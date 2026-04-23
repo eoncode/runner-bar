@@ -20,9 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = false
-        let hc = NSHostingController(rootView: PopoverView(store: observable))
-        hc.preferredContentSize = NSSize(width: 280, height: 400)
-        popover.contentViewController = hc
         self.popover = popover
 
         RunnerStore.shared.onChange = { [weak self] in
@@ -57,12 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Recreate the hosting controller every time to prevent layout drift
+            // on second and subsequent opens (NSHostingController loses Auto Layout
+            // anchors after NSPopover dismissal).
+            let hc = NSHostingController(rootView: PopoverView(store: observable))
+            hc.preferredContentSize = NSSize(width: 280, height: 400)
+            popover.contentViewController = hc
             NSApplication.shared.activate(ignoringOtherApps: true)
-            // Always re-read button.bounds at show time so the anchor is correct
-            // on every open, not just the first. Pass `button` itself as the
-            // positioningView so AppKit stays in the right coordinate space.
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-            popover.contentViewController?.view.window?.makeKey()
         }
     }
 }
