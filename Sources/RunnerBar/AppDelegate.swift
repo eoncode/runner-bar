@@ -39,16 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        guard githubToken() != nil else {
-            let icon = NSImage(systemSymbolName: "exclamationmark.circle", accessibilityDescription: "RunnerBar")
-            icon?.isTemplate = true
-            statusItem?.button?.image = icon
-            return
-        }
-
-        if !ScopeStore.shared.isEmpty {
-            RunnerStore.shared.start()
-        }
+        RunnerStore.shared.start()
     }
 
     @objc private func togglePopover() {

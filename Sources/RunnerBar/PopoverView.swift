@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ServiceManagement
 
@@ -5,6 +6,7 @@ struct PopoverView: View {
     @ObservedObject var store: RunnerStoreObservable
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var isAuthenticated = (githubToken() != nil)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -15,12 +17,28 @@ struct PopoverView: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
-                Button(action: { RunnerStore.shared.fetch() }) {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .font(.caption)
+                if isAuthenticated {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        Text("Authenticated")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    Button(action: signInWithGitHub) {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 8, height: 8)
+                            Text("Sign in with GitHub")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut("r", modifiers: .command)
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -30,7 +48,7 @@ struct PopoverView: View {
 
             // Runner list
             if store.runners.isEmpty {
-                Text("No runners found")
+                Text(isAuthenticated ? "No runners found" : "Authenticate to see runners")
                     .foregroundColor(.secondary)
                     .font(.caption)
                     .padding(.horizontal, 12)
@@ -126,6 +144,15 @@ struct PopoverView: View {
             .padding(.vertical, 8)
         }
         .frame(width: 280)
+        .onReceive(store.objectWillChange) {
+            isAuthenticated = (githubToken() != nil)
+        }
+    }
+
+    private func signInWithGitHub() {
+        let script = "tell application \"Terminal\" to do script \"gh auth login\""
+        NSAppleScript(source: script)?.executeAndReturnError(nil)
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
 
     private func submitScope() {
