@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.animates = false
         let hc = NSHostingController(rootView: PopoverView(store: observable))
-        hc.view.frame = NSRect(x: 0, y: 0, width: 280, height: 0)
+        hc.view.frame = NSRect(x: 0, y: 0, width: 280, height: 400)
         popover.contentViewController = hc
         self.popover = popover
 
