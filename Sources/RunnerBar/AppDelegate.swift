@@ -13,7 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         RunnerStore.shared.onChange = { [weak self] in
-            self?.statusItem?.menu = self?.buildMenu()
+            guard let self else { return }
+            self.statusItem?.button?.title = RunnerStore.shared.aggregateStatus.dot
+            self.statusItem?.menu = self.buildMenu()
         }
 
         if githubToken() != nil && !ScopeStore.shared.isEmpty {

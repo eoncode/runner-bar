@@ -1,12 +1,34 @@
 import Foundation
 import AppKit
 
+enum AggregateStatus {
+    case allOnline
+    case someOffline
+    case allOffline
+
+    var dot: String {
+        switch self {
+        case .allOnline: return "🟢"
+        case .someOffline: return "🟡"
+        case .allOffline: return "⚫"
+        }
+    }
+}
+
 final class RunnerStore {
     static let shared = RunnerStore()
 
     private(set) var runners: [Runner] = []
     private var timer: Timer?
     var onChange: (() -> Void)?
+
+    var aggregateStatus: AggregateStatus {
+        guard !runners.isEmpty else { return .allOffline }
+        let onlineCount = runners.filter { $0.status == "online" }.count
+        if onlineCount == runners.count { return .allOnline }
+        if onlineCount == 0 { return .allOffline }
+        return .someOffline
+    }
 
     func start() {
         fetch()
