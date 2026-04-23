@@ -108,10 +108,8 @@ struct PopoverView: View {
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-
-            Spacer(minLength: 0)
         }
-        .frame(width: 280, height: 400, alignment: .top)
+        .frame(width: 280)
     }
 
     private func submitScope() {

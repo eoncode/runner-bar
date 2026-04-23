@@ -18,8 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hc = NSHostingController(rootView: PopoverView(store: observable))
+        hc.sizingOptions = .preferredContentSize
+
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 280, height: 400)
         popover.behavior = .transient
         popover.animates = false
         popover.contentViewController = hc
