@@ -5,7 +5,7 @@ BASE="https://eonist.github.io/runner-bar"
 TMP=$(mktemp -d)
 
 echo "→ Downloading RunnerBar..."
-curl -fsSL "$BASE/RunnerBar.zip" -o "$TMP/RunnerBar.zip"
+curl -fsSL -L "$BASE/RunnerBar.zip" -o "$TMP/RunnerBar.zip"
 
 echo "→ Installing to /Applications..."
 rm -rf /Applications/RunnerBar.app
