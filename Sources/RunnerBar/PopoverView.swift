@@ -109,7 +109,6 @@ struct PopoverView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .fixedSize(horizontal: false, vertical: true)
         .frame(width: 280)
     }
 
