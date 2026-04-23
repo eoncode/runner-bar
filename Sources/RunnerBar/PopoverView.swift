@@ -1,8 +1,10 @@
 import SwiftUI
+import ServiceManagement
 
 struct PopoverView: View {
     @ObservedObject var store: RunnerStoreObservable
     @State private var newScope = ""
+    @State private var launchAtLogin = LoginItem.isEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -92,6 +94,20 @@ struct PopoverView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+            }
+
+            Divider()
+
+            // Launch at login
+            Toggle(isOn: $launchAtLogin) {
+                Text("Launch at login")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .onChange(of: launchAtLogin) { _ in
+                LoginItem.toggle()
             }
 
             Divider()
