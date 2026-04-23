@@ -19,7 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = NSSize(width: 280, height: 400)
         popover.behavior = .transient
         popover.animates = false
-        popover.contentViewController = NSHostingController(rootView: PopoverView(store: observable))
+        let hc = NSHostingController(rootView: PopoverView(store: observable))
+        hc.view.frame = NSRect(x: 0, y: 0, width: 280, height: 0)
+        popover.contentViewController = hc
         self.popover = popover
 
         RunnerStore.shared.onChange = { [weak self] in
