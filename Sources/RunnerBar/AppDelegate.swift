@@ -10,7 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "RunnerBar")
+            let icon = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "RunnerBar")
+            icon?.isTemplate = true
+            button.image = icon
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -27,16 +29,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             DispatchQueue.main.async {
-                self.statusItem?.button?.image = NSImage(
+                let icon = NSImage(
                     systemSymbolName: RunnerStore.shared.aggregateStatus.symbolName,
                     accessibilityDescription: "RunnerBar"
                 )
+                icon?.isTemplate = true
+                self.statusItem?.button?.image = icon
                 self.observable.reload()
             }
         }
 
         guard githubToken() != nil else {
-            statusItem?.button?.image = NSImage(systemSymbolName: "exclamationmark.circle", accessibilityDescription: "RunnerBar")
+            let icon = NSImage(systemSymbolName: "exclamationmark.circle", accessibilityDescription: "RunnerBar")
+            icon?.isTemplate = true
+            statusItem?.button?.image = icon
             return
         }
 
@@ -53,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 }
