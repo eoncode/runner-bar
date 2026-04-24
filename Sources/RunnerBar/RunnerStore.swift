@@ -23,11 +23,12 @@ final class RunnerStore {
     static let shared = RunnerStore()
 
     private(set) var runners: [Runner] = []
-    private(set) var jobs: [ActiveJob] = []
+    private(set) var jobs: [ActiveJob] = []  // max 3, shown in UI
 
-    /// Persists completed jobs keyed by job id.
-    /// Never cleared between polls — only grows (or removes re-activated jobs).
-    private var completedCache: [Int: ActiveJob] = [:]
+    // Persistent completed tail — never wiped, only updated.
+    // Seeded on first launch from API. After that, jobs that finish
+    // are frozen in here immediately (no API lag gap).
+    private var completedTail: [ActiveJob] = []
 
     private var timer: Timer?
     var onChange: (() -> Void)?
@@ -44,12 +45,12 @@ final class RunnerStore {
         log("RunnerStore › start")
         timer?.invalidate()
         fetch()
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.fetch() }
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.fetch() }
     }
 
     func fetch() {
         log("RunnerStore › fetch")
-        let snapCache: [Int: ActiveJob] = DispatchQueue.main.sync { self.completedCache }
+        let snapTail = completedTail
 
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
@@ -63,57 +64,54 @@ final class RunnerStore {
             for i in idle.indices { let s = busy.count + i; idle[i].metrics = s < metrics.count ? metrics[s] : nil }
             let enriched = busy + idle
 
-            // ── All jobs from active runs (includes just-finished with conclusion != nil)
+            // ── Fetch all jobs from active runs
+            // fetchActiveJobs returns all jobs (active + just-completed) from
+            // in_progress/queued runs — we split them here.
             var allFetched: [ActiveJob] = []
             for scope in ScopeStore.shared.scopes { allFetched.append(contentsOf: fetchActiveJobs(for: scope)) }
 
-            // Split active vs just-finished
-            let activeJobs  = allFetched.filter { $0.conclusion == nil }.sorted { jobRank($0) < jobRank($1) }
-            let finishedNow = allFetched.filter { $0.conclusion != nil }
-            let activeIDs   = Set(activeJobs.map { $0.id })
+            // Active = no conclusion yet. Sorted in_progress → queued.
+            let activeJobs = allFetched
+                .filter { $0.conclusion == nil }
+                .sorted { rankJob($0) < rankJob($1) }
 
-            // ── Update cache
-            var newCache = snapCache
-            let now = Date()
-            for job in finishedNow {
-                guard newCache[job.id] == nil else { continue }
-                newCache[job.id] = ActiveJob(
-                    id: job.id, name: job.name, status: "completed",
-                    conclusion: job.conclusion,
-                    startedAt: job.startedAt, createdAt: job.createdAt,
-                    completedAt: job.completedAt ?? now,
-                    isDimmed: true
-                )
+            // Done within this run = has conclusion. Mark dimmed.
+            let freshDone: [ActiveJob] = allFetched
+                .filter { $0.conclusion != nil }
+                .map { j in
+                    var d = j; d.isDimmed = true; return d
+                }
+
+            // ── Update completed tail
+            // Merge freshDone + existing tail, dedupe by id, cap 3.
+            // If no fresh done jobs this cycle, keep tail unchanged.
+            let newTail: [ActiveJob]
+            if !freshDone.isEmpty {
+                var merged = freshDone
+                for job in snapTail where !merged.contains(where: { $0.id == job.id }) {
+                    merged.append(job)
+                }
+                newTail = Array(merged.prefix(3))
+            } else {
+                newTail = snapTail
             }
-            // Re-activated jobs leave the cache
-            for id in activeIDs { newCache.removeValue(forKey: id) }
 
-            // ── Build final list: active first (max 3), pad with cached completed
-            let active    = Array(activeJobs.prefix(3))
-            let remaining = 3 - active.count
-            var cached: [ActiveJob] = []
-            if remaining > 0 {
-                cached = newCache.values
-                    .filter { !activeIDs.contains($0.id) }
-                    .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
-                    .prefix(remaining)
-                    .map { $0 }
-            }
-            let merged = active + cached
+            // ── Display: active first, then tail, cap 3
+            let display = Array((activeJobs + newTail).prefix(3))
 
-            log("RunnerStore › \(enriched.count) runners | \(active.count) active + \(cached.count) cached = \(merged.count) shown | cache: \(newCache.count)")
+            log("RunnerStore › done — \(enriched.count) runners, \(activeJobs.count) active, \(newTail.count) tail, \(display.count) shown")
 
             DispatchQueue.main.async {
-                self.runners        = enriched
-                self.jobs           = merged
-                self.completedCache = newCache
+                self.runners       = enriched
+                self.jobs          = display
+                self.completedTail = newTail
                 self.onChange?()
             }
         }
     }
 }
 
-func jobRank(_ job: ActiveJob) -> Int {
+private func rankJob(_ job: ActiveJob) -> Int {
     switch job.status {
     case "in_progress": return 0
     case "queued":      return 1
