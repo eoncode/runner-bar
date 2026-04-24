@@ -52,8 +52,15 @@ final class RunnerStore {
             for scope in ScopeStore.shared.scopes {
                 all.append(contentsOf: fetchRunners(for: scope))
             }
+            // Inject busyCount so each runner knows how many peers are active
+            let busyCount = max(all.filter { $0.busy }.count, 1)
+            let enriched = all.map { runner -> Runner in
+                var r = runner
+                r.busyCount = busyCount
+                return r
+            }
             DispatchQueue.main.async {
-                self.runners = all
+                self.runners = enriched
                 self.onChange?()
             }
         }

@@ -2,7 +2,7 @@
 set -e
 
 APP_NAME="RunnerBar"
-VERSION="0.1.0"
+VERSION="0.2.0"
 OUT_DIR="dist"
 
 echo "→ Compiling universal binary..."
