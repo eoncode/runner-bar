@@ -6,7 +6,7 @@ struct ActiveJob: Identifiable {
     let id: Int
     let name: String
     let status: String       // "queued", "in_progress", "completed"
-    let conclusion: String?  // "success", "failure", "cancelled", nil when truly active
+    let conclusion: String?  // nil when truly active
     let startedAt: Date?
     let createdAt: Date?
 
@@ -20,44 +20,84 @@ struct ActiveJob: Identifiable {
     }
 }
 
+// MARK: - gh API (no shell — avoids & metacharacter splitting)
+
+/// Calls `gh api <endpoint>` directly via Process, bypassing /bin/zsh.
+/// This mirrors Python's subprocess.run(['gh', 'api', url]) and avoids
+/// zsh treating & in query strings as a background operator.
+private func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    let gh = "/opt/homebrew/bin/gh"
+    guard FileManager.default.isExecutableFile(atPath: gh) else {
+        log("ghAPI › gh not found at \(gh)")
+        return nil
+    }
+
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: gh)
+    task.arguments     = ["api", endpoint]
+    task.standardOutput = pipe
+    task.standardError  = Pipe() // discard stderr
+
+    var outputData = Data()
+    let lock = NSLock()
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+        let chunk = handle.availableData
+        guard !chunk.isEmpty else { return }
+        lock.lock(); outputData.append(chunk); lock.unlock()
+    }
+
+    do { try task.run() } catch {
+        log("ghAPI › launch error for \(endpoint): \(error)")
+        pipe.fileHandleForReading.readabilityHandler = nil
+        return nil
+    }
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while task.isRunning {
+        if Date() > deadline {
+            log("ghAPI › timeout for \(endpoint)")
+            task.terminate(); break
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+
+    pipe.fileHandleForReading.readabilityHandler = nil
+    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+
+    log("ghAPI › \(endpoint) → \(outputData.count) bytes, exit \(task.terminationStatus)")
+    return outputData.isEmpty ? nil : outputData
+}
+
 // MARK: - Fetch
 
-/// Fetches in_progress AND queued workflow runs for `scope`, collects their
-/// jobs, filters to only truly active ones (conclusion == nil), deduplicates,
-/// and sorts: in_progress → queued.
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
-    // Build the correct API path for repo vs org scope.
-    // Org-level endpoint: /orgs/{org}/actions/runs
-    // Repo-level endpoint: /repos/{owner}/{repo}/actions/runs
-    func runsPath(status: String) -> String {
+    func runsEndpoint(status: String) -> String {
         if scope.contains("/") {
-            return "/repos/\(scope)/actions/runs?status=\(status)&per_page=50"
+            return "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
         } else {
-            return "/orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
+            return "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
         }
     }
 
-    // Fetch both in_progress and queued runs so we catch everything active.
     for status in ["in_progress", "queued"] {
-        let path = runsPath(status: status)
-        log("fetchActiveJobs › fetching \(status) runs: \(path)")
-        let json = shell("/opt/homebrew/bin/gh api \(path)")
+        let endpoint = runsEndpoint(status: status)
+        log("fetchActiveJobs › \(endpoint)")
         guard
-            let data = json.data(using: .utf8),
+            let data = ghAPI(endpoint),
             let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else {
-            log("fetchActiveJobs › failed to decode \(status) runs for \(scope)")
+            log("fetchActiveJobs › decode failed for \(status) runs (scope: \(scope))")
             continue
         }
         log("fetchActiveJobs › \(resp.workflowRuns.count) \(status) run(s)")
         for run in resp.workflowRuns {
-            if seenRunIDs.insert(run.id).inserted {
-                runIDs.append(run.id)
-            }
+            if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
         }
     }
 
@@ -65,33 +105,32 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     var seenJobIDs = Set<Int>()
 
     for runID in runIDs {
-        let path = "/repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"
-        let json = shell("/opt/homebrew/bin/gh api \(path)")
+        // Job-level endpoint is always repo-scoped
+        let repoSlug = scope.contains("/") ? scope : nil
+        guard let repo = repoSlug else { continue }
+        let endpoint = "repos/\(repo)/actions/runs/\(runID)/jobs?per_page=100"
         guard
-            let data = json.data(using: .utf8),
+            let data = ghAPI(endpoint),
             let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
         else {
-            log("fetchActiveJobs › failed to decode jobs for run \(runID)")
+            log("fetchActiveJobs › decode failed for jobs of run \(runID)")
             continue
         }
         for j in resp.jobs {
             guard seenJobIDs.insert(j.id).inserted else { continue }
-            // KEY FIX: skip jobs that already have a conclusion — they are done.
-            // Without this filter the section fills with completed jobs and the
-            // Active Jobs section never shows truly in-flight work.
-            guard j.conclusion == nil else { continue }
+            guard j.conclusion == nil else { continue } // skip finished jobs
             jobs.append(ActiveJob(
                 id:         j.id,
                 name:       j.name,
                 status:     j.status,
                 conclusion: j.conclusion,
-                startedAt:  j.startedAt.flatMap  { iso.date(from: $0) },
-                createdAt:  j.createdAt.flatMap  { iso.date(from: $0) }
+                startedAt:  j.startedAt.flatMap { iso.date(from: $0) },
+                createdAt:  j.createdAt.flatMap { iso.date(from: $0) }
             ))
         }
     }
 
-    log("fetchActiveJobs › \(jobs.count) truly active job(s) for \(scope)")
+    log("fetchActiveJobs › \(jobs.count) active job(s) for \(scope)")
     return jobs.sorted { rank($0) < rank($1) }
 }
 
