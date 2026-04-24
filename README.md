@@ -23,7 +23,7 @@
 
 </div>
 
-RunnerBar is a tiny macOS menu-bar app that shows whether your GitHub self-hosted runners are online. A colored dot summarizes state at a glance; click it for the full list with live CPU and memory for active runners. No Xcode, no Apple Developer account, no Gatekeeper dialog — one `curl` command installs it.
+RunnerBar is a tiny macOS menu-bar app that shows whether your GitHub self-hosted runners are online. A colored dot summarizes state at a glance; click it to see each runner with an `idle` / `active` / `offline` badge. No Xcode, no Apple Developer account, no Gatekeeper dialog — one `curl` command installs it.
 
 <br/>
 
@@ -52,7 +52,7 @@ RunnerBar is a tiny macOS menu-bar app that shows whether your GitHub self-hoste
 curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 ```
 
-The installer downloads `RunnerBar.zip` from GitHub Pages, unzips it to `/Applications`, and launches the app. The menu-bar dot appears immediately. See [DEPLOYMENT.md](DEPLOYMENT.md) for why Gatekeeper doesn't fire.
+The installer downloads `RunnerBar.zip` from GitHub Pages, replaces any existing `/Applications/RunnerBar.app`, unzips the new bundle into `/Applications`, and launches it. The menu-bar dot appears immediately. See [DEPLOYMENT.md](DEPLOYMENT.md) for why Gatekeeper doesn't fire.
 
 **Uninstall:**
 
@@ -70,7 +70,7 @@ defaults delete dev.eonist.runnerbar 2>/dev/null || true
 You'll be running in under a minute.
 
 | Step | Action |
-|---|---|
+|:---:|---|
 | 1 | `brew install gh && gh auth login` (once) |
 | 2 | Install RunnerBar with the `curl` command above |
 | 3 | Click the menu-bar dot to open the popover |
@@ -86,13 +86,13 @@ Optional: toggle **Launch at login** in the popover.
 ## ✨ Features
 
 - **Traffic-light menu-bar icon.** `systemGreen` when every runner is online, `systemOrange` when some are offline, `systemRed` when none are online or no scopes are configured. Drawn programmatically in [`StatusIcon.swift`](Sources/RunnerBar/StatusIcon.swift).
-- **Runner list popover.** Each runner shows name, scope, and a status badge — `idle`, `active`, or `offline`. ([`PopoverView.swift`](Sources/RunnerBar/PopoverView.swift))
-- **Live CPU & memory for active runners.** When a runner is busy, RunnerBar reads the local `Runner.Worker` process with `ps` and attaches CPU % / MEM %. ([`RunnerMetrics.swift`](Sources/RunnerBar/RunnerMetrics.swift))
+- **Runner list popover.** Each row shows the runner's name and a status badge — `idle`, `active`, or `offline`. See [`PopoverView.swift`](Sources/RunnerBar/PopoverView.swift).
 - **In-popover sign-in.** If `gh` isn't authenticated, a **Sign in with GitHub** button opens Terminal running `gh auth login`. Otherwise you see a green "Authenticated" indicator.
-- **Scopes managed in-app.** Add or remove `owner/repo` and org names from the popover. Persisted in `UserDefaults`. ([`ScopeStore.swift`](Sources/RunnerBar/ScopeStore.swift))
-- **Launch at login.** One toggle, backed by `SMAppService` (macOS 13+). ([`LoginItem.swift`](Sources/RunnerBar/LoginItem.swift))
-- **Menu-bar only.** `LSUIElement=true` — no Dock icon, no app-switcher entry.
-- **Universal, tiny.** Single arm64 + x86_64 binary, ad-hoc signed.
+- **Scopes managed in-app.** Add or remove `owner/repo` slugs and org names from the popover. Persisted in `UserDefaults`. See [`ScopeStore.swift`](Sources/RunnerBar/ScopeStore.swift).
+- **30-second auto-polling.** A `Timer` in [`RunnerStore.swift`](Sources/RunnerBar/RunnerStore.swift) refreshes every configured scope in the background.
+- **Launch at login.** One toggle, backed by `SMAppService` (macOS 13+). See [`LoginItem.swift`](Sources/RunnerBar/LoginItem.swift).
+- **Menu-bar only.** `LSUIElement=true` in [Info.plist](Resources/Info.plist) — no Dock icon, no app-switcher entry.
+- **Universal, tiny.** Single arm64 + x86_64 binary, ad-hoc signed by [`build.sh`](build.sh).
 
 > **v0.1 is read-only.** RunnerBar shows state; it does not register, start, stop, or restart runners, and does not surface workflow logs. See [Out of scope](#-out-of-scope-for-v01).
 
@@ -102,21 +102,21 @@ Optional: toggle **Launch at login** in the popover.
 
 ## 🚦 Status reference
 
-**Menu-bar icon** — aggregate across all scopes:
+**Menu-bar icon** — aggregate across all configured scopes, computed in [`RunnerStore.aggregateStatus`](Sources/RunnerBar/RunnerStore.swift):
 
-| Color | Meaning | Source |
-|:-:|---|---|
-| 🟢 Green | Every runner is `online` | `AggregateStatus.allOnline` |
-| 🟠 Orange | At least one runner is `online`, at least one isn't | `AggregateStatus.someOffline` |
-| 🔴 Red | No runners are `online`, or no scopes are configured | `AggregateStatus.allOffline` |
+| Color | Case | Meaning |
+|:---:|---|---|
+| 🟢 Green | `allOnline` | Every runner reports `status == "online"` |
+| 🟠 Orange | `someOffline` | At least one runner is online, at least one isn't |
+| 🔴 Red | `allOffline` | No runners are online, or no scopes are configured |
 
-**Runner row badge** — per runner, inside the popover:
+**Runner row badge** — per runner, rendered inline in [`PopoverView.swift`](Sources/RunnerBar/PopoverView.swift):
 
-| Badge | Meaning |
+| Badge | Condition |
 |---|---|
-| `idle` | Runner is `online` and not currently executing a job |
-| `active` | Runner is `online` and `busy` (shows CPU / MEM when a local `Runner.Worker` is found) |
-| `offline` | Runner's `status` is not `online` |
+| `idle` | `status == "online"` and `busy == false` |
+| `active` | `status == "online"` and `busy == true` |
+| `offline` | anything else |
 
 <br/>
 
@@ -127,10 +127,10 @@ Optional: toggle **Launch at login** in the popover.
 | | |
 |---|---|
 | **macOS** | 13 Ventura or later |
-| **Architecture** | Apple Silicon or Intel (universal) |
-| **[`gh` CLI](https://cli.github.com)** | Installed and authenticated |
+| **Architecture** | Apple Silicon or Intel (universal binary) |
+| **[`gh` CLI](https://cli.github.com)** | Installed and authenticated (`brew install gh && gh auth login`) |
 
-RunnerBar never stores a token. It resolves auth at runtime in this order ([`Auth.swift`](Sources/RunnerBar/Auth.swift)):
+RunnerBar never stores a token. It resolves auth at runtime in this order — see [`Auth.swift`](Sources/RunnerBar/Auth.swift):
 
 1. `gh auth token`
 2. `GH_TOKEN` environment variable
@@ -153,16 +153,15 @@ RunnerBar never stores a token. It resolves auth at runtime in this order ([`Aut
                                     gh api /orgs/{org}/actions/runners
                                          │
                                     [Runner] (id, name, status, busy)
-                                         │
-                                    busy?  ──▶  RunnerMetrics via `ps`
 ```
 
-- [`ScopeStore`](Sources/RunnerBar/ScopeStore.swift) holds the scopes you've added, persisted in `UserDefaults`.
-- [`RunnerStore`](Sources/RunnerBar/RunnerStore.swift) runs a `Timer` on a 30-second cadence. Each tick fetches every scope in the background.
-- [`GitHub.swift`](Sources/RunnerBar/GitHub.swift) shells out to `gh api`: `/repos/{owner}/{repo}/actions/runners` if the scope contains `/`, otherwise `/orgs/{org}/actions/runners`.
-- Responses decode into [`Runner`](Sources/RunnerBar/Runner.swift) values.
-- For `busy` runners, [`RunnerMetrics`](Sources/RunnerBar/RunnerMetrics.swift) runs `ps -eo pcpu,pmem,args | grep Runner.Worker` locally and matches on runner name.
-- `RunnerStore.aggregateStatus` collapses the list to `allOnline` / `someOffline` / `allOffline`, which drives the menu-bar dot.
+1. [`ScopeStore`](Sources/RunnerBar/ScopeStore.swift) stores the scopes you've added in `UserDefaults` under the key `scopes`.
+2. [`RunnerStore`](Sources/RunnerBar/RunnerStore.swift) runs a `Timer` on a 30-second cadence; each tick fetches every scope on a background queue.
+3. [`GitHub.swift`](Sources/RunnerBar/GitHub.swift) shells out to the `gh` CLI:
+   - Scope contains `/` → `gh api /repos/{owner}/{repo}/actions/runners`
+   - Otherwise → `gh api /orgs/{org}/actions/runners`
+4. Responses decode into [`Runner`](Sources/RunnerBar/Runner.swift) values (`id`, `name`, `status`, `busy`).
+5. `RunnerStore.aggregateStatus` collapses the combined list to `allOnline` / `someOffline` / `allOffline`, which drives the menu-bar icon via [`StatusIcon`](Sources/RunnerBar/StatusIcon.swift).
 
 <br/>
 
@@ -180,16 +179,16 @@ runner-bar/
 │   ├── PopoverView.swift         # SwiftUI popover UI
 │   ├── RunnerStore.swift         # 30s polling + aggregate status
 │   ├── Runner.swift              # Runner model
-│   ├── RunnerMetrics.swift       # CPU/MEM via `ps`
+│   ├── RunnerMetrics.swift       # Local CPU/MEM via `ps` (model-layer helper)
 │   ├── GitHub.swift              # `gh api` shell-outs
 │   ├── ScopeStore.swift          # UserDefaults-backed scope list
 │   ├── LoginItem.swift           # SMAppService launch-at-login
 │   ├── Auth.swift                # Token resolution
-│   └── Shell.swift               # shell() helper
-├── Resources/Info.plist          # LSUIElement=true
-├── build.sh                      # compile → .app → ad-hoc sign → zip
-├── deploy.sh                     # push dist/ to gh-pages
-└── install.sh                    # curl | bash installer
+│   └── Shell.swift               # shell() helper (zsh -c)
+├── Resources/Info.plist          # LSUIElement=true, bundle metadata
+├── build.sh                      # swift build → .app bundle → ad-hoc sign → zip
+├── deploy.sh                     # push dist/ to gh-pages via git worktree
+└── install.sh                    # curl | bash installer (also on gh-pages)
 ```
 
 <br/>
@@ -208,7 +207,7 @@ swift build        # fast error check
 bash build.sh      # universal release .app in ./dist
 ```
 
-Details in [DEVELOPMENT.md](DEVELOPMENT.md); release flow in [DEPLOYMENT.md](DEPLOYMENT.md).
+`build.sh` runs `swift build -c release --arch arm64 --arch x86_64`, assembles `dist/RunnerBar.app`, signs it ad-hoc, and produces `dist/RunnerBar.zip` + `dist/version.txt`. Details in [DEVELOPMENT.md](DEVELOPMENT.md); release flow in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 <br/>
 
@@ -245,27 +244,21 @@ Auth comes from the `gh` CLI, not the browser. Run `brew install gh && gh auth l
 </details>
 
 <details>
-<summary><strong>Why are CPU / MEM values missing on an active runner?</strong></summary>
-
-[`RunnerMetrics`](Sources/RunnerBar/RunnerMetrics.swift) reads local processes only. If the busy runner is on a different Mac, or its worker process isn't named `Runner.Worker`, `ps` can't find it and the row falls back to `active`.
-</details>
-
-<details>
 <summary><strong>I installed it but don't see anything.</strong></summary>
 
-RunnerBar has no Dock icon (`LSUIElement=true`). Look for a colored circle on the right side of your menu bar.
+RunnerBar has no Dock icon (`LSUIElement=true`). Look for a small colored circle on the right side of your menu bar.
 </details>
 
 <details>
 <summary><strong>Does it work with GitHub Enterprise Server?</strong></summary>
 
-Not in v0.1.
+Not in v0.1. The `gh api` calls use default host resolution and multi-host support isn't implemented.
 </details>
 
 <details>
 <summary><strong>Why is <code>gh</code> hard-coded to <code>/opt/homebrew/bin/gh</code>?</strong></summary>
 
-Menu-bar apps launched via LaunchServices don't inherit a shell `PATH`, so the path is explicit. If `gh` is elsewhere, symlink it there.
+Menu-bar apps launched via LaunchServices don't inherit a shell <code>PATH</code>, so the path is explicit in <a href="Sources/RunnerBar/Auth.swift"><code>Auth.swift</code></a> and <a href="Sources/RunnerBar/GitHub.swift"><code>GitHub.swift</code></a>. If <code>gh</code> lives elsewhere on your machine, symlink it there.
 </details>
 
 <br/>
@@ -279,7 +272,7 @@ Conventions, mostly from [AGENTS.md](AGENTS.md):
 - **SwiftPM only.** No `.xcodeproj`, `.xcworkspace`, `.xib`, or storyboards.
 - **No third-party dependencies** unless there's a strong reason.
 - **Programmatic UI only** (AppKit + SwiftUI).
-- **Small, single-responsibility files.** Add a new file rather than growing one.
+- **Small, single-responsibility files.** Add a new file rather than growing an existing one.
 - **macOS 13+**, universal binary.
 
 ```bash
@@ -296,9 +289,9 @@ swift run
 
 | Doc | What's inside |
 |---|---|
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Local build, run, dev loop |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | `build.sh`, `deploy.sh`, `gh-pages` layout |
-| [AGENTS.md](AGENTS.md) | Context for AI coding agents |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Local build, run, dev loop, auth during development |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | `build.sh`, `deploy.sh`, `gh-pages` layout, why Gatekeeper doesn't fire |
+| [AGENTS.md](AGENTS.md) | Context and hard constraints for AI coding agents |
 
 <br/>
 
