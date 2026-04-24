@@ -14,14 +14,11 @@ struct Runner: Codable, Identifiable {
 
     var displayStatus: String {
         if status == "offline" { return "offline" }
-        let m = fetchMetrics(for: name, busyCount: busyCount)
-        let cpu = m?.cpu ?? 0
-        let mem = m?.mem ?? 0
+        // fetchMetrics now does a per-runner ps aux match — no busyCount averaging
+        let m = fetchMetrics(for: name)
+        let cpu = m.map { String(format: "%.1f", $0.cpu) } ?? "0"
+        let mem = m.map { String(format: "%.1f", $0.mem) } ?? "0"
         let label = busy ? "active" : "idle"
         return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"
     }
-}
-
-private struct RunnersResponse: Codable {
-    let runners: [Runner]
 }
