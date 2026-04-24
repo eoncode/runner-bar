@@ -6,11 +6,11 @@ struct ActiveJob: Identifiable {
     let id: Int
     let name: String
     let status: String       // "queued", "in_progress", "completed"
-    let conclusion: String?  // "success", "failure", "cancelled", nil
-    let startedAt: Date?     // nil for queued jobs — fall back to createdAt
+    let conclusion: String?  // "success", "failure", "cancelled", nil when truly active
+    let startedAt: Date?
     let createdAt: Date?
 
-    /// Elapsed time since the job started (or was created if not yet started).
+    /// Elapsed time since the job started (or was created if still queued).
     var elapsed: String {
         guard let start = startedAt ?? createdAt else { return "—" }
         let sec = Int(Date().timeIntervalSince(start))
@@ -22,21 +22,28 @@ struct ActiveJob: Identifiable {
 
 // MARK: - Fetch
 
-/// Fetches in_progress AND queued workflow runs for `scope`, collects all
-/// their jobs, deduplicates by job id, and sorts: in_progress → queued → done.
+/// Fetches in_progress AND queued workflow runs for `scope`, collects their
+/// jobs, filters to only truly active ones (conclusion == nil), deduplicates,
+/// and sorts: in_progress → queued.
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
-    guard scope.contains("/") else {
-        log("fetchActiveJobs › org-level runs not supported, skipping \(scope)")
-        return []
-    }
-
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
-    // Fetch both statuses so we get queued jobs too
+    // Build the correct API path for repo vs org scope.
+    // Org-level endpoint: /orgs/{org}/actions/runs
+    // Repo-level endpoint: /repos/{owner}/{repo}/actions/runs
+    func runsPath(status: String) -> String {
+        if scope.contains("/") {
+            return "/repos/\(scope)/actions/runs?status=\(status)&per_page=50"
+        } else {
+            return "/orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
+        }
+    }
+
+    // Fetch both in_progress and queued runs so we catch everything active.
     for status in ["in_progress", "queued"] {
-        let path = "/repos/\(scope)/actions/runs?status=\(status)&per_page=10"
+        let path = runsPath(status: status)
         log("fetchActiveJobs › fetching \(status) runs: \(path)")
         let json = shell("/opt/homebrew/bin/gh api \(path)")
         guard
@@ -58,7 +65,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     var seenJobIDs = Set<Int>()
 
     for runID in runIDs {
-        let path = "/repos/\(scope)/actions/runs/\(runID)/jobs?per_page=30"
+        let path = "/repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"
         let json = shell("/opt/homebrew/bin/gh api \(path)")
         guard
             let data = json.data(using: .utf8),
@@ -69,6 +76,10 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
         }
         for j in resp.jobs {
             guard seenJobIDs.insert(j.id).inserted else { continue }
+            // KEY FIX: skip jobs that already have a conclusion — they are done.
+            // Without this filter the section fills with completed jobs and the
+            // Active Jobs section never shows truly in-flight work.
+            guard j.conclusion == nil else { continue }
             jobs.append(ActiveJob(
                 id:         j.id,
                 name:       j.name,
@@ -80,7 +91,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
         }
     }
 
-    log("fetchActiveJobs › \(jobs.count) total job(s) for \(scope)")
+    log("fetchActiveJobs › \(jobs.count) truly active job(s) for \(scope)")
     return jobs.sorted { rank($0) < rank($1) }
 }
 
