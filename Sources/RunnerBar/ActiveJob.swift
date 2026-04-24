@@ -9,22 +9,25 @@ struct ActiveJob: Identifiable {
     let conclusion: String?  // nil when truly active; non-nil for completed tail
     let startedAt: Date?
     let createdAt: Date?
-    let completedAt: Date?   // non-nil for done jobs — freezes elapsed
+    let completedAt: Date?   // non-nil for completed jobs — freezes elapsed
     var isDimmed: Bool = false
 
+    /// Elapsed time:
+    /// - queued jobs (not yet started): "—"
+    /// - completed jobs: frozen start → completedAt
+    /// - active jobs: live start → now
     var elapsed: String {
-        // Queued: hasn't started yet, show 00:00
-        if status == "queued" { return "00:00" }
-        guard let start = startedAt else { return "00:00" }
-        // Done: use completedAt as fixed end so the clock stops
+        guard status != "queued" else { return "—" }
+        guard let start = startedAt ?? createdAt else { return "—" }
         let end = completedAt ?? Date()
-        let sec = max(0, Int(end.timeIntervalSince(start)))
+        let sec = Int(end.timeIntervalSince(start))
+        guard sec >= 0 else { return "—" }
         let m = sec / 60; let s = sec % 60
         return String(format: "%02d:%02d", m, s)
     }
 }
 
-// MARK: - gh API
+// MARK: - gh API (direct Process, no shell — avoids & metachar splitting)
 
 private func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let gh = "/opt/homebrew/bin/gh"
@@ -110,7 +113,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     return jobs.sorted { rank($0) < rank($1) }
 }
 
-// MARK: - Fetch completed tail
+// MARK: - Fetch completed tail (last 3 jobs from most recent completed run)
 
 func fetchRecentCompletedJobs(for scope: String) -> [ActiveJob] {
     guard scope.contains("/") else { return [] }
@@ -162,7 +165,9 @@ private struct JobsResponse: Codable { let jobs: [JobPayload] }
 private struct JobPayload: Codable {
     let id: Int; let name: String; let status: String
     let conclusion: String?
-    let startedAt: String?; let createdAt: String?; let completedAt: String?
+    let startedAt: String?
+    let createdAt: String?
+    let completedAt: String?
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
         case startedAt   = "started_at"
