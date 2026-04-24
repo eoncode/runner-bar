@@ -8,19 +8,19 @@ func fetchRunners(for scope: String) -> [Runner] {
         path = "/orgs/\(scope)/actions/runners"
     }
 
-    print("[RunnerBar] fetching: \(path)")
+    log("fetchRunners › \(path)")
     let json = shell("/opt/homebrew/bin/gh api \(path)")
-    print("[RunnerBar] response: \(json.prefix(200))")
+    log("fetchRunners › response prefix: \(json.prefix(120))")
 
     guard
         let data = json.data(using: .utf8),
         let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
     else {
-        print("[RunnerBar] decode failed for scope: \(scope)")
+        log("fetchRunners › decode failed for scope: \(scope)")
         return []
     }
 
-    print("[RunnerBar] found \(response.runners.count) runners for \(scope)")
+    log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
     return response.runners
 }
 

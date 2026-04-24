@@ -11,7 +11,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Header
+            // ── Header ───────────────────────────────────────────────
             HStack {
                 Text("RunnerBar v0.2")
                     .font(.headline)
@@ -19,9 +19,7 @@ struct PopoverView: View {
                 Spacer()
                 if isAuthenticated {
                     HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 8, height: 8)
+                        Circle().fill(Color.green).frame(width: 8, height: 8)
                         Text("Authenticated")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -29,9 +27,7 @@ struct PopoverView: View {
                 } else {
                     Button(action: signInWithGitHub) {
                         HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.orange)
-                                .frame(width: 8, height: 8)
+                            Circle().fill(Color.orange).frame(width: 8, height: 8)
                             Text("Sign in with GitHub")
                                 .font(.caption)
                                 .foregroundColor(.orange)
@@ -46,7 +42,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // Runner list
+            // ── Runner list ──────────────────────────────────────────
             if store.runners.isEmpty {
                 Text(isAuthenticated ? "No runners found" : "Authenticate to see runners")
                     .foregroundColor(.secondary)
@@ -74,9 +70,43 @@ struct PopoverView: View {
                 }
             }
 
+            // ── Active Jobs ──────────────────────────────────────────
+            if !store.jobs.isEmpty {
+                Divider()
+
+                Text("Active Jobs")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 2)
+
+                ForEach(store.jobs.prefix(5)) { job in
+                    HStack(spacing: 8) {
+                        jobDot(for: job)
+                        Text(job.name)
+                            .font(.system(size: 12))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer()
+                        Text(jobStatusLabel(for: job))
+                            .font(.caption)
+                            .foregroundColor(jobStatusColor(for: job))
+                            .frame(width: 76, alignment: .trailing)
+                        Text(job.elapsed)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 3)
+                }
+                .padding(.bottom, 6)
+            }
+
             Divider()
 
-            // Scope management
+            // ── Scope management ─────────────────────────────────────
             VStack(alignment: .leading, spacing: 4) {
                 Text("Scopes")
                     .font(.caption)
@@ -86,8 +116,7 @@ struct PopoverView: View {
 
                 ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
                     HStack {
-                        Text(scope)
-                            .font(.system(size: 12))
+                        Text(scope).font(.system(size: 12))
                         Spacer()
                         Button(action: {
                             ScopeStore.shared.remove(scope)
@@ -119,21 +148,18 @@ struct PopoverView: View {
 
             Divider()
 
-            // Launch at login
+            // ── Launch at login ──────────────────────────────────────
             Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login")
-                    .font(.system(size: 13))
+                Text("Launch at login").font(.system(size: 13))
             }
             .toggleStyle(.checkbox)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .onChange(of: launchAtLogin) { _ in
-                LoginItem.toggle()
-            }
+            .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
 
             Divider()
 
-            // Quit
+            // ── Quit ─────────────────────────────────────────────────
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 HStack {
                     Image(systemName: "xmark.square")
@@ -152,6 +178,48 @@ struct PopoverView: View {
         }
     }
 
+    // MARK: - Job helpers
+
+    @ViewBuilder
+    private func jobDot(for job: ActiveJob) -> some View {
+        Circle()
+            .fill(jobDotColor(for: job))
+            .frame(width: 7, height: 7)
+    }
+
+    private func jobDotColor(for job: ActiveJob) -> Color {
+        switch job.status {
+        case "in_progress": return .yellow
+        case "queued":      return .gray
+        default:            return job.conclusion == "success" ? .green : .red
+        }
+    }
+
+    private func jobStatusLabel(for job: ActiveJob) -> String {
+        switch job.status {
+        case "in_progress": return "In Progress"
+        case "queued":      return "Queued"
+        default:            return job.conclusion?.capitalized ?? "Done"
+        }
+    }
+
+    private func jobStatusColor(for job: ActiveJob) -> Color {
+        switch job.status {
+        case "in_progress": return .yellow
+        case "queued":      return .secondary
+        default:            return job.conclusion == "success" ? .green : .red
+        }
+    }
+
+    // MARK: - Runner helpers
+
+    private func dotColor(for runner: Runner) -> Color {
+        if runner.status != "online" { return .gray }
+        return runner.busy ? .yellow : .green
+    }
+
+    // MARK: - Actions
+
     private func signInWithGitHub() {
         let script = "tell application \"Terminal\" to do script \"gh auth login\""
         NSAppleScript(source: script)?.executeAndReturnError(nil)
@@ -166,22 +234,22 @@ struct PopoverView: View {
         store.reload()
         newScope = ""
     }
-
-    private func dotColor(for runner: Runner) -> Color {
-        if runner.status != "online" { return .gray }
-        return runner.busy ? .yellow : .green
-    }
 }
+
+// MARK: - Observable
 
 final class RunnerStoreObservable: ObservableObject {
     @Published var runners: [Runner] = []
+    @Published var jobs: [ActiveJob] = []
 
     init() {
         runners = RunnerStore.shared.runners
+        jobs    = RunnerStore.shared.jobs
     }
 
     func reload() {
         runners = RunnerStore.shared.runners
+        jobs    = RunnerStore.shared.jobs
         objectWillChange.send()
     }
 }

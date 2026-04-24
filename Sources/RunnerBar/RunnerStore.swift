@@ -8,9 +8,9 @@ enum AggregateStatus {
 
     var dot: String {
         switch self {
-        case .allOnline:  return "🟢"
+        case .allOnline:   return "🟢"
         case .someOffline: return "🟡"
-        case .allOffline: return "⚫"
+        case .allOffline:  return "⚫"
         }
     }
 
@@ -27,6 +27,7 @@ final class RunnerStore {
     static let shared = RunnerStore()
 
     private(set) var runners: [Runner] = []
+    private(set) var jobs: [ActiveJob] = []
     private var timer: Timer?
     var onChange: (() -> Void)?
 
@@ -51,26 +52,20 @@ final class RunnerStore {
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
 
-            // Fetch runners from GitHub API
+            // ── Runners ──────────────────────────────────────────────
             var all: [Runner] = []
             for scope in ScopeStore.shared.scopes {
-                log("RunnerStore › fetching scope: \(scope)")
+                log("RunnerStore › fetching runners for scope: \(scope)")
                 let fetched = fetchRunners(for: scope)
                 log("RunnerStore › scope \(scope) → \(fetched.count) runner(s)")
                 all.append(contentsOf: fetched)
             }
 
-            // Collect Worker process metrics once, sorted by CPU desc
-            // Mirrors ci-dash.py pair_runners(): busy runners first, then idle
+            // Assign Worker process metrics by slot index (busy-first)
             let workerMetrics = allWorkerMetrics()
             log("RunnerStore › found \(workerMetrics.count) worker process(es)")
-
-            // Sort runners: busy (active) first, then idle — same ordering
-            // assumption as ci-dash which pairs worker[0] with the busiest runner
-            var busyRunners  = all.filter { $0.busy }
-            var idleRunners  = all.filter { !$0.busy }
-
-            // Assign metrics by slot index
+            var busyRunners = all.filter {  $0.busy }
+            var idleRunners = all.filter { !$0.busy }
             for i in busyRunners.indices {
                 busyRunners[i].metrics = i < workerMetrics.count ? workerMetrics[i] : nil
             }
@@ -79,12 +74,22 @@ final class RunnerStore {
                 let slot = offset + i
                 idleRunners[i].metrics = slot < workerMetrics.count ? workerMetrics[slot] : nil
             }
-
             let enriched = busyRunners + idleRunners
-            log("RunnerStore › fetch complete — \(enriched.count) runner(s)")
+            log("RunnerStore › \(enriched.count) runner(s) enriched")
+
+            // ── Active Jobs ──────────────────────────────────────────
+            var allJobs: [ActiveJob] = []
+            for scope in ScopeStore.shared.scopes {
+                log("RunnerStore › fetching jobs for scope: \(scope)")
+                allJobs.append(contentsOf: fetchActiveJobs(for: scope))
+            }
+            // Cap at 5, always show at least what exists (down to 0)
+            let topJobs = Array(allJobs.prefix(5))
+            log("RunnerStore › fetch complete — \(enriched.count) runner(s), \(topJobs.count) job(s)")
 
             DispatchQueue.main.async {
                 self.runners = enriched
+                self.jobs    = topJobs
                 self.onChange?()
             }
         }
