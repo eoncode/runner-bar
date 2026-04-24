@@ -13,7 +13,7 @@ struct PopoverView: View {
 
             // ── Header ───────────────────────────────────────────────
             HStack {
-                Text("RunnerBar v0.3")
+                Text("RunnerBar v0.4")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -71,16 +71,24 @@ struct PopoverView: View {
             }
 
             // ── Active Jobs ──────────────────────────────────────────
-            if !store.jobs.isEmpty {
-                Divider()
+            // Always show the section; show a placeholder when no jobs are active
+            Divider()
 
-                Text("Active Jobs")
+            Text("Active Jobs")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 2)
+
+            if store.jobs.isEmpty {
+                Text("No active jobs")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
-                    .padding(.top, 8)
+                    .padding(.vertical, 4)
                     .padding(.bottom, 2)
-
+            } else {
                 ForEach(store.jobs.prefix(5)) { job in
                     HStack(spacing: 8) {
                         jobDot(for: job)
