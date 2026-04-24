@@ -37,6 +37,21 @@ It's built to stay out of your way — no Dock icon, no login prompts, no tokens
 
 <br/>
 
+## At a glance
+
+| | |
+|---|---|
+| **Platform** | macOS 13 Ventura or later (universal: arm64 + x86_64) |
+| **Language** | Swift 5.9+ ([`Package.swift`](Package.swift)) |
+| **Runner types** | Repo-level (`owner/repo`) and org-level (`org-name`) self-hosted runners |
+| **Host support** | github.com only — GitHub Enterprise Server is not supported in v0.1 |
+| **Auth** | Reuses the [`gh`](https://cli.github.com) CLI session — no PAT, no OAuth app |
+| **Polling** | Every 30 seconds via `gh api` ([`RunnerStore.swift`](Sources/RunnerBar/RunnerStore.swift)) |
+| **Status** | v0.1 — read-only ([issue #1](https://github.com/eonist/runner-bar/issues/1)) |
+| **Install** | `curl -fsSL https://eonist.github.io/runner-bar/install.sh \| bash` |
+
+<br/>
+
 ## Table of contents
 
 - [Install](#-install)
@@ -48,6 +63,7 @@ It's built to stay out of your way — no Dock icon, no login prompts, no tokens
 - [Project layout](#-project-layout)
 - [Build from source](#-build-from-source)
 - [Out of scope for v0.1](#-out-of-scope-for-v01)
+- [Troubleshooting](#-troubleshooting)
 - [FAQ](#-faq)
 - [Contributing](#-contributing)
 - [Docs](#-docs)
@@ -64,12 +80,29 @@ curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 
 The installer downloads `RunnerBar.zip` from GitHub Pages, replaces any existing `/Applications/RunnerBar.app`, unzips the new bundle into `/Applications`, and launches it. The menu-bar dot appears immediately. See [DEPLOYMENT.md](DEPLOYMENT.md) for why Gatekeeper doesn't fire.
 
-**Uninstall:**
+### Update
+
+Re-run the installer. It always fetches the current `RunnerBar.zip` from GitHub Pages and replaces `/Applications/RunnerBar.app`:
+
+```bash
+curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
+```
+
+Check the installed version against the latest published one:
+
+```bash
+defaults read /Applications/RunnerBar.app/Contents/Info CFBundleShortVersionString
+curl -fsSL https://eonist.github.io/runner-bar/version.txt
+```
+
+### Uninstall
 
 ```bash
 rm -rf /Applications/RunnerBar.app
 defaults delete dev.eonist.runnerbar 2>/dev/null || true
 ```
+
+The first line removes the app bundle. The second clears the `UserDefaults` store containing your configured scopes and the launch-at-login preference — omit it if you'd rather keep those.
 
 <br/>
 
@@ -240,6 +273,55 @@ Full v0.1 spec: [issue #1](https://github.com/eonist/runner-bar/issues/1). What'
 
 ---
 
+## 🩹 Troubleshooting
+
+<details>
+<summary><strong>I ran the installer but nothing appears in the menu bar.</strong></summary>
+
+First, confirm the app is installed: `ls -l /Applications/RunnerBar.app`. If it's there, launch it manually with `open /Applications/RunnerBar.app` and look for a small colored circle on the right side of your menu bar. RunnerBar has no Dock icon (`LSUIElement=true`). If your menu bar is crowded, another item may be hiding it — try a menu-bar manager like [Ice](https://icemenubar.app).
+</details>
+
+<details>
+<summary><strong>The dot is red even though my runners are online on github.com.</strong></summary>
+
+1. Open the popover and verify that the scope matches what GitHub uses. Repo-level runners need <code>owner/repo</code>; org-level runners need just the org name.
+2. Confirm the "Authenticated" indicator is green. If it's "Sign in with GitHub", click it and complete <code>gh auth login</code>.
+3. Verify from Terminal: <code>gh api /repos/OWNER/REPO/actions/runners</code> or <code>gh api /orgs/ORG/actions/runners</code>. If that call fails, your <code>gh</code> session doesn't have the right scope for that repo/org.
+</details>
+
+<details>
+<summary><strong>The installer fails with a download or SSL error.</strong></summary>
+
+The installer pulls from GitHub Pages. Confirm the endpoints are reachable:
+
+<pre><code>curl -I https://eonist.github.io/runner-bar/install.sh
+curl -I https://eonist.github.io/runner-bar/RunnerBar.zip
+</code></pre>
+
+If both return <code>HTTP/2 200</code>, re-run the installer. If they don't, you're behind a proxy or offline.
+</details>
+
+<details>
+<summary><strong>macOS says the app is damaged or blocks it from opening.</strong></summary>
+
+This usually means the bundle picked up the <code>com.apple.quarantine</code> attribute somewhere along the way (e.g. downloaded through a browser instead of via <code>curl</code>). Remove it:
+
+<pre><code>xattr -dr com.apple.quarantine /Applications/RunnerBar.app
+</code></pre>
+
+Then reopen the app. See <a href="DEPLOYMENT.md">DEPLOYMENT.md</a> for why the <code>curl | bash</code> install path avoids this in the first place.
+</details>
+
+<details>
+<summary><strong>Launch at login doesn't stick after a reboot.</strong></summary>
+
+Launch at login is managed by <a href="Sources/RunnerBar/LoginItem.swift"><code>LoginItem.swift</code></a> via <code>SMAppService</code>. Check <strong>System Settings → General → Login Items</strong> — RunnerBar should appear there when enabled. Toggling the checkbox in the popover re-registers it.
+</details>
+
+<br/>
+
+---
+
 ## ❓ FAQ
 
 <details>
@@ -252,12 +334,6 @@ No. RunnerBar reuses the session `gh auth login` created. To pin a specific toke
 <summary><strong>The popover says "Sign in with GitHub" but I'm already signed into github.com.</strong></summary>
 
 Auth comes from the `gh` CLI, not the browser. Run `brew install gh && gh auth login` and reopen the popover.
-</details>
-
-<details>
-<summary><strong>I installed it but don't see anything.</strong></summary>
-
-RunnerBar has no Dock icon (`LSUIElement=true`). Look for a small colored circle on the right side of your menu bar.
 </details>
 
 <details>
