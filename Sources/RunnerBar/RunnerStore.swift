@@ -28,6 +28,9 @@ final class RunnerStore {
 
     private(set) var runners: [Runner] = []
     private(set) var jobs: [ActiveJob] = []
+    /// Last active (non-dimmed) jobs seen — used to seed completed tail
+    /// when they vanish before the GitHub API marks the run as completed.
+    private var lastActiveJobs: [ActiveJob] = []
     private var timer: Timer?
     var onChange: (() -> Void)?
 
@@ -52,6 +55,9 @@ final class RunnerStore {
         log("RunnerStore › fetch — \(ScopeStore.shared.scopes.count) scope(s)")
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
+
+            // ── Snapshot previous active jobs (main-thread safe read before bg work)
+            let prevActive: [ActiveJob] = DispatchQueue.main.sync { self.lastActiveJobs }
 
             // ── Runners ──────────────────────────────────────────────
             var all: [Runner] = []
@@ -83,11 +89,38 @@ final class RunnerStore {
                 completedTail.append(contentsOf: fetchRecentCompletedJobs(for: scope))
             }
 
-            // Always merge: active first, then completed tail, cap at 3 total.
-            // If completed fetch returned nothing (GitHub API lag), preserve
-            // previous completed jobs (already dimmed+frozen) as the tail.
-            let prevCompleted = self.jobs.filter { $0.isDimmed }
-            let tail = completedTail.isEmpty ? prevCompleted : Array(completedTail.prefix(3))
+            // Build tail: prefer fresh API data.
+            // If API returned nothing (lag), fall back to:
+            //   1. Previous dimmed jobs already in self.jobs
+            //   2. Previous active jobs frozen as dimmed right now
+            let now = Date()
+            let tail: [ActiveJob]
+            if !completedTail.isEmpty {
+                tail = Array(completedTail.prefix(3))
+            } else {
+                // Try existing dimmed jobs first
+                let existingDimmed = DispatchQueue.main.sync { self.jobs.filter { $0.isDimmed } }
+                if !existingDimmed.isEmpty {
+                    tail = existingDimmed
+                } else if !prevActive.isEmpty {
+                    // Active jobs just vanished — freeze them as dimmed tail
+                    tail = Array(prevActive.map { job in
+                        ActiveJob(
+                            id:          job.id,
+                            name:        job.name,
+                            status:      "completed",
+                            conclusion:  "success",
+                            startedAt:   job.startedAt,
+                            createdAt:   job.createdAt,
+                            completedAt: now,
+                            isDimmed:    true
+                        )
+                    }.prefix(3))
+                } else {
+                    tail = []
+                }
+            }
+
             let merged = Array((activeJobs + tail).prefix(3))
 
             log("RunnerStore › fetch complete — \(enriched.count) runner(s), \(merged.count) job(s) (\(activeJobs.count) active, \(tail.count) tail)")
@@ -95,6 +128,8 @@ final class RunnerStore {
             DispatchQueue.main.async {
                 self.runners = enriched
                 self.jobs    = merged
+                // Track active jobs for next cycle's fallback
+                self.lastActiveJobs = activeJobs
                 self.onChange?()
             }
         }
