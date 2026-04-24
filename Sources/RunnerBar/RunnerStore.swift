@@ -50,6 +50,8 @@ final class RunnerStore {
         log("RunnerStore › fetch — \(ScopeStore.shared.scopes.count) scope(s)")
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
+
+            // Fetch runners from GitHub API
             var all: [Runner] = []
             for scope in ScopeStore.shared.scopes {
                 log("RunnerStore › fetching scope: \(scope)")
@@ -57,13 +59,30 @@ final class RunnerStore {
                 log("RunnerStore › scope \(scope) → \(fetched.count) runner(s)")
                 all.append(contentsOf: fetched)
             }
-            let busyCount = max(all.filter { $0.busy }.count, 1)
-            let enriched = all.map { runner -> Runner in
-                var r = runner
-                r.busyCount = busyCount
-                return r
+
+            // Collect Worker process metrics once, sorted by CPU desc
+            // Mirrors ci-dash.py pair_runners(): busy runners first, then idle
+            let workerMetrics = allWorkerMetrics()
+            log("RunnerStore › found \(workerMetrics.count) worker process(es)")
+
+            // Sort runners: busy (active) first, then idle — same ordering
+            // assumption as ci-dash which pairs worker[0] with the busiest runner
+            var busyRunners  = all.filter { $0.busy }
+            var idleRunners  = all.filter { !$0.busy }
+
+            // Assign metrics by slot index
+            for i in busyRunners.indices {
+                busyRunners[i].metrics = i < workerMetrics.count ? workerMetrics[i] : nil
             }
-            log("RunnerStore › fetch complete — \(enriched.count) total runner(s), busyCount=\(busyCount)")
+            let offset = busyRunners.count
+            for i in idleRunners.indices {
+                let slot = offset + i
+                idleRunners[i].metrics = slot < workerMetrics.count ? workerMetrics[slot] : nil
+            }
+
+            let enriched = busyRunners + idleRunners
+            log("RunnerStore › fetch complete — \(enriched.count) runner(s)")
+
             DispatchQueue.main.async {
                 self.runners = enriched
                 self.onChange?()

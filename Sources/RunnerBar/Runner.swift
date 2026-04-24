@@ -6,7 +6,8 @@ struct Runner: Codable, Identifiable {
     let status: String  // "online" or "offline"
     let busy: Bool
 
-    var busyCount: Int = 1
+    // Assigned after fetch by RunnerStore, not decoded from JSON
+    var metrics: RunnerMetrics? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, busy
@@ -14,11 +15,12 @@ struct Runner: Codable, Identifiable {
 
     var displayStatus: String {
         if status == "offline" { return "offline" }
-        // fetchMetrics now does a per-runner ps aux match — no busyCount averaging
-        let m = fetchMetrics(for: name)
-        let cpu = m.map { String(format: "%.1f", $0.cpu) } ?? "0"
-        let mem = m.map { String(format: "%.1f", $0.mem) } ?? "0"
         let label = busy ? "active" : "idle"
+        guard let m = metrics else {
+            return "\(label) (CPU: — MEM: —)"
+        }
+        let cpu = String(format: "%.1f", m.cpu)
+        let mem = String(format: "%.1f", m.mem)
         return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"
     }
 }
