@@ -78,11 +78,6 @@ final class RunnerStore {
             }
 
             // ── Completed tail ────────────────────────────────────
-            // When active: show up to 3 active jobs.
-            // When idle: show last 3 completed jobs as dimmed tail.
-            // KEY: if the completed fetch returns empty (GitHub API lag after
-            // a run finishes), keep self.jobs from the previous cycle so the
-            // section never flashes blank. Mirrors ci-dash.py prev_completed.
             let newJobs: [ActiveJob]
             if !activeJobs.isEmpty {
                 newJobs = Array(activeJobs.prefix(3))
@@ -91,9 +86,28 @@ final class RunnerStore {
                 for scope in ScopeStore.shared.scopes {
                     tail.append(contentsOf: fetchRecentCompletedJobs(for: scope))
                 }
-                // Only replace if we actually got something back.
-                // Otherwise preserve the previous snapshot (avoids blank flash).
-                newJobs = tail.isEmpty ? self.jobs : Array(tail.prefix(3))
+                if !tail.isEmpty {
+                    // Fresh completed data from API — already dimmed + have completedAt.
+                    newJobs = Array(tail.prefix(3))
+                } else {
+                    // GitHub API lag: run not yet marked completed.
+                    // Preserve previous snapshot but freeze each job:
+                    // mark isDimmed=true and pin completedAt=now so elapsed stops ticking.
+                    let now = Date()
+                    newJobs = self.jobs.map { job in
+                        guard !job.isDimmed else { return job } // already frozen
+                        return ActiveJob(
+                            id:          job.id,
+                            name:        job.name,
+                            status:      "completed",
+                            conclusion:  job.conclusion ?? "success",
+                            startedAt:   job.startedAt,
+                            createdAt:   job.createdAt,
+                            completedAt: job.completedAt ?? now,
+                            isDimmed:    true
+                        )
+                    }
+                }
             }
 
             log("RunnerStore › fetch complete — \(enriched.count) runner(s), \(newJobs.count) job(s)")
