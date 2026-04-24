@@ -41,6 +41,7 @@ final class RunnerStore {
 
     func start() {
         log("RunnerStore › start — poll interval 30s")
+        timer?.invalidate()
         fetch()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.fetch()
@@ -55,15 +56,9 @@ final class RunnerStore {
             // ── Runners ──────────────────────────────────────────────
             var all: [Runner] = []
             for scope in ScopeStore.shared.scopes {
-                log("RunnerStore › fetching runners for scope: \(scope)")
-                let fetched = fetchRunners(for: scope)
-                log("RunnerStore › scope \(scope) → \(fetched.count) runner(s)")
-                all.append(contentsOf: fetched)
+                all.append(contentsOf: fetchRunners(for: scope))
             }
-
-            // Assign Worker process metrics by slot index (busy-first)
             let workerMetrics = allWorkerMetrics()
-            log("RunnerStore › found \(workerMetrics.count) worker process(es)")
             var busyRunners = all.filter {  $0.busy }
             var idleRunners = all.filter { !$0.busy }
             for i in busyRunners.indices {
@@ -75,16 +70,27 @@ final class RunnerStore {
                 idleRunners[i].metrics = slot < workerMetrics.count ? workerMetrics[slot] : nil
             }
             let enriched = busyRunners + idleRunners
-            log("RunnerStore › \(enriched.count) runner(s) enriched")
 
             // ── Active Jobs ──────────────────────────────────────────
-            var allJobs: [ActiveJob] = []
+            var activeJobs: [ActiveJob] = []
             for scope in ScopeStore.shared.scopes {
-                log("RunnerStore › fetching jobs for scope: \(scope)")
-                allJobs.append(contentsOf: fetchActiveJobs(for: scope))
+                activeJobs.append(contentsOf: fetchActiveJobs(for: scope))
             }
-            // Cap at 5, always show at least what exists (down to 0)
-            let topJobs = Array(allJobs.prefix(5))
+
+            // ── Completed tail (shown when nothing is active) ────────
+            // Mirrors ci-dash.py: keep last 3 completed jobs so the
+            // section never goes blank right after a run finishes.
+            let topJobs: [ActiveJob]
+            if !activeJobs.isEmpty {
+                topJobs = Array(activeJobs.prefix(5))
+            } else {
+                var tail: [ActiveJob] = []
+                for scope in ScopeStore.shared.scopes {
+                    tail.append(contentsOf: fetchRecentCompletedJobs(for: scope))
+                }
+                topJobs = Array(tail.prefix(3))
+            }
+
             log("RunnerStore › fetch complete — \(enriched.count) runner(s), \(topJobs.count) job(s)")
 
             DispatchQueue.main.async {

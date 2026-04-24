@@ -7,13 +7,14 @@ struct PopoverView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    @State private var tick = 0  // incremented every second to drive live elapsed
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header ───────────────────────────────────────────────
             HStack {
-                Text("RunnerBar v0.3")
+                Text("RunnerBar v0.4")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -71,29 +72,46 @@ struct PopoverView: View {
             }
 
             // ── Active Jobs ──────────────────────────────────────────
-            if !store.jobs.isEmpty {
-                Divider()
+            Divider()
 
-                Text("Active Jobs")
+            Text("Active Jobs")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 2)
+
+            if store.jobs.isEmpty {
+                Text("No active jobs")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
-                    .padding(.top, 8)
+                    .padding(.vertical, 4)
                     .padding(.bottom, 2)
-
+            } else {
                 ForEach(store.jobs.prefix(5)) { job in
                     HStack(spacing: 8) {
                         jobDot(for: job)
                         Text(job.name)
                             .font(.system(size: 12))
+                            .foregroundColor(job.isDimmed ? .secondary : .primary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Spacer()
-                        Text(jobStatusLabel(for: job))
-                            .font(.caption)
-                            .foregroundColor(jobStatusColor(for: job))
-                            .frame(width: 76, alignment: .trailing)
-                        Text(store.tick > 0 ? job.elapsed : job.elapsed) // re-evaluate each tick
+                        // Completed tail: show conclusion; active: show status label
+                        if job.isDimmed {
+                            Text(conclusionLabel(for: job))
+                                .font(.caption)
+                                .foregroundColor(conclusionColor(for: job))
+                                .frame(width: 76, alignment: .trailing)
+                        } else {
+                            Text(jobStatusLabel(for: job))
+                                .font(.caption)
+                                .foregroundColor(jobStatusColor(for: job))
+                                .frame(width: 76, alignment: .trailing)
+                        }
+                        // tick forces SwiftUI to re-evaluate elapsed every second
+                        Text(elapsedText(for: job, tick: tick))
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                             .frame(width: 40, alignment: .trailing)
@@ -176,6 +194,18 @@ struct PopoverView: View {
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
         }
+        // 1-second ticker for live elapsed — only runs while popover is open
+        .onAppear {
+            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                tick += 1
+            }
+        }
+    }
+
+    // MARK: - Elapsed (tick-driven for live updates)
+
+    private func elapsedText(for job: ActiveJob, tick _: Int) -> String {
+        job.elapsed
     }
 
     // MARK: - Job helpers
@@ -183,7 +213,7 @@ struct PopoverView: View {
     @ViewBuilder
     private func jobDot(for job: ActiveJob) -> some View {
         Circle()
-            .fill(jobDotColor(for: job))
+            .fill(job.isDimmed ? Color.secondary : jobDotColor(for: job))
             .frame(width: 7, height: 7)
     }
 
@@ -191,7 +221,7 @@ struct PopoverView: View {
         switch job.status {
         case "in_progress": return .yellow
         case "queued":      return .gray
-        default:            return job.conclusion == "success" ? .green : .red
+        default:            return .secondary
         }
     }
 
@@ -199,7 +229,7 @@ struct PopoverView: View {
         switch job.status {
         case "in_progress": return "In Progress"
         case "queued":      return "Queued"
-        default:            return job.conclusion?.capitalized ?? "Done"
+        default:            return "Done"
         }
     }
 
@@ -207,7 +237,25 @@ struct PopoverView: View {
         switch job.status {
         case "in_progress": return .yellow
         case "queued":      return .secondary
-        default:            return job.conclusion == "success" ? .green : .red
+        default:            return .secondary
+        }
+    }
+
+    private func conclusionLabel(for job: ActiveJob) -> String {
+        switch job.conclusion {
+        case "success":   return "✓ success"
+        case "failure":   return "✗ failure"
+        case "cancelled": return "⊖ cancelled"
+        case "skipped":   return "− skipped"
+        default:          return job.conclusion ?? "done"
+        }
+    }
+
+    private func conclusionColor(for job: ActiveJob) -> Color {
+        switch job.conclusion {
+        case "success":  return .green
+        case "failure":  return .red
+        default:         return .secondary
         }
     }
 
@@ -241,15 +289,10 @@ struct PopoverView: View {
 final class RunnerStoreObservable: ObservableObject {
     @Published var runners: [Runner] = []
     @Published var jobs: [ActiveJob] = []
-    /// Increments every second to drive elapsed re-renders.
-    @Published var tick: Int = 0
-
-    private var tickTimer: Timer?
 
     init() {
         runners = RunnerStore.shared.runners
         jobs    = RunnerStore.shared.jobs
-        startTicking()
     }
 
     func reload() {
@@ -257,15 +300,4 @@ final class RunnerStoreObservable: ObservableObject {
         jobs    = RunnerStore.shared.jobs
         objectWillChange.send()
     }
-
-    private func startTicking() {
-        tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            // Only tick when there are active jobs to avoid unnecessary redraws
-            guard !self.jobs.isEmpty else { return }
-            self.tick &+= 1
-        }
-    }
-
-    deinit { tickTimer?.invalidate() }
 }
