@@ -34,7 +34,6 @@ struct PopoverView: View {
             switch navState {
             case .jobList:
                 jobListView
-                    .frame(width: 340)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxHeight: 480, alignment: .top)
             case .jobSteps(let job, let scope):
@@ -52,6 +51,10 @@ struct PopoverView: View {
                 )
             }
         }
+        // Width is fixed here at the root so ALL nav states report width=340
+        // to NSHostingController.preferredContentSize. This prevents NSPopover
+        // from ever changing its horizontal position.
+        .frame(width: 340)
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
         }
@@ -65,7 +68,7 @@ struct PopoverView: View {
     private var jobListView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header
+            // -- Header
             HStack {
                 Text("RunnerBar v1.0")
                     .font(.headline)
@@ -96,7 +99,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Active Jobs
+            // -- Active Jobs
             Text("Active Jobs")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -121,7 +124,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Local runners
+            // -- Local runners
             Text("Local runners")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -159,7 +162,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Scope management
+            // -- Scope management
             VStack(alignment: .leading, spacing: 4) {
                 Text("Scopes")
                     .font(.caption)
@@ -201,7 +204,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Launch at login
+            // -- Launch at login
             Toggle(isOn: $launchAtLogin) {
                 Text("Launch at login").font(.system(size: 13))
             }
@@ -212,7 +215,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Quit
+            // -- Quit
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 HStack {
                     Image(systemName: "xmark.square")
@@ -332,10 +335,10 @@ struct PopoverView: View {
 
     private func conclusionLabel(conclusion: String?) -> String {
         switch conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "cancelled": return "⊖ cancelled"
-        case "skipped":   return "− skipped"
+        case "success":   return "checkmark success"
+        case "failure":   return "x failure"
+        case "cancelled": return "- cancelled"
+        case "skipped":   return "- skipped"
         default:          return conclusion ?? "done"
         }
     }

@@ -7,9 +7,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover?
     private var hc: NSHostingController<PopoverView>?
     private let observable = RunnerStoreObservable()
-    private var sizeObserver: NSKeyValueObservation?
-
-    static let popoverWidth: CGFloat = 340
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("AppDelegate > applicationDidFinishLaunching")
@@ -22,29 +19,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hc = NSHostingController(rootView: PopoverView(store: observable))
-        // sizingOptions = [] means AppKit does NOT auto-resize the popover.
-        // We drive height manually via KVO below, so width never changes.
-        hc.sizingOptions = []
+        // The root PopoverView has .frame(width: 340) so SwiftUI's ideal width
+        // is always exactly 340. sizingOptions=.preferredContentSize is therefore
+        // safe: AppKit reads height from SwiftUI, width never changes.
+        hc.sizingOptions = .preferredContentSize
         self.hc = hc
 
         let popover = NSPopover()
         popover.behavior              = .transient
         popover.animates              = false
         popover.contentViewController = hc
-        // Seed an initial size; height will be corrected by KVO before first show.
-        popover.contentSize = NSSize(width: Self.popoverWidth, height: 480)
         self.popover = popover
-
-        // KVO: whenever SwiftUI recalculates its ideal height, update ONLY the
-        // popover height. Width is never touched, so the popover never jumps left.
-        sizeObserver = hc.observe(\.preferredContentSize, options: [.new]) { [weak self] _, change in
-            guard let self, let popover = self.popover,
-                  let newSize = change.newValue else { return }
-            let h = max(newSize.height, 1)
-            if popover.contentSize.height != h {
-                popover.contentSize = NSSize(width: Self.popoverWidth, height: h)
-            }
-        }
 
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
