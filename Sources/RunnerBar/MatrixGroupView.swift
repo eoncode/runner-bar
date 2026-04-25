@@ -55,15 +55,16 @@ import SwiftUI
 //
 // When the user taps a job variant here, we:
 //   1. Set isLoadingJob = true  (show a spinner row)
-//   2. Fetch steps in the background
+//   2. Fetch steps via the free function fetchJobSteps(jobID:scope:)
 //   3. On completion, set selectedJob + selectedSteps  (navigate)
 //
 // The popover height does NOT change during the spinner because this
 // view is already at .frame(minHeight:480, maxHeight:480). The spinner
 // is content inside the fixed frame, not a size change.
 //
-// ⚠️ DO NOT call JobStepsView without pre-loading steps.
-// ⚠️ DO NOT pass an empty [] steps array and load inside JobStepsView.
+// ⚠️ fetchJobSteps is a FREE FUNCTION in JobStep.swift — not a static method.
+// ⚠️ Call as:  fetchJobSteps(jobID: job.id, scope: scope)
+// ⚠️ NOT as:   JobStep.fetchJobSteps(...)  ← does not exist, will not compile
 // ============================================================
 
 struct MatrixGroupView: View {
@@ -202,7 +203,8 @@ struct MatrixGroupView: View {
         guard isLoadingJob == nil else { return }
         isLoadingJob = job
         Task {
-            let steps = await JobStep.fetchJobSteps(jobID: job.id, scope: scope)
+            // ⚠️ fetchJobSteps is a FREE FUNCTION — not JobStep.fetchJobSteps
+            let steps = fetchJobSteps(jobID: job.id, scope: scope)
             await MainActor.run {
                 selectedSteps = steps
                 selectedJob = job
