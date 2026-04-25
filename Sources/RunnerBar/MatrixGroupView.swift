@@ -1,31 +1,49 @@
 import SwiftUI
 
-// MARK: - Matrix Group View
-// Shows the list of child jobs inside a matrix group.
-// Each child job taps into JobStepsView.
+// ============================================================
+// ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
+// ============================================================
+// VERSION: v1.7
+//
+// This view is rendered inside PopoverView’s root Group as the
+// .matrixGroup navigation state. It exists inside an NSPopover
+// whose sizing is extremely fragile. Read PopoverView.swift SECTION 1
+// and AppDelegate.swift SECTION 1 before making any changes.
+//
+// The frame and navigation rules here are IDENTICAL to JobStepsView.
+// See JobStepsView.swift for the detailed explanation.
 //
 // ============================================================
-// ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
+// FRAME RULE (same as JobStepsView — do not change either without the other)
 // ============================================================
-// This view is a nav state inside PopoverView's root Group.
-// PopoverView root Group has .frame(idealWidth: 340).
-// NSHostingController with sizingOptions=.preferredContentSize
-// reads SwiftUI IDEAL size to set preferredContentSize.
 //
-// RULE: child nav views must NEVER set .frame(width: N).
-//   ✗ .frame(width: 340, height: 480)  ← overrides ideal width => left jump
-//   ✓ .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
-//     fills width (owned by root idealWidth:340), pins height to 480pt
+// body MUST end with:
+//   .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
 //
-// THINGS THAT WILL CAUSE THE LEFT-JUMP REGRESSION:
-//   ✗ Using .frame(width: 340) anywhere in this file
-//   ✗ Using ZStack with .transition(.move(edge:))
-//     => ZStack collapses to zero width in NSPopover context
-//     => move transition animates from far left of screen
-//     => USE Group + if/else instead, no transitions
-//   ✗ Using .frame(minWidth:) or .fixedSize on the outer container
+// ✘ NOT: .frame(width: 340, height: 480)
+// ✘ NOT: .frame(width: 340, minHeight: 480, maxHeight: 480)
+// ✔ YES: .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
 //
-// See GitHub issues #53 and #54 before touching any of this.
+// Changing width:340 instead of maxWidth:.infinity causes the ideal
+// width to be reported differently from the root Group’s idealWidth:340,
+// making preferredContentSize.width fluctuate across navigation states,
+// triggering NSPopover to re-anchor its screen position => left jump.
+//
+// ============================================================
+// NAVIGATION RULE (same as JobStepsView — extremely important)
+// ============================================================
+//
+// Internal navigation between variantListView and JobStepsView MUST use
+// Group + if/else. DO NOT use ZStack + .transition(.move(edge:)).
+//
+// ZStack with move transitions in NSPopover context:
+//   => ZStack measures all children simultaneously (even invisible ones)
+//   => Width collapses to zero during the transition
+//   => .transition(.move(edge: .leading)) animates from the LEFT EDGE
+//      OF THE ENTIRE SCREEN, not from within the popover
+//   => Looks exactly like the left-jump bug
+//   => This was tried. It was catastrophic. Do not try it again.
+//
 // ============================================================
 
 struct MatrixGroupView: View {
@@ -38,11 +56,13 @@ struct MatrixGroupView: View {
     @State private var tick = 0
 
     var body: some View {
-        // ⚠️ Group + if/else, NOT ZStack + .transition(.move)
-        // ZStack with move transitions causes content to animate from far left of screen.
-        // Group with plain if/else swaps content in-place with no anchor issues.
+        // ⚠️ Group + if/else for internal navigation.
+        // DO NOT replace with ZStack + .transition(.move(edge:)).
+        // See NAVIGATION RULE above.
         Group {
             if let job = selectedJob {
+                // JobStepsView also has .frame(maxWidth:.infinity,...) on its body.
+                // The two frames compose correctly — do not add another frame here.
                 JobStepsView(
                     job: job,
                     scope: scope,
@@ -52,20 +72,20 @@ struct MatrixGroupView: View {
                 variantListView
             }
         }
-        // ⚠️ maxWidth:.infinity — DO NOT use width:340 here.
-        // width:340 overrides the root Group's idealWidth:340 and breaks
-        // preferredContentSize.width => left jump. See contract above.
+        // ⚠️ THIS FRAME IS MANDATORY. See frame rule at top of file.
+        // maxWidth:.infinity — DO NOT change to width:340
+        // minHeight:480 — DO NOT remove
+        // maxHeight:480 — DO NOT remove
         .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
     }
 
     // MARK: - Variant list
 
     private var variantListView: some View {
-        // ⚠️ No .fixedSize or .frame(minWidth:) here — the outer frame controls size.
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
 
-                // ── Header
+                // Header
                 HStack(spacing: 6) {
                     Button(action: onBack) {
                         Image(systemName: "chevron.left")
@@ -91,7 +111,6 @@ struct MatrixGroupView: View {
 
                 Divider()
 
-                // ── Variant rows
                 ForEach(jobs) { job in
                     Button(action: { selectedJob = job }) {
                         HStack(spacing: 8) {
@@ -137,39 +156,30 @@ struct MatrixGroupView: View {
                 }
                 .padding(.bottom, 6)
 
-            } // VStack
-        } // ScrollView
+            } // end VStack
+        } // end ScrollView
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
     }
 
     // MARK: - Helpers
-
-    private func liveElapsed(for job: ActiveJob) -> String {
-        _ = tick
-        return job.elapsed
-    }
+    private func liveElapsed(for job: ActiveJob) -> String { _ = tick; return job.elapsed }
 
     private func dotColor(for job: ActiveJob) -> Color {
-        if job.isDimmed {
-            return job.conclusion == "failure" ? .red : .secondary
-        }
+        if job.isDimmed { return job.conclusion == "failure" ? .red : .secondary }
         switch job.status {
         case "in_progress": return .yellow
         case "queued":      return .gray
         default:            return .secondary
         }
     }
-
     private func statusLabel(for job: ActiveJob) -> String {
         job.status == "in_progress" ? "In Progress" : "Queued"
     }
-
     private func statusColor(for job: ActiveJob) -> Color {
         job.status == "in_progress" ? .yellow : .secondary
     }
-
     private func conclusionLabel(for job: ActiveJob) -> String {
         switch job.conclusion {
         case "success":   return "✓ success"
@@ -179,7 +189,6 @@ struct MatrixGroupView: View {
         default:          return job.conclusion ?? "done"
         }
     }
-
     private func conclusionColor(for job: ActiveJob) -> Color {
         switch job.conclusion {
         case "success": return .green

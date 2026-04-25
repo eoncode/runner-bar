@@ -1,21 +1,69 @@
 import SwiftUI
 
-// MARK: - Job Steps View
+// ============================================================
+// ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
+// ============================================================
+// VERSION: v1.7
+//
+// This view is rendered inside PopoverView’s root Group as the
+// .jobSteps navigation state. It exists inside an NSPopover whose
+// sizing is extremely fragile. Read PopoverView.swift SECTION 1
+// and AppDelegate.swift SECTION 1 before making any changes.
 //
 // ============================================================
-// ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
+// THE ONLY FRAME RULE YOU NEED TO KNOW FOR THIS FILE
 // ============================================================
-// This view is a nav state inside PopoverView's root Group.
-// PopoverView root Group has .frame(idealWidth: 340).
-// NSHostingController with sizingOptions=.preferredContentSize
-// reads SwiftUI IDEAL size to set preferredContentSize.
 //
-// RULE: child nav views must NEVER set .frame(width: N).
-//   ✗ .frame(width: 340, height: 480)  ← overrides ideal width => left jump
-//   ✓ .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
-//     fills width (owned by root idealWidth:340), pins height to 480pt
+// The body of this view MUST end with:
+//   .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
 //
-// See GitHub issues #53 and #54 before touching any of this.
+// WHY maxWidth: .infinity and NOT width: 340:
+//   PopoverView’s root Group has .frame(idealWidth: 340).
+//   NSHostingController reads the SwiftUI ideal size to set
+//   preferredContentSize. .frame(idealWidth: 340) on the root
+//   Group establishes 340pt as the ideal width for the entire tree.
+//
+//   If THIS view uses .frame(width: 340), it sets a LAYOUT constraint
+//   of 340pt. This fights the parent’s idealWidth:340 and causes the
+//   ideal width to be reported inconsistently across navigation states.
+//   The result: preferredContentSize.width changes when navigating
+//   to/from this view => NSPopover re-anchors its full screen position
+//   => popover jumps to the far left of the screen.
+//
+//   .frame(maxWidth: .infinity) expands to fill the space established
+//   by the parent’s idealWidth constraint without fighting it.
+//   This keeps ideal width = 340 at all times.
+//
+// WHY minHeight: 480, maxHeight: 480:
+//   Pins the height to exactly 480pt for this navigation state.
+//   This matches the maxHeight:480 cap on the jobList state,
+//   so the popover height stays constant across navigation.
+//   DO NOT remove minHeight — without it, short step lists would
+//   shrink the popover height, causing a re-anchor => left jump.
+//
+// ✘ DO NOT change to: .frame(width: 340, height: 480)
+// ✘ DO NOT change to: .frame(width: 340, minHeight: 480, maxHeight: 480)
+// ✘ DO NOT change to: .frame(maxWidth: 340, ...)
+// ✔ KEEP AS:          .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+//
+// ============================================================
+// NAVIGATION CONTRACT FOR THIS VIEW
+// ============================================================
+//
+// This view has its own internal navigation: stepsListView <-> StepLogView.
+// That internal navigation follows the same rules:
+//
+//   ✘ DO NOT use ZStack + .transition(.move(edge:))
+//      In NSPopover context, ZStack collapses to zero width during the
+//      transition and the move animation plays from the LEFT EDGE OF THE
+//      SCREEN, not from within the popover. This looks exactly like the
+//      left-jump bug and is just as bad.
+//
+//   ✔ USE Group + if/else (current approach)
+//      Group with plain if/else swaps content in-place with no transitions
+//      and no size artifacts. The outer .frame(maxWidth:.infinity,...) on
+//      the Group’s body keeps size stable regardless of which branch is shown.
+//
 // ============================================================
 
 struct JobStepsView: View {
@@ -29,6 +77,8 @@ struct JobStepsView: View {
     @State private var selectedStep: JobStep? = nil
 
     var body: some View {
+        // ⚠️ Group + if/else for internal navigation. See NAVIGATION CONTRACT above.
+        // DO NOT replace with ZStack + transitions.
         Group {
             if let step = selectedStep {
                 StepLogView(
@@ -41,19 +91,24 @@ struct JobStepsView: View {
                 stepsListView
             }
         }
-        // ⚠️ maxWidth:.infinity — DO NOT use width:340 here.
-        // width:340 overrides the root Group's idealWidth:340 and breaks
-        // preferredContentSize.width => left jump. See contract above.
+        // ⚠️ THIS FRAME IS MANDATORY. See frame contract at top of file.
+        // maxWidth:.infinity — DO NOT change to width:340
+        // minHeight:480 — DO NOT remove (prevents shrink on short lists)
+        // maxHeight:480 — DO NOT remove (prevents expand on tall lists)
         .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
     }
 
     // MARK: - Steps list
 
     private var stepsListView: some View {
+        // ⚠️ ScrollView is correct here (unlike jobListView which must NOT use ScrollView).
+        // The outer .frame(maxHeight:480) clamps the scroll region to 480pt.
+        // The ScrollView itself does not affect preferredContentSize because it
+        // is inside the clamping frame, not measuring the outer container.
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
 
-                // ── Header
+                // Header
                 HStack(spacing: 6) {
                     Button(action: onBack) {
                         Image(systemName: "chevron.left")
@@ -75,7 +130,6 @@ struct JobStepsView: View {
 
                 Divider()
 
-                // ── Steps
                 if isLoading {
                     HStack {
                         Spacer()
@@ -90,7 +144,6 @@ struct JobStepsView: View {
                         .padding(.vertical, 8)
                 } else {
                     ForEach(steps) { step in
-                        // All completed steps are tappable — expired/skipped logs show a friendly message
                         let tappable = step.status == "completed"
                         Button(action: {
                             guard tappable else { return }
@@ -138,8 +191,8 @@ struct JobStepsView: View {
                     .padding(.bottom, 6)
                 }
 
-            } // VStack
-        } // ScrollView
+            } // end VStack
+        } // end ScrollView
         .onAppear { loadSteps() }
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -160,17 +213,11 @@ struct JobStepsView: View {
     }
 
     // MARK: - Helpers
-
-    private func liveElapsed(for step: JobStep) -> String {
-        _ = tick
-        return step.elapsed
-    }
+    private func liveElapsed(for step: JobStep) -> String { _ = tick; return step.elapsed }
 
     @ViewBuilder
     private func stepDot(for step: JobStep) -> some View {
-        Circle()
-            .fill(dotColor(for: step))
-            .frame(width: 7, height: 7)
+        Circle().fill(dotColor(for: step)).frame(width: 7, height: 7)
     }
 
     private func dotColor(for step: JobStep) -> Color {
@@ -189,11 +236,9 @@ struct JobStepsView: View {
     private func statusLabel(for step: JobStep) -> String {
         step.status == "in_progress" ? "In Progress" : "Queued"
     }
-
     private func statusColor(for step: JobStep) -> Color {
         step.status == "in_progress" ? .yellow : .secondary
     }
-
     private func conclusionLabel(for step: JobStep) -> String {
         switch step.conclusion {
         case "success":   return "✓ success"
@@ -203,7 +248,6 @@ struct JobStepsView: View {
         default:          return step.conclusion ?? "done"
         }
     }
-
     private func conclusionColor(for step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .green
