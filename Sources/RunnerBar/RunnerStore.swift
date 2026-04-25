@@ -35,6 +35,7 @@ final class RunnerStore {
 
     /// Persisted completed jobs, keyed by ID. Never cleared mid-session.
     /// Trimmed to the 3 most recent by completedAt.
+    /// IMPORTANT: Only ever mutated on the main thread to avoid stale-snapshot races.
     private var completedCache: [Int: ActiveJob] = [:]
 
     private var timer: Timer?
@@ -58,8 +59,9 @@ final class RunnerStore {
     }
 
     func fetch() {
-        let snapPrev  = prevLiveJobs
-        let snapCache = completedCache
+        // Snapshot only prevLiveJobs — completedCache is merged on main thread
+        // to avoid stale-snapshot overwrites when polls overlap.
+        let snapPrev = prevLiveJobs
 
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
@@ -90,14 +92,13 @@ final class RunnerStore {
             let liveIDs   = Set(liveJobs.map { $0.id })
             let now       = Date()
 
-            // ── Update completedCache
-            var newCache = snapCache
+            // ── Compute new done entries to merge (background, no cache read)
 
             // 1. Vanished jobs: were live last poll, gone this poll.
             //    Freeze using their last-known data from prevLiveJobs.
+            var newDoneEntries: [Int: ActiveJob] = [:]
             for (id, job) in snapPrev where !liveIDs.contains(id) {
-                guard newCache[id] == nil else { continue }
-                newCache[id] = ActiveJob(
+                newDoneEntries[id] = ActiveJob(
                     id: job.id, name: job.name,
                     status: "completed",
                     conclusion: job.conclusion ?? "success",
@@ -111,7 +112,7 @@ final class RunnerStore {
             // 2. FreshDone: GitHub still returning them with a conclusion.
             //    Overwrite to get the real conclusion value.
             for job in freshDone {
-                newCache[job.id] = ActiveJob(
+                newDoneEntries[job.id] = ActiveJob(
                     id: job.id, name: job.name,
                     status: "completed",
                     conclusion: job.conclusion,
@@ -122,38 +123,45 @@ final class RunnerStore {
                 )
             }
 
-            // Trim to newest 3.
-            if newCache.count > 3 {
-                let sorted = newCache.values
-                    .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
-                newCache = Dictionary(
-                    uniqueKeysWithValues: sorted.prefix(3).map { ($0.id, $0) }
-                )
-            }
-
             // ── Snapshot live jobs for next poll
             let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
 
-            // ── Build display list (max 3 slots)
-            // Priority: in_progress → queued → completed (newest first)
+            // ── Priority-sorted live lists
             let inProgress = liveJobs.filter { $0.status == "in_progress" }
             let queued     = liveJobs.filter { $0.status == "queued" }
-            let cached     = newCache.values
-                .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
 
-            var display: [ActiveJob] = []
-            for job in inProgress where display.count < 3 { display.append(job) }
-            for job in queued     where display.count < 3 { display.append(job) }
-            for job in cached     where display.count < 3 { display.append(job) }
-
-            log("RunnerStore › \(inProgress.count) in_progress \(queued.count) queued | " +
-                "cache: \(newCache.count) | display: \(display.count)")
+            log("RunnerStore › \(inProgress.count) in_progress \(queued.count) queued | vanished: \(newDoneEntries.count)")
 
             DispatchQueue.main.async {
-                self.runners        = enrichedRunners
-                self.jobs           = display
-                self.completedCache = newCache
-                self.prevLiveJobs   = newPrevLive
+                // ── Merge new done entries into the LIVE completedCache
+                // (never replace — always additive to avoid stale-snapshot race)
+                for (id, job) in newDoneEntries {
+                    self.completedCache[id] = job
+                }
+
+                // Trim to newest 3
+                if self.completedCache.count > 3 {
+                    let sorted = self.completedCache.values
+                        .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+                    self.completedCache = Dictionary(
+                        uniqueKeysWithValues: sorted.prefix(3).map { ($0.id, $0) }
+                    )
+                }
+
+                // ── Build display: in_progress → queued → done (newest first), cap 3
+                let cached = self.completedCache.values
+                    .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+
+                var display: [ActiveJob] = []
+                for job in inProgress where display.count < 3 { display.append(job) }
+                for job in queued     where display.count < 3 { display.append(job) }
+                for job in cached     where display.count < 3 { display.append(job) }
+
+                log("RunnerStore › display: \(display.count) | cache: \(self.completedCache.count)")
+
+                self.runners      = enrichedRunners
+                self.jobs         = display
+                self.prevLiveJobs = newPrevLive
                 self.onChange?()
             }
         }
