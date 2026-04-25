@@ -5,33 +5,26 @@ import SwiftUI
 //
 // ARCHITECTURE:
 //   AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
-//   fittingSize reads SwiftUI's IDEAL size. Both PopoverMainView AND JobDetailView
-//   MUST declare .frame(idealWidth: 340) so fittingSize returns the correct width.
-//   Without idealWidth, fittingSize.width = 0 and layout collapses.
+//   fittingSize reads SwiftUI's IDEAL size.
+//   This view MUST declare .frame(idealWidth: 340) so fittingSize.width = 340.
+//   fittingSize.height = VStack intrinsic content height (all steps + header).
+//   AppDelegate uses that height to size the popover exactly to content.
 //
-// ROOT CAUSE OF VERTICAL CENTERING (v0.24–v0.27 regression):
-//   openPopover() sets the frame size from fittingSize of the CURRENT view
-//   (always PopoverMainView, which is ~260–320px tall).
-//   When navigate() swaps to JobDetailView (which is taller, ~500px),
-//   the view frame stays at the smaller main-view height.
-//   JobDetailView had .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
-//   but no idealWidth — so its OWN fittingSize was never read.
-//   RESULT: content was squished/vertically centered in a too-small frame.
-//
-// THE FIX:
-//   .frame(idealWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-//   idealWidth: 340 — matches PopoverMainView, fittingSize contract
-//   maxHeight: .infinity + alignment: .top — fills frame and pins to top
-//   Spacer(minLength: 8) at VStack bottom — absorbs remaining space if any
+// ROOT CAUSE OF VERTICAL CENTERING (fixed in v0.28):
+//   .frame(maxHeight: .infinity) was present on the root frame.
+//   This told SwiftUI the ideal height is "infinite" → fittingSize returned a
+//   huge value → AppDelegate made the popover very tall → content appeared
+//   centred in a too-tall popover (or clipped if frame was from main view).
+//   FIX: removed maxHeight — fittingSize.height now = actual content height.
 //
 // RULES:
-//   ✔ .frame(idealWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   ✔ .frame(idealWidth: 340, maxWidth: .infinity, alignment: .top)
+//   ❌ NEVER add maxHeight: .infinity — causes vertical centering regression
 //   ❌ NEVER use .frame(width: 340) — sets layout width, NOT ideal width
-//   ❌ NEVER use .frame(maxWidth:.infinity) alone — no idealWidth = fittingSize.width = 0
-//   ❌ NEVER use .fixedSize() — collapses to intrinsic size, breaks fill
-//   ❌ NEVER add .frame(height:) — fights fittingSize height reading
-//   ❌ NEVER remove Spacer() from header HStack — load-bearing (RULE 3)
-//   ❌ NEVER remove Spacer(minLength: 8) at VStack bottom — absorbs slack height
+//   ❌ NEVER use .fixedSize() — collapses to intrinsic width
+//   ❌ NEVER add .frame(height:) — fixed height fights fittingSize
+//   ❌ NEVER remove Spacer() from header HStack — load-bearing
+//   ❌ NEVER remove Spacer(minLength: 8) at VStack bottom — bottom padding
 struct JobDetailView: View {
     let job: ActiveJob
     let onBack: () -> Void
@@ -109,20 +102,18 @@ struct JobDetailView: View {
                 }
             }
 
-            Spacer(minLength: 8)  // ⚠️ load-bearing — absorbs remaining height
+            Spacer(minLength: 8)  // ⚠️ bottom padding — do NOT remove
         }
-        // ⚠️ CRITICAL: idealWidth:340 MUST match PopoverMainView's idealWidth.
-        //   AppDelegate reads fittingSize in openPopover() to size the popover.
-        //   fittingSize.height = VStack intrinsic content height (this view's steps).
-        //   fittingSize.width  = 340 (from idealWidth).
-        //   maxHeight:.infinity + alignment:.top pins content to top of the frame.
-        //   Spacer(minLength:8) at VStack bottom absorbs any remaining slack.
+        // ⚠️ CRITICAL FRAME CONTRACT:
+        //   idealWidth: 340 — fittingSize.width = 340 (must match PopoverMainView)
+        //   maxWidth: .infinity — fills popover width
+        //   alignment: .top — pins VStack to top of frame
         //
-        //   ❌ NEVER remove idealWidth:340 — fittingSize.width collapses to 0
-        //   ❌ NEVER use .frame(width:340) — does NOT set ideal width
-        //   ❌ NEVER use .fixedSize() — collapses to intrinsic size
+        //   ❌ NEVER add maxHeight: .infinity — causes vertical centering regression
+        //   ❌ NEVER use .frame(width: 340) — does NOT set ideal width
+        //   ❌ NEVER use .fixedSize() — collapses width to intrinsic
         //   ❌ NEVER add .frame(height:) — fights fittingSize height reading
-        .frame(idealWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(idealWidth: 340, maxWidth: .infinity, alignment: .top)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
