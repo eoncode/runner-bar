@@ -1,34 +1,29 @@
 import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING ANYTHING (ref #52 #54 #57 #59)
+// ⚠️ REGRESSION GUARD — frame rules (ref issue #59, causes 1-5 in AppDelegate.swift)
 //
-// ARCHITECTURE:
-//   AppDelegate uses sizingOptions=[] + manual contentSize.
-//   openPopover() sets contentSize to computeMainHeight() before show().
-//   navigate() swaps hc.rootView ONLY while popover IS open.
-//   JobDetailView renders inside the SAME fixed frame as PopoverMainView.
+// RULE 1: This view MUST use .frame(maxWidth: .infinity) as its root modifier.
+//   AppDelegate uses sizingOptions = .preferredContentSize.
+//   The root container (PopoverMainView/JobDetailView) sets .frame(idealWidth: 340)
+//   in the NSHostingController — AppDelegate wraps BOTH views in AnyView and the
+//   navigate() call swaps hc.rootView.
+//   JobDetailView is the root view when on detail screen. It must fill the 340px
+//   wide popover without overriding the ideal width set by NSHostingController.
+//   .frame(maxWidth: .infinity) fills available width without touching idealWidth.
+//   ❌ NEVER use .frame(width: 340) — overrides ideal width contract
+//   ❌ NEVER use .frame(idealWidth: 340) here — hc already has it as root view
 //
-// RULE 1 — ROOT FRAME:
-//   MUST use .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-//   This fills the fixed contentSize frame AppDelegate provides.
-//   ❌ NEVER use .frame(idealWidth:) — only used in preferredContentSize mode.
-//   ❌ NEVER use .frame(width: 320) or .frame(height: ...) — fixed sizes fight the
-//      frame AppDelegate sets and cause center-alignment or clipping.
-//   ❌ NEVER use .fixedSize() — collapses the view to intrinsic size, losing fill.
+// RULE 2: The Spacer() in the header HStack is load-bearing.
+//   Removes it causes elapsed time to collide with back button text.
 //
-// RULE 2 — NO SIZE CHANGES IN navigate():
-//   navigate() fires while the popover IS open (user tapped a row inside it).
-//   Any contentSize change while popover is open = NSPopover re-anchors = LEFT-JUMP.
-//   The Spacer(minLength: 8) at bottom absorbs remaining vertical space gracefully.
+// RULE 3: NEVER add contentSize or setFrameSize calls inside navigate().
+//   See AppDelegate.swift — navigate() fires while popover IS open.
+//   Any size op while popover is open = re-anchor = left-jump.
 //
-// RULE 3 — SPACERS ARE LOAD-BEARING:
-//   The Spacer() in the header HStack and the Spacer(minLength: 8) at VStack bottom
-//   must NOT be removed. They maintain correct layout under the fixed-height frame.
-//
-// ❌ NEVER: add .frame(height:) or .frame(idealHeight:) to this view
-// ❌ NEVER: add popover.contentSize changes in navigate()
-// ✅ SAFE: hc.rootView swap in navigate() — no size change
+// RULE 4: Spacer(minLength: 8) at VStack bottom absorbs remaining height.
+//   preferredContentSize grows the popover to fit all steps.
+//   If steps are tall, popover grows. That is correct and expected.
 struct JobDetailView: View {
     let job: ActiveJob
     let onBack: () -> Void
@@ -38,7 +33,7 @@ struct JobDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Back button + elapsed
-            // ⚠️ The Spacer() here is load-bearing — do NOT remove (Rule 3)
+            // ⚠️ RULE 2: Spacer() here is load-bearing — do NOT remove
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -50,7 +45,7 @@ struct JobDetailView: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ load-bearing — do NOT remove
+                Spacer()  // ⚠️ RULE 2: load-bearing — do NOT remove
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -59,6 +54,7 @@ struct JobDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
+            // ── Job name
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -88,7 +84,7 @@ struct JobDetailView: View {
                                 .foregroundColor(step.status == "queued" ? .secondary : .primary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                            Spacer()  // ⚠️ load-bearing — do NOT remove
+                            Spacer()  // load-bearing — do NOT remove
                             Text(step.elapsed)
                                 .font(.caption.monospacedDigit())
                                 .foregroundColor(.secondary)
@@ -105,20 +101,22 @@ struct JobDetailView: View {
                 }
             }
 
-            Spacer(minLength: 8)  // ⚠️ load-bearing — absorbs remaining height (Rule 3)
+            Spacer(minLength: 8)  // ⚠️ RULE 4: absorbs remaining height
         }
-        // ⚠️ RULE 1: fill the fixed contentSize frame AppDelegate provides.
-        // maxWidth: .infinity + maxHeight: .infinity + alignment: .top
-        // pins all content to top-left within the popover frame.
-        // ❌ NEVER use idealWidth, fixedSize, or fixed width/height here.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ RULE 1: maxWidth: .infinity fills available width without overriding idealWidth.
+        // The hc.rootView swap in navigate() means this IS the root view while on detail screen.
+        // idealWidth is already set by the NSHostingController container level.
+        // minHeight: 300 prevents popover from collapsing on jobs with very few steps.
+        // maxHeight: 480 caps unbounded growth for jobs with very many steps.
+        // ❌ NEVER use .frame(width: 340) here
+        // ❌ NEVER use .frame(idealWidth: 340) here — already set at container level
+        .frame(maxWidth: .infinity, minHeight: 300, maxHeight: 480, alignment: .top)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
     }
 
     private func openLog(step: JobStep) {
-        // Open GitHub Actions log URL anchored to the step number
         let base = job.htmlUrl ?? "https://github.com"
         let urlString = "\(base)#step:\(step.id)"
         if let url = URL(string: urlString) {
