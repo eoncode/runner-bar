@@ -11,6 +11,7 @@ struct StepLogView: View {
     @State private var lines: [String] = []
     @State private var isLoading = true
     @State private var truncated = false
+    @State private var errorMessage: String? = nil
 
     private let maxLines = 200
 
@@ -53,12 +54,27 @@ struct StepLogView: View {
                     ProgressView().padding(.vertical, 16)
                     Spacer()
                 }
+                .frame(maxHeight: .infinity)
+            } else if let err = errorMessage {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 24))
+                        .foregroundColor(.secondary)
+                    Text(err)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 24)
             } else if lines.isEmpty {
                 Text("No log output available")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
+                    .frame(maxHeight: .infinity)
             } else {
                 if truncated {
                     Text("(showing last \(maxLines) lines)")
@@ -81,11 +97,10 @@ struct StepLogView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                 }
-                .frame(maxHeight: 320)
             }
         }
-        .frame(minWidth: 320)
-        .fixedSize(horizontal: false, vertical: true)
+        // Fixed frame matches the popover — no fixedSize, no anchor jumps
+        .frame(width: 340, height: 480)
         .onAppear { loadLog() }
     }
 
@@ -93,6 +108,7 @@ struct StepLogView: View {
 
     private func loadLog() {
         isLoading = true
+        errorMessage = nil
         DispatchQueue.global(qos: .userInitiated).async {
             let (logLines, wasTruncated) = fetchStepLog(
                 jobID: job.id,
@@ -101,8 +117,16 @@ struct StepLogView: View {
                 maxLines: maxLines
             )
             DispatchQueue.main.async {
-                lines = logLines
-                truncated = wasTruncated
+                // Detect Azure BlobNotFound or any XML error response
+                if logLines.count == 1,
+                   let first = logLines.first,
+                   first.contains("BlobNotFound") || first.hasPrefix("<?xml") || first.contains("<Error>") {
+                    errorMessage = "Log unavailable\nGitHub has expired this step\'s log."
+                    lines = []
+                } else {
+                    lines = logLines
+                    truncated = wasTruncated
+                }
                 isLoading = false
             }
         }
