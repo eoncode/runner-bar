@@ -27,14 +27,9 @@ final class RunnerStore {
     static let shared = RunnerStore()
 
     private(set) var runners: [Runner] = []
-    private(set) var jobs: [ActiveJob] = []  // what UI shows, max 3
+    private(set) var jobs: [ActiveJob] = []
 
-    /// Full snapshot of live jobs (conclusion == nil) from last poll, keyed by ID.
-    /// Preserved so we have all data when a job vanishes from the API next poll.
     private var prevLiveJobs: [Int: ActiveJob] = [:]
-
-    /// Persisted completed jobs, keyed by ID. Never cleared mid-session.
-    /// Trimmed to the 3 most recent by completedAt.
     private var completedCache: [Int: ActiveJob] = [:]
 
     private var timer: Timer?
@@ -79,7 +74,7 @@ final class RunnerStore {
             }
             let enrichedRunners = busy + idle
 
-            // ── Fetch all jobs from currently active runs
+            // ── Fetch jobs
             var allFetched: [ActiveJob] = []
             for scope in ScopeStore.shared.scopes {
                 allFetched.append(contentsOf: fetchActiveJobs(for: scope))
@@ -90,39 +85,40 @@ final class RunnerStore {
             let liveIDs   = Set(liveJobs.map { $0.id })
             let now       = Date()
 
-            // ── Update completedCache
             var newCache = snapCache
 
-            // 1. Vanished jobs: were live last poll, gone this poll.
-            //    Freeze using their last-known data from prevLiveJobs.
+            // Vanished jobs — freeze with last known data
             for (id, job) in snapPrev where !liveIDs.contains(id) {
                 guard newCache[id] == nil else { continue }
                 newCache[id] = ActiveJob(
-                    id: job.id, name: job.name,
-                    status: "completed",
-                    conclusion: job.conclusion ?? "success",
-                    startedAt: job.startedAt,
-                    createdAt: job.createdAt,
+                    id:          job.id,
+                    name:        job.name,
+                    status:      "completed",
+                    conclusion:  job.conclusion ?? "success",
+                    startedAt:   job.startedAt,
+                    createdAt:   job.createdAt,
                     completedAt: job.completedAt ?? now,
-                    isDimmed: true
+                    htmlUrl:     job.htmlUrl,
+                    isDimmed:    true
                 )
             }
 
-            // 2. FreshDone: GitHub still returning them with a conclusion.
-            //    Overwrite to get the real conclusion value.
+            // Fresh done — overwrite with real conclusion
             for job in freshDone {
                 newCache[job.id] = ActiveJob(
-                    id: job.id, name: job.name,
-                    status: "completed",
-                    conclusion: job.conclusion,
-                    startedAt: job.startedAt,
-                    createdAt: job.createdAt,
+                    id:          job.id,
+                    name:        job.name,
+                    status:      "completed",
+                    conclusion:  job.conclusion,
+                    startedAt:   job.startedAt,
+                    createdAt:   job.createdAt,
                     completedAt: job.completedAt ?? now,
-                    isDimmed: true
+                    htmlUrl:     job.htmlUrl,
+                    isDimmed:    true
                 )
             }
 
-            // Trim to newest 3.
+            // Trim to newest 3
             if newCache.count > 3 {
                 let sorted = newCache.values
                     .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
@@ -131,11 +127,8 @@ final class RunnerStore {
                 )
             }
 
-            // ── Snapshot live jobs for next poll
             let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
 
-            // ── Build display list (max 3 slots)
-            // Priority: in_progress → queued → completed (newest first)
             let inProgress = liveJobs.filter { $0.status == "in_progress" }
             let queued     = liveJobs.filter { $0.status == "queued" }
             let cached     = newCache.values
