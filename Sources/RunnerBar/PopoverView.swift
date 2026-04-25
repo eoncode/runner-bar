@@ -11,11 +11,14 @@ struct PopoverView: View {
     @State private var selectedJob: ActiveJob? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            mainView
+                .opacity(selectedJob == nil ? 1 : 0)
+                .allowsHitTesting(selectedJob == nil)
+
             if let job = selectedJob {
                 JobDetailView(job: job, onBack: { selectedJob = nil })
-            } else {
-                mainView
+                    .transition(.identity)
             }
         }
         .frame(width: 320)
