@@ -49,8 +49,7 @@ struct PopoverView: View {
                 )
             }
         }
-        .frame(minWidth: 320)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 340, height: 480)
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
         }
@@ -62,168 +61,172 @@ struct PopoverView: View {
     // MARK: - Job list view
 
     private var jobListView: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Outer ScrollView so content never overflows the fixed frame
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header
-            HStack {
-                Text("RunnerBar v0.8")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                Spacer()
-                if isAuthenticated {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                } else {
-                    Button(action: signInWithGitHub) {
+                // ── Header
+                HStack {
+                    Text("RunnerBar v0.8")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if isAuthenticated {
                         HStack(spacing: 4) {
-                            Circle().fill(Color.orange).frame(width: 8, height: 8)
-                            Text("Sign in with GitHub")
+                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            Text("Authenticated")
                                 .font(.caption)
-                                .foregroundColor(.orange)
+                                .foregroundColor(.secondary)
                         }
+                    } else {
+                        Button(action: signInWithGitHub) {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.orange).frame(width: 8, height: 8)
+                                Text("Sign in with GitHub")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
-            Divider()
-
-            // ── Active Jobs
-            Text("Active Jobs")
-                .font(.caption)
-                .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
 
-            if store.jobs.isEmpty {
-                Text("No active jobs")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .padding(.bottom, 2)
-            } else {
-                let groups = groupJobs(Array(store.jobs.prefix(3)))
-                ForEach(groups) { group in
-                    groupRow(for: group)
-                }
-                .padding(.bottom, 6)
-            }
+                Divider()
 
-            Divider()
-
-            // ── Local runners
-            Text("Local runners")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
-
-            if store.runners.isEmpty {
-                Text(isAuthenticated ? "No runners found" : "Authenticate to see runners")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .padding(.bottom, 2)
-            } else {
-                ForEach(store.runners, id: \.id) { runner in
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(dotColor(for: runner))
-                            .frame(width: 8, height: 8)
-                        Text(runner.name)
-                            .font(.system(size: 13))
-                            .lineLimit(1)
-                        Spacer()
-                        Text(runner.displayStatus)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                }
-            }
-
-            Divider()
-
-            // ── Scope management
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Scopes")
+                // ── Active Jobs
+                Text("Active Jobs")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
+                    .padding(.bottom, 2)
 
-                ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
+                if store.jobs.isEmpty {
+                    Text("No active jobs")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .padding(.bottom, 2)
+                } else {
+                    let groups = groupJobs(Array(store.jobs.prefix(3)))
+                    ForEach(groups) { group in
+                        groupRow(for: group)
+                    }
+                    .padding(.bottom, 6)
+                }
+
+                Divider()
+
+                // ── Local runners
+                Text("Local runners")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 2)
+
+                if store.runners.isEmpty {
+                    Text(isAuthenticated ? "No runners found" : "Authenticate to see runners")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .padding(.bottom, 2)
+                } else {
+                    ForEach(store.runners, id: \.id) { runner in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(dotColor(for: runner))
+                                .frame(width: 8, height: 8)
+                            Text(runner.name)
+                                .font(.system(size: 13))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(runner.displayStatus)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                    }
+                }
+
+                Divider()
+
+                // ── Scope management
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Scopes")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+
+                    ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
+                        HStack {
+                            Text(scope).font(.system(size: 12))
+                            Spacer()
+                            Button(action: {
+                                ScopeStore.shared.remove(scope)
+                                store.reload()
+                            }) {
+                                Image(systemName: "minus.circle")
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 2)
+                    }
+
                     HStack {
-                        Text(scope).font(.system(size: 12))
-                        Spacer()
-                        Button(action: {
-                            ScopeStore.shared.remove(scope)
-                            store.reload()
-                        }) {
-                            Image(systemName: "minus.circle")
-                                .foregroundColor(.red)
+                        TextField("owner/repo or org", text: $newScope)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12))
+                            .onSubmit { submitScope() }
+                        Button(action: submitScope) {
+                            Image(systemName: "plus.circle")
                         }
                         .buttonStyle(.plain)
+                        .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 4)
                 }
 
-                HStack {
-                    TextField("owner/repo or org", text: $newScope)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12))
-                        .onSubmit { submitScope() }
-                    Button(action: submitScope) {
-                        Image(systemName: "plus.circle")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
+                Divider()
+
+                // ── Launch at login (macOS 13 compatible)
+                Toggle(isOn: $launchAtLogin) {
+                    Text("Launch at login").font(.system(size: 13))
                 }
+                .toggleStyle(.checkbox)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            }
+                .padding(.vertical, 8)
+                .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
 
-            Divider()
+                Divider()
 
-            // ── Launch at login (macOS 13 compatible)
-            Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 13))
-            }
-            .toggleStyle(.checkbox)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
-
-            Divider()
-
-            // ── Quit
-            Button(action: { NSApplication.shared.terminate(nil) }) {
-                HStack {
-                    Image(systemName: "xmark.square")
-                    Text("Quit")
+                // ── Quit
+                Button(action: { NSApplication.shared.terminate(nil) }) {
+                    HStack {
+                        Image(systemName: "xmark.square")
+                        Text("Quit")
+                    }
+                    .font(.system(size: 13))
                 }
-                .font(.system(size: 13))
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut("q", modifiers: .command)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
+                .buttonStyle(.plain)
+                .keyboardShortcut("q", modifiers: .command)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+            } // VStack
+        } // ScrollView
     }
 
     // MARK: - Group row builder
