@@ -4,30 +4,34 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — frame rules (ref #52 #54 #57)
 //
 // ARCHITECTURE:
-//   AppDelegate uses sizingOptions=[] + manual contentSize.
-//   In sizingOptions=[] mode, NSHostingController does NOT read ideal size.
-//   The popover has a fixed contentSize set by openPopover() before show().
-//   navigate() swaps hc.rootView ONLY while popover IS open — ZERO size changes.
-//   JobDetailView renders inside the SAME fixed frame as PopoverMainView.
+//   AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
+//   fittingSize reads SwiftUI's IDEAL size. Both PopoverMainView AND JobDetailView
+//   MUST declare .frame(idealWidth: 340) so fittingSize returns the correct width.
+//   Without idealWidth, fittingSize.width = 0 and layout collapses.
 //
-// RULE 1 — ROOT FRAME:
-//   MUST use .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-//   This fills the fixed contentSize frame AppDelegate provides and pins to top.
-//   The Spacer(minLength: 8) at VStack bottom absorbs remaining vertical space.
-//   ❌ NEVER use .frame(idealWidth:) — only used in preferredContentSize mode
-//   ❌ NEVER use .frame(width: 320) or .frame(height: ...) — fights fixed frame
-//   ❌ NEVER use .fixedSize() — collapses to intrinsic size
+// ROOT CAUSE OF VERTICAL CENTERING (v0.24–v0.27 regression):
+//   openPopover() sets the frame size from fittingSize of the CURRENT view
+//   (always PopoverMainView, which is ~260–320px tall).
+//   When navigate() swaps to JobDetailView (which is taller, ~500px),
+//   the view frame stays at the smaller main-view height.
+//   JobDetailView had .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
+//   but no idealWidth — so its OWN fittingSize was never read.
+//   RESULT: content was squished/vertically centered in a too-small frame.
 //
-// RULE 2 — NO SIZE CHANGES IN navigate():
-//   navigate() fires while popover IS open. Any contentSize change = left-jump.
-//   The fixed frame from openPopover() is shared by main and detail views.
-//   openPopover() always sets height to computeMainHeight() (main view budget).
-//   This means detail view gets main-view-height frame — that is intentional.
-//   Detail content aligns to top, Spacer at bottom absorbs slack.
+// THE FIX:
+//   .frame(idealWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   idealWidth: 340 — matches PopoverMainView, fittingSize contract
+//   maxHeight: .infinity + alignment: .top — fills frame and pins to top
+//   Spacer(minLength: 8) at VStack bottom — absorbs remaining space if any
 //
-// RULE 3 — SPACERS ARE LOAD-BEARING:
-//   Spacer() in header HStack and Spacer(minLength:8) at VStack bottom
-//   MUST NOT be removed. They maintain layout under fixed-height frame.
+// RULES:
+//   ✔ .frame(idealWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   ❌ NEVER use .frame(width: 340) — sets layout width, NOT ideal width
+//   ❌ NEVER use .frame(maxWidth:.infinity) alone — no idealWidth = fittingSize.width = 0
+//   ❌ NEVER use .fixedSize() — collapses to intrinsic size, breaks fill
+//   ❌ NEVER add .frame(height:) — fights fittingSize height reading
+//   ❌ NEVER remove Spacer() from header HStack — load-bearing (RULE 3)
+//   ❌ NEVER remove Spacer(minLength: 8) at VStack bottom — absorbs slack height
 struct JobDetailView: View {
     let job: ActiveJob
     let onBack: () -> Void
@@ -37,7 +41,7 @@ struct JobDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Back button + elapsed
-            // ⚠️ Spacer() here is load-bearing (RULE 3) — do NOT remove
+            // ⚠️ Spacer() here is load-bearing — do NOT remove
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -49,7 +53,7 @@ struct JobDetailView: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ RULE 3: load-bearing — do NOT remove
+                Spacer()  // ⚠️ load-bearing — do NOT remove
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -105,13 +109,20 @@ struct JobDetailView: View {
                 }
             }
 
-            Spacer(minLength: 8)  // ⚠️ RULE 3: load-bearing — absorbs remaining height
+            Spacer(minLength: 8)  // ⚠️ load-bearing — absorbs remaining height
         }
-        // ⚠️ RULE 1: fill the fixed contentSize frame AppDelegate provides.
-        // maxWidth: .infinity + maxHeight: .infinity + alignment: .top
-        // pins all content to top-left within the fixed popover frame.
-        // ❌ NEVER use idealWidth, fixedSize, or fixed width/height here.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ CRITICAL: idealWidth:340 MUST match PopoverMainView's idealWidth.
+        //   AppDelegate reads fittingSize in openPopover() to size the popover.
+        //   fittingSize.height = VStack intrinsic content height (this view's steps).
+        //   fittingSize.width  = 340 (from idealWidth).
+        //   maxHeight:.infinity + alignment:.top pins content to top of the frame.
+        //   Spacer(minLength:8) at VStack bottom absorbs any remaining slack.
+        //
+        //   ❌ NEVER remove idealWidth:340 — fittingSize.width collapses to 0
+        //   ❌ NEVER use .frame(width:340) — does NOT set ideal width
+        //   ❌ NEVER use .fixedSize() — collapses to intrinsic size
+        //   ❌ NEVER add .frame(height:) — fights fittingSize height reading
+        .frame(idealWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
