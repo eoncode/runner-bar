@@ -31,7 +31,7 @@ struct PopoverMainView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             HStack {
-                Text("RunnerBar v0.18")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.19")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -156,9 +156,6 @@ struct PopoverMainView: View {
             .padding(.horizontal, 12).padding(.vertical, 8)
             // ⚠️ quit row ≈ 38px — must match AppDelegate.computeMainHeight budget
         }
-        // ⚠️ REGRESSION GUARD: fills AppDelegate’s computed frame.
-        // NEVER replace with .frame(height: X) or .fixedSize() — both cause sizing bugs.
-        // NEVER set a fixed height here — that is AppDelegate’s job via computeMainHeight().
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
         .onAppear { Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 } }
