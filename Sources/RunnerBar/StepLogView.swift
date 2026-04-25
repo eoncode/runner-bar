@@ -1,19 +1,100 @@
 import SwiftUI
 
-// MARK: - Step Log View
+// ============================================================
+// ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
+// ============================================================
+// VERSION: v2.2 (keep in sync with AppDelegate.swift)
+//
+// This view is the deepest nav state: PopoverView → JobStepsView → StepLogView.
+// It exists inside an NSPopover whose sizing is brutally fragile.
+// The same left-jump bug was introduced 30+ times in a single day on this project.
+// Read AppDelegate.swift SECTION 1 and PopoverView.swift SECTION 1 before
+// making ANY change to this file.
 //
 // ============================================================
-// ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
+// SECTION 1 — FRAME CONTRACT (the one rule that matters most)
 // ============================================================
-// This view is a child inside JobStepsView's Group, which is
-// itself a nav state inside PopoverView's root Group.
-// PopoverView root Group has .frame(idealWidth: 340).
 //
-// RULE: child nav views must NEVER set .frame(width: N).
-//   ✗ .frame(width: 340, height: 480)  ← overrides ideal width => left jump
-//   ✓ .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+// The body VStack MUST end with:
+//   .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
 //
-// See GitHub issues #53 and #54 before touching any of this.
+// WHY maxWidth: .infinity and NOT width: 340:
+//   PopoverView root Group has .frame(idealWidth: 340).
+//   NSHostingController reads SwiftUI's IDEAL size (not layout size)
+//   to set preferredContentSize. idealWidth:340 on the root Group
+//   locks preferredContentSize.width = 340 across ALL nav states.
+//
+//   .frame(width: 340) on ANY child view overrides the ideal width
+//   contract. When navigating to a child with width:340, the ideal
+//   width is reported differently => preferredContentSize.width changes
+//   => NSPopover re-anchors its full screen position => left jump.
+//
+//   .frame(maxWidth: .infinity) fills the space the parent has already
+//   established via idealWidth:340. It does NOT fight the ideal width.
+//
+//   ✘ DO NOT change to: .frame(width: 340, height: 480)
+//   ✘ DO NOT change to: .frame(width: 340, minHeight: 480, maxHeight: 480)
+//   ✘ DO NOT change to: .frame(maxWidth: 340, ...)
+//   ✔ KEEP AS:          .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+//
+// WHY minHeight: 480, maxHeight: 480:
+//   Pins this nav state to exactly 480pt so the popover does not
+//   shrink/expand when navigating here from JobStepsView (also 480pt).
+//   Removing minHeight => popover may shrink => re-anchor => left jump.
+//
+// ============================================================
+// SECTION 2 — ASYNC LOADING IS ALLOWED HERE (but read the rules)
+// ============================================================
+//
+// Unlike JobStepsView (which must NOT load async — see CAUSE 7),
+// StepLogView IS allowed to load its log async via loadLog() in onAppear.
+//
+// WHY this is safe here but not in JobStepsView:
+//   The outer .frame(minHeight:480, maxHeight:480) pins the view size
+//   to exactly 480pt regardless of content. Whether isLoading=true
+//   (spinner) or isLoading=false (log lines), the view is always 480pt.
+//   The @State changes (isLoading, lines) trigger SwiftUI re-renders
+//   but those re-renders report the same ideal size (480pt) because
+//   the frame clamps it. No size change => no re-anchor => no jump.
+//
+// CONTRAST with JobStepsView (CAUSE 7):
+//   In v1.7-v1.9, JobStepsView loaded steps async. Even though its
+//   frame was also 480pt, the @State changes caused SwiftUI to
+//   recalculate preferredContentSize differently (content structure
+//   change: spinner VStack → step list VStack). NSPopover re-anchored.
+//   Steps were moved to pre-load in PopoverView to fix this.
+//   Logs are fetched here because the log content structure is stable
+//   (always a ScrollView with LazyVStack), just the data changes.
+//
+// RULE: Do NOT change @State lines or isLoading from OUTSIDE this view
+//   (e.g., do not pass them as bindings or modify them from a parent).
+//   The only writes must be from loadLog() running on the main queue.
+//
+// ============================================================
+// SECTION 3 — NAVIGATION CONTRACT
+// ============================================================
+//
+// This view is navigated to from JobStepsView using Group + if/else:
+//   if let step = selectedStep { StepLogView(...) } else { stepsListView }
+//
+// DO NOT change that to ZStack + .transition(.move(edge:)).
+//   In NSPopover context, ZStack + move transition animates from the
+//   LEFT EDGE OF THE SCREEN, looks identical to the left-jump bug,
+//   and collapses the width to zero during animation.
+//   This was tried. It was catastrophic. Do not try it again.
+//
+// ============================================================
+// SECTION 4 — PRE-COMMIT CHECKLIST FOR THIS FILE
+// ============================================================
+//
+// Before pushing any change to this file, verify:
+//   [ ] body VStack still ends with .frame(maxWidth:.infinity, minHeight:480, maxHeight:480)
+//   [ ] No .frame(width:340) anywhere in this file
+//   [ ] No navigation added using ZStack + transitions
+//   [ ] loadLog() still runs on DispatchQueue.global then dispatches to main
+//   [ ] @State lines and isLoading are only written from loadLog()
+//   [ ] Version string bumped if logic changed
+//
 // ============================================================
 
 struct StepLogView: View {
@@ -22,6 +103,12 @@ struct StepLogView: View {
     let scope: String
     let onBack: () -> Void
 
+    // ⚠️ These @State properties are written ONLY from loadLog().
+    // Writing them from outside this view (binding, parent, etc.) is
+    // forbidden — any @State change while the popover is open risks
+    // triggering a re-render that changes preferredContentSize.
+    // The fixed .frame(minHeight:480,maxHeight:480) makes this safe
+    // for loadLog() specifically. See SECTION 2.
     @State private var lines: [String] = []
     @State private var isLoading = true
     @State private var truncated = false
@@ -62,6 +149,11 @@ struct StepLogView: View {
             Divider()
 
             // ── Log content
+            // All branches (loading / error / empty / lines) must be the same
+            // visual height. The outer frame clamps them all to 480pt but
+            // using .frame(maxHeight: .infinity) inside ensures they expand
+            // to fill rather than collapsing — which keeps the outer ideal
+            // size stable regardless of which branch is active.
             if isLoading {
                 HStack {
                     Spacer()
@@ -98,6 +190,11 @@ struct StepLogView: View {
                         .padding(.top, 6)
                         .padding(.bottom, 2)
                 }
+                // ⚠️ ScrollView + LazyVStack is correct here.
+                // Unlike jobListView (which must NOT use ScrollView),
+                // this ScrollView is INSIDE the .frame(maxHeight:480) clamp,
+                // so it does not expose infinite preferred height to
+                // NSHostingController. Safe to use here.
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
@@ -113,14 +210,29 @@ struct StepLogView: View {
                 }
             }
         }
-        // ⚠️ maxWidth:.infinity — DO NOT use width:340 here.
-        // width:340 overrides the root Group's idealWidth:340 and breaks
-        // preferredContentSize.width => left jump. See contract above.
+        // ⚠️⚠️⚠️  THIS FRAME IS MANDATORY. SEE SECTION 1.  ⚠️⚠️⚠️
+        //
+        // maxWidth: .infinity — DO NOT change to width:340
+        //   width:340 on a child view overrides the root Group's idealWidth:340
+        //   contract and causes preferredContentSize.width to change on
+        //   navigation => NSPopover re-anchors => left jump.
+        //
+        // minHeight: 480 — DO NOT remove
+        //   Without minHeight, navigating here shrinks the popover height
+        //   => preferredContentSize.height changes => re-anchor => left jump.
+        //
+        // maxHeight: 480 — DO NOT remove
+        //   Prevents the log content from expanding beyond 480pt.
         .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
         .onAppear { loadLog() }
     }
 
     // MARK: - Data
+    //
+    // ⚠️ loadLog() is the ONLY place @State lines, isLoading, truncated,
+    // and errorMessage are written. See SECTION 2 for why this is safe.
+    // DO NOT add a second load path or a refresh timer that writes lines.
+    // Writing lines = @State change = re-render = possible size recalc.
 
     private func loadLog() {
         isLoading = true
