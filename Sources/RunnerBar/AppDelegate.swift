@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hc: NSHostingController<PopoverView>?
     private let observable = RunnerStoreObservable()
 
+    // Fixed popover size — never changes so the popover window never moves.
+    private let popoverSize = NSSize(width: 320, height: 500)
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("AppDelegate › applicationDidFinishLaunching")
 
@@ -19,13 +22,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hc = NSHostingController(rootView: PopoverView(store: observable))
-        hc.sizingOptions = .preferredContentSize
+        // Do NOT use .preferredContentSize — it causes macOS to reposition the
+        // popover window to (0,0) whenever SwiftUI content height changes.
+        hc.sizingOptions = []
         self.hc = hc
 
         let popover = NSPopover()
-        popover.behavior               = .transient
-        popover.animates               = false
-        popover.contentViewController  = hc
+        popover.behavior              = .transient
+        popover.animates              = false
+        popover.contentSize           = popoverSize
+        popover.contentViewController = hc
         self.popover = popover
 
         RunnerStore.shared.onChange = { [weak self] in
@@ -33,13 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("AppDelegate › onChange — refreshing status icon")
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
             self.observable.reload()
-            // Update contentSize only while popover is closed so the anchor
-            // never moves during a live session, preventing the jump.
-            if self.popover?.isShown == false {
-                self.popover?.contentSize = hc.sizingOptions == .preferredContentSize
-                    ? hc.view.fittingSize
-                    : NSSize(width: 320, height: 400)
-            }
         }
 
         RunnerStore.shared.start()
@@ -52,8 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            // Snap to latest content size just before opening.
-            if let hc { popover.contentSize = hc.view.fittingSize }
             log("AppDelegate › opening popover")
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         }

@@ -11,18 +11,23 @@ struct PopoverView: View {
     @State private var selectedJob: ActiveJob? = nil
 
     var body: some View {
-        ZStack {
-            mainView
-                .opacity(selectedJob == nil ? 1 : 0)
-                .allowsHitTesting(selectedJob == nil)
+        // Fixed frame matching AppDelegate.popoverSize — never resize the popover.
+        ZStack(alignment: .topLeading) {
+            ScrollView {
+                mainView
+                    .frame(width: 320)
+            }
+            .opacity(selectedJob == nil ? 1 : 0)
+            .allowsHitTesting(selectedJob == nil)
 
             if let job = selectedJob {
-                JobDetailView(job: job, onBack: { selectedJob = nil })
-                    .transition(.identity)
+                ScrollView {
+                    JobDetailView(job: job, onBack: { selectedJob = nil })
+                        .frame(width: 320)
+                }
             }
         }
-        .frame(width: 320)
-        .fixedSize(horizontal: true, vertical: true)
+        .frame(width: 320, height: 500)
     }
 
     // MARK: - Main list view
