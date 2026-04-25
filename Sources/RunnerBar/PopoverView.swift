@@ -7,11 +7,13 @@ import ServiceManagement
 private enum NavState: Equatable {
     case jobList
     case jobSteps(job: ActiveJob)
+    case matrixGroup(baseName: String, jobs: [ActiveJob])
 
     static func == (lhs: NavState, rhs: NavState) -> Bool {
         switch (lhs, rhs) {
         case (.jobList, .jobList): return true
         case (.jobSteps(let a), .jobSteps(let b)): return a.id == b.id
+        case (.matrixGroup(let a, _), .matrixGroup(let b, _)): return a == b
         default: return false
         }
     }
@@ -29,16 +31,22 @@ struct PopoverView: View {
 
     var body: some View {
         ZStack {
-            // ── Job list (root)
             if case .jobList = navState {
                 jobListView
                     .transition(.move(edge: .leading))
             }
-
-            // ── Job steps (phase 1 drill-down)
             if case .jobSteps(let job) = navState {
                 JobStepsView(
                     job: job,
+                    scope: ScopeStore.shared.scopes.first ?? "",
+                    onBack: { withAnimation(.easeInOut(duration: 0.25)) { navState = .jobList } }
+                )
+                .transition(.move(edge: .trailing))
+            }
+            if case .matrixGroup(let baseName, let jobs) = navState {
+                MatrixGroupView(
+                    baseName: baseName,
+                    jobs: jobs,
                     scope: ScopeStore.shared.scopes.first ?? "",
                     onBack: { withAnimation(.easeInOut(duration: 0.25)) { navState = .jobList } }
                 )
@@ -50,9 +58,7 @@ struct PopoverView: View {
             isAuthenticated = (githubToken() != nil)
         }
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                tick += 1
-            }
+            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
     }
 
@@ -108,44 +114,9 @@ struct PopoverView: View {
                     .padding(.vertical, 4)
                     .padding(.bottom, 2)
             } else {
-                ForEach(store.jobs.prefix(3)) { job in
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            navState = .jobSteps(job: job)
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            jobDot(for: job)
-                            Text(job.name)
-                                .font(.system(size: 12))
-                                .foregroundColor(job.isDimmed ? .secondary : .primary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Spacer()
-                            if job.isDimmed {
-                                Text(conclusionLabel(for: job))
-                                    .font(.caption)
-                                    .foregroundColor(conclusionColor(for: job))
-                                    .frame(width: 76, alignment: .trailing)
-                            } else {
-                                Text(jobStatusLabel(for: job))
-                                    .font(.caption)
-                                    .foregroundColor(jobStatusColor(for: job))
-                                    .frame(width: 76, alignment: .trailing)
-                            }
-                            Text(job.isDimmed ? job.elapsed : elapsedLive(for: job, tick: tick))
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
-                                .frame(width: 40, alignment: .trailing)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 9))
-                                .foregroundColor(.secondary.opacity(0.5))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 3)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                let groups = groupJobs(Array(store.jobs.prefix(3)))
+                ForEach(groups) { group in
+                    groupRow(for: group)
                 }
                 .padding(.bottom, 6)
             }
@@ -260,57 +231,121 @@ struct PopoverView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    // MARK: - Elapsed
-
-    private func elapsedLive(for job: ActiveJob, tick _: Int) -> String {
-        job.elapsed
-    }
-
-    // MARK: - Job helpers
+    // MARK: - Group row builder
 
     @ViewBuilder
-    private func jobDot(for job: ActiveJob) -> some View {
-        Circle()
-            .fill(job.isDimmed ? Color.secondary : jobDotColor(for: job))
-            .frame(width: 7, height: 7)
+    private func groupRow(for group: JobGroup) -> some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                switch group {
+                case .single(let job):
+                    navState = .jobSteps(job: job)
+                case .matrix(let baseName, let jobs):
+                    navState = .matrixGroup(baseName: baseName, jobs: jobs)
+                }
+            }
+        }) {
+            HStack(spacing: 8) {
+                groupDot(for: group)
+
+                Text(group.displayName)
+                    .font(.system(size: 12))
+                    .foregroundColor(group.isDimmed ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer()
+
+                if group.isDimmed {
+                    Text(conclusionLabel(conclusion: group.conclusion))
+                        .font(.caption)
+                        .foregroundColor(conclusionColor(conclusion: group.conclusion))
+                        .frame(width: 76, alignment: .trailing)
+                } else {
+                    Text(statusLabel(status: group.status))
+                        .font(.caption)
+                        .foregroundColor(statusColor(status: group.status))
+                        .frame(width: 76, alignment: .trailing)
+                }
+
+                Text(group.isDimmed ? group.elapsed : liveElapsed(group: group))
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary.opacity(0.5))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
-    private func jobDotColor(for job: ActiveJob) -> Color {
-        switch job.status {
+    // MARK: - Elapsed
+
+    private func liveElapsed(group: JobGroup) -> String {
+        _ = tick
+        return group.elapsed
+    }
+
+    // MARK: - Dot helpers
+
+    @ViewBuilder
+    private func groupDot(for group: JobGroup) -> some View {
+        if case .matrix = group {
+            // Matrix indicator: two overlapping small circles
+            ZStack {
+                Circle().fill(groupDotColor(for: group)).frame(width: 6, height: 6).offset(x: -2)
+                Circle().fill(groupDotColor(for: group).opacity(0.6)).frame(width: 6, height: 6).offset(x: 2)
+            }
+            .frame(width: 7, height: 7)
+        } else {
+            Circle()
+                .fill(groupDotColor(for: group))
+                .frame(width: 7, height: 7)
+        }
+    }
+
+    private func groupDotColor(for group: JobGroup) -> Color {
+        if group.isDimmed {
+            return group.conclusion == "failure" ? .red : .secondary
+        }
+        switch group.status {
         case "in_progress": return .yellow
         case "queued":      return .gray
         default:            return .secondary
         }
     }
 
-    private func jobStatusLabel(for job: ActiveJob) -> String {
-        switch job.status {
+    // MARK: - Label helpers
+
+    private func statusLabel(status: String) -> String {
+        switch status {
         case "in_progress": return "In Progress"
         case "queued":      return "Queued"
         default:            return "Done"
         }
     }
 
-    private func jobStatusColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued":      return .secondary
-        default:            return .secondary
-        }
+    private func statusColor(status: String) -> Color {
+        status == "in_progress" ? .yellow : .secondary
     }
 
-    private func conclusionLabel(for job: ActiveJob) -> String {
-        switch job.conclusion {
+    private func conclusionLabel(conclusion: String?) -> String {
+        switch conclusion {
         case "success":   return "✓ success"
         case "failure":   return "✗ failure"
         case "cancelled": return "⊖ cancelled"
         case "skipped":   return "− skipped"
-        default:          return job.conclusion ?? "done"
+        default:          return conclusion ?? "done"
         }
     }
 
-    private func conclusionColor(for job: ActiveJob) -> Color {
-        switch job.conclusion {
+    private func conclusionColor(conclusion: String?) -> Color {
+        switch conclusion {
         case "success": return .green
         case "failure": return .red
         default:        return .secondary
