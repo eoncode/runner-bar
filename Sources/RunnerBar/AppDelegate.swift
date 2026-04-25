@@ -1,11 +1,23 @@
 import AppKit
 import SwiftUI
 
+/// Hosting controller that fixes width at 340 pt while letting SwiftUI
+/// determine the height freely (used so the popover never jumps sideways).
+private final class FixedWidthHostingController<V: View>: NSHostingController<V> {
+    override var preferredContentSize: NSSize {
+        get {
+            let s = super.preferredContentSize
+            return NSSize(width: 340, height: s.height)
+        }
+        set { super.preferredContentSize = newValue }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private var hc: NSHostingController<PopoverView>?
+    private var hc: FixedWidthHostingController<PopoverView>?
     private let observable = RunnerStoreObservable()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -18,9 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        let hc = NSHostingController(rootView: PopoverView(store: observable))
-        // Let SwiftUI drive the popover height via its intrinsic size.
-        // PopoverView caps jobListView at maxHeight:480 so it never grows unbounded.
+        let hc = FixedWidthHostingController(rootView: PopoverView(store: observable))
         hc.sizingOptions = .preferredContentSize
         self.hc = hc
 
