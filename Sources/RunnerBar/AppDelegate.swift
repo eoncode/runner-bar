@@ -8,16 +8,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hc: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
 
-    // ⚠️ REGRESSION GUARD — width/height (ref issue #54)
-    // WIDTH must ALWAYS be 320. Never make it dynamic or derive it from fittingSize.
-    // Dynamic width causes the popover to jump left on every data update.
-    // Heights are the ONLY place dimensions are defined — PopoverMainView must NOT
-    // set its own .frame(height:). The views fill whatever size AppDelegate gives them.
+    // ⚠️ REGRESSION GUARD — width/height (ref issues #52 #54)
+    //
+    // WIDTH = 320. NEVER make it dynamic or derive from fittingSize.
+    //   Dynamic width → popover jumps left on every data update.
+    //
+    // mainHeight = 400. Accounts for the TALLEST possible main-view state:
+    //   header(44) + divider(1) + jobs-label(26) + 3 job-rows(3×26=78) + divider(1)
+    //   + runners-label(26) + 2 runner-rows(2×32=64) + divider(1)
+    //   + scopes-section(82) + divider(1) + toggle(38) + divider(1) + quit(38) = ~401px
+    //   → 400 is the correct floor. Do NOT lower it below 400.
+    //   → If content ever shrinks (0 runners, 0 jobs), SwiftUI top-aligns and
+    //     the extra whitespace at the bottom is acceptable and correct.
+    //
+    // detailHeight = 460. Accounts for the job-detail step list (up to ~10 steps).
+    //   Do NOT lower below 460.
+    //
     // sizingOptions MUST remain [] — .preferredContentSize causes SwiftUI to resize
-    // the popover on every layout pass, which also causes the left-jump.
+    //   the popover on every layout pass → left-jump on every poll.
     private static let width: CGFloat        = 320
-    private static let mainHeight: CGFloat   = 360
-    private static let detailHeight: CGFloat = 460
+    private static let mainHeight: CGFloat   = 400  // ⚠️ do not lower — see calculation above
+    private static let detailHeight: CGFloat = 460  // ⚠️ do not lower — covers ~10 step rows
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -62,10 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }))
     }
 
-    /// Swap content and resize the popover WITHOUT closing it.
-    /// ⚠️ REGRESSION GUARD: NEVER navigate by calling performClose() + show().
-    /// Closing and reopening the popover causes macOS to re-anchor it from scratch,
-    /// which shifts it left. Always swap hc.rootView in-place instead.
+    // ⚠️ REGRESSION GUARD — navigation (ref issues #52 #54)
+    // Swap content in-place. NEVER navigate by calling performClose() + show().
+    // Closing and reopening the popover forces macOS to re-anchor from scratch → left-jump.
+    // This function changes ONLY the height. Width stays Self.width (320) always.
     private func navigate(to view: AnyView, height: CGFloat) {
         guard let popover, let hc else { return }
         let newSize = NSSize(width: Self.width, height: height)
