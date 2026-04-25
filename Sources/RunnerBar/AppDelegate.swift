@@ -8,11 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hc: NSHostingController<PopoverView>?
     private let observable = RunnerStoreObservable()
 
-    // Fixed popover size — never changes, no repositioning jumps.
-    static let popoverSize = NSSize(width: 340, height: 480)
-
     func applicationDidFinishLaunching(_ notification: Notification) {
-        log("AppDelegate › applicationDidFinishLaunching")
+        log("AppDelegate \u203a applicationDidFinishLaunching")
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -22,19 +19,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hc = NSHostingController(rootView: PopoverView(store: observable))
-        // Do NOT set sizingOptions — let the fixed contentSize below control sizing.
+        // Let SwiftUI drive the popover height via its own intrinsic size.
+        // The PopoverView caps jobListView at maxHeight:480, so it never grows unbounded.
+        hc.sizingOptions = .preferredContentSize
         self.hc = hc
 
         let popover = NSPopover()
         popover.behavior              = .transient
         popover.animates              = false
         popover.contentViewController = hc
-        popover.contentSize           = Self.popoverSize
+        // Width is fixed; height is driven by sizingOptions above.
+        hc.view.setFrameSize(NSSize(width: 340, height: hc.view.fittingSize.height))
         self.popover = popover
 
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
-            log("AppDelegate › onChange — refreshing status icon")
+            log("AppDelegate \u203a onChange \u2014 refreshing status icon")
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
             self.observable.reload()
         }
@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            log("AppDelegate › opening popover")
+            log("AppDelegate \u203a opening popover")
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         }
     }
