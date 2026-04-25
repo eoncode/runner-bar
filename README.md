@@ -4,7 +4,7 @@ A macOS menu bar app that shows the status of your GitHub self-hosted runners at
 
 > No Xcode. No Apple Developer account. No Gatekeeper dialogs. One `curl` command to install.
 
-![RunnerBar screenshot](https://raw.githubusercontent.com/eonist/runner-bar/main/app3.png)
+![RunnerBar screenshot](https://raw.githubusercontent.com/eonist/runner-bar/main/runner-bar.gif)
 
 ---
 
