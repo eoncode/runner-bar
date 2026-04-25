@@ -1,20 +1,26 @@
 import SwiftUI
 import ServiceManagement
 
-// ⚠️ REGRESSION GUARD — layout rules (ref issues #52 #54 #57)
+// ⚠️ REGRESSION GUARD — frame rules (ref issue #59)
 //
-// 1. NEVER add .frame(height:) anywhere in this file.
-//    Height is owned exclusively by AppDelegate (fixedHeight = 390).
-//    This view fills AppDelegate's fixed frame via .frame(maxWidth/maxHeight: .infinity).
+// RULE 1: Root body MUST use .frame(idealWidth: 320, maxWidth: 320)
+//   AppDelegate uses sizingOptions = .preferredContentSize.
+//   preferredContentSize reads the SwiftUI IDEAL size, not layout size.
+//   .frame(idealWidth: 320) sets ideal width = 320 so popover is 320px wide.
+//   .frame(width: 320) would override layout AND ideal — don’t use it.
+//   NEVER use .frame(maxWidth: .infinity) as root — no ideal width = collapse.
 //
-// 2. The Spacer() inside each job row HStack is load-bearing.
-//    Removing it causes text to left-align when job names change.
+// RULE 2: NEVER set popover.contentSize anywhere.
+//   Any write to contentSize re-anchors popover X position = left-jump.
 //
-// 3. All rows use .padding(.horizontal, 12) — keep uniform across every row.
-//    Mismatched padding causes visible column shifts between states.
+// RULE 3: The Spacer() in each job row HStack is load-bearing.
+//   Removing it causes text to left-align when job names change length.
 //
-// 4. NEVER use .fixedSize(horizontal: true, ...) on any container.
-//    Dynamic width causes the popover anchor to drift left.
+// RULE 4: All rows use .padding(.horizontal, 12). Keep uniform.
+//   Mismatched padding causes visible column shifts.
+//
+// RULE 5: NEVER use .fixedSize(horizontal: true, ...) on any container.
+//   This fights preferredContentSize and causes width collapse.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -28,7 +34,7 @@ struct PopoverMainView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             HStack {
-                Text("RunnerBar v0.20")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.23")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -66,7 +72,7 @@ struct PopoverMainView: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                                 .lineLimit(1).truncationMode(.tail)
-                            Spacer() // ⚠️ load-bearing — do NOT remove (prevents left-align shift)
+                            Spacer() // ⚠️ RULE 3: load-bearing — do NOT remove
                             Text(job.isDimmed ? conclusionLabel(for: job) : jobStatusLabel(for: job))
                                 .font(.caption)
                                 .foregroundColor(job.isDimmed ? conclusionColor(for: job) : jobStatusColor(for: job))
@@ -143,10 +149,10 @@ struct PopoverMainView: View {
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12).padding(.vertical, 8)
         }
-        // ⚠️ fills AppDelegate's fixed 390px frame.
-        // NEVER replace with .frame(height: X) — that is AppDelegate's job.
-        // NEVER add .fixedSize() — causes sizing negotiation with NSPopover.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ RULE 1: idealWidth=320 REQUIRED for preferredContentSize width anchor.
+        // NEVER replace with .frame(maxWidth: .infinity) — no ideal width = collapse.
+        // NEVER replace with .frame(width: 320) — overrides ideal size negotiation.
+        .frame(idealWidth: 320, maxWidth: 320, alignment: .top)
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
         .onAppear { Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 } }
     }

@@ -1,6 +1,22 @@
 import AppKit
 import SwiftUI
 
+// ⚠️ REGRESSION GUARD — frame rules (ref issue #59)
+//
+// RULE 1: Root body MUST use .frame(idealWidth: 320, maxWidth: 320)
+//   AppDelegate uses sizingOptions = .preferredContentSize.
+//   preferredContentSize reads the SwiftUI IDEAL size.
+//   If idealWidth is not set, SwiftUI collapses width to near-zero
+//   and the back button / header become invisible.
+//   NEVER use .frame(maxWidth: .infinity) as the root frame.
+//   NEVER use .frame(width: 320) — overrides ideal size.
+//
+// RULE 2: NEVER set popover.contentSize anywhere.
+//   Any write to contentSize re-anchors the popover X position = left-jump.
+//
+// RULE 3: Steps list does NOT need a ScrollView for typical job counts.
+//   preferredContentSize auto-grows the popover height to fit all steps.
+//   If you add ScrollView, set a maxHeight or the popover will grow unbounded.
 struct JobDetailView: View {
     let job: ActiveJob
     let onBack: () -> Void
@@ -9,7 +25,7 @@ struct JobDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Back + elapsed
+            // ── Back button + elapsed
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -21,7 +37,7 @@ struct JobDetailView: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                Spacer()
+                Spacer()  // ⚠️ load-bearing — do NOT remove
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -59,7 +75,7 @@ struct JobDetailView: View {
                                 .foregroundColor(step.status == "queued" ? .secondary : .primary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                            Spacer()
+                            Spacer()  // ⚠️ load-bearing — do NOT remove
                             Text(step.elapsed)
                                 .font(.caption.monospacedDigit())
                                 .foregroundColor(.secondary)
@@ -78,14 +94,18 @@ struct JobDetailView: View {
 
             Spacer(minLength: 8)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ RULE 1: idealWidth=320 is REQUIRED for preferredContentSize.
+        // NEVER replace with .frame(maxWidth: .infinity) — collapses width.
+        // NEVER replace with .frame(width: 320) — overrides ideal size.
+        // Must match PopoverMainView’s root frame exactly.
+        .frame(idealWidth: 320, maxWidth: 320, alignment: .top)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
     }
 
     private func openLog(step: JobStep) {
-        // GitHub log URL anchored to the step number
+        // Open GitHub log URL anchored to the step number
         let base = job.htmlUrl ?? "https://github.com"
         let urlString = "\(base)#step:\(step.id)"
         if let url = URL(string: urlString) {
