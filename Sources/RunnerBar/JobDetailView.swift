@@ -2,25 +2,39 @@ import SwiftUI
 
 struct JobDetailView: View {
     let job: ActiveJob
+    let onBack: () -> Void
     @State private var tick = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header
+            // ── Back + header
             HStack(spacing: 6) {
-                Text(job.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: onBack) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                            .font(.caption)
+                        Text("Jobs")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
+            Text(job.name)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
 
             Divider()
 
@@ -52,8 +66,9 @@ struct JobDetailView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 3)
                 }
-                .padding(.bottom, 6)
             }
+
+            Spacer(minLength: 8)
         }
         .frame(minWidth: 320)
         .fixedSize(horizontal: false, vertical: true)

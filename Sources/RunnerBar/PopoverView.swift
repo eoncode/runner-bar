@@ -8,10 +8,15 @@ struct PopoverView: View {
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
     @State private var tick = 0
+    @State private var selectedJob: ActiveJob? = nil
 
     var body: some View {
-        NavigationStack {
-            mainView
+        Group {
+            if let job = selectedJob {
+                JobDetailView(job: job, onBack: { selectedJob = nil })
+            } else {
+                mainView
+            }
         }
         .frame(minWidth: 320)
         .fixedSize(horizontal: false, vertical: true)
@@ -70,7 +75,7 @@ struct PopoverView: View {
                     .padding(.bottom, 2)
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
-                    NavigationLink(destination: JobDetailView(job: job)) {
+                    Button(action: { selectedJob = job }) {
                         HStack(spacing: 8) {
                             jobDot(for: job)
                             Text(job.name)
@@ -94,6 +99,9 @@ struct PopoverView: View {
                                 .font(.caption.monospacedDigit())
                                 .foregroundColor(.secondary)
                                 .frame(width: 40, alignment: .trailing)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 3)
