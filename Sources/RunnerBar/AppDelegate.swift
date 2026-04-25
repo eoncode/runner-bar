@@ -18,7 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hc = NSHostingController(rootView: PopoverView(store: observable))
-        hc.sizingOptions = .preferredContentSize
+        // sizingOptions (.preferredContentSize) requires macOS 13+ and caused
+        // silent crashes on older hosts — removed. SwiftUI sizes via .fixedSize.
 
         let popover = NSPopover()
         popover.behavior    = .transient
