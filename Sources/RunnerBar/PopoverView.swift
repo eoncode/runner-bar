@@ -4,30 +4,26 @@ import ServiceManagement
 
 struct PopoverView: View {
     @ObservedObject var store: RunnerStoreObservable
+
+    // Navigation is driven by AppDelegate so it can re-anchor the popover.
+    let selectedJob: ActiveJob?
+    let onSelectJob: (ActiveJob) -> Void
+    let onBack: () -> Void
+
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
     @State private var tick = 0
-    @State private var selectedJob: ActiveJob? = nil
 
     var body: some View {
-        // Fixed frame matching AppDelegate.popoverSize — never resize the popover.
-        ZStack(alignment: .topLeading) {
-            ScrollView {
-                mainView
-                    .frame(width: 320)
-            }
-            .opacity(selectedJob == nil ? 1 : 0)
-            .allowsHitTesting(selectedJob == nil)
-
+        Group {
             if let job = selectedJob {
-                ScrollView {
-                    JobDetailView(job: job, onBack: { selectedJob = nil })
-                        .frame(width: 320)
-                }
+                JobDetailView(job: job, onBack: onBack)
+            } else {
+                mainView
             }
         }
-        .frame(width: 320, height: 500)
+        .frame(width: 320, height: 420)
     }
 
     // MARK: - Main list view
@@ -35,7 +31,7 @@ struct PopoverView: View {
     private var mainView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header
+            // ─── Header
             HStack {
                 Text("RunnerBar v0.8")
                     .font(.headline)
@@ -66,7 +62,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Active Jobs
+            // ─── Active Jobs
             Text("Active Jobs")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -83,7 +79,7 @@ struct PopoverView: View {
                     .padding(.bottom, 2)
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
-                    Button(action: { selectedJob = job }) {
+                    Button(action: { onSelectJob(job) }) {
                         HStack(spacing: 8) {
                             jobDot(for: job)
                             Text(job.name)
@@ -121,7 +117,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Local runners
+            // ─── Local runners
             if !store.runners.isEmpty {
                 Text("Local runners")
                     .font(.caption)
@@ -152,7 +148,7 @@ struct PopoverView: View {
                 Divider()
             }
 
-            // ── Scope management
+            // ─── Scope management
             VStack(alignment: .leading, spacing: 4) {
                 Text("Scopes")
                     .font(.caption)
@@ -194,7 +190,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Launch at login
+            // ─── Launch at login
             Toggle(isOn: $launchAtLogin) {
                 Text("Launch at login").font(.system(size: 13))
             }
@@ -205,7 +201,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Quit
+            // ─── Quit
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 HStack {
                     Image(systemName: "xmark.square")
@@ -217,6 +213,8 @@ struct PopoverView: View {
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+
+            Spacer(minLength: 0)
         }
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
@@ -265,10 +263,10 @@ struct PopoverView: View {
 
     private func conclusionLabel(for job: ActiveJob) -> String {
         switch job.conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "cancelled": return "⊖ cancelled"
-        case "skipped":   return "− skipped"
+        case "success":   return "\u2713 success"
+        case "failure":   return "\u2717 failure"
+        case "cancelled": return "\u2296 cancelled"
+        case "skipped":   return "\u2212 skipped"
         default:          return job.conclusion ?? "done"
         }
     }

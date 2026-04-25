@@ -8,11 +8,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hc: NSHostingController<PopoverView>?
     private let observable = RunnerStoreObservable()
 
-    // Fixed popover size — never changes so the popover window never moves.
-    private let popoverSize = NSSize(width: 320, height: 500)
+    // Navigation state lives here in AppDelegate so we can re-anchor
+    // the popover (via show(relativeTo:of:preferredEdge:)) whenever the
+    // content size changes. Toggling this calls showPopover() which
+    // sets the new contentSize BEFORE showing, preventing the (0,0) jump.
+    var selectedJob: ActiveJob? = nil {
+        didSet {
+            // Update the hosted root view with the new selection.
+            if let hc {
+                hc.rootView = PopoverView(
+                    store: observable,
+                    selectedJob: selectedJob,
+                    onSelectJob: { [weak self] job in self?.selectedJob = job },
+                    onBack: { [weak self] in self?.selectedJob = nil }
+                )
+            }
+            // Re-show the popover so it re-anchors at the correct position
+            // with the updated contentSize. This is the only reliable fix.
+            if popover?.isShown == true {
+                showPopover()
+            }
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        log("AppDelegate › applicationDidFinishLaunching")
+        log("AppDelegate \u203a applicationDidFinishLaunching")
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -21,22 +41,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        let hc = NSHostingController(rootView: PopoverView(store: observable))
-        // Do NOT use .preferredContentSize — it causes macOS to reposition the
-        // popover window to (0,0) whenever SwiftUI content height changes.
+        let rootView = PopoverView(
+            store: observable,
+            selectedJob: nil,
+            onSelectJob: { [weak self] job in self?.selectedJob = job },
+            onBack: { [weak self] in self?.selectedJob = nil }
+        )
+        let hc = NSHostingController(rootView: rootView)
         hc.sizingOptions = []
         self.hc = hc
 
         let popover = NSPopover()
         popover.behavior              = .transient
         popover.animates              = false
-        popover.contentSize           = popoverSize
+        popover.contentSize           = Self.mainSize
         popover.contentViewController = hc
         self.popover = popover
 
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
-            log("AppDelegate › onChange — refreshing status icon")
+            log("AppDelegate \u203a onChange")
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
             self.observable.reload()
         }
@@ -44,15 +68,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunnerStore.shared.start()
     }
 
+    // MARK: - Sizes
+
+    private static let mainSize   = NSSize(width: 320, height: 420)
+    private static let detailSize = NSSize(width: 320, height: 420)
+
+    // MARK: - Toggle
+
     @objc private func togglePopover() {
-        guard let button = statusItem?.button,
-              button.window != nil,
-              let popover else { return }
+        guard let popover else { return }
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            log("AppDelegate › opening popover")
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+            showPopover()
         }
+    }
+
+    private func showPopover() {
+        guard let button = statusItem?.button,
+              button.window != nil,
+              let popover, let hc else { return }
+
+        // Set size BEFORE showing so the anchor calculation uses correct size.
+        let size = (selectedJob == nil) ? Self.mainSize : Self.detailSize
+        popover.contentSize = size
+        hc.view.setFrameSize(size)
+        hc.view.layoutSubtreeIfNeeded()
+
+        log("AppDelegate \u203a showPopover size=\(size) isShown=\(popover.isShown)")
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        popover.contentViewController?.view.window?.makeKey()
     }
 }
