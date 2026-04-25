@@ -5,7 +5,7 @@ import ServiceManagement
 // ============================================================
 // ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
 // ============================================================
-// VERSION: v1.4
+// VERSION: v1.7 (keep in sync with AppDelegate.swift)
 //
 // TWO SYMPTOMS that keep recurring:
 //   A) LEFT JUMP  — popover flies to far left of screen on open/nav
@@ -31,6 +31,9 @@ import ServiceManagement
 //      NEVER .frame(width: 340, ...) — fixed width fights idealWidth:340
 //      and causes preferredContentSize.width to drift => left jump.
 //
+//   5. popoverIsOpen flag in AppDelegate MUST be set true BEFORE reload().
+//      See AppDelegate.swift CAUSE 4 comment.
+//
 // WHY idealWidth AND NOT width:
 //   NSHostingController with sizingOptions=.preferredContentSize reads the
 //   SwiftUI view's IDEAL size to set preferredContentSize.
@@ -38,7 +41,7 @@ import ServiceManagement
 //   .frame(width: 340) sets a layout constraint but breaks ideal size
 //   reporting on child views => preferredContentSize.width changes => jump.
 //
-// This regression has been introduced and "fixed" 10+ times in one day.
+// This regression has been introduced 30+ times in one day.
 // See GitHub issues #53 and #54 before touching any of this.
 // ============================================================
 
@@ -114,9 +117,9 @@ struct PopoverView: View {
     private var jobListView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // -- Header — RunnerBar v1.4
+            // -- Header — RunnerBar v1.7
             HStack {
-                Text("RunnerBar v1.4")
+                Text("RunnerBar v1.7")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
