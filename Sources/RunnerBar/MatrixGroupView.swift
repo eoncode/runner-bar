@@ -8,26 +8,24 @@ import SwiftUI
 // ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
 // ============================================================
 // This view is a nav state inside PopoverView's root Group.
-// The root Group has .frame(idealWidth: 340), which keeps
-// NSHostingController.preferredContentSize.width = 340 always.
+// PopoverView root Group has .frame(idealWidth: 340).
+// NSHostingController with sizingOptions=.preferredContentSize
+// reads SwiftUI IDEAL size to set preferredContentSize.
 //
-// For that to work, THIS VIEW must ALSO report width = 340.
-// Rule: the outermost container must be .frame(width: 340, height: 480).
+// RULE: child nav views must NEVER set .frame(width: N).
+//   ✗ .frame(width: 340, height: 480)  ← overrides ideal width => left jump
+//   ✓ .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+//     fills width (owned by root idealWidth:340), pins height to 480pt
 //
 // THINGS THAT WILL CAUSE THE LEFT-JUMP REGRESSION:
-//   ✗ Removing .frame(width: 340, height: 480) from the outer Group
-//     => this view reports a different ideal width => left jump
-//   ✗ Using .frame(minWidth: 320) or .fixedSize on the outer container
-//     => dynamic width => preferredContentSize.width changes => left jump
+//   ✗ Using .frame(width: 340) anywhere in this file
 //   ✗ Using ZStack with .transition(.move(edge:))
-//     => ZStack collapses to zero-width in NSPopover context
-//     => move transition animates FROM the left edge of the screen
-//     => content appears flying in from far left
-//     => USE Group + if/else switch instead, no transitions
-//   ✗ Width != 340
-//     => must match PopoverView's idealWidth exactly
+//     => ZStack collapses to zero width in NSPopover context
+//     => move transition animates from far left of screen
+//     => USE Group + if/else instead, no transitions
+//   ✗ Using .frame(minWidth:) or .fixedSize on the outer container
 //
-// See GitHub issue #53 before touching any of this.
+// See GitHub issues #53 and #54 before touching any of this.
 // ============================================================
 
 struct MatrixGroupView: View {
@@ -54,17 +52,16 @@ struct MatrixGroupView: View {
                 variantListView
             }
         }
-        // ⚠️ MUST be .frame(width: 340, height: 480) — NOT minWidth, NOT fixedSize.
-        // This ensures preferredContentSize.width = 340 when this nav state is active.
-        // Width must match PopoverView's .frame(idealWidth: 340) exactly.
-        .frame(width: 340, height: 480)
+        // ⚠️ maxWidth:.infinity — DO NOT use width:340 here.
+        // width:340 overrides the root Group's idealWidth:340 and breaks
+        // preferredContentSize.width => left jump. See contract above.
+        .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
     }
 
     // MARK: - Variant list
 
     private var variantListView: some View {
-        // ⚠️ No .fixedSize or .frame(minWidth:) here — the outer .frame(width:height:)
-        // already controls the size. Adding fixedSize/minWidth here would fight it.
+        // ⚠️ No .fixedSize or .frame(minWidth:) here — the outer frame controls size.
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
 

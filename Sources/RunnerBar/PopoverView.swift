@@ -5,39 +5,41 @@ import ServiceManagement
 // ============================================================
 // ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
 // ============================================================
+// VERSION: v1.4
+//
 // TWO SYMPTOMS that keep recurring:
-//   A) LEFT JUMP  — popover flies to far left of screen on open
-//   B) EMPTY SPACE — large black void below content (height stuck at 480pt)
+//   A) LEFT JUMP  — popover flies to far left of screen on open/nav
+//   B) EMPTY SPACE — large void below content
 //
 // THE CONTRACT (all must be true simultaneously):
 //   1. Root Group must have .frame(idealWidth: 340) — NOT .frame(width:)
 //      idealWidth controls NSHostingController.preferredContentSize.width.
 //      .frame(width:) does NOT. They are NOT equivalent here.
-//      Changing idealWidth → width WILL cause left-jump. This has happened 3 times.
+//      Changing idealWidth → width WILL cause left-jump.
 //
 //   2. jobListView must use:
 //        .fixedSize(horizontal: false, vertical: true)
 //        .frame(maxHeight: 480, alignment: .top)
 //      NOT a fixed .frame(height: 480) — that causes empty space.
-//      NOT wrapped in ScrollView — ScrollView reports infinite preferred height.
+//      NOT wrapped in ScrollView — infinite preferred height.
 //
 //   3. AppDelegate must keep hc.sizingOptions = .preferredContentSize.
 //      Never set popover.contentSize manually.
 //
-//   4. All nav states (jobList, jobSteps, matrixGroup) must share the same
-//      root Group with .frame(idealWidth: 340).
-//      If ANY nav state reports a different ideal width, navigating to it
-//      changes preferredContentSize.width => left jump.
+//   4. ALL child nav states (jobSteps, matrixGroup, stepLog) must use
+//        .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+//      NEVER .frame(width: 340, ...) — fixed width fights idealWidth:340
+//      and causes preferredContentSize.width to drift => left jump.
 //
 // WHY idealWidth AND NOT width:
 //   NSHostingController with sizingOptions=.preferredContentSize reads the
-//   SwiftUI view's IDEAL size (not layout size) to set preferredContentSize.
-//   .frame(idealWidth: 340) sets the ideal width to 340 for layout negotiation.
-//   .frame(width: 340) sets a layout constraint but does NOT guarantee the
-//   ideal size reported to NSHostingController is 340 on all nav states.
+//   SwiftUI view's IDEAL size to set preferredContentSize.
+//   .frame(idealWidth: 340) sets ideal width = 340 for all nav states.
+//   .frame(width: 340) sets a layout constraint but breaks ideal size
+//   reporting on child views => preferredContentSize.width changes => jump.
 //
-// This regression has been introduced and "fixed" 8+ times in one day.
-// See GitHub issue #53 before touching any of this.
+// This regression has been introduced and "fixed" 10+ times in one day.
+// See GitHub issues #53 and #54 before touching any of this.
 // ============================================================
 
 // MARK: - Navigation state
@@ -112,9 +114,9 @@ struct PopoverView: View {
     private var jobListView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // -- Header
+            // -- Header — RunnerBar v1.4
             HStack {
-                Text("RunnerBar v1.3")
+                Text("RunnerBar v1.4")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -379,10 +381,10 @@ struct PopoverView: View {
 
     private func conclusionLabel(conclusion: String?) -> String {
         switch conclusion {
-        case "success":   return "checkmark success"
-        case "failure":   return "x failure"
-        case "cancelled": return "- cancelled"
-        case "skipped":   return "- skipped"
+        case "success":   return "✓ success"
+        case "failure":   return "✗ failure"
+        case "cancelled": return "⊖ cancelled"
+        case "skipped":   return "− skipped"
         default:          return conclusion ?? "done"
         }
     }

@@ -1,6 +1,20 @@
 import SwiftUI
 
-// MARK: - Step Log View (Phase 2)
+// MARK: - Step Log View
+//
+// ============================================================
+// ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
+// ============================================================
+// This view is a child inside JobStepsView's Group, which is
+// itself a nav state inside PopoverView's root Group.
+// PopoverView root Group has .frame(idealWidth: 340).
+//
+// RULE: child nav views must NEVER set .frame(width: N).
+//   ✗ .frame(width: 340, height: 480)  ← overrides ideal width => left jump
+//   ✓ .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+//
+// See GitHub issues #53 and #54 before touching any of this.
+// ============================================================
 
 struct StepLogView: View {
     let job: ActiveJob
@@ -99,8 +113,10 @@ struct StepLogView: View {
                 }
             }
         }
-        // Fixed frame matches the popover — no fixedSize, no anchor jumps
-        .frame(width: 340, height: 480)
+        // ⚠️ maxWidth:.infinity — DO NOT use width:340 here.
+        // width:340 overrides the root Group's idealWidth:340 and breaks
+        // preferredContentSize.width => left jump. See contract above.
+        .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
         .onAppear { loadLog() }
     }
 
@@ -121,7 +137,7 @@ struct StepLogView: View {
                 if logLines.count == 1,
                    let first = logLines.first,
                    first.contains("BlobNotFound") || first.hasPrefix("<?xml") || first.contains("<Error>") {
-                    errorMessage = "Log unavailable\nGitHub has expired this step\'s log."
+                    errorMessage = "Log unavailable\nGitHub has expired this step's log."
                     lines = []
                 } else {
                     lines = logLines

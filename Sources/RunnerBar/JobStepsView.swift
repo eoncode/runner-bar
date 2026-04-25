@@ -1,6 +1,22 @@
 import SwiftUI
 
 // MARK: - Job Steps View
+//
+// ============================================================
+// ⚠️  WARNING — POPOVER SIZING CONTRACT — READ BEFORE EDITING
+// ============================================================
+// This view is a nav state inside PopoverView's root Group.
+// PopoverView root Group has .frame(idealWidth: 340).
+// NSHostingController with sizingOptions=.preferredContentSize
+// reads SwiftUI IDEAL size to set preferredContentSize.
+//
+// RULE: child nav views must NEVER set .frame(width: N).
+//   ✗ .frame(width: 340, height: 480)  ← overrides ideal width => left jump
+//   ✓ .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
+//     fills width (owned by root idealWidth:340), pins height to 480pt
+//
+// See GitHub issues #53 and #54 before touching any of this.
+// ============================================================
 
 struct JobStepsView: View {
     let job: ActiveJob
@@ -25,7 +41,10 @@ struct JobStepsView: View {
                 stepsListView
             }
         }
-        .frame(width: 340, height: 480)
+        // ⚠️ maxWidth:.infinity — DO NOT use width:340 here.
+        // width:340 overrides the root Group's idealWidth:340 and breaks
+        // preferredContentSize.width => left jump. See contract above.
+        .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
     }
 
     // MARK: - Steps list
