@@ -8,8 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hc: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
 
-    private static let mainSize   = NSSize(width: 320, height: 360)
-    private static let detailSize = NSSize(width: 320, height: 460)
+    private static let width: CGFloat = 320
+    private static let mainHeight: CGFloat   = 360
+    private static let detailHeight: CGFloat = 460
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -19,15 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
+        let size = NSSize(width: Self.width, height: Self.mainHeight)
         let hc = NSHostingController(rootView: mainView())
         hc.sizingOptions = []
-        hc.view.frame = NSRect(origin: .zero, size: Self.mainSize)
+        hc.view.frame = NSRect(origin: .zero, size: size)
         self.hc = hc
 
         let popover = NSPopover()
         popover.behavior              = .transient
         popover.animates              = false
-        popover.contentSize           = Self.mainSize
+        popover.contentSize           = size
         popover.contentViewController = hc
         self.popover = popover
 
@@ -38,8 +40,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         RunnerStore.shared.start()
     }
-
-    // MARK: - View factories
 
     private func mainView() -> AnyView {
         AnyView(PopoverMainView(store: observable, onSelectJob: { [weak self] job in
@@ -53,35 +53,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }))
     }
 
-    // MARK: - Navigation
-
     private func showDetail(job: ActiveJob) {
-        guard let popover, let hc else { return }
-        popover.performClose(nil)
-        hc.rootView = detailView(job: job)
-        popover.contentSize = Self.detailSize
-        hc.view.setFrameSize(Self.detailSize)
-        DispatchQueue.main.async { [weak self] in self?.openPopover() }
+        swap(to: detailView(job: job), height: Self.detailHeight)
     }
 
     private func showMain() {
+        swap(to: mainView(), height: Self.mainHeight)
+    }
+
+    private func swap(to view: AnyView, height: CGFloat) {
         guard let popover, let hc else { return }
         popover.performClose(nil)
-        hc.rootView = mainView()
-        popover.contentSize = Self.mainSize
-        hc.view.setFrameSize(Self.mainSize)
+        hc.rootView = view
+        // Only height changes — width is always 320
+        let newSize = NSSize(width: Self.width, height: height)
+        popover.contentSize = newSize
+        hc.view.setFrameSize(newSize)
         DispatchQueue.main.async { [weak self] in self?.openPopover() }
     }
 
-    // MARK: - Toggle
-
     @objc private func togglePopover() {
         guard let popover else { return }
-        if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            openPopover()
-        }
+        if popover.isShown { popover.performClose(nil) } else { openPopover() }
     }
 
     private func openPopover() {
