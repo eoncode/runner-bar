@@ -1,28 +1,26 @@
 import SwiftUI
 import ServiceManagement
 
-// ⚠️ REGRESSION GUARD — frame rules (ref issue #59, causes 1-5 in AppDelegate.swift)
+// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
-// RULE 1: Root body frame MUST be .frame(idealWidth: 340) — NOT .frame(width: 340)
-//   AppDelegate.sizingOptions = .preferredContentSize reads SwiftUI IDEAL size.
-//   .frame(width: 340) sets layout width but does NOT set ideal width.
-//   .frame(idealWidth: 340) sets the ideal size → popover stays 340px wide.
-//   ❌ NEVER use .frame(width: 340) — looks the same, breaks everything
-//   ❌ NEVER use .frame(maxWidth: .infinity) as root — no ideal width = collapse
+// RULE 1: Root VStack MUST use .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   AppDelegate sets popover.contentSize. This view fills it. No fixed height here.
+//   ❌ NEVER add .frame(height:) to root VStack
+//   ❌ NEVER add .frame(idealWidth:) — only meaningful under preferredContentSize
 //
-// RULE 2: The Spacer() in each job row HStack is load-bearing.
-//   Removing it causes text to left-align when job name lengths change.
-//   See issue #54.
+// RULE 2: ALL rows use .padding(.horizontal, 12) — uniform across header/jobs/runners/scopes.
+//   Mismatched padding causes visible left-alignment shift between states.
+//   ❌ NEVER change one row’s horizontal padding without changing ALL rows.
 //
-// RULE 3: All rows use .padding(.horizontal, 12). Keep uniform.
-//   Mismatched padding causes visible column shift between rows.
+// RULE 3: Job row HStack Spacer() is LOAD-BEARING.
+//   Removing it causes job name text to left-align when names change length.
+//   ❌ NEVER remove the Spacer() inside the job row HStack.
 //
-// RULE 4: NEVER use .fixedSize(horizontal: true, ...) on any container.
-//   Fights preferredContentSize sizing negotiation.
+// RULE 4: NEVER use .fixedSize() on any container.
+//   Fights the fixed-frame architecture AppDelegate provides.
 //
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
-//   NEVER add objectWillChange.send() to reload() — causes double re-render
-//   and left-jump on second open. See AppDelegate.swift CAUSE 5.
+//   NEVER add objectWillChange.send() to reload().
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -36,7 +34,7 @@ struct PopoverMainView: View {
 
             // ── Header
             HStack {
-                Text("RunnerBar v0.25")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.26")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -53,19 +51,19 @@ struct PopoverMainView: View {
                     }.buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
+            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)  // ⚠️ RULE 2
 
             Divider()
 
             // ── Active Jobs
             Text("Active Jobs")
                 .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)  // ⚠️ RULE 2
 
             if store.jobs.isEmpty {
                 Text("No active jobs")
                     .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
+                    .padding(.horizontal, 12).padding(.vertical, 4)  // ⚠️ RULE 2
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
                     Button(action: { onSelectJob(job) }) {
@@ -75,7 +73,7 @@ struct PopoverMainView: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                                 .lineLimit(1).truncationMode(.tail)
-                            Spacer() // ⚠️ RULE 2: load-bearing — do NOT remove
+                            Spacer()  // ⚠️ RULE 3: load-bearing — do NOT remove
                             Text(job.isDimmed ? conclusionLabel(for: job) : jobStatusLabel(for: job))
                                 .font(.caption)
                                 .foregroundColor(job.isDimmed ? conclusionColor(for: job) : jobStatusColor(for: job))
@@ -86,7 +84,7 @@ struct PopoverMainView: View {
                             Image(systemName: "chevron.right")
                                 .font(.caption2).foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 3)  // ⚠️ RULE 3
+                        .padding(.horizontal, 12).padding(.vertical, 3)  // ⚠️ RULE 2
                     }
                     .buttonStyle(.plain)
                 }
@@ -99,7 +97,7 @@ struct PopoverMainView: View {
             if !store.runners.isEmpty {
                 Text("Local runners")
                     .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)  // ⚠️ RULE 2
                 ForEach(store.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
@@ -108,7 +106,7 @@ struct PopoverMainView: View {
                         Text(runner.displayStatus)
                             .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 5)  // ⚠️ RULE 3
+                    .padding(.horizontal, 12).padding(.vertical, 5)  // ⚠️ RULE 2
                 }
                 Divider()
             }
@@ -116,7 +114,7 @@ struct PopoverMainView: View {
             // ── Scopes
             VStack(alignment: .leading, spacing: 4) {
                 Text("Scopes").font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8)
+                    .padding(.horizontal, 12).padding(.top, 8)  // ⚠️ RULE 2
                 ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
                     HStack {
                         Text(scope).font(.system(size: 12))
@@ -125,7 +123,7 @@ struct PopoverMainView: View {
                             Image(systemName: "minus.circle").foregroundColor(.red)
                         }.buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 2)
+                    .padding(.horizontal, 12).padding(.vertical, 2)  // ⚠️ RULE 2
                 }
                 HStack {
                     TextField("owner/repo or org", text: $newScope)
@@ -135,14 +133,14 @@ struct PopoverMainView: View {
                         .buttonStyle(.plain)
                         .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 4)
+                .padding(.horizontal, 12).padding(.vertical, 4)  // ⚠️ RULE 2
             }
 
             Divider()
 
             Toggle(isOn: $launchAtLogin) { Text("Launch at login").font(.system(size: 13)) }
                 .toggleStyle(.checkbox)
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 12).padding(.vertical, 8)  // ⚠️ RULE 2
                 .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
 
             Divider()
@@ -152,13 +150,11 @@ struct PopoverMainView: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut("q", modifiers: .command)
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, 8)  // ⚠️ RULE 2
         }
-        // ⚠️ RULE 1: idealWidth=340 — preferredContentSize reads this as popover width.
-        // ❌ NEVER replace with .frame(width: 340) — identical look, breaks sizing
-        // ❌ NEVER replace with .frame(maxWidth: .infinity) — no ideal width = collapse
-        // ❌ NEVER add .fixedSize(horizontal: true, ...) — see RULE 4
-        .frame(idealWidth: 340)
+        // ⚠️ RULE 1: fill the fixed contentSize frame AppDelegate provides.
+        // ❌ NEVER add .frame(height:) or .frame(idealWidth:) here.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
     }
 
@@ -197,17 +193,13 @@ struct PopoverMainView: View {
     }
 }
 
-// ⚠️ CAUSE 5: reload() uses withAnimation(nil) to coalesce TWO @Published
-// assignments into ONE layout pass. NEVER add objectWillChange.send() here.
-// @Published already fires objectWillChange — adding it manually causes
-// two layout passes → jump on second open.
+// ⚠️ RULE 5: reload() uses withAnimation(nil). NEVER add objectWillChange.send().
 final class RunnerStoreObservable: ObservableObject {
     @Published var runners: [Runner] = []
     @Published var jobs: [ActiveJob] = []
     init() { reload() }
     func reload() {
         // ❌ NEVER add objectWillChange.send() here — @Published handles it
-        // withAnimation(nil) coalesces both @Published changes into 1 layout pass
         withAnimation(nil) {
             runners = RunnerStore.shared.runners
             jobs    = RunnerStore.shared.jobs
