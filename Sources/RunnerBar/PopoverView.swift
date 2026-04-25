@@ -5,104 +5,52 @@ import ServiceManagement
 // ============================================================
 // ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
 // ============================================================
-// VERSION: v2.1 (keep in sync with AppDelegate.swift)
-//
-// This file defines the root SwiftUI view inside an NSPopover.
-// The sizing relationship between SwiftUI and NSPopover is extremely
-// fragile. The left-jump bug was introduced and re-introduced 30+
-// times before all root causes were identified.
-//
-// READ AppDelegate.swift SECTION 1 for the full explanation of WHY
-// NSPopover behaves this way. This comment covers the SwiftUI side.
+// VERSION: v2.2 (keep in sync with AppDelegate.swift)
 //
 // ============================================================
-// SECTION 1: THE FRAME CONTRACT (all rules must hold simultaneously)
+// SECTION 1: THE FRAME CONTRACT
 // ============================================================
 //
-// RULE 1: The root Group MUST use .frame(idealWidth: 340, minHeight: 480)
+// RULE 1: The root Group MUST use ONLY .frame(idealWidth: 340)
+//   NO minHeight. NO maxHeight. NO height.
 //
-//   NSHostingController with sizingOptions=.preferredContentSize reads
-//   the SwiftUI layout engine's IDEAL size (not min, not max, not the
-//   resolved layout size) to compute preferredContentSize.
+//   With sizingOptions = [] (v2.2), NSHostingController does NOT
+//   auto-update preferredContentSize from SwiftUI. The ideal size
+//   is irrelevant to popover positioning after the first layout.
+//   AppDelegate reads hc.view.fittingSize ONCE before show() and
+//   sets popover.contentSize manually. See AppDelegate SECTION 2.
 //
-//   .frame(idealWidth: 340)  => ideal width = 340  ✔ CORRECT
-//   .frame(width: 340)       => layout width = 340, ideal width = BROKEN
+//   The idealWidth: 340 is still needed so hc.view.fittingSize
+//   returns width=340 (otherwise the view has no width constraint
+//   and fittingSize.width may be 0 or huge).
 //
-//   minHeight: 480 is REQUIRED (CAUSE 8 fix).
-//   Without it, the root Group reports different ideal heights per nav state:
-//     .jobList  => height = content height (e.g. 240pt when few jobs)
-//     .jobSteps => height = 480pt (pinned by JobStepsView's frame)
-//   The height change fires preferredContentSize update => NSPopover re-anchors
-//   => left jump on EVERY navigation from jobList to steps.
-//   minHeight: 480 on the root Group prevents the height from ever going
-//   below 480pt, matching all child nav views. No height delta => no re-anchor.
+//   DO NOT add minHeight: 480 — that was the CAUSE 8 workaround
+//   which caused the empty-space regression. It is no longer needed.
+//   DO NOT change idealWidth to width: 340.
 //
-//   DO NOT REMOVE minHeight: 480.
-//   DO NOT CHANGE .frame(idealWidth: 340) TO .frame(width: 340).
+// RULE 2: jobList nav state uses fixedSize + maxHeight
+//   .fixedSize(horizontal: false, vertical: true) => natural height
+//   .frame(maxHeight: 480) => cap at 480pt for long lists
+//   This is what gives jobListView its dynamic (content-sized) height.
 //
-// RULE 2: The root Group MUST be the outermost container
-//
-//   The .frame(idealWidth: 340, minHeight: 480) modifier must be on the
-//   direct parent of the switch statement.
-//
-// RULE 3: The jobList nav state MUST use fixedSize + maxHeight, NOT height
-//
-//   .fixedSize(horizontal: false, vertical: true) tells SwiftUI to use
-//   the view's natural (ideal) vertical size rather than expanding to fill.
-//   .frame(maxHeight: 480) caps the height at 480pt for long lists.
-//   DO NOT wrap jobListView in a ScrollView.
-//
-// RULE 4: ALL child nav views MUST use maxWidth, NOT width
-//
-//   JobStepsView, MatrixGroupView all use:
+// RULE 3: Child nav views use maxWidth + fixed height
+//   JobStepsView and MatrixGroupView apply:
 //     .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
-//   They MUST NEVER use .frame(width: 340, ...).
+//   on their own body. PopoverView does NOT add frames to them.
+//   This is fine because AppDelegate locks the contentSize at open.
+//   Navigating to these views does not change popover.contentSize.
 //
 // ============================================================
 // SECTION 2: NAVIGATION CONTRACT
 // ============================================================
 //
-// Navigation is implemented as a @State NavState enum + Group + switch.
+//   ✘ NavigationStack / NavigationView  => fights NSHostingController
+//   ✘ ZStack + .transition(.move)       => collapses to zero width, plays from screen edge
+//   ✔ Group + switch (current)          => measures exactly one child at a time
 //
-//   ✘ NavigationStack / NavigationView => fights NSHostingController sizing
-//   ✘ ZStack with .opacity or .transition => measures all children at once
-//   ✘ ZStack with .transition(.move) => collapses to zero width, plays from left edge
-//   ✔ Group + switch (current approach) => measures exactly one child at a time
-//
-// DO NOT add .transition() to any case in the switch statement.
+// DO NOT add .transition() to any switch case.
 //
 // ============================================================
-// SECTION 3: SYMPTOMS AND CAUSES
-// ============================================================
-//
-// Symptom A — Popover flies to far left on open:
-//   Cause: preferredContentSize.width is wrong. .frame(width:) not idealWidth.
-//
-// Symptom B — Popover jumps left when navigating to steps/matrix view:
-//   Cause: child view reports different ideal width than 340.
-//
-// Symptom C — Popover jumps left every ~10 seconds while open:
-//   Cause: observable.reload() called while popover is open. CAUSE 2.
-//
-// Symptom D — Popover opens and immediately closes:
-//   Cause: objectWillChange pending at show(). CAUSE 3 or CAUSE 6.
-//
-// Symptom E — Large empty space below content when no jobs:
-//   Cause: .frame(height:480) instead of .fixedSize+.frame(maxHeight:480).
-//
-// Symptom F — Popover jumps only on first open:
-//   Cause: popoverIsOpen set after reload() in togglePopover. CAUSE 4.
-//
-// Symptom G — Popover jumps ~2 seconds after navigating to steps view:
-//   Cause: async step load fires @State change after appear. CAUSE 7.
-//
-// Symptom H — Popover jumps immediately when tapping any job row:
-//   Cause: root Group has no minHeight. Height changes from jobList (short)
-//   to jobSteps (480pt) on navigation. CAUSE 8. Fix: minHeight:480 on root.
-//
-// ============================================================
-
-// MARK: - Navigation state
 
 private enum NavState: Equatable {
     case jobList
@@ -119,8 +67,6 @@ private enum NavState: Equatable {
     }
 }
 
-// MARK: - Root view
-
 struct PopoverView: View {
     @ObservedObject var store: RunnerStoreObservable
     @State private var newScope = ""
@@ -132,10 +78,11 @@ struct PopoverView: View {
     var body: some View {
         Group {
             switch navState {
-
             case .jobList:
                 jobListView
+                    // ⚠️ fixedSize: natural content height (not 480pt fixed)
                     .fixedSize(horizontal: false, vertical: true)
+                    // ⚠️ maxHeight: cap long lists at 480pt
                     .frame(maxHeight: 480, alignment: .top)
 
             case .jobSteps(let job, let steps, let scope):
@@ -155,22 +102,13 @@ struct PopoverView: View {
                 )
             }
         }
-        // ⚠️⚠️⚠️  BOTH PARAMETERS ARE MANDATORY.  ⚠️⚠️⚠️
-        //
-        // idealWidth: 340 — locks preferredContentSize.width = 340 across
-        //   all nav states. DO NOT change to width: 340.
-        //
-        // minHeight: 480 — CAUSE 8 FIX. Prevents height from being shorter
-        //   than 480pt in the jobList state (which has dynamic height).
-        //   Without this, navigating jobList→jobSteps changes ideal height
-        //   from e.g. 240pt to 480pt => preferredContentSize update =>
-        //   NSPopover re-anchors => left jump on every tap.
-        //   All child nav views already pin to minHeight:480 on their own
-        //   body frame. This root frame ensures jobList matches them.
-        //
-        // DO NOT REMOVE EITHER PARAMETER.
-        // DO NOT ADD maxHeight here — jobList controls its own max via .frame(maxHeight:480).
-        .frame(idealWidth: 340, minHeight: 480)
+        // ⚠️⚠️⚠️  idealWidth: 340 ONLY. NO minHeight. NO maxHeight.  ⚠️⚠️⚠️
+        // Width constraint ensures hc.view.fittingSize.width = 340.
+        // Height is NOT constrained here — AppDelegate reads fittingSize
+        // and sets popover.contentSize before show(). See AppDelegate v2.2.
+        // Adding minHeight here would cause empty space (regression).
+        // Adding maxHeight here would clip child views.
+        .frame(idealWidth: 340)
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
         }
@@ -341,33 +279,24 @@ struct PopoverView: View {
     }
 
     // MARK: - Group row builder
-    //
-    // ⚠️ CAUSE 7 FIX: loadStepsAndNavigate fetches BEFORE navigating.
-    // DO NOT change to navigate-first pattern.
-
+    // ⚠️ CAUSE 7 FIX: fetch steps BEFORE navigating.
     @ViewBuilder
     private func groupRow(for group: JobGroup) -> some View {
         let jobScope = ScopeStore.shared.scopes.first ?? ""
-
         Button(action: {
             switch group {
-            case .single(let job):
-                loadStepsAndNavigate(job: job, scope: jobScope)
-            case .matrix(let baseName, let jobs):
-                navState = .matrixGroup(baseName: baseName, jobs: jobs, scope: jobScope)
+            case .single(let job): loadStepsAndNavigate(job: job, scope: jobScope)
+            case .matrix(let baseName, let jobs): navState = .matrixGroup(baseName: baseName, jobs: jobs, scope: jobScope)
             }
         }) {
             HStack(spacing: 8) {
                 groupDot(for: group)
-
                 Text(group.displayName)
                     .font(.system(size: 12))
                     .foregroundColor(group.isDimmed ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-
                 Spacer()
-
                 if group.isDimmed {
                     Text(conclusionLabel(conclusion: group.conclusion))
                         .font(.caption)
@@ -379,12 +308,10 @@ struct PopoverView: View {
                         .foregroundColor(statusColor(status: group.status))
                         .frame(width: 76, alignment: .trailing)
                 }
-
                 Text(group.isDimmed ? group.elapsed : liveElapsed(group: group))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
                     .frame(width: 40, alignment: .trailing)
-
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9))
                     .foregroundColor(.secondary.opacity(0.5))
@@ -396,13 +323,10 @@ struct PopoverView: View {
         .buttonStyle(.plain)
     }
 
-    // ⚠️ CAUSE 7 FIX: fetch steps BEFORE navigating.
     private func loadStepsAndNavigate(job: ActiveJob, scope: String) {
         DispatchQueue.global(qos: .userInitiated).async {
             let steps = fetchJobSteps(jobID: job.id, scope: scope)
-            DispatchQueue.main.async {
-                navState = .jobSteps(job: job, steps: steps, scope: scope)
-            }
+            DispatchQueue.main.async { navState = .jobSteps(job: job, steps: steps, scope: scope) }
         }
     }
 
@@ -432,7 +356,6 @@ struct PopoverView: View {
         }
     }
 
-    // MARK: - Label helpers
     private func statusLabel(status: String) -> String {
         switch status {
         case "in_progress": return "In Progress"
@@ -459,13 +382,11 @@ struct PopoverView: View {
         }
     }
 
-    // MARK: - Runner helpers
     private func dotColor(for runner: Runner) -> Color {
         if runner.status != "online" { return .gray }
         return runner.busy ? .yellow : .green
     }
 
-    // MARK: - Actions
     private func signInWithGitHub() {
         let script = "tell application \"Terminal\" to do script \"gh auth login\""
         NSAppleScript(source: script)?.executeAndReturnError(nil)
