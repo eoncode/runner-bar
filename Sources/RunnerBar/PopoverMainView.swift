@@ -14,7 +14,7 @@ struct PopoverMainView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             HStack {
-                Text("RunnerBar v0.13")
+                Text("RunnerBar v0.15")
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
