@@ -4,8 +4,8 @@ import ServiceManagement
 // ⚠️ REGRESSION GUARD — layout rules (ref issues #52 #54 #57)
 //
 // 1. NEVER add .frame(height:) anywhere in this file.
-//    Height is owned exclusively by AppDelegate.computeMainHeight().
-//    This view fills AppDelegate’s frame via .frame(maxWidth/maxHeight: .infinity).
+//    Height is owned exclusively by AppDelegate (fixedHeight = 390).
+//    This view fills AppDelegate's fixed frame via .frame(maxWidth/maxHeight: .infinity).
 //
 // 2. The Spacer() inside each job row HStack is load-bearing.
 //    Removing it causes text to left-align when job names change.
@@ -15,9 +15,6 @@ import ServiceManagement
 //
 // 4. NEVER use .fixedSize(horizontal: true, ...) on any container.
 //    Dynamic width causes the popover anchor to drift left.
-//
-// 5. If you change ANY padding value here, update the pixel budget comment
-//    in AppDelegate.swift (computeMainHeight) or sizing will be wrong.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -31,7 +28,7 @@ struct PopoverMainView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             HStack {
-                Text("RunnerBar v0.19")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.20")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -49,20 +46,17 @@ struct PopoverMainView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
-            // ⚠️ header height ≈ 44px (12+~20+8) — must match AppDelegate.computeMainHeight budget
 
             Divider()
 
             Text("Active Jobs")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            // ⚠️ jobs label ≈ 26px — must match AppDelegate.computeMainHeight budget
 
             if store.jobs.isEmpty {
                 Text("No active jobs")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
-                // ⚠️ empty row ≈ 22px — must match AppDelegate.computeMainHeight budget
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
                     Button(action: { onSelectJob(job) }) {
@@ -72,7 +66,7 @@ struct PopoverMainView: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                                 .lineLimit(1).truncationMode(.tail)
-                            Spacer() // ⚠️ load-bearing — do NOT remove
+                            Spacer() // ⚠️ load-bearing — do NOT remove (prevents left-align shift)
                             Text(job.isDimmed ? conclusionLabel(for: job) : jobStatusLabel(for: job))
                                 .font(.caption)
                                 .foregroundColor(job.isDimmed ? conclusionColor(for: job) : jobStatusColor(for: job))
@@ -84,12 +78,10 @@ struct PopoverMainView: View {
                                 .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 3)
-                        // ⚠️ each job row ≈ 26px (3+~20+3) — must match AppDelegate.computeMainHeight budget
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(.bottom, 6)
-                // ⚠️ bottom pad = 6px — must match AppDelegate.computeMainHeight budget
             }
 
             Divider()
@@ -98,7 +90,6 @@ struct PopoverMainView: View {
                 Text("Local runners")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-                // ⚠️ runners label ≈ 26px — must match AppDelegate.computeMainHeight budget
                 ForEach(store.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
@@ -108,7 +99,6 @@ struct PopoverMainView: View {
                             .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
                     }
                     .padding(.horizontal, 12).padding(.vertical, 5)
-                    // ⚠️ each runner row ≈ 32px (5+~22+5) — must match AppDelegate.computeMainHeight budget
                 }
                 Divider()
             }
@@ -136,7 +126,6 @@ struct PopoverMainView: View {
                 }
                 .padding(.horizontal, 12).padding(.vertical, 4)
             }
-            // ⚠️ scopes section ≈ 82px total — must match AppDelegate.computeMainHeight budget
 
             Divider()
 
@@ -144,7 +133,6 @@ struct PopoverMainView: View {
                 .toggleStyle(.checkbox)
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
-            // ⚠️ toggle row ≈ 38px — must match AppDelegate.computeMainHeight budget
 
             Divider()
 
@@ -154,8 +142,10 @@ struct PopoverMainView: View {
             .buttonStyle(.plain)
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12).padding(.vertical, 8)
-            // ⚠️ quit row ≈ 38px — must match AppDelegate.computeMainHeight budget
         }
+        // ⚠️ fills AppDelegate's fixed 390px frame.
+        // NEVER replace with .frame(height: X) — that is AppDelegate's job.
+        // NEVER add .fixedSize() — causes sizing negotiation with NSPopover.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
         .onAppear { Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 } }

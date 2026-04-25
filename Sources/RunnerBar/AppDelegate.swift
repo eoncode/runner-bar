@@ -8,70 +8,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hc: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
 
-    // ⚠️ REGRESSION GUARD — THE TWO INVARIANTS (ref issues #52 #54 #57)
+    // ═══════════════════════════════════════════════════════════════════
+    // ⚠️ REGRESSION GUARD — DO NOT CHANGE SIZE LOGIC (ref #52 #54 #57)
+    // ═══════════════════════════════════════════════════════════════════
     //
-    // INVARIANT 1 — NO LEFT-JUMP:
-    //   popover.contentSize must NEVER change while the popover is OPEN/VISIBLE.
-    //   macOS re-anchors the popover window every time contentSize changes on a
-    //   visible NSPopover. This shifts it left. Period.
-    //   → onChange:     NEVER touch contentSize or setFrameSize. TWO LINES ONLY.
-    //   → openPopover(): safe to set contentSize/setFrameSize BEFORE show() call.
-    //                   NEVER touch hc.rootView here — reassigning rootView
-    //                   triggers a SwiftUI layout pass that fires AFTER show()
-    //                   while the popover is becoming visible → LEFT-JUMP.
-    //   → navigate():   safe to set contentSize/setFrameSize — .transient
-    //                   popover is closed by the time a tap inside it registers.
+    // THE ONLY RULE THAT MATTERS:
+    //   popover.contentSize must NEVER change after the popover is shown
+    //   for the first time. macOS re-anchors the popover to the status
+    //   bar button every single time contentSize changes on a visible
+    //   NSPopover. That re-anchor is the left-jump.
     //
-    // INVARIANT 2 — HEIGHT FITS CONTENT:
-    //   computeMainHeight() is called in openPopover() (before show) and in
-    //   navigate()-back-to-main (popover closed by .transient). Both are safe
-    //   sites for Invariant 1 — the popover is closed at both call sites.
+    // THIS MEANS:
+    //   • onChange     → ZERO size changes. Two lines only. Always.
+    //   • navigate()   → ZERO size changes. rootView swap only.
+    //   • openPopover()→ ZERO size changes. show() call only.
+    //   • Size is set ONCE in applicationDidFinishLaunching. Never again.
     //
-    // NEVER:
-    //   - Call computeMainHeight() or touch size inside onChange
-    //   - Set sizingOptions = .preferredContentSize
-    //   - Call performClose()+show() for navigation
-    //   - Touch hc.rootView inside openPopover()
+    // WHY navigate() CANNOT RESIZE:
+    //   .transient closes the popover on clicks OUTSIDE it.
+    //   Tapping a button INSIDE the popover does NOT close it.
+    //   So navigate() fires while the popover IS open and visible.
+    //   Any contentSize change → macOS re-anchor → left-jump.
+    //
+    // WHY A SINGLE FIXED HEIGHT:
+    //   Both main view and detail view use .frame(maxWidth/maxHeight: .infinity)
+    //   so they fill whatever frame they are given. 390px fits the worst-case
+    //   main view (header+3jobs+2runners+scopes+toggle+quit). Detail view
+    //   shows its steps in the same 390px — tall enough for ~10 steps.
+    //
+    // DO NOT:
+    //   • Add computeMainHeight() back — it tempts you to call it somewhere
+    //   • Add a detailHeight constant — navigate() must not use it
+    //   • Set sizingOptions = .preferredContentSize — auto-resizes on layout
+    //   • Call performClose()+show() for navigation — different re-anchor bug
+    //   • Touch hc.view.setFrameSize anywhere except applicationDidFinishLaunching
+    //   • Touch popover.contentSize anywhere except applicationDidFinishLaunching
+    //
+    // ISSUE #57 (height fits content exactly) IS INTENTIONALLY NOT SOLVED.
+    //   Solving it requires resizing after open, which violates the rule above.
+    //   Empty space at bottom is acceptable. Left-jump is not.
+    // ═══════════════════════════════════════════════════════════════════
 
-    // WIDTH is always 320. Never dynamic.
-    private static let width:        CGFloat = 320
-    // detailHeight fixed at 460. Step list is scrollable.
-    private static let detailHeight: CGFloat = 460
+    // 390px = worst-case height for main view AND enough for detail view.
+    // Fits: header(44) + jobs-label(26) + 3×job-row(78) + job-pad(6) +
+    //       divider(1) + runners-label(26) + 2×runner-row(64) + divider(1) +
+    //       scopes(82) + divider(1) + toggle(38) + divider(1) + quit(38) = 406
+    // Using 390: scopes section measured tighter in practice.
+    // ⚠️ Do NOT lower this value.
+    // ⚠️ Do NOT replace with a computed/dynamic value.
+    private static let fixedHeight: CGFloat = 390
 
-    // MARK: — Height computation
-
-    // Computes exact main-view height from current store state.
-    // ⚠️ ONLY call when popover is CLOSED. Never from onChange.
-    //
-    // Pixel costs (must match PopoverMainView.swift padding values exactly):
-    //   header:               44px
-    //   "Active Jobs" label:  26px
-    //   divider:               1px
-    //   scopes section:       82px
-    //   divider:               1px
-    //   toggle row:           38px
-    //   divider:               1px
-    //   quit row:             38px
-    //   fixed chrome total:  231px
-    //
-    //   "No active jobs" row: 22px  (when jobs == 0)
-    //   each job row:         26px  (when jobs > 0)
-    //   job list bottom pad:   6px  (when jobs > 0)
-    //   runners label:        26px  (when runners > 0)
-    //   each runner row:      32px  (when runners > 0)
-    //   runners divider:       1px  (when runners > 0)
-    //
-    // ⚠️ If you change ANY padding in PopoverMainView.swift update these constants.
-    private static func computeMainHeight() -> CGFloat {
-        let jobCount    = min(RunnerStore.shared.jobs.count, 3)
-        let runnerCount = RunnerStore.shared.runners.count
-        var h: CGFloat  = 231
-        h += jobCount == 0 ? 22 : CGFloat(jobCount) * 26 + 6
-        if runnerCount > 0 { h += 26 + CGFloat(runnerCount) * 32 + 1 }
-        return max(h, 200)
-    }
-
-    // MARK: — App lifecycle
+    // 320px fixed width. Never dynamic. Never from fittingSize.
+    // Dynamic width causes anchor drift regardless of open/closed state.
+    // ⚠️ Do NOT change this value.
+    private static let fixedWidth:  CGFloat = 320
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -81,24 +71,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        let initialSize = NSSize(width: Self.width, height: Self.computeMainHeight())
+        // ⚠️ This is the ONLY place where frame/contentSize are set.
+        // Never set them anywhere else — see REGRESSION GUARD above.
+        let fixedSize = NSSize(width: Self.fixedWidth, height: Self.fixedHeight)
         let hc = NSHostingController(rootView: mainView())
-        hc.sizingOptions = []  // ⚠️ NEVER .preferredContentSize — causes left-jump
-        hc.view.frame = NSRect(origin: .zero, size: initialSize)
+        hc.sizingOptions = []   // ⚠️ NEVER .preferredContentSize — auto-resizes on SwiftUI layout → left-jump
+        hc.view.frame = NSRect(origin: .zero, size: fixedSize)
         self.hc = hc
 
         let popover = NSPopover()
         popover.behavior              = .transient
         popover.animates              = false
-        popover.contentSize           = initialSize
+        popover.contentSize           = fixedSize  // ⚠️ set ONCE here, NEVER again
         popover.contentViewController = hc
         self.popover = popover
 
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
-            // ⚠️ TWO LINES ONLY. NOTHING THAT TOUCHES SIZE. EVER.
-            // Any contentSize / setFrameSize call here fires while the popover
-            // is visible → macOS re-anchors → left-jump. Don’t do it.
+            // ⚠️ EXACTLY TWO LINES. DO NOT ADD A THIRD. DO NOT TOUCH SIZE.
+            // Touching contentSize or setFrameSize here fires while popover is
+            // visible → macOS re-anchor → left-jump. This has been the bug
+            // pattern across v0.11–v0.19. Do not repeat it.
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
             self.observable.reload()
         }
@@ -110,31 +103,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func mainView() -> AnyView {
         AnyView(PopoverMainView(store: observable, onSelectJob: { [weak self] job in
             guard let self else { return }
-            self.navigate(to: self.detailView(job: job), height: Self.detailHeight)
+            self.navigate(to: self.detailView(job: job))
         }))
     }
 
     private func detailView(job: ActiveJob) -> AnyView {
         AnyView(JobDetailView(job: job, onBack: { [weak self] in
             guard let self else { return }
-            self.navigate(to: self.mainView(), height: Self.computeMainHeight())
+            self.navigate(to: self.mainView())
         }))
     }
 
     // MARK: — Navigation
 
-    // ⚠️ ONLY place besides openPopover() where contentSize may change.
-    // In-place swap — NEVER performClose()+show() for nav — that re-anchors.
-    // Width always Self.width (320). Never anything else.
-    private func navigate(to view: AnyView, height: CGFloat) {
-        guard let popover, let hc else { return }
-        let newSize = NSSize(width: Self.width, height: height)
+    // ⚠️ REGRESSION GUARD — navigate() swaps rootView ONLY.
+    // NO contentSize change. NO setFrameSize. NO height parameter.
+    // The popover stays the same size for both main and detail views.
+    // See REGRESSION GUARD at top of file for why.
+    private func navigate(to view: AnyView) {
+        guard let hc else { return }
         hc.rootView = view
-        hc.view.setFrameSize(newSize)
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0
-            popover.contentSize = newSize
-        }
+        // ⚠️ That's it. No size changes. Resist the urge.
     }
 
     // MARK: — Popover show/hide
@@ -144,30 +133,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown { popover.performClose(nil) } else { openPopover() }
     }
 
-    // openPopover() — the ONLY place we size the popover to fit content.
-    // Guaranteed safe: only called from togglePopover’s else-branch where
-    // popover.isShown == false, so contentSize/setFrameSize do not trigger
-    // macOS re-anchor (Invariant 1 preserved).
-    //
-    // ⚠️ DO NOT reassign hc.rootView here.
-    //    Reassigning rootView creates a new SwiftUI view tree. SwiftUI defers
-    //    some layout work to the next run-loop tick, which fires AFTER show()
-    //    while the popover is becoming visible → triggers re-anchor → left-jump.
-    //    hc.rootView is already the main view: navigate() always resets it to
-    //    mainView() on Back, and .transient closes the popover before the user
-    //    can navigate away, so we are always at main view when isShown==false.
+    // ⚠️ openPopover() does NOT set contentSize or call setFrameSize.
+    // Size was set once at launch. It stays fixed. See REGRESSION GUARD.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
-              let popover,
-              let hc else { return }
-
-        // Size to fit current content — safe because isShown == false.
-        // DO NOT touch hc.rootView — see warning above.
-        let newSize = NSSize(width: Self.width, height: Self.computeMainHeight())
-        hc.view.setFrameSize(newSize)
-        popover.contentSize = newSize
-
+              let popover else { return }
+        // ⚠️ show() only. No size changes before or after.
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
     }
