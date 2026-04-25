@@ -3,7 +3,7 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57)
 //
-// ── WHY EVERY PREVIOUS ATTEMPT FAILED (v0.22–v0.28) ────────────────────────
+// ── WHY EVERY PREVIOUS ATTEMPT FAILED (v0.22–v0.28) ──────────────────────
 //   AppDelegate.openPopover() reads fittingSize of hc.rootView ONCE, while
 //   the popover is CLOSED. At that moment rootView is ALWAYS mainView().
 //   It is NEVER JobDetailView at open time.
@@ -20,14 +20,14 @@ import SwiftUI
 //     e) idealWidth tricks             — fittingSize is read from mainView, not here
 //   All four re-introduced either the left-jump or a broken main view.
 //
-// ── THE CORRECT FIX (v0.29) ─────────────────────────────────────────────────
-//   Don’t fight the frame — work within it.
+// ── THE CORRECT FIX (v0.29) ──────────────────────────────────────────────
+//   Don't fight the frame — work within it.
 //   Header (back button + job name) stays fixed at the top, always visible.
 //   Steps list is wrapped in a ScrollView — scrolls within the available frame.
 //   The view ALWAYS fits whatever frame AppDelegate gives it, regardless of
 //   step count. Zero changes to AppDelegate, navigate(), onChange, sizingOptions.
 //
-// ── RULES ─────────────────────────────────────────────────────────────────────
+// ── RULES ────────────────────────────────────────────────────────────────
 //   ✔ Steps list MUST stay inside ScrollView — may be taller than available frame
 //   ✔ Header (HStack + Text + Divider) MUST stay outside ScrollView — always visible
 //   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -36,12 +36,13 @@ import SwiftUI
 //   ❌ NEVER add idealWidth to root frame — only meaningful under preferredContentSize,
 //        which is FORBIDDEN (#52 #54). idealWidth here has zero effect on the current
 //        fittingSize architecture (fittingSize is read from mainView(), not here).
-//   ❌ NEVER add .frame(height:) to root — fights AppDelegate’s fixed frame
+//   ❌ NEVER add .frame(height:) to root — fights AppDelegate's fixed frame
 //   ❌ NEVER add .fixedSize() to root — collapses view, breaks layout
 //   ❌ NEVER resize in navigate() — popover is open = left-jump (#52 #54)
 struct JobDetailView: View {
     let job: ActiveJob
     let onBack: () -> Void
+    let onSelectStep: (JobStep) -> Void
     @State private var tick = 0
 
     var body: some View {
@@ -90,7 +91,7 @@ struct JobDetailView: View {
                             .padding(.vertical, 8)
                     } else {
                         ForEach(job.steps) { step in
-                            Button(action: { openLog(step: step) }) {
+                            Button(action: { onSelectStep(step) }) {
                                 HStack(spacing: 8) {
                                     Text(step.conclusionIcon)
                                         .font(.system(size: 11))
@@ -106,7 +107,7 @@ struct JobDetailView: View {
                                         .font(.caption.monospacedDigit())
                                         .foregroundColor(.secondary)
                                         .frame(width: 40, alignment: .trailing)
-                                    Image(systemName: "arrow.up.right.square")
+                                    Image(systemName: "chevron.right")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -125,19 +126,11 @@ struct JobDetailView: View {
         // maxHeight: .infinity is correct here — the ScrollView above
         // ensures content never overflows regardless of step count.
         // ❌ NEVER add idealWidth — fittingSize is read from mainView(), not here
-        // ❌ NEVER add .frame(height:) — fights AppDelegate’s fixed frame
+        // ❌ NEVER add .frame(height:) — fights AppDelegate's fixed frame
         // ❌ NEVER add .fixedSize() — collapses the view
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
-        }
-    }
-
-    private func openLog(step: JobStep) {
-        let base = job.htmlUrl ?? "https://github.com"
-        let urlString = "\(base)#step:\(step.id)"
-        if let url = URL(string: urlString) {
-            NSWorkspace.shared.open(url)
         }
     }
 
