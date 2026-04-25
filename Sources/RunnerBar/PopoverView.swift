@@ -6,14 +6,14 @@ import ServiceManagement
 
 private enum NavState: Equatable {
     case jobList
-    case jobSteps(job: ActiveJob)
-    case matrixGroup(baseName: String, jobs: [ActiveJob])
+    case jobSteps(job: ActiveJob, scope: String)
+    case matrixGroup(baseName: String, jobs: [ActiveJob], scope: String)
 
     static func == (lhs: NavState, rhs: NavState) -> Bool {
         switch (lhs, rhs) {
         case (.jobList, .jobList): return true
-        case (.jobSteps(let a), .jobSteps(let b)): return a.id == b.id
-        case (.matrixGroup(let a, _), .matrixGroup(let b, _)): return a == b
+        case (.jobSteps(let a, _), .jobSteps(let b, _)): return a.id == b.id
+        case (.matrixGroup(let a, _, _), .matrixGroup(let b, _, _)): return a == b
         default: return false
         }
     }
@@ -35,19 +35,19 @@ struct PopoverView: View {
                 jobListView
                     .transition(.move(edge: .leading))
             }
-            if case .jobSteps(let job) = navState {
+            if case .jobSteps(let job, let scope) = navState {
                 JobStepsView(
                     job: job,
-                    scope: ScopeStore.shared.scopes.first ?? "",
+                    scope: scope,
                     onBack: { withAnimation(.easeInOut(duration: 0.25)) { navState = .jobList } }
                 )
                 .transition(.move(edge: .trailing))
             }
-            if case .matrixGroup(let baseName, let jobs) = navState {
+            if case .matrixGroup(let baseName, let jobs, let scope) = navState {
                 MatrixGroupView(
                     baseName: baseName,
                     jobs: jobs,
-                    scope: ScopeStore.shared.scopes.first ?? "",
+                    scope: scope,
                     onBack: { withAnimation(.easeInOut(duration: 0.25)) { navState = .jobList } }
                 )
                 .transition(.move(edge: .trailing))
@@ -203,7 +203,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Launch at login
+            // ── Launch at login (macOS 13 compatible onChange)
             Toggle(isOn: $launchAtLogin) {
                 Text("Launch at login").font(.system(size: 13))
             }
@@ -235,13 +235,23 @@ struct PopoverView: View {
 
     @ViewBuilder
     private func groupRow(for group: JobGroup) -> some View {
+        // Find which scope this group's jobs belong to
+        let jobScope: String = {
+            switch group {
+            case .single(let job):
+                return ScopeStore.shared.scopes.first(where: { _ in true }) ?? ""
+            case .matrix(_, let jobs):
+                return ScopeStore.shared.scopes.first(where: { _ in true }) ?? ""
+            }
+        }()
+
         Button(action: {
             withAnimation(.easeInOut(duration: 0.25)) {
                 switch group {
                 case .single(let job):
-                    navState = .jobSteps(job: job)
+                    navState = .jobSteps(job: job, scope: jobScope)
                 case .matrix(let baseName, let jobs):
-                    navState = .matrixGroup(baseName: baseName, jobs: jobs)
+                    navState = .matrixGroup(baseName: baseName, jobs: jobs, scope: jobScope)
                 }
             }
         }) {
@@ -296,7 +306,6 @@ struct PopoverView: View {
     @ViewBuilder
     private func groupDot(for group: JobGroup) -> some View {
         if case .matrix = group {
-            // Matrix indicator: two overlapping small circles
             ZStack {
                 Circle().fill(groupDotColor(for: group)).frame(width: 6, height: 6).offset(x: -2)
                 Circle().fill(groupDotColor(for: group).opacity(0.6)).frame(width: 6, height: 6).offset(x: 2)
