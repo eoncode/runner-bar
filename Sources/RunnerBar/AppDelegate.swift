@@ -4,7 +4,7 @@ import SwiftUI
 // ============================================================
 // ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
 // ============================================================
-// VERSION: v1.8
+// VERSION: v1.9
 //
 // This file controls a brutally fragile relationship between SwiftUI,
 // NSHostingController, and NSPopover. The symptom when broken is that
@@ -42,7 +42,7 @@ import SwiftUI
 // edge far to the LEFT of the screen. This is the "left jump" symptom.
 //
 // ============================================================
-// SECTION 2: ALL 5 ROOT CAUSES OF LEFT-JUMP (ALL must be fixed)
+// SECTION 2: ALL 6 ROOT CAUSES OF LEFT-JUMP (ALL must be fixed)
 // ============================================================
 //
 // CAUSE 1 — Wrong SwiftUI frame modifier on root or child views
@@ -79,20 +79,32 @@ import SwiftUI
 //   Fix: Set popoverIsOpen = true FIRST, then reload(), then show().
 //   DO NOT REORDER THESE THREE LINES.
 //
-// CAUSE 5 — Triple objectWillChange publish from reload()
-//   Location: RunnerStoreObservable.reload() in PopoverView.swift
-//   What happens: The original reload() was:
-//     runners = ...  => @Published fires objectWillChange (1)
-//     jobs = ...     => @Published fires objectWillChange (2)
-//     objectWillChange.send()  => explicit fires (3)  ← THE BUG
-//   Three publishes = three re-renders queued on the runloop.
-//   Even with CAUSE 4 fixed, these three re-renders race against show().
-//   The first render sees stale data (0 jobs), subsequent renders see
-//   fresh data (1 job). These have DIFFERENT heights. Each re-render
-//   changes preferredContentSize => re-anchor => left jump on 2nd open.
-//   Fix: Remove the explicit objectWillChange.send() from reload().
-//        Wrap assignments in withAnimation(nil) to coalesce into 1 pass.
-//   See: RunnerStoreObservable in PopoverView.swift for details.
+// CAUSE 5 — Multiple objectWillChange publishes per reload()
+//   Location: RunnerStoreObservable in PopoverView.swift
+//   What happens (v1.7): Two separate @Published properties (runners, jobs)
+//   each fired objectWillChange automatically => 2 publishes per reload().
+//   Plus an explicit .send() => 3 publishes. Three re-renders per reload().
+//   Even with CAUSE 4 fixed, these re-renders race against show() or
+//   against NSPopover.transient dismissal logic.
+//   Fix (v1.9): Merged into ONE @Published StoreState struct.
+//   ONE assignment = ONE Combine publish = ONE re-render. Atomic.
+//   See: RunnerStoreObservable in PopoverView.swift for full history.
+//
+// CAUSE 6 — onChange-triggered reload races with togglePopover-triggered reload
+//   Location: onChange handler + togglePopover in this file
+//   What happens: onChange fires (popoverIsOpen=false) => reload() queues
+//   a Combine publish on the runloop. Before that publish drains, the user
+//   clicks the icon. togglePopover runs: popoverIsOpen=true, reload() again
+//   (second publish in flight), show(). Now TWO objectWillChange events are
+//   in-flight simultaneously. NSPopover(.transient) sees the second pending
+//   publish as an outside-click => immediately calls popoverDidClose.
+//   Symptom: popover opens and immediately closes on every click.
+//   Fix: Defer show() to the next runloop tick with DispatchQueue.main.async.
+//   This gives any in-flight Combine publishes from the onChange reload()
+//   time to drain completely before show() is called. By the time the
+//   async block runs, the runloop is clear of pending objectWillChange events.
+//   DO NOT remove the DispatchQueue.main.async wrapping show().
+//   DO NOT move show() back outside the async block.
 //
 // ============================================================
 // SECTION 3: COMPLETE FORBIDDEN ACTIONS LIST
@@ -107,8 +119,14 @@ import SwiftUI
 //   ✘ Set popoverIsOpen = true AFTER reload() in togglePopover
 //       => CAUSE 4: jump on first open due to runloop race
 //
-//   ✘ Add objectWillChange.send() to RunnerStoreObservable.reload()
-//       => CAUSE 5: triple publish => triple re-render => jump on 2nd open
+//   ✘ Split StoreState back into separate @Published properties
+//       => CAUSE 5: multiple publishes per reload() => multiple re-renders
+//
+//   ✘ Add objectWillChange.send() anywhere in RunnerStoreObservable
+//       => Extra publish => extra re-render => re-anchor
+//
+//   ✘ Move show() outside the DispatchQueue.main.async block
+//       => CAUSE 6: onChange reload races with togglePopover => immediate close
 //
 //   ✘ Set popover.contentSize anywhere in this file or any other
 //       => NSPopover immediately re-anchors => left jump
@@ -128,6 +146,7 @@ import SwiftUI
 //
 //   ✔ Update statusItem button image in onChange (no size impact)
 //   ✔ Call reload() inside togglePopover AFTER popoverIsOpen = true
+//   ✔ Defer show() with DispatchQueue.main.async (required for CAUSE 6)
 //   ✔ Set popoverIsOpen = false in popoverDidClose (flag only, no reload)
 //   ✔ Read popover.isShown freely
 //   ✔ Call popover.performClose()
@@ -136,15 +155,16 @@ import SwiftUI
 // SECTION 5: HOW TO VERIFY THE FIX IS STILL WORKING
 // ============================================================
 //
-// 1. Run with no active jobs. Open popover. Must NOT jump.
-// 2. Close it. Wait for a job to appear (poll cycle). Reopen.
-//    => Must NOT jump even though content changed (0 jobs -> 1 job).
-// 3. Open and leave open for 30+ seconds (3+ poll cycles).
-//    => Must NOT jump while open.
-// 4. Rapidly open/close 10 times.
-//    => Must open stably every time. No thrash.
-// 5. Navigate to JobStepsView and back.
-//    => Width must stay 340pt. No jump.
+// Test 1 — Open with no active jobs. Popover must NOT jump.
+// Test 2 — Close. Wait for a job to appear (poll fires, state changes
+//          0 jobs → 1 job). Reopen. Popover must NOT jump or immediately close.
+//          THIS IS THE HARDEST TEST. It was the regression scenario in v1.7-v1.8.
+// Test 3 — Open and leave open for 30+ seconds (3+ poll cycles).
+//          Popover must NOT jump while open.
+// Test 4 — Rapidly open/close 10 times.
+//          Must open stably every time. No thrash or immediate-close.
+// Test 5 — Navigate to JobStepsView and back.
+//          Width must stay 340pt. No jump on navigation.
 //
 // ============================================================
 
@@ -155,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var hc: NSHostingController<PopoverView>?
     private let observable = RunnerStoreObservable()
 
-    // ⚠️ CRITICAL FLAG — participates in CAUSE 2 and CAUSE 4 fixes.
+    // ⚠️ CRITICAL FLAG — participates in CAUSE 2, CAUSE 4, and CAUSE 6 fixes.
     // MUST be set to true BEFORE calling observable.reload() in togglePopover.
     // MUST be set to false in popoverDidClose.
     // DO NOT use popover.isShown as a substitute — it is unreliable during
@@ -181,8 +201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let popover = NSPopover()
         // ⚠️ behavior = .transient is required for standard macOS menu-bar UX.
-        // WARNING: .transient means objectWillChange publishes during close
-        // can trigger auto-dismiss. This is why CAUSE 3 is so dangerous.
+        // WARNING: .transient means any objectWillChange publish that fires
+        // while NSPopover is processing show() can trigger auto-dismiss.
+        // This is why CAUSE 3 and CAUSE 6 are so dangerous.
         popover.behavior              = .transient
         // ⚠️ animates = false prevents size-interpolation re-anchors during open.
         popover.animates              = false
@@ -200,9 +221,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             // ⚠️ CAUSE 2 FIX — DO NOT REMOVE THIS GUARD.
             // reload() while popover is open => re-render => preferredContentSize
             // changes => NSPopover re-anchors => left jump.
-            // While closed: reload freely to keep data current.
+            // While closed: reload freely to keep data current for next open.
             // DO NOT replace with `if !self.popover?.isShown ?? false`.
             // popover.isShown is unreliable during transitions.
+            //
+            // ⚠️ CAUSE 6 NOTE: Even though this guard prevents reload() while open,
+            // a reload() that fires here while closed can queue a Combine publish
+            // that hasn't drained yet when the user clicks the icon. This is why
+            // show() in togglePopover is wrapped in DispatchQueue.main.async —
+            // to let this pending publish drain before show() runs.
             if !self.popoverIsOpen {
                 self.observable.reload()
             }
@@ -212,11 +239,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     // ⚠️⚠️⚠️  THE ORDER OF OPERATIONS IN THIS METHOD IS NOT NEGOTIABLE  ⚠️⚠️⚠️
-    // See SECTION 2 CAUSE 4 for full explanation.
-    // The three lines inside `else` MUST stay in this exact order:
-    //   1. popoverIsOpen = true
-    //   2. observable.reload()
-    //   3. popover.show(...)
+    // See SECTION 2 CAUSE 4 and CAUSE 6 for full explanation.
+    //
+    // REQUIRED ORDER:
+    //   1. popoverIsOpen = true          (arm CAUSE 2 guard synchronously)
+    //   2. observable.reload()           (snapshot fresh data, fires 1 publish)
+    //   3. DispatchQueue.main.async {    (defer show to next runloop tick)
+    //        popover.show(...)           (show only after all publishes drained)
+    //      }
+    //
+    // WHY THE ASYNC DEFER:
+    //   reload() fires objectWillChange which schedules a SwiftUI re-render
+    //   for the next runloop tick. If the user clicked the icon immediately
+    //   after an onChange-triggered reload() (which also queued a publish),
+    //   there may be TWO pending publishes when we reach show().
+    //   NSPopover(.transient) sees the second pending publish as an outside-
+    //   click and immediately calls popoverDidClose.
+    //   By deferring show() one tick, ALL pending publishes drain and complete
+    //   their re-renders before show() executes. Clean runloop = stable open.
+    //
+    // DO NOT move show() outside the async block.
+    // DO NOT remove the DispatchQueue.main.async.
+    // DO NOT reorder steps 1, 2, 3.
     @objc private func togglePopover() {
         guard let button = statusItem?.button,
               button.window != nil,
@@ -226,18 +270,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         } else {
             log("AppDelegate > opening popover")
 
-            // STEP 1: Arm the CAUSE 2 guard FIRST.
-            // Any re-renders from reload() (step 2) that land after show() (step 3)
-            // will be blocked by the !popoverIsOpen check in onChange.
+            // STEP 1: Arm the CAUSE 2 guard FIRST, synchronously.
+            // This prevents any onChange poll that fires between now and show()
+            // from calling reload() and queueing another publish.
             popoverIsOpen = true
 
-            // STEP 2: Snapshot fresh data. Only valid here because step 1 is done.
-            // ⚠️ reload() now fires objectWillChange ONCE (via @Published x2 coalesced
-            // by withAnimation(nil)). It no longer fires 3x. See CAUSE 5.
+            // STEP 2: Snapshot fresh data. Fires exactly ONE objectWillChange
+            // publish (via single @Published StoreState — see CAUSE 5 fix).
             observable.reload()
 
-            // STEP 3: Show the popover. Guard armed. Data fresh. Size stable.
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+            // STEP 3: Defer show() to the NEXT runloop tick.
+            // This gives the publish from step 2 (and any publish still draining
+            // from a pre-click onChange reload) time to complete their SwiftUI
+            // re-render pass before NSPopover.show() is called.
+            // When this async block executes, the runloop is clear of pending
+            // objectWillChange events => NSPopover(.transient) won't auto-dismiss.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let popover = self.popover,
+                      let button = self.statusItem?.button else { return }
+                // Re-check isShown: user may have clicked again during the async delay.
+                guard !popover.isShown else { return }
+                popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+            }
         }
     }
 

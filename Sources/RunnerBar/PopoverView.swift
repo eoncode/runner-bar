@@ -5,12 +5,12 @@ import ServiceManagement
 // ============================================================
 // ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
 // ============================================================
-// VERSION: v1.8 (keep in sync with AppDelegate.swift)
+// VERSION: v1.9 (keep in sync with AppDelegate.swift)
 //
 // This file defines the root SwiftUI view inside an NSPopover.
 // The sizing relationship between SwiftUI and NSPopover is extremely
 // fragile. The left-jump bug was introduced and re-introduced 30+
-// times in a single day before all 5 root causes were identified.
+// times in a single day before all 6 root causes were identified.
 //
 // READ AppDelegate.swift SECTION 1 for the full explanation of WHY
 // NSPopover behaves this way. This comment covers the SwiftUI side.
@@ -124,8 +124,9 @@ import ServiceManagement
 //   See AppDelegate.swift CAUSE 2.
 //
 // Symptom D — Popover opens and immediately closes on every click:
-//   Caused by: observable.reload() called from popoverDidClose.
-//   See AppDelegate.swift CAUSE 3.
+//   Caused by: objectWillChange publish pending at the moment show() runs.
+//   Either reload() in popoverDidClose (CAUSE 3), or onChange-triggered
+//   reload racing with togglePopover (CAUSE 6), or show() not deferred.
 //
 // Symptom E — Large empty space below content when no jobs are running:
 //   Caused by: .frame(height:480) instead of .fixedSize+.frame(maxHeight:480).
@@ -136,9 +137,9 @@ import ServiceManagement
 //   See AppDelegate.swift CAUSE 4.
 //
 // Symptom G — Popover jumps left on second open (first open was fine):
-//   Caused by: reload() firing objectWillChange 3x due to redundant
-//   explicit .send() on top of 2x @Published auto-publishes.
-//   See AppDelegate.swift CAUSE 5 and RunnerStoreObservable.reload() below.
+//   Previously caused by CAUSE 5 (triple publish). Fixed in v1.8.
+//   If this recurs, check that reload() has exactly ONE @Published
+//   assignment (the StoreState struct) and no extra .send() calls.
 //
 // ============================================================
 
@@ -232,6 +233,10 @@ struct PopoverView: View {
         // DO NOT REMOVE THIS MODIFIER.
         .frame(idealWidth: 340)
         .onReceive(store.objectWillChange) {
+            // ⚠️ store.objectWillChange now fires exactly ONCE per reload()
+            // because StoreState is a single @Published property.
+            // Previously runners + jobs were two @Published properties =>
+            // two fires per reload() => two githubToken() calls => two re-renders.
             isAuthenticated = (githubToken() != nil)
         }
         .onAppear {
@@ -248,9 +253,9 @@ struct PopoverView: View {
     private var jobListView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Header — RunnerBar v1.8
+            // Header — RunnerBar v1.9
             HStack {
-                Text("RunnerBar v1.8")
+                Text("RunnerBar v1.9")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -286,7 +291,9 @@ struct PopoverView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 2)
 
-            if store.jobs.isEmpty {
+            // ⚠️ store.state.jobs — access via the single StoreState struct.
+            // Do NOT use store.jobs or store.runners directly; they no longer exist.
+            if store.state.jobs.isEmpty {
                 Text("No active jobs")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -294,7 +301,7 @@ struct PopoverView: View {
                     .padding(.vertical, 4)
                     .padding(.bottom, 2)
             } else {
-                let groups = groupJobs(Array(store.jobs.prefix(3)))
+                let groups = groupJobs(Array(store.state.jobs.prefix(3)))
                 ForEach(groups) { group in
                     groupRow(for: group)
                 }
@@ -310,7 +317,7 @@ struct PopoverView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 2)
 
-            if store.runners.isEmpty {
+            if store.state.runners.isEmpty {
                 Text(isAuthenticated ? "No runners found" : "Authenticate to see runners")
                     .foregroundColor(.secondary)
                     .font(.caption)
@@ -318,7 +325,7 @@ struct PopoverView: View {
                     .padding(.vertical, 4)
                     .padding(.bottom, 2)
             } else {
-                ForEach(store.runners, id: \.id) { runner in
+                ForEach(store.state.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle()
                             .fill(dotColor(for: runner))
@@ -542,81 +549,80 @@ struct PopoverView: View {
 // MARK: - Observable
 
 // ============================================================
-// ⚠️⚠️⚠️  RunnerStoreObservable.reload() — READ BEFORE TOUCHING  ⚠️⚠️⚠️
+// ⚠️⚠️⚠️  RunnerStoreObservable — READ BEFORE TOUCHING  ⚠️⚠️⚠️
 // ============================================================
-// CAUSE 5 — Triple objectWillChange publish from reload()
+// VERSION HISTORY:
+//   v1.7: runners + jobs as two separate @Published properties
+//   v1.8: removed explicit objectWillChange.send(), added withAnimation(nil)
+//         PROBLEM: withAnimation(nil) does NOT coalesce @Published (Combine)
+//         fires. Still 2x publishes per reload() because two @Published props.
+//   v1.9: Merged runners + jobs into ONE @Published StoreState struct.
+//         ONE property = ONE assignment = ONE Combine publish = ONE re-render.
+//         This is the correct and final fix for the multi-publish problem.
 //
-// The original reload() looked like this:
-//   func reload() {
-//       runners = RunnerStore.shared.runners  // ← @Published fires (1)
-//       jobs    = RunnerStore.shared.jobs     // ← @Published fires (2)
-//       objectWillChange.send()               // ← EXPLICIT fires (3) ← BUG
-//   }
+// WHY ONE @Published STRUCT INSTEAD OF TWO @Published PROPERTIES:
+//   @Published fires objectWillChange via the Combine pipeline, NOT via
+//   SwiftUI's animation/transaction system. withAnimation(nil) only batches
+//   @State changes inside a SwiftUI view body. It has NO effect on @Published
+//   Combine publishers. Two @Published properties = two separate Combine
+//   events per reload() = two SwiftUI re-renders = two preferredContentSize
+//   recalculations. Each recalculation can trigger NSPopover re-anchor.
 //
-// This fired objectWillChange THREE times per reload() call.
-// Three publishes = three SwiftUI re-renders queued on the runloop.
+// ⚠️ DO NOT split StoreState back into separate @Published properties.
+//    This was tried in v1.7 and caused CAUSE 5/5b. It looks cleaner.
+//    It is not. One struct = one publish = one render. Keep it.
 //
-// Why this breaks even with popoverIsOpen = true set before reload():
-//   - The Cause 4 fix arms the onChange guard so the poll can't call
-//     reload() while open. But it does NOT prevent the three re-renders
-//     queued by the pre-open reload() in togglePopover from firing
-//     after show(). All three race against show().
-//   - The first re-render sees "0 jobs" (stale state).
-//   - The second/third re-render sees "1 job" (updated state).
-//   - Layout for "0 jobs" and "1 job" are different heights.
-//   - Each re-render changes preferredContentSize.
-//   - NSPopover re-anchors on each change => left jump.
+// ⚠️ DO NOT add objectWillChange.send() after the state assignment.
+//    @Published fires it automatically. Extra .send() = extra re-render.
+//    This was CAUSE 5 in v1.7.
 //
-// THE FIX (v1.8):
-//   - REMOVED the explicit objectWillChange.send().
-//     @Published properties already call objectWillChange before each
-//     assignment automatically. The explicit .send() was ALWAYS redundant.
-//     It served no purpose except to add a third publish and cause CAUSE 5.
-//
-//   - WRAPPED both assignments in withAnimation(nil) { }.
-//     This is a hint to SwiftUI to coalesce the two @Published assignments
-//     into a single layout pass where possible, reducing from 2 re-renders
-//     to 1. Note: SwiftUI does NOT guarantee perfect coalescing in all
-//     cases, but withAnimation(nil) is the standard tool for this.
-//
-// ⚠️ DO NOT re-add objectWillChange.send() here. Ever.
-//     @Published handles it. An extra .send() = an extra re-render =
-//     an extra preferredContentSize change = left jump.
-//
-// ⚠️ DO NOT call reload() from popoverDidClose. See AppDelegate CAUSE 3.
-// ⚠️ DO NOT call reload() from onChange when popoverIsOpen. See AppDelegate CAUSE 2.
 // ⚠️ ONLY call reload() from:
-//     - togglePopover (after popoverIsOpen = true has been set)
-//     - onChange handler (only when !popoverIsOpen)
-//     - submitScope / scope removal (user-triggered, acceptable)
+//    - togglePopover (after popoverIsOpen = true, before show())
+//    - onChange handler (only when !popoverIsOpen)
+//    - submitScope / scope removal (user-triggered, acceptable)
+//    NEVER from popoverDidClose. See AppDelegate CAUSE 3.
 // ============================================================
+
+/// Snapshot of RunnerStore state for SwiftUI rendering.
+/// This is a VALUE TYPE (struct) — assignment is atomic from SwiftUI/Combine's
+/// perspective: one assignment triggers exactly one objectWillChange publish.
+struct StoreState {
+    var runners: [Runner]   = []
+    var jobs: [ActiveJob]   = []
+}
+
 final class RunnerStoreObservable: ObservableObject {
-    @Published var runners: [Runner] = []
-    @Published var jobs: [ActiveJob] = []
+    // ⚠️ ONE @Published property. ONE Combine publish per reload().
+    // Do NOT add more @Published properties to this class.
+    // If you need new data, add fields to StoreState instead.
+    @Published var state: StoreState = StoreState()
 
     init() {
-        // ⚠️ init() is called once at app launch before any popover exists.
-        // Direct assignment here is fine — no objectWillChange listeners yet.
-        runners = RunnerStore.shared.runners
-        jobs    = RunnerStore.shared.jobs
+        // init() runs once at app launch before any Combine subscribers exist.
+        // Direct struct mutation here is equivalent to a single @Published fire.
+        state = StoreState(
+            runners: RunnerStore.shared.runners,
+            jobs:    RunnerStore.shared.jobs
+        )
     }
 
     func reload() {
-        // ⚠️⚠️⚠️  DO NOT ADD objectWillChange.send() HERE.  ⚠️⚠️⚠️
-        // @Published fires objectWillChange automatically on assignment.
-        // An extra .send() causes a THIRD publish per reload() call,
-        // which queues an extra SwiftUI re-render, which changes
-        // preferredContentSize, which causes NSPopover to re-anchor => left jump.
-        // This was CAUSE 5 of the left-jump regression. Do not reintroduce it.
+        // ⚠️⚠️⚠️  THIS ASSIGNMENT MUST REMAIN A SINGLE LINE / SINGLE VALUE.  ⚠️⚠️⚠️
         //
-        // withAnimation(nil) coalesces the two @Published assignments into
-        // a single layout pass (1 re-render instead of 2).
-        // DO NOT remove withAnimation(nil) — without it, two separate
-        // re-renders fire (one for runners, one for jobs), each of which
-        // may calculate a different preferredContentSize => re-anchor.
-        withAnimation(nil) {
-            runners = RunnerStore.shared.runners
-            jobs    = RunnerStore.shared.jobs
-        }
+        // Assigning a new StoreState struct fires objectWillChange EXACTLY ONCE
+        // via @Published. This is atomic from Combine's perspective.
+        //
+        // HISTORY OF BUGS FROM SPLITTING THIS:
+        //   runners = ... (publish 1) + jobs = ... (publish 2) => 2 re-renders
+        //   runners = ... (pub 1) + jobs = ... (pub 2) + .send() (pub 3) => 3 re-renders
+        //   Each extra re-render = extra preferredContentSize change = left jump.
+        //
+        // DO NOT refactor this into two separate assignments.
+        // DO NOT add objectWillChange.send() after this.
+        // DO NOT add withAnimation(nil) { } around this — not needed, struct is atomic.
+        state = StoreState(
+            runners: RunnerStore.shared.runners,
+            jobs:    RunnerStore.shared.jobs
+        )
     }
 }
