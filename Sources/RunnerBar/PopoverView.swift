@@ -5,50 +5,45 @@ import ServiceManagement
 // ============================================================
 // ⚠️⚠️⚠️  STOP. READ THIS ENTIRE COMMENT BEFORE TOUCHING THIS FILE.  ⚠️⚠️⚠️
 // ============================================================
-// VERSION: v2.2 (keep in sync with AppDelegate.swift)
+// VERSION: v2.4 (keep in sync with AppDelegate.swift)
 //
 // ============================================================
-// SECTION 1: THE FRAME CONTRACT
+// FRAME CONTRACT
 // ============================================================
 //
-// RULE 1: The root Group MUST use ONLY .frame(idealWidth: 340)
-//   NO minHeight. NO maxHeight. NO height.
+// Root Group: .frame(idealWidth: 340)
+//   — idealWidth drives preferredContentSize.width = 340 always.
+//   — NO idealHeight / minHeight / maxHeight on root.
+//   — Height comes entirely from the active nav state child.
 //
-//   With sizingOptions = [] (v2.2), NSHostingController does NOT
-//   auto-update preferredContentSize from SwiftUI. The ideal size
-//   is irrelevant to popover positioning after the first layout.
-//   AppDelegate reads hc.view.fittingSize ONCE before show() and
-//   sets popover.contentSize manually. See AppDelegate SECTION 2.
+// .jobList branch: .fixedSize(horizontal:false, vertical:true)
+//                  .frame(maxHeight: 480, alignment: .top)
+//   — fixedSize: SwiftUI measures natural content height.
+//   — maxHeight: caps at 480pt for very long lists.
+//   — This produces a compact, content-sized popover height.
 //
-//   The idealWidth: 340 is still needed so hc.view.fittingSize
-//   returns width=340 (otherwise the view has no width constraint
-//   and fittingSize.width may be 0 or huge).
+// .jobSteps / .matrixGroup branches: each view applies
+//   .frame(maxWidth:.infinity, minHeight:480, maxHeight:480) internally.
+//   — Height = 480pt always for these views.
 //
-//   DO NOT add minHeight: 480 — that was the CAUSE 8 workaround
-//   which caused the empty-space regression. It is no longer needed.
-//   DO NOT change idealWidth to width: 340.
-//
-// RULE 2: jobList nav state uses fixedSize + maxHeight
-//   .fixedSize(horizontal: false, vertical: true) => natural height
-//   .frame(maxHeight: 480) => cap at 480pt for long lists
-//   This is what gives jobListView its dynamic (content-sized) height.
-//
-// RULE 3: Child nav views use maxWidth + fixed height
-//   JobStepsView and MatrixGroupView apply:
-//     .frame(maxWidth: .infinity, minHeight: 480, maxHeight: 480)
-//   on their own body. PopoverView does NOT add frames to them.
-//   This is fine because AppDelegate locks the contentSize at open.
-//   Navigating to these views does not change popover.contentSize.
+// HEIGHT CHANGE DURING NAVIGATION:
+//   jobList (e.g. 320pt) → jobSteps (480pt): height INCREASES.
+//   An increase moves the popover UP (not left). No "left jump".
+//   The popover closes when the user taps Back (onBack calls close).
+//   On reopen, navState is always .jobList => compact height again.
+//   Height NEVER decreases while the popover is visible.
 //
 // ============================================================
-// SECTION 2: NAVIGATION CONTRACT
+// NAVIGATION CONTRACT
 // ============================================================
 //
-//   ✘ NavigationStack / NavigationView  => fights NSHostingController
-//   ✘ ZStack + .transition(.move)       => collapses to zero width, plays from screen edge
-//   ✔ Group + switch (current)          => measures exactly one child at a time
+//   ✘ NavigationStack / NavigationView
+//   ✘ ZStack + .transition(.move)
+//   ✔ Group + switch  (current)
 //
-// DO NOT add .transition() to any switch case.
+//   onBack MUST call the injected closePopover closure, NOT set
+//   navState=.jobList directly. Setting navState while open would
+//   decrease height => re-anchor => potential jump.
 //
 // ============================================================
 
@@ -75,22 +70,29 @@ struct PopoverView: View {
     @State private var tick = 0
     @State private var navState: NavState = .jobList
 
+    // Called by AppDelegate.popoverWillShow to reset nav before first render.
+    // ⚠️ CAUSE 8 FIX. DO NOT REMOVE.
+    mutating func resetNavState() {
+        navState = .jobList
+    }
+
     var body: some View {
         Group {
             switch navState {
             case .jobList:
                 jobListView
-                    // ⚠️ fixedSize: natural content height (not 480pt fixed)
                     .fixedSize(horizontal: false, vertical: true)
-                    // ⚠️ maxHeight: cap long lists at 480pt
                     .frame(maxHeight: 480, alignment: .top)
 
             case .jobSteps(let job, let steps, let scope):
+                // ⚠️ onBack closes the popover (via NSApp event) instead of
+                // setting navState=.jobList. Closing prevents a height
+                // decrease while visible => no re-anchor => no jump.
                 JobStepsView(
                     job: job,
                     steps: steps,
                     scope: scope,
-                    onBack: { navState = .jobList }
+                    onBack: { closePopover() }
                 )
 
             case .matrixGroup(let baseName, let jobs, let scope):
@@ -98,16 +100,11 @@ struct PopoverView: View {
                     baseName: baseName,
                     jobs: jobs,
                     scope: scope,
-                    onBack: { navState = .jobList }
+                    onBack: { closePopover() }
                 )
             }
         }
-        // ⚠️⚠️⚠️  idealWidth: 340 ONLY. NO minHeight. NO maxHeight.  ⚠️⚠️⚠️
-        // Width constraint ensures hc.view.fittingSize.width = 340.
-        // Height is NOT constrained here — AppDelegate reads fittingSize
-        // and sets popover.contentSize before show(). See AppDelegate v2.2.
-        // Adding minHeight here would cause empty space (regression).
-        // Adding maxHeight here would clip child views.
+        // ⚠️ idealWidth:340 ONLY on root. Height = child. DO NOT add minHeight here.
         .frame(idealWidth: 340)
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
@@ -115,6 +112,11 @@ struct PopoverView: View {
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
+    }
+
+    // Close the popover gracefully. User can reopen to see jobList.
+    private func closePopover() {
+        NSApplication.shared.keyWindow?.close()
     }
 
     // MARK: - Job list view
@@ -278,8 +280,7 @@ struct PopoverView: View {
         } // end VStack
     }
 
-    // MARK: - Group row builder
-    // ⚠️ CAUSE 7 FIX: fetch steps BEFORE navigating.
+    // MARK: - Group row
     @ViewBuilder
     private func groupRow(for group: JobGroup) -> some View {
         let jobScope = ScopeStore.shared.scopes.first ?? ""
@@ -330,10 +331,9 @@ struct PopoverView: View {
         }
     }
 
-    // MARK: - Elapsed
+    // MARK: - Helpers
     private func liveElapsed(group: JobGroup) -> String { _ = tick; return group.elapsed }
 
-    // MARK: - Dot helpers
     @ViewBuilder
     private func groupDot(for group: JobGroup) -> some View {
         if case .matrix = group {
@@ -383,8 +383,7 @@ struct PopoverView: View {
     }
 
     private func dotColor(for runner: Runner) -> Color {
-        if runner.status != "online" { return .gray }
-        return runner.busy ? .yellow : .green
+        runner.status == "online" ? (runner.busy ? .yellow : .green) : .gray
     }
 
     private func signInWithGitHub() {
@@ -403,11 +402,11 @@ struct PopoverView: View {
     }
 }
 
-// MARK: - Observable
+// MARK: - Store
 
 struct StoreState {
-    var runners: [Runner]   = []
-    var jobs: [ActiveJob]   = []
+    var runners: [Runner] = []
+    var jobs: [ActiveJob] = []
 }
 
 final class RunnerStoreObservable: ObservableObject {
