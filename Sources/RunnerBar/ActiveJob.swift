@@ -73,7 +73,7 @@ struct ActiveJob: Identifiable {
     }
 }
 
-// MARK: - gh API
+// MARK: - gh API (JSON)
 
 private func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let gh = "/opt/homebrew/bin/gh"
@@ -109,6 +109,135 @@ private func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
     log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     return outputData.isEmpty ? nil : outputData
+}
+
+// MARK: - gh API (raw text — for log endpoints)
+
+// Same as ghAPI() but passes Accept: application/vnd.github.v3.raw
+// so GitHub returns plain text instead of a redirect or JSON.
+private func ghAPIRaw(_ endpoint: String, timeout: TimeInterval = 30) -> String? {
+    let gh = "/opt/homebrew/bin/gh"
+    guard FileManager.default.isExecutableFile(atPath: gh) else { return nil }
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL  = URL(fileURLWithPath: gh)
+    task.arguments      = ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"]
+    task.standardOutput = pipe
+    task.standardError  = Pipe()
+    var outputData = Data()
+    let lock = NSLock()
+    pipe.fileHandleForReading.readabilityHandler = { h in
+        let chunk = h.availableData
+        guard !chunk.isEmpty else { return }
+        lock.lock(); outputData.append(chunk); lock.unlock()
+    }
+    do { try task.run() } catch { return nil }
+    let deadline = Date().addingTimeInterval(timeout)
+    while task.isRunning {
+        if Date() > deadline { task.terminate(); break }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    pipe.fileHandleForReading.readabilityHandler = nil
+    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    return outputData.isEmpty ? nil : String(data: outputData, encoding: .utf8)
+}
+
+// MARK: - Fetch step log
+
+// Fetches the full job log and returns lines for the given step number (1-based).
+// Called from StepLogView on a background thread — never call on main thread.
+//
+// GitHub Actions log format:
+//   Each line: "2024-01-01T00:00:00.0000000Z <content>"
+//   Steps are delimited by ##[group]<name> … ##[endgroup] blocks.
+//   Block N (1-based) corresponds to step N.
+//   Some simple jobs have no group markers — fallback returns all lines.
+//
+// Returns nil if gh is unavailable, auth fails, or network is down.
+func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
+    guard !scope.isEmpty, scope.contains("/") else {
+        log("fetchStepLog › no repo scope available")
+        return nil
+    }
+    let endpoint = "repos/\(scope)/actions/jobs/\(jobID)/logs"
+    guard let raw = ghAPIRaw(endpoint) else {
+        log("fetchStepLog › failed to fetch log for job \(jobID)")
+        return nil
+    }
+
+    let allLines = raw.components(separatedBy: "\n")
+    var groupCount = 0
+    var inTarget = false
+    var result: [String] = []
+
+    for rawLine in allLines {
+        let line = stripLogTimestamp(stripANSI(rawLine))
+
+        if line.contains("##[group]") {
+            groupCount += 1
+            inTarget = (groupCount == stepNumber)
+            if inTarget {
+                // Include the group label as a header line
+                let label = line
+                    .replacingOccurrences(of: "##[group]", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                if !label.isEmpty { result.append(label) }
+            }
+            continue
+        }
+        if line.contains("##[endgroup]") {
+            if inTarget { inTarget = false }
+            continue
+        }
+        if inTarget && !line.trimmingCharacters(in: .whitespaces).isEmpty {
+            result.append(line)
+        }
+    }
+
+    // Fallback: no group markers → return all non-empty lines
+    if result.isEmpty && groupCount == 0 {
+        let fallback = allLines
+            .map { stripLogTimestamp(stripANSI($0)) }
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return fallback.isEmpty ? nil : fallback.joined(separator: "\n")
+    }
+
+    return result.isEmpty ? nil : result.joined(separator: "\n")
+}
+
+// Strip ANSI escape sequences (ESC [ ... <letter>)
+private func stripANSI(_ s: String) -> String {
+    var out = ""
+    var i = s.startIndex
+    while i < s.endIndex {
+        let c = s[i]
+        if c == "\u{1B}" {
+            var j = s.index(after: i)
+            while j < s.endIndex {
+                let ec = s[j]
+                j = s.index(after: j)
+                if ec.isLetter || ec == "m" || ec == "K" || ec == "J" || ec == "H" { break }
+            }
+            i = j
+        } else {
+            out.append(c)
+            i = s.index(after: i)
+        }
+    }
+    return out
+}
+
+// Strip GitHub Actions timestamp prefix: "YYYY-MM-DDTHH:MM:SS.0000000Z "
+// Timestamps are exactly 29 chars including the trailing space.
+private func stripLogTimestamp(_ s: String) -> String {
+    guard s.count > 29 else { return s }
+    let idx = s.index(s.startIndex, offsetBy: 29)
+    let prefix = String(s[..<idx])
+    if prefix.first?.isNumber == true && prefix.contains("T") && prefix.contains("Z") {
+        return String(s[idx...])
+    }
+    return s
 }
 
 // MARK: - Fetch all jobs from active runs
