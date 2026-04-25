@@ -10,9 +10,19 @@ struct PopoverView: View {
     @State private var tick = 0
 
     var body: some View {
+        NavigationStack {
+            mainView
+        }
+        .frame(minWidth: 320)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - Main list view
+
+    private var mainView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────
+            // ── Header
             HStack {
                 Text("RunnerBar v0.8")
                     .font(.headline)
@@ -43,7 +53,7 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Active Jobs ──────────────────────────────────
+            // ── Active Jobs
             Text("Active Jobs")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -60,54 +70,50 @@ struct PopoverView: View {
                     .padding(.bottom, 2)
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
-                    HStack(spacing: 8) {
-                        jobDot(for: job)
-                        Text(job.name)
-                            .font(.system(size: 12))
-                            .foregroundColor(job.isDimmed ? .secondary : .primary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer()
-                        if job.isDimmed {
-                            Text(conclusionLabel(for: job))
-                                .font(.caption)
-                                .foregroundColor(conclusionColor(for: job))
-                                .frame(width: 76, alignment: .trailing)
-                        } else {
-                            Text(jobStatusLabel(for: job))
-                                .font(.caption)
-                                .foregroundColor(jobStatusColor(for: job))
-                                .frame(width: 76, alignment: .trailing)
+                    NavigationLink(destination: JobDetailView(job: job)) {
+                        HStack(spacing: 8) {
+                            jobDot(for: job)
+                            Text(job.name)
+                                .font(.system(size: 12))
+                                .foregroundColor(job.isDimmed ? .secondary : .primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer()
+                            if job.isDimmed {
+                                Text(conclusionLabel(for: job))
+                                    .font(.caption)
+                                    .foregroundColor(conclusionColor(for: job))
+                                    .frame(width: 76, alignment: .trailing)
+                            } else {
+                                Text(jobStatusLabel(for: job))
+                                    .font(.caption)
+                                    .foregroundColor(jobStatusColor(for: job))
+                                    .frame(width: 76, alignment: .trailing)
+                            }
+                            Text(job.isDimmed ? job.elapsed : elapsedLive(for: job, tick: tick))
+                                .font(.caption.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 40, alignment: .trailing)
                         }
-                        Text(job.isDimmed ? job.elapsed : elapsedLive(for: job, tick: tick))
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                            .frame(width: 40, alignment: .trailing)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 3)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 3)
+                    .buttonStyle(.plain)
                 }
                 .padding(.bottom, 6)
             }
 
             Divider()
 
-            // ── Local runners ──────────────────────────────────
-            Text("Local runners")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
-
-            if store.runners.isEmpty {
-                Text(isAuthenticated ? "No runners found" : "Authenticate to see runners")
-                    .foregroundColor(.secondary)
+            // ── Local runners
+            if !store.runners.isEmpty {
+                Text("Local runners")
                     .font(.caption)
+                    .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.top, 8)
                     .padding(.bottom, 2)
-            } else {
+
                 ForEach(store.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle()
@@ -126,11 +132,11 @@ struct PopoverView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                 }
+
+                Divider()
             }
 
-            Divider()
-
-            // ── Scope management ────────────────────────────
+            // ── Scope management
             VStack(alignment: .leading, spacing: 4) {
                 Text("Scopes")
                     .font(.caption)
@@ -172,18 +178,18 @@ struct PopoverView: View {
 
             Divider()
 
-            // ── Launch at login ────────────────────────────
+            // ── Launch at login
             Toggle(isOn: $launchAtLogin) {
                 Text("Launch at login").font(.system(size: 13))
             }
             .toggleStyle(.checkbox)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
+            .onChange(of: launchAtLogin) { _, _ in LoginItem.toggle() }
 
             Divider()
 
-            // ── Quit ────────────────────────────────────────
+            // ── Quit
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 HStack {
                     Image(systemName: "xmark.square")
@@ -196,23 +202,17 @@ struct PopoverView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .frame(minWidth: 320)
-        .fixedSize(horizontal: false, vertical: true)
         .onReceive(store.objectWillChange) {
             isAuthenticated = (githubToken() != nil)
         }
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                tick += 1
-            }
+            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
     }
 
     // MARK: - Elapsed
 
-    private func elapsedLive(for job: ActiveJob, tick _: Int) -> String {
-        job.elapsed
-    }
+    private func elapsedLive(for job: ActiveJob, tick _: Int) -> String { job.elapsed }
 
     // MARK: - Job helpers
 
