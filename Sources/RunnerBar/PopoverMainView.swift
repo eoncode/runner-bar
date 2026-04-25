@@ -3,7 +3,7 @@ import ServiceManagement
 
 // ⚠️ REGRESSION GUARD — layout rules (ref issue #54)
 // 1. Do NOT add .frame(height:) anywhere in this file.
-//    Height is owned exclusively by AppDelegate (mainHeight / detailHeight constants).
+//    Height is owned exclusively by AppDelegate.computeMainHeight().
 //    This view fills whatever frame AppDelegate gives it via .frame(maxWidth/maxHeight: .infinity).
 // 2. The Spacer() inside each job row HStack is load-bearing.
 //    Removing it causes all text to left-align when job names change length — the left-jump.
@@ -11,6 +11,8 @@ import ServiceManagement
 //    Mismatched padding causes visible column shifts between states.
 // 4. Do NOT use .fixedSize(horizontal: true, ...) on any container —
 //    dynamic width causes the popover anchor to drift left.
+// 5. If you change ANY padding value here, update the matching constant in
+//    AppDelegate.computeMainHeight() or the dynamic height will be wrong.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -24,7 +26,7 @@ struct PopoverMainView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             HStack {
-                Text("RunnerBar v0.15")
+                Text("RunnerBar v0.16")  // ⚠️ bump this on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -53,6 +55,7 @@ struct PopoverMainView: View {
                 Text("No active jobs")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
+                // ⚠️ height cost: emptyJobsRow=22px — matches AppDelegate.computeMainHeight()
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
                     Button(action: { onSelectJob(job) }) {
@@ -74,10 +77,12 @@ struct PopoverMainView: View {
                                 .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 3)
+                        // ⚠️ height cost per row: jobRowHeight=26px — matches AppDelegate.computeMainHeight()
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(.bottom, 6)
+                // ⚠️ height cost: jobsBottomPad=6px — matches AppDelegate.computeMainHeight()
             }
 
             Divider()
@@ -86,6 +91,7 @@ struct PopoverMainView: View {
                 Text("Local runners")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+                // ⚠️ height cost: runnersLabel=26px — matches AppDelegate.computeMainHeight()
                 ForEach(store.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
@@ -95,8 +101,9 @@ struct PopoverMainView: View {
                             .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
                     }
                     .padding(.horizontal, 12).padding(.vertical, 5)
+                    // ⚠️ height cost per row: runnerRowHeight=32px — matches AppDelegate.computeMainHeight()
                 }
-                Divider()
+                Divider() // ⚠️ runnersDivider=1px
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -139,8 +146,8 @@ struct PopoverMainView: View {
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12).padding(.vertical, 8)
         }
-        // ⚠️ REGRESSION GUARD: .frame(maxWidth/maxHeight: .infinity) fills AppDelegate's fixed frame.
-        // Do NOT replace with .frame(height: X) or .fixedSize() — both cause sizing regressions.
+        // ⚠️ REGRESSION GUARD: fills AppDelegate's dynamically computed frame.
+        // Do NOT replace with .frame(height: X) or .fixedSize() — both break sizing.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
         .onAppear { Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 } }
