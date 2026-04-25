@@ -1,45 +1,16 @@
 import SwiftUI
 import ServiceManagement
 
-private let kFixedHeight: CGFloat = 480
-
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
-    @State private var selectedJob: ActiveJob? = nil
+    let onSelectJob: (ActiveJob) -> Void
+
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
     @State private var tick = 0
 
     var body: some View {
-        // Both layers occupy the SAME fixed frame.
-        // Opacity swap means NSPopover never sees a size change — no anchor bug.
-        ZStack(alignment: .topLeading) {
-            mainView
-                .frame(width: 320, height: kFixedHeight)
-                .opacity(selectedJob == nil ? 1 : 0)
-                .allowsHitTesting(selectedJob == nil)
-
-            detailLayer
-                .frame(width: 320, height: kFixedHeight)
-                .opacity(selectedJob != nil ? 1 : 0)
-                .allowsHitTesting(selectedJob != nil)
-        }
-        .frame(width: 320, height: kFixedHeight)
-    }
-
-    // Detail layer always rendered (but invisible) so no layout change occurs.
-    @ViewBuilder
-    private var detailLayer: some View {
-        if let job = selectedJob {
-            JobDetailView(job: job, onBack: { selectedJob = nil })
-        } else {
-            // Placeholder keeps the layer in the tree at the same size.
-            Color.clear
-        }
-    }
-
-    private var mainView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             HStack {
@@ -74,7 +45,7 @@ struct PopoverMainView: View {
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
-                    Button(action: { selectedJob = job }) {
+                    Button(action: { onSelectJob(job) }) {
                         HStack(spacing: 8) {
                             jobDot(for: job)
                             Text(job.name)
@@ -157,8 +128,6 @@ struct PopoverMainView: View {
             .buttonStyle(.plain)
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12).padding(.vertical, 8)
-
-            Spacer(minLength: 0)
         }
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
         .onAppear { Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 } }
