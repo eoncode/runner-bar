@@ -3,12 +3,12 @@ import ServiceManagement
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 340)
+// RULE 1: Root VStack MUST use .frame(idealWidth: 420)
 //   AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
 //   fittingSize reads SwiftUI's IDEAL size. Without idealWidth set, fittingSize
 //   returns width=0 and AppDelegate falls back to fixedWidth.
-//   ❌ NEVER remove .frame(idealWidth: 340) — fittingSize.width becomes 0
-//   ❌ NEVER use .frame(width: 340) — sets layout width but NOT ideal width
+//   ❌ NEVER remove .frame(idealWidth: 420) — fittingSize.width becomes 0
+//   ❌ NEVER use .frame(width: 420) — sets layout width but NOT ideal width
 //   ❌ NEVER use .frame(maxWidth: .infinity) alone — no ideal width = fittingSize.width=0
 //   ❌ NEVER add .frame(height:) to root VStack — fights fittingSize height reading
 //
@@ -32,13 +32,14 @@ struct PopoverMainView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    @StateObject private var systemStats = SystemStatsViewModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header
             HStack {
-                Text("RunnerBar v0.27")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.28")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -56,6 +57,14 @@ struct PopoverMainView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)  // ⚠️ RULE 2
+
+            Divider()
+
+            // ── System
+            Text("System")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)  // ⚠️ RULE 2
+            SystemStatsView(stats: systemStats.stats)
 
             Divider()
 
@@ -156,11 +165,12 @@ struct PopoverMainView: View {
             .keyboardShortcut("q", modifiers: .command)
             .padding(.horizontal, 12).padding(.vertical, 8)  // ⚠️ RULE 2
         }
-        // ⚠️ RULE 1: idealWidth=340 so fittingSize returns correct width.
+        // ⚠️ RULE 1: idealWidth=420 so fittingSize returns correct width.
+        // Widened from 340 → 420 to prevent System stats row truncation.
         // fittingSize.height = VStack intrinsic height (used by openPopover()).
         // ❌ NEVER remove idealWidth — fittingSize.width collapses to 0.
         // ❌ NEVER add .frame(height:) — fights fittingSize height.
-        .frame(idealWidth: 340, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
     }
 
