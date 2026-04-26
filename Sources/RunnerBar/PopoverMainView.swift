@@ -32,13 +32,14 @@ struct PopoverMainView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    @StateObject private var systemStats = SystemStatsViewModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header
             HStack {
-                Text("RunnerBar v0.27")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.28")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -56,6 +57,14 @@ struct PopoverMainView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)  // ⚠️ RULE 2
+
+            Divider()
+
+            // ── System
+            Text("System")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)  // ⚠️ RULE 2
+            SystemStatsView(stats: systemStats.stats)
 
             Divider()
 
