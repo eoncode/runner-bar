@@ -2,10 +2,10 @@ import SwiftUI
 
 // ── System stats: ONE row, never bleeds to second row ────────────────────────
 //
-// CPU [▓░░] 29.7%  MEM [▓▓▓░] 1.6/16.0GB  DISK [▓▓▓▓▓░] 352/460GB (free: 108GB 24%)
+// CPU [▓░░] 29.7%  MEM [▓▓▓░] 1.6/16.0GB  DISK [▓▓▓▓▓░] 335/460GB (126GB 27%)
 //
 // RULE: .lineLimit(1) is load-bearing. Do not remove.
-// RULE: bar width 20pt, height 5pt.
+// RULE: bar width 16pt, height 5pt.
 // RULE: segment spacing 6pt.
 // COLOR: all three segments use usageColor(pct: usedPct) — same as ci-dash.py:
 //   dc = R if dp > 85 else Y if dp > 60 else G
@@ -51,6 +51,7 @@ struct SystemStatsView: View {
 
     // ── DISK ─────────────────────────────────────────────────────────────────
     // Color on used% — matches ci-dash.py: dc = R if dp > 85 else Y if dp > 60 else G
+    // Free label: (126GB 27%) — no "free:" prefix to save space
 
     private var diskSegment: some View {
         let usedPct = stats.diskTotalGB > 0 ? (stats.diskUsedGB / stats.diskTotalGB) * 100 : 0
@@ -58,7 +59,7 @@ struct SystemStatsView: View {
         return HStack(spacing: 4) {
             Text("DISK").font(.caption2).foregroundColor(.secondary)
             bar(fraction: usedPct / 100, color: color)
-            Text(String(format: "%d/%dGB (free: %dGB %d%%)",
+            Text(String(format: "%d/%dGB (%dGB %d%%)",
                         Int(stats.diskUsedGB.rounded()),
                         Int(stats.diskTotalGB.rounded()),
                         Int(stats.diskFreeGB.rounded()),
@@ -77,10 +78,10 @@ struct SystemStatsView: View {
                     .fill(Color.primary.opacity(0.1))
                 RoundedRectangle(cornerRadius: 2)
                     .fill(color)
-                    .frame(width: 20 * max(0, min(1, fraction)))
+                    .frame(width: 16 * max(0, min(1, fraction)))
             }
         }
-        .frame(width: 20, height: 5)
+        .frame(width: 16, height: 5)
     }
 
     // ── Colors ───────────────────────────────────────────────────────────────
