@@ -1,7 +1,11 @@
 import Foundation
 
+/// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
+/// Values are percentages sourced from the `%CPU` and `%MEM` columns of `ps aux`.
 struct RunnerMetrics {
+    /// CPU utilisation as a percentage (e.g. `12.5` means 12.5% of one core).
     let cpu: Double
+    /// Memory utilisation as a percentage of total physical RAM (from `ps aux` `%MEM`).
     let mem: Double
 }
 
@@ -21,7 +25,7 @@ func allWorkerMetrics() -> [RunnerMetrics] {
     var results: [RunnerMetrics] = []
     for line in output.components(separatedBy: "\n") {
         guard line.contains("Runner.Worker") || line.contains("Runner.Listener") else { continue }
-        // ps aux: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND…
+        // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND…
         let parts = line.split(separator: " ", omittingEmptySubsequences: true)
         guard parts.count > 3,
               let cpu = Double(parts[2]),

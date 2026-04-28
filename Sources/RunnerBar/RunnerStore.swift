@@ -3,8 +3,17 @@ import AppKit
 
 // MARK: - Aggregate status
 
+/// Represents the combined online/offline status across all registered runners.
+/// Drives the status bar icon colour so the user can see runner health at a glance.
 enum AggregateStatus {
-    case allOnline, someOffline, allOffline
+    /// All registered runners are online.
+    case allOnline
+    /// At least one runner is online and at least one is offline.
+    case someOffline
+    /// All registered runners are offline, or no runners are registered.
+    case allOffline
+
+    /// Emoji dot representation, used in log output for quick visual scanning.
     var dot: String {
         switch self {
         case .allOnline:   return "🟢"
@@ -12,6 +21,8 @@ enum AggregateStatus {
         case .allOffline:  return "⚫"
         }
     }
+
+    /// SF Symbol name for use in SwiftUI `Image(systemName:)` calls.
     var symbolName: String {
         switch self {
         case .allOnline:   return "circle.fill"
@@ -23,10 +34,21 @@ enum AggregateStatus {
 
 // MARK: - Store
 
+/// Singleton polling store that coordinates GitHub runner + job fetching every 10 seconds.
+///
+/// Owns the canonical `runners` and `jobs` arrays consumed by the UI layer.
+/// Call `start()` once at launch (or whenever a new scope is added) to begin polling.
+/// Subscribe to `onChange` to be notified after each poll completes.
 final class RunnerStore {
+    /// Shared singleton — the single source of truth for runner and job state.
     static let shared = RunnerStore()
 
+    /// Currently known self-hosted runners, enriched with local process metrics.
+    /// Updated on every poll. Must only be read and written on the main thread.
     private(set) var runners: [Runner] = []
+
+    /// Jobs to display: live (in_progress/queued) + recently completed (dimmed).
+    /// Capped at 3 entries. Updated on every poll. Main-thread only.
     private(set) var jobs: [ActiveJob] = []
 
     // ⚠️ REGRESSION GUARD — completed job persistence (ref issue #54)
@@ -43,9 +65,15 @@ final class RunnerStore {
     private var prevLiveJobs: [Int: ActiveJob] = [:]
     private var completedCache: [Int: ActiveJob] = [:]
 
+    /// The repeating 10-second poll timer. Held strongly so it is not deallocated.
     private var timer: Timer?
+
+    /// Called on the main thread after each poll completes.
+    /// Use this to trigger a UI refresh (e.g. reload the observable or update the icon).
     var onChange: (() -> Void)?
 
+    /// Derives the aggregate runner status from the current `runners` array.
+    /// Returns `.allOffline` when `runners` is empty (no scopes configured yet).
     var aggregateStatus: AggregateStatus {
         guard !runners.isEmpty else { return .allOffline }
         let online = runners.filter { $0.status == "online" }.count
@@ -54,6 +82,9 @@ final class RunnerStore {
         return .someOffline
     }
 
+    /// Starts (or restarts) the 10-second polling timer and fires an immediate fetch.
+    /// Invalidates any existing timer first to prevent stacked timers when called
+    /// multiple times (e.g. each time a new scope is added via `submitScope()`).
     func start() {
         log("RunnerStore › start")
         timer?.invalidate()  // ⚠️ Always invalidate before creating a new timer — prevents stacking
@@ -63,6 +94,20 @@ final class RunnerStore {
         }
     }
 
+    /// Fetches runners and active jobs for all scopes on a background thread.
+    ///
+    /// Algorithm:
+    /// 1. Fetch runners via `fetchRunners(for:)` and enrich with local `ps aux` metrics.
+    /// 2. Fetch active jobs via `fetchActiveJobs(for:)` for every scope.
+    /// 3. Diff live jobs against `prevLiveJobs` to detect vanished jobs and freeze them
+    ///    into `completedCache` (prevents done jobs from disappearing before the API
+    ///    marks the run as completed, which can lag 10–30 s).
+    /// 4. Add freshly-concluded jobs (conclusion != nil in still-active runs) to cache.
+    /// 5. Trim cache to the 3 most-recently-completed jobs.
+    /// 6. Build the display list: in_progress → queued → cached done (newest first),
+    ///    capped at 3. This priority ensures actively-running jobs are always visible.
+    /// 7. Publish all results to `runners`, `jobs`, `completedCache`, `prevLiveJobs`
+    ///    on the main thread, then call `onChange`.
     func fetch() {
         let snapPrev  = prevLiveJobs
         let snapCache = completedCache
@@ -78,6 +123,8 @@ final class RunnerStore {
             let metrics = allWorkerMetrics()
             var busy = allRunners.filter { $0.busy }
             var idle = allRunners.filter { !$0.busy }
+            // Assign metrics by slot index (busy first) — name-based matching is
+            // not possible because runner names do not appear in ps aux output.
             for i in busy.indices { busy[i].metrics = i < metrics.count ? metrics[i] : nil }
             for i in idle.indices {
                 let s = busy.count + i
@@ -131,7 +178,7 @@ final class RunnerStore {
                 )
             }
 
-            // Trim to newest 3
+            // Trim to newest 3 to cap memory usage.
             if newCache.count > 3 {
                 let sorted = newCache.values
                     .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
@@ -142,7 +189,9 @@ final class RunnerStore {
 
             let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
 
-            // Display order: in_progress → queued → done (newest first), max 3 total
+            // Display order: in_progress → queued → done (newest first), max 3 total.
+            // Priority ensures actively-running jobs are always shown first;
+            // queued jobs surface next; completed jobs fill remaining slots.
             let inProgress = liveJobs.filter { $0.status == "in_progress" }
             let queued     = liveJobs.filter { $0.status == "queued" }
             let cached     = newCache.values
@@ -156,6 +205,8 @@ final class RunnerStore {
             log("RunnerStore › \(inProgress.count) in_progress \(queued.count) queued | " +
                 "cache: \(newCache.count) | display: \(display.count)")
 
+            // All property writes must happen on the main thread because they are
+            // observed by SwiftUI via RunnerStoreObservable (@Published properties).
             DispatchQueue.main.async {
                 self.runners        = enrichedRunners
                 self.jobs           = display

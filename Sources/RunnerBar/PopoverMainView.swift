@@ -176,15 +176,28 @@ struct PopoverMainView: View {
 
     // MARK: — Helpers
 
+    /// Returns a colored dot view reflecting the job's current state.
+    /// Dimmed jobs (recently finished, fading out) use a secondary/gray dot.
+    /// In-progress jobs use yellow; all other live states use gray.
     @ViewBuilder
     private func jobDot(for job: ActiveJob) -> some View {
         Circle().fill(job.isDimmed ? Color.secondary : (job.status == "in_progress" ? Color.yellow : Color.gray))
             .frame(width: 7, height: 7)
     }
+
+    /// Returns a human-readable status label for a live (non-dimmed) job.
+    /// Maps `in_progress` → "In Progress", `queued` → "Queued", anything else → "Done".
     private func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status { case "in_progress": return "In Progress"; case "queued": return "Queued"; default: return "Done" }
     }
+
+    /// Returns the accent color for a live job's status label.
+    /// In-progress jobs are yellow; queued/other states use secondary (dimmed).
     private func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
+
+    /// Returns an icon + text label for a completed (dimmed) job's conclusion.
+    /// Covers success, failure, cancelled, and skipped; falls back to the raw
+    /// conclusion string or "done" if the value is unrecognised or nil.
     private func conclusionLabel(for job: ActiveJob) -> String {
         switch job.conclusion {
         case "success": return "✓ success"; case "failure": return "✗ failure"
@@ -192,16 +205,31 @@ struct PopoverMainView: View {
         default: return job.conclusion ?? "done"
         }
     }
+
+    /// Returns the accent color for a completed job's conclusion label.
+    /// Success → green, failure → red, all other conclusions → secondary.
     private func conclusionColor(for job: ActiveJob) -> Color {
         switch job.conclusion { case "success": return .green; case "failure": return .red; default: return .secondary }
     }
+
+    /// Returns the status dot color for a self-hosted runner row.
+    /// Offline runners are gray; online+busy runners are yellow; online+idle are green.
     private func dotColor(for runner: Runner) -> Color {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
+
+    /// Opens Terminal and runs `gh auth login` to authenticate the user.
+    /// Uses NSAppleScript to script Terminal because there is no direct API to
+    /// launch an interactive CLI auth flow from a sandboxed menu bar process.
+    /// Terminal is also brought to front so the user sees the prompt immediately.
     private func signInWithGitHub() {
         NSAppleScript(source: "tell application \"Terminal\" to do script \"gh auth login\"")?.executeAndReturnError(nil)
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
+
+    /// Validates and persists a new scope entered by the user, then refreshes the store.
+    /// Trims whitespace, guards against empty input, adds to `ScopeStore`, restarts
+    /// `RunnerStore` polling for the new scope, reloads the observable, and clears the field.
     private func submitScope() {
         let t = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
@@ -213,6 +241,8 @@ struct PopoverMainView: View {
 final class RunnerStoreObservable: ObservableObject {
     @Published var runners: [Runner] = []
     @Published var jobs: [ActiveJob] = []
+    /// Initialises the observable and performs an eager reload so the view has
+    /// data immediately on first render without waiting for a polling cycle.
     init() { reload() }
     func reload() {
         // ❌ NEVER add objectWillChange.send() here — @Published handles it
