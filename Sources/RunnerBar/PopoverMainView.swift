@@ -39,7 +39,7 @@ struct PopoverMainView: View {
 
             // ── Header
             HStack {
-                Text("RunnerBar v0.28")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.29")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
