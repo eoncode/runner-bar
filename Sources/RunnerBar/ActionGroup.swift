@@ -269,6 +269,9 @@ func fetchActionGroups(for scope: String) -> [ActionGroup] {
             }
         }
 
+        // Sort jobs by id ascending — matches yml definition order (#101).
+        allJobs.sort { $0.id < $1.id }
+
         // Derive timestamps from job data (matches enrich_group()).
         let starts = allJobs.compactMap { $0.startedAt }
         let ends   = allJobs.compactMap { $0.completedAt }
@@ -301,36 +304,64 @@ func fetchActionGroups(for scope: String) -> [ActionGroup] {
 
 // MARK: - Private helpers
 
+/// Constructs an `ActiveJob` from a decoded `JobPayload`.
+/// Shared by the initial batch map and the second-pass re-fetch so both
+/// paths produce identical structs — prevents drift between the two (#102/#103).
+private func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
+                            isDimmed: Bool = false) -> ActiveJob {
+    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+        JobStep(
+            id:          idx + 1,
+            name:        s.name,
+            status:      s.status,
+            conclusion:  s.conclusion,
+            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
+            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+        )
+    }
+    return ActiveJob(
+        id:          j.id,
+        name:        j.name,
+        status:      j.status,
+        conclusion:  j.conclusion,
+        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
+        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+        completedAt: j.completedAt.flatMap { iso.date(from: $0) },
+        htmlUrl:     j.htmlUrl,
+        isDimmed:    isDimmed,
+        steps:       steps
+    )
+}
+
 /// Fetch and decode jobs for a single run ID. Reuses the internal
 /// JobsResponse/JobPayload/StepPayload types from ActiveJob.swift.
+///
+/// Second pass: any job that still has no conclusion — or whose steps still
+/// contain an "in_progress" entry — is re-fetched individually via the single-job
+/// endpoint.  This resolves three stale-data classes the batch endpoint produces:
+///   #102  — queued job lingers / steps missing after the run completes.
+///   #103 A+B — GitHub-hosted runner jobs with missing step data.
+///   #103 C  — jobs whose steps are still "in_progress" after completion.
 private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
     guard
         let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?filter=latest&per_page=100"),
         let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
     else { return [] }
 
-    return resp.jobs.map { j in
-        let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
-            JobStep(
-                id:          idx + 1,
-                name:        s.name,
-                status:      s.status,
-                conclusion:  s.conclusion,
-                startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-                completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
-            )
-        }
-        return ActiveJob(
-            id:          j.id,
-            name:        j.name,
-            status:      j.status,
-            conclusion:  j.conclusion,
-            startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-            createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
-            completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-            htmlUrl:     j.htmlUrl,
-            steps:       steps
-        )
+    // Initial map via shared helper.
+    let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
+
+    // Second pass: re-fetch jobs whose batch data may be stale.
+    return initial.map { job in
+        let needsRefresh = job.conclusion == nil
+            || job.steps.contains { $0.status == "in_progress" }
+        guard needsRefresh else { return job }
+        guard
+            let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
+            let fresh     = try? JSONDecoder().decode(JobPayload.self, from: freshData),
+            fresh.conclusion != nil
+        else { return job }
+        return makeActiveJob(from: fresh, iso: iso)
     }
 }
 

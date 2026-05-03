@@ -317,22 +317,41 @@ final class RunnerStore {
             // not be greyed out — they should show their conclusion in full colour.
             func enrichGroupJobs(_ jobs: [ActiveJob]) -> [ActiveJob] {
                 jobs.map { job in
-                    guard job.conclusion == nil,
-                          let hit = newCache[job.id],
-                          hit.conclusion != nil
-                    else { return job }
-                    return ActiveJob(
-                        id:          job.id,
-                        name:        job.name,
-                        status:      hit.status,
-                        conclusion:  hit.conclusion,
-                        startedAt:   job.startedAt   ?? hit.startedAt,
-                        createdAt:   job.createdAt   ?? hit.createdAt,
-                        completedAt: hit.completedAt ?? job.completedAt,
-                        htmlUrl:     job.htmlUrl     ?? hit.htmlUrl,
-                        isDimmed:    false,
-                        steps:       job.steps.isEmpty ? hit.steps : job.steps
-                    )
+                    // Primary: substitute from completedCache when available.
+                    if job.conclusion == nil,
+                       let hit = newCache[job.id],
+                       hit.conclusion != nil {
+                        return ActiveJob(
+                            id:          job.id,
+                            name:        job.name,
+                            status:      hit.status,
+                            conclusion:  hit.conclusion,
+                            startedAt:   job.startedAt   ?? hit.startedAt,
+                            createdAt:   job.createdAt   ?? hit.createdAt,
+                            completedAt: hit.completedAt ?? job.completedAt,
+                            htmlUrl:     job.htmlUrl     ?? hit.htmlUrl,
+                            isDimmed:    false,
+                            steps:       job.steps.isEmpty ? hit.steps : job.steps
+                        )
+                    }
+                    // Secondary: completedAt is set but conclusion not yet propagated (#103).
+                    // GitHub-hosted runner jobs can have a timestamp without a conclusion
+                    // when the API lags. Treat as success so the row stops lingering.
+                    if job.conclusion == nil, let _ = job.completedAt {
+                        return ActiveJob(
+                            id:          job.id,
+                            name:        job.name,
+                            status:      "completed",
+                            conclusion:  "success",
+                            startedAt:   job.startedAt,
+                            createdAt:   job.createdAt,
+                            completedAt: job.completedAt,
+                            htmlUrl:     job.htmlUrl,
+                            isDimmed:    false,
+                            steps:       job.steps
+                        )
+                    }
+                    return job
                 }
             }
 
