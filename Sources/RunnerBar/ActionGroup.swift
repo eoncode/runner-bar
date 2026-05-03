@@ -352,16 +352,42 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
 
     // Second pass: re-fetch jobs whose batch data may be stale.
+    // Two independent substitution cases (fixes #107/#108):
+    //   Case 1 — conclusion resolved: use everything fresh.
+    //   Case 2 — conclusion still nil but steps are final (non-empty, no in_progress):
+    //            keep original conclusion/status, replace only the steps array.
+    // Removing `fresh.conclusion != nil` from the guard lets us always decode
+    // the fresh payload and choose the right substitution independently.
     return initial.map { job in
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh else { return job }
         guard
             let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-            let fresh     = try? JSONDecoder().decode(JobPayload.self, from: freshData),
-            fresh.conclusion != nil
+            let fresh     = try? JSONDecoder().decode(JobPayload.self, from: freshData)
         else { return job }
-        return makeActiveJob(from: fresh, iso: iso)
+
+        let freshJob = makeActiveJob(from: fresh, iso: iso)
+
+        // Case 1: conclusion resolved — substitute the whole job.
+        if fresh.conclusion != nil { return freshJob }
+
+        // Case 2: conclusion still lagging but steps look final — merge steps only.
+        let betterSteps = !freshJob.steps.isEmpty
+            && !freshJob.steps.contains { $0.status == "in_progress" }
+        guard betterSteps else { return job }
+        return ActiveJob(
+            id:          job.id,
+            name:        job.name,
+            status:      job.status,
+            conclusion:  job.conclusion,
+            startedAt:   freshJob.startedAt   ?? job.startedAt,
+            createdAt:   freshJob.createdAt   ?? job.createdAt,
+            completedAt: freshJob.completedAt ?? job.completedAt,
+            htmlUrl:     job.htmlUrl,
+            isDimmed:    job.isDimmed,
+            steps:       freshJob.steps
+        )
     }
 }
 
