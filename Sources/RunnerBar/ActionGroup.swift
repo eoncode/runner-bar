@@ -265,7 +265,8 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         let allJobs: [ActiveJob]
         if let cached = cache[sha],
            !cached.jobs.isEmpty,
-           cached.jobs.allSatisfy({ $0.conclusion != nil }) {
+           cached.jobs.allSatisfy({ $0.conclusion != nil }) &&
+           !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
             allJobs = cached.jobs
         } else {
             var fetched: [ActiveJob] = []

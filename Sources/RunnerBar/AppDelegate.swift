@@ -184,6 +184,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: — View factories
 
+    private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
+        guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
+              let scope = scopeFromHtmlUrl(job.htmlUrl),
+              let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
+        else { return job }
+        let iso = ISO8601DateFormatter()
+        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
+    }
+
     // mainView() — navigation level 1.
     // onSelectJob → level 2 (detailView); onSelectAction → level 2a (actionDetailView).
     private func mainView() -> AnyView {
@@ -191,7 +201,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             store: observable,
             onSelectJob: { [weak self] job in
                 guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailView(job: enriched))
+                    }
+                }
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
@@ -212,7 +228,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             },
             onSelectJob: { [weak self] job in
                 guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+                    }
+                }
             }
         ))
     }
