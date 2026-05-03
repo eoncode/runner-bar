@@ -20,9 +20,16 @@ import SwiftUI
 //   navigate() swaps hc.rootView ONLY. Zero size changes. Ever.
 //
 // ── NAVIGATION LEVELS ───────────────────────────────────────────────────────────
-//   Level 1: PopoverMainView   — job list + runner status
-//   Level 2: JobDetailView     — step list for a selected job
-//   Level 3: StepLogView       — log output for a selected step
+//   Jobs path (Active Jobs section):
+//     Level 1: PopoverMainView   — runner status + jobs + actions
+//     Level 2: JobDetailView     — step list for a selected job
+//     Level 3: StepLogView       — log output for a selected step
+//
+//   Actions path (Actions section):
+//     Level 1:  PopoverMainView    — same root
+//     Level 2a: ActionDetailView   — jobs inside a commit/PR group
+//     Level 3a: JobDetailView      — steps (existing, reused)
+//     Level 4a: StepLogView        — log (existing, reused)
 //
 //   All levels navigate via navigate() — rootView swap only, ZERO size changes.
 //   All levels use ScrollView for content that may overflow the fixed frame.
@@ -31,9 +38,10 @@ import SwiftUI
 //   using their own ScrollView — that is the correct contract, not fighting the frame.
 //
 //   Back-navigation chain:
-//     StepLogView.onBack    → navigate(to: detailView(job:))
-//     JobDetailView.onBack  → navigate(to: mainView())
-//     popoverDidClose       → reset hc.rootView = mainView() (async, popover already closed)
+//     StepLogView.onBack       → detailView(job:) OR logViewFromAction
+//     JobDetailView.onBack     → mainView() OR actionDetailView(group:)
+//     ActionDetailView.onBack  → mainView()
+//     popoverDidClose          → reset hc.rootView = mainView() (async)
 //
 // ── WHY NOT preferredContentSize ─────────────────────────────────────────────
 //   preferredContentSize causes NSPopover to re-anchor on every hc.rootView swap.
@@ -177,12 +185,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: — View factories
 
     // mainView() — navigation level 1.
-    // onSelectJob navigates to level 2 (detailView).
+    // onSelectJob → level 2 (detailView); onSelectAction → level 2a (actionDetailView).
     private func mainView() -> AnyView {
-        AnyView(PopoverMainView(store: observable, onSelectJob: { [weak self] job in
-            guard let self else { return }
-            self.navigate(to: self.detailView(job: job))
-        }))
+        AnyView(PopoverMainView(
+            store: observable,
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                self.navigate(to: self.detailView(job: job))
+            },
+            onSelectAction: { [weak self] group in
+                guard let self else { return }
+                self.navigate(to: self.actionDetailView(group: group))
+            }
+        ))
+    }
+
+    // actionDetailView(group:) — navigation level 2a (Actions path).
+    // Shows the flat job list for a commit/PR group.
+    // onBack → level 1; onSelectJob → level 3a.
+    private func actionDetailView(group: ActionGroup) -> AnyView {
+        AnyView(ActionDetailView(
+            group: group,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            },
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+            }
+        ))
+    }
+
+    // detailViewFromAction(job:group:) — navigation level 3a.
+    // Reuses JobDetailView; onBack returns to actionDetailView, not mainView.
+    private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
+        AnyView(JobDetailView(
+            job: job,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.actionDetailView(group: group))
+            },
+            onSelectStep: { [weak self] step in
+                guard let self else { return }
+                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+            }
+        ))
+    }
+
+    // logViewFromAction — navigation level 4a. onBack → level 3a.
+    private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
+        AnyView(StepLogView(
+            job: job,
+            step: step,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+            }
+        ))
     }
 
     // detailView(job:) — navigation level 2.

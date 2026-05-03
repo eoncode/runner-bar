@@ -85,7 +85,10 @@ struct ActiveJob: Identifiable {
 
 // MARK: - gh API
 
-private func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+/// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
+/// Internal so `ActionGroup.swift` can reuse it without duplicating networking code.
+/// Returns `nil` on launch failure, timeout, or empty response.
+func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let gh = "/opt/homebrew/bin/gh"
     guard FileManager.default.isExecutableFile(atPath: gh) else {
         log("ghAPI › gh not found at \(gh)")
@@ -185,13 +188,14 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
 
 // MARK: - Codable helpers
 
-private struct WorkflowRunsResponse: Codable {
+struct WorkflowRunsResponse: Codable {
     let workflowRuns: [WorkflowRun]
     enum CodingKeys: String, CodingKey { case workflowRuns = "workflow_runs" }
 }
-private struct WorkflowRun: Codable { let id: Int }
-private struct JobsResponse: Codable { let jobs: [JobPayload] }
-private struct StepPayload: Codable {
+struct WorkflowRun: Codable { let id: Int }
+/// Internal so `ActionGroup.swift` can decode job lists without duplicating structs.
+struct JobsResponse: Codable { let jobs: [JobPayload] }
+struct StepPayload: Codable {
     let name: String
     let status: String
     let conclusion: String?
@@ -203,7 +207,7 @@ private struct StepPayload: Codable {
         case completedAt = "completed_at"
     }
 }
-private struct JobPayload: Codable {
+struct JobPayload: Codable {
     let id: Int; let name: String; let status: String
     let conclusion: String?
     let startedAt: String?

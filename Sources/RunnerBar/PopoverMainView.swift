@@ -28,6 +28,7 @@ import ServiceManagement
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
+    let onSelectAction: (ActionGroup) -> Void
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -39,7 +40,7 @@ struct PopoverMainView: View {
 
             // ── Header
             HStack {
-                Text("RunnerBar v0.29")  // ⚠️ bump on every commit
+                Text("RunnerBar v0.30")  // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
                 if isAuthenticated {
@@ -65,6 +66,51 @@ struct PopoverMainView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)  // ⚠️ RULE 2
             SystemStatsView(stats: systemStats.stats)
+
+            Divider()
+
+            // ── Actions
+            Text("Actions")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)  // ⚠️ RULE 2
+
+            if store.actions.isEmpty {
+                Text("No recent actions")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+            } else {
+                ForEach(store.actions.prefix(5)) { group in
+                    Button(action: { onSelectAction(group) }) {
+                        HStack(spacing: 8) {
+                            actionDot(for: group)
+                            Text(group.label)
+                                .font(.caption.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 44, alignment: .leading)
+                            Text(group.title)
+                                .font(.system(size: 12))
+                                .foregroundColor(group.isDimmed ? .secondary : .primary)
+                                .lineLimit(1).truncationMode(.tail)
+                            Spacer()  // ⚠️ RULE 3: load-bearing — do NOT remove
+                            Text(group.currentJobName)
+                                .font(.caption).foregroundColor(.secondary)
+                                .lineLimit(1).truncationMode(.tail)
+                                .frame(width: 64, alignment: .trailing)
+                            Text(group.jobProgress)
+                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                .frame(width: 30, alignment: .trailing)
+                            Text(group.elapsed)
+                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                .frame(width: 40, alignment: .trailing)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2).foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 3)  // ⚠️ RULE 2
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, 6)
+            }
 
             Divider()
 
@@ -212,6 +258,27 @@ struct PopoverMainView: View {
         switch job.conclusion { case "success": return .green; case "failure": return .red; default: return .secondary }
     }
 
+    // MARK: — Action group row helpers
+
+    /// Status dot for an action group row.
+    @ViewBuilder
+    private func actionDot(for group: ActionGroup) -> some View {
+        let color: Color = {
+            if group.isDimmed { return .secondary }
+            switch group.groupStatus {
+            case .inProgress: return .yellow
+            case .queued:     return .gray
+            case .completed:
+                switch group.conclusion {
+                case "success": return .green
+                case "failure": return .red
+                default:        return .secondary
+                }
+            }
+        }()
+        Circle().fill(color).frame(width: 7, height: 7)
+    }
+
     /// Returns the status dot color for a self-hosted runner row.
     /// Offline runners are gray; online+busy runners are yellow; online+idle are green.
     private func dotColor(for runner: Runner) -> Color {
@@ -241,6 +308,7 @@ struct PopoverMainView: View {
 final class RunnerStoreObservable: ObservableObject {
     @Published var runners: [Runner] = []
     @Published var jobs: [ActiveJob] = []
+    @Published var actions: [ActionGroup] = []
     /// Initialises the observable and performs an eager reload so the view has
     /// data immediately on first render without waiting for a polling cycle.
     init() { reload() }
@@ -249,6 +317,7 @@ final class RunnerStoreObservable: ObservableObject {
         withAnimation(nil) {
             runners = RunnerStore.shared.runners
             jobs    = RunnerStore.shared.jobs
+            actions = RunnerStore.shared.actions
         }
     }
 }

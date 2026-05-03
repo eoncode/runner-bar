@@ -51,6 +51,10 @@ final class RunnerStore {
     /// Capped at 3 entries. Updated on every poll. Main-thread only.
     private(set) var jobs: [ActiveJob] = []
 
+    /// Action groups to display: live + recently completed (dimmed).
+    /// Capped at 5 entries (matches ci-dash.py MAX_GROUPS). Main-thread only.
+    private(set) var actions: [ActionGroup] = []
+
     // ⚠️ REGRESSION GUARD — completed job persistence (ref issue #54)
     // prevLiveJobs: full snapshot of the LIVE jobs from the previous poll.
     //   Used to detect vanished jobs (were live, now gone) and freeze them into cache.
@@ -64,6 +68,17 @@ final class RunnerStore {
     //   - Trimmed to newest 3 entries to cap memory.
     private var prevLiveJobs: [Int: ActiveJob] = [:]
     private var completedCache: [Int: ActiveJob] = [:]
+
+    // ── Action group persistence (mirrors completedCache pattern)
+    // prevLiveGroups: live ActionGroup snapshot from the previous poll.
+    //   Used to detect vanished groups (were live, now gone) and freeze them.
+    // actionGroupCache: persists completed groups keyed by head_sha (String).
+    //   - NEVER clear between polls.
+    //   - Key is head_sha — stable across polls even as run IDs change.
+    //   - Trimmed to newest 5 entries (ci-dash.py MAX_GROUPS = 5).
+    // ⚠️ Snapshots MUST be taken on the main thread before the background block.
+    private var prevLiveGroups: [String: ActionGroup] = [:]
+    private var actionGroupCache: [String: ActionGroup] = [:]
 
     /// The repeating 10-second poll timer. Held strongly so it is not deallocated.
     private var timer: Timer?
@@ -94,9 +109,9 @@ final class RunnerStore {
         }
     }
 
-    /// Fetches runners and active jobs for all scopes on a background thread.
+    /// Fetches runners, active jobs, and action groups for all scopes on a background thread.
     ///
-    /// Algorithm:
+    /// Algorithm (jobs):
     /// 1. Fetch runners via `fetchRunners(for:)` and enrich with local `ps aux` metrics.
     /// 2. Fetch active jobs via `fetchActiveJobs(for:)` for every scope.
     /// 3. Diff live jobs against `prevLiveJobs` to detect vanished jobs and freeze them
@@ -106,11 +121,20 @@ final class RunnerStore {
     /// 5. Trim cache to the 3 most-recently-completed jobs.
     /// 6. Build the display list: in_progress → queued → cached done (newest first),
     ///    capped at 3. This priority ensures actively-running jobs are always visible.
-    /// 7. Publish all results to `runners`, `jobs`, `completedCache`, `prevLiveJobs`
-    ///    on the main thread, then call `onChange`.
+    ///
+    /// Algorithm (action groups — mirrors jobs diff exactly):
+    /// 8. Fetch action groups via `fetchActionGroups(for:)` for every scope.
+    /// 9. Diff live groups against `prevLiveGroups` by head_sha.
+    /// 10. Vanished groups → freeze into `actionGroupCache` with `isDimmed = true`.
+    /// 11. Trim cache to 5 groups (ci-dash.py MAX_GROUPS).
+    /// 12. Publish `actions` alongside `jobs` on the main thread.
     func fetch() {
-        let snapPrev  = prevLiveJobs
-        let snapCache = completedCache
+        // ⚠️ Snapshot mutable state on the main thread BEFORE the background block.
+        //    Direct reads inside the async block are data races.
+        let snapPrev       = prevLiveJobs
+        let snapCache      = completedCache
+        let snapPrevGroups = prevLiveGroups
+        let snapGroupCache = actionGroupCache
 
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
@@ -205,13 +229,90 @@ final class RunnerStore {
             log("RunnerStore › \(inProgress.count) in_progress \(queued.count) queued | " +
                 "cache: \(newCache.count) | display: \(display.count)")
 
+            // ── Action groups
+            var allFetchedGroups: [ActionGroup] = []
+            for scope in ScopeStore.shared.scopes {
+                allFetchedGroups.append(contentsOf: fetchActionGroups(for: scope))
+            }
+
+            // Live groups = those that have at least one in_progress or queued run.
+            let liveGroups = allFetchedGroups.filter { $0.groupStatus != .completed }
+            let doneGroups = allFetchedGroups.filter { $0.groupStatus == .completed }
+            let liveGroupIDs = Set(liveGroups.map { $0.id })
+            let nowGroups = Date()
+
+            var newGroupCache = snapGroupCache
+
+            // Vanished groups: were live last poll, absent now — freeze.
+            for (sha, group) in snapPrevGroups where !liveGroupIDs.contains(sha) {
+                guard newGroupCache[sha] == nil else { continue }
+                var frozen = group
+                frozen.isDimmed = true
+                // Synthesise a last-updated time if missing.
+                if frozen.lastJobCompletedAt == nil {
+                    frozen = ActionGroup(
+                        id: frozen.id, label: frozen.label, title: frozen.title,
+                        headBranch: frozen.headBranch, repo: frozen.repo,
+                        runs: frozen.runs, jobs: frozen.jobs,
+                        firstJobStartedAt: frozen.firstJobStartedAt,
+                        lastJobCompletedAt: nowGroups,
+                        createdAt: frozen.createdAt, isDimmed: true
+                    )
+                }
+                newGroupCache[sha] = frozen
+            }
+
+            // Fresh-done groups: concluded in this poll.
+            for group in doneGroups {
+                var dimmed = group
+                dimmed.isDimmed = true
+                newGroupCache[group.id] = dimmed
+            }
+
+            // Trim to newest 5 (ci-dash.py MAX_GROUPS = 5).
+            if newGroupCache.count > 5 {
+                let sorted = newGroupCache.values.sorted {
+                    ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast) >
+                    ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
+                }
+                newGroupCache = Dictionary(
+                    uniqueKeysWithValues: sorted.prefix(5).map { ($0.id, $0) }
+                )
+            }
+
+            let newPrevLiveGroups = Dictionary(uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
+
+            // Display: in_progress → queued → cached done (newest first), max 5.
+            // Dedup: skip cache entries whose sha is already in the live list.
+            let inProgressGroups = liveGroups.filter { $0.groupStatus == .inProgress }
+            let queuedGroups     = liveGroups.filter { $0.groupStatus == .queued }
+            let cachedGroups     = newGroupCache.values.sorted {
+                ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast) >
+                ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
+            }
+            let liveGroupIDsInDisplay = Set((inProgressGroups + queuedGroups).map { $0.id })
+
+            var displayGroups: [ActionGroup] = []
+            for g in inProgressGroups                        where displayGroups.count < 5 { displayGroups.append(g) }
+            for g in queuedGroups                            where displayGroups.count < 5 { displayGroups.append(g) }
+            for g in cachedGroups
+                where displayGroups.count < 5 && !liveGroupIDsInDisplay.contains(g.id) {
+                displayGroups.append(g)
+            }
+
+            log("RunnerStore › groups: \(inProgressGroups.count) in_progress " +
+                "\(queuedGroups.count) queued | cache: \(newGroupCache.count) | display: \(displayGroups.count)")
+
             // All property writes must happen on the main thread because they are
             // observed by SwiftUI via RunnerStoreObservable (@Published properties).
             DispatchQueue.main.async {
-                self.runners        = enrichedRunners
-                self.jobs           = display
-                self.completedCache = newCache
-                self.prevLiveJobs   = newPrevLive
+                self.runners          = enrichedRunners
+                self.jobs             = display
+                self.completedCache   = newCache
+                self.prevLiveJobs     = newPrevLive
+                self.actions          = displayGroups
+                self.actionGroupCache = newGroupCache
+                self.prevLiveGroups   = newPrevLiveGroups
                 self.onChange?()
             }
         }
