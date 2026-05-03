@@ -196,7 +196,7 @@ private func prLabel(from run: RunPayload) -> String {
 /// Mirrors ci-dash.py's `group_runs()` + `enrich_group()`.
 ///
 /// Org scopes are skipped — the GitHub Jobs API requires a repo-scoped endpoint.
-func fetchActionGroups(for scope: String) -> [ActionGroup] {
+func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
         return []
@@ -259,18 +259,27 @@ func fetchActionGroups(for scope: String) -> [ActionGroup] {
                            conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
         }
 
-        // Fetch and flatten jobs for all run IDs in this group.
-        var allJobs: [ActiveJob] = []
-        var seenJobIDs = Set<Int>()
-        for runID in shaRuns.map({ $0.id }) {
-            let fetched = fetchJobsForRun(runID, scope: scope, iso: iso)
-            for job in fetched where seenJobIDs.insert(job.id).inserted {
-                allJobs.append(job)
+        // Use cached jobs if all are concluded — avoids redundant API calls (#114 Fix 2).
+        // fetchJobsForRun fires several requests per run; skipping it for groups we
+        // already know are fully done significantly reduces the call count at idle.
+        let allJobs: [ActiveJob]
+        if let cached = cache[sha],
+           !cached.jobs.isEmpty,
+           cached.jobs.allSatisfy({ $0.conclusion != nil }) {
+            allJobs = cached.jobs
+        } else {
+            var fetched: [ActiveJob] = []
+            var seenJobIDs = Set<Int>()
+            for runID in shaRuns.map({ $0.id }) {
+                for job in fetchJobsForRun(runID, scope: scope, iso: iso)
+                    where seenJobIDs.insert(job.id).inserted {
+                    fetched.append(job)
+                }
             }
+            // Sort jobs by id ascending — matches yml definition order (#101).
+            fetched.sort { $0.id < $1.id }
+            allJobs = fetched
         }
-
-        // Sort jobs by id ascending — matches yml definition order (#101).
-        allJobs.sort { $0.id < $1.id }
 
         // Derive timestamps from job data (matches enrich_group()).
         let starts = allJobs.compactMap { $0.startedAt }
@@ -352,43 +361,49 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
 
     // Second pass: re-fetch jobs whose batch data may be stale.
-    // Two independent substitution cases (fixes #107/#108):
-    //   Case 1 — conclusion resolved: use everything fresh.
-    //   Case 2 — conclusion still nil but steps are final (non-empty, no in_progress):
-    //            keep original conclusion/status, replace only the steps array.
-    // Removing `fresh.conclusion != nil` from the guard lets us always decode
-    // the fresh payload and choose the right substitution independently.
-    return initial.map { job in
+    // Capped at 3 re-fetches per run per poll to limit API call volume (#114 Fix 3).
+    // Two substitution cases (fixes #107/#108):
+    //   Case 1 — conclusion resolved: substitute the whole job.
+    //   Case 2 — conclusion still nil but steps are final: merge steps only.
+    var result      = initial
+    var refreshCount = 0
+    for i in result.indices {
+        let job = result[i]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
-        guard needsRefresh else { return job }
+        guard needsRefresh, refreshCount < 3 else { continue }
+        refreshCount += 1
         guard
             let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
             let fresh     = try? JSONDecoder().decode(JobPayload.self, from: freshData)
-        else { return job }
+        else { continue }
 
         let freshJob = makeActiveJob(from: fresh, iso: iso)
 
         // Case 1: conclusion resolved — substitute the whole job.
-        if fresh.conclusion != nil { return freshJob }
-
+        if fresh.conclusion != nil {
+            result[i] = freshJob
+            continue
+        }
         // Case 2: conclusion still lagging but steps look final — merge steps only.
         let betterSteps = !freshJob.steps.isEmpty
             && !freshJob.steps.contains { $0.status == "in_progress" }
-        guard betterSteps else { return job }
-        return ActiveJob(
-            id:          job.id,
-            name:        job.name,
-            status:      job.status,
-            conclusion:  job.conclusion,
-            startedAt:   freshJob.startedAt   ?? job.startedAt,
-            createdAt:   freshJob.createdAt   ?? job.createdAt,
-            completedAt: freshJob.completedAt ?? job.completedAt,
-            htmlUrl:     job.htmlUrl,
-            isDimmed:    job.isDimmed,
-            steps:       freshJob.steps
-        )
+        if betterSteps {
+            result[i] = ActiveJob(
+                id:          job.id,
+                name:        job.name,
+                status:      job.status,
+                conclusion:  job.conclusion,
+                startedAt:   freshJob.startedAt   ?? job.startedAt,
+                createdAt:   freshJob.createdAt   ?? job.createdAt,
+                completedAt: freshJob.completedAt ?? job.completedAt,
+                htmlUrl:     job.htmlUrl,
+                isDimmed:    job.isDimmed,
+                steps:       freshJob.steps
+            )
+        }
     }
+    return result
 }
 
 /// Lower number = higher display priority for sort.

@@ -85,6 +85,11 @@ struct ActiveJob: Identifiable {
 
 // MARK: - gh API
 
+/// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.
+/// Reset to `false` at the start of each `RunnerStore.fetch()` poll cycle.
+/// Intentionally non-atomic: a one-cycle lag in the UI warning is acceptable.
+var ghIsRateLimited: Bool = false
+
 /// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
 /// Internal so `ActionGroup.swift` can reuse it without duplicating networking code.
 /// Returns `nil` on launch failure, timeout, or empty response.
@@ -121,6 +126,15 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
     log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    // Detect rate limit — gh api returns a JSON error body with a "status" field.
+    // Only set the flag to true here; reset happens at the top of each fetch() cycle.
+    if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
+       let status = json["status"] as? String,
+       status == "403" || status == "429" {
+        ghIsRateLimited = true
+        log("ghAPI › rate limit (\(status)): \(endpoint)")
+        return nil
+    }
     return outputData.isEmpty ? nil : outputData
 }
 

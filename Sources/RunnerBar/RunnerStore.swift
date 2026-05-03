@@ -80,7 +80,12 @@ final class RunnerStore {
     private var prevLiveGroups: [String: ActionGroup] = [:]
     private var actionGroupCache: [String: ActionGroup] = [:]
 
-    /// The repeating 10-second poll timer. Held strongly so it is not deallocated.
+    /// True when the most recent poll cycle detected a GitHub rate-limit response.
+    /// Drives the 60s backoff interval and the UI warning row.
+    private(set) var isRateLimited = false
+
+    /// One-shot adaptive poll timer. Rescheduled by `scheduleTimer()` after each fetch.
+    /// Held strongly so it is not deallocated between polls.
     private var timer: Timer?
 
     /// Called on the main thread after each poll completes.
@@ -97,14 +102,29 @@ final class RunnerStore {
         return .someOffline
     }
 
-    /// Starts (or restarts) the 10-second polling timer and fires an immediate fetch.
-    /// Invalidates any existing timer first to prevent stacked timers when called
-    /// multiple times (e.g. each time a new scope is added via `submitScope()`).
+    /// Starts (or restarts) the polling timer and fires an immediate fetch.
+    /// Invalidates any existing timer first. The next timer is scheduled adaptively
+    /// inside `fetch()`’s main.async block once results are available.
     func start() {
         log("RunnerStore › start")
-        timer?.invalidate()  // ⚠️ Always invalidate before creating a new timer — prevents stacking
+        timer?.invalidate()
         fetch()
-        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+    }
+
+    /// Schedules the next one-shot poll timer using an adaptive interval:
+    /// - 10 s when any job or group is actively running (in_progress / queued)
+    /// - 60 s when idle or rate-limited
+    ///
+    /// Always invalidates the previous timer first so calling this more than once
+    /// cannot accumulate stacked timers.
+    /// Must be called on the main thread (reads main-thread-owned state).
+    private func scheduleTimer() {
+        timer?.invalidate()
+        let hasActive = jobs.contains    { $0.status == "in_progress" || $0.status == "queued" }
+                     || actions.contains { $0.groupStatus == .inProgress || $0.groupStatus == .queued }
+        let interval: TimeInterval = (isRateLimited || !hasActive) ? 60 : 10
+        log("RunnerStore › next poll in \(Int(interval))s (active=\(hasActive) rateLimited=\(isRateLimited))")
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             self?.fetch()
         }
     }
@@ -138,6 +158,10 @@ final class RunnerStore {
 
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self else { return }
+
+            // Reset rate-limit flag for this poll cycle.
+            // ghAPI() will set it back to true if any call gets a 403/429.
+            ghIsRateLimited = false
 
             // ── Runners
             var allRunners: [Runner] = []
@@ -252,7 +276,7 @@ final class RunnerStore {
             // ── Action groups
             var allFetchedGroups: [ActionGroup] = []
             for scope in ScopeStore.shared.scopes {
-                allFetchedGroups.append(contentsOf: fetchActionGroups(for: scope))
+                allFetchedGroups.append(contentsOf: fetchActionGroups(for: scope, cache: snapGroupCache))
             }
 
             // Live groups = those that have at least one in_progress or queued run.
@@ -388,7 +412,9 @@ final class RunnerStore {
                 self.actions          = mergedDisplayGroups
                 self.actionGroupCache = mergedGroupCache
                 self.prevLiveGroups   = newPrevLiveGroups
+                self.isRateLimited    = ghIsRateLimited
                 self.onChange?()
+                self.scheduleTimer()
             }
         }
     }

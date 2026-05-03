@@ -61,6 +61,18 @@ struct PopoverMainView: View {
 
             Divider()
 
+            // ── Rate limit warning (visible only when GitHub API quota is exhausted)
+            if store.isRateLimited {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.yellow).font(.caption)
+                    Text("GitHub rate limit reached — pausing polls")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 4)  // ⚠️ RULE 2
+                Divider()
+            }
+
             // ── System
             Text("System")
                 .font(.caption).foregroundColor(.secondary)
@@ -309,15 +321,17 @@ final class RunnerStoreObservable: ObservableObject {
     @Published var runners: [Runner] = []
     @Published var jobs: [ActiveJob] = []
     @Published var actions: [ActionGroup] = []
+    @Published var isRateLimited: Bool = false
     /// Initialises the observable and performs an eager reload so the view has
     /// data immediately on first render without waiting for a polling cycle.
     init() { reload() }
     func reload() {
         // ❌ NEVER add objectWillChange.send() here — @Published handles it
         withAnimation(nil) {
-            runners = RunnerStore.shared.runners
-            jobs    = RunnerStore.shared.jobs
-            actions = RunnerStore.shared.actions
+            runners       = RunnerStore.shared.runners
+            jobs          = RunnerStore.shared.jobs
+            actions       = RunnerStore.shared.actions
+            isRateLimited = RunnerStore.shared.isRateLimited
         }
     }
 }
