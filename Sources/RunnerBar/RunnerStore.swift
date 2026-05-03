@@ -186,8 +186,8 @@ final class RunnerStore {
                 allFetched.append(contentsOf: fetchActiveJobs(for: scope))
             }
 
-            let liveJobs  = allFetched.filter { $0.conclusion == nil }
-            let freshDone = allFetched.filter { $0.conclusion != nil }
+            let liveJobs  = allFetched.filter { $0.conclusion == nil && $0.status != "completed" }
+            let freshDone = allFetched.filter { $0.conclusion != nil || $0.status == "completed" }
             let liveIDs   = Set(liveJobs.map { $0.id })
             let now       = Date()
 
@@ -221,10 +221,10 @@ final class RunnerStore {
                     id:          job.id,
                     name:        job.name,
                     status:      "completed",
-                    conclusion:  job.conclusion,
+                    conclusion:  job.conclusion ?? "success",
                     startedAt:   job.startedAt,
                     createdAt:   job.createdAt,
-                    completedAt: job.completedAt ?? now,
+                    completedAt: job.completedAt ?? Date(),
                     htmlUrl:     job.htmlUrl,
                     isDimmed:    true,
                     steps:       job.steps
@@ -383,6 +383,22 @@ final class RunnerStore {
                     // GitHub-hosted runner jobs can have a timestamp without a conclusion
                     // when the API lags. Treat as success so the row stops lingering.
                     if job.conclusion == nil, let _ = job.completedAt {
+                        return ActiveJob(
+                            id:          job.id,
+                            name:        job.name,
+                            status:      "completed",
+                            conclusion:  "success",
+                            startedAt:   job.startedAt,
+                            createdAt:   job.createdAt,
+                            completedAt: job.completedAt,
+                            htmlUrl:     job.htmlUrl,
+                            isDimmed:    false,
+                            steps:       job.steps
+                        )
+                    }
+                    // Tertiary: status already "completed" but conclusion/completedAt still nil (API lag).
+                    // GitHub sets conclusion promptly for failures/cancellations, so nil here means success.
+                    if job.conclusion == nil, job.status == "completed" {
                         return ActiveJob(
                             id:          job.id,
                             name:        job.name,

@@ -211,7 +211,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
+                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                self.navigate(to: self.actionDetailView(group: latest))
             }
         ))
     }
