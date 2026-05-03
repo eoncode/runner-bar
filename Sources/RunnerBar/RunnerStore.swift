@@ -306,6 +306,39 @@ final class RunnerStore {
             log("RunnerStore › groups: \(inProgressGroups.count) in_progress " +
                 "\(queuedGroups.count) queued | cache: \(newGroupCache.count) | display: \(displayGroups.count)")
 
+            // ── Cross-reference group jobs with completedCache (issue #96)
+            // The GitHub Jobs API lags: fetchJobsForRun can return
+            // status:"in_progress", conclusion:nil for a job that has already
+            // concluded. The Active Jobs path already captured the correct
+            // conclusion in newCache via vanish-freeze. Substitute stale entries
+            // here so ActionDetailView shows correct statuses immediately.
+            //
+            // isDimmed is kept false: completed jobs inside a live group should
+            // not be greyed out — they should show their conclusion in full colour.
+            func enrichGroupJobs(_ jobs: [ActiveJob]) -> [ActiveJob] {
+                jobs.map { job in
+                    guard job.conclusion == nil,
+                          let hit = newCache[job.id],
+                          hit.conclusion != nil
+                    else { return job }
+                    return ActiveJob(
+                        id:          job.id,
+                        name:        job.name,
+                        status:      hit.status,
+                        conclusion:  hit.conclusion,
+                        startedAt:   job.startedAt   ?? hit.startedAt,
+                        createdAt:   job.createdAt   ?? hit.createdAt,
+                        completedAt: hit.completedAt ?? job.completedAt,
+                        htmlUrl:     job.htmlUrl     ?? hit.htmlUrl,
+                        isDimmed:    false,
+                        steps:       job.steps.isEmpty ? hit.steps : job.steps
+                    )
+                }
+            }
+
+            let mergedDisplayGroups = displayGroups.map    { $0.withJobs(enrichGroupJobs($0.jobs)) }
+            let mergedGroupCache    = newGroupCache.mapValues { $0.withJobs(enrichGroupJobs($0.jobs)) }
+
             // All property writes must happen on the main thread because they are
             // observed by SwiftUI via RunnerStoreObservable (@Published properties).
             DispatchQueue.main.async {
@@ -313,8 +346,8 @@ final class RunnerStore {
                 self.jobs             = display
                 self.completedCache   = newCache
                 self.prevLiveJobs     = newPrevLive
-                self.actions          = displayGroups
-                self.actionGroupCache = newGroupCache
+                self.actions          = mergedDisplayGroups
+                self.actionGroupCache = mergedGroupCache
                 self.prevLiveGroups   = newPrevLiveGroups
                 self.onChange?()
             }

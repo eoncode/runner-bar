@@ -60,6 +60,19 @@ struct ActionGroup: Identifiable {
     /// Set to `true` when frozen into `actionGroupCache` after completion.
     var isDimmed: Bool = false
 
+    /// Returns a copy of this group with a replacement jobs array.
+    /// Used in `RunnerStore` to enrich job data without reconstructing the
+    /// full struct at every call site.
+    func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
+        ActionGroup(
+            id: id, label: label, title: title, headBranch: headBranch,
+            repo: repo, runs: runs, jobs: newJobs,
+            firstJobStartedAt: firstJobStartedAt,
+            lastJobCompletedAt: lastJobCompletedAt,
+            createdAt: createdAt, isDimmed: isDimmed
+        )
+    }
+
     // MARK: - Derived properties (match ci-dash.py enrich_group / status_icon)
 
     /// Group status: in_progress if any run is running; queued if any queued
