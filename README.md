@@ -49,8 +49,8 @@ curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 
 **To test branches:**    
 ```
-`git fetch && git checkout feature/actions-section && git pull`
-`bash build.sh && pkill RunnerBar; sleep 1 && open dist/RunnerBar.app`  
+git fetch && git checkout feature/actions-section && git pull
+bash build.sh && pkill RunnerBar; sleep 1 && open dist/RunnerBar.app 
 ```
 
  
