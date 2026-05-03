@@ -171,6 +171,8 @@ final class RunnerStore {
 
             // ⚠️ CALLSITE 2 of 3 — Vanished jobs: were live last poll, gone now.
             // Freeze with last known data. completedAt defaults to now if API had none.
+            // steps: forward whatever the live snapshot had — backfill loop below
+            // will re-fetch from the single-job endpoint if steps are still empty (#110/#111).
             for (id, job) in snapPrev where !liveIDs.contains(id) {
                 guard newCache[id] == nil else { continue }
                 newCache[id] = ActiveJob(
@@ -182,12 +184,14 @@ final class RunnerStore {
                     createdAt:   job.createdAt,
                     completedAt: job.completedAt ?? now,
                     htmlUrl:     job.htmlUrl,
-                    isDimmed:    true
+                    isDimmed:    true,
+                    steps:       job.steps
                 )
             }
 
             // ⚠️ CALLSITE 3 of 3 — Fresh done: jobs with a conclusion inside active runs.
             // Overwrite cache entry with real conclusion data from the API.
+            // steps: fetchActiveJobs already populated steps for live jobs; forward them.
             for job in freshDone {
                 newCache[job.id] = ActiveJob(
                     id:          job.id,
@@ -198,7 +202,8 @@ final class RunnerStore {
                     createdAt:   job.createdAt,
                     completedAt: job.completedAt ?? now,
                     htmlUrl:     job.htmlUrl,
-                    isDimmed:    true
+                    isDimmed:    true,
+                    steps:       job.steps
                 )
             }
 
@@ -209,6 +214,21 @@ final class RunnerStore {
                 newCache = Dictionary(
                     uniqueKeysWithValues: sorted.prefix(3).map { ($0.id, $0) }
                 )
+            }
+
+            // Backfill steps for cached jobs that concluded with empty steps (#110/#111).
+            // Fires once per broken entry via the single-job endpoint; the steps.isEmpty
+            // guard skips the entry on subsequent polls once steps are populated.
+            let backfillIso = ISO8601DateFormatter()
+            for id in Array(newCache.keys) {
+                let cached = newCache[id]!
+                guard cached.conclusion != nil, cached.steps.isEmpty,
+                      let scope    = scopeFromHtmlUrl(cached.htmlUrl),
+                      let data     = ghAPI("repos/\(scope)/actions/jobs/\(id)"),
+                      let fresh    = try? JSONDecoder().decode(JobPayload.self, from: data),
+                      let rawSteps = fresh.steps, !rawSteps.isEmpty
+                else { continue }
+                newCache[id] = makeActiveJob(from: fresh, iso: backfillIso, isDimmed: true)
             }
 
             let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })

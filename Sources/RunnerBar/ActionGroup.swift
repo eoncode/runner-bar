@@ -307,7 +307,7 @@ func fetchActionGroups(for scope: String) -> [ActionGroup] {
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
 /// Shared by the initial batch map and the second-pass re-fetch so both
 /// paths produce identical structs — prevents drift between the two (#102/#103).
-private func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
+func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
                             isDimmed: Bool = false) -> ActiveJob {
     let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
         JobStep(

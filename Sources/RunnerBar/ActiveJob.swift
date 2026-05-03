@@ -186,6 +186,20 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     return jobs
 }
 
+// MARK: - URL helpers
+
+/// Extracts the "owner/repo" scope from a GitHub Actions job HTML URL.
+/// Pattern: https://github.com/owner/repo/actions/runs/...
+/// Returns nil if the URL is missing or has fewer than 3 path components.
+func scopeFromHtmlUrl(_ urlString: String?) -> String? {
+    guard let urlString,
+          let url = URL(string: urlString),
+          url.pathComponents.count >= 3
+    else { return nil }
+    let c = url.pathComponents  // ["/", "owner", "repo", "actions", ...]
+    return "\(c[1])/\(c[2])"
+}
+
 // MARK: - Codable helpers
 
 struct WorkflowRunsResponse: Codable {
