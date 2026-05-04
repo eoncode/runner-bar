@@ -17,7 +17,12 @@
 
 1. Easily see which runners are offline, online, or buzy
 2. Easily add / remove or pause your runners
-3. Easily look through sessions, individual jobs and action logs. 
+3. Easily look through sessions, individual jobs and action logs.
+
+## Features:
+- Copy action logs to clipboard at every level, for quick resolvment in LLM's etc: action (all jobs), job (all steps), step (single step)
+- Re-run or cancel action sessions / singular jobs
+- Access action YML data and sha of jobs from the UI
 
 ## Install
 
