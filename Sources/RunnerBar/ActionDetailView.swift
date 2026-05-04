@@ -52,6 +52,19 @@ struct ActionDetailView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
+                ReRunButton(
+                    action: { completion in
+                        let scope = group.repo
+                        let runIDs = group.runs.map { $0.id }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let ok = runIDs.allSatisfy { runID in
+                                ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
+                            }
+                            completion(ok)
+                        }
+                    },
+                    isDisabled: group.groupStatus == .inProgress
+                )
                 LogCopyButton(
                     fetch: { completion in
                         let g = group
