@@ -85,6 +85,16 @@ struct JobDetailView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()  // ⚠️ load-bearing — do NOT remove (see above)
+                LogCopyButton(
+                    fetch: { completion in
+                        let jobID = job.id
+                        let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            completion(fetchJobLog(jobID: jobID, scope: scope))
+                        }
+                    },
+                    isDisabled: false
+                )
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)

@@ -60,6 +60,13 @@ struct StepLogView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()  // ⚠️ load-bearing — do NOT remove
+                LogCopyButton(
+                    fetch: { completion in
+                        let text = logText
+                        DispatchQueue.global(qos: .userInitiated).async { completion(text) }
+                    },
+                    isDisabled: logText == nil || logText?.isEmpty == true
+                )
                 Text(step.elapsed)
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
