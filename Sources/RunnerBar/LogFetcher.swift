@@ -7,9 +7,8 @@ import Foundation
 /// instead of the default JSON wrapper. Mirrors the pattern used by
 /// `fetchStepLog` in GitHub.swift but returns raw `Data` for binary support.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
-    guard let gh = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-        log("ghRaw › gh not found in \(candidates)")
+    guard let gh = ghBinaryPath() else {
+        log("ghRaw › gh not found")
         return nil
     }
     let task = Process()

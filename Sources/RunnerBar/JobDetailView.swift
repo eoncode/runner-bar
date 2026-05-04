@@ -89,6 +89,7 @@ struct JobDetailView: View {
                     action: { completion in
                         let jobID = job.id
                         let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
+                        if scope.isEmpty { log("ReRunButton › could not derive scope from htmlUrl: \(job.htmlUrl)") }
                         DispatchQueue.global(qos: .userInitiated).async {
                             let ok = scope.contains("/") && ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
                             completion(ok)

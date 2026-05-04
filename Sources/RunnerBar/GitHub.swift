@@ -78,9 +78,8 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         return nil
     }
 
-    let gh = "/opt/homebrew/bin/gh"
-    guard FileManager.default.isExecutableFile(atPath: gh) else {
-        log("fetchStepLog › gh not found at \(gh)")
+    guard let gh = ghBinaryPath() else {
+        log("fetchStepLog › gh not found")
         return nil
     }
 
@@ -192,6 +191,15 @@ private func stripAnsi(_ input: String) -> String {
     )
 }
 
+// MARK: - Shared gh binary path
+
+/// Returns the first executable `gh` binary found on common install paths.
+/// Covers Apple Silicon Homebrew (/opt/homebrew), Intel Homebrew (/usr/local), and system (/usr/bin).
+func ghBinaryPath() -> String? {
+    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
+    return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+}
+
 // MARK: - POST helper
 
 /// Fires a POST to the GitHub API via `gh api --method POST`.
@@ -199,8 +207,7 @@ private func stripAnsi(_ input: String) -> String {
 /// Must be called from a background thread.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
-    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
-    guard let gh = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+    guard let gh = ghBinaryPath() else {
         log("ghPost › gh not found")
         return false
     }
