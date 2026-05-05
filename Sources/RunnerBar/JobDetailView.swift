@@ -97,6 +97,21 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
                 )
+                CancelButton(
+                    action: { completion in
+                        let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
+                        let runID = runIDFromHtmlUrl(job.htmlUrl)
+                        guard scope.contains("/"), let runID else {
+                            log("CancelButton › could not derive scope/runID from htmlUrl: \(job.htmlUrl ?? "nil")")
+                            completion(false)
+                            return
+                        }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            completion(cancelRun(runID: runID, scope: scope))
+                        }
+                    },
+                    isDisabled: job.status != "in_progress" && job.status != "queued"
+                )
                 LogCopyButton(
                     fetch: { completion in
                         let jobID = job.id

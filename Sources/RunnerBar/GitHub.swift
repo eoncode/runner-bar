@@ -231,3 +231,15 @@ func ghPost(_ endpoint: String) -> Bool {
     log("ghPost › \(endpoint) exit \(task.terminationStatus)")
     return task.terminationStatus == 0
 }
+
+// MARK: - Cancel run
+
+/// Cancels a workflow run via POST .../cancel.
+/// Returns true on HTTP 202 (accepted), false on error or 409 (already completed).
+/// Must be called from a background thread.
+@discardableResult
+func cancelRun(runID: Int, scope: String) -> Bool {
+    let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
+    log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
+    return result
+}
