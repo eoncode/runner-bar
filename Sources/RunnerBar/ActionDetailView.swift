@@ -65,6 +65,19 @@ struct ActionDetailView: View {
                     },
                     isDisabled: group.groupStatus == .inProgress
                 )
+                CancelButton(
+                    action: { completion in
+                        let scope = group.repo
+                        let runIDs = group.runs.map { $0.id }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let ok = runIDs.allSatisfy { runID in
+                                cancelRun(runID: runID, scope: scope)
+                            }
+                            completion(ok)
+                        }
+                    },
+                    isDisabled: group.groupStatus != .inProgress
+                )
                 LogCopyButton(
                     fetch: { completion in
                         let g = group

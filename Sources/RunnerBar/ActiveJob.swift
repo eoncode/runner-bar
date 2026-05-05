@@ -214,6 +214,20 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     return "\(c[1])/\(c[2])"
 }
 
+/// Extracts the workflow run ID from a GitHub Actions job HTML URL.
+/// URL pattern: https://github.com/{owner}/{repo}/actions/runs/{run_id}/jobs/{job_id}
+/// Returns nil for nil or malformed URLs.
+func runIDFromHtmlUrl(_ url: String?) -> Int? {
+    guard let url else { return nil }
+    let parts = url.components(separatedBy: "/")
+    for (i, part) in parts.enumerated() {
+        if part == "runs", i + 1 < parts.count {
+            return Int(parts[i + 1])
+        }
+    }
+    return nil
+}
+
 // MARK: - Codable helpers
 
 struct WorkflowRunsResponse: Codable {
