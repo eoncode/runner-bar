@@ -15,18 +15,15 @@ struct Runner: Codable, Identifiable {
     /// `true` when the runner is currently executing a job.
     /// A busy+online runner shows a yellow dot in the UI.
     let busy: Bool
-
     /// CPU/memory utilisation from the local `ps aux` snapshot.
     /// `nil` if no matching `Runner.Worker` process was found for this runner's slot.
     /// Populated by `RunnerStore.fetch()` after the API response is decoded —
     /// not present in the JSON payload.
-    var metrics: RunnerMetrics? = nil
+    var metrics: RunnerMetrics?
 
     /// Excludes `metrics` from JSON decoding — it is assigned locally after fetch,
     /// not returned by the GitHub API.
-    enum CodingKeys: String, CodingKey {
-        case id, name, status, busy
-    }
+    enum CodingKeys: String, CodingKey { case id, name, status, busy }
 
     /// A single-line status string for display in the runner list row.
     ///
@@ -37,11 +34,9 @@ struct Runner: Codable, Identifiable {
     var displayStatus: String {
         if status == "offline" { return "offline" }
         let label = busy ? "active" : "idle"
-        guard let m = metrics else {
-            return "\(label) (CPU: — MEM: —)"
-        }
-        let cpu = String(format: "%.1f", m.cpu)
-        let mem = String(format: "%.1f", m.mem)
+        guard let runnerMetrics = metrics else { return "\(label) (CPU: — MEM: —)" }
+        let cpu = String(format: "%.1f", runnerMetrics.cpu)
+        let mem = String(format: "%.1f", runnerMetrics.mem)
         return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"
     }
 }
