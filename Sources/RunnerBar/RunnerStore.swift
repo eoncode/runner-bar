@@ -385,10 +385,10 @@ final class RunnerStore {
                             name: job.name,
                             status: hit.status,
                             conclusion: hit.conclusion,
-                            startedAt: job.startedAt   ?? hit.startedAt,
-                            createdAt: job.createdAt   ?? hit.createdAt,
+                            startedAt: job.startedAt ?? hit.startedAt,
+                            createdAt: job.createdAt ?? hit.createdAt,
                             completedAt: hit.completedAt ?? job.completedAt,
-                            htmlUrl: job.htmlUrl     ?? hit.htmlUrl,
+                            htmlUrl: job.htmlUrl ?? hit.htmlUrl,
                             isDimmed: false,
                             steps: job.steps.isEmpty ? hit.steps : job.steps
                         )

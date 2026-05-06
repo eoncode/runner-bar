@@ -128,7 +128,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     private func cpuPercent() -> Double {
         var cpuInfo: processor_info_array_t?
-        var msgType  = natural_t(0)              // receives the number of logical CPUs
+        var msgType = natural_t(0)              // receives the number of logical CPUs
         var numCPUInfo = mach_msg_type_number_t(0) // receives the buffer element count
 
         guard host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO,
@@ -147,8 +147,8 @@ final class SystemStatsViewModel: ObservableObject {
             let s  = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
             let id = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
             let n  = Double(info[Int(base) + Int(CPU_STATE_NICE)])
-            userTicks  += u + n          // nice is unprioritised user work
-            sysTicks   += s
+            userTicks += u + n          // nice is unprioritised user work
+            sysTicks += s
             totalTicks += u + s + id + n
         }
 
@@ -158,8 +158,8 @@ final class SystemStatsViewModel: ObservableObject {
                       vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<integer_t>.stride))
 
         // Delta against previous sample — this is the activity in the last 2 s.
-        let dUser  = userTicks  - prevTicks.user
-        let dSys   = sysTicks   - prevTicks.sys
+        let dUser  = userTicks - prevTicks.user
+        let dSys   = sysTicks - prevTicks.sys
         let dTotal = totalTicks - prevTicks.total
 
         // Save current cumulative totals for next delta.
@@ -264,7 +264,7 @@ final class SystemStatsViewModel: ObservableObject {
         }
 
         let total   = Double(totalBytes) / gb
-        let free    = Double(freeBytes)  / gb
+        let free    = Double(freeBytes) / gb
         let used    = total - free
         let freePct = total > 0 ? (free / total) * 100 : 100
 

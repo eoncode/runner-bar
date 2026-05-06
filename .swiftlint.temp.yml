@@ -1,5 +1,5 @@
 only_rules:
-  - opening_brace
+  - operator_usage_whitespace
 included:
   - Sources
 excluded:

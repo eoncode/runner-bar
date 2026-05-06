@@ -376,7 +376,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
     // Two substitution cases (fixes #107/#108):
     //   Case 1 — conclusion resolved: substitute the whole job.
     //   Case 2 — conclusion still nil but steps are final: merge steps only.
-    var result      = initial
+    var result = initial
     var refreshCount = 0
     for i in result.indices {
         let job = result[i]
@@ -405,8 +405,8 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
                 name: job.name,
                 status: job.status,
                 conclusion: job.conclusion,
-                startedAt: freshJob.startedAt   ?? job.startedAt,
-                createdAt: freshJob.createdAt   ?? job.createdAt,
+                startedAt: freshJob.startedAt ?? job.startedAt,
+                createdAt: freshJob.createdAt ?? job.createdAt,
                 completedAt: freshJob.completedAt ?? job.completedAt,
                 htmlUrl: job.htmlUrl,
                 isDimmed: job.isDimmed,
