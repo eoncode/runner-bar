@@ -86,10 +86,8 @@ struct ActionGroup: Identifiable {
     /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
         // Override: all jobs done → completed, regardless of run API lag.
-        // Use any-conclusion count (not jobsDone, which is success+skipped only) so
-        // a single failed job still triggers the all-done path.
-        if jobsTotal > 0,
-           jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed }
+        let concludedCount = jobs.filter { $0.conclusion != nil }.count
+        if jobsTotal > 0, concludedCount == jobsTotal { return .completed }
         if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
         if runs.contains(where: { $0.status == "queued" }) { return .queued }
         return .completed
@@ -120,8 +118,8 @@ struct ActionGroup: Identifiable {
     /// Name of the first in-progress job, or first queued, or "—".
     /// Mirrors ci-dash.py's `current` field in `enrich_group()`.
     var currentJobName: String {
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
+        if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
         return "—"
     }
 
@@ -131,17 +129,19 @@ struct ActionGroup: Identifiable {
     var elapsed: String {
         if let start = firstJobStartedAt {
             let end = lastJobCompletedAt ?? Date()
-            let sec = Int(end.timeIntervalSince(start))
-            guard sec >= 0 else { return "00:00" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            let totalSec = Int(end.timeIntervalSince(start))
+            guard totalSec >= 0 else { return "00:00" }
+            let minutes = totalSec / 60
+            let seconds = totalSec % 60
+            return String(format: "%02d:%02d", minutes, seconds)
         }
         // Jobs not yet started — use run creation time as rough proxy.
         guard let start = createdAt else { return "00:00" }
-        let sec = Int(Date().timeIntervalSince(start))
-        guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let totalSec = Int(Date().timeIntervalSince(start))
+        guard totalSec >= 0 else { return "00:00" }
+        let minutes = totalSec / 60
+        let seconds = totalSec % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 
@@ -168,14 +168,14 @@ private struct RunPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case headBranch    = "head_branch"
-        case headSha       = "head_sha"
-        case displayTitle  = "display_title"
-        case createdAt     = "created_at"
-        case updatedAt     = "updated_at"
-        case htmlUrl       = "html_url"
-        case headCommit    = "head_commit"
-        case pullRequests  = "pull_requests"
+        case headBranch   = "head_branch"
+        case headSha      = "head_sha"
+        case displayTitle = "display_title"
+        case createdAt    = "created_at"
+        case updatedAt    = "updated_at"
+        case htmlUrl      = "html_url"
+        case headCommit   = "head_commit"
+        case pullRequests = "pull_requests"
     }
 }
 
@@ -188,7 +188,7 @@ private struct PRRef: Codable { let number: Int }
 /// Priority: PR number → branch-embedded number → sha[:7].
 /// Mirrors ci-dash.py's `pr_label_from_run()`.
 private func prLabel(from run: RunPayload) -> String {
-    if let pr = run.pullRequests?.first { return "#\(pr.number)" }
+    if let pullRequest = run.pullRequests?.first { return "#\(pullRequest.number)" }
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
         let digits = branch[range].filter { $0.isNumber }
@@ -251,75 +251,97 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
     // Build ActionGroup for each sha bucket.
     var groups: [ActionGroup] = bySha.map { sha, shaRuns in
-        // Representative run = most recently created.
-        let rep = shaRuns.sorted {
-            ($0.createdAt ?? "") > ($1.createdAt ?? "")
-        }.first!
-
-        let label = prLabel(from: rep)
-
-        // Title: prefer display_title → head_commit.message first line → sha[:7].
-        let rawTitle = rep.displayTitle
-            ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
-            ?? String(sha.prefix(7))
-        let title = String(rawTitle.prefix(40))
-
-        let runs: [WorkflowRunRef] = shaRuns.map {
-            WorkflowRunRef(id: $0.id, name: $0.name, status: $0.status,
-                           conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
-        }
-
-        // Use cached jobs if all are concluded — avoids redundant API calls (#114 Fix 2).
-        // fetchJobsForRun fires several requests per run; skipping it for groups we
-        // already know are fully done significantly reduces the call count at idle.
-        let allJobs: [ActiveJob]
-        if let cached = cache[sha],
-           !cached.jobs.isEmpty,
-           cached.jobs.allSatisfy({ $0.conclusion != nil }) &&
-           !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
-            allJobs = cached.jobs
-        } else {
-            var fetched: [ActiveJob] = []
-            var seenJobIDs = Set<Int>()
-            for runID in shaRuns.map({ $0.id }) {
-                for job in fetchJobsForRun(runID, scope: scope, iso: iso)
-                    where seenJobIDs.insert(job.id).inserted {
-                    fetched.append(job)
-                }
-            }
-            // Sort jobs by id ascending — matches yml definition order (#101).
-            fetched.sort { $0.id < $1.id }
-            allJobs = fetched
-        }
-
-        // Derive timestamps from job data (matches enrich_group()).
-        let starts = allJobs.compactMap { $0.startedAt }
-        let ends   = allJobs.compactMap { $0.completedAt }
-
-        return ActionGroup(
-            headSha:             sha,
-            label:               label,
-            title:               title,
-            headBranch:          rep.headBranch,
-            repo:                scope,
-            runs:                runs,
-            jobs:                allJobs,
-            firstJobStartedAt:   starts.min(),
-            lastJobCompletedAt:  ends.max(),
-            createdAt:           rep.createdAt.flatMap { iso.date(from: $0) }
-        )
+        buildActionGroup(sha: sha, shaRuns: shaRuns, iso: iso, cache: cache, scope: scope)
     }
 
     // Sort: active first (in_progress → queued), then done, each sub-group newest first.
-    groups.sort { a, b in
-        let aPriority = statusPriority(a.groupStatus)
-        let bPriority = statusPriority(b.groupStatus)
-        if aPriority != bPriority { return aPriority < bPriority }
-        return (a.createdAt ?? .distantPast) > (b.createdAt ?? .distantPast)
+    groups.sort { groupA, groupB in
+        let priorityA = statusPriority(groupA.groupStatus)
+        let priorityB = statusPriority(groupB.groupStatus)
+        if priorityA != priorityB { return priorityA < priorityB }
+        return (groupA.createdAt ?? .distantPast) > (groupB.createdAt ?? .distantPast)
     }
 
     log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
     return groups
+}
+
+/// Builds a single `ActionGroup` from a sha bucket of run payloads.
+/// Extracted from `fetchActionGroups` to reduce its cyclomatic complexity.
+private func buildActionGroup(
+    sha: String,
+    shaRuns: [RunPayload],
+    iso: ISO8601DateFormatter,
+    cache: [String: ActionGroup],
+    scope: String
+) -> ActionGroup {
+    // Representative run = most recently created.
+    let rep = shaRuns.sorted {
+        ($0.createdAt ?? "") > ($1.createdAt ?? "")
+    }.first! // swiftlint:disable:this force_unwrapping
+
+    let label = prLabel(from: rep)
+
+    // Title: prefer display_title → head_commit.message first line → sha[:7].
+    let rawTitle = rep.displayTitle
+        ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
+        ?? String(sha.prefix(7))
+    let title = String(rawTitle.prefix(40))
+
+    let runs: [WorkflowRunRef] = shaRuns.map {
+        WorkflowRunRef(
+            id: $0.id, name: $0.name, status: $0.status,
+            conclusion: $0.conclusion, htmlUrl: $0.htmlUrl
+        )
+    }
+
+    // Use cached jobs if all are concluded — avoids redundant API calls (#114 Fix 2).
+    let allJobs = resolveJobs(sha: sha, shaRuns: shaRuns, cache: cache, iso: iso, scope: scope)
+
+    // Derive timestamps from job data (matches enrich_group()).
+    let starts = allJobs.compactMap { $0.startedAt }
+    let ends   = allJobs.compactMap { $0.completedAt }
+
+    return ActionGroup(
+        headSha:            sha,
+        label:              label,
+        title:              title,
+        headBranch:         rep.headBranch,
+        repo:               scope,
+        runs:               runs,
+        jobs:               allJobs,
+        firstJobStartedAt:  starts.min(),
+        lastJobCompletedAt: ends.max(),
+        createdAt:          rep.createdAt.flatMap { iso.date(from: $0) }
+    )
+}
+
+/// Returns the job list for a group: from cache when all jobs are concluded,
+/// otherwise fetches fresh from the API.
+private func resolveJobs(
+    sha: String,
+    shaRuns: [RunPayload],
+    cache: [String: ActionGroup],
+    iso: ISO8601DateFormatter,
+    scope: String
+) -> [ActiveJob] {
+    if let cached = cache[sha],
+       !cached.jobs.isEmpty,
+       cached.jobs.allSatisfy({ $0.conclusion != nil }),
+       !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
+        return cached.jobs
+    }
+    var fetched: [ActiveJob] = []
+    var seenJobIDs = Set<Int>()
+    for runID in shaRuns.map({ $0.id }) {
+        for job in fetchJobsForRun(runID, scope: scope, iso: iso)
+            where seenJobIDs.insert(job.id).inserted {
+            fetched.append(job)
+        }
+    }
+    // Sort jobs by id ascending — matches yml definition order (#101).
+    fetched.sort { $0.id < $1.id }
+    return fetched
 }
 
 // MARK: - Private helpers
@@ -327,27 +349,30 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
 /// Shared by the initial batch map and the second-pass re-fetch so both
 /// paths produce identical structs — prevents drift between the two (#102/#103).
-func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
-                            isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+func makeActiveJob(
+    from payload: JobPayload,
+    iso: ISO8601DateFormatter,
+    isDimmed: Bool = false
+) -> ActiveJob {
+    let steps: [JobStep] = (payload.steps ?? []).enumerated().map { idx, stepPayload in
         JobStep(
             id:          idx + 1,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+            name:        stepPayload.name,
+            status:      stepPayload.status,
+            conclusion:  stepPayload.conclusion,
+            startedAt:   stepPayload.startedAt.flatMap   { iso.date(from: $0) },
+            completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
-        id:          j.id,
-        name:        j.name,
-        status:      j.status,
-        conclusion:  j.conclusion,
-        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
-        completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl:     j.htmlUrl,
+        id:          payload.id,
+        name:        payload.name,
+        status:      payload.status,
+        conclusion:  payload.conclusion,
+        startedAt:   payload.startedAt.flatMap   { iso.date(from: $0) },
+        createdAt:   payload.createdAt.flatMap   { iso.date(from: $0) },
+        completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
+        htmlUrl:     payload.htmlUrl,
         isDimmed:    isDimmed,
         steps:       steps
     )
@@ -362,7 +387,11 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
 ///   #102  — queued job lingers / steps missing after the run completes.
 ///   #103 A+B — GitHub-hosted runner jobs with missing step data.
 ///   #103 C  — jobs whose steps are still "in_progress" after completion.
-private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
+private func fetchJobsForRun(
+    _ runID: Int,
+    scope: String,
+    iso: ISO8601DateFormatter
+) -> [ActiveJob] {
     guard
         let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?filter=latest&per_page=100"),
         let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
@@ -373,13 +402,10 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
     // Second pass: re-fetch jobs whose batch data may be stale.
     // Capped at 3 re-fetches per run per poll to limit API call volume (#114 Fix 3).
-    // Two substitution cases (fixes #107/#108):
-    //   Case 1 — conclusion resolved: substitute the whole job.
-    //   Case 2 — conclusion still nil but steps are final: merge steps only.
-    var result      = initial
+    var result       = initial
     var refreshCount = 0
-    for i in result.indices {
-        let job = result[i]
+    for idx in result.indices {
+        let job = result[idx]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh, refreshCount < 3 else { continue }
@@ -393,14 +419,14 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
         // Case 1: conclusion resolved — substitute the whole job.
         if fresh.conclusion != nil {
-            result[i] = freshJob
+            result[idx] = freshJob
             continue
         }
         // Case 2: conclusion still lagging but steps look final — merge steps only.
         let betterSteps = !freshJob.steps.isEmpty
             && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
-            result[i] = ActiveJob(
+            result[idx] = ActiveJob(
                 id:          job.id,
                 name:        job.name,
                 status:      job.status,
