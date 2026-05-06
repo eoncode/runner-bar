@@ -88,7 +88,7 @@ extension RunnerStore {
     private func backfillSteps(into cache: inout [Int: ActiveJob]) {
         let iso = ISO8601DateFormatter()
         for cacheID in Array(cache.keys) {
-            let cached = cache[cacheID]! // swiftlint:disable:this force_unwrapping
+            guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil,
                   cached.steps.isEmpty
                   || cached.steps.contains(where: { $0.status == "in_progress" }),
