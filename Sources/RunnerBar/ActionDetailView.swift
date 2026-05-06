@@ -5,27 +5,27 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ────────────────────────────────────────────────────────────
-//   Receives the same FIXED frame from AppDelegate as JobDetailView.
-//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
-//   ScrollView absorbs overflow — do NOT fight the frame.
+// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────
+// Receives the same FIXED frame from AppDelegate as JobDetailView.
+// Sized once at openPopover() from mainView()'s fittingSize; never changes.
+// ScrollView absorbs overflow — do NOT fight the frame.
 //
-// ── LAYOUT RULES ──────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-//   ✔ Job list MUST be inside ScrollView
-//   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
-//   ❌ NEVER put header inside ScrollView
-//   ❌ NEVER add .idealWidth or .frame(height:) to root
-//   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
+// ── LAYOUT RULES ───────────────────────────────────────────────────────────────
+// ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+// ✔ Job list MUST be inside ScrollView
+// ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
+// ❌ NEVER put header inside ScrollView
+// ❌ NEVER add .idealWidth or .frame(height:) to root
+// ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
 /// Drill-down chain:
 ///   PopoverMainView (action row tap)
-///   → ActionDetailView            ← this view
-///   → JobDetailView (step list)   ← existing, unchanged
-///   → StepLogView (log)           ← existing, unchanged
+///   → ActionDetailView ← this view
+///   → JobDetailView (step list) ← existing, unchanged
+///   → StepLogView (log) ← existing, unchanged
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
@@ -40,7 +40,6 @@ struct ActionDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             // ── Header: OUTSIDE ScrollView — always visible at top
             HStack(spacing: 6) {
                 Button(action: onBack) {
@@ -51,16 +50,16 @@ struct ActionDetailView: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
+                Spacer() // ⚠️ load-bearing — pushes elapsed to right edge
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
+                            let success = runIDs.allSatisfy { runID in
                                 ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
                             }
-                            completion(ok)
+                            completion(success)
                         }
                     },
                     isDisabled: group.groupStatus == .inProgress
@@ -70,19 +69,19 @@ struct ActionDetailView: View {
                         let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
+                            let success = runIDs.allSatisfy { runID in
                                 cancelRun(runID: runID, scope: scope)
                             }
-                            completion(ok)
+                            completion(success)
                         }
                     },
                     isDisabled: group.groupStatus != .inProgress
                 )
                 LogCopyButton(
                     fetch: { completion in
-                        let g = group
+                        let actionGroup = group
                         DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchActionLogs(group: g))
+                            completion(fetchActionLogs(group: actionGroup))
                         }
                     },
                     isDisabled: false
@@ -120,7 +119,6 @@ struct ActionDetailView: View {
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
-
             Divider()
 
             // ── Jobs list: INSIDE ScrollView
@@ -144,7 +142,7 @@ struct ActionDetailView: View {
                                         .foregroundColor(job.isDimmed ? .secondary : .primary)
                                         .lineLimit(1)
                                         .truncationMode(.tail)
-                                    Spacer()  // ⚠️ load-bearing
+                                    Spacer() // ⚠️ load-bearing
                                     if let conclusion = job.conclusion {
                                         Text(conclusionLabel(conclusion))
                                             .font(.caption)
@@ -180,7 +178,9 @@ struct ActionDetailView: View {
             // Invalidate any existing timer before creating a new one — prevents
             // accumulation when the user navigates away and back multiple times.
             tickTimer?.invalidate()
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
+            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                tick += 1
+            }
         }
         .onDisappear {
             tickTimer?.invalidate()
@@ -201,8 +201,8 @@ struct ActionDetailView: View {
     private func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "In Progress"
-        case "queued":      return "Queued"
-        default:            return "Pending"
+        case "queued": return "Queued"
+        default: return "Pending"
         }
     }
 
@@ -210,21 +210,21 @@ struct ActionDetailView: View {
         job.status == "in_progress" ? .yellow : .secondary
     }
 
-    private func conclusionLabel(_ c: String) -> String {
-        switch c {
+    private func conclusionLabel(_ conclusion: String) -> String {
+        switch conclusion {
         case "success":   return "✓ success"
         case "failure":   return "✗ failure"
         case "cancelled": return "⊗ cancelled"
         case "skipped":   return "− skipped"
-        default:          return c
+        default: return conclusion
         }
     }
 
-    private func conclusionColor(_ c: String) -> Color {
-        switch c {
+    private func conclusionColor(_ conclusion: String) -> Color {
+        switch conclusion {
         case "success": return .green
         case "failure": return .red
-        default:        return .secondary
+        default: return .secondary
         }
     }
 }
