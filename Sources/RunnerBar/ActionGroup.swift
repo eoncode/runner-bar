@@ -85,20 +85,17 @@ struct ActionGroup: Identifiable {
     /// Also treats the group as completed if all jobs are done, even if the
     /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
-        // swiftlint:disable:next opening_brace
         if jobsTotal > 0,
-           jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed }
-        // swiftlint:disable:next opening_brace
-        if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
-        if runs.contains(where: { $0.status == "queued" }) { return .queued }
+           jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed } // swiftlint:disable:this opening_brace
+        if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress } // swiftlint:disable:this opening_brace
+        if runs.contains(where: { $0.status == "queued" }) { return .queued } // swiftlint:disable:this opening_brace
         return .completed
     }
 
     /// Group conclusion: only non-nil when every run has concluded.
     /// Priority: failure > cancelled > skipped > success.
     var conclusion: String? {
-        // swiftlint:disable:next opening_brace
-        guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
+        guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil } // swiftlint:disable:this opening_brace
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
         if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
@@ -118,10 +115,8 @@ struct ActionGroup: Identifiable {
 
     /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
-        // swiftlint:disable:next identifier_name
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        // swiftlint:disable:next identifier_name
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name } // swiftlint:disable:this identifier_name
+        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name } // swiftlint:disable:this identifier_name
         return "—"
     }
 
@@ -131,15 +126,13 @@ struct ActionGroup: Identifiable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            // swiftlint:disable:next identifier_name
-            let m = sec / 60; let s = sec % 60
+            let m = sec / 60; let s = sec % 60 // swiftlint:disable:this identifier_name
             return String(format: "%02d:%02d", m, s)
         }
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        // swiftlint:disable:next identifier_name
-        let m = sec / 60; let s = sec % 60
+        let m = sec / 60; let s = sec % 60 // swiftlint:disable:this identifier_name
         return String(format: "%02d:%02d", m, s)
     }
 }
@@ -185,9 +178,8 @@ private struct PRRef: Codable { let number: Int }
 
 /// Derives the short identifier for an action group row.
 /// Priority: PR number → branch-embedded number → sha[:7].
-private func prLabel(from run: RunPayload) -> String { // swiftlint:disable:this identifier_name
-    // swiftlint:disable:next identifier_name
-    if let pr = run.pullRequests?.first { return "#\(pr.number)" }
+private func prLabel(from run: RunPayload) -> String {
+    if let pr = run.pullRequests?.first { return "#\(pr.number)" } // swiftlint:disable:this identifier_name
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
         let digits = branch[range].filter { $0.isNumber }
@@ -202,7 +194,7 @@ private func prLabel(from run: RunPayload) -> String { // swiftlint:disable:this
 /// enriches each group with its flattened job list, and returns groups sorted:
 /// in_progress first, then queued, then done — newest first.
 // swiftlint:disable:next function_body_length cyclomatic_complexity
-func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
+func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] { // swiftlint:disable:this missing_docs
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
         return []
@@ -292,8 +284,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         )
     }
 
-    // swiftlint:disable:next identifier_name
-    groups.sort { a, b in
+    groups.sort { a, b in // swiftlint:disable:this identifier_name
         let aPriority = statusPriority(a.groupStatus)
         let bPriority = statusPriority(b.groupStatus)
         if aPriority != bPriority { return aPriority < bPriority }
@@ -309,8 +300,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
 func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter, // swiftlint:disable:this identifier_name missing_docs
                    isDimmed: Bool = false) -> ActiveJob {
-    // swiftlint:disable:next identifier_name
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in // swiftlint:disable:this identifier_name
         JobStep(
             id: idx + 1,
             name: s.name,
@@ -345,8 +335,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
     var result = initial
     var refreshCount = 0
-    // swiftlint:disable:next identifier_name
-    for i in result.indices {
+    for i in result.indices { // swiftlint:disable:this identifier_name
         let job = result[i]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
