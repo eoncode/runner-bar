@@ -31,6 +31,36 @@ struct SystemStats {
     )
 }
 
+/// CPU tick counters captured from `host_processor_info()`.
+private struct CPUTicks {
+    /// User + nice ticks accumulated across all cores.
+    var user: Double
+    /// System ticks accumulated across all cores.
+    var system: Double
+    /// Total ticks accumulated across all cores.
+    var total: Double
+}
+
+/// Memory usage snapshot in GB.
+private struct MemoryStats {
+    /// Active + wired memory in use, in GB.
+    var used: Double
+    /// Total installed RAM, in GB.
+    var total: Double
+}
+
+/// Disk usage snapshot in GB and percent free.
+private struct DiskStats {
+    /// Used disk capacity, in GB.
+    var used: Double
+    /// Total disk capacity, in GB.
+    var total: Double
+    /// Free disk capacity, in GB.
+    var free: Double
+    /// Free disk capacity as a percentage of total.
+    var freePct: Double
+}
+
 // MARK: - SystemStatsViewModel
 
 /// ObservableObject that owns the 2-second polling loop for system metrics.
@@ -42,7 +72,7 @@ final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
 
     private var timer: Timer?
-    private var prevTicks: (user: Double, sys: Double, total: Double) = (0, 0, 0)
+    private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
     /// Initialises the view model and performs an eager sample.
     init() {
@@ -87,20 +117,21 @@ final class SystemStatsViewModel: ObservableObject {
             vm_address_t(bitPattern: cpuInfo),
             vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<integer_t>.stride)
         )
-        let dUser = userTicks - prevTicks.user
-        let dSys = sysTicks - prevTicks.sys
-        let dTotal = totalTicks - prevTicks.total
-        prevTicks = (userTicks, sysTicks, totalTicks)
+        let currentTicks = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
+        let dUser = currentTicks.user - prevTicks.user
+        let dSys = currentTicks.system - prevTicks.system
+        let dTotal = currentTicks.total - prevTicks.total
+        prevTicks = currentTicks
         guard dTotal > 0 else { return 0 }
         return min(100, ((dUser + dSys) / dTotal) * 100)
     }
 
     // MARK: - Memory
 
-    /// Returns `(used, total)` in GB using `host_statistics64()` and `sysctl hw.memsize`.
+    /// Returns memory usage in GB using `host_statistics64()` and `sysctl hw.memsize`.
     ///
     /// Reports active + wired pages only, matching `ci-dash.py` measurement.
-    private func memStats() -> (used: Double, total: Double) {
+    private func memStats() -> MemoryStats {
         var vmStats = vm_statistics64()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size
@@ -110,7 +141,7 @@ final class SystemStatsViewModel: ObservableObject {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        guard kernResult == KERN_SUCCESS else { return (0, 16) }
+        guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
         let pageSize = Double(vm_kernel_page_size)
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
@@ -118,16 +149,16 @@ final class SystemStatsViewModel: ObservableObject {
         var memSizeLen = MemoryLayout<UInt64>.size
         sysctlbyname("hw.memsize", &memSize, &memSizeLen, nil, 0)
         let total = Double(memSize) / gigabytes
-        return (used, total)
+        return MemoryStats(used: used, total: total)
     }
 
     // MARK: - Disk
 
-    /// Returns `(used, total, free, freePct)` in GB using URL resource values.
+    /// Returns disk usage in GB and free percentage using URL resource values.
     ///
     /// Uses `volumeAvailableCapacityForImportantUsage` (the value Finder shows).
     /// Falls back to a safe all-free default on error.
-    private func diskStats() -> (used: Double, total: Double, free: Double, freePct: Double) {
+    private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         guard let values = try? url.resourceValues(forKeys: [
@@ -136,12 +167,12 @@ final class SystemStatsViewModel: ObservableObject {
         ]),
         let totalBytes = values.volumeTotalCapacity,
         let freeBytes = values.volumeAvailableCapacityForImportantUsage
-        else { return (0, 460, 460, 100) }
+        else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
         let total = Double(totalBytes) / gigabytes
         let free = Double(freeBytes) / gigabytes
         let used = total - free
         let freePct = total > 0 ? (free / total) * 100 : 100
-        return (used, total, free, freePct)
+        return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
 
     // MARK: - Sample

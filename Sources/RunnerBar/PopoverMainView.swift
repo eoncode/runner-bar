@@ -16,6 +16,7 @@ import SwiftUI
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
 /// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
+// swiftlint:disable:next type_body_length
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
@@ -182,9 +183,9 @@ struct PopoverMainView: View {
                     HStack {
                         Text(scopeStr).font(.system(size: 12))
                         Spacer()
-                        Button(action: { ScopeStore.shared.remove(scopeStr); store.reload() }) {
+                        Button(action: { ScopeStore.shared.remove(scopeStr); store.reload() }, label: {
                             Image(systemName: "minus.circle").foregroundColor(.red)
-                        }.buttonStyle(.plain)
+                        }).buttonStyle(.plain)
                     }
                     .padding(.horizontal, 12).padding(.vertical, 2)
                 }
@@ -209,9 +210,9 @@ struct PopoverMainView: View {
             .onChange(of: launchAtLogin) { _, newValue in
                 LoginItem.setEnabled(newValue)
             }
-            Button(action: { NSApplication.shared.terminate(nil) }) {
+            Button(action: { NSApplication.shared.terminate(nil) }, label: {
                 Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
-            }
+            })
             .buttonStyle(.plain)
             .padding(.horizontal, 12).padding(.vertical, 6)
         }

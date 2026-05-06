@@ -33,15 +33,15 @@ struct ActionGroup: Identifiable {
     var groupStatus: GroupStatus {
         let statuses = runs.map { $0.status }
         if statuses.contains("in_progress") { return .inProgress }
-        if statuses.contains("queued")      { return .queued }
+        if statuses.contains("queued") { return .queued }
         return .completed
     }
 
     /// Elapsed time string for the whole group.
     var elapsed: String {
         let start = firstJobStartedAt ?? createdAt ?? Date()
-        let end   = lastJobCompletedAt ?? Date()
-        let secs  = Int(end.timeIntervalSince(start))
+        let end = lastJobCompletedAt ?? Date()
+        let secs = Int(end.timeIntervalSince(start))
         if secs < 60 { return "\(secs)s" }
         return "\(secs / 60)m \(secs % 60)s"
     }
@@ -100,10 +100,10 @@ struct WorkflowRun: Identifiable, Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case headSha    = "head_sha"
+        case headSha = "head_sha"
         case headBranch = "head_branch"
-        case htmlUrl    = "html_url"
-        case createdAt  = "created_at"
+        case htmlUrl = "html_url"
+        case createdAt = "created_at"
     }
 }
 
@@ -141,18 +141,15 @@ extension RunnerStore {
             let jobs = pair.jobs.isEmpty
                 ? fetchJobsForRuns(pair.runs, scope: scope, iso: iso)
                 : pair.jobs
-            let startDates = jobs.compactMap { $0.startedAt }
-            let endDates   = jobs.compactMap { $0.completedAt }
             return buildActionGroup(
                 sha: sha, runs: pair.runs, jobs: jobs,
                 label: label, title: title, headBranch: branch,
                 repo: scope, isDimmed: false
             )
-            _ = startDates; _ = endDates
         }.sorted { ($0.firstJobStartedAt ?? .distantPast) > ($1.firstJobStartedAt ?? .distantPast) }
     }
 
-    /// Builds a single `ActionGroup` from decoded run + job data.
+    // Builds a single `ActionGroup` from decoded run + job data.
     // swiftlint:disable:next function_parameter_count
     private func buildActionGroup(
         sha: String, runs: [WorkflowRun], jobs: [ActiveJob],
