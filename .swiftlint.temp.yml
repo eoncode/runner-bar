@@ -1,5 +1,5 @@
 only_rules:
-  - vertical_whitespace_opening_braces
+  - redundant_optional_initialization
 included:
   - Sources
 excluded:

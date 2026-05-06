@@ -20,7 +20,7 @@ struct Runner: Codable, Identifiable {
     /// `nil` if no matching `Runner.Worker` process was found for this runner's slot.
     /// Populated by `RunnerStore.fetch()` after the API response is decoded —
     /// not present in the JSON payload.
-    var metrics: RunnerMetrics? = nil
+    var metrics: RunnerMetrics?
 
     /// Excludes `metrics` from JSON decoding — it is assigned locally after fetch,
     /// not returned by the GitHub API.

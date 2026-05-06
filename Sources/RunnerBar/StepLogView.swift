@@ -35,7 +35,7 @@ struct StepLogView: View {
     //   nil  — never used (isLoading gate prevents nil from showing)
     //   ""   — fetch returned empty / unavailable (shows "Log not available")
     //   text — actual log content for this step
-    @State private var logText: String? = nil
+    @State private var logText: String?
 
     // isLoading: true while the background fetch is in-flight.
     // Drives the ProgressView spinner. Set to false on fetch completion.
