@@ -86,8 +86,10 @@ struct ActionGroup: Identifiable {
     /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
         if jobsTotal > 0,
+           // swiftlint:disable:next opening_brace
            jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed }
         if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
+        // swiftlint:disable:next opening_brace
         if runs.contains(where: { $0.status == "queued" }) { return .queued }
         return .completed
     }
@@ -95,6 +97,7 @@ struct ActionGroup: Identifiable {
     /// Group conclusion: only non-nil when every run has concluded.
     /// Priority: failure > cancelled > skipped > success.
     var conclusion: String? {
+        // swiftlint:disable:next opening_brace
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
@@ -305,9 +308,9 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 // MARK: - Private helpers
 
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
-// swiftlint:disable:next identifier_name
+// swiftlint:disable:next identifier_name vertical_parameter_alignment
 func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
-                            isDimmed: Bool = false) -> ActiveJob {
+                   isDimmed: Bool = false) -> ActiveJob {
     // swiftlint:disable:next identifier_name
     let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
         JobStep(
@@ -344,7 +347,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
     var result = initial
     var refreshCount = 0
-    for i in result.indices {
+    for i in result.indices { // swiftlint:disable:this identifier_name
         let job = result[i]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }

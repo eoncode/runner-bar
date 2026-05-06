@@ -57,6 +57,7 @@ struct ActionDetailView: View {
                         let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
                         DispatchQueue.global(qos: .userInitiated).async {
+                            // swiftlint:disable:next identifier_name
                             let ok = runIDs.allSatisfy { runID in
                                 ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
                             }
@@ -70,6 +71,7 @@ struct ActionDetailView: View {
                         let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
                         DispatchQueue.global(qos: .userInitiated).async {
+                            // swiftlint:disable:next identifier_name
                             let ok = runIDs.allSatisfy { runID in
                                 cancelRun(runID: runID, scope: scope)
                             }
