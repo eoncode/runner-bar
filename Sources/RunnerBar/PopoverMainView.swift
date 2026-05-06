@@ -3,11 +3,11 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 420)
+// RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
 // AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
 // ❌ NEVER remove .frame(idealWidth: 420)
 // ❌ NEVER use .frame(width: 420)
-// ❌ NEVER use .frame(maxWidth: .infinity) alone
+// ❌ NEVER remove maxWidth: .infinity (VStack must stretch to full popover width)
 // ❌ NEVER add .frame(height:) to root VStack
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
@@ -216,7 +216,7 @@ struct PopoverMainView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
-        .frame(idealWidth: 420)
+        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
