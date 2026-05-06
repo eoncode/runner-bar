@@ -12,11 +12,11 @@ struct ActiveJob: Identifiable, Equatable {
     let status: String
     /// Final conclusion once completed (`success`, `failure`, `cancelled`, etc.).
     let conclusion: String?
-    /// ISO-8601 string when the job started, if available.
+    /// When the job started, if available.
     let startedAt: Date?
-    /// ISO-8601 string when the job was created/queued.
+    /// When the job was created/queued.
     let createdAt: Date?
-    /// ISO-8601 string when the job completed, if available.
+    /// When the job completed, if available.
     let completedAt: Date?
     /// URL to the job on GitHub.com.
     let htmlUrl: String
@@ -36,14 +36,13 @@ struct JobStep: Codable, Equatable {
     let name: String
     /// Current step status (`queued`, `in_progress`, `completed`).
     let status: String
-    /// Final conclusion once completed (`success`, `failure`, `skipped`, etc.).
+    /// Final conclusion once completed.
     let conclusion: String?
     /// ISO-8601 start timestamp.
     let startedAt: String?
     /// ISO-8601 completion timestamp.
     let completedAt: String?
 
-    /// Maps JSON snake_case keys to Swift camelCase properties.
     enum CodingKeys: String, CodingKey {
         case number, name, status, conclusion
         case startedAt = "started_at"
@@ -55,7 +54,7 @@ struct JobStep: Codable, Equatable {
 
 /// Top-level envelope for the GitHub list-jobs API response.
 struct JobsPayload: Codable {
-    /// Array of decoded job payloads.
+    /// Decoded job array.
     let jobs: [JobPayload]
 }
 
@@ -77,10 +76,9 @@ struct JobPayload: Codable {
     let completedAt: String?
     /// Job page URL.
     let htmlUrl: String
-    /// Steps array, present only on single-job detail calls.
+    /// Steps array, present on single-job detail calls only.
     let steps: [JobStep]?
 
-    /// Maps JSON snake_case keys to Swift camelCase properties.
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion, steps
         case startedAt = "started_at"
@@ -94,7 +92,11 @@ struct JobPayload: Codable {
 
 extension RunnerStore {
     /// Builds an `ActiveJob` from a decoded `JobPayload`.
-    func makeActiveJob(from payload: JobPayload, iso: ISO8601DateFormatter, isDimmed: Bool) -> ActiveJob {
+    func makeActiveJob(
+        from payload: JobPayload,
+        iso: ISO8601DateFormatter,
+        isDimmed: Bool
+    ) -> ActiveJob {
         ActiveJob(
             id: payload.id,
             name: payload.name,
