@@ -1,46 +1,32 @@
 import AppKit
 import SwiftUI
 
-// ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────
-// Receives the same FIXED frame from AppDelegate as JobDetailView.
-// Sized once at openPopover() from mainView()'s fittingSize; never changes.
-// ScrollView absorbs overflow — do NOT fight the frame.
-//
-// ── LAYOUT RULES ───────────────────────────────────────────────────────────────
-// ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-// ✔ Job list MUST be inside ScrollView
-// ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
-// ❌ NEVER put header inside ScrollView
+// Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+// Job list MUST be inside ScrollView.
+// Header MUST be OUTSIDE ScrollView.
 // ❌ NEVER add .idealWidth or .frame(height:) to root
 // ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
-// ═══════════════════════════════════════════════════════════════════════════════
 
-/// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
+/// Navigation level 2a (Actions path): flat job list for a commit/PR group.
 ///
-/// Drill-down chain:
-///   PopoverMainView (action row tap)
-///   → ActionDetailView ← this view
-///   → JobDetailView (step list) ← existing, unchanged
-///   → StepLogView (log) ← existing, unchanged
+/// Drill-down chain: PopoverMainView → ActionDetailView → JobDetailView → StepLogView.
 struct ActionDetailView: View {
+    /// The action group whose jobs are displayed.
     let group: ActionGroup
+    /// Called when the user taps the back button.
     let onBack: () -> Void
-    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
+    /// Called when the user taps a job row.
     let onSelectJob: (ActiveJob) -> Void
 
     /// Drives the live elapsed timer every second.
     @State private var tick = 0
-    /// Held so we can invalidate on disappear and prevent timer accumulation
-    /// when the user navigates away and back (AppDelegate swaps rootView each time).
+    /// Timer reference — invalidated on disappear to prevent accumulation.
     @State private var tickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header: OUTSIDE ScrollView — always visible at top
+            // ── Header: OUTSIDE ScrollView
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -50,7 +36,7 @@ struct ActionDetailView: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                Spacer() // ⚠️ load-bearing — pushes elapsed to right edge
+                Spacer()
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
@@ -94,7 +80,6 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // Label + title below nav bar.
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(group.label)
@@ -112,7 +97,6 @@ struct ActionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                // Job progress summary
                 Text("\(group.jobsDone)/\(group.jobsTotal) jobs concluded")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -142,7 +126,7 @@ struct ActionDetailView: View {
                                         .foregroundColor(job.isDimmed ? .secondary : .primary)
                                         .lineLimit(1)
                                         .truncationMode(.tail)
-                                    Spacer() // ⚠️ load-bearing
+                                    Spacer()
                                     if let conclusion = job.conclusion {
                                         Text(conclusionLabel(conclusion))
                                             .font(.caption)
@@ -175,8 +159,6 @@ struct ActionDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
-            // Invalidate any existing timer before creating a new one — prevents
-            // accumulation when the user navigates away and back multiple times.
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 tick += 1
@@ -188,7 +170,6 @@ struct ActionDetailView: View {
         }
     }
 
-    // Re-evaluates group.elapsed on every tick to drive a live counter.
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     // MARK: - Job row helpers
@@ -212,10 +193,10 @@ struct ActionDetailView: View {
 
     private func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
+        case "success": return "✓ success"
+        case "failure": return "✗ failure"
         case "cancelled": return "⊗ cancelled"
-        case "skipped":   return "− skipped"
+        case "skipped": return "− skipped"
         default: return conclusion
         }
     }
