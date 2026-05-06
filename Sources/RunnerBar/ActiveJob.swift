@@ -2,11 +2,12 @@ import Foundation
 
 // MARK: - JobStep
 
+/// A single step within a GitHub Actions job, decoded from the GitHub API.
 struct JobStep: Identifiable {
-    let id: Int  // step number (1-based)
+    let id: Int        // step number (1-based)
     let name: String
-    let status: String        // queued, in_progress, completed
-    let conclusion: String?   // success, failure, cancelled, skipped
+    let status: String       // queued, in_progress, completed
+    let conclusion: String?  // success, failure, cancelled, skipped
     let startedAt: Date?
     let completedAt: Date?
 
@@ -16,21 +17,22 @@ struct JobStep: Identifiable {
         let end = completedAt ?? Date()
         let sec = Int(end.timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let minutes = sec / 60
+        let seconds = sec % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     var conclusionIcon: String {
         switch conclusion {
-        case "success":   return "✓"
-        case "failure":   return "✗"
+        case "success": return "✓"
+        case "failure": return "✗"
         case "cancelled": return "⊖"
-        case "skipped":   return "−"
+        case "skipped": return "−"
         default:
             switch status {
             case "in_progress": return "⟳"
-            case "queued":      return "○"
-            default:            return "•"
+            case "queued": return "○"
+            default: return "•"
             }
         }
     }
@@ -44,12 +46,14 @@ struct JobStep: Identifiable {
 // in the SAME commit or the build will fail with "missing argument" errors.
 //
 // The 3 construction sites:
-//   1. fetchActiveJobs()            — live jobs fetched from the GitHub API
-//   2. Vanished-job freeze block    — RunnerStore.fetch(), "snapPrev" diff loop
-//   3. Fresh-done freeze block      — RunnerStore.fetch(), "freshDone" loop
+// 1. fetchActiveJobs() — live jobs fetched from the GitHub API
+// 2. Vanished-job freeze block — RunnerStore.fetch(), "snapPrev" diff loop
+// 3. Fresh-done freeze block — RunnerStore.fetch(), "freshDone" loop
 //
 // Before pushing any model change, verify:
-//   grep -rn 'ActiveJob(' Sources/
+// grep -rn 'ActiveJob(' Sources/
+
+/// A GitHub Actions job currently active (in-progress, queued) or recently completed.
 struct ActiveJob: Identifiable {
     let id: Int
     let name: String
@@ -58,7 +62,7 @@ struct ActiveJob: Identifiable {
     let startedAt: Date?
     let createdAt: Date?
     let completedAt: Date?
-    let htmlUrl: String?       // GitHub job page URL
+    let htmlUrl: String?  // GitHub job page URL
     var isDimmed: Bool = false
     var steps: [JobStep] = []
 
@@ -70,16 +74,18 @@ struct ActiveJob: Identifiable {
             guard let start = startedAt, let end = completedAt else { return "--:--" }
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "--:--" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            let minutes = sec / 60
+            let seconds = sec % 60
+            return String(format: "%02d:%02d", minutes, seconds)
         }
         // Live jobs: createdAt fallback is acceptable while startedAt may not yet be set.
         guard let start = startedAt ?? createdAt else { return "00:00" }
         let end = completedAt ?? Date()
         let sec = Int(end.timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let minutes = sec / 60
+        let seconds = sec % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 
@@ -94,17 +100,17 @@ var ghIsRateLimited: Bool = false
 /// Internal so `ActionGroup.swift` can reuse it without duplicating networking code.
 /// Returns `nil` on launch failure, timeout, or empty response.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    let gh = "/opt/homebrew/bin/gh"
-    guard FileManager.default.isExecutableFile(atPath: gh) else {
-        log("ghAPI › gh not found at \(gh)")
+    let ghPath = "/opt/homebrew/bin/gh"
+    guard FileManager.default.isExecutableFile(atPath: ghPath) else {
+        log("ghAPI › gh not found at \(ghPath)")
         return nil
     }
     let task = Process()
     let pipe = Pipe()
-    task.executableURL  = URL(fileURLWithPath: gh)
-    task.arguments      = ["api", endpoint]
+    task.executableURL = URL(fileURLWithPath: ghPath)
+    task.arguments = ["api", endpoint]
     task.standardOutput = pipe
-    task.standardError  = Pipe()
+    task.standardError = Pipe()
     var outputData = Data()
     let lock = NSLock()
     pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -140,59 +146,55 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 
 // MARK: - Fetch all jobs from active runs
 
+/// Fetches all active (in-progress and queued) jobs for the given scope.
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
-
     func runsEndpoint(status: String) -> String {
         scope.contains("/")
             ? "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
             : "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
     }
-
     for status in ["in_progress", "queued"] {
-        guard
-            let data = ghAPI(runsEndpoint(status: status)),
-            let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
+        guard let data = ghAPI(runsEndpoint(status: status)),
+              let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
         for run in resp.workflowRuns {
             if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
         }
     }
-
     var jobs: [ActiveJob] = []
     var seenJobIDs = Set<Int>()
-
     for runID in runIDs {
         guard scope.contains("/") else { continue }
-        guard
-            let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
-            let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+        guard let data = ghAPI(
+            "repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"
+        ), let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
         else { continue }
-        for j in resp.jobs {
-            guard seenJobIDs.insert(j.id).inserted else { continue }
-            let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+        for jobPayload in resp.jobs {
+            guard seenJobIDs.insert(jobPayload.id).inserted else { continue }
+            let steps: [JobStep] = (jobPayload.steps ?? []).enumerated().map { idx, stepPayload in
                 JobStep(
-                    id:          idx + 1,
-                    name:        s.name,
-                    status:      s.status,
-                    conclusion:  s.conclusion,
-                    startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-                    completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                    id: idx + 1,
+                    name: stepPayload.name,
+                    status: stepPayload.status,
+                    conclusion: stepPayload.conclusion,
+                    startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
                 )
             }
             // ⚠️ CALLSITE 1 of 3 — see ActiveJob callsite warning above
             jobs.append(ActiveJob(
-                id:          j.id,
-                name:        j.name,
-                status:      j.status,
-                conclusion:  j.conclusion,
-                startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-                createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
-                completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-                htmlUrl:     j.htmlUrl,
-                steps:       steps
+                id: jobPayload.id,
+                name: jobPayload.name,
+                status: jobPayload.status,
+                conclusion: jobPayload.conclusion,
+                startedAt: jobPayload.startedAt.flatMap { iso.date(from: $0) },
+                createdAt: jobPayload.createdAt.flatMap { iso.date(from: $0) },
+                completedAt: jobPayload.completedAt.flatMap { iso.date(from: $0) },
+                htmlUrl: jobPayload.htmlUrl,
+                steps: steps
             ))
         }
     }
@@ -210,8 +212,8 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
           let url = URL(string: urlString),
           url.pathComponents.count >= 3
     else { return nil }
-    let c = url.pathComponents  // ["/", "owner", "repo", "actions", ...]
-    return "\(c[1])/\(c[2])"
+    let components = url.pathComponents // ["/", "owner", "repo", "actions", ...]
+    return "\(components[1])/\(components[2])"
 }
 
 /// Extracts the workflow run ID from a GitHub Actions job HTML URL.
@@ -220,9 +222,9 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
 func runIDFromHtmlUrl(_ url: String?) -> Int? {
     guard let url else { return nil }
     let parts = url.components(separatedBy: "/")
-    for (i, part) in parts.enumerated() {
-        if part == "runs", i + 1 < parts.count {
-            return Int(parts[i + 1])
+    for (index, part) in parts.enumerated() {
+        if part == "runs", index + 1 < parts.count {
+            return Int(parts[index + 1])
         }
     }
     return nil
@@ -230,13 +232,25 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 
 // MARK: - Codable helpers
 
+/// Response wrapper for the GitHub workflow runs list endpoint.
 struct WorkflowRunsResponse: Codable {
     let workflowRuns: [WorkflowRun]
-    enum CodingKeys: String, CodingKey { case workflowRuns = "workflow_runs" }
+    enum CodingKeys: String, CodingKey {
+        case workflowRuns = "workflow_runs"
+    }
 }
-struct WorkflowRun: Codable { let id: Int }
+
+/// A single workflow run, used only to extract the run ID.
+struct WorkflowRun: Codable {
+    let id: Int
+}
+
 /// Internal so `ActionGroup.swift` can decode job lists without duplicating structs.
-struct JobsResponse: Codable { let jobs: [JobPayload] }
+struct JobsResponse: Codable {
+    let jobs: [JobPayload]
+}
+
+/// Raw step data decoded from the GitHub API jobs response.
 struct StepPayload: Codable {
     let name: String
     let status: String
@@ -245,12 +259,16 @@ struct StepPayload: Codable {
     let completedAt: String?
     enum CodingKeys: String, CodingKey {
         case name, status, conclusion
-        case startedAt   = "started_at"
+        case startedAt = "started_at"
         case completedAt = "completed_at"
     }
 }
+
+/// Raw job data decoded from the GitHub API jobs response.
 struct JobPayload: Codable {
-    let id: Int; let name: String; let status: String
+    let id: Int
+    let name: String
+    let status: String
     let conclusion: String?
     let startedAt: String?
     let createdAt: String?
@@ -259,9 +277,9 @@ struct JobPayload: Codable {
     let steps: [StepPayload]?
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion, steps
-        case startedAt   = "started_at"
-        case createdAt   = "created_at"
+        case startedAt = "started_at"
+        case createdAt = "created_at"
         case completedAt = "completed_at"
-        case htmlUrl     = "html_url"
+        case htmlUrl = "html_url"
     }
 }
