@@ -1,4 +1,4 @@
-# RunnerBar 
+# RunnerBar  
 
 > Self-hosted GitHub Actions runners, at a glance in your macOS menu bar.
 
@@ -57,3 +57,4 @@ curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 git fetch && git checkout feature/actions-section && git pull
 bash build.sh && pkill RunnerBar; sleep 1 && open dist/RunnerBar.app 
 ```
+  
