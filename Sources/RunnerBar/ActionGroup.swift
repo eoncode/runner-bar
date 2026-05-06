@@ -115,7 +115,9 @@ struct ActionGroup: Identifiable {
 
     /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
+        // swiftlint:disable:next identifier_name
         if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
+        // swiftlint:disable:next identifier_name
         if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
         return "—"
     }
@@ -124,18 +126,14 @@ struct ActionGroup: Identifiable {
     var elapsed: String {
         if let start = firstJobStartedAt {
             let end = lastJobCompletedAt ?? Date()
-            // swiftlint:disable:next identifier_name
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            // swiftlint:disable:next identifier_name
             let m = sec / 60; let s = sec % 60
             return String(format: "%02d:%02d", m, s)
         }
         guard let start = createdAt else { return "00:00" }
-        // swiftlint:disable:next identifier_name
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        // swiftlint:disable:next identifier_name
         let m = sec / 60; let s = sec % 60
         return String(format: "%02d:%02d", m, s)
     }
@@ -183,6 +181,7 @@ private struct PRRef: Codable { let number: Int }
 /// Derives the short identifier for an action group row.
 /// Priority: PR number → branch-embedded number → sha[:7].
 private func prLabel(from run: RunPayload) -> String {
+    // swiftlint:disable:next identifier_name
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
@@ -288,6 +287,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         )
     }
 
+    // swiftlint:disable:next identifier_name
     groups.sort { a, b in
         let aPriority = statusPriority(a.groupStatus)
         let bPriority = statusPriority(b.groupStatus)
@@ -302,8 +302,10 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 // MARK: - Private helpers
 
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
+// swiftlint:disable:next identifier_name
 func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
+    // swiftlint:disable:next identifier_name
     let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
         JobStep(
             id: idx + 1,
@@ -339,6 +341,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
     var result = initial
     var refreshCount = 0
+    // swiftlint:disable:next identifier_name
     for i in result.indices {
         let job = result[i]
         let needsRefresh = job.conclusion == nil
