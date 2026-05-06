@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
-/// States: idle (doc.on.doc + "Copy log") → loading (spinner) → done (green checkmark, 1.5s) → idle
+/// States: idle (doc.on.doc + "Copy log") → loading (spinner + "Running…") → done (✓ + "Done", 1.5s) → idle
 struct LogCopyButton: View {
    /// Called on tap. Must call completion(text) from any thread.
    /// Pass nil or empty string on failure — button still resets to idle.
@@ -31,14 +31,24 @@ struct LogCopyButton: View {
             .buttonStyle(.plain)
             .disabled(isDisabled)
          case .loading:
-            ProgressView().controlSize(.mini)
+            HStack(spacing: 4) {
+               ProgressView().controlSize(.mini)
+               Text("Running…")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+            }
          case .done:
-            Image(systemName: "checkmark")
-               .font(.caption)
-               .foregroundColor(.green)
+            HStack(spacing: 4) {
+               Image(systemName: "checkmark")
+                  .font(.caption)
+                  .foregroundColor(.green)
+               Text("Done")
+                  .font(.caption)
+                  .foregroundColor(.green)
+            }
          }
       }
-      .frame(width: 72)
+      .fixedSize()
    }
 
    private func startCopy() {

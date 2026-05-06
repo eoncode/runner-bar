@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Top-bar cancel button shared by ActionDetailView and JobDetailView.
-/// idle (xmark.circle + "Cancel") → loading (spinner) → done (green ✓, 1.5s) OR failed (red ✗, 1.5s) → idle
+/// idle (xmark.circle + "Cancel") → loading (spinner + "Running…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
 struct CancelButton: View {
    /// Called on tap. Must call completion(success: Bool) from any thread.
    let action: (@escaping (Bool) -> Void) -> Void
@@ -29,18 +29,33 @@ struct CancelButton: View {
             .buttonStyle(.plain)
             .disabled(isDisabled)
          case .loading:
-            ProgressView().controlSize(.mini)
+            HStack(spacing: 4) {
+               ProgressView().controlSize(.mini)
+               Text("Running…")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+            }
          case .done:
-            Image(systemName: "checkmark")
-               .font(.caption)
-               .foregroundColor(.green)
+            HStack(spacing: 4) {
+               Image(systemName: "checkmark")
+                  .font(.caption)
+                  .foregroundColor(.green)
+               Text("Done")
+                  .font(.caption)
+                  .foregroundColor(.green)
+            }
          case .failed:
-            Image(systemName: "xmark")
-               .font(.caption)
-               .foregroundColor(.red)
+            HStack(spacing: 4) {
+               Image(systemName: "xmark")
+                  .font(.caption)
+                  .foregroundColor(.red)
+               Text("Failed")
+                  .font(.caption)
+                  .foregroundColor(.red)
+            }
          }
       }
-      .frame(width: 72)
+      .fixedSize()
    }
 
    private func startCancel() {
