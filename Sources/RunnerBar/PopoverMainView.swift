@@ -225,11 +225,12 @@ struct PopoverMainView: View {
 
     // MARK: - Helpers
 
-    /// Submits a new scope from the text field.
+    /// Validates and persists a new scope, triggers polling, reloads the observable, and clears the field.
     private func submitScope() {
-        let trimmed = newScope.trimmingCharacters(in: .whitespaces)
+        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         ScopeStore.shared.add(trimmed)
+        RunnerStore.shared.start()
         store.reload()
         newScope = ""
     }
@@ -321,7 +322,7 @@ struct PopoverMainView: View {
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
 
-    /// Validates and persists a new scope, then refreshes the store.
+    /// Validates and persists a new scope from the popover input, then refreshes the store.
     private func validateAndAddScope(_ scope: String) {
         guard scope.contains("/") || !scope.isEmpty else { return }
         ScopeStore.shared.add(scope)
