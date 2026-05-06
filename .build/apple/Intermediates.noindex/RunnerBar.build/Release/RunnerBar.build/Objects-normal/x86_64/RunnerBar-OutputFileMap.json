@@ -1,0 +1,141 @@
+{
+  "" : {
+    "const-values" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary.swiftconstvalues",
+    "dependencies" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary.d",
+    "diagnostics" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary.dia",
+    "emit-module-dependencies" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary-emit-module.dia",
+    "pch" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerBar-primary.swiftdeps"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActionDetailView.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActionDetailView.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActionDetailView.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActionGroup.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActionGroup.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActionGroup.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActiveJob.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActiveJob.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ActiveJob.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/AppDelegate.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/AppDelegate.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/AppDelegate.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/AppDelegate.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/Auth.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Auth.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Auth.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Auth.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/CancelButton.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/CancelButton.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/CancelButton.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/CancelButton.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/GitHub.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/GitHub.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/GitHub.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/GitHub.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/JobDetailView.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/JobDetailView.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/JobDetailView.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/JobDetailView.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/LogCopyButton.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LogCopyButton.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LogCopyButton.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LogCopyButton.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/LogFetcher.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LogFetcher.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LogFetcher.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LogFetcher.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/Logger.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Logger.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Logger.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Logger.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/LoginItem.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LoginItem.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LoginItem.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/LoginItem.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/PopoverMainView.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/PopoverMainView.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/PopoverMainView.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/PopoverView.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/PopoverView.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/PopoverView.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/PopoverView.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/ReRunButton.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ReRunButton.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ReRunButton.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ReRunButton.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/Runner.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Runner.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Runner.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Runner.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/RunnerMetrics.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerMetrics.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerMetrics.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerMetrics.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerStore.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerStore.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/RunnerStore.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/ScopeStore.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ScopeStore.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ScopeStore.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/ScopeStore.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/Shell.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Shell.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Shell.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/Shell.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/StatusIcon.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StatusIcon.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StatusIcon.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StatusIcon.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/StatusPanel.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StatusPanel.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StatusPanel.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StatusPanel.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/StepLogView.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StepLogView.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StepLogView.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/StepLogView.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/SystemStats.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/SystemStats.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/SystemStats.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/SystemStatsView.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/SystemStatsView.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/SystemStatsView.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/SystemStatsView.o"
+  },
+  "/Users/eon/runner-bar/Sources/RunnerBar/main.swift" : {
+    "index-unit-output-path" : "/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/main.o",
+    "llvm-bc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/main.bc",
+    "object" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/x86_64/main.o"
+  }
+}

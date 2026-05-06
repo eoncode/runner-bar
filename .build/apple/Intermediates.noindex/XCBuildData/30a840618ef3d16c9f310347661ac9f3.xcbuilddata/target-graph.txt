@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'AllExcludingTests' in project 'Aggregate'
+➜ Explicit dependency on target 'RunnerBar_60FF8A341ED8D098_PackageProduct' in project 'RunnerBar'
+Target 'RunnerBar_60FF8A341ED8D098_PackageProduct' in project 'RunnerBar' (no dependencies)

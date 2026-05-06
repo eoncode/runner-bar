@@ -1,0 +1,24 @@
+{
+  "source": "/Users/eon/runner-bar/Sources/RunnerBar/StepLogView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Steps",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 57
+        }
+      },
+      {
+        "comment": "",
+        "key": "Log not available",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 116
+        }
+      }
+    ]
+  },
+  "version": 1
+}

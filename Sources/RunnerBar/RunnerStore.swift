@@ -200,16 +200,16 @@ final class RunnerStore {
             for (id, job) in snapPrev where !liveIDs.contains(id) {
                 guard newCache[id] == nil else { continue }
                 newCache[id] = ActiveJob(
-                    id:          job.id,
-                    name:        job.name,
-                    status:      "completed",
-                    conclusion:  job.conclusion ?? "success",
-                    startedAt:   job.startedAt,
-                    createdAt:   job.createdAt,
+                    id: job.id,
+                    name: job.name,
+                    status: "completed",
+                    conclusion: job.conclusion ?? "success",
+                    startedAt: job.startedAt,
+                    createdAt: job.createdAt,
                     completedAt: job.completedAt ?? now,
-                    htmlUrl:     job.htmlUrl,
-                    isDimmed:    true,
-                    steps:       job.steps
+                    htmlUrl: job.htmlUrl,
+                    isDimmed: true,
+                    steps: job.steps
                 )
             }
 
@@ -218,16 +218,16 @@ final class RunnerStore {
             // steps: fetchActiveJobs already populated steps for live jobs; forward them.
             for job in freshDone {
                 newCache[job.id] = ActiveJob(
-                    id:          job.id,
-                    name:        job.name,
-                    status:      "completed",
-                    conclusion:  job.conclusion ?? "success",
-                    startedAt:   job.startedAt,
-                    createdAt:   job.createdAt,
+                    id: job.id,
+                    name: job.name,
+                    status: "completed",
+                    conclusion: job.conclusion ?? "success",
+                    startedAt: job.startedAt,
+                    createdAt: job.createdAt,
                     completedAt: job.completedAt ?? Date(),
-                    htmlUrl:     job.htmlUrl,
-                    isDimmed:    true,
-                    steps:       job.steps
+                    htmlUrl: job.htmlUrl,
+                    isDimmed: true,
+                    steps: job.steps
                 )
             }
 
@@ -381,16 +381,16 @@ final class RunnerStore {
                        let hit = newCache[job.id],
                        hit.conclusion != nil {
                         return ActiveJob(
-                            id:          job.id,
-                            name:        job.name,
-                            status:      hit.status,
-                            conclusion:  hit.conclusion,
-                            startedAt:   job.startedAt   ?? hit.startedAt,
-                            createdAt:   job.createdAt   ?? hit.createdAt,
+                            id: job.id,
+                            name: job.name,
+                            status: hit.status,
+                            conclusion: hit.conclusion,
+                            startedAt: job.startedAt   ?? hit.startedAt,
+                            createdAt: job.createdAt   ?? hit.createdAt,
                             completedAt: hit.completedAt ?? job.completedAt,
-                            htmlUrl:     job.htmlUrl     ?? hit.htmlUrl,
-                            isDimmed:    false,
-                            steps:       job.steps.isEmpty ? hit.steps : job.steps
+                            htmlUrl: job.htmlUrl     ?? hit.htmlUrl,
+                            isDimmed: false,
+                            steps: job.steps.isEmpty ? hit.steps : job.steps
                         )
                     }
                     // Secondary: completedAt is set but conclusion not yet propagated (#103).
@@ -398,32 +398,32 @@ final class RunnerStore {
                     // when the API lags. Treat as success so the row stops lingering.
                     if job.conclusion == nil, let _ = job.completedAt {
                         return ActiveJob(
-                            id:          job.id,
-                            name:        job.name,
-                            status:      "completed",
-                            conclusion:  "success",
-                            startedAt:   job.startedAt,
-                            createdAt:   job.createdAt,
+                            id: job.id,
+                            name: job.name,
+                            status: "completed",
+                            conclusion: "success",
+                            startedAt: job.startedAt,
+                            createdAt: job.createdAt,
                             completedAt: job.completedAt,
-                            htmlUrl:     job.htmlUrl,
-                            isDimmed:    false,
-                            steps:       job.steps
+                            htmlUrl: job.htmlUrl,
+                            isDimmed: false,
+                            steps: job.steps
                         )
                     }
                     // Tertiary: status already "completed" but conclusion/completedAt still nil (API lag).
                     // GitHub sets conclusion promptly for failures/cancellations, so nil here means success.
                     if job.conclusion == nil, job.status == "completed" {
                         return ActiveJob(
-                            id:          job.id,
-                            name:        job.name,
-                            status:      "completed",
-                            conclusion:  "success",
-                            startedAt:   job.startedAt,
-                            createdAt:   job.createdAt,
+                            id: job.id,
+                            name: job.name,
+                            status: "completed",
+                            conclusion: "success",
+                            startedAt: job.startedAt,
+                            createdAt: job.createdAt,
                             completedAt: job.completedAt,
-                            htmlUrl:     job.htmlUrl,
-                            isDimmed:    false,
-                            steps:       job.steps
+                            htmlUrl: job.htmlUrl,
+                            isDimmed: false,
+                            steps: job.steps
                         )
                     }
                     // Quinary: job has been in_progress for >10 min with no conclusion.
@@ -434,16 +434,16 @@ final class RunnerStore {
                        let started = job.startedAt,
                        Date().timeIntervalSince(started) > 600 {
                         return ActiveJob(
-                            id:          job.id,
-                            name:        job.name,
-                            status:      "completed",
-                            conclusion:  "success",
-                            startedAt:   job.startedAt,
-                            createdAt:   job.createdAt,
+                            id: job.id,
+                            name: job.name,
+                            status: "completed",
+                            conclusion: "success",
+                            startedAt: job.startedAt,
+                            createdAt: job.createdAt,
                             completedAt: job.completedAt ?? started.addingTimeInterval(600),
-                            htmlUrl:     job.htmlUrl,
-                            isDimmed:    false,
-                            steps:       job.steps
+                            htmlUrl: job.htmlUrl,
+                            isDimmed: false,
+                            steps: job.steps
                         )
                     }
                     return job

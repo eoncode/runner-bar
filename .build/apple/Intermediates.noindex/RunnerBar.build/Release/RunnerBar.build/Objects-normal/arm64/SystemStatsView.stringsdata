@@ -1,0 +1,32 @@
+{
+  "source": "/Users/eon/runner-bar/Sources/RunnerBar/SystemStatsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "CPU",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 64
+        }
+      },
+      {
+        "comment": "",
+        "key": "MEM",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "DISK",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 116
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,11 @@
+{
+  "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift" : {
+    "abi-baseline-json" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar.abi.json",
+    "const-values" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar-primary.swiftconstvalues",
+    "dependencies" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar-primary.d",
+    "diagnostics" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar-primary.dia",
+    "swiftdoc" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar.swiftdoc",
+    "swiftmodule" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar.swiftmodule",
+    "swiftsourceinfo" : "/Users/eon/runner-bar/.build/apple/Intermediates.noindex/RunnerBar.build/Release/RunnerBar.build/Objects-normal/arm64/RunnerBar.swiftsourceinfo"
+  }
+}

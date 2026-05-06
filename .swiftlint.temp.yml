@@ -1,0 +1,7 @@
+only_rules:
+  - colon
+included:
+  - Sources
+excluded:
+  - .build
+  - Package.swift

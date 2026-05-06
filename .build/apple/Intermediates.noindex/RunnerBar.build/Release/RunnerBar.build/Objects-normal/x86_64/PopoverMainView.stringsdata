@@ -1,0 +1,120 @@
+{
+  "source": "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "System",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "Actions",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "No recent actions",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "Active Jobs",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 133
+        }
+      },
+      {
+        "comment": "",
+        "key": "No active jobs",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "Local runners",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 172
+        }
+      },
+      {
+        "comment": "",
+        "key": "RunnerBar v0.34",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 43
+        }
+      },
+      {
+        "comment": "",
+        "key": "Authenticated",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 49
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sign in with GitHub",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 55
+        }
+      },
+      {
+        "comment": "",
+        "key": "GitHub rate limit reached — pausing polls",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 69
+        }
+      },
+      {
+        "comment": "",
+        "key": "Scopes",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 190
+        }
+      },
+      {
+        "comment": "",
+        "key": "owner/repo or org",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "Launch at login",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 215
+        }
+      },
+      {
+        "comment": "",
+        "key": "Quit",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 223
+        }
+      }
+    ]
+  },
+  "version": 1
+}

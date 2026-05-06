@@ -297,16 +297,16 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         let ends   = allJobs.compactMap { $0.completedAt }
 
         return ActionGroup(
-            headSha:             sha,
-            label:               label,
-            title:               title,
-            headBranch:          rep.headBranch,
-            repo:                scope,
-            runs:                runs,
-            jobs:                allJobs,
-            firstJobStartedAt:   starts.min(),
-            lastJobCompletedAt:  ends.max(),
-            createdAt:           rep.createdAt.flatMap { iso.date(from: $0) }
+            headSha: sha,
+            label: label,
+            title: title,
+            headBranch: rep.headBranch,
+            repo: scope,
+            runs: runs,
+            jobs: allJobs,
+            firstJobStartedAt: starts.min(),
+            lastJobCompletedAt: ends.max(),
+            createdAt: rep.createdAt.flatMap { iso.date(from: $0) }
         )
     }
 
@@ -331,25 +331,25 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
                             isDimmed: Bool = false) -> ActiveJob {
     let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
         JobStep(
-            id:          idx + 1,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
+            id: idx + 1,
+            name: s.name,
+            status: s.status,
+            conclusion: s.conclusion,
+            startedAt: s.startedAt.flatMap   { iso.date(from: $0) },
             completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
         )
     }
     return ActiveJob(
-        id:          j.id,
-        name:        j.name,
-        status:      j.status,
-        conclusion:  j.conclusion,
-        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+        id: j.id,
+        name: j.name,
+        status: j.status,
+        conclusion: j.conclusion,
+        startedAt: j.startedAt.flatMap   { iso.date(from: $0) },
+        createdAt: j.createdAt.flatMap   { iso.date(from: $0) },
         completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl:     j.htmlUrl,
-        isDimmed:    isDimmed,
-        steps:       steps
+        htmlUrl: j.htmlUrl,
+        isDimmed: isDimmed,
+        steps: steps
     )
 }
 
@@ -401,16 +401,16 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
             && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
             result[i] = ActiveJob(
-                id:          job.id,
-                name:        job.name,
-                status:      job.status,
-                conclusion:  job.conclusion,
-                startedAt:   freshJob.startedAt   ?? job.startedAt,
-                createdAt:   freshJob.createdAt   ?? job.createdAt,
+                id: job.id,
+                name: job.name,
+                status: job.status,
+                conclusion: job.conclusion,
+                startedAt: freshJob.startedAt   ?? job.startedAt,
+                createdAt: freshJob.createdAt   ?? job.createdAt,
                 completedAt: freshJob.completedAt ?? job.completedAt,
-                htmlUrl:     job.htmlUrl,
-                isDimmed:    job.isDimmed,
-                steps:       freshJob.steps
+                htmlUrl: job.htmlUrl,
+                isDimmed: job.isDimmed,
+                steps: freshJob.steps
             )
         }
     }

@@ -426,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         observable.reload()               // ❌ Step 2: NEVER move above popoverIsOpen = true
 
         let size = NSSize(
-            width:  hc.view.fittingSize.width > 0 ? hc.view.fittingSize.width : Self.fixedWidth,
+            width: hc.view.fittingSize.width > 0 ? hc.view.fittingSize.width : Self.fixedWidth,
             height: hc.view.fittingSize.height    // Step 3: read AFTER reload()
         )
 

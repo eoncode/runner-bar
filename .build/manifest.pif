@@ -1,0 +1,841 @@
+[
+  {
+    "contents" : {
+      "guid" : "Workspace:/Users/eon/runner-bar@11",
+      "name" : "RunnerBar",
+      "path" : "/Users/eon/runner-bar",
+      "projects" : [
+        "10080c19969b3159fb78ecf88019b6ab9b5f9ec235cf72efd98ad5f98713e58c",
+        "3ef39e44218fe22ae72351931d336edbc8a02b171397051f824691906e1c56fe"
+      ]
+    },
+    "signature" : "fbb30182966a27888b77017b379e298005e792ef1d9113cddde02e385587aae7",
+    "type" : "workspace"
+  },
+  {
+    "contents" : {
+      "buildConfigurations" : [
+        {
+          "buildSettings" : {
+            "CLANG_ENABLE_OBJC_ARC" : "YES",
+            "CODE_SIGNING_REQUIRED" : "NO",
+            "CODE_SIGN_IDENTITY" : "",
+            "COPY_PHASE_STRIP" : "NO",
+            "DEBUG_INFORMATION_FORMAT" : "dwarf",
+            "DRIVERKIT_DEPLOYMENT_TARGET" : "19.0",
+            "DYLIB_INSTALL_NAME_BASE" : "@rpath",
+            "ENABLE_NS_ASSERTIONS" : "YES",
+            "ENABLE_TESTABILITY" : "YES",
+            "ENABLE_TESTING_SEARCH_PATHS" : "YES",
+            "ENTITLEMENTS_REQUIRED" : "NO",
+            "FRAMEWORK_SEARCH_PATHS[__platform_filter=ios;ios-simulator]" : [
+              "$(inherited)",
+              "$(PLATFORM_DIR)/Developer/Library/Frameworks"
+            ],
+            "FRAMEWORK_SEARCH_PATHS[__platform_filter=macos]" : [
+              "$(inherited)",
+              "$(PLATFORM_DIR)/Developer/Library/Frameworks"
+            ],
+            "FRAMEWORK_SEARCH_PATHS[__platform_filter=tvos;tvos-simulator]" : [
+              "$(inherited)",
+              "$(PLATFORM_DIR)/Developer/Library/Frameworks"
+            ],
+            "GCC_OPTIMIZATION_LEVEL" : "0",
+            "GCC_PREPROCESSOR_DEFINITIONS" : [
+              "$(inherited)",
+              "SWIFT_PACKAGE",
+              "DEBUG=1"
+            ],
+            "IPHONEOS_DEPLOYMENT_TARGET" : "12.0",
+            "IPHONEOS_DEPLOYMENT_TARGET[__platform_filter=ios-maccatalyst]" : "13.0",
+            "KEEP_PRIVATE_EXTERNS" : "NO",
+            "MACOSX_DEPLOYMENT_TARGET" : "13.0",
+            "ONLY_ACTIVE_ARCH" : "YES",
+            "OTHER_LDRFLAGS" : [
+
+            ],
+            "PRODUCT_NAME" : "$(TARGET_NAME)",
+            "SDKROOT" : "auto",
+            "SDK_VARIANT" : "auto",
+            "SKIP_INSTALL" : "YES",
+            "SUPPORTED_PLATFORMS" : [
+              "$(AVAILABLE_PLATFORMS)"
+            ],
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS" : [
+              "$(inherited)",
+              "SWIFT_PACKAGE",
+              "DEBUG"
+            ],
+            "SWIFT_INSTALL_OBJC_HEADER" : "NO",
+            "SWIFT_OBJC_INTERFACE_HEADER_NAME" : "",
+            "SWIFT_OPTIMIZATION_LEVEL" : "-Onone",
+            "TVOS_DEPLOYMENT_TARGET" : "12.0",
+            "USE_HEADERMAP" : "NO",
+            "WATCHOS_DEPLOYMENT_TARGET" : "4.0",
+            "XROS_DEPLOYMENT_TARGET" : "1.0"
+          },
+          "guid" : "PACKAGE:/Users/eon/runner-bar::BUILDCONFIG_Debug",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Debug"
+        },
+        {
+          "buildSettings" : {
+            "CLANG_ENABLE_OBJC_ARC" : "YES",
+            "CODE_SIGNING_REQUIRED" : "NO",
+            "CODE_SIGN_IDENTITY" : "",
+            "COPY_PHASE_STRIP" : "YES",
+            "DEBUG_INFORMATION_FORMAT" : "dwarf-with-dsym",
+            "DRIVERKIT_DEPLOYMENT_TARGET" : "19.0",
+            "DYLIB_INSTALL_NAME_BASE" : "@rpath",
+            "ENABLE_TESTING_SEARCH_PATHS" : "YES",
+            "ENTITLEMENTS_REQUIRED" : "NO",
+            "FRAMEWORK_SEARCH_PATHS[__platform_filter=ios;ios-simulator]" : [
+              "$(inherited)",
+              "$(PLATFORM_DIR)/Developer/Library/Frameworks"
+            ],
+            "FRAMEWORK_SEARCH_PATHS[__platform_filter=macos]" : [
+              "$(inherited)",
+              "$(PLATFORM_DIR)/Developer/Library/Frameworks"
+            ],
+            "FRAMEWORK_SEARCH_PATHS[__platform_filter=tvos;tvos-simulator]" : [
+              "$(inherited)",
+              "$(PLATFORM_DIR)/Developer/Library/Frameworks"
+            ],
+            "GCC_OPTIMIZATION_LEVEL" : "s",
+            "GCC_PREPROCESSOR_DEFINITIONS" : [
+              "$(inherited)",
+              "SWIFT_PACKAGE"
+            ],
+            "IPHONEOS_DEPLOYMENT_TARGET" : "12.0",
+            "IPHONEOS_DEPLOYMENT_TARGET[__platform_filter=ios-maccatalyst]" : "13.0",
+            "KEEP_PRIVATE_EXTERNS" : "NO",
+            "MACOSX_DEPLOYMENT_TARGET" : "13.0",
+            "OTHER_LDRFLAGS" : [
+
+            ],
+            "PRODUCT_NAME" : "$(TARGET_NAME)",
+            "SDKROOT" : "auto",
+            "SDK_VARIANT" : "auto",
+            "SKIP_INSTALL" : "YES",
+            "SUPPORTED_PLATFORMS" : [
+              "$(AVAILABLE_PLATFORMS)"
+            ],
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS" : [
+              "$(inherited)",
+              "SWIFT_PACKAGE"
+            ],
+            "SWIFT_INSTALL_OBJC_HEADER" : "NO",
+            "SWIFT_OBJC_INTERFACE_HEADER_NAME" : "",
+            "SWIFT_OPTIMIZATION_LEVEL" : "-Owholemodule",
+            "TVOS_DEPLOYMENT_TARGET" : "12.0",
+            "USE_HEADERMAP" : "NO",
+            "WATCHOS_DEPLOYMENT_TARGET" : "4.0",
+            "XROS_DEPLOYMENT_TARGET" : "1.0"
+          },
+          "guid" : "PACKAGE:/Users/eon/runner-bar::BUILDCONFIG_Release",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Release"
+        }
+      ],
+      "defaultConfigurationName" : "Release",
+      "developmentRegion" : "en",
+      "groupTree" : {
+        "children" : [
+          {
+            "children" : [
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_0",
+                "name" : "ActionDetailView.swift",
+                "path" : "ActionDetailView.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_1",
+                "name" : "ActionGroup.swift",
+                "path" : "ActionGroup.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_2",
+                "name" : "ActiveJob.swift",
+                "path" : "ActiveJob.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_3",
+                "name" : "AppDelegate.swift",
+                "path" : "AppDelegate.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_4",
+                "name" : "Auth.swift",
+                "path" : "Auth.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_5",
+                "name" : "CancelButton.swift",
+                "path" : "CancelButton.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_6",
+                "name" : "GitHub.swift",
+                "path" : "GitHub.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_7",
+                "name" : "JobDetailView.swift",
+                "path" : "JobDetailView.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_8",
+                "name" : "LogCopyButton.swift",
+                "path" : "LogCopyButton.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_9",
+                "name" : "LogFetcher.swift",
+                "path" : "LogFetcher.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_10",
+                "name" : "Logger.swift",
+                "path" : "Logger.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_11",
+                "name" : "LoginItem.swift",
+                "path" : "LoginItem.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_12",
+                "name" : "PopoverMainView.swift",
+                "path" : "PopoverMainView.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_13",
+                "name" : "PopoverView.swift",
+                "path" : "PopoverView.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_14",
+                "name" : "ReRunButton.swift",
+                "path" : "ReRunButton.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_15",
+                "name" : "Runner.swift",
+                "path" : "Runner.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_16",
+                "name" : "RunnerMetrics.swift",
+                "path" : "RunnerMetrics.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_17",
+                "name" : "RunnerStore.swift",
+                "path" : "RunnerStore.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_18",
+                "name" : "ScopeStore.swift",
+                "path" : "ScopeStore.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_19",
+                "name" : "Shell.swift",
+                "path" : "Shell.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_20",
+                "name" : "StatusIcon.swift",
+                "path" : "StatusIcon.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_21",
+                "name" : "StatusPanel.swift",
+                "path" : "StatusPanel.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_22",
+                "name" : "StepLogView.swift",
+                "path" : "StepLogView.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_23",
+                "name" : "SystemStats.swift",
+                "path" : "SystemStats.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_24",
+                "name" : "SystemStatsView.swift",
+                "path" : "SystemStatsView.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_25",
+                "name" : "main.swift",
+                "path" : "main.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              }
+            ],
+            "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0",
+            "name" : "Sources/RunnerBar",
+            "path" : "Sources/RunnerBar",
+            "sourceTree" : "<group>",
+            "type" : "group"
+          }
+        ],
+        "guid" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP",
+        "name" : "",
+        "path" : "",
+        "sourceTree" : "<group>",
+        "type" : "group"
+      },
+      "guid" : "PACKAGE:/Users/eon/runner-bar@11",
+      "path" : "/Users/eon/runner-bar",
+      "projectDirectory" : "/Users/eon/runner-bar",
+      "projectIsPackage" : "true",
+      "projectName" : "RunnerBar",
+      "targets" : [
+        "e3440d93384309ec0a30157d12f38b00125da30d4987e8c37dfe2f2449ecbcd2"
+      ]
+    },
+    "signature" : "10080c19969b3159fb78ecf88019b6ab9b5f9ec235cf72efd98ad5f98713e58c",
+    "type" : "project"
+  },
+  {
+    "contents" : {
+      "buildConfigurations" : [
+        {
+          "buildSettings" : {
+            "CLANG_ENABLE_MODULES" : "YES",
+            "DEFINES_MODULE" : "YES",
+            "INSTALL_PATH" : "/usr/local/bin",
+            "LD_RUNPATH_SEARCH_PATHS" : [
+              "$(inherited)",
+              "@executable_path/../lib"
+            ],
+            "LIBRARY_SEARCH_PATHS" : [
+              "$(inherited)",
+              "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
+            ],
+            "OTHER_SWIFT_FLAGS" : [
+              "-package-name",
+              "runner_bar"
+            ],
+            "PACKAGE_RESOURCE_TARGET_KIND" : "regular",
+            "PRODUCT_BUNDLE_IDENTIFIER" : "RunnerBar",
+            "PRODUCT_MODULE_NAME" : "RunnerBar",
+            "PRODUCT_NAME" : "$(TARGET_NAME)",
+            "SKIP_INSTALL" : "NO",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS" : [
+              "$(inherited)",
+              "SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE"
+            ],
+            "SWIFT_VERSION" : "5",
+            "TARGET_NAME" : "RunnerBar"
+          },
+          "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDCONFIG_Debug",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Debug"
+        },
+        {
+          "buildSettings" : {
+            "CLANG_ENABLE_MODULES" : "YES",
+            "DEFINES_MODULE" : "YES",
+            "INSTALL_PATH" : "/usr/local/bin",
+            "LD_RUNPATH_SEARCH_PATHS" : [
+              "$(inherited)",
+              "@executable_path/../lib"
+            ],
+            "LIBRARY_SEARCH_PATHS" : [
+              "$(inherited)",
+              "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
+            ],
+            "OTHER_SWIFT_FLAGS" : [
+              "-package-name",
+              "runner_bar"
+            ],
+            "PACKAGE_RESOURCE_TARGET_KIND" : "regular",
+            "PRODUCT_BUNDLE_IDENTIFIER" : "RunnerBar",
+            "PRODUCT_MODULE_NAME" : "RunnerBar",
+            "PRODUCT_NAME" : "$(TARGET_NAME)",
+            "SKIP_INSTALL" : "NO",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS" : [
+              "$(inherited)",
+              "SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE"
+            ],
+            "SWIFT_VERSION" : "5",
+            "TARGET_NAME" : "RunnerBar"
+          },
+          "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDCONFIG_Release",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Release"
+        }
+      ],
+      "buildPhases" : [
+        {
+          "buildFiles" : [
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_0",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::0",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_1",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::1",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_2",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::2",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_3",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::3",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_4",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::4",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_5",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::5",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_6",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::6",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_7",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::7",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_8",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::8",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_9",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::9",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_10",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::10",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_11",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::11",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_12",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::12",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_13",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::13",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_14",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::14",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_15",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::15",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_16",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::16",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_17",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::17",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_18",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::18",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_19",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::19",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_20",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::20",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_21",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::21",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_22",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::22",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_23",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::23",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_24",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::24",
+              "platformFilters" : [
+
+              ]
+            },
+            {
+              "fileReference" : "PACKAGE:/Users/eon/runner-bar::MAINGROUP::REF_0::REF_25",
+              "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0::25",
+              "platformFilters" : [
+
+              ]
+            }
+          ],
+          "guid" : "PACKAGE-PRODUCT:RunnerBar::BUILDPHASE_0",
+          "type" : "com.apple.buildphase.sources"
+        }
+      ],
+      "buildRules" : [
+
+      ],
+      "dependencies" : [
+
+      ],
+      "guid" : "PACKAGE-PRODUCT:RunnerBar@11",
+      "impartedBuildProperties" : {
+        "buildSettings" : {
+
+        }
+      },
+      "name" : "RunnerBar_60FF8A341ED8D098_PackageProduct",
+      "productReference" : {
+        "guid" : "PRODUCTREF-PACKAGE-PRODUCT:RunnerBar",
+        "name" : "RunnerBar",
+        "type" : "file"
+      },
+      "productTypeIdentifier" : "com.apple.product-type.tool",
+      "type" : "standard"
+    },
+    "signature" : "e3440d93384309ec0a30157d12f38b00125da30d4987e8c37dfe2f2449ecbcd2",
+    "type" : "target"
+  },
+  {
+    "contents" : {
+      "buildConfigurations" : [
+        {
+          "buildSettings" : {
+            "PRODUCT_NAME" : "$(TARGET_NAME)",
+            "SDKROOT" : "auto",
+            "SDK_VARIANT" : "auto",
+            "SKIP_INSTALL" : "YES",
+            "SUPPORTED_PLATFORMS" : [
+              "$(AVAILABLE_PLATFORMS)"
+            ]
+          },
+          "guid" : "AGGREGATE::BUILDCONFIG_Debug",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Debug"
+        },
+        {
+          "buildSettings" : {
+            "PRODUCT_NAME" : "$(TARGET_NAME)",
+            "SDKROOT" : "auto",
+            "SDK_VARIANT" : "auto",
+            "SKIP_INSTALL" : "YES",
+            "SUPPORTED_PLATFORMS" : [
+              "$(AVAILABLE_PLATFORMS)"
+            ]
+          },
+          "guid" : "AGGREGATE::BUILDCONFIG_Release",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Release"
+        }
+      ],
+      "defaultConfigurationName" : "Release",
+      "developmentRegion" : "en",
+      "groupTree" : {
+        "children" : [
+
+        ],
+        "guid" : "AGGREGATE::MAINGROUP",
+        "name" : "",
+        "path" : "",
+        "sourceTree" : "<group>",
+        "type" : "group"
+      },
+      "guid" : "AGGREGATE@11",
+      "path" : "/Users/eon/runner-bar",
+      "projectDirectory" : "/Users/eon/runner-bar",
+      "projectIsPackage" : "true",
+      "projectName" : "Aggregate",
+      "targets" : [
+        "d70cd13b65e44925a3c23580ea641469f807b16b40e880e55774aa4115118eb6",
+        "28076b2a9eaa827478802e2fae3186c4a6c8d79ec87e1985b13a46842121e152"
+      ]
+    },
+    "signature" : "3ef39e44218fe22ae72351931d336edbc8a02b171397051f824691906e1c56fe",
+    "type" : "project"
+  },
+  {
+    "contents" : {
+      "buildConfigurations" : [
+        {
+          "buildSettings" : {
+
+          },
+          "guid" : "ALL-EXCLUDING-TESTS::BUILDCONFIG_Debug",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Debug"
+        },
+        {
+          "buildSettings" : {
+
+          },
+          "guid" : "ALL-EXCLUDING-TESTS::BUILDCONFIG_Release",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Release"
+        }
+      ],
+      "buildPhases" : [
+
+      ],
+      "dependencies" : [
+        {
+          "guid" : "PACKAGE-PRODUCT:RunnerBar@11"
+        }
+      ],
+      "guid" : "ALL-EXCLUDING-TESTS@11",
+      "impartedBuildProperties" : {
+        "buildSettings" : {
+
+        }
+      },
+      "name" : "AllExcludingTests",
+      "type" : "aggregate"
+    },
+    "signature" : "d70cd13b65e44925a3c23580ea641469f807b16b40e880e55774aa4115118eb6",
+    "type" : "target"
+  },
+  {
+    "contents" : {
+      "buildConfigurations" : [
+        {
+          "buildSettings" : {
+
+          },
+          "guid" : "ALL-INCLUDING-TESTS::BUILDCONFIG_Debug",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Debug"
+        },
+        {
+          "buildSettings" : {
+
+          },
+          "guid" : "ALL-INCLUDING-TESTS::BUILDCONFIG_Release",
+          "impartedBuildProperties" : {
+            "buildSettings" : {
+
+            }
+          },
+          "name" : "Release"
+        }
+      ],
+      "buildPhases" : [
+
+      ],
+      "dependencies" : [
+        {
+          "guid" : "PACKAGE-PRODUCT:RunnerBar@11"
+        }
+      ],
+      "guid" : "ALL-INCLUDING-TESTS@11",
+      "impartedBuildProperties" : {
+        "buildSettings" : {
+
+        }
+      },
+      "name" : "AllIncludingTests",
+      "type" : "aggregate"
+    },
+    "signature" : "28076b2a9eaa827478802e2fae3186c4a6c8d79ec87e1985b13a46842121e152",
+    "type" : "target"
+  }
+]

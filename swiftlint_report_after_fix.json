@@ -1,0 +1,866 @@
+[
+  {
+    "character" : 15,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/LogFetcher.swift",
+    "line" : 10,
+    "reason" : "Variable name 'gh' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 9,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/LogFetcher.swift",
+    "line" : 68,
+    "reason" : "Variable name 'dg' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 9,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/LogFetcher.swift",
+    "line" : 94,
+    "reason" : "Variable name 'fm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/LogFetcher.swift",
+    "line" : 93,
+    "reason" : "internal declarations should be documented",
+    "rule_id" : "missing_docs",
+    "severity" : "Warning",
+    "type" : "Missing Docs"
+  },
+  {
+    "character" : 9,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/Logger.swift",
+    "line" : 13,
+    "reason" : "Variable name 'ts' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 12,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/Auth.swift",
+    "line" : 19,
+    "reason" : "Variable name 't' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 12,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/Auth.swift",
+    "line" : 23,
+    "reason" : "Variable name 't' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 15,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/GitHub.swift",
+    "line" : 81,
+    "reason" : "Variable name 'gh' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 15,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/GitHub.swift",
+    "line" : 210,
+    "reason" : "Variable name 'gh' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/GitHub.swift",
+    "line" : 5,
+    "reason" : "internal declarations should be documented",
+    "rule_id" : "missing_docs",
+    "severity" : "Warning",
+    "type" : "Missing Docs"
+  },
+  {
+    "character" : 19,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/Runner.swift",
+    "line" : 40,
+    "reason" : "Variable name 'm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 33,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+    "line" : 59,
+    "reason" : "Variable name 'ok' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 33,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+    "line" : 72,
+    "reason" : "Variable name 'ok' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 29,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+    "line" : 82,
+    "reason" : "Variable name 'g' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 36,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+    "line" : 212,
+    "reason" : "Variable name 'c' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 36,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+    "line" : 222,
+    "reason" : "Variable name 'c' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 66,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+    "line" : 136,
+    "reason" : "Trailing closure syntax should not be used when passing more than one closure argument",
+    "rule_id" : "multiple_closures_with_trailing_closure",
+    "severity" : "Warning",
+    "type" : "Multiple Closures with Trailing Closure"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/main.swift",
+    "line" : 9,
+    "reason" : "internal declarations should be documented",
+    "rule_id" : "missing_docs",
+    "severity" : "Warning",
+    "type" : "Missing Docs"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/main.swift",
+    "line" : 10,
+    "reason" : "internal declarations should be documented",
+    "rule_id" : "missing_docs",
+    "severity" : "Warning",
+    "type" : "Missing Docs"
+  },
+  {
+    "character" : 33,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/JobDetailView.swift",
+    "line" : 93,
+    "reason" : "Variable name 'ok' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 68,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/JobDetailView.swift",
+    "line" : 165,
+    "reason" : "Trailing closure syntax should not be used when passing more than one closure argument",
+    "rule_id" : "multiple_closures_with_trailing_closure",
+    "severity" : "Warning",
+    "type" : "Multiple Closures with Trailing Closure"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 209,
+    "reason" : "Function should have complexity 10 or less; currently complexity is 12",
+    "rule_id" : "cyclomatic_complexity",
+    "severity" : "Warning",
+    "type" : "Cyclomatic Complexity"
+  },
+  {
+    "character" : null,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 427,
+    "reason" : "File should contain 400 lines or less: currently contains 427",
+    "rule_id" : "file_length",
+    "severity" : "Warning",
+    "type" : "File Length"
+  },
+  {
+    "character" : 6,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 209,
+    "reason" : "Function body should span 50 lines or less excluding comments and whitespace: currently spans 83 lines",
+    "rule_id" : "function_body_length",
+    "severity" : "Warning",
+    "type" : "Function Body Length"
+  },
+  {
+    "character" : 16,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 123,
+    "reason" : "Variable name 'j' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 16,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 124,
+    "reason" : "Variable name 'j' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 136,
+    "reason" : "Variable name 'm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 35,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 136,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 143,
+    "reason" : "Variable name 'm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 31,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 143,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 12,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 191,
+    "reason" : "Variable name 'pr' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 19,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 314,
+    "reason" : "Variable name 'a' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 22,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 314,
+    "reason" : "Variable name 'b' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 25,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 330,
+    "reason" : "Variable name 'j' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 68,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 332,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 9,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 381,
+    "reason" : "Variable name 'i' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 29,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActionGroup.swift",
+    "line" : 331,
+    "reason" : "Function parameters should be aligned vertically if they're in multiple lines in a declaration",
+    "rule_id" : "vertical_parameter_alignment",
+    "severity" : "Warning",
+    "type" : "Vertical Parameter Alignment"
+  },
+  {
+    "character" : 5,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 151,
+    "reason" : "Function should have complexity 10 or less; currently complexity is 23",
+    "rule_id" : "cyclomatic_complexity",
+    "severity" : "Error",
+    "type" : "Cyclomatic Complexity"
+  },
+  {
+    "character" : null,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 472,
+    "reason" : "File should contain 400 lines or less: currently contains 472",
+    "rule_id" : "file_length",
+    "severity" : "Warning",
+    "type" : "File Length"
+  },
+  {
+    "character" : 10,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 151,
+    "reason" : "Function body should span 100 lines or less excluding comments and whitespace: currently spans 233 lines",
+    "rule_id" : "function_body_length",
+    "severity" : "Error",
+    "type" : "Function Body Length"
+  },
+  {
+    "character" : 18,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 377,
+    "reason" : "Function body should span 50 lines or less excluding comments and whitespace: currently spans 64 lines",
+    "rule_id" : "function_body_length",
+    "severity" : "Warning",
+    "type" : "Function Body Length"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 176,
+    "reason" : "Variable name 'i' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 177,
+    "reason" : "Variable name 'i' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 21,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 178,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 37,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 282,
+    "reason" : "Variable name 'a' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 40,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 282,
+    "reason" : "Variable name 'b' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 358,
+    "reason" : "Variable name 'g' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 359,
+    "reason" : "Variable name 'g' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 360,
+    "reason" : "Variable name 'g' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 7,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 42,
+    "reason" : "Type body should span 200 lines or less excluding comments and whitespace: currently spans 268 lines",
+    "rule_id" : "type_body_length",
+    "severity" : "Warning",
+    "type" : "Type Body Length"
+  },
+  {
+    "character" : 51,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/RunnerStore.swift",
+    "line" : 399,
+    "reason" : "Prefer `!= nil` over `let _ =`",
+    "rule_id" : "unused_optional_binding",
+    "severity" : "Warning",
+    "type" : "Unused Optional Binding"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 315,
+    "reason" : "Variable name 't' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : null,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 251,
+    "reason" : "Line should be 120 characters or less; currently it has 126 characters",
+    "rule_id" : "line_length",
+    "severity" : "Warning",
+    "type" : "Line Length"
+  },
+  {
+    "character" : null,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 307,
+    "reason" : "Line should be 120 characters or less; currently it has 121 characters",
+    "rule_id" : "line_length",
+    "severity" : "Warning",
+    "type" : "Line Length"
+  },
+  {
+    "character" : 63,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 94,
+    "reason" : "Trailing closure syntax should not be used when passing more than one closure argument",
+    "rule_id" : "multiple_closures_with_trailing_closure",
+    "severity" : "Warning",
+    "type" : "Multiple Closures with Trailing Closure"
+  },
+  {
+    "character" : 58,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 142,
+    "reason" : "Trailing closure syntax should not be used when passing more than one closure argument",
+    "rule_id" : "multiple_closures_with_trailing_closure",
+    "severity" : "Warning",
+    "type" : "Multiple Closures with Trailing Closure"
+  },
+  {
+    "character" : 93,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 195,
+    "reason" : "Trailing closure syntax should not be used when passing more than one closure argument",
+    "rule_id" : "multiple_closures_with_trailing_closure",
+    "severity" : "Warning",
+    "type" : "Multiple Closures with Trailing Closure"
+  },
+  {
+    "character" : 69,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 221,
+    "reason" : "Trailing closure syntax should not be used when passing more than one closure argument",
+    "rule_id" : "multiple_closures_with_trailing_closure",
+    "severity" : "Warning",
+    "type" : "Multiple Closures with Trailing Closure"
+  },
+  {
+    "character" : 29,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 251,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 71,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 251,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 103,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 251,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 45,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 263,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 49,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 264,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 33,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 272,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 64,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 272,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 93,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 272,
+    "reason" : "Case statements should vertically aligned with their closing brace",
+    "rule_id" : "switch_case_alignment",
+    "severity" : "Warning",
+    "type" : "Switch and Case Statement Alignment"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/PopoverMainView.swift",
+    "line" : 28,
+    "reason" : "Type body should span 200 lines or less excluding comments and whitespace: currently spans 225 lines",
+    "rule_id" : "type_body_length",
+    "severity" : "Warning",
+    "type" : "Type Body Length"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 160,
+    "reason" : "`where` clauses are preferred over a single `if` inside a `for`",
+    "rule_id" : "for_where",
+    "severity" : "Warning",
+    "type" : "Prefer For-Where"
+  },
+  {
+    "character" : 6,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 143,
+    "reason" : "Function body should span 50 lines or less excluding comments and whitespace: currently spans 52 lines",
+    "rule_id" : "function_body_length",
+    "severity" : "Warning",
+    "type" : "Function Body Length"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 19,
+    "reason" : "Variable name 'm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 31,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 19,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 73,
+    "reason" : "Variable name 'm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 35,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 73,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 81,
+    "reason" : "Variable name 'm' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 31,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 81,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 9,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 97,
+    "reason" : "Variable name 'gh' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 173,
+    "reason" : "Variable name 'j' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 76,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 175,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 9,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 213,
+    "reason" : "Variable name 'c' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 10,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 223,
+    "reason" : "Variable name 'i' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/ActiveJob.swift",
+    "line" : 143,
+    "reason" : "internal declarations should be documented",
+    "rule_id" : "missing_docs",
+    "severity" : "Warning",
+    "type" : "Missing Docs"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 143,
+    "reason" : "Variable name 'i' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 146,
+    "reason" : "Variable name 'u' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 147,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 149,
+    "reason" : "Variable name 'n' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 205,
+    "reason" : "Variable name 'kr' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 214,
+    "reason" : "Variable name 'gb' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 253,
+    "reason" : "Variable name 'gb' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 286,
+    "reason" : "Variable name 's' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Error",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 28,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 90,
+    "reason" : "Tuples should have at most 2 members",
+    "rule_id" : "large_tuple",
+    "severity" : "Warning",
+    "type" : "Large Tuple"
+  },
+  {
+    "character" : 33,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 251,
+    "reason" : "Tuples should have at most 2 members",
+    "rule_id" : "large_tuple",
+    "severity" : "Error",
+    "type" : "Large Tuple"
+  },
+  {
+    "character" : 1,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/SystemStats.swift",
+    "line" : 15,
+    "reason" : "internal declarations should be documented",
+    "rule_id" : "missing_docs",
+    "severity" : "Warning",
+    "type" : "Missing Docs"
+  },
+  {
+    "character" : null,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/AppDelegate.swift",
+    "line" : 443,
+    "reason" : "File should contain 400 lines or less: currently contains 443",
+    "rule_id" : "file_length",
+    "severity" : "Warning",
+    "type" : "File Length"
+  },
+  {
+    "character" : 17,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/AppDelegate.swift",
+    "line" : 118,
+    "reason" : "Variable name 'hc' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 13,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/AppDelegate.swift",
+    "line" : 148,
+    "reason" : "Variable name 'hc' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  },
+  {
+    "character" : 19,
+    "file" : "/Users/eon/runner-bar/Sources/RunnerBar/AppDelegate.swift",
+    "line" : 422,
+    "reason" : "Variable name 'hc' should be between 3 and 40 characters long",
+    "rule_id" : "identifier_name",
+    "severity" : "Warning",
+    "type" : "Identifier Name"
+  }
+]

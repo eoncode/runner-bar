@@ -1,0 +1,32 @@
+{
+  "source": "/Users/eon/runner-bar/Sources/RunnerBar/ActionDetailView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Actions",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 49
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld jobs concluded",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "No jobs available",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 130
+        }
+      }
+    ]
+  },
+  "version": 1
+}
