@@ -21,6 +21,8 @@ struct JobDetailView: View {
 
     /// Drives the live elapsed timer in the header.
     @State private var tick = 0
+    /// Retained so it can be invalidated on disappear to prevent a timer leak.
+    @State private var tickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -135,11 +137,15 @@ struct JobDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
-            Timer.scheduledTimer(
+            tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,
                 repeats: true,
                 block: { _ in tick += 1 }
             )
+        }
+        .onDisappear {
+            tickTimer?.invalidate()
+            tickTimer = nil
         }
     }
 
