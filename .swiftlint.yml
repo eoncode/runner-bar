@@ -7,8 +7,6 @@ included:
 excluded:
   - .build
   - Package.swift
-  - Sources/RunnerBar/ActionGroup.swift
-  - Sources/RunnerBar/ActionDetailView.swift
 
 # ── Opt-in rules ────────────────────────────────────────────────────────────────────────
 opt_in_rules:

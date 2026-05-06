@@ -87,6 +87,7 @@ struct ActionDetailView: View {
                     },
                     isDisabled: false
                 )
+                // swiftlint:disable:next identifier_name
                 Text(elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -132,7 +133,7 @@ struct ActionDetailView: View {
                             .padding(.vertical, 8)
                     } else {
                         ForEach(group.jobs) { job in
-                            Button(action: { onSelectJob(job) }) {
+                            Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
                                     Circle()
                                         .fill(jobDotColor(for: job))
@@ -165,7 +166,7 @@ struct ActionDetailView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 3)
                                 .contentShape(Rectangle())
-                            }
+                            })
                             .buttonStyle(.plain)
                         }
                     }
@@ -184,6 +185,7 @@ struct ActionDetailView: View {
         }
     }
 
+    // swiftlint:disable:next identifier_name
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     // MARK: - Job row helpers

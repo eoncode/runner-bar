@@ -124,14 +124,18 @@ struct ActionGroup: Identifiable {
     var elapsed: String {
         if let start = firstJobStartedAt {
             let end = lastJobCompletedAt ?? Date()
+            // swiftlint:disable:next identifier_name
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
+            // swiftlint:disable:next identifier_name
             let m = sec / 60; let s = sec % 60
             return String(format: "%02d:%02d", m, s)
         }
         guard let start = createdAt else { return "00:00" }
+        // swiftlint:disable:next identifier_name
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
+        // swiftlint:disable:next identifier_name
         let m = sec / 60; let s = sec % 60
         return String(format: "%02d:%02d", m, s)
     }
@@ -193,6 +197,7 @@ private func prLabel(from run: RunPayload) -> String {
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
 /// in_progress first, then queued, then done — newest first.
+// swiftlint:disable:next function_body_length cyclomatic_complexity
 func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
