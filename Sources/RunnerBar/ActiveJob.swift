@@ -26,8 +26,20 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     let steps: [JobStep]
 
     /// Human-readable elapsed time string.
+    /// Queued jobs always show "00:00".
+    /// Completed jobs return "--:--" when timestamps are unavailable.
+    /// Live jobs fall back to createdAt while startedAt may not yet be set.
     var elapsed: String {
-        let start = startedAt ?? createdAt ?? Date()
+        guard status != "queued" else { return "00:00" }
+        if conclusion != nil {
+            guard let start = startedAt, let end = completedAt else { return "--:--" }
+            let secs = Int(end.timeIntervalSince(start))
+            guard secs >= 0 else { return "--:--" }
+            // swiftlint:disable:next identifier_name
+            let m = secs / 60; let s = secs % 60
+            return String(format: "%02d:%02d", m, s)
+        }
+        guard let start = startedAt ?? createdAt else { return "00:00" }
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
@@ -131,3 +143,8 @@ extension RunnerStore {
         )
     }
 }
+
+// MARK: - Codable helpers
+
+/// Shared response wrapper used by ActionGroup.swift and RunnerStoreState.swift.
+struct JobsResponse: Codable { let jobs: [JobPayload] }
