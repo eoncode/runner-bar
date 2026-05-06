@@ -2,60 +2,70 @@ import Foundation
 
 // MARK: - ActionGroup model
 
-/// A logical grouping of GitHub Actions workflow runs sharing the same `head_sha`.
-///
-/// Aggregates multiple `WorkflowRun` entries into a single popover row, showing
-/// the aggregate status, timing, and individual jobs for that commit.
-struct ActionGroup: Identifiable, Equatable {
-    // MARK: Stored properties
+/// Groups one or more workflow runs that share a `head_sha` into a single display entry.
+struct ActionGroup: Identifiable {
     /// Unique identifier — the `head_sha` of the grouped runs.
-    let id: String
-    /// Commit SHA all grouped runs share.
+    var id: String { headSha }
+    /// The git SHA shared by all runs in this group.
     let headSha: String
-    /// Short human-readable label (e.g. branch name or PR title).
+    /// Short branch/SHA label shown in the popover row.
     let label: String
-    /// Most recent workflow run title in the group.
+    /// Workflow title shown in the popover row (first run's name).
     let title: String
-    /// Branch name associated with the grouped runs.
+    /// The head branch name.
     let headBranch: String
-    /// `owner/repo` string for the repository.
+    /// The `owner/repo` scope string.
     let repo: String
-    /// All workflow runs in the group.
+    /// All workflow runs in this group.
     let runs: [WorkflowRun]
-    /// All jobs across all runs in the group.
-    let jobs: [ActiveJob]
-    /// Earliest job start time in the group.
+    /// Jobs across all runs, enriched with live data where available.
+    var jobs: [ActiveJob]
+    /// When the first job in the group started.
     let firstJobStartedAt: Date?
-    /// Latest job completion time in the group, or nil if still running.
+    /// When the last job in the group completed.
     let lastJobCompletedAt: Date?
-    /// Workflow-run creation time (used when job timestamps are unavailable).
+    /// When the group's first run was created.
     let createdAt: Date?
-    /// When true, this group is shown dimmed (recently completed).
+    /// `true` when the group is shown as a dimmed historical entry.
     var isDimmed: Bool
 
-    // MARK: Computed
-    /// Aggregate status across all runs in the group.
-    var groupStatus: AggregateStatus {
-        if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
-        if runs.contains(where: { $0.status == "queued" || $0.status == "waiting" }) { return .queued }
+    /// Combined status across all runs.
+    var groupStatus: GroupStatus {
+        let statuses = runs.map { $0.status }
+        if statuses.contains("in_progress") { return .inProgress }
+        if statuses.contains("queued")      { return .queued }
         return .completed
     }
 
-    /// Overall conclusion collapsed from all run conclusions.
-    var overallConclusion: String? {
-        let conclusions = runs.compactMap { $0.conclusion }
-        if conclusions.contains("failure") { return "failure" }
-        if conclusions.contains("cancelled") { return "cancelled" }
-        if conclusions.contains("skipped") { return "skipped" }
-        if conclusions.allSatisfy({ $0 == "success" }) { return "success" }
-        return conclusions.first
+    /// Elapsed time string for the whole group.
+    var elapsed: String {
+        let start = firstJobStartedAt ?? createdAt ?? Date()
+        let end   = lastJobCompletedAt ?? Date()
+        let secs  = Int(end.timeIntervalSince(start))
+        if secs < 60 { return "\(secs)s" }
+        return "\(secs / 60)m \(secs % 60)s"
     }
 
-    /// Returns a copy of the group with its jobs replaced by `newJobs`.
+    /// Name of the currently running (or last) job, for display in the popover row.
+    var currentJobName: String {
+        jobs.first(where: { $0.status == "in_progress" })?.name
+            ?? jobs.first(where: { $0.status == "queued" })?.name
+            ?? jobs.last?.name
+            ?? ""
+    }
+
+    /// `X/Y` job-count progress label.
+    var jobProgress: String {
+        let done = jobs.filter { $0.conclusion != nil }.count
+        return "\(done)/\(jobs.count)"
+    }
+
+    /// Returns a copy of this group with a replacement jobs array.
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
         ActionGroup(
-            headSha: headSha, label: label, title: title, headBranch: headBranch,
-            repo: repo, runs: runs, jobs: newJobs,
+            headSha: headSha, label: label, title: title,
+            headBranch: headBranch, repo: repo, runs: runs,
+            jobs: newJobs,
             firstJobStartedAt: firstJobStartedAt,
             lastJobCompletedAt: lastJobCompletedAt,
             createdAt: createdAt, isDimmed: isDimmed
@@ -63,72 +73,43 @@ struct ActionGroup: Identifiable, Equatable {
     }
 }
 
-// MARK: - AggregateStatus
+// MARK: - GroupStatus
 
-/// The overall run/job status for an `ActionGroup`.
-enum AggregateStatus {
-    /// At least one run or job is actively executing.
+/// Aggregate lifecycle status for an `ActionGroup`.
+enum GroupStatus {
+    /// At least one run is currently executing.
     case inProgress
-    /// All runs/jobs are queued or waiting; none are actively executing.
+    /// All runs are queued, none are executing.
     case queued
-    /// All runs/jobs have finished.
+    /// All runs have finished.
     case completed
-    /// All runners are online.
-    case allOnline
-    /// Some runners are offline.
-    case someOffline
-    /// All runners are offline.
-    case allOffline
 }
 
 // MARK: - WorkflowRun
 
-/// Thin model for a single GitHub Actions workflow run, as returned by the list-runs API.
-struct WorkflowRun: Codable, Identifiable, Equatable {
-    /// GitHub run ID.
+/// A single workflow run as returned by the GitHub Actions API.
+struct WorkflowRun: Identifiable, Decodable {
     let id: Int
-    /// Human-readable run title (commit message headline or custom name).
     let name: String?
-    /// Current run status (e.g. `in_progress`, `queued`, `completed`).
-    let status: String?
-    /// Final conclusion once completed (e.g. `success`, `failure`, `cancelled`).
+    let status: String
     let conclusion: String?
-    /// ISO-8601 timestamp when the run was created.
-    let createdAt: String?
-    /// Branch the run targets.
-    let headBranch: String?
-    /// Commit SHA the run targets.
     let headSha: String
-    /// URL to the run on GitHub.com.
-    let htmlUrl: String?
-    /// Commit message headline associated with this run.
-    let displayTitle: String?
+    let headBranch: String?
+    let htmlUrl: String
+    let createdAt: String?
 
-    /// Maps JSON snake_case keys to Swift camelCase properties.
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case createdAt = "created_at"
+        case headSha    = "head_sha"
         case headBranch = "head_branch"
-        case headSha = "head_sha"
-        case htmlUrl = "html_url"
-        case displayTitle = "display_title"
-    }
-}
-
-// MARK: - RunsResponse
-
-/// Top-level envelope for the GitHub list-workflow-runs API response.
-struct RunsResponse: Codable {
-    /// Paginated array of workflow runs.
-    let workflowRuns: [WorkflowRun]
-    /// Maps `workflow_runs` JSON key.
-    enum CodingKeys: String, CodingKey {
-        case workflowRuns = "workflow_runs"
+        case htmlUrl    = "html_url"
+        case createdAt  = "created_at"
     }
 }
 
 // MARK: - ActionGroup factory
 
+/// RunnerStore extension providing the `ActionGroup` factory and fetch methods.
 extension RunnerStore {
     /// Fetches and groups live workflow runs for `scope` into `ActionGroup` values.
     ///
@@ -138,23 +119,41 @@ extension RunnerStore {
         for scope: String,
         cache shaKeyedCache: [String: ActionGroup]
     ) -> [ActionGroup] {
-        guard let data = ghAPI("repos/\(scope)/actions/runs?per_page=20&status=in_progress"),
-              let decoded = try? JSONDecoder().decode(RunsResponse.self, from: data)
+        guard scope.contains("/"),
+              let data = ghAPI("repos/\(scope)/actions/runs?per_page=10&status=in_progress"),
+              let payload = try? JSONDecoder().decode(WorkflowRunsPayload.self, from: data)
         else { return [] }
-        let grouped = Dictionary(grouping: decoded.workflowRuns, by: { $0.headSha })
-        return grouped.compactMap { sha, runs -> ActionGroup? in
-            guard let first = runs.first else { return nil }
-            let cached = shaKeyedCache[sha]
-            let jobs = cached?.jobs ?? fetchJobsForRuns(runs, scope: scope)
+
+        let iso = ISO8601DateFormatter()
+        var grouped: [String: (runs: [WorkflowRun], jobs: [ActiveJob])] = [:]
+        for run in payload.workflowRuns {
+            let sha = run.headSha
+            let cachedJobs = shaKeyedCache[sha]?.jobs ?? []
+            grouped[sha, default: ([], cachedJobs)].runs.append(run)
+        }
+        return grouped.compactMap { sha, pair in
+            guard !pair.runs.isEmpty else { return nil }
+            let firstRun = pair.runs[0]
+            let branch = firstRun.headBranch ?? sha.prefix(7).description
+            let shortSha = String(sha.prefix(7))
+            let label = "\(branch.prefix(8))/\(shortSha)"
+            let title = firstRun.name ?? "Workflow"
+            let jobs = pair.jobs.isEmpty
+                ? fetchJobsForRuns(pair.runs, scope: scope, iso: iso)
+                : pair.jobs
+            let startDates = jobs.compactMap { $0.startedAt }
+            let endDates   = jobs.compactMap { $0.completedAt }
             return buildActionGroup(
-                sha: sha, runs: runs, jobs: jobs,
-                label: first.headBranch ?? sha, title: first.displayTitle ?? first.name ?? sha,
-                headBranch: first.headBranch ?? "", repo: scope, isDimmed: false
+                sha: sha, runs: pair.runs, jobs: jobs,
+                label: label, title: title, headBranch: branch,
+                repo: scope, isDimmed: false
             )
+            _ = startDates; _ = endDates
         }.sorted { ($0.firstJobStartedAt ?? .distantPast) > ($1.firstJobStartedAt ?? .distantPast) }
     }
 
     /// Builds a single `ActionGroup` from decoded run + job data.
+    // swiftlint:disable:next function_parameter_count
     private func buildActionGroup(
         sha: String, runs: [WorkflowRun], jobs: [ActiveJob],
         label: String, title: String, headBranch: String,
@@ -163,33 +162,45 @@ extension RunnerStore {
         let startedDates = jobs.compactMap { $0.startedAt }
         let completedDates = jobs.compactMap { $0.completedAt }
         let iso = ISO8601DateFormatter()
-        let runCreatedAt = runs.compactMap {
-            $0.createdAt.flatMap { iso.date(from: $0) }
-        }.min()
+        let createdAt = runs.compactMap { $0.createdAt.flatMap { iso.date(from: $0) } }.min()
         return ActionGroup(
-            headSha: sha, label: label, title: title, headBranch: headBranch,
-            repo: repo, runs: runs, jobs: jobs,
+            headSha: sha, label: label, title: title,
+            headBranch: headBranch, repo: repo, runs: runs,
+            jobs: jobs,
             firstJobStartedAt: startedDates.min(),
             lastJobCompletedAt: completedDates.max(),
-            createdAt: runCreatedAt, isDimmed: isDimmed
+            createdAt: createdAt, isDimmed: isDimmed
         )
     }
 
-    /// Fetches all jobs for an array of workflow runs in `scope`.
-    private func fetchJobsForRuns(_ runs: [WorkflowRun], scope: String) -> [ActiveJob] {
-        let iso = ISO8601DateFormatter()
-        return runs.flatMap { run -> [ActiveJob] in
-            guard let data = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs"),
+    /// Fetches jobs for a list of runs, used when the cache has no jobs for a sha.
+    private func fetchJobsForRuns(
+        _ runs: [WorkflowRun],
+        scope: String,
+        iso: ISO8601DateFormatter
+    ) -> [ActiveJob] {
+        runs.flatMap { run -> [ActiveJob] in
+            guard let data = ghAPI(
+                "repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=30"
+            ),
                   let payload = try? JSONDecoder().decode(JobsPayload.self, from: data)
             else { return [] }
             return payload.jobs.map { makeActiveJob(from: $0, iso: iso, isDimmed: false) }
         }
     }
+}
 
-    /// Looks up the `owner/repo` scope from a job's `html_url`.
-    func scopeFromHtmlUrl(_ url: String) -> String? {
-        let parts = url.split(separator: "/")
-        guard parts.count >= 4 else { return nil }
-        return "\(parts[1])/\(parts[2])"
+// MARK: - Decoding helpers
+
+/// Top-level payload for `GET /repos/{owner}/{repo}/actions/runs`.
+struct WorkflowRunsPayload: Decodable {
+    let workflowRuns: [WorkflowRun]
+    enum CodingKeys: String, CodingKey {
+        case workflowRuns = "workflow_runs"
     }
+}
+
+/// Top-level payload for `GET /repos/{owner}/{repo}/actions/runs/{id}/jobs`.
+struct JobsPayload: Decodable {
+    let jobs: [JobPayload]
 }

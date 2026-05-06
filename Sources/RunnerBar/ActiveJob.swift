@@ -1,82 +1,97 @@
 import Foundation
 
-// MARK: - ActiveJob
+// MARK: - ActiveJob model
 
-/// A single GitHub Actions job as displayed in the popover.
-struct ActiveJob: Identifiable, Equatable {
-    /// GitHub job ID.
+/// Represents a single GitHub Actions job that is live or recently completed.
+struct ActiveJob: Identifiable, Codable, Equatable {
+    /// GitHub-assigned job identifier.
     let id: Int
-    /// Human-readable job name.
+    /// Display name of the job.
     let name: String
-    /// Current job status (`queued`, `in_progress`, `completed`).
+    /// Current lifecycle status (`queued`, `in_progress`, `completed`).
     let status: String
-    /// Final conclusion once completed (`success`, `failure`, `cancelled`, etc.).
+    /// Final outcome once the job finishes (`success`, `failure`, `cancelled`, etc.).
     let conclusion: String?
-    /// When the job started, if available.
+    /// When the job runner picked up the job.
     let startedAt: Date?
-    /// When the job was created/queued.
+    /// When the job was added to the queue.
     let createdAt: Date?
-    /// When the job completed, if available.
+    /// When the job finished.
     let completedAt: Date?
-    /// URL to the job on GitHub.com.
+    /// Deep-link URL on github.com for this job.
     let htmlUrl: String
-    /// When true, this job is shown dimmed (recently completed).
-    var isDimmed: Bool
-    /// Individual steps within the job.
+    /// `true` when the job is shown as a dimmed historical entry.
+    let isDimmed: Bool
+    /// Ordered list of steps within this job.
     let steps: [JobStep]
+
+    /// Human-readable elapsed time string.
+    var elapsed: String {
+        let start = startedAt ?? createdAt ?? Date()
+        let end = completedAt ?? Date()
+        let secs = Int(end.timeIntervalSince(start))
+        if secs < 60 { return "\(secs)s" }
+        return "\(secs / 60)m \(secs % 60)s"
+    }
 }
 
 // MARK: - JobStep
 
-/// A single step within a GitHub Actions job.
-struct JobStep: Codable, Equatable {
+/// A single step within an `ActiveJob`, matching the GitHub API `steps` array.
+struct JobStep: Identifiable, Codable, Equatable {
     /// Step sequence number (1-based).
-    let number: Int
-    /// Step name as shown in GitHub UI.
+    let id: Int
+    /// Display name of the step.
     let name: String
-    /// Current step status (`queued`, `in_progress`, `completed`).
+    /// Lifecycle status of the step.
     let status: String
-    /// Final conclusion once completed.
+    /// Conclusion of the step once finished.
     let conclusion: String?
-    /// ISO-8601 start timestamp.
-    let startedAt: String?
-    /// ISO-8601 completion timestamp.
-    let completedAt: String?
+    /// When this step started.
+    let startedAt: Date?
+    /// When this step finished.
+    let completedAt: Date?
+
+    /// SF Symbol or emoji icon representing the step's conclusion.
+    var conclusionIcon: String {
+        switch conclusion {
+        case "success": return "✓"
+        case "failure": return "✗"
+        case "skipped": return "⊘"
+        case "cancelled": return "⊘"
+        default: return status == "in_progress" ? "▶" : "·"
+        }
+    }
+
+    /// Human-readable elapsed time for this step.
+    var elapsed: String {
+        let start = startedAt ?? Date()
+        let end = completedAt ?? Date()
+        let secs = Int(end.timeIntervalSince(start))
+        if secs < 60 { return "\(secs)s" }
+        return "\(secs / 60)m \(secs % 60)s"
+    }
 
     enum CodingKeys: String, CodingKey {
-        case number, name, status, conclusion
+        case id = "number"
+        case name, status, conclusion
         case startedAt = "started_at"
         case completedAt = "completed_at"
     }
 }
 
-// MARK: - API payloads
+// MARK: - JobPayload (API decoding)
 
-/// Top-level envelope for the GitHub list-jobs API response.
-struct JobsPayload: Codable {
-    /// Decoded job array.
-    let jobs: [JobPayload]
-}
-
-/// Decodable representation of a single job from the GitHub API.
-struct JobPayload: Codable {
-    /// GitHub job ID.
+/// Raw API shape for a single job returned by `GET /repos/{owner}/{repo}/actions/jobs/{job_id}`.
+struct JobPayload: Decodable {
     let id: Int
-    /// Job name.
     let name: String
-    /// Current status string.
     let status: String
-    /// Conclusion string once completed.
     let conclusion: String?
-    /// ISO-8601 start timestamp.
     let startedAt: String?
-    /// ISO-8601 creation timestamp.
     let createdAt: String?
-    /// ISO-8601 completion timestamp.
     let completedAt: String?
-    /// Job page URL.
     let htmlUrl: String
-    /// Steps array, present on single-job detail calls only.
     let steps: [JobStep]?
 
     enum CodingKeys: String, CodingKey {
@@ -90,6 +105,7 @@ struct JobPayload: Codable {
 
 // MARK: - ActiveJob factory
 
+/// RunnerStore extension providing the `ActiveJob` factory method.
 extension RunnerStore {
     /// Builds an `ActiveJob` from a decoded `JobPayload`.
     func makeActiveJob(
@@ -109,31 +125,5 @@ extension RunnerStore {
             isDimmed: isDimmed,
             steps: payload.steps ?? []
         )
-    }
-
-    /// Fetches all currently active jobs for `scope` from the GitHub API.
-    func fetchActiveJobs(for scope: String) -> [ActiveJob] {
-        let iso = ISO8601DateFormatter()
-        guard let data = ghAPI("repos/\(scope)/actions/runs?per_page=20&status=in_progress"),
-              let payload = try? JSONDecoder().decode(JobsPayload.self, from: data)
-        else { return [] }
-        return payload.jobs.map { makeActiveJob(from: $0, iso: iso, isDimmed: false) }
-    }
-
-    /// Enriches a job array by overlaying cached step data for completed jobs.
-    func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
-        jobs.map { job in
-            guard job.conclusion != nil,
-                  let cached = jobCache[job.id],
-                  !cached.steps.isEmpty
-            else { return job }
-            return ActiveJob(
-                id: job.id, name: job.name, status: job.status,
-                conclusion: job.conclusion, startedAt: job.startedAt,
-                createdAt: job.createdAt, completedAt: job.completedAt,
-                htmlUrl: job.htmlUrl, isDimmed: job.isDimmed,
-                steps: cached.steps
-            )
-        }
     }
 }

@@ -81,7 +81,7 @@ struct PopoverMainView: View {
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
                 ForEach(store.actions.prefix(5)) { actionGroup in
-                    Button(action: { onSelectAction(actionGroup) }) {
+                    Button(action: { onSelectAction(actionGroup) }, label: {
                         HStack(spacing: 8) {
                             actionDot(for: actionGroup)
                             Text(actionGroup.label)
@@ -111,7 +111,7 @@ struct PopoverMainView: View {
                                 .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 3)
-                    }
+                    })
                     .buttonStyle(.plain)
                 }
                 .padding(.bottom, 6)
@@ -128,7 +128,7 @@ struct PopoverMainView: View {
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
                 ForEach(store.jobs.prefix(3)) { job in
-                    Button(action: { onSelectJob(job) }) {
+                    Button(action: { onSelectJob(job) }, label: {
                         HStack(spacing: 8) {
                             jobDot(for: job)
                             Text(job.name)
@@ -149,7 +149,7 @@ struct PopoverMainView: View {
                                 .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 3)
-                    }
+                    })
                     .buttonStyle(.plain)
                 }
                 .padding(.bottom, 6)
@@ -202,136 +202,128 @@ struct PopoverMainView: View {
             }
             Divider()
             Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 13))
+                Text("Launch at login").font(.system(size: 12))
             }
-            .toggleStyle(.checkbox)
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .onChange(of: launchAtLogin) { _ in LoginItem.toggle() }
-            Divider()
+            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .onChange(of: launchAtLogin) { _, newValue in
+                LoginItem.setEnabled(newValue)
+            }
             Button(action: { NSApplication.shared.terminate(nil) }) {
-                HStack {
-                    Image(systemName: "xmark.square"); Text("Quit")
-                }.font(.system(size: 13))
+                Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("q", modifiers: .command)
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, 6)
         }
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-        .onReceive(store.objectWillChange) { isAuthenticated = (githubToken() != nil) }
+        .frame(idealWidth: 420)
+        .onAppear {
+            isAuthenticated = (githubToken() != nil)
+            systemStats.start()
+        }
     }
 
     // MARK: - Helpers
 
-    /// Returns a colored dot reflecting the job's current state.
-    @ViewBuilder private func jobDot(for job: ActiveJob) -> some View {
-        let dotFill: Color = {
-            if job.isDimmed { return .secondary }
-            return job.status == "in_progress" ? .yellow : .gray
-        }()
-        Circle().fill(dotFill).frame(width: 7, height: 7)
+    /// Submits a new scope from the text field.
+    private func submitScope() {
+        let trimmed = newScope.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        ScopeStore.shared.add(trimmed)
+        store.reload()
+        newScope = ""
     }
 
-    /// Returns a human-readable status label for a live job.
+    /// Dot color for an action group based on its status.
+    @ViewBuilder
+    private func actionDot(for group: ActionGroup) -> some View {
+        Circle()
+            .fill(actionDotColor(for: group))
+            .frame(width: 8, height: 8)
+    }
+
+    /// Dot color for a job based on its status.
+    @ViewBuilder
+    private func jobDot(for job: ActiveJob) -> some View {
+        Circle()
+            .fill(jobDotColor(for: job))
+            .frame(width: 8, height: 8)
+    }
+
+    /// Color for an action group's status dot.
+    private func actionDotColor(for group: ActionGroup) -> Color {
+        switch group.groupStatus {
+        case .inProgress: return .yellow
+        case .queued: return .blue
+        case .completed:
+            if group.isDimmed { return .gray }
+            return group.runs.allSatisfy({ $0.conclusion == "success" }) ? .green : .red
+        }
+    }
+
+    /// Color for a job's status dot.
+    private func jobDotColor(for job: ActiveJob) -> Color {
+        switch job.status {
+        case "in_progress": return .yellow
+        case "queued": return .blue
+        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
+        }
+    }
+
+    /// Human-readable status label for a live job.
     private func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
-        case "in_progress": return "In Progress"
+        case "in_progress": return "Running"
         case "queued": return "Queued"
-        default: return "Done"
+        default: return job.status.capitalized
         }
     }
 
-    /// Returns the accent color for a live job's status label.
+    /// Foreground color for a live job's status label.
     private func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? .yellow : .secondary
-    }
-
-    /// Returns an icon + text label for a completed job's conclusion.
-    private func conclusionLabel(for job: ActiveJob) -> String {
-        switch job.conclusion {
-        case "success": return "✓ success"
-        case "failure": return "✗ failure"
-        case "cancelled": return "⊗ cancelled"
-        case "skipped": return "− skipped"
-        default: return job.conclusion ?? "done"
-        }
-    }
-
-    /// Returns the accent color for a completed job's conclusion label.
-    private func conclusionColor(for job: ActiveJob) -> Color {
-        switch job.conclusion {
-        case "success": return .green
-        case "failure": return .red
+        switch job.status {
+        case "in_progress": return .yellow
+        case "queued": return .blue
         default: return .secondary
         }
     }
 
-    // MARK: - Action group row helpers
-
-    /// Status dot for an action group row.
-    @ViewBuilder private func actionDot(for group: ActionGroup) -> some View {
-        let dotFill: Color = {
-            if group.isDimmed { return .secondary }
-            switch group.groupStatus {
-            case .inProgress: return .yellow
-            case .queued: return .gray
-            case .completed:
-                switch group.conclusion {
-                case "success": return .green
-                case "failure": return .red
-                default: return .secondary
-                }
-            default: return .secondary
-            }
-        }()
-        Circle().fill(dotFill).frame(width: 7, height: 7)
+    /// Human-readable conclusion label for a completed/dimmed job.
+    private func conclusionLabel(for job: ActiveJob) -> String {
+        switch job.conclusion {
+        case "success": return "Success"
+        case "failure": return "Failed"
+        case "cancelled": return "Cancelled"
+        case "skipped": return "Skipped"
+        default: return job.conclusion?.capitalized ?? "Done"
+        }
     }
 
-    /// Returns the status dot color for a runner row.
+    /// Foreground color for a completed job's conclusion label.
+    private func conclusionColor(for job: ActiveJob) -> Color {
+        switch job.conclusion {
+        case "success": return .green
+        case "failure": return .red
+        case "cancelled": return .orange
+        default: return .secondary
+        }
+    }
+
+    /// Runner status dot color.
     private func dotColor(for runner: Runner) -> Color {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 
     /// Opens Terminal and runs `gh auth login`.
     private func signInWithGitHub() {
-        NSAppleScript(source: "tell application \"Terminal\" to do script \"gh auth login\"")?.executeAndReturnError(nil)
+        let script = "tell application \"Terminal\" to do script \"gh auth login\""
+        NSAppleScript(source: script)?.executeAndReturnError(nil)
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
 
     /// Validates and persists a new scope, then refreshes the store.
-    private func submitScope() {
-        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        ScopeStore.shared.add(trimmed)
-        RunnerStore.shared.start()
+    private func validateAndAddScope(_ scope: String) {
+        guard scope.contains("/") || !scope.isEmpty else { return }
+        ScopeStore.shared.add(scope)
         store.reload()
-        newScope = ""
-    }
-}
-
-/// Observable bridge from `RunnerStore` singletons into SwiftUI `@ObservedObject`.
-// ⚠️ RULE 5: reload() uses withAnimation(nil). NEVER add objectWillChange.send().
-final class RunnerStoreObservable: ObservableObject {
-    /// Mirrored runner list, published for SwiftUI diffing.
-    @Published var runners: [Runner] = []
-    /// Mirrored job list, published for SwiftUI diffing.
-    @Published var jobs: [ActiveJob] = []
-    /// Mirrored action group list, published for SwiftUI diffing.
-    @Published var actions: [ActionGroup] = []
-    /// Mirrored rate-limit flag, published for SwiftUI diffing.
-    @Published var isRateLimited: Bool = false
-
-    /// Initialises the observable with an eager reload so the view has data on first render.
-    init() { reload() }
-
-    /// Mirrors current RunnerStore state into @Published properties without an extra animation.
-    func reload() {
-        // ❌ NEVER add objectWillChange.send() here — @Published handles it
-        withAnimation(nil) {
-            runners = RunnerStore.shared.runners
-            jobs = RunnerStore.shared.jobs
-            actions = RunnerStore.shared.actions
-            isRateLimited = RunnerStore.shared.isRateLimited
-        }
     }
 }

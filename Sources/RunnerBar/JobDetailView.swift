@@ -102,7 +102,7 @@ struct JobDetailView: View {
                             .padding(.vertical, 8)
                     } else {
                         ForEach(job.steps) { step in
-                            Button(action: { onSelectStep(step) }) {
+                            Button(action: { onSelectStep(step) }, label: {
                                 HStack(spacing: 8) {
                                     Text(step.conclusionIcon)
                                         .font(.system(size: 11))
@@ -125,7 +125,7 @@ struct JobDetailView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 3)
                                 .contentShape(Rectangle())
-                            }
+                            })
                             .buttonStyle(.plain)
                         }
                     }
