@@ -15,8 +15,8 @@ import SwiftUI
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
-/// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
 // swiftlint:disable:next type_body_length
+/// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
