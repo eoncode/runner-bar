@@ -10,16 +10,17 @@ func fetchRunners(for scope: String) -> [Runner] {
     } else {
         path = "/orgs/\(scope)/actions/runners"
     }
-    log("fetchRunners › \(path)")
+    log("fetchRunners \u203a \(path)")
     let json = shell("/opt/homebrew/bin/gh api \(path)")
-    log("fetchRunners › response prefix: \(json.prefix(120))")
-    guard let data = json.data(using: .utf8),
-          let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
+    log("fetchRunners \u203a response prefix: \(json.prefix(120))")
+    guard
+        let data = json.data(using: .utf8),
+        let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
     else {
-        log("fetchRunners › decode failed for scope: \(scope)")
+        log("fetchRunners \u203a decode failed for scope: \(scope)")
         return []
     }
-    log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
+    log("fetchRunners \u203a found \(response.runners.count) runner(s) for \(scope)")
     return response.runners
 }
 
@@ -37,7 +38,7 @@ private struct RunnersResponse: Codable {
 /// The `gh api` CLI follows the redirect automatically.
 ///
 /// Accept header MUST be:
-/// Accept: application/vnd.github.v3.raw
+///   Accept: application/vnd.github.v3.raw
 /// Without this header, `gh api` may return a redirect JSON object or an error
 /// instead of the actual plain-text log. This was the root cause of
 /// "Log not available" showing even for jobs with logs.
@@ -46,10 +47,10 @@ private struct RunnersResponse: Codable {
 /// GitHub Actions writes the full job log as one blob with step sections
 /// delimited by group markers:
 ///
-/// ##[group]Step Name
-/// 2024-01-01T00:00:00.0000000Z line one
-/// ...
-/// ##[endgroup]
+///   ##[group]Step Name
+///   2024-01-01T00:00:00.0000000Z line one
+///   ...
+///   ##[endgroup]
 ///
 /// Each ##[group] block corresponds to one step in order.
 /// stepNumber is 1-based (matches JobStep.id, idx+1 in fetchActiveJobs).
@@ -59,30 +60,30 @@ private struct RunnersResponse: Codable {
 /// - If stepNumber is out of range, the full log is returned rather than nil.
 ///
 /// # Threading
-/// ⚠️ MUST be called from a background thread (DispatchQueue.global).
+/// \u26a0\ufe0f MUST be called from a background thread (DispatchQueue.global).
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     // Org-scoped logs are not supported: the jobs/{id}/logs endpoint requires
     // a repo scope ("owner/repo").
     guard scope.contains("/") else {
-        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
+        log("fetchStepLog \u203a skipped: org-scoped logs not supported (scope=\(scope))")
         return nil
     }
     guard let ghPath = ghBinaryPath() else {
-        log("fetchStepLog › gh not found")
+        log("fetchStepLog \u203a gh not found")
         return nil
     }
     let endpoint = "repos/\(scope)/actions/jobs/\(jobID)/logs"
-    log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
-    // ⚠️ CRITICAL: the Accept header is required for raw text.
+    log("fetchStepLog \u203a fetching \(endpoint) step=\(stepNumber)")
+    // \u26a0\ufe0f CRITICAL: the Accept header is required for raw text.
     // Without it: gh api returns JSON or an empty redirect.
     let raw = shell("\(ghPath) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\"")
     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        log("fetchStepLog › empty response for job \(jobID)")
+        log("fetchStepLog \u203a empty response for job \(jobID)")
         return nil
     }
     // Detect error JSON: gh api returns {"message":"..."} on 404, auth failure, etc.
     if raw.hasPrefix("{") {
-        log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
+        log("fetchStepLog \u203a error JSON returned: \(raw.prefix(120))")
         return nil
     }
     // Strip ANSI/VT100 escape sequences before splitting into sections.
@@ -100,23 +101,23 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         }
     }
     if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
-    log("fetchStepLog › parsed \(sections.count) section(s) from log")
+    log("fetchStepLog \u203a parsed \(sections.count) section(s) from log")
     // Fallback A: no ##[group] markers at all.
     if sections.isEmpty || (sections.count == 1 && !sections[0].contains("##[group]")) {
-        log("fetchStepLog › no group markers, returning full raw log")
+        log("fetchStepLog \u203a no group markers, returning full raw log")
         return cleaned
     }
     // stepNumber is 1-based; sections array is 0-based.
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
         log(
-            "fetchStepLog › stepNumber \(stepNumber) out of range "
+            "fetchStepLog \u203a stepNumber \(stepNumber) out of range "
             + "(sections=\(sections.count)), returning full log"
         )
         return cleaned
     }
     let section = sections[index]
-    log("fetchStepLog › step \(stepNumber) → \(section.count)ch")
+    log("fetchStepLog \u203a step \(stepNumber) \u2192 \(section.count)ch")
     return section.isEmpty ? cleaned : section
 }
 
@@ -124,7 +125,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
 /// Pattern: ESC (\x1B) followed by '[', then any digits/semicolons, then a letter.
 private func stripAnsi(_ input: String) -> String {
     guard let regex = try? NSRegularExpression(pattern: "\u001B\\[[0-9;]*[A-Za-z]") else {
-        // Pattern is a constant — this branch is unreachable in practice.
+        // Pattern is a constant \u2014 this branch is unreachable in practice.
         return input
     }
     return regex.stringByReplacingMatches(
@@ -151,7 +152,7 @@ func ghBinaryPath() -> String? {
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
     guard let ghPath = ghBinaryPath() else {
-        log("ghPost › gh not found")
+        log("ghPost \u203a gh not found")
         return false
     }
     let task = Process()
@@ -162,14 +163,14 @@ func ghPost(_ endpoint: String) -> Bool {
     do {
         try task.run()
     } catch {
-        log("ghPost › launch error: \(error)")
+        log("ghPost \u203a launch error: \(error)")
         return false
     }
     let timeout = DispatchWorkItem { task.terminate() }
     DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeout)
     task.waitUntilExit()
     timeout.cancel()
-    log("ghPost › \(endpoint) exit \(task.terminationStatus)")
+    log("ghPost \u203a \(endpoint) exit \(task.terminationStatus)")
     return task.terminationStatus == 0
 }
 
@@ -181,6 +182,6 @@ func ghPost(_ endpoint: String) -> Bool {
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
-    log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
+    log("cancelRun \u203a run=\(runID) scope=\(scope) success=\(result)")
     return result
 }

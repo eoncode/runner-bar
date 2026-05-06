@@ -18,24 +18,24 @@ struct RunnerMetrics {
 func allWorkerMetrics() -> [RunnerMetrics] {
     let output = shell("ps aux", timeout: 5)
     guard !output.isEmpty else {
-        log("allWorkerMetrics › ps aux returned empty")
+        log("allWorkerMetrics \u203a ps aux returned empty")
         return []
     }
     var results: [RunnerMetrics] = []
     for line in output.components(separatedBy: "\n") {
         guard line.contains("Runner.Worker") || line.contains("Runner.Listener") else { continue }
-        // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND…
+        // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND\u2026
         let parts = line.split(separator: " ", omittingEmptySubsequences: true)
         guard parts.count > 3,
               let cpu = Double(parts[2]),
               let mem = Double(parts[3])
         else { continue }
         log(
-            "allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): "
+            "allWorkerMetrics \u203a found process cpu=\(cpu) mem=\(mem): "
             + "\(parts[10...].prefix(3).joined(separator: " "))"
         )
         results.append(RunnerMetrics(cpu: cpu, mem: mem))
     }
-    // Highest CPU first — matches ci-dash.py Worker ordering
+    // Highest CPU first \u2014 matches ci-dash.py Worker ordering
     return results.sorted { $0.cpu > $1.cpu }
 }
