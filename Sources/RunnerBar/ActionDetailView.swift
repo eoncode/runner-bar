@@ -1,29 +1,47 @@
+import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — same frame rules as PopoverMainView (ref #52 #54 #57)
-// navigate() = rootView swap ONLY inside the fixed popover frame.
-// ❌ NEVER put header inside ScrollView
-// ❌ NEVER add .frame(height:) or .fixedSize() to root
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// ── FRAME CONTRACT ───────────────────────────────────────────────────────────────────────
+//   Receives the same FIXED frame from AppDelegate as JobDetailView.
+//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
+//   ScrollView absorbs overflow — do NOT fight the frame.
+//
+// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────
+//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   ✔ Job list MUST be inside ScrollView
+//   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
+//   ❌ NEVER put header inside ScrollView
+//   ❌ NEVER add .idealWidth or .frame(height:) to root
+//   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
+// ═══════════════════════════════════════════════════════════════════════════════
 
-/// Navigation level 2 (Actions path): job list for a single `ActionGroup`.
+/// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
-/// Drill-down chain: PopoverMainView → ActionDetailView → JobDetailView → StepLogView.
+/// Drill-down chain:
+///   PopoverMainView (action row tap)
+///   → ActionDetailView            ← this view
+///   → JobDetailView (step list)   ← existing, unchanged
+///   → StepLogView (log)           ← existing, unchanged
 struct ActionDetailView: View {
-    /// The action group whose jobs are displayed.
     let group: ActionGroup
-    /// Called when the user taps the back button.
     let onBack: () -> Void
-    /// Called when the user taps a job row.
+    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
     let onSelectJob: (ActiveJob) -> Void
 
-    /// Drives the live elapsed timer in the header.
+    /// Drives the live elapsed timer every second.
     @State private var tick = 0
-    /// Retained so it can be invalidated on disappear to prevent a timer leak.
+    /// Held so we can invalidate on disappear and prevent timer accumulation
+    /// when the user navigates away and back (AppDelegate swaps rootView each time).
     @State private var tickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header: OUTSIDE ScrollView
+
+            // ── Header: OUTSIDE ScrollView — always visible at top
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -33,38 +51,38 @@ struct ActionDetailView: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                Spacer()
+                Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
                 ReRunButton(
                     action: { completion in
-                        let scopeStr = group.repo
+                        let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
-                        guard !runIDs.isEmpty else { completion(false); return }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let results = runIDs.map {
-                                ghPost("repos/\(scopeStr)/actions/runs/\($0)/rerun")
+                            let ok = runIDs.allSatisfy { runID in
+                                ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
                             }
-                            completion(results.contains(true))
+                            completion(ok)
                         }
                     },
-                    isDisabled: group.groupStatus == .inProgress || group.groupStatus == .queued
+                    isDisabled: group.groupStatus == .inProgress
                 )
                 CancelButton(
                     action: { completion in
-                        let scopeStr = group.repo
+                        let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
-                        guard !runIDs.isEmpty else { completion(false); return }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let results = runIDs.map { cancelRun(runID: $0, scope: scopeStr) }
-                            completion(results.contains(true))
+                            let ok = runIDs.allSatisfy { runID in
+                                cancelRun(runID: runID, scope: scope)
+                            }
+                            completion(ok)
                         }
                     },
-                    isDisabled: group.groupStatus != .inProgress && group.groupStatus != .queued
+                    isDisabled: group.groupStatus != .inProgress
                 )
                 LogCopyButton(
                     fetch: { completion in
-                        let grp = group
+                        let g = group
                         DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchActionLogs(group: grp))
+                            completion(fetchActionLogs(group: g))
                         }
                     },
                     isDisabled: false
@@ -77,37 +95,44 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            Text(group.title)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 4)
-            HStack(spacing: 4) {
-                Text(group.headBranch)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(group.label)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                    Text(group.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let branch = group.headBranch {
+                    Text(branch)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Text("\(group.jobsDone)/\(group.jobsTotal) jobs concluded")
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("·").font(.caption).foregroundColor(.secondary)
-                Text(group.headSha.prefix(7))
-                    .font(.caption.monospaced())
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
+
             Divider()
 
             // ── Jobs list: INSIDE ScrollView
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
-                        Text("No job data available")
+                        Text("No jobs available")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                     } else {
                         ForEach(group.jobs) { job in
-                            Button(action: { onSelectJob(job) }, label: {
+                            Button(action: { onSelectJob(job) }) {
                                 HStack(spacing: 8) {
                                     Circle()
                                         .fill(jobDotColor(for: job))
@@ -117,7 +142,7 @@ struct ActionDetailView: View {
                                         .foregroundColor(job.isDimmed ? .secondary : .primary)
                                         .lineLimit(1)
                                         .truncationMode(.tail)
-                                    Spacer()
+                                    Spacer()  // ⚠️ load-bearing
                                     if let conclusion = job.conclusion {
                                         Text(conclusionLabel(conclusion))
                                             .font(.caption)
@@ -140,7 +165,7 @@ struct ActionDetailView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 3)
                                 .contentShape(Rectangle())
-                            })
+                            }
                             .buttonStyle(.plain)
                         }
                     }
@@ -150,11 +175,8 @@ struct ActionDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
-            tickTimer = Timer.scheduledTimer(
-                withTimeInterval: 1,
-                repeats: true,
-                block: { _ in tick += 1 }
-            )
+            tickTimer?.invalidate()
+            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
         .onDisappear {
             tickTimer?.invalidate()
@@ -162,54 +184,42 @@ struct ActionDetailView: View {
         }
     }
 
-    /// Returns the group's elapsed time, re-evaluated every tick for live updates.
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    /// Dot color for a job in the action detail list.
+    // MARK: - Job row helpers
+
     private func jobDotColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued": return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
-        }
+        if job.isDimmed { return .secondary }
+        return job.status == "in_progress" ? .yellow : .gray
     }
 
-    /// Status label for a live job.
     private func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
-        case "in_progress": return "Running"
+        case "in_progress": return "In Progress"
         case "queued":      return "Queued"
-        default:            return job.status.capitalized
+        default:            return "Pending"
         }
     }
 
-    /// Foreground color for a live job's status label.
     private func jobStatusColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued":      return .blue
-        default:            return .secondary
+        job.status == "in_progress" ? .yellow : .secondary
+    }
+
+    private func conclusionLabel(_ c: String) -> String {
+        switch c {
+        case "success":   return "✓ success"
+        case "failure":   return "✗ failure"
+        case "cancelled": return "⊗ cancelled"
+        case "skipped":   return "− skipped"
+        default:          return c
         }
     }
 
-    /// Human-readable conclusion label.
-    private func conclusionLabel(_ conclusion: String) -> String {
-        switch conclusion {
-        case "success":   return "Success"
-        case "failure":   return "Failed"
-        case "cancelled": return "Cancelled"
-        case "skipped":   return "Skipped"
-        default:          return conclusion.capitalized
-        }
-    }
-
-    /// Foreground color for a conclusion label.
-    private func conclusionColor(_ conclusion: String) -> Color {
-        switch conclusion {
-        case "success":   return .green
-        case "failure":   return .red
-        case "cancelled": return .orange
-        default:          return .secondary
+    private func conclusionColor(_ c: String) -> Color {
+        switch c {
+        case "success": return .green
+        case "failure": return .red
+        default:        return .secondary
         }
     }
 }
