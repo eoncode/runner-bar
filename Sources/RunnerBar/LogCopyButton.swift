@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
 /// States: idle (doc.on.doc) → loading (spinner) → done (green checkmark, 1.5s) → idle
 struct LogCopyButton: View {
@@ -8,11 +7,8 @@ struct LogCopyButton: View {
     /// Pass nil or empty string on failure — button still resets to idle.
     let fetch: (@escaping (String?) -> Void) -> Void
     var isDisabled: Bool = false
-
     @State private var phase: Phase = .idle
-
     enum Phase { case idle, loading, done }
-
     var body: some View {
         Group {
             switch phase {
@@ -34,19 +30,16 @@ struct LogCopyButton: View {
         }
         .frame(width: 20)
     }
-
     private func startCopy() {
         guard phase == .idle else { return }
         phase = .loading
-        fetch { text in
+        fetch { copyText in
             DispatchQueue.main.async {
-                if let text = text, !text.isEmpty {
+                if let copyText = copyText, !copyText.isEmpty {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                    NSPasteboard.general.setString(copyText, forType: .string)
                     phase = .done
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        phase = .idle
-                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
                 } else {
                     phase = .idle
                 }
