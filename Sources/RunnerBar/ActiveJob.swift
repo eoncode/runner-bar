@@ -178,7 +178,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
                     name: s.name,
                     status: s.status,
                     conclusion: s.conclusion,
-                    startedAt: s.startedAt.flatMap   { iso.date(from: $0) },
+                    startedAt: s.startedAt.flatMap { iso.date(from: $0) },
                     completedAt: s.completedAt.flatMap { iso.date(from: $0) }
                 )
             }
@@ -188,8 +188,8 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
                 name: j.name,
                 status: j.status,
                 conclusion: j.conclusion,
-                startedAt: j.startedAt.flatMap   { iso.date(from: $0) },
-                createdAt: j.createdAt.flatMap   { iso.date(from: $0) },
+                startedAt: j.startedAt.flatMap { iso.date(from: $0) },
+                createdAt: j.createdAt.flatMap { iso.date(from: $0) },
                 completedAt: j.completedAt.flatMap { iso.date(from: $0) },
                 htmlUrl: j.htmlUrl,
                 steps: steps

@@ -1,5 +1,5 @@
 only_rules:
-  - colon
+  - opening_brace
 included:
   - Sources
 excluded:

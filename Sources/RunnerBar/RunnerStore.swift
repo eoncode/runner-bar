@@ -98,7 +98,7 @@ final class RunnerStore {
         guard !runners.isEmpty else { return .allOffline }
         let online = runners.filter { $0.status == "online" }.count
         if online == runners.count { return .allOnline }
-        if online == 0             { return .allOffline }
+        if online == 0 { return .allOffline }
         return .someOffline
     }
 
@@ -120,7 +120,7 @@ final class RunnerStore {
     /// Must be called on the main thread (reads main-thread-owned state).
     private func scheduleTimer() {
         timer?.invalidate()
-        let hasActive = jobs.contains    { $0.status == "in_progress" || $0.status == "queued" }
+        let hasActive = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
                      || actions.contains { $0.groupStatus == .inProgress || $0.groupStatus == .queued }
         let interval: TimeInterval = (isRateLimited || !hasActive) ? 60 : 10
         log("RunnerStore › next poll in \(Int(interval))s (active=\(hasActive) rateLimited=\(isRateLimited))")
@@ -450,7 +450,7 @@ final class RunnerStore {
                 }
             }
 
-            let mergedDisplayGroups = displayGroups.map    { $0.withJobs(enrichGroupJobs($0.jobs)) }
+            let mergedDisplayGroups = displayGroups.map { $0.withJobs(enrichGroupJobs($0.jobs)) }
             let mergedGroupCache    = newGroupCache.mapValues { $0.withJobs(enrichGroupJobs($0.jobs)) }
 
             // All property writes must happen on the main thread because they are

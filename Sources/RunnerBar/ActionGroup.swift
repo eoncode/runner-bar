@@ -100,9 +100,9 @@ struct ActionGroup: Identifiable {
     /// (Matches ci-dash.py status_icon precedence.)
     var conclusion: String? {
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-        if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
+        if runs.contains(where: { $0.conclusion == "failure" }) { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+        if runs.contains(where: { $0.conclusion == "skipped" }) { return "skipped" }
         return "success"
     }
 
@@ -121,7 +121,7 @@ struct ActionGroup: Identifiable {
     /// Mirrors ci-dash.py's `current` field in `enrich_group()`.
     var currentJobName: String {
         if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let j = jobs.first(where: { $0.status == "queued" }) { return j.name }
         return "—"
     }
 
@@ -335,8 +335,8 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
             name: s.name,
             status: s.status,
             conclusion: s.conclusion,
-            startedAt: s.startedAt.flatMap   { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+            startedAt: s.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: s.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
@@ -344,8 +344,8 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
         name: j.name,
         status: j.status,
         conclusion: j.conclusion,
-        startedAt: j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt: j.createdAt.flatMap   { iso.date(from: $0) },
+        startedAt: j.startedAt.flatMap { iso.date(from: $0) },
+        createdAt: j.createdAt.flatMap { iso.date(from: $0) },
         completedAt: j.completedAt.flatMap { iso.date(from: $0) },
         htmlUrl: j.htmlUrl,
         isDimmed: isDimmed,
