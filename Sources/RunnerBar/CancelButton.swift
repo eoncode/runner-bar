@@ -23,6 +23,7 @@ struct CancelButton: View {
                      .font(.caption)
                   Text("Cancel")
                      .font(.caption)
+                     .fixedSize()
                }
                .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
             }
@@ -34,6 +35,7 @@ struct CancelButton: View {
                Text("Running…")
                   .font(.caption)
                   .foregroundColor(.secondary)
+                  .fixedSize()
             }
          case .done:
             HStack(spacing: 4) {
@@ -43,6 +45,7 @@ struct CancelButton: View {
                Text("Done")
                   .font(.caption)
                   .foregroundColor(.green)
+                  .fixedSize()
             }
          case .failed:
             HStack(spacing: 4) {
@@ -52,10 +55,10 @@ struct CancelButton: View {
                Text("Failed")
                   .font(.caption)
                   .foregroundColor(.red)
+                  .fixedSize()
             }
          }
       }
-      .fixedSize()
    }
 
    private func startCancel() {
