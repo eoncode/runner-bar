@@ -120,8 +120,8 @@ struct ActionGroup: Identifiable {
     /// Name of the first in-progress job, or first queued, or "—".
     /// Mirrors ci-dash.py's `current` field in `enrich_group()`.
     var currentJobName: String {
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
+        if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
         return "—"
     }
 
@@ -133,15 +133,15 @@ struct ActionGroup: Identifiable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            let minutes = sec / 60; let seconds = sec % 60
+            return String(format: "%02d:%02d", minutes, seconds)
         }
         // Jobs not yet started — use run creation time as rough proxy.
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let minutes = sec / 60; let seconds = sec % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 
@@ -188,7 +188,7 @@ private struct PRRef: Codable { let number: Int }
 /// Priority: PR number → branch-embedded number → sha[:7].
 /// Mirrors ci-dash.py's `pr_label_from_run()`.
 private func prLabel(from run: RunPayload) -> String {
-    if let pr = run.pullRequests?.first { return "#\(pr.number)" }
+    if let pullRequest = run.pullRequests?.first { return "#\(pullRequest.number)" }
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
         let digits = branch[range].filter { $0.isNumber }
@@ -252,15 +252,15 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     // Build ActionGroup for each sha bucket.
     var groups: [ActionGroup] = bySha.map { sha, shaRuns in
         // Representative run = most recently created.
-        let rep = shaRuns.sorted {
+        let representativeRun = shaRuns.sorted {
             ($0.createdAt ?? "") > ($1.createdAt ?? "")
         }.first!
 
-        let label = prLabel(from: rep)
+        let label = prLabel(from: representativeRun)
 
         // Title: prefer display_title → head_commit.message first line → sha[:7].
-        let rawTitle = rep.displayTitle
-            ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
+        let rawTitle = representativeRun.displayTitle
+            ?? representativeRun.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
         let title = String(rawTitle.prefix(40))
 
@@ -300,22 +300,22 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
             headSha:             sha,
             label:               label,
             title:               title,
-            headBranch:          rep.headBranch,
+            headBranch:          representativeRun.headBranch,
             repo:                scope,
             runs:                runs,
             jobs:                allJobs,
             firstJobStartedAt:   starts.min(),
             lastJobCompletedAt:  ends.max(),
-            createdAt:           rep.createdAt.flatMap { iso.date(from: $0) }
+            createdAt:           representativeRun.createdAt.flatMap { iso.date(from: $0) }
         )
     }
 
     // Sort: active first (in_progress → queued), then done, each sub-group newest first.
-    groups.sort { a, b in
-        let aPriority = statusPriority(a.groupStatus)
-        let bPriority = statusPriority(b.groupStatus)
-        if aPriority != bPriority { return aPriority < bPriority }
-        return (a.createdAt ?? .distantPast) > (b.createdAt ?? .distantPast)
+    groups.sort { first, second in
+        let firstPriority = statusPriority(first.groupStatus)
+        let secondPriority = statusPriority(second.groupStatus)
+        if firstPriority != secondPriority { return firstPriority < secondPriority }
+        return (first.createdAt ?? .distantPast) > (second.createdAt ?? .distantPast)
     }
 
     log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
@@ -327,29 +327,29 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
 /// Shared by the initial batch map and the second-pass re-fetch so both
 /// paths produce identical structs — prevents drift between the two (#102/#103).
-func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
+func makeActiveJob(from job: JobPayload, iso: ISO8601DateFormatter,
                             isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+    let steps: [JobStep] = (job.steps ?? []).enumerated().map { index, step in
         JobStep(
-            id:          idx + 1,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+            id: index + 1,
+            name: step.name,
+            status: step.status,
+            conclusion: step.conclusion,
+            startedAt: step.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: step.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
-        id:          j.id,
-        name:        j.name,
-        status:      j.status,
-        conclusion:  j.conclusion,
-        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
-        completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl:     j.htmlUrl,
-        isDimmed:    isDimmed,
-        steps:       steps
+        id: job.id,
+        name: job.name,
+        status: job.status,
+        conclusion: job.conclusion,
+        startedAt: job.startedAt.flatMap { iso.date(from: $0) },
+        createdAt: job.createdAt.flatMap { iso.date(from: $0) },
+        completedAt: job.completedAt.flatMap { iso.date(from: $0) },
+        htmlUrl: job.htmlUrl,
+        isDimmed: isDimmed,
+        steps: steps
     )
 }
 
@@ -378,8 +378,8 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
     //   Case 2 — conclusion still nil but steps are final: merge steps only.
     var result      = initial
     var refreshCount = 0
-    for i in result.indices {
-        let job = result[i]
+    for index in result.indices {
+        let job = result[index]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh, refreshCount < 3 else { continue }
@@ -393,24 +393,24 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
         // Case 1: conclusion resolved — substitute the whole job.
         if fresh.conclusion != nil {
-            result[i] = freshJob
+            result[index] = freshJob
             continue
         }
         // Case 2: conclusion still lagging but steps look final — merge steps only.
         let betterSteps = !freshJob.steps.isEmpty
             && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
-            result[i] = ActiveJob(
-                id:          job.id,
-                name:        job.name,
-                status:      job.status,
-                conclusion:  job.conclusion,
-                startedAt:   freshJob.startedAt   ?? job.startedAt,
-                createdAt:   freshJob.createdAt   ?? job.createdAt,
+            result[index] = ActiveJob(
+                id: job.id,
+                name: job.name,
+                status: job.status,
+                conclusion: job.conclusion,
+                startedAt: freshJob.startedAt ?? job.startedAt,
+                createdAt: freshJob.createdAt ?? job.createdAt,
                 completedAt: freshJob.completedAt ?? job.completedAt,
-                htmlUrl:     job.htmlUrl,
-                isDimmed:    job.isDimmed,
-                steps:       freshJob.steps
+                htmlUrl: job.htmlUrl,
+                isDimmed: job.isDimmed,
+                steps: freshJob.steps
             )
         }
     }

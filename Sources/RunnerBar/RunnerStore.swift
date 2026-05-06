@@ -173,10 +173,10 @@ final class RunnerStore {
             var idle = allRunners.filter { !$0.busy }
             // Assign metrics by slot index (busy first) — name-based matching is
             // not possible because runner names do not appear in ps aux output.
-            for i in busy.indices { busy[i].metrics = i < metrics.count ? metrics[i] : nil }
-            for i in idle.indices {
-                let s = busy.count + i
-                idle[i].metrics = s < metrics.count ? metrics[s] : nil
+            for index in busy.indices { busy[index].metrics = index < metrics.count ? metrics[index] : nil }
+            for index in idle.indices {
+                let slotIndex = busy.count + index
+                idle[index].metrics = slotIndex < metrics.count ? metrics[slotIndex] : nil
             }
             let enrichedRunners = busy + idle
 

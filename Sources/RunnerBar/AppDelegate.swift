@@ -10,7 +10,7 @@ import SwiftUI
 //
 // ── ARCHITECTURE ─────────────────────────────────────────────────────────────
 //   sizingOptions: default (NOT set to .preferredContentSize, NOT set to [])
-//   Height is read via hc.view.fittingSize.height ONCE per open in openPopover().
+//   Height is read via hostingController.view.fittingSize.height ONCE per open in openPopover().
 //   fittingSize reads SwiftUI ideal size ONE TIME while popover is CLOSED.
 //   sizingOptions=.preferredContentSize would re-read it CONTINUOUSLY → re-anchor → jump.
 //   So we rely on the default (which is []) and read fittingSize manually.
@@ -116,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private var hc: NSHostingController<AnyView>?
+    private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
 
@@ -146,16 +146,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // ⚠️ sizingOptions is NOT set here — default is [] which is correct.
         // ❌ NEVER set sizingOptions = .preferredContentSize (re-anchors on rootView swap)
         // ❌ NEVER set sizingOptions = [] explicitly (same as default, but signals intent incorrectly)
-        let hc = NSHostingController(rootView: mainView())
+        let hostingController = NSHostingController(rootView: mainView())
         let initialSize = NSSize(width: Self.fixedWidth, height: 300)
-        hc.view.frame = NSRect(origin: .zero, size: initialSize)
-        self.hc = hc
+        hostingController.view.frame = NSRect(origin: .zero, size: initialSize)
+        self.hostingController = hostingController
 
         let popover = NSPopover()
         popover.behavior              = .transient   // closes on outside click
         popover.animates              = false         // avoids animation triggering size reads
         popover.contentSize           = initialSize
-        popover.contentViewController = hc
+        popover.contentViewController = hostingController
         popover.delegate              = self
         self.popover = popover
 
@@ -188,7 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // Async dispatch: popover close animation may still be running synchronously.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.hc?.rootView = self.mainView()
+            self.hostingController?.rootView = self.mainView()
         }
     }
 
@@ -371,7 +371,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ScrollView inside each view handles overflow — content scrolls within the
     // fixed frame. That is the correct contract. Fighting the frame = regressions.
     private func navigate(to view: AnyView) {
-        hc?.rootView = view
+        hostingController?.rootView = view
         // ⚠️ THAT IS ALL. Do not add ANYTHING else here. Ever.
     }
 
@@ -420,17 +420,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let button = statusItem?.button,
               button.window != nil,
               let popover,
-              let hc else { return }
+              let hostingController = self.hostingController else { return }
 
         popoverIsOpen = true              // ❌ Step 1: NEVER move below reload()
         observable.reload()               // ❌ Step 2: NEVER move above popoverIsOpen = true
 
         let size = NSSize(
-            width:  hc.view.fittingSize.width > 0 ? hc.view.fittingSize.width : Self.fixedWidth,
-            height: hc.view.fittingSize.height    // Step 3: read AFTER reload()
+            width:  hostingController.view.fittingSize.width > 0 ? hostingController.view.fittingSize.width : Self.fixedWidth,
+            height: hostingController.view.fittingSize.height    // Step 3: read AFTER reload()
         )
 
-        hc.view.setFrameSize(size)        // Step 4a: safe — isShown==false
+        hostingController.view.setFrameSize(size)        // Step 4a: safe — isShown==false
         popover.contentSize = size        // Step 4b: safe — isShown==false
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)  // Step 5
