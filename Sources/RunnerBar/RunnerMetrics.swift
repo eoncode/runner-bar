@@ -21,7 +21,6 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         log("allWorkerMetrics › ps aux returned empty")
         return []
     }
-
     var results: [RunnerMetrics] = []
     for line in output.components(separatedBy: "\n") {
         guard line.contains("Runner.Worker") || line.contains("Runner.Listener") else { continue }
@@ -29,11 +28,14 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         let parts = line.split(separator: " ", omittingEmptySubsequences: true)
         guard parts.count > 3,
               let cpu = Double(parts[2]),
-              let mem = Double(parts[3]) else { continue }
-        log("allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): \(parts[10...].prefix(3).joined(separator: " "))")
+              let mem = Double(parts[3])
+        else { continue }
+        log(
+            "allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): "
+            + "\(parts[10...].prefix(3).joined(separator: " "))"
+        )
         results.append(RunnerMetrics(cpu: cpu, mem: mem))
     }
-
     // Highest CPU first — matches ci-dash.py Worker ordering
     return results.sorted { $0.cpu > $1.cpu }
 }
