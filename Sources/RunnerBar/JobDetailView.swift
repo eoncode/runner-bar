@@ -67,7 +67,6 @@ struct JobDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             // ── Header: OUTSIDE ScrollView — always visible at top
             //
             // This HStack must stay outside the ScrollView so the back button
@@ -91,8 +90,8 @@ struct JobDetailView: View {
                         let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         if scope.isEmpty { log("ReRunButton › could not derive scope from htmlUrl: \(job.htmlUrl)") }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = scope.contains("/") && ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
-                            completion(ok)
+                            let isSuccess = scope.contains("/") && ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
+                            completion(isSuccess)
                         }
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
@@ -163,7 +162,7 @@ struct JobDetailView: View {
                         ForEach(job.steps) { step in
                             // Tapping a step row calls onSelectStep(step).
                             // AppDelegate translates this into navigate(to: logView(job:step:)).
-                            Button(action: { onSelectStep(step) }) {
+                            Button(action: { onSelectStep(step) }, label: {
                                 HStack(spacing: 8) {
                                     // Status/conclusion icon — always 14pt wide for alignment.
                                     Text(step.conclusionIcon)
@@ -198,7 +197,7 @@ struct JobDetailView: View {
                                 // contentShape(Rectangle()) makes the entire row — including
                                 // the Spacer gap — tappable, not just the text/icon areas.
                                 .contentShape(Rectangle())
-                            }
+                            })
                             .buttonStyle(.plain)
                         }
                     }
