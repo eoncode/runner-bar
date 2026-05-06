@@ -284,12 +284,12 @@ final class SystemStatsViewModel: ObservableObject {
         let disk = diskStats()
 
         let s = SystemStats(
-            cpuPct:      cpu,
-            memUsedGB:   mem.used,
-            memTotalGB:  mem.total,
-            diskUsedGB:  disk.used,
+            cpuPct: cpu,
+            memUsedGB: mem.used,
+            memTotalGB: mem.total,
+            diskUsedGB: disk.used,
             diskTotalGB: disk.total,
-            diskFreeGB:  disk.free,
+            diskFreeGB: disk.free,
             diskFreePct: disk.freePct
         )
 

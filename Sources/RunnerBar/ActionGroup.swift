@@ -297,13 +297,13 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         let ends   = allJobs.compactMap { $0.completedAt }
 
         return ActionGroup(
-            headSha:             sha,
-            label:               label,
-            title:               title,
-            headBranch:          representativeRun.headBranch,
-            repo:                scope,
-            runs:                runs,
-            jobs:                allJobs,
+            headSha: sha,
+            label: label,
+            title: title,
+            headBranch: representativeRun.headBranch,
+            repo: scope,
+            runs: runs,
+            jobs: allJobs,
             firstJobStartedAt:   starts.min(),
             lastJobCompletedAt:  ends.max(),
             createdAt:           representativeRun.createdAt.flatMap { iso.date(from: $0) }

@@ -35,7 +35,7 @@ struct StepLogView: View {
     //   nil  — never used (isLoading gate prevents nil from showing)
     //   ""   — fetch returned empty / unavailable (shows "Log not available")
     //   text — actual log content for this step
-    @State private var logText: String? = nil
+    @State private var logText: String?
 
     // isLoading: true while the background fetch is in-flight.
     // Drives the ProgressView spinner. Set to false on fetch completion.
@@ -43,7 +43,6 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             // ── Header: always visible, OUTSIDE ScrollView
             //
             // Must stay outside the ScrollView so the back button remains

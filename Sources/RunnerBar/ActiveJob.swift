@@ -172,27 +172,27 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
         else { continue }
         for j in resp.jobs {
             guard seenJobIDs.insert(j.id).inserted else { continue }
-            let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+            let steps: [JobStep] = (j.steps ?? []).enumerated().map { index, stepPayload in
                 JobStep(
-                    id:          idx + 1,
-                    name:        s.name,
-                    status:      s.status,
-                    conclusion:  s.conclusion,
-                    startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-                    completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                    id: index + 1,
+                    name: stepPayload.name,
+                    status: stepPayload.status,
+                    conclusion: stepPayload.conclusion,
+                    startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
                 )
             }
             // ⚠️ CALLSITE 1 of 3 — see ActiveJob callsite warning above
             jobs.append(ActiveJob(
-                id:          j.id,
-                name:        j.name,
-                status:      j.status,
-                conclusion:  j.conclusion,
-                startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-                createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+                id: j.id,
+                name: j.name,
+                status: j.status,
+                conclusion: j.conclusion,
+                startedAt: j.startedAt.flatMap { iso.date(from: $0) },
+                createdAt: j.createdAt.flatMap { iso.date(from: $0) },
                 completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-                htmlUrl:     j.htmlUrl,
-                steps:       steps
+                htmlUrl: j.htmlUrl,
+                steps: steps
             ))
         }
     }
