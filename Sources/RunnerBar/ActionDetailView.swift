@@ -1,16 +1,17 @@
 import AppKit
 import SwiftUI
+// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ───────────────────────────────────────────────────────────────────────
+// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
 //   Receives the same FIXED frame from AppDelegate as JobDetailView.
 //   Sized once at openPopover() from mainView()'s fittingSize; never changes.
 //   ScrollView absorbs overflow — do NOT fight the frame.
 //
-// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────
+// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
 //   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
@@ -87,7 +88,6 @@ struct ActionDetailView: View {
                     },
                     isDisabled: false
                 )
-                // swiftlint:disable:next identifier_name
                 Text(elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -185,7 +185,6 @@ struct ActionDetailView: View {
         }
     }
 
-    // swiftlint:disable:next identifier_name
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     // MARK: - Job row helpers
@@ -225,3 +224,4 @@ struct ActionDetailView: View {
         }
     }
 }
+// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command

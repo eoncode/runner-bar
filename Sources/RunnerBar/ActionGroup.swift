@@ -1,5 +1,5 @@
 import Foundation
-// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment line_length
+// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
 
 // MARK: - GroupStatus
 
@@ -381,4 +381,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment line_length
+// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment
