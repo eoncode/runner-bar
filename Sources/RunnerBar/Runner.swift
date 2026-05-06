@@ -37,11 +37,11 @@ struct Runner: Codable, Identifiable {
     var displayStatus: String {
         if status == "offline" { return "offline" }
         let label = busy ? "active" : "idle"
-        guard let m = metrics else {
+        guard let runnerMetrics = metrics else {
             return "\(label) (CPU: — MEM: —)"
         }
-        let cpu = String(format: "%.1f", m.cpu)
-        let mem = String(format: "%.1f", m.mem)
+        let cpu = String(format: "%.1f", runnerMetrics.cpu)
+        let mem = String(format: "%.1f", runnerMetrics.mem)
         return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"
     }
 }

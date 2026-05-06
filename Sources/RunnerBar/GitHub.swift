@@ -78,7 +78,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         return nil
     }
 
-    guard let gh = ghBinaryPath() else {
+    guard let ghPath = ghBinaryPath() else {
         log("fetchStepLog › gh not found")
         return nil
     }
@@ -89,7 +89,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     // ⚠️ CRITICAL: the Accept header is required for raw text.
     // Without it: gh api returns {"message":"..."} JSON or an empty redirect.
     // With it: gh api follows the S3 redirect and streams plain-text log bytes.
-    let raw = shell("\(gh) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\"")
+    let raw = shell("\(ghPath) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\"")
 
     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty response for job \(jobID)")
@@ -207,12 +207,12 @@ func ghBinaryPath() -> String? {
 /// Must be called from a background thread.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
-    guard let gh = ghBinaryPath() else {
+    guard let ghPath = ghBinaryPath() else {
         log("ghPost › gh not found")
         return false
     }
     let task = Process()
-    task.executableURL  = URL(fileURLWithPath: gh)
+    task.executableURL  = URL(fileURLWithPath: ghPath)
     task.arguments      = ["api", "--method", "POST",
                            "-H", "Accept: application/vnd.github+json",
                            endpoint]

@@ -56,10 +56,10 @@ struct ActionDetailView: View {
                         let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
+                            let isSuccess = runIDs.allSatisfy { runID in
                                 ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
                             }
-                            completion(ok)
+                            completion(isSuccess)
                         }
                     },
                     isDisabled: group.groupStatus == .inProgress
@@ -69,19 +69,19 @@ struct ActionDetailView: View {
                         let scope = group.repo
                         let runIDs = group.runs.map { $0.id }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
+                            let isSuccess = runIDs.allSatisfy { runID in
                                 cancelRun(runID: runID, scope: scope)
                             }
-                            completion(ok)
+                            completion(isSuccess)
                         }
                     },
                     isDisabled: group.groupStatus != .inProgress
                 )
                 LogCopyButton(
                     fetch: { completion in
-                        let g = group
+                        let currentGroup = group
                         DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchActionLogs(group: g))
+                            completion(fetchActionLogs(group: currentGroup))
                         }
                     },
                     isDisabled: false
@@ -209,18 +209,18 @@ struct ActionDetailView: View {
         job.status == "in_progress" ? .yellow : .secondary
     }
 
-    private func conclusionLabel(_ c: String) -> String {
-        switch c {
+    private func conclusionLabel(_ conclusion: String) -> String {
+        switch conclusion {
         case "success":   return "✓ success"
         case "failure":   return "✗ failure"
         case "cancelled": return "⊗ cancelled"
         case "skipped":   return "− skipped"
-        default:          return c
+        default:          return conclusion
         }
     }
 
-    private func conclusionColor(_ c: String) -> Color {
-        switch c {
+    private func conclusionColor(_ conclusion: String) -> Color {
+        switch conclusion {
         case "success": return .green
         case "failure": return .red
         default:        return .secondary

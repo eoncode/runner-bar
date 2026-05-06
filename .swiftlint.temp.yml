@@ -1,7 +1,0 @@
-only_rules:
-  - control_statement
-included:
-  - Sources
-excluded:
-  - .build
-  - Package.swift

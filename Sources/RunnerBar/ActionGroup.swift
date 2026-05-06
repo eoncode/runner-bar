@@ -120,8 +120,8 @@ struct ActionGroup: Identifiable {
     /// Name of the first in-progress job, or first queued, or "—".
     /// Mirrors ci-dash.py's `current` field in `enrich_group()`.
     var currentJobName: String {
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" }) { return j.name }
+        if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
+        if let job = jobs.first(where: { $0.status == "queued" }) { return job.name }
         return "—"
     }
 
@@ -131,17 +131,17 @@ struct ActionGroup: Identifiable {
     var elapsed: String {
         if let start = firstJobStartedAt {
             let end = lastJobCompletedAt ?? Date()
-            let sec = Int(end.timeIntervalSince(start))
-            guard sec >= 0 else { return "00:00" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            let seconds = Int(end.timeIntervalSince(start))
+            guard seconds >= 0 else { return "00:00" }
+            let minutes = seconds / 60; let remainingSeconds = seconds % 60
+            return String(format: "%02d:%02d", minutes, remainingSeconds)
         }
         // Jobs not yet started — use run creation time as rough proxy.
         guard let start = createdAt else { return "00:00" }
-        let sec = Int(Date().timeIntervalSince(start))
-        guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let seconds = Int(Date().timeIntervalSince(start))
+        guard seconds >= 0 else { return "00:00" }
+        let minutes = seconds / 60; let remainingSeconds = seconds % 60
+        return String(format: "%02d:%02d", minutes, remainingSeconds)
     }
 }
 
@@ -188,7 +188,7 @@ private struct PRRef: Codable { let number: Int }
 /// Priority: PR number → branch-embedded number → sha[:7].
 /// Mirrors ci-dash.py's `pr_label_from_run()`.
 private func prLabel(from run: RunPayload) -> String {
-    if let pr = run.pullRequests?.first { return "#\(pr.number)" }
+    if let pullRequest = run.pullRequests?.first { return "#\(pullRequest.number)" }
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
         let digits = branch[range].filter { $0.isNumber }
@@ -311,11 +311,11 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     }
 
     // Sort: active first (in_progress → queued), then done, each sub-group newest first.
-    groups.sort { a, b in
-        let aPriority = statusPriority(a.groupStatus)
-        let bPriority = statusPriority(b.groupStatus)
+    groups.sort { groupA, groupB in
+        let aPriority = statusPriority(groupA.groupStatus)
+        let bPriority = statusPriority(groupB.groupStatus)
         if aPriority != bPriority { return aPriority < bPriority }
-        return (a.createdAt ?? .distantPast) > (b.createdAt ?? .distantPast)
+        return (groupA.createdAt ?? .distantPast) > (groupB.createdAt ?? .distantPast)
     }
 
     log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
@@ -327,27 +327,27 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
 /// Shared by the initial batch map and the second-pass re-fetch so both
 /// paths produce identical structs — prevents drift between the two (#102/#103).
-func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
+func makeActiveJob(from jobPayload: JobPayload, iso: ISO8601DateFormatter,
                             isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+    let steps: [JobStep] = (jobPayload.steps ?? []).enumerated().map { index, stepPayload in
         JobStep(
-            id: idx + 1,
-            name: s.name,
-            status: s.status,
-            conclusion: s.conclusion,
-            startedAt: s.startedAt.flatMap { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+            id: index + 1,
+            name: stepPayload.name,
+            status: stepPayload.status,
+            conclusion: stepPayload.conclusion,
+            startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
-        id: j.id,
-        name: j.name,
-        status: j.status,
-        conclusion: j.conclusion,
-        startedAt: j.startedAt.flatMap { iso.date(from: $0) },
-        createdAt: j.createdAt.flatMap { iso.date(from: $0) },
-        completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl: j.htmlUrl,
+        id: jobPayload.id,
+        name: jobPayload.name,
+        status: jobPayload.status,
+        conclusion: jobPayload.conclusion,
+        startedAt: jobPayload.startedAt.flatMap { iso.date(from: $0) },
+        createdAt: jobPayload.createdAt.flatMap { iso.date(from: $0) },
+        completedAt: jobPayload.completedAt.flatMap { iso.date(from: $0) },
+        htmlUrl: jobPayload.htmlUrl,
         isDimmed: isDimmed,
         steps: steps
     )
@@ -378,8 +378,8 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
     //   Case 2 — conclusion still nil but steps are final: merge steps only.
     var result = initial
     var refreshCount = 0
-    for i in result.indices {
-        let job = result[i]
+    for index in result.indices {
+        let job = result[index]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh, refreshCount < 3 else { continue }
@@ -393,14 +393,14 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
         // Case 1: conclusion resolved — substitute the whole job.
         if fresh.conclusion != nil {
-            result[i] = freshJob
+            result[index] = freshJob
             continue
         }
         // Case 2: conclusion still lagging but steps look final — merge steps only.
         let betterSteps = !freshJob.steps.isEmpty
             && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
-            result[i] = ActiveJob(
+            result[index] = ActiveJob(
                 id: job.id,
                 name: job.name,
                 status: job.status,

@@ -16,12 +16,12 @@ func githubToken() -> String? {
         return token
     }
     // 2. GH_TOKEN env var
-    if let t = ProcessInfo.processInfo.environment["GH_TOKEN"], !t.isEmpty {
-        return t
+    if let ghToken = ProcessInfo.processInfo.environment["GH_TOKEN"], !ghToken.isEmpty {
+        return ghToken
     }
     // 3. GITHUB_TOKEN env var
-    if let t = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !t.isEmpty {
-        return t
+    if let githubToken = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !githubToken.isEmpty {
+        return githubToken
     }
     return nil
 }

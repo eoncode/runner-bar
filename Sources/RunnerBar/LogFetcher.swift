@@ -7,13 +7,13 @@ import Foundation
 /// instead of the default JSON wrapper. Mirrors the pattern used by
 /// `fetchStepLog` in GitHub.swift but returns raw `Data` for binary support.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard let gh = ghBinaryPath() else {
+    guard let ghPath = ghBinaryPath() else {
         log("ghRaw › gh not found")
         return nil
     }
     let task = Process()
     let pipe = Pipe()
-    task.executableURL  = URL(fileURLWithPath: gh)
+    task.executableURL  = URL(fileURLWithPath: ghPath)
     task.arguments      = ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"]
     task.standardOutput = pipe
     task.standardError  = Pipe()
@@ -65,12 +65,12 @@ func fetchActionLogs(group: ActionGroup) -> String? {
 
     var parts: [(name: String, text: String)] = []
     let lock = NSLock()
-    let dg = DispatchGroup()
+    let dispatchGroup = DispatchGroup()
 
     for runID in runIDs {
-        dg.enter()
+        dispatchGroup.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            defer { dg.leave() }
+            defer { dispatchGroup.leave() }
             guard let data = ghRaw("repos/\(scope)/actions/runs/\(runID)/logs") else { return }
             let extracted = unzipLogs(data)
             lock.lock()
@@ -79,7 +79,7 @@ func fetchActionLogs(group: ActionGroup) -> String? {
         }
     }
 
-    dg.wait()
+    dispatchGroup.wait()
     guard !parts.isEmpty else { return nil }
 
     return parts
@@ -91,13 +91,13 @@ func fetchActionLogs(group: ActionGroup) -> String? {
 // MARK: - ZIP extraction (uses /usr/bin/unzip — always available on macOS)
 
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
-    let fm = FileManager.default
-    let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let fileManager = FileManager.default
+    let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let zipFile = tmp.appendingPathComponent("logs.zip")
-    defer { try? fm.removeItem(at: tmp) }
+    defer { try? fileManager.removeItem(at: tmp) }
 
     do {
-        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: tmp, withIntermediateDirectories: true)
         try zipData.write(to: zipFile)
     } catch { return [] }
 
@@ -112,7 +112,7 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         return []
     }
 
-    guard let enumerator = fm.enumerator(at: tmp, includingPropertiesForKeys: nil) else { return [] }
+    guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else { return [] }
     var results: [(name: String, text: String)] = []
     for case let url as URL in enumerator where url.pathExtension == "txt" {
         let relative = url.path.replacingOccurrences(of: tmp.path + "/", with: "")
