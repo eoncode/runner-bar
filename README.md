@@ -1,4 +1,4 @@
-# RunnerBar
+# RunnerBar 
 
 > Self-hosted GitHub Actions runners, at a glance in your macOS menu bar.
 
