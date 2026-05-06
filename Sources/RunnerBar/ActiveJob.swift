@@ -113,7 +113,9 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
         guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
+        lock.lock()
+        outputData.append(chunk)
+        lock.unlock()
     }
     do { try task.run() } catch {
         log("ghAPI › launch error: \(error)")
@@ -122,12 +124,19 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     }
     let deadline = Date().addingTimeInterval(timeout)
     while task.isRunning {
-        if Date() > deadline { task.terminate(); break }
+        if Date() > deadline {
+            task.terminate()
+            break
+        }
         Thread.sleep(forTimeInterval: 0.05)
     }
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    if !tail.isEmpty {
+        lock.lock()
+        outputData.append(tail)
+        lock.unlock()
+    }
     log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     // Detect rate limit — gh api returns a JSON error body with a "status" field.
     // Only set the flag to true here; reset happens at the top of each fetch() cycle.
