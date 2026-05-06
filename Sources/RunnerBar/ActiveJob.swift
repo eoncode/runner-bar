@@ -246,9 +246,16 @@ struct WorkflowRunsResponse: Codable {
     let workflowRuns: [WorkflowRun]
     enum CodingKeys: String, CodingKey { case workflowRuns = "workflow_runs" }
 }
-struct WorkflowRun: Codable { let id: Int }
+
+struct WorkflowRun: Codable {
+    let id: Int
+}
+
 /// Internal so `ActionGroup.swift` can decode job lists without duplicating structs.
-struct JobsResponse: Codable { let jobs: [JobPayload] }
+struct JobsResponse: Codable {
+    let jobs: [JobPayload]
+}
+
 struct StepPayload: Codable {
     let name: String
     let status: String
@@ -261,8 +268,11 @@ struct StepPayload: Codable {
         case completedAt = "completed_at"
     }
 }
+
 struct JobPayload: Codable {
-    let id: Int; let name: String; let status: String
+    let id: Int
+    let name: String
+    let status: String
     let conclusion: String?
     let startedAt: String?
     let createdAt: String?
