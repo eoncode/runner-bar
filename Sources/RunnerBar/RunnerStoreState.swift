@@ -89,8 +89,8 @@ extension RunnerStore {
         for cacheID in Array(cache.keys) {
             let cached = cache[cacheID]! // swiftlint:disable:this force_unwrapping
             guard cached.conclusion != nil,
-                  (cached.steps.isEmpty ||
-                   cached.steps.contains(where: { $0.status == "in_progress" })),
+                  cached.steps.isEmpty
+                  || cached.steps.contains(where: { $0.status == "in_progress" }),
                   let scope = scopeFromHtmlUrl(cached.htmlUrl),
                   let data = ghAPI("repos/\(scope)/actions/jobs/\(cacheID)"),
                   let fresh = try? JSONDecoder().decode(JobPayload.self, from: data),

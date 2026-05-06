@@ -7,35 +7,45 @@ import Foundation
 /// instead of the default JSON wrapper. Mirrors the pattern used by
 /// `fetchStepLog` in GitHub.swift but returns raw `Data` for binary support.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard let gh = ghBinaryPath() else {
+    guard let ghPath = ghBinaryPath() else {
         log("ghRaw › gh not found")
         return nil
     }
     let task = Process()
     let pipe = Pipe()
-    task.executableURL  = URL(fileURLWithPath: gh)
-    task.arguments      = ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"]
+    task.executableURL = URL(fileURLWithPath: ghPath)
+    task.arguments = ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"]
     task.standardOutput = pipe
-    task.standardError  = Pipe()
+    task.standardError = Pipe()
     var outputData = Data()
     let lock = NSLock()
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
         guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
+        lock.lock()
+        outputData.append(chunk)
+        lock.unlock()
     }
-    do { try task.run() } catch {
+    do {
+        try task.run()
+    } catch {
         log("ghRaw › launch error: \(error)")
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
-    let timeoutItem = DispatchWorkItem { if task.isRunning { task.terminate() } }
+    let timeoutItem = DispatchWorkItem {
+        if task.isRunning { task.terminate() }
+    }
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
     task.waitUntilExit()
     timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    if !tail.isEmpty {
+        lock.lock()
+        outputData.append(tail)
+        lock.unlock()
+    }
     log("ghRaw › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     return outputData.isEmpty ? nil : outputData
 }
@@ -47,9 +57,8 @@ private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
 func fetchJobLog(jobID: Int, scope: String) -> String? {
     guard scope.contains("/") else { return nil }
     guard let data = ghRaw("repos/\(scope)/actions/jobs/\(jobID)/logs"),
-          let text = String(data: data, encoding: .utf8)
-    else { return nil }
-    if text.hasPrefix("{") { return nil }  // error JSON, not a real log
+          let text = String(data: data, encoding: .utf8) else { return nil }
+    if text.hasPrefix("{") { return nil }
     return text
 }
 
@@ -62,15 +71,13 @@ func fetchActionLogs(group: ActionGroup) -> String? {
     guard scope.contains("/") else { return nil }
     let runIDs = group.runs.map { $0.id }
     guard !runIDs.isEmpty else { return nil }
-
     var parts: [(name: String, text: String)] = []
     let lock = NSLock()
-    let dg = DispatchGroup()
-
+    let dispatchGroup = DispatchGroup()
     for runID in runIDs {
-        dg.enter()
+        dispatchGroup.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            defer { dg.leave() }
+            defer { dispatchGroup.leave() }
             guard let data = ghRaw("repos/\(scope)/actions/runs/\(runID)/logs") else { return }
             let extracted = unzipLogs(data)
             lock.lock()
@@ -78,10 +85,8 @@ func fetchActionLogs(group: ActionGroup) -> String? {
             lock.unlock()
         }
     }
-
-    dg.wait()
+    dispatchGroup.wait()
     guard !parts.isEmpty else { return nil }
-
     return parts
         .sorted { $0.name < $1.name }
         .map { "=== \($0.name) ===\n\($0.text)" }
@@ -90,29 +95,29 @@ func fetchActionLogs(group: ActionGroup) -> String? {
 
 // MARK: - ZIP extraction (uses /usr/bin/unzip — always available on macOS)
 
+/// Extracts all `.txt` files from a ZIP blob and returns `(name, text)` pairs.
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
-    let fm = FileManager.default
-    let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let fileManager = FileManager.default
+    let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let zipFile = tmp.appendingPathComponent("logs.zip")
-    defer { try? fm.removeItem(at: tmp) }
-
+    defer { try? fileManager.removeItem(at: tmp) }
     do {
-        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: tmp, withIntermediateDirectories: true)
         try zipData.write(to: zipFile)
-    } catch { return [] }
-
+    } catch {
+        return []
+    }
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
     proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
     proc.standardOutput = FileHandle.nullDevice
-    proc.standardError  = FileHandle.nullDevice
+    proc.standardError = FileHandle.nullDevice
     try? proc.run()
     proc.waitUntilExit()
-    guard proc.terminationStatus == 0 else {
+    guard proc.terminationStatus == 0 else { return [] }
+    guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else {
         return []
     }
-
-    guard let enumerator = fm.enumerator(at: tmp, includingPropertiesForKeys: nil) else { return [] }
     var results: [(name: String, text: String)] = []
     for case let url as URL in enumerator where url.pathExtension == "txt" {
         let relative = url.path.replacingOccurrences(of: tmp.path + "/", with: "")

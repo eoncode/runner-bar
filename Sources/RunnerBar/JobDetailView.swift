@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57)
-//
 // navigate() = rootView swap ONLY inside the fixed popover frame.
 // ScrollView absorbs overflow — NEVER fight the frame.
 // ❌ NEVER put header inside ScrollView
@@ -20,11 +19,12 @@ struct JobDetailView: View {
     /// Called when the user taps a step row.
     let onSelectStep: (JobStep) -> Void
 
+    /// Drives the live elapsed timer in the header.
     @State private var tick = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header: OUTSIDE ScrollView
+            // ── Header: OUTSIDE ScrollView — always visible at top
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -43,9 +43,9 @@ struct JobDetailView: View {
                             log("ReRunButton › could not derive scope from htmlUrl: \(job.htmlUrl)")
                         }
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let posted = scopeStr.contains("/")
+                            let isOk = scopeStr.contains("/")
                                 && ghPost("repos/\(scopeStr)/actions/jobs/\(jobID)/rerun")
-                            completion(posted)
+                            completion(isOk)
                         }
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
@@ -135,12 +135,18 @@ struct JobDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
+            Timer.scheduledTimer(
+                withTimeInterval: 1,
+                repeats: true,
+                block: { _ in tick += 1 }
+            )
         }
     }
 
+    /// Returns job.elapsed, re-evaluated every tick so the header updates live.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
+    /// Color-codes the step icon based on conclusion/status.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .green
