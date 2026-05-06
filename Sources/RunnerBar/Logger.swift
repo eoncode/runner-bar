@@ -9,6 +9,7 @@ func log(
 ) {
     let filename = URL(fileURLWithPath: file)
         .deletingPathExtension().lastPathComponent
-    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let formatter = ISO8601DateFormatter()
+    let timestamp = formatter.string(from: Date())
     fputs("[RunnerBar \(timestamp)] \(filename):\(line) — \(message)\n", stderr)
 }
