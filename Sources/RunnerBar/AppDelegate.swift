@@ -113,7 +113,6 @@ private enum NavState {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
-
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var hc: NSHostingController<AnyView>?

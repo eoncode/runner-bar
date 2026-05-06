@@ -1,5 +1,5 @@
 only_rules:
-  - sorted_imports
+  - vertical_whitespace_opening_braces
 included:
   - Sources
 excluded:

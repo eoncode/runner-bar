@@ -37,7 +37,6 @@ struct PopoverMainView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             // ── Header
             HStack {
                 Text("RunnerBar v0.34")  // ⚠️ bump on every commit

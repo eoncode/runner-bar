@@ -40,7 +40,6 @@ struct ActionDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             // ── Header: OUTSIDE ScrollView — always visible at top
             HStack(spacing: 6) {
                 Button(action: onBack) {

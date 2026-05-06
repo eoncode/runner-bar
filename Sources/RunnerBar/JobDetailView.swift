@@ -67,7 +67,6 @@ struct JobDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             // ── Header: OUTSIDE ScrollView — always visible at top
             //
             // This HStack must stay outside the ScrollView so the back button
