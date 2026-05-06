@@ -160,14 +160,14 @@ private struct RunPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case headBranch    = "head_branch"
-        case headSha       = "head_sha"
-        case displayTitle  = "display_title"
-        case createdAt     = "created_at"
-        case updatedAt     = "updated_at"
-        case htmlUrl       = "html_url"
-        case headCommit    = "head_commit"
-        case pullRequests  = "pull_requests"
+        case headBranch   = "head_branch"
+        case headSha      = "head_sha"
+        case displayTitle = "display_title"
+        case createdAt    = "created_at"
+        case updatedAt    = "updated_at"
+        case htmlUrl      = "html_url"
+        case headCommit   = "head_commit"
+        case pullRequests = "pull_requests"
     }
 }
 
@@ -270,16 +270,16 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         let ends   = allJobs.compactMap { $0.completedAt }
 
         return ActionGroup(
-            headSha:             sha,
-            label:               label,
-            title:               title,
-            headBranch:          rep.headBranch,
-            repo:                scope,
-            runs:                runs,
-            jobs:                allJobs,
-            firstJobStartedAt:   starts.min(),
-            lastJobCompletedAt:  ends.max(),
-            createdAt:           rep.createdAt.flatMap { iso.date(from: $0) }
+            headSha:            sha,
+            label:              label,
+            title:              title,
+            headBranch:         rep.headBranch,
+            repo:               scope,
+            runs:               runs,
+            jobs:               allJobs,
+            firstJobStartedAt:  starts.min(),
+            lastJobCompletedAt: ends.max(),
+            createdAt:          rep.createdAt.flatMap { iso.date(from: $0) }
         )
     }
 
@@ -305,8 +305,8 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
             name:        s.name,
             status:      s.status,
             conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+            startedAt:   s.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: s.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
@@ -314,8 +314,8 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
         name:        j.name,
         status:      j.status,
         conclusion:  j.conclusion,
-        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+        startedAt:   j.startedAt.flatMap { iso.date(from: $0) },
+        createdAt:   j.createdAt.flatMap { iso.date(from: $0) },
         completedAt: j.completedAt.flatMap { iso.date(from: $0) },
         htmlUrl:     j.htmlUrl,
         isDimmed:    isDimmed,
@@ -332,7 +332,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
 
-    var result      = initial
+    var result       = initial
     var refreshCount = 0
     for i in result.indices {
         let job = result[i]
