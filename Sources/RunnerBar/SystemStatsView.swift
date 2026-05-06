@@ -1,6 +1,6 @@
 import SwiftUI
 
-// ── SystemStatsView ───────────────────────────────────────────────────────────
+// ── SystemStatsView ──────────────────────────────────────────────────────────────
 //
 // Renders a single horizontal row of three metric segments:
 //
@@ -52,7 +52,7 @@ struct SystemStatsView: View {
         .padding(.vertical, 4)
     }
 
-    // ── CPU segment ──────────────────────────────────────────────────────────
+    // ── CPU segment ──────────────────────────────────────────────────────────────
     //
     // Format: "CPU [bar] 20.1%"
     // Color:  usageColor on cpuPct (0–100)
@@ -69,7 +69,7 @@ struct SystemStatsView: View {
         }
     }
 
-    // ── MEM segment ──────────────────────────────────────────────────────────
+    // ── MEM segment ──────────────────────────────────────────────────────────────
     //
     // Format: "MEM [bar] 7.2/16.0GB"
     // usedPct is recomputed here from raw GB values (not stored in SystemStats)
@@ -90,7 +90,7 @@ struct SystemStatsView: View {
         }
     }
 
-    // ── DISK segment ─────────────────────────────────────────────────────────
+    // ── DISK segment ──────────────────────────────────────────────────────────────
     //
     // Format: "DISK [bar] 335/460GB (126GB 27%)"
     // usedPct drives both the bar fill AND the color — matches ci-dash.py:
@@ -115,23 +115,21 @@ struct SystemStatsView: View {
         return HStack(spacing: 4) {
             Text("DISK").font(.caption2).foregroundColor(.secondary)
             bar(fraction: usedPct / 100, color: color)
-            Text(String(format: "%d/%dGB (%dGB %d%%)",
-                        Int(stats.diskUsedGB.rounded()),
-                        Int(stats.diskTotalGB.rounded()),
-                        Int(stats.diskFreeGB.rounded()),
-                        Int(stats.diskFreePct.rounded())))
+            Text(String(
+                format: "%d/%dGB (%dGB %d%%)",
+                Int(stats.diskUsedGB.rounded()),
+                Int(stats.diskTotalGB.rounded()),
+                Int(stats.diskFreeGB.rounded()),
+                Int(stats.diskFreePct.rounded())
+            ))
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(color)
         }
     }
 
-    // ── Bar helper ───────────────────────────────────────────────────────────
+    // ── Bar helper ───────────────────────────────────────────────────────────────
     //
     // Renders a small progress bar: dim background track + colored fill overlay.
-    //
-    // WHY GeometryReader + ZStack instead of ProgressView?
-    //   ProgressView's style and sizing is platform-controlled and inconsistent
-    //   across macOS versions.  This ZStack approach gives us exact pixel control.
     //
     // WHY fixed .frame(width: 16, height: 5)?
     //   The bar must not grow with available space — doing so would cause DISK's
@@ -141,21 +139,19 @@ struct SystemStatsView: View {
     //  delta glitch) don't cause the fill rect to exceed the track width.
 
     private func bar(fraction: Double, color: Color) -> some View {
-        GeometryReader { _ in
-            ZStack(alignment: .leading) {
-                // Track: dim background
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.primary.opacity(0.1))
-                // Fill: colored overlay scaled by fraction
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(color)
-                    .frame(width: 16 * max(0, min(1, fraction)))
-            }
+        ZStack(alignment: .leading) {
+            // Track: dim background
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.primary.opacity(0.1))
+            // Fill: colored overlay scaled by fraction
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 16 * max(0, min(1, fraction)))
         }
         .frame(width: 16, height: 5)
     }
 
-    // ── Color helper ─────────────────────────────────────────────────────────
+    // ── Color helper ──────────────────────────────────────────────────────────────
     //
     // Mirrors ci-dash.py's color logic for CPU, MEM, and DISK:
     //   cc = R if cpu > 85 else Y if cpu > 60 else G
@@ -166,9 +162,6 @@ struct SystemStatsView: View {
     //   > 85 % = danger (red)    — system under heavy load, CI may fail
     //   > 60 % = warning (yellow) — elevated, worth watching
     //   ≤ 60 % = nominal (green)  — plenty of headroom
-    //
-    // All three metrics use the same thresholds for visual consistency and
-    // because they were copied directly from ci-dash.py where they are the same.
 
     private func usageColor(pct: Double) -> Color {
         if pct > 85 { return .red }

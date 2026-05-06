@@ -8,7 +8,7 @@ excluded:
   - .build
   - Package.swift
 
-# ── Opt-in rules ────────────────────────────────────────────────────────────
+# ── Opt-in rules ────────────────────────────────────────────────────────────────────────
 opt_in_rules:
   - missing_docs           # require /// on all internal/public declarations
   - closure_spacing        # consistent spacing inside closure braces
@@ -23,7 +23,7 @@ opt_in_rules:
   - empty_collection_literal  # prefer isEmpty over == []
   - first_where            # prefer first(where:) over filter().first
 
-# ── Rule configuration ───────────────────────────────────────────────────────
+# ── Rule configuration ───────────────────────────────────────────────────────────────────
 missing_docs:
   warning:
     - internal
@@ -61,7 +61,7 @@ nesting:
   function_level:
     warning: 3
 
-# ── Disabled rules ───────────────────────────────────────────────────────────
+# ── Disabled rules ───────────────────────────────────────────────────────────────────────
 disabled_rules:
   - todo          # TODOs are acceptable during active development
   - trailing_comma  # SwiftPM/Xcode auto-formatter conflicts with this

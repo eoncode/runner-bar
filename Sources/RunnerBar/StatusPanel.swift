@@ -1,2 +1,2 @@
-// StatusPanel.swift — unused, kept as empty placeholder
+// StatusPanel.swift — unused, kept as empty placeholder.
 import AppKit
