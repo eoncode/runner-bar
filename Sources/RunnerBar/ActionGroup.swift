@@ -113,20 +113,36 @@ struct WorkflowRun: Identifiable, Decodable {
 extension RunnerStore {
     /// Fetches and groups live workflow runs for `scope` into `ActionGroup` values.
     ///
-    /// Groups runs by `head_sha`. Enriches each group's jobs from the cache where available.
-    /// Skips scopes whose API call fails.
+    /// Fetches both `in_progress` and `queued` runs (per_page=50 each) and merges
+    /// them by `head_sha`. Enriches each group's jobs from the cache where available.
+    /// Skips scopes whose API calls fail.
     func fetchActionGroups(
         for scope: String,
         cache shaKeyedCache: [String: ActionGroup]
     ) -> [ActionGroup] {
-        guard scope.contains("/"),
-              let data = ghAPI("repos/\(scope)/actions/runs?per_page=10&status=in_progress"),
-              let payload = try? JSONDecoder().decode(WorkflowRunsPayload.self, from: data)
-        else { return [] }
+        guard scope.contains("/") else { return [] }
+
+        let decoder = JSONDecoder()
+        var allRuns: [WorkflowRun] = []
+
+        // Fetch in_progress runs.
+        if let data = ghAPI("repos/\(scope)/actions/runs?per_page=50&status=in_progress"),
+           let payload = try? decoder.decode(WorkflowRunsPayload.self, from: data) {
+            allRuns.append(contentsOf: payload.workflowRuns)
+        }
+
+        // Fetch queued runs and merge, deduplicating by run ID.
+        if let data = ghAPI("repos/\(scope)/actions/runs?per_page=50&status=queued"),
+           let payload = try? decoder.decode(WorkflowRunsPayload.self, from: data) {
+            let existingIDs = Set(allRuns.map { $0.id })
+            allRuns.append(contentsOf: payload.workflowRuns.filter { !existingIDs.contains($0.id) })
+        }
+
+        guard !allRuns.isEmpty else { return [] }
 
         let iso = ISO8601DateFormatter()
         var grouped: [String: (runs: [WorkflowRun], jobs: [ActiveJob])] = [:]
-        for run in payload.workflowRuns {
+        for run in allRuns {
             let sha = run.headSha
             let cachedJobs = shaKeyedCache[sha]?.jobs ?? []
             grouped[sha, default: ([], cachedJobs)].runs.append(run)
