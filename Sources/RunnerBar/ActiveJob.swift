@@ -19,7 +19,7 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     /// When the job finished.
     let completedAt: Date?
     /// Deep-link URL on github.com for this job.
-    let htmlUrl: String
+    let htmlUrl: String?
     /// `true` when the job is shown as a dimmed historical entry.
     let isDimmed: Bool
     /// Ordered list of steps within this job.
@@ -30,8 +30,9 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         let start = startedAt ?? createdAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
-        if secs < 60 { return "\(secs)s" }
-        return "\(secs / 60)m \(secs % 60)s"
+        guard secs >= 0 else { return "00:00" }
+        let m = secs / 60; let s = secs % 60
+        return String(format: "%02d:%02d", m, s)
     }
 }
 
@@ -68,8 +69,9 @@ struct JobStep: Identifiable, Codable, Equatable {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
-        if secs < 60 { return "\(secs)s" }
-        return "\(secs / 60)m \(secs % 60)s"
+        guard secs >= 0 else { return "00:00" }
+        let m = secs / 60; let s = secs % 60
+        return String(format: "%02d:%02d", m, s)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -91,7 +93,7 @@ struct JobPayload: Decodable {
     let startedAt: String?
     let createdAt: String?
     let completedAt: String?
-    let htmlUrl: String
+    let htmlUrl: String?
     let steps: [JobStep]?
 
     enum CodingKeys: String, CodingKey {
