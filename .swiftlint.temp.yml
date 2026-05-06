@@ -1,5 +1,5 @@
 only_rules:
-  - closure_spacing
+  - sorted_imports
 included:
   - Sources
 excluded:

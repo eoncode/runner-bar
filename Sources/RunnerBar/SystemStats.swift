@@ -1,6 +1,6 @@
-import Foundation
-import Darwin
 import Combine
+import Darwin
+import Foundation
 
 // ── SystemStats — plain value type ───────────────────────────────────────────
 //

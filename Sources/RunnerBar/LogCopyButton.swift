@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
 /// States: idle (doc.on.doc) → loading (spinner) → done (green checkmark, 1.5s) → idle
