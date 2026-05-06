@@ -10,6 +10,7 @@ var ghIsRateLimited: Bool = false
 /// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
 /// Returns `nil` on launch failure, timeout, empty response, or rate-limit (403/429).
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    // swiftlint:disable:next identifier_name
     guard let gh = ghBinaryPath() else {
         log("ghAPI › gh not found")
         return nil
@@ -77,6 +78,7 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 
 // MARK: - Fetch all jobs from active runs
 
+/// Fetches all active (in_progress + queued) jobs across all runs for the given scope.
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
@@ -93,6 +95,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             let data = ghAPI(runsEndpoint(status: status)),
             let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
+        // swiftlint:disable:next for_where
         for run in resp.workflowRuns {
             if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
         }
@@ -229,6 +232,9 @@ func ghBinaryPath() -> String? {
 
 // MARK: - POST helper
 
+/// Fires a POST to the GitHub API via `gh api --method POST`.
+/// Returns `true` if gh exits 0 (HTTP 2xx), `false` otherwise.
+/// Must be called from a background thread.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
     guard let ghPath = ghBinaryPath() else {
@@ -256,6 +262,9 @@ func ghPost(_ endpoint: String) -> Bool {
 
 // MARK: - Cancel run
 
+/// Cancels a workflow run via POST `.../cancel`.
+/// Returns `true` on HTTP 202, `false` on error or 409 (already completed).
+/// Must be called from a background thread.
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
