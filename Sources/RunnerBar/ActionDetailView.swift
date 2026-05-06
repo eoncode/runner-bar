@@ -1,16 +1,17 @@
 import AppKit
 import SwiftUI
+// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ────────────────────────────────────────────────────────────
+// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
 //   Receives the same FIXED frame from AppDelegate as JobDetailView.
 //   Sized once at openPopover() from mainView()'s fittingSize; never changes.
 //   ScrollView absorbs overflow — do NOT fight the frame.
 //
-// ── LAYOUT RULES ──────────────────────────────────────────────────────────────
+// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
 //   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
@@ -95,7 +96,6 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // Label + title below nav bar.
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(group.label)
@@ -113,7 +113,6 @@ struct ActionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                // Job progress summary
                 Text("\(group.jobsDone)/\(group.jobsTotal) jobs concluded")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -134,7 +133,7 @@ struct ActionDetailView: View {
                             .padding(.vertical, 8)
                     } else {
                         ForEach(group.jobs) { job in
-                            Button(action: { onSelectJob(job) }) {
+                            Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
                                     Circle()
                                         .fill(jobDotColor(for: job))
@@ -167,7 +166,7 @@ struct ActionDetailView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 3)
                                 .contentShape(Rectangle())
-                            }
+                            })
                             .buttonStyle(.plain)
                         }
                     }
@@ -177,8 +176,6 @@ struct ActionDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
-            // Invalidate any existing timer before creating a new one — prevents
-            // accumulation when the user navigates away and back multiple times.
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
@@ -188,7 +185,6 @@ struct ActionDetailView: View {
         }
     }
 
-    // Re-evaluates group.elapsed on every tick to drive a live counter.
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     // MARK: - Job row helpers
@@ -228,3 +224,4 @@ struct ActionDetailView: View {
         }
     }
 }
+// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command

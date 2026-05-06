@@ -1,4 +1,5 @@
 import Foundation
+// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
 
 // MARK: - GroupStatus
 
@@ -85,9 +86,6 @@ struct ActionGroup: Identifiable {
     /// Also treats the group as completed if all jobs are done, even if the
     /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
-        // Override: all jobs done → completed, regardless of run API lag.
-        // Use any-conclusion count (not jobsDone, which is success+skipped only) so
-        // a single failed job still triggers the all-done path.
         if jobsTotal > 0,
            jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed }
         if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
@@ -97,7 +95,6 @@ struct ActionGroup: Identifiable {
 
     /// Group conclusion: only non-nil when every run has concluded.
     /// Priority: failure > cancelled > skipped > success.
-    /// (Matches ci-dash.py status_icon precedence.)
     var conclusion: String? {
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
@@ -118,16 +115,13 @@ struct ActionGroup: Identifiable {
     var jobProgress: String { jobs.isEmpty ? "—" : "\(jobsDone)/\(jobsTotal)" }
 
     /// Name of the first in-progress job, or first queued, or "—".
-    /// Mirrors ci-dash.py's `current` field in `enrich_group()`.
     var currentJobName: String {
         if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
         if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
         return "—"
     }
 
-    /// Elapsed time derived from min(job.startedAt) → max(job.completedAt),
-    /// matching ci-dash.py's `enrich_group()` elapsed logic exactly.
-    /// Falls back to wall-clock time from `createdAt` while jobs haven't started.
+    /// Elapsed time derived from min(job.startedAt) → max(job.completedAt).
     var elapsed: String {
         if let start = firstJobStartedAt {
             let end = lastJobCompletedAt ?? Date()
@@ -136,7 +130,6 @@ struct ActionGroup: Identifiable {
             let m = sec / 60; let s = sec % 60
             return String(format: "%02d:%02d", m, s)
         }
-        // Jobs not yet started — use run creation time as rough proxy.
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
@@ -168,14 +161,14 @@ private struct RunPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case headBranch    = "head_branch"
-        case headSha       = "head_sha"
-        case displayTitle  = "display_title"
-        case createdAt     = "created_at"
-        case updatedAt     = "updated_at"
-        case htmlUrl       = "html_url"
-        case headCommit    = "head_commit"
-        case pullRequests  = "pull_requests"
+        case headBranch = "head_branch"
+        case headSha = "head_sha"
+        case displayTitle = "display_title"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case htmlUrl = "html_url"
+        case headCommit = "head_commit"
+        case pullRequests = "pull_requests"
     }
 }
 
@@ -186,7 +179,6 @@ private struct PRRef: Codable { let number: Int }
 
 /// Derives the short identifier for an action group row.
 /// Priority: PR number → branch-embedded number → sha[:7].
-/// Mirrors ci-dash.py's `pr_label_from_run()`.
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
@@ -200,12 +192,9 @@ private func prLabel(from run: RunPayload) -> String {
 // MARK: - Fetch + Group
 
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
-/// enriches each group with its flattened job list, and returns up to `limit`
-/// groups sorted: in_progress first, then queued, then done — newest first.
-///
-/// Mirrors ci-dash.py's `group_runs()` + `enrich_group()`.
-///
-/// Org scopes are skipped — the GitHub Jobs API requires a repo-scoped endpoint.
+/// enriches each group with its flattened job list, and returns groups sorted:
+/// in_progress first, then queued, then done — newest first.
+// swiftlint:disable:next function_body_length cyclomatic_complexity
 func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
@@ -216,7 +205,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     var runPayloads: [RunPayload] = []
     var seenIDs = Set<Int>()
 
-    // Phase 1: fetch in_progress and queued runs — these seed the group dict.
+    // Phase 1: fetch in_progress and queued runs.
     for status in ["in_progress", "queued"] {
         let endpoint = "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
         guard
@@ -228,18 +217,13 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         }
     }
 
-    // Group by head_sha — mirrors ci-dash.py's group_runs().
-    // Phase 1 runs seed the dict; only these shas become visible groups.
+    // Group by head_sha.
     var bySha: [String: [RunPayload]] = [:]
     for run in runPayloads {
         bySha[run.headSha, default: []].append(run)
     }
 
-    // Phase 2: fetch recently completed runs and merge into EXISTING groups only.
-    // As individual sibling workflow files finish, their run_ids vanish from the
-    // in_progress/queued pages — without this merge, jobsTotal shrinks each poll.
-    // Mirrors ci-dash.py's prev_completed merge that keeps groups stable.
-    // ⚠️ We do NOT add new keys to bySha here — only backfill known shas.
+    // Phase 2: merge recently completed runs into EXISTING groups only.
     if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
@@ -249,16 +233,12 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         }
     }
 
-    // Build ActionGroup for each sha bucket.
     var groups: [ActionGroup] = bySha.map { sha, shaRuns in
-        // Representative run = most recently created.
         let rep = shaRuns.sorted {
             ($0.createdAt ?? "") > ($1.createdAt ?? "")
         }.first!
 
         let label = prLabel(from: rep)
-
-        // Title: prefer display_title → head_commit.message first line → sha[:7].
         let rawTitle = rep.displayTitle
             ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
@@ -269,9 +249,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
                            conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
         }
 
-        // Use cached jobs if all are concluded — avoids redundant API calls (#114 Fix 2).
-        // fetchJobsForRun fires several requests per run; skipping it for groups we
-        // already know are fully done significantly reduces the call count at idle.
         let allJobs: [ActiveJob]
         if let cached = cache[sha],
            !cached.jobs.isEmpty,
@@ -287,30 +264,27 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
                     fetched.append(job)
                 }
             }
-            // Sort jobs by id ascending — matches yml definition order (#101).
             fetched.sort { $0.id < $1.id }
             allJobs = fetched
         }
 
-        // Derive timestamps from job data (matches enrich_group()).
         let starts = allJobs.compactMap { $0.startedAt }
         let ends   = allJobs.compactMap { $0.completedAt }
 
         return ActionGroup(
-            headSha:             sha,
-            label:               label,
-            title:               title,
-            headBranch:          rep.headBranch,
-            repo:                scope,
-            runs:                runs,
-            jobs:                allJobs,
-            firstJobStartedAt:   starts.min(),
-            lastJobCompletedAt:  ends.max(),
-            createdAt:           rep.createdAt.flatMap { iso.date(from: $0) }
+            headSha: sha,
+            label: label,
+            title: title,
+            headBranch: rep.headBranch,
+            repo: scope,
+            runs: runs,
+            jobs: allJobs,
+            firstJobStartedAt: starts.min(),
+            lastJobCompletedAt: ends.max(),
+            createdAt: rep.createdAt.flatMap { iso.date(from: $0) }
         )
     }
 
-    // Sort: active first (in_progress → queued), then done, each sub-group newest first.
     groups.sort { a, b in
         let aPriority = statusPriority(a.groupStatus)
         let bPriority = statusPriority(b.groupStatus)
@@ -325,58 +299,42 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 // MARK: - Private helpers
 
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
-/// Shared by the initial batch map and the second-pass re-fetch so both
-/// paths produce identical structs — prevents drift between the two (#102/#103).
 func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
-                            isDimmed: Bool = false) -> ActiveJob {
+                   isDimmed: Bool = false) -> ActiveJob {
     let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
         JobStep(
-            id:          idx + 1,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+            id: idx + 1,
+            name: s.name,
+            status: s.status,
+            conclusion: s.conclusion,
+            startedAt: s.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: s.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
-        id:          j.id,
-        name:        j.name,
-        status:      j.status,
-        conclusion:  j.conclusion,
-        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+        id: j.id,
+        name: j.name,
+        status: j.status,
+        conclusion: j.conclusion,
+        startedAt: j.startedAt.flatMap { iso.date(from: $0) },
+        createdAt: j.createdAt.flatMap { iso.date(from: $0) },
         completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl:     j.htmlUrl,
-        isDimmed:    isDimmed,
-        steps:       steps
+        htmlUrl: j.htmlUrl,
+        isDimmed: isDimmed,
+        steps: steps
     )
 }
 
-/// Fetch and decode jobs for a single run ID. Reuses the internal
-/// JobsResponse/JobPayload/StepPayload types from ActiveJob.swift.
-///
-/// Second pass: any job that still has no conclusion — or whose steps still
-/// contain an "in_progress" entry — is re-fetched individually via the single-job
-/// endpoint.  This resolves three stale-data classes the batch endpoint produces:
-///   #102  — queued job lingers / steps missing after the run completes.
-///   #103 A+B — GitHub-hosted runner jobs with missing step data.
-///   #103 C  — jobs whose steps are still "in_progress" after completion.
+/// Fetch and decode jobs for a single run ID.
 private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
     guard
         let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?filter=latest&per_page=100"),
         let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
     else { return [] }
 
-    // Initial map via shared helper.
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
 
-    // Second pass: re-fetch jobs whose batch data may be stale.
-    // Capped at 3 re-fetches per run per poll to limit API call volume (#114 Fix 3).
-    // Two substitution cases (fixes #107/#108):
-    //   Case 1 — conclusion resolved: substitute the whole job.
-    //   Case 2 — conclusion still nil but steps are final: merge steps only.
-    var result      = initial
+    var result = initial
     var refreshCount = 0
     for i in result.indices {
         let job = result[i]
@@ -391,26 +349,24 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
         let freshJob = makeActiveJob(from: fresh, iso: iso)
 
-        // Case 1: conclusion resolved — substitute the whole job.
         if fresh.conclusion != nil {
             result[i] = freshJob
             continue
         }
-        // Case 2: conclusion still lagging but steps look final — merge steps only.
         let betterSteps = !freshJob.steps.isEmpty
             && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
             result[i] = ActiveJob(
-                id:          job.id,
-                name:        job.name,
-                status:      job.status,
-                conclusion:  job.conclusion,
-                startedAt:   freshJob.startedAt   ?? job.startedAt,
-                createdAt:   freshJob.createdAt   ?? job.createdAt,
+                id: job.id,
+                name: job.name,
+                status: job.status,
+                conclusion: job.conclusion,
+                startedAt: freshJob.startedAt ?? job.startedAt,
+                createdAt: freshJob.createdAt ?? job.createdAt,
                 completedAt: freshJob.completedAt ?? job.completedAt,
-                htmlUrl:     job.htmlUrl,
-                isDimmed:    job.isDimmed,
-                steps:       freshJob.steps
+                htmlUrl: job.htmlUrl,
+                isDimmed: job.isDimmed,
+                steps: freshJob.steps
             )
         }
     }
@@ -425,3 +381,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
+// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment

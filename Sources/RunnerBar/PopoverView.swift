@@ -1,5 +1,10 @@
+// PopoverView.swift — unused, kept as empty placeholder.
+// Navigation is handled inside PopoverMainView via @State.
+// All content lives in PopoverMainView.swift and JobDetailView.swift.
 import SwiftUI
 
-// Navigation is now handled inside PopoverMainView via @State.
-// This file kept as empty placeholder to avoid removing it from the target.
-// All content lives in PopoverMainView.swift and JobDetailView.swift.
+/// Placeholder view — navigation is handled by `PopoverMainView`.
+struct PopoverView: View {
+    /// Empty body; this file is a placeholder only.
+    var body: some View { EmptyView() }
+}

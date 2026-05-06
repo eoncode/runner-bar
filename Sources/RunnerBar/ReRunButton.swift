@@ -1,21 +1,32 @@
 import SwiftUI
 
-/// Top-bar re-run button. Mirrors LogCopyButton phase-machine pattern.
+/// Top-bar re-run button. Mirrors CancelButton phase-machine pattern.
 /// idle (arrow.clockwise) → loading (spinner) → done (green ✓, 1.5s) OR failed (red ✗, 1.5s) → idle
 struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
+    /// When true the button is rendered at reduced opacity and cannot be tapped.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
 
-    enum Phase { case idle, loading, done, failed }
+    /// Visual states of the re-run button lifecycle.
+    enum Phase {
+        /// Normal tappable state.
+        case idle
+        /// Spinner shown while the re-run request is in-flight.
+        case loading
+        /// Green checkmark shown for 1.5 s after success.
+        case done
+        /// Red cross shown for 1.5 s after failure.
+        case failed
+    }
 
     var body: some View {
         Group {
             switch phase {
             case .idle:
-                Button { startRerun() } label: {
+                Button(action: startRerun) {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption)
                         .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)

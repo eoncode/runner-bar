@@ -1,15 +1,15 @@
 import Foundation
 
 /// Writes a timestamped, file-annotated message to stderr.
-/// Visible in Terminal when running the app from the shell,
-/// in Console.app under the process name, and in crash logs.
+/// Visible in Terminal, Console.app, and crash logs.
 func log(
     _ message: String,
     file: String = #file,
-    line: Int    = #line
+    line: Int = #line
 ) {
     let filename = URL(fileURLWithPath: file)
         .deletingPathExtension().lastPathComponent
-    let ts = ISO8601DateFormatter().string(from: Date())
-    fputs("[RunnerBar \(ts)] \(filename):\(line) — \(message)\n", stderr)
+    let formatter = ISO8601DateFormatter()
+    let timestamp = formatter.string(from: Date())
+    fputs("[RunnerBar \(timestamp)] \(filename):\(line) — \(message)\n", stderr)
 }
