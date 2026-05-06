@@ -3,19 +3,16 @@ import Foundation
 /// Persists the list of watched GitHub scopes (e.g. `"owner/repo"` or `"myorg"`).
 ///
 /// A scope is either a `owner/repo` string that targets a single repository,
-/// or an org slug (e.g. `"myorg"`) that targets all runners in an organisation.
+/// or an org slug that targets all runners in an organisation.
 /// Scopes are stored in `UserDefaults` and read back on every access so changes
 /// survive app restarts without requiring an explicit save call.
-/// Access the shared instance via `ScopeStore.shared`.
 final class ScopeStore {
-    /// Shared singleton — the single source of truth for all scope read/write operations.
+    /// Shared singleton \u2014 the single source of truth for all scope read/write operations.
     static let shared = ScopeStore()
 
-    /// The `UserDefaults` key under which the scopes array is persisted.
     private let key = "scopes"
 
-    /// The current list of scopes, read from and written directly to `UserDefaults`
-    /// on every access. Changes are immediately durable across app launches.
+    /// The current list of scopes, read from and written to `UserDefaults` on every access.
     var scopes: [String] {
         get { UserDefaults.standard.stringArray(forKey: key) ?? [] }
         set { UserDefaults.standard.set(newValue, forKey: key) }
@@ -24,8 +21,7 @@ final class ScopeStore {
     /// `true` when no scopes have been added yet.
     var isEmpty: Bool { scopes.isEmpty }
 
-    /// Appends `scope` to the persisted list after trimming leading/trailing whitespace.
-    /// No-ops silently if the trimmed value is empty or already present (dedup guard).
+    /// Appends `scope` after trimming whitespace. No-ops if empty or already present.
     func add(_ scope: String) {
         let trimmed = scope.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !scopes.contains(trimmed) else { return }
@@ -34,6 +30,6 @@ final class ScopeStore {
 
     /// Removes all entries equal to `scope` from the persisted list.
     func remove(_ scope: String) {
-        scopes.removeAll { $0 == scope }
+        scopes.removeAll(where: { $0 == scope })
     }
 }

@@ -34,36 +34,17 @@ private struct RunnersResponse: Codable {
 ///
 /// # GitHub API details
 /// Endpoint: GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs
-/// This endpoint returns a 302 redirect to a short-lived pre-signed AWS S3 URL.
-/// The `gh api` CLI follows the redirect automatically.
-///
-/// Accept header MUST be:
-///   Accept: application/vnd.github.v3.raw
-/// Without this header, `gh api` may return a redirect JSON object or an error
-/// instead of the actual plain-text log. This was the root cause of
-/// "Log not available" showing even for jobs with logs.
+/// Returns a 302 redirect to a pre-signed S3 URL; `gh api` follows it automatically.
+/// Accept: application/vnd.github.v3.raw is required for plain-text response.
 ///
 /// # Log format
-/// GitHub Actions writes the full job log as one blob with step sections
-/// delimited by group markers:
-///
-///   ##[group]Step Name
-///   2024-01-01T00:00:00.0000000Z line one
-///   ...
-///   ##[endgroup]
-///
-/// Each ##[group] block corresponds to one step in order.
-/// stepNumber is 1-based (matches JobStep.id, idx+1 in fetchActiveJobs).
-///
-/// # Fallbacks
-/// - If the log has no ##[group] markers, the full cleaned log text is returned.
-/// - If stepNumber is out of range, the full log is returned rather than nil.
+/// GitHub Actions writes the full job log with step sections delimited by:
+///   ##[group]Step Name ... ##[endgroup]
+/// stepNumber is 1-based (matches JobStep.id).
 ///
 /// # Threading
-/// \u26a0\ufe0f MUST be called from a background thread (DispatchQueue.global).
+/// \u26a0\ufe0f MUST be called from a background thread.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
-    // Org-scoped logs are not supported: the jobs/{id}/logs endpoint requires
-    // a repo scope ("owner/repo").
     guard scope.contains("/") else {
         log("fetchStepLog \u203a skipped: org-scoped logs not supported (scope=\(scope))")
         return nil
@@ -74,21 +55,18 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     }
     let endpoint = "repos/\(scope)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog \u203a fetching \(endpoint) step=\(stepNumber)")
-    // \u26a0\ufe0f CRITICAL: the Accept header is required for raw text.
-    // Without it: gh api returns JSON or an empty redirect.
-    let raw = shell("\(ghPath) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\"")
+    let raw = shell(
+        "\(ghPath) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\""
+    )
     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog \u203a empty response for job \(jobID)")
         return nil
     }
-    // Detect error JSON: gh api returns {"message":"..."} on 404, auth failure, etc.
     if raw.hasPrefix("{") {
         log("fetchStepLog \u203a error JSON returned: \(raw.prefix(120))")
         return nil
     }
-    // Strip ANSI/VT100 escape sequences before splitting into sections.
     let cleaned = stripAnsi(raw)
-    // Split log into per-step sections using ##[group] as section boundaries.
     let lines = cleaned.components(separatedBy: "\n")
     var sections: [String] = []
     var current: [String] = []
@@ -102,12 +80,10 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     }
     if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
     log("fetchStepLog \u203a parsed \(sections.count) section(s) from log")
-    // Fallback A: no ##[group] markers at all.
     if sections.isEmpty || (sections.count == 1 && !sections[0].contains("##[group]")) {
         log("fetchStepLog \u203a no group markers, returning full raw log")
         return cleaned
     }
-    // stepNumber is 1-based; sections array is 0-based.
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
         log(
@@ -122,10 +98,8 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
 }
 
 /// Strip ANSI/VT100 escape sequences from a log string.
-/// Pattern: ESC (\x1B) followed by '[', then any digits/semicolons, then a letter.
 private func stripAnsi(_ input: String) -> String {
     guard let regex = try? NSRegularExpression(pattern: "\u001B\\[[0-9;]*[A-Za-z]") else {
-        // Pattern is a constant \u2014 this branch is unreachable in practice.
         return input
     }
     return regex.stringByReplacingMatches(
@@ -138,7 +112,6 @@ private func stripAnsi(_ input: String) -> String {
 // MARK: - Shared gh binary path
 
 /// Returns the first executable `gh` binary found on common install paths.
-/// Covers Apple Silicon Homebrew (/opt/homebrew), Intel Homebrew (/usr/local), and system (/usr/bin).
 func ghBinaryPath() -> String? {
     let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
     return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
@@ -166,10 +139,10 @@ func ghPost(_ endpoint: String) -> Bool {
         log("ghPost \u203a launch error: \(error)")
         return false
     }
-    let timeout = DispatchWorkItem { task.terminate() }
-    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeout)
+    let timeoutItem = DispatchWorkItem(block: { task.terminate() })
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
     task.waitUntilExit()
-    timeout.cancel()
+    timeoutItem.cancel()
     log("ghPost \u203a \(endpoint) exit \(task.terminationStatus)")
     return task.terminationStatus == 0
 }
@@ -177,7 +150,7 @@ func ghPost(_ endpoint: String) -> Bool {
 // MARK: - Cancel run
 
 /// Cancels a workflow run via POST .../cancel.
-/// Returns true on HTTP 202 (accepted), false on error or 409 (already completed).
+/// Returns true on HTTP 202, false on error or 409 (already completed).
 /// Must be called from a background thread.
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {

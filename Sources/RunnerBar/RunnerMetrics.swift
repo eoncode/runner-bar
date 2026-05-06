@@ -22,9 +22,9 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         return []
     }
     var results: [RunnerMetrics] = []
-    for line in output.components(separatedBy: "\n") {
-        guard line.contains("Runner.Worker") || line.contains("Runner.Listener") else { continue }
-        // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND\u2026
+    for line in output.components(separatedBy: "\n")
+        where line.contains("Runner.Worker") || line.contains("Runner.Listener") {
+        // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND…
         let parts = line.split(separator: " ", omittingEmptySubsequences: true)
         guard parts.count > 3,
               let cpu = Double(parts[2]),
@@ -36,6 +36,5 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         )
         results.append(RunnerMetrics(cpu: cpu, mem: mem))
     }
-    // Highest CPU first \u2014 matches ci-dash.py Worker ordering
     return results.sorted { $0.cpu > $1.cpu }
 }

@@ -1,21 +1,32 @@
 import SwiftUI
 
 /// Top-bar cancel button shared by ActionDetailView and JobDetailView.
-/// idle (xmark.circle) → loading (spinner) → done (green ✓, 1.5s) OR failed (red ✗, 1.5s) → idle
+/// idle (xmark.circle) \u2192 loading (spinner) \u2192 done (green \u2713, 1.5s) OR failed (red \u2717, 1.5s) \u2192 idle
 struct CancelButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
+    /// When true the button is rendered at reduced opacity and cannot be tapped.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
 
-    enum Phase { case idle, loading, done, failed }
+    /// Represents the four visual states of the cancel button lifecycle.
+    enum Phase {
+        /// Normal tappable state showing the xmark icon.
+        case idle
+        /// Spinner shown while the cancellation request is in-flight.
+        case loading
+        /// Green checkmark shown for 1.5 s after a successful cancel.
+        case done
+        /// Red cross shown for 1.5 s after a failed cancel.
+        case failed
+    }
 
     var body: some View {
         Group {
             switch phase {
             case .idle:
-                Button { startCancel() } label: {
+                Button(action: startCancel) {
                     Image(systemName: "xmark.circle")
                         .font(.caption)
                         .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
