@@ -1,4 +1,3 @@
-// swiftlint:disable identifier_name
 import AppKit
 import SwiftUI
 
