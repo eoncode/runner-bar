@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Top-bar re-run button. Mirrors CancelButton phase-machine pattern.
-/// idle (arrow.clockwise) → loading (spinner) → done (green ✓, 1.5s) OR failed (red ✗, 1.5s) → idle
+/// idle (arrow.clockwise + "Re-run") → loading (spinner + "Running…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
 struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -27,25 +27,47 @@ struct ReRunButton: View {
             switch phase {
             case .idle:
                 Button(action: startRerun) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
-                        .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption)
+                        Text("Re-run")
+                            .font(.caption)
+                            .fixedSize()
+                    }
+                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
             case .loading:
-                ProgressView().controlSize(.mini)
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Running…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                }
             case .done:
-                Image(systemName: "checkmark")
-                    .font(.caption)
-                    .foregroundColor(.green)
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                    Text("Done")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .fixedSize()
+                }
             case .failed:
-                Image(systemName: "xmark")
-                    .font(.caption)
-                    .foregroundColor(.red)
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Text("Failed")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .fixedSize()
+                }
             }
         }
-        .frame(width: 20)
     }
 
     private func startRerun() {

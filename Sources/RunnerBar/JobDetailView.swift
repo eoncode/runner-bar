@@ -34,6 +34,7 @@ struct JobDetailView: View {
                         Text("Jobs").font(.caption)
                     }
                     .foregroundColor(.secondary)
+                    .fixedSize()
                 }
                 .buttonStyle(.plain)
                 Spacer()

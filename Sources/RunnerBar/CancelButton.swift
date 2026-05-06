@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView and StepLogView.
-/// States: idle (xmark.circle) → loading (spinner) → done (green ✓, 1.5 s) OR failed (red ✗, 1.5 s) → idle
+/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") → done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
 struct CancelButton: View {
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -27,25 +27,47 @@ struct CancelButton: View {
             switch phase {
             case .idle:
                 Button(action: startCancel) {
-                    Image(systemName: "xmark.circle")
-                        .font(.caption)
-                        .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark.circle")
+                            .font(.caption)
+                        Text("Cancel")
+                            .font(.caption)
+                            .fixedSize()
+                    }
+                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
             case .loading:
-                ProgressView().controlSize(.mini)
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Running…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                }
             case .done:
-                Image(systemName: "checkmark")
-                    .font(.caption)
-                    .foregroundColor(.green)
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                    Text("Done")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .fixedSize()
+                }
             case .failed:
-                Image(systemName: "xmark.circle")
-                    .font(.caption)
-                    .foregroundColor(.red)
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Text("Failed")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .fixedSize()
+                }
             }
         }
-        .frame(width: 20)
     }
 
     private func startCancel() {

@@ -50,6 +50,7 @@ struct ActionDetailView: View {
                         Text("Actions").font(.caption)
                     }
                     .foregroundColor(.secondary)
+                    .fixedSize()
                 }
                 .buttonStyle(.plain)
                 Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge

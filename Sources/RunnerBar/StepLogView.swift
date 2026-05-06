@@ -34,6 +34,7 @@ struct StepLogView: View {
                         Text("Steps").font(.caption)
                     }
                     .foregroundColor(.secondary)
+                    .fixedSize()
                 }
                 .buttonStyle(.plain)
                 Spacer()
