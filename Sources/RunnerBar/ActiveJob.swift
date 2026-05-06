@@ -16,7 +16,8 @@ struct JobStep: Identifiable {
         let end = completedAt ?? Date()
         let sec = Int(end.timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
+        let m = sec / 60
+        let s = sec % 60
         return String(format: "%02d:%02d", m, s)
     }
 
@@ -70,7 +71,8 @@ struct ActiveJob: Identifiable {
             guard let start = startedAt, let end = completedAt else { return "--:--" }
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "--:--" }
-            let m = sec / 60; let s = sec % 60
+            let m = sec / 60
+            let s = sec % 60
             return String(format: "%02d:%02d", m, s)
         }
         // Live jobs: createdAt fallback is acceptable while startedAt may not yet be set.
@@ -78,7 +80,8 @@ struct ActiveJob: Identifiable {
         let end = completedAt ?? Date()
         let sec = Int(end.timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
+        let m = sec / 60
+        let s = sec % 60
         return String(format: "%02d:%02d", m, s)
     }
 }
