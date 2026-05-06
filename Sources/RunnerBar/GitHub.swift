@@ -95,10 +95,12 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             let data = ghAPI(runsEndpoint(status: status)),
             let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
-        // swiftlint:disable:next for_where
+        // insert+append pattern cannot be expressed as a where clause
+        // swiftlint:disable for_where
         for run in resp.workflowRuns {
             if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
         }
+        // swiftlint:enable for_where
     }
 
     var jobs: [ActiveJob] = []
