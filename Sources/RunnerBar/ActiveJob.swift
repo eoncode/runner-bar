@@ -22,16 +22,16 @@ struct JobStep: Identifiable {
 
     var conclusionIcon: String {
         switch conclusion {
-        case "success":   return "✓"
-        case "failure":   return "✗"
-        case "cancelled": return "⊖"
-        case "skipped":   return "−"
-        default:
-            switch status {
-            case "in_progress": return "⟳"
-            case "queued":      return "○"
-            default:            return "•"
-            }
+            case "success":   return "✓"
+            case "failure":   return "✗"
+            case "cancelled": return "⊖"
+            case "skipped":   return "−"
+            default:
+                switch status {
+                    case "in_progress": return "⟳"
+                    case "queued":      return "○"
+                    default:            return "•"
+                }
         }
     }
 }
