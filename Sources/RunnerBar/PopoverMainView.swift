@@ -321,12 +321,5 @@ struct PopoverMainView: View {
         NSAppleScript(source: script)?.executeAndReturnError(nil)
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
-
-    /// Validates and persists a new scope from the popover input, then refreshes the store.
-    private func validateAndAddScope(_ scope: String) {
-        guard scope.contains("/") || !scope.isEmpty else { return }
-        ScopeStore.shared.add(scope)
-        store.reload()
-    }
 }
 // swiftlint:enable type_body_length
