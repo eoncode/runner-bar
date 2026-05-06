@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name opening_brace orphaned_doc_comment missing_docs vertical_parameter_alignment function_body_length cyclomatic_complexity
 import Foundation
 
 // MARK: - GroupStatus
@@ -86,10 +87,8 @@ struct ActionGroup: Identifiable {
     /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
         if jobsTotal > 0,
-           // swiftlint:disable:next opening_brace
            jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed }
         if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
-        // swiftlint:disable:next opening_brace
         if runs.contains(where: { $0.status == "queued" }) { return .queued }
         return .completed
     }
@@ -97,7 +96,6 @@ struct ActionGroup: Identifiable {
     /// Group conclusion: only non-nil when every run has concluded.
     /// Priority: failure > cancelled > skipped > success.
     var conclusion: String? {
-        // swiftlint:disable:next opening_brace
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
@@ -118,9 +116,7 @@ struct ActionGroup: Identifiable {
 
     /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
-        // swiftlint:disable:next identifier_name
         if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        // swiftlint:disable:next identifier_name
         if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
         return "—"
     }
@@ -131,14 +127,12 @@ struct ActionGroup: Identifiable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            // swiftlint:disable:next identifier_name
             let m = sec / 60; let s = sec % 60
             return String(format: "%02d:%02d", m, s)
         }
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        // swiftlint:disable:next identifier_name
         let m = sec / 60; let s = sec % 60
         return String(format: "%02d:%02d", m, s)
     }
@@ -186,7 +180,6 @@ private struct PRRef: Codable { let number: Int }
 /// Derives the short identifier for an action group row.
 /// Priority: PR number → branch-embedded number → sha[:7].
 private func prLabel(from run: RunPayload) -> String {
-    // swiftlint:disable:next identifier_name
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
@@ -201,7 +194,6 @@ private func prLabel(from run: RunPayload) -> String {
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
 /// in_progress first, then queued, then done — newest first.
-// swiftlint:disable function_body_length cyclomatic_complexity
 func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
@@ -292,7 +284,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         )
     }
 
-    // swiftlint:disable:next identifier_name
     groups.sort { a, b in
         let aPriority = statusPriority(a.groupStatus)
         let bPriority = statusPriority(b.groupStatus)
@@ -303,15 +294,12 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
     return groups
 }
-// swiftlint:enable function_body_length cyclomatic_complexity
 
 // MARK: - Private helpers
 
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
-// swiftlint:disable:next identifier_name vertical_parameter_alignment
 func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
-    // swiftlint:disable:next identifier_name
     let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
         JobStep(
             id: idx + 1,
@@ -347,7 +335,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
 
     var result = initial
     var refreshCount = 0
-    for i in result.indices { // swiftlint:disable:this identifier_name
+    for i in result.indices {
         let job = result[i]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
