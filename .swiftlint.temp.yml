@@ -1,5 +1,5 @@
 only_rules:
-  - redundant_optional_initialization
+  - control_statement
 included:
   - Sources
 excluded:

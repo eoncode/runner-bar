@@ -247,7 +247,7 @@ final class RunnerStore {
             for id in Array(newCache.keys) {
                 let cached = newCache[id]!
                 guard cached.conclusion != nil,
-                      (cached.steps.isEmpty || cached.steps.contains(where: { $0.status == "in_progress" })),
+                      cached.steps.isEmpty || cached.steps.contains(where: { $0.status == "in_progress" }),
                       let scope    = scopeFromHtmlUrl(cached.htmlUrl),
                       let data     = ghAPI("repos/\(scope)/actions/jobs/\(id)"),
                       let fresh    = try? JSONDecoder().decode(JobPayload.self, from: data),
