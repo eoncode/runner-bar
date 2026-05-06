@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView and StepLogView.
-/// States: idle (xmark) → loading (spinner) → done (green ✓, 1.5 s) OR failed (red ✗, 1.5 s) → idle
+/// States: idle (xmark.circle) → loading (spinner) → done (green ✓, 1.5 s) OR failed (red ✗, 1.5 s) → idle
 struct CancelButton: View {
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -27,7 +27,7 @@ struct CancelButton: View {
             switch phase {
             case .idle:
                 Button(action: startCancel) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "xmark.circle")
                         .font(.caption)
                         .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
                 }
@@ -40,7 +40,7 @@ struct CancelButton: View {
                     .font(.caption)
                     .foregroundColor(.green)
             case .failed:
-                Image(systemName: "xmark")
+                Image(systemName: "xmark.circle")
                     .font(.caption)
                     .foregroundColor(.red)
             }
