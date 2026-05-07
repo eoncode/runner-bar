@@ -1,15 +1,19 @@
+import ServiceManagement
 import SwiftUI
 
 // MARK: - SettingsView
 
-/// Phase 1 — Settings view shell with section structure and SettingsStore bindings.
-/// Phase 2 will add runner management (migrated from PopoverMainView).
-/// ❌ Do NOT add runner management here until Phase 1 shell is verified in production.
+// swiftlint:disable type_body_length
+/// Phase 2 — Settings view with runner management duplicated from PopoverMainView.
+/// ⚠️ Phase 3 will remove these controls from PopoverMainView AFTER Phase 2 is verified.
+/// ❌ Do NOT remove from PopoverMainView until Phase 3 is explicitly approved (ref #221).
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
 
-    @ObservedObject private var store = SettingsStore.shared
+    @ObservedObject private var settings = SettingsStore.shared
+    @State private var newScope = ""
+    @State private var launchAtLogin = LoginItem.isEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -41,17 +45,70 @@ struct SettingsView: View {
                     settingsSection(title: "General") {
                         toggleRow(
                             label: "Show offline runners",
-                            value: $store.showDimmedRunners
+                            value: $settings.showDimmedRunners
                         )
                         Divider().padding(.leading, 12)
                         stepperRow(
                             label: "Polling interval",
-                            value: $store.pollingInterval,
+                            value: $settings.pollingInterval,
                             unit: "s",
                             range: 10...300
                         )
                     }
-                    // Phase 2 placeholder: Runner management section added here.
+                    // ── Runner management (Phase 2, ref #221)
+                    settingsSection(title: "Scopes") {
+                        ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
+                            HStack {
+                                Text(scope).font(.system(size: 12))
+                                Spacer()
+                                Button(action: {
+                                    ScopeStore.shared.remove(scope)
+                                    RunnerStore.shared.start()
+                                }, label: {
+                                    Image(systemName: "minus.circle").foregroundColor(.red)
+                                }).buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 4)
+                            Divider().padding(.leading, 12)
+                        }
+                        HStack {
+                            TextField("owner/repo or org", text: $newScope)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 12))
+                                .onSubmit { submitScope() }
+                            Button(action: submitScope) {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                    }
+                    // ── App
+                    settingsSection(title: "App") {
+                        toggleRow(
+                            label: "Launch at login",
+                            value: Binding(
+                                get: { launchAtLogin },
+                                set: { newValue in
+                                    launchAtLogin = newValue
+                                    LoginItem.setEnabled(newValue)
+                                }
+                            )
+                        )
+                        Divider().padding(.leading, 12)
+                        HStack {
+                            Text("Quit RunnerBar")
+                                .font(.system(size: 13))
+                            Spacer()
+                            Button(action: { NSApplication.shared.terminate(nil) }) {
+                                Text("Quit")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.red)
+                            }.buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                    }
                     // Phase 4 placeholder: Notifications section added here.
                     // Phase 5 placeholder: Account section added here.
                     // Phase 6 placeholder: Legal section added here.
@@ -61,6 +118,16 @@ struct SettingsView: View {
         }
         // ⚠️ REGRESSION GUARD: keep idealWidth: 420 — matches PopoverMainView (ref #52 #54 #57)
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+    }
+
+    // MARK: - Actions
+
+    private func submitScope() {
+        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        ScopeStore.shared.add(trimmed)
+        RunnerStore.shared.start()
+        newScope = ""
     }
 
     // MARK: - Section builder
@@ -124,3 +191,4 @@ struct SettingsView: View {
         .padding(.vertical, 8)
     }
 }
+// swiftlint:enable type_body_length
