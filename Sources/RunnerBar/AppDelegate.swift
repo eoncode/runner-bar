@@ -10,14 +10,14 @@ import SwiftUI
 //
 // ── ARCHITECTURE ─────────────────────────────────────────────────────────────
 //   sizingOptions: default (NOT set to .preferredContentSize, NOT set to [])
-//   Height is read via hc.view.fittingSize.height ONCE per open in openPopover().
+//   Height is read via hostingController.view.fittingSize.height ONCE per open in openPopover().
 //   fittingSize reads SwiftUI ideal size ONE TIME while popover is CLOSED.
-//   sizingOptions=.preferredContentSize would re-read it CONTINUOUSLY → re-anchor → jump.
+//   sizingOptions = .preferredContentSize would re-read it CONTINUOUSLY → re-anchor → jump.
 //   So we rely on the default (which is []) and read fittingSize manually.
 //   popover.contentSize set manually ONLY in two safe places:
 //     1. applicationDidFinishLaunching (popover not yet shown)
 //     2. openPopover() (popover is CLOSED, isShown==false guaranteed)
-//   navigate() swaps hc.rootView ONLY. Zero size changes. Ever.
+//   navigate() swaps hostingController.rootView ONLY. Zero size changes. Ever.
 //
 // ── NAVIGATION LEVELS ───────────────────────────────────────────────────────────
 //   Jobs path (Active Jobs section):
@@ -38,13 +38,13 @@ import SwiftUI
 //   using their own ScrollView — that is the correct contract, not fighting the frame.
 //
 //   Back-navigation chain:
-//     StepLogView.onBack       → detailView(job:) OR logViewFromAction
-//     JobDetailView.onBack     → mainView() OR actionDetailView(group:)
+//     StepLogView.onBack       → detailView(job: ) OR logViewFromAction
+//     JobDetailView.onBack     → mainView() OR actionDetailView(group: )
 //     ActionDetailView.onBack  → mainView()
-//     popoverDidClose          → reset hc.rootView = mainView() (async)
+//     popoverDidClose          → reset hostingController.rootView = mainView() (async)
 //
 // ── WHY NOT preferredContentSize ─────────────────────────────────────────────
-//   preferredContentSize causes NSPopover to re-anchor on every hc.rootView swap.
+//   preferredContentSize causes NSPopover to re-anchor on every hostingController.rootView swap.
 //   When navigate() swaps main→detail or detail→log, SwiftUI computes a new ideal
 //   size. NSPopover sees contentSize change → re-anchors X+Y → left-jump.
 //   This was v0.25’s mistake.
@@ -73,7 +73,7 @@ import SwiftUI
 //     ✖ reload() without popoverIsOpen guard ← triggers re-render → size shift → jump
 //
 //   navigate() (fires while popover IS open — user tapped inside):
-//     ✔ hc.rootView = newView  (SwiftUI updates in-place, no re-anchor)
+//     ✔ hostingController.rootView = newView  (SwiftUI updates in-place, no re-anchor)
 //     ✖ contentSize  ← LEFT-JUMP
 //     ✖ setFrameSize ← LEFT-JUMP
 //
@@ -81,11 +81,11 @@ import SwiftUI
 //     ✔ setFrameSize  (popover is CLOSED)
 //     ✔ contentSize   (popover is CLOSED)
 //     ✔ fittingSize read (reads SwiftUI ideal size once, safely)
-//     ✖ hc.rootView   ← new SwiftUI tree → deferred layout fires AFTER show() → LEFT-JUMP
+//     ✖ hostingController.rootView   ← new SwiftUI tree → deferred layout fires AFTER show() → LEFT-JUMP
 //
 //   popoverDidClose:
 //     ✔ popoverIsOpen = false
-//     ✔ hc.rootView = mainView() via async dispatch (popover already closed, safe)
+//     ✔ hostingController.rootView = mainView() via async dispatch (popover already closed, safe)
 //     ✖ reload() ← objectWillChange → .transient treats as outside-click → thrash loop
 //     ✖ contentSize ← avoid even during close — timing is ambiguous
 //
@@ -93,9 +93,9 @@ import SwiftUI
 //   ❌ sizingOptions = .preferredContentSize → re-anchors on every rootView swap
 //   ❌ contentSize while isShown==true → left-jump
 //   ❌ setFrameSize while isShown==true → left-jump
-//   ❌ hc.rootView in openPopover() → deferred layout → left-jump
+//   ❌ hostingController.rootView in openPopover() → deferred layout → left-jump
 //   ❌ reload() from popoverDidClose → thrash loop
-//   ❌ reload() before popoverIsOpen=true → race: re-render fires after show() → jump
+//   ❌ reload() before popoverIsOpen = true → race: re-render fires after show() → jump
 //   ❌ objectWillChange.send() in reload() → double re-render
 //   ❌ remove .frame(idealWidth: 340) from PopoverMainView → fittingSize returns 0 width
 //   ❌ add size changes in navigate() → popover is open → left-jump
@@ -116,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private var hc: NSHostingController<AnyView>?
+    private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
 
@@ -146,10 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // ⚠️ sizingOptions is NOT set here — default is [] which is correct.
         // ❌ NEVER set sizingOptions = .preferredContentSize (re-anchors on rootView swap)
         // ❌ NEVER set sizingOptions = [] explicitly (same as default, but signals intent incorrectly)
-        let hc = NSHostingController(rootView: mainView())
+        let let hostingController = NSHostingController(rootView: mainView())
         let initialSize = NSSize(width: Self.fixedWidth, height: 300)
-        hc.view.frame = NSRect(origin: .zero, size: initialSize)
-        self.hc = hc
+        hostingController.view.frame = NSRect(origin: .zero, size: initialSize)
+        self.let hostingController = hc
 
         let popover = NSPopover()
         popover.behavior              = .transient   // closes on outside click
@@ -178,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     //   .transient treats as outside-click → open/close thrash loop.
     //
     // The async rootView reset ensures that when the user re-opens the popover,
-    // hc.rootView is always mainView() so openPopover() reads the correct
+    // hostingController.rootView is always mainView() so openPopover() reads the correct
     // fittingSize (mainView height, not detailView or logView height).
     // The reset is async so it fires after the popover close animation completes.
     // It is safe because the popover is already closed — no re-anchor is possible.
@@ -228,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    // actionDetailView(group:) — navigation level 2a (Actions path).
+    // actionDetailView(group: ) — navigation level 2a (Actions path).
     // Shows the flat job list for a commit/PR group.
     // onBack → level 1; onSelectJob → level 3a.
     private func actionDetailView(group: ActionGroup) -> AnyView {
@@ -252,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    // detailViewFromAction(job:group:) — navigation level 3a.
+    // detailViewFromAction(job: group: ) — navigation level 3a.
     // Reuses JobDetailView; onBack returns to actionDetailView, not mainView.
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
@@ -282,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    // detailView(job:) — navigation level 2.
+    // detailView(job: ) — navigation level 2.
     // onBack navigates back to level 1 (mainView).
     // onSelectStep navigates forward to level 3 (logView).
     //
@@ -304,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    // logView(job:step:) — navigation level 3.
+    // logView(job: step: ) — navigation level 3.
     // onBack navigates back to level 2 (detailView for the same job).
     // job is captured by value in the closure — ActiveJob is a struct, so this
     // is a safe copy; no reference cycle or stale-pointer risk.
@@ -405,10 +405,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     //   Step 5: show()
     //     Must come LAST. After this line popover.isShown==true and no sizing is allowed.
     //
-    // ⚠️ DO NOT reassign hc.rootView here.
+    // ⚠️ DO NOT reassign hostingController.rootView here.
     //   Reassigning rootView discards the SwiftUI tree and builds a new one.
     //   SwiftUI defers layout to the next run-loop tick → fires AFTER show() → left-jump.
-    //   hc.rootView is always mainView() here because:
+    //   hostingController.rootView is always mainView() here because:
     //     • Initialised as mainView() in applicationDidFinishLaunching.
     //     • popoverDidClose resets it to mainView() asynchronously after each close.
     //     • .transient closes on outside-click before user can re-open while on level 2/3.
@@ -426,11 +426,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         observable.reload()               // ❌ Step 2: NEVER move above popoverIsOpen = true
 
         let size = NSSize(
-            width:  hc.view.fittingSize.width > 0 ? hc.view.fittingSize.width : Self.fixedWidth,
-            height: hc.view.fittingSize.height    // Step 3: read AFTER reload()
+            width:  hostingController.view.fittingSize.width > 0 ? hostingController.view.fittingSize.width :
+                Self.fixedWidth,
+            height: hostingController.view.fittingSize.height    // Step 3: read AFTER reload()
         )
 
-        hc.view.setFrameSize(size)        // Step 4a: safe — isShown==false
+        hostingController.view.setFrameSize(size)        // Step 4a: safe — isShown==false
         popover.contentSize = size        // Step 4b: safe — isShown==false
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)  // Step 5

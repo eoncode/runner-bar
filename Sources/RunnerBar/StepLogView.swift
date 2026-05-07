@@ -16,13 +16,13 @@ import SwiftUI
 //   always fit the pre-existing frame regardless of log length.
 //
 // ── LAYOUT RULES ──────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
+//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 //       Fills the fixed frame, pins content to top.
 //   ✔ Log text MUST be inside ScrollView — may be many hundreds of lines
 //   ✔ Header (back button + step name) MUST be OUTSIDE ScrollView — always visible
 //       Without this, scrolling down hides the back button.
 //   ❌ NEVER add .idealWidth — only meaningful under preferredContentSize (FORBIDDEN)
-//   ❌ NEVER add .frame(height:) — fights AppDelegate’s fixed frame
+//   ❌ NEVER add .frame(height: ) — fights AppDelegate’s fixed frame
 //   ❌ NEVER add .fixedSize() — collapses view, breaks layout
 //   ❌ NEVER call navigate() directly — use the onBack callback
 //   ❌ NEVER resize from inside this view — popover is open, any resize = left-jump
@@ -76,7 +76,7 @@ struct StepLogView: View {
             .padding(.bottom, 2)
 
             // Step name — may wrap to 2 lines for very long names.
-            // fixedSize(horizontal:false, vertical:true) allows vertical growth
+            // fixedSize(horizontal: false, vertical: true) allows vertical growth
             // while honouring the container’s horizontal constraint.
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
@@ -102,7 +102,7 @@ struct StepLogView: View {
                 } else if let text = logText, !text.isEmpty {
                     // Log text: monospaced font, selectable, full width.
                     // textSelection(.enabled) allows the user to copy log lines.
-                    // .frame(maxWidth:.infinity, alignment:.leading) ensures the text
+                    // .frame(maxWidth: .infinity, alignment: .leading) ensures the text
                     // block stretches to the full scroll area width.
                     Text(text)
                         .font(.system(size: 11, design: .monospaced))
@@ -123,7 +123,7 @@ struct StepLogView: View {
         }
         // Root frame contract: fill the fixed popover frame, pin to top.
         // ❌ NEVER add .idealWidth — has no effect (fittingSize read from mainView)
-        // ❌ NEVER add .frame(height:) — fights AppDelegate’s frame
+        // ❌ NEVER add .frame(height: ) — fights AppDelegate’s frame
         // ❌ NEVER add .fixedSize() — collapses the view
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { loadLog() }
@@ -142,9 +142,9 @@ struct StepLogView: View {
 
         // Derive owner/repo scope from job.htmlUrl.
         //
-        // job.htmlUrl format: "https://github.com/{owner}/{repo}/actions/runs/{run}/jobs/{id}"
+        // job.htmlUrl format: "https://github.com/{ owner }/{ repo }/actions/runs/{ run }/jobs/{ id }"
         // Splitting by "/" gives:
-        //   parts[0] = "https:"
+        //   parts[0] = "https: "
         //   parts[1] = ""
         //   parts[2] = "github.com"
         //   parts[3] = owner

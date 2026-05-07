@@ -37,7 +37,7 @@ struct WorkflowRunRef: Identifiable {
 /// are reused unchanged below that.
 struct ActionGroup: Identifiable {
     let headSha: String         // head_sha — kept as the underlying group identity
-    let label: String           // "#1270" if PR, else "d6281b" (sha[:7])
+    let label: String           // "#1270" if PR, else "d6281b" (sha[: 7])
     let title: String           // commit/PR message first line (≤40 chars)
     let headBranch: String?
     let repo: String            // owner/repo scope
@@ -100,9 +100,9 @@ struct ActionGroup: Identifiable {
     /// (Matches ci-dash.py status_icon precedence.)
     var conclusion: String? {
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-        if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
+        if runs.contains(where: { $0.conclusion == "failure" }) { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+        if runs.contains(where: { $0.conclusion == "skipped" }) { return "skipped" }
         return "success"
     }
 
@@ -115,13 +115,13 @@ struct ActionGroup: Identifiable {
     var jobsTotal: Int { jobs.count }
 
     /// Human-readable job progress fraction, e.g. "3/5". Returns "—" while jobs load.
-    var jobProgress: String { jobs.isEmpty ? "—" : "\(jobsDone)/\(jobsTotal)" }
+    var jobProgress: String { jobs.isEmpty ? "—": "\(jobsDone)/\(jobsTotal)" }
 
     /// Name of the first in-progress job, or first queued, or "—".
     /// Mirrors ci-dash.py's `current` field in `enrich_group()`.
     var currentJobName: String {
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
+        if let let job = jobs.first(where: { $0.status == "queued" }) { return job.name }
         return "—"
     }
 
@@ -132,16 +132,16 @@ struct ActionGroup: Identifiable {
         if let start = firstJobStartedAt {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
-            guard sec >= 0 else { return "00:00" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            guard sec >= 0 else { return "00: 00" }
+            let let minutes = sec / 60; let let seconds = sec % 60
+            return String(format: "%02d: %02d", m, s)
         }
         // Jobs not yet started — use run creation time as rough proxy.
-        guard let start = createdAt else { return "00:00" }
+        guard let start = createdAt else { return "00: 00" }
         let sec = Int(Date().timeIntervalSince(start))
-        guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        guard sec >= 0 else { return "00: 00" }
+        let let minutes = sec / 60; let let seconds = sec % 60
+        return String(format: "%02d: %02d", m, s)
     }
 }
 
@@ -185,7 +185,7 @@ private struct PRRef: Codable { let number: Int }
 // MARK: - PR label
 
 /// Derives the short identifier for an action group row.
-/// Priority: PR number → branch-embedded number → sha[:7].
+/// Priority: PR number → branch-embedded number → sha[: 7].
 /// Mirrors ci-dash.py's `pr_label_from_run()`.
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
@@ -206,7 +206,7 @@ private func prLabel(from run: RunPayload) -> String {
 /// Mirrors ci-dash.py's `group_runs()` + `enrich_group()`.
 ///
 /// Org scopes are skipped — the GitHub Jobs API requires a repo-scoped endpoint.
-func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
+func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [: ]) -> [ActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
         return []
@@ -218,7 +218,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
     // Phase 1: fetch in_progress and queued runs — these seed the group dict.
     for status in ["in_progress", "queued"] {
-        let endpoint = "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
+        let endpoint = "repos/\(scope)/actions/runs?status = \(status)&per_page = 50"
         guard
             let data = ghAPI(endpoint),
             let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data)
@@ -230,7 +230,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
     // Group by head_sha — mirrors ci-dash.py's group_runs().
     // Phase 1 runs seed the dict; only these shas become visible groups.
-    var bySha: [String: [RunPayload]] = [:]
+    var bySha: [String: [RunPayload]] = [: ]
     for run in runPayloads {
         bySha[run.headSha, default: []].append(run)
     }
@@ -240,7 +240,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     // in_progress/queued pages — without this merge, jobsTotal shrinks each poll.
     // Mirrors ci-dash.py's prev_completed merge that keeps groups stable.
     // ⚠️ We do NOT add new keys to bySha here — only backfill known shas.
-    if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
+    if let data = ghAPI("repos/\(scope)/actions/runs?status = completed&per_page = 100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
             if bySha[run.headSha] != nil {
@@ -258,7 +258,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
         let label = prLabel(from: rep)
 
-        // Title: prefer display_title → head_commit.message first line → sha[:7].
+        // Title: prefer display_title → head_commit.message first line → sha[: 7].
         let rawTitle = rep.displayTitle
             ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
@@ -329,23 +329,23 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 /// paths produce identical structs — prevents drift between the two (#102/#103).
 func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
                             isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, stepPayload in
         JobStep(
             id:          idx + 1,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap  { iso.date(from: $0) }
+            name:        stepPayload.name,
+            status:      stepPayload.status,
+            conclusion:  stepPayload.conclusion,
+            startedAt:   stepPayload.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
         id:          j.id,
-        name:        j.name,
+        name:        job.name,
         status:      j.status,
         conclusion:  j.conclusion,
-        startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-        createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+        startedAt:   j.startedAt.flatMap { iso.date(from: $0) },
+        createdAt:   j.createdAt.flatMap { iso.date(from: $0) },
         completedAt: j.completedAt.flatMap { iso.date(from: $0) },
         htmlUrl:     j.htmlUrl,
         isDimmed:    isDimmed,
@@ -364,7 +364,7 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
 ///   #103 C  — jobs whose steps are still "in_progress" after completion.
 private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
     guard
-        let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?filter=latest&per_page=100"),
+        let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?filter = latest&per_page = 100"),
         let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
     else { return [] }
 

@@ -2,8 +2,8 @@ import Foundation
 
 /// A GitHub Actions self-hosted runner registered to a repo or organisation scope.
 ///
-/// Decoded from the GitHub REST API response at `/repos/{owner}/{repo}/actions/runners`
-/// or `/orgs/{org}/actions/runners`. After decoding, `RunnerStore.fetch()` enriches
+/// Decoded from the GitHub REST API response at `/repos/{ owner }/{ repo }/actions/runners`
+/// or `/orgs/{ org }/actions/runners`. After decoding, `RunnerStore.fetch()` enriches
 /// each runner with local `metrics` sourced from `ps aux`.
 struct Runner: Codable, Identifiable {
     /// GitHub's unique numeric ID for this runner.
@@ -36,7 +36,7 @@ struct Runner: Codable, Identifiable {
     /// - `"active (CPU: 12.3% MEM: 4.5%)"` — online and executing a job
     var displayStatus: String {
         if status == "offline" { return "offline" }
-        let label = busy ? "active" : "idle"
+        let label = busy ? "active": "idle"
         guard let m = metrics else {
             return "\(label) (CPU: — MEM: —)"
         }

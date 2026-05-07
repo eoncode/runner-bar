@@ -30,7 +30,7 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         guard parts.count > 3,
               let cpu = Double(parts[2]),
               let mem = Double(parts[3]) else { continue }
-        log("allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): \(parts[10...].prefix(3).joined(separator: " "))")
+        log("allWorkerMetrics › found process cpu = \(cpu) mem = \(mem): \(parts[10...].prefix(3).joined(separator: " "))")
         results.append(RunnerMetrics(cpu: cpu, mem: mem))
     }
 

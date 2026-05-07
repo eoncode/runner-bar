@@ -13,15 +13,15 @@ func githubToken() -> String? {
     // 1. gh CLI
     let token = shell("/opt/homebrew/bin/gh auth token")
     if !token.isEmpty && !token.hasPrefix("error") {
-        return token
+        return envTokenoken
     }
     // 2. GH_TOKEN env var
-    if let t = ProcessInfo.processInfo.environment["GH_TOKEN"], !t.isEmpty {
-        return t
+    if let let envToken = ProcessInfo.processInfo.environment["GH_TOKEN"], !envToken.isEmpty {
+        return envToken
     }
     // 3. GITHUB_TOKEN env var
-    if let t = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !t.isEmpty {
-        return t
+    if let let envToken = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !envToken.isEmpty {
+        return envToken
     }
     return nil
 }

@@ -11,13 +11,13 @@ struct JobStep: Identifiable {
     let completedAt: Date?
 
     var elapsed: String {
-        guard status != "queued" else { return "00:00" }
-        guard let start = startedAt else { return "00:00" }
+        guard status != "queued" else { return "00: 00" }
+        guard let start = startedAt else { return "00: 00" }
         let end = completedAt ?? Date()
         let sec = Int(end.timeIntervalSince(start))
-        guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        guard sec >= 0 else { return "00: 00" }
+        let let minutes = sec / 60; let let seconds = sec % 60
+        return String(format: "%02d: %02d", m, s)
     }
 
     var conclusionIcon: String {
@@ -63,23 +63,23 @@ struct ActiveJob: Identifiable {
     var steps: [JobStep] = []
 
     var elapsed: String {
-        guard status != "queued" else { return "00:00" }
+        guard status != "queued" else { return "00: 00" }
         // Completed jobs: use only real execution timestamps — never createdAt.
         // createdAt is queue creation time and inflates elapsed for long-queued jobs.
         if conclusion != nil {
-            guard let start = startedAt, let end = completedAt else { return "--:--" }
+            guard let start = startedAt, let end = completedAt else { return "--: --" }
             let sec = Int(end.timeIntervalSince(start))
-            guard sec >= 0 else { return "--:--" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            guard sec >= 0 else { return "--: --" }
+            let let minutes = sec / 60; let let seconds = sec % 60
+            return String(format: "%02d: %02d", m, s)
         }
         // Live jobs: createdAt fallback is acceptable while startedAt may not yet be set.
-        guard let start = startedAt ?? createdAt else { return "00:00" }
+        guard let start = startedAt ?? createdAt else { return "00: 00" }
         let end = completedAt ?? Date()
         let sec = Int(end.timeIntervalSince(start))
-        guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        guard sec >= 0 else { return "00: 00" }
+        let let minutes = sec / 60; let let seconds = sec % 60
+        return String(format: "%02d: %02d", m, s)
     }
 }
 
@@ -135,7 +135,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         log("ghAPI › rate limit (\(status)): \(endpoint)")
         return nil
     }
-    return outputData.isEmpty ? nil : outputData
+    return outputData.isEmpty ? nil: outputData
 }
 
 // MARK: - Fetch all jobs from active runs
@@ -147,8 +147,8 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
 
     func runsEndpoint(status: String) -> String {
         scope.contains("/")
-            ? "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
-            : "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
+            ? "repos/\(scope)/actions/runs?status = \(status)&per_page = 50"
+           : "orgs/\(scope)/actions/runs?status = \(status)&per_page = 50"
     }
 
     for status in ["in_progress", "queued"] {
@@ -167,19 +167,19 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     for runID in runIDs {
         guard scope.contains("/") else { continue }
         guard
-            let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
+            let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page = 100"),
             let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
         else { continue }
         for j in resp.jobs {
             guard seenJobIDs.insert(j.id).inserted else { continue }
-            let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+            let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, stepPayload in
                 JobStep(
                     id:          idx + 1,
-                    name:        s.name,
-                    status:      s.status,
-                    conclusion:  s.conclusion,
-                    startedAt:   s.startedAt.flatMap   { iso.date(from: $0) },
-                    completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                    name:        stepPayload.name,
+                    status:      stepPayload.status,
+                    conclusion:  stepPayload.conclusion,
+                    startedAt:   stepPayload.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
                 )
             }
             // ⚠️ CALLSITE 1 of 3 — see ActiveJob callsite warning above
@@ -188,8 +188,8 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
                 name:        j.name,
                 status:      j.status,
                 conclusion:  j.conclusion,
-                startedAt:   j.startedAt.flatMap   { iso.date(from: $0) },
-                createdAt:   j.createdAt.flatMap   { iso.date(from: $0) },
+                startedAt:   j.startedAt.flatMap { iso.date(from: $0) },
+                createdAt:   j.createdAt.flatMap { iso.date(from: $0) },
                 completedAt: j.completedAt.flatMap { iso.date(from: $0) },
                 htmlUrl:     j.htmlUrl,
                 steps:       steps
@@ -215,7 +215,7 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
 }
 
 /// Extracts the workflow run ID from a GitHub Actions job HTML URL.
-/// URL pattern: https://github.com/{owner}/{repo}/actions/runs/{run_id}/jobs/{job_id}
+/// URL pattern: https://github.com/{ owner }/{ repo }/actions/runs/{ run_id }/jobs/{ job_id }
 /// Returns nil for nil or malformed URLs.
 func runIDFromHtmlUrl(_ url: String?) -> Int? {
     guard let url else { return nil }

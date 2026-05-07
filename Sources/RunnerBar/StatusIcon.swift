@@ -7,7 +7,7 @@ import AppKit
 /// - `.someOffline` → system orange
 /// - `.allOffline`  → system red
 ///
-/// The circle is inset by 2 pt on each side (`insetBy(dx:dy:)`) so it sits
+/// The circle is inset by 2 pt on each side (`insetBy(dx: dy: )`) so it sits
 /// comfortably inside the 16 pt status bar button square without clipping at
 /// the edges on any display density.
 ///

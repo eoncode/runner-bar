@@ -266,7 +266,7 @@ final class SystemStatsViewModel: ObservableObject {
         let total   = Double(totalBytes) / gb
         let free    = Double(freeBytes)  / gb
         let used    = total - free
-        let freePct = total > 0 ? (free / total) * 100 : 100
+        let freePct = total > 0 ? (free / total) * 100: 100
 
         return (used, total, free, freePct)
     }

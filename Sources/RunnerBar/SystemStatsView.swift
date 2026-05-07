@@ -14,7 +14,7 @@ import SwiftUI
 //
 //   • Bar width is 16 pt, height 5 pt.
 //     Reducing bar width frees space for the longer DISK text label.
-//     Do NOT use .frame(maxWidth:) on bars — it fights the fixed 16 pt.
+//     Do NOT use .frame(maxWidth: ) on bars — it fights the fixed 16 pt.
 //
 //   • HStack segment spacing is 6 pt. Tighter than 4 pt looks cramped;
 //     looser than 8 pt risks truncation on smaller screens.
@@ -22,14 +22,14 @@ import SwiftUI
 // COLOR LOGIC (mirrors ci-dash.py render_system exactly):
 //   CPU/MEM: color on used%    — cc = R>85 Y>60 G≤60
 //   DISK:    color on used%    — dc = R>85 Y>60 G≤60
-//   All three use the same usageColor(pct:) helper.
+//   All three use the same usageColor(pct: ) helper.
 //   WHY used% for DISK (not free%)?
 //     ci-dash.py calculates: dp = (du / dt * 100), then dc = R>85 Y>60 G≤60
 //     At 335/460 GB used → dp = 72.8 % → yellow. This matches the terminal UI.
 //
 // DISK LABEL FORMAT:
 //   "335/460GB (126GB 27%)" — used/total then free in parens.
-//   The "free:" prefix was dropped to save ~5 pt of horizontal space.
+//   The "free: " prefix was dropped to save ~5 pt of horizontal space.
 //   Integers (not .1f) are used for GB values because fractional GB is noise
 //   at disk scales.
 
@@ -57,7 +57,7 @@ struct SystemStatsView: View {
     // Format: "CPU [bar] 20.1%"
     // Color:  usageColor on cpuPct (0–100)
     // "%.1f%%" gives one decimal place, e.g. "20.1%" — matches ci-dash.py
-    //   `f"{cpu:4.1f}%"` formatting.
+    //   `f"{ cpu: 4.1f }%"` formatting.
 
     private var cpuSegment: some View {
         HStack(spacing: 4) {
@@ -75,12 +75,12 @@ struct SystemStatsView: View {
     // usedPct is recomputed here from raw GB values (not stored in SystemStats)
     // to keep SystemStats a pure data bag with no view logic.
     // Color:  usageColor on usedPct.
-    // "%.1f/%.1fGB" matches ci-dash.py `f"{mu:.1f}/{mt:.1f}GB"` format.
+    // "%.1f/%.1fGB" matches ci-dash.py `f"{ mu: .1f }/{ mt: .1f }GB"` format.
 
     private var memSegment: some View {
         let usedPct = stats.memTotalGB > 0
             ? (stats.memUsedGB / stats.memTotalGB) * 100
-            : 0
+           : 0
         return HStack(spacing: 4) {
             Text("MEM").font(.caption2).foregroundColor(.secondary)
             bar(fraction: usedPct / 100, color: usageColor(pct: usedPct))
@@ -110,7 +110,7 @@ struct SystemStatsView: View {
     private var diskSegment: some View {
         let usedPct = stats.diskTotalGB > 0
             ? (stats.diskUsedGB / stats.diskTotalGB) * 100
-            : 0
+           : 0
         let color = usageColor(pct: usedPct)
         return HStack(spacing: 4) {
             Text("DISK").font(.caption2).foregroundColor(.secondary)

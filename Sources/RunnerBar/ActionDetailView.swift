@@ -15,7 +15,7 @@ import SwiftUI
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ❌ NEVER put header inside ScrollView
-//   ❌ NEVER add .idealWidth or .frame(height:) to root
+//   ❌ NEVER add .idealWidth or .frame(height: ) to root
 //   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -29,7 +29,7 @@ import SwiftUI
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
-    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
+    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job: group: ).
     let onSelectJob: (ActiveJob) -> Void
 
     /// Drives the live elapsed timer every second.
@@ -141,7 +141,7 @@ struct ActionDetailView: View {
                                         .frame(width: 7, height: 7)
                                     Text(job.name)
                                         .font(.system(size: 12))
-                                        .foregroundColor(job.isDimmed ? .secondary : .primary)
+                                        .foregroundColor(job.isDimmed ? .secondary: .primary)
                                         .lineLimit(1)
                                         .truncationMode(.tail)
                                     Spacer()  // ⚠️ load-bearing
@@ -195,7 +195,7 @@ struct ActionDetailView: View {
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return .secondary }
-        return job.status == "in_progress" ? .yellow : .gray
+        return job.status == "in_progress" ? .yellow: .gray
     }
 
     private func jobStatusLabel(for job: ActiveJob) -> String {
@@ -207,7 +207,7 @@ struct ActionDetailView: View {
     }
 
     private func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? .yellow : .secondary
+        job.status == "in_progress" ? .yellow: .secondary
     }
 
     private func conclusionLabel(_ c: String) -> String {

@@ -18,7 +18,7 @@ struct ReRunButton: View {
                 Button { startRerun() } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption)
-                        .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                        .foregroundColor(isDisabled ? .secondary.opacity(0.4): .secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
@@ -42,7 +42,7 @@ struct ReRunButton: View {
         phase = .loading
         action { success in
             DispatchQueue.main.async {
-                phase = success ? .done : .failed
+                phase = success ? .done: .failed
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }

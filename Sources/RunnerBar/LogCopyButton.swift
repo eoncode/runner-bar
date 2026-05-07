@@ -20,7 +20,7 @@ struct LogCopyButton: View {
                 Button { startCopy() } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.caption)
-                        .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                        .foregroundColor(isDisabled ? .secondary.opacity(0.4): .secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
