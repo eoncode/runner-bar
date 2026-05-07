@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 // MARK: - AggregateStatus
@@ -31,9 +32,11 @@ enum AggregateStatus {
 
 // MARK: - RunnerStore
 
-/// Singleton polling store. Coordinates GitHub runner + job fetching every 10 s.
+/// Singleton polling store. Coordinates GitHub runner + job fetching on an adaptive interval.
 ///
-/// Owns the canonical `runners` and `jobs` arrays consumed by the UI layer.
+/// Idle interval is read from `SettingsStore.shared.pollingInterval` and reacts to live changes
+/// via a Combine subscription (no restart required when the user changes the stepper).
+/// Active-job interval remains fixed at 10 s for responsiveness.
 /// Call `start()` once at launch to begin polling.
 /// Subscribe to `onChange` to be notified after each poll completes.
 final class RunnerStore {
@@ -64,6 +67,9 @@ final class RunnerStore {
     /// One-shot adaptive poll timer. Rescheduled by `scheduleTimer()` after each fetch.
     private var timer: Timer?
 
+    /// Combine cancellable — reacts to user changes to SettingsStore.pollingInterval.
+    private var intervalCancellable: AnyCancellable?
+
     /// Called on the main thread after each poll completes.
     var onChange: (() -> Void)?
 
@@ -76,6 +82,16 @@ final class RunnerStore {
         return .someOffline
     }
 
+    private init() {
+        // dropFirst(1) skips the initial emission — start() handles the first schedule.
+        intervalCancellable = SettingsStore.shared.$pollingInterval
+            .dropFirst(1)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.scheduleTimer()
+            }
+    }
+
     /// Starts (or restarts) the polling timer and fires an immediate fetch.
     func start() {
         log("RunnerStore › start")
@@ -84,6 +100,7 @@ final class RunnerStore {
     }
 
     /// Schedules the next one-shot poll timer using an adaptive interval.
+    /// Idle base interval comes from `SettingsStore.shared.pollingInterval`.
     private func scheduleTimer() {
         timer?.invalidate()
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
@@ -91,7 +108,8 @@ final class RunnerStore {
             $0.groupStatus == .inProgress || $0.groupStatus == .queued
         }
         let hasActive = hasActiveJobs || hasActiveActions
-        let interval: TimeInterval = (isRateLimited || !hasActive) ? 60 : 10
+        let baseIdle = max(10, SettingsStore.shared.pollingInterval)
+        let interval: TimeInterval = (isRateLimited || !hasActive) ? TimeInterval(baseIdle) : 10
         log("RunnerStore › next poll in \(Int(interval))s (active=\(hasActive) rateLimited=\(isRateLimited))")
         timer = Timer.scheduledTimer(
             withTimeInterval: interval,
