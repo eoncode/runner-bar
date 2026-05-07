@@ -102,6 +102,12 @@ struct RunnerLifecycleService {
 
     // MARK: - Rename
 
+    // Phase 2 — wired in follow-up.
+    // rename() currently only patches the local .runner JSON; it does not call
+    // config.sh remove + config.sh --name <newName> to re-register the runner
+    // with GitHub. Full rename requires a registration token and is deferred to
+    // the Phase 2 follow-up issue. There is no UI entry point for this method
+    // in the current PR.
     /// Renames the runner by patching the `runnerName` field in the `.runner`
     /// JSON file at `installPath`.
     @discardableResult
