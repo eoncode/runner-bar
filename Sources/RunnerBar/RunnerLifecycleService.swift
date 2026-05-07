@@ -36,28 +36,49 @@ struct RunnerLifecycleService {
         return nil
     }
 
-    /// Looks up the exact launchd label for this runner by scanning
-    /// `launchctl list` output for a label whose last dot-separated component
-    /// equals the runner name exactly.
+    /// Looks up the exact launchd label for this runner by running
+    /// `/bin/launchctl list` via Process (no shell, no grep) and filtering
+    /// the output lines in Swift.
     ///
     /// Uses `hasSuffix("." + runnerName)` rather than `contains(runnerName)`
     /// to prevent a runner named "ci-runner" from matching
     /// "actions.runner.org.repo.ci-runner-backup" or similar.
+    ///
+    /// Falls back to the derived `serviceLabel(for:)` if no match is found.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
-        let output = shell("launchctl list 2>/dev/null | grep actions.runner", timeout: 5)
+        // Run /bin/launchctl list directly — no shell string, no pipe, no grep.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["list"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe() // discard stderr
+        do { try task.run() } catch {
+            log("RunnerLifecycle › resolvedLabel: launchctl list failed: \(error)")
+            return serviceLabel(for: runner)
+        }
+        let timeoutItem = DispatchWorkItem { task.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+        // Filter in Swift: find a launchd label whose last component is exactly runnerName.
         let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
             guard cols.count >= 3 else { continue }
             let label = cols[2].trimmingCharacters(in: .whitespaces)
-            if label.hasSuffix(exactSuffix) { return label }
+            if label.hasPrefix("actions.runner") && label.hasSuffix(exactSuffix) {
+                return label
+            }
         }
         return serviceLabel(for: runner)
     }
 
     // MARK: - Start
 
-    /// Starts the runner’s launchd service.
+    /// Starts the runner's launchd service.
     /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
@@ -70,7 +91,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Stops the runner’s launchd service.
+    /// Stops the runner's launchd service.
     /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
@@ -114,7 +135,7 @@ struct RunnerLifecycleService {
     /// Uninstalls and de-registers the runner.
     ///
     /// Runs `./svc.sh uninstall` then `./config.sh remove --unattended` from the
-    /// runner’s `installPath` using `Process.arguments` so the path is never
+    /// runner's `installPath` using `Process.arguments` so the path is never
     /// interpolated into a shell string.
     ///
     /// ⚠️ Blocking — must only be called from a background thread.
