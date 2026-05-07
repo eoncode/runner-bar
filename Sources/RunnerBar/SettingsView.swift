@@ -73,7 +73,9 @@ struct SettingsView: View {
             // Phase 1: trigger local runner scan immediately on appear (no token needed)
             localRunnerStore.refresh()
         }
-        .onChange(of: localRunnerStore.isScanning) { scanning in
+        // Two-parameter form — preferred over single-closure form deprecated in macOS 14+.
+        // Matches the pattern used for launchAtLogin .onChange below.
+        .onChange(of: localRunnerStore.isScanning) { _, scanning in
             // Mark that at least one scan has completed so the empty-state
             // placeholder is only shown after real data (not before first scan).
             if !scanning { hasLoadedOnce = true }
@@ -109,7 +111,7 @@ struct SettingsView: View {
 
     /// Section 1: displays all locally-installed runners discovered by
     /// `LocalRunnerScanner`. Renders instantly at launch without any API call.
-    /// Status dots reflect whether the runner process is live on this machine.
+    /// Status dots reflect whether the runner service is live on this machine.
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
