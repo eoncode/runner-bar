@@ -33,9 +33,9 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: Private
 
-    private let scanner   = LocalRunnerScanner()
-    private let enricher  = RunnerStatusEnricher.shared
-    private let queue     = DispatchQueue(
+    private let scanner = LocalRunnerScanner()
+    private let enricher = RunnerStatusEnricher.shared
+    private let queue = DispatchQueue(
         label: "dev.eonist.runnerbar.localrunnerstore",
         qos: .userInitiated
     )
