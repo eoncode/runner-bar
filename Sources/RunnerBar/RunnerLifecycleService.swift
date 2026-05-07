@@ -65,9 +65,7 @@ struct RunnerLifecycleService {
             log("RunnerLifecycle › start: no label for \(runner.runnerName)")
             return false
         }
-        let result = shell("launchctl start \(label)", timeout: 10)
-        log("RunnerLifecycle › start \(label): \(result.isEmpty ? "ok" : result)")
-        return true
+        return runLaunchctl("start", label: label)
     }
 
     // MARK: - Stop
@@ -80,9 +78,35 @@ struct RunnerLifecycleService {
             log("RunnerLifecycle › stop: no label for \(runner.runnerName)")
             return false
         }
-        let result = shell("launchctl stop \(label)", timeout: 10)
-        log("RunnerLifecycle › stop \(label): \(result.isEmpty ? "ok" : result)")
-        return true
+        return runLaunchctl("stop", label: label)
+    }
+
+    // MARK: - launchctl runner
+
+    /// Invokes `/bin/launchctl <subcommand> <label>` via Process (no shell
+    /// interpolation) and returns `true` iff the exit status is 0.
+    ///
+    /// launchctl exits 0 on success and non-zero with a descriptive error on
+    /// failure, so terminationStatus is the authoritative signal.
+    @discardableResult
+    private func runLaunchctl(_ subcommand: String, label: String) -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = [subcommand, label]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        do { try task.run() } catch {
+            log("RunnerLifecycle › launchctl \(subcommand) \(label) launch error: \(error)")
+            return false
+        }
+        let timeoutItem = DispatchWorkItem { task.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        log("RunnerLifecycle › launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
+        return task.terminationStatus == 0
     }
 
     // MARK: - Remove
