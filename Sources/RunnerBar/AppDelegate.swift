@@ -25,6 +25,8 @@ private enum NavState {
     case actionJobDetail(ActiveJob, ActionGroup)
     /// Actions path level 4a: log output for a step reached via an action group.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
+    /// Settings view (Phase 0, ref #221).
+    case settings
 }
 
 // MARK: - AppDelegate
@@ -119,6 +121,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                 self.navigate(to: self.actionDetailView(group: latest))
+            },
+            // Phase 0 (ref #221): gear button opens Settings view.
+            onOpenSettings: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.settingsView())
+            }
+        ))
+    }
+
+    /// Navigation: Settings view (Phase 0, ref #221).
+    private func settingsView() -> AnyView {
+        savedNavState = .settings
+        return AnyView(SettingsView(
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
             }
         ))
     }
@@ -210,6 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         switch state {
         case .main:
             return nil
+        case .settings:
+            // Settings view is stateless — always safe to restore.
+            return settingsView()
         case .jobDetail(let job):
             let live = store.jobs.first(where: { $0.id == job.id }) ?? job
             return detailView(job: live)

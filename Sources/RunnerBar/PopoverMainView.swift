@@ -24,6 +24,8 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     /// Called when the user taps an action group row to drill into action detail.
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when the user taps the gear button to open Settings. Added Phase 0 (ref #221).
+    let onOpenSettings: () -> Void
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -50,6 +52,14 @@ struct PopoverMainView: View {
                         }
                     }.buttonStyle(.plain)
                 }
+                // ── Settings gear button (Phase 0, ref #221)
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
             }
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
             Divider()
