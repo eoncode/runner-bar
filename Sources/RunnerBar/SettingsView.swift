@@ -106,7 +106,6 @@ struct SettingsView: View {
                     .font(.caption).foregroundColor(.secondary)
                 Spacer()
                 if localRunnerStore.isScanning {
-                    // Lightweight spinner shown during background scan
                     ProgressView()
                         .scaleEffect(0.6)
                         .frame(width: 14, height: 14)
@@ -136,7 +135,6 @@ struct SettingsView: View {
 
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
-            // Status dot: green = running, grey = idle
             Circle()
                 .fill(localRunnerDotColor(for: runner))
                 .frame(width: 8, height: 8)
@@ -245,9 +243,7 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin, perform: { newValue in
-                LoginItem.setEnabled(newValue)
-            })
+            .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             Divider().padding(.leading, 12)
             Toggle(isOn: $settings.showDimmedRunners) {
                 Text("Show offline runners").font(.system(size: 12))
@@ -259,7 +255,7 @@ struct SettingsView: View {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
                 Text("\(settings.pollingInterval)s")
-            .font(.system(size: 12)).foregroundColor(.secondary)
+                    .font(.system(size: 12)).foregroundColor(.secondary)
                     .frame(minWidth: 36, alignment: .trailing)
                 Stepper("", value: $settings.pollingInterval, in: 10...300)
                     .labelsHidden()
@@ -342,6 +338,12 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+
+    /// Called by `.onChange(of: launchAtLogin, perform:)` — extracted to avoid
+    /// the `multiple_closures_with_trailing_closure` SwiftLint violation.
+    private func applyLaunchAtLogin(_ enabled: Bool) {
+        LoginItem.setEnabled(enabled)
+    }
 
     private func submitScope() {
         let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
