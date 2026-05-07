@@ -15,7 +15,13 @@ final class SettingsStore: ObservableObject {
 
     /// Polling interval in seconds (default 30, range 10–300).
     @Published var pollingInterval: Int {
-        didSet { UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval) }
+        didSet {
+            let clamped = min(max(pollingInterval, 10), 300)
+            // Always persist the clamped value; re-assign only if out of range.
+            // Re-assigning re-triggers didSet, but then clamped == pollingInterval so no recursion.
+            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
+            if clamped != pollingInterval { pollingInterval = clamped }
+        }
     }
 
     /// Whether dimmed (offline) runners are shown in the list (default true).
@@ -25,7 +31,13 @@ final class SettingsStore: ObservableObject {
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
-        pollingInterval = stored > 0 ? stored : 30
+        // clamp on read so a previously-stored out-of-range value is corrected immediately
+        let clamped = stored > 0 ? min(max(stored, 10), 300) : 30
+        pollingInterval = clamped
+        // didSet is not triggered during init, so explicitly repair the stored value if needed
+        if stored != clamped {
+            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
+        }
         if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
             showDimmedRunners = true
         } else {
