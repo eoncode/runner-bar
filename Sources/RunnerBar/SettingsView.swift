@@ -94,7 +94,10 @@ struct SettingsView: View {
                             label: "Launch at login",
                             value: Binding(
                                 get: { launchAtLogin },
-                                set: { v in launchAtLogin = v; LoginItem.setEnabled(v) }
+                                set: { newValue in
+                                    launchAtLogin = newValue
+                                    LoginItem.setEnabled(newValue)
+                                }
                             )
                         )
                         Divider().padding(.leading, 12)
