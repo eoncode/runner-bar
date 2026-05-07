@@ -14,9 +14,9 @@ struct SettingsView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
-    /// Phase 6: analytics opt-out, persisted in UserDefaults (default true).
+    /// Phase 6: analytics opt-IN — default false, user must explicitly enable (ref #221 review).
     @State private var analyticsEnabled: Bool = {
-        guard UserDefaults.standard.object(forKey: "legal.analyticsEnabled") != nil else { return true }
+        guard UserDefaults.standard.object(forKey: "legal.analyticsEnabled") != nil else { return false }
         return UserDefaults.standard.bool(forKey: "legal.analyticsEnabled")
     }()
 
