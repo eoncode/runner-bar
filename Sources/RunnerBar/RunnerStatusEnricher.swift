@@ -46,7 +46,8 @@ struct RunnerStatusEnricher {
     // MARK: - Private helpers
 
     /// Fetches runner status from the GitHub API for each unique scope in `runners`
-    /// and returns a lookup keyed by `agentId` (primary) and `name` (fallback).
+    /// and returns a lookup keyed by `agentId` (primary) and `"scope/name"` (fallback).
+    /// The fallback key is scope-qualified to prevent cross-scope name collisions.
     private func buildAPILookup(
         for runners: [RunnerModel]
     ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
@@ -73,7 +74,9 @@ struct RunnerStatusEnricher {
             }
             for apiRunner in page.runners {
                 byID[apiRunner.id] = apiRunner
-                byName[apiRunner.name] = apiRunner
+                // Key by "scope/name" to prevent silent overwrites when runners
+                // across different scopes share the same name.
+                byName["\(scope)/\(apiRunner.name)"] = apiRunner
             }
             log("RunnerStatusEnricher › \(page.runners.count) runner(s) from GitHub for \(scope)")
         }
@@ -89,8 +92,12 @@ struct RunnerStatusEnricher {
         let apiRunner: APIRunner?
         if let aid = runner.agentId {
             apiRunner = lookup.byID[aid]
+        } else if let urlStr = runner.gitHubUrl,
+                  let scope = scopeFrom(gitHubUrl: urlStr) {
+            // Fallback: look up by scope-qualified key to avoid cross-scope collision.
+            apiRunner = lookup.byName["\(scope)/\(runner.runnerName)"]
         } else {
-            apiRunner = lookup.byName[runner.runnerName]
+            apiRunner = nil
         }
         guard let api = apiRunner else { return enriched }
         enriched.githubStatus = api.status

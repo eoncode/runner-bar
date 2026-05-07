@@ -187,6 +187,8 @@ func fetchUserRepos() -> [String] {
 /// - For org-scoped runners:  `POST /orgs/{org}/actions/runners/registration-token`
 ///
 /// Returns the `token` string on success, `nil` on API error or missing auth.
+///
+/// ⚠️ Blocking — must only be called from a background thread.
 func fetchRegistrationToken(scope: String) -> String? {
     let endpoint: String
     if scope.contains("/") {
