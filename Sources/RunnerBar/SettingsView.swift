@@ -3,7 +3,7 @@ import SwiftUI
 /// Settings view — complete implementation for all phases 1-6.
 ///
 /// Contains the shared settings UI with runner management, notifications,
-/// general toggles, and about section.
+/// general toggles, legal preferences, and about section.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -12,6 +12,7 @@ struct SettingsView: View {
 
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notificationPrefs = NotificationPrefsStore.shared
+    @ObservedObject private var legalPrefs = LegalPrefsStore.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -146,6 +147,26 @@ struct SettingsView: View {
             }
             Divider()
 
+            // ── Legal
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Legal")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+                Toggle(isOn: $legalPrefs.analyticsEnabled) {
+                    Text("Share analytics").font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+#if DEBUG
+                // ⚠️ Placeholder URLs — gated behind DEBUG so they never ship to users (ref #245).
+                Divider().padding(.leading, 12)
+                legalLinkRow(label: "Privacy Policy", urlString: "https://github.com/eoncode/runner-bar")
+                Divider().padding(.leading, 12)
+                legalLinkRow(label: "EULA", urlString: "https://github.com/eoncode/runner-bar")
+#endif
+            }
+            Divider()
+
             // ── About (Phase 6)
             VStack(alignment: .leading, spacing: 4) {
                 Text("About")
@@ -196,5 +217,22 @@ struct SettingsView: View {
     /// Runner status dot color.
     private func runnerDotColor(for runner: Runner) -> Color {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+    }
+
+    /// A tappable row that opens a URL in the default browser.
+    private func legalLinkRow(label: String, urlString: String) -> some View {
+        Button(
+            action: {
+                if let url = URL(string: urlString) { NSWorkspace.shared.open(url) }
+            },
+            label: {
+                HStack {
+                    Text(label).font(.system(size: 12)).foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+            }
+        ).buttonStyle(.plain)
     }
 }
