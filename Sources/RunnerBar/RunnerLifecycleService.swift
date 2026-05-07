@@ -213,12 +213,12 @@ struct RunnerLifecycleService {
     // rename() currently only patches the local .runner JSON; it does not call
     // config.sh remove + config.sh --name <newName> to re-register the runner
     // with GitHub. Full rename requires a registration token and is deferred to
-    // the Phase 2 follow-up issue. There is no UI entry point for this method
-    // in the current PR.
+    // the Phase 2 follow-up issue. Marked private to prevent accidental use
+    // until re-registration is implemented.
     /// Renames the runner by patching the `runnerName` field in the `.runner`
     /// JSON file at `installPath`.
     @discardableResult
-    func rename(runner: RunnerModel, newName: String) -> Bool {
+    private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
             log("RunnerLifecycle › rename: no installPath for \(runner.runnerName)")
             return false
@@ -250,6 +250,8 @@ struct RunnerLifecycleService {
     // MARK: - Update config (labels / workFolder)
 
     /// Writes updated labels and workFolder to the `.runner` JSON at `installPath`.
+    /// Note: the runner agent caches config in memory — changes take effect after
+    /// the next runner restart.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
@@ -265,6 +267,8 @@ struct RunnerLifecycleService {
             return false
         }
         json["workFolder"] = workFolder
+        // TODO: add customLabels to RunnerJSON in LocalRunnerScanner so labels
+        // written here are re-read on the next scan and reflected in RunnerModel.labels.
         json["customLabels"] = labels
         guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
         else { return false }
