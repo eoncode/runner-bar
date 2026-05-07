@@ -59,6 +59,10 @@ struct SettingsView: View {
                 store?.reload()
             }
         }
+        .onDisappear {
+            // Clear the closure to avoid stale-capture reload after view is gone
+            ScopeStore.shared.onMutate = nil
+        }
     }
 
     // MARK: - Sections
@@ -107,7 +111,10 @@ struct SettingsView: View {
                 HStack {
                     Text(scopeStr).font(.system(size: 12))
                     Spacer()
-                    Button(action: { ScopeStore.shared.remove(scopeStr) }, label: {
+                    Button(action: {
+                        ScopeStore.shared.remove(scopeStr)
+                        RunnerStore.shared.start()
+                    }, label: {
                         Image(systemName: "minus.circle").foregroundColor(.red)
                     }).buttonStyle(.plain)
                 }

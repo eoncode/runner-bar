@@ -35,7 +35,9 @@ final class ScopeStore {
     }
 
     /// Removes all entries equal to `scope` from the persisted list.
+    /// No-ops (and suppresses the `onMutate` callback) when `scope` is not present.
     func remove(_ scope: String) {
+        guard scopes.contains(scope) else { return }
         scopes.removeAll(where: { $0 == scope })
         onMutate?()
     }
