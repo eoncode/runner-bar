@@ -1,7 +1,7 @@
 import ServiceManagement
 import SwiftUI
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 // MARK: - SettingsView
 
 /// Settings view — complete implementation for all phases 1-6.
@@ -122,14 +122,14 @@ struct SettingsView: View {
                             Text(runner.name).font(.system(size: 13)).lineLimit(1)
                             Spacer()
                             HStack(spacing: 12) {
-                                Button(action: { toggleRunner(runner) }) {
+                                Button(action: { toggleRunner(runner) }, label: {
                                     Image(systemName: runner.isRunning ? "stop.fill" : "play.fill")
                                         .foregroundColor(runner.isRunning ? .red : .green)
-                                }.buttonStyle(.plain)
+                                }).buttonStyle(.plain)
 
-                                Button(action: { removeRunner(runner) }) {
+                                Button(action: { removeRunner(runner) }, label: {
                                     Image(systemName: "trash").foregroundColor(.secondary)
-                                }.buttonStyle(.plain)
+                                }).buttonStyle(.plain)
                             }
                         }
                         if let url = runner.gitHubUrl {
@@ -149,10 +149,10 @@ struct SettingsView: View {
                 Text("Add Runner")
                     .font(.caption).foregroundColor(.secondary)
                 Spacer()
-                Button(action: { withAnimation { showAddFlow.toggle() } }) {
+                Button(action: { withAnimation { showAddFlow.toggle() } }, label: {
                     Image(systemName: showAddFlow ? "minus.circle" : "plus.circle")
                         .foregroundColor(.blue)
-                }.buttonStyle(.plain)
+                }).buttonStyle(.plain)
             }
             .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
 
@@ -452,4 +452,4 @@ struct SettingsView: View {
         NSWorkspace.shared.open(url)
     }
 }
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length file_length
