@@ -9,9 +9,18 @@ import SwiftUI
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
 ///
-/// Phase 1 (issue #251): Local Runners section auto-populates at launch via
+/// Phase 1 (issue #252): Local Runners section auto-populates at launch via
 /// `LocalRunnerStore`, which calls `LocalRunnerScanner` on a background thread.
 /// No GitHub token is required for this section.
+///
+/// Phase 2 (issue #253): Each runner row gains Resume/Stop, ⚙ Config, and
+/// ✕ Remove controls backed by `RunnerLifecycleService`.
+///
+/// Phase 3 (issue #254): A `+` button in the Local Runners header opens
+/// `AddRunnerSheet` to onboard new runners via the GitHub API.
+///
+/// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
+/// live GitHub API status (online/offline/busy) after each local scan.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -31,6 +40,12 @@ struct SettingsView: View {
     /// "No local runners found" empty-state placeholder until at least one scan
     /// has finished — avoids a misleading flash before the initial scan runs.
     @State private var hasLoadedOnce = false
+    /// Phase 2: runner pending removal confirmation.
+    @State private var runnerPendingRemoval: RunnerModel?
+    /// Phase 2: runner whose config sheet is open.
+    @State private var runnerBeingConfigured: RunnerModel?
+    /// Phase 3: controls whether the Add Runner sheet is presented.
+    @State private var showAddRunnerSheet = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -74,22 +89,49 @@ struct SettingsView: View {
             localRunnerStore.refresh()
         }
         // Two-parameter form — preferred over single-closure form deprecated in macOS 14+.
-        // Matches the pattern used for launchAtLogin .onChange below.
         .onChange(of: localRunnerStore.isScanning) { _, scanning in
-            // Mark that at least one scan has completed so the empty-state
-            // placeholder is only shown after real data (not before first scan).
             if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
-            // Clear the closure to avoid stale-capture reload after view is gone
             ScopeStore.shared.onMutate = nil
+        }
+        // Phase 3: Add Runner sheet
+        .sheet(isPresented: $showAddRunnerSheet) {
+            AddRunnerSheet(isPresented: $showAddRunnerSheet) {
+                localRunnerStore.refresh()
+            }
+        }
+        // Phase 2: Config sheet
+        .sheet(item: $runnerBeingConfigured) { runner in
+            RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
+                localRunnerStore.refresh()
+            }
+        }
+        // Phase 2: Remove confirmation alert
+        .alert(
+            "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "\"\")\"",
+            isPresented: Binding(
+                get: { runnerPendingRemoval != nil },
+                set: { if !$0 { runnerPendingRemoval = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
+            Button("Remove", role: .destructive) {
+                guard let runner = runnerPendingRemoval else { return }
+                runnerPendingRemoval = nil
+                DispatchQueue.global(qos: .userInitiated).async {
+                    RunnerLifecycleService.shared.remove(runner: runner)
+                    DispatchQueue.main.async { localRunnerStore.refresh() }
+                }
+            }
+        } message: {
+            Text("This will run ./svc.sh uninstall and ./config.sh remove. " +
+                 "A GitHub token is required for de-registration.")
         }
     }
 
     // MARK: - Sections
 
-    // Explicit label: on all Button(action:label:) calls throughout this file—
-    // prevents multiple_closures_with_trailing_closure SwiftLint violations.
     private var headerBar: some View {
         HStack {
             Button(action: onBack, label: {
@@ -107,17 +149,26 @@ struct SettingsView: View {
         .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
     }
 
-    // MARK: Phase 1 — Local Runners (no GitHub token required)
+    // MARK: Phase 1 + 2 + 4 — Local Runners
 
     /// Section 1: displays all locally-installed runners discovered by
-    /// `LocalRunnerScanner`. Renders instantly at launch without any API call.
-    /// Status dots reflect whether the runner service is live on this machine.
+    /// `LocalRunnerScanner`, enriched with GitHub API status (Phase 4).
+    /// Each row has lifecycle controls (Phase 2).
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Local runners")
                     .font(.caption).foregroundColor(.secondary)
                 Spacer()
+                // Phase 3: Add Runner button
+                Button(action: { showAddRunnerSheet = true }, label: {
+                    Image(systemName: "plus")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                })
+                .buttonStyle(.plain)
+                .help("Add a new runner")
+                .padding(.trailing, 4)
                 if localRunnerStore.isScanning {
                     ProgressView()
                         .scaleEffect(0.6)
@@ -147,7 +198,7 @@ struct SettingsView: View {
     }
 
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(localRunnerDotColor(for: runner))
                 .frame(width: 8, height: 8)
@@ -163,13 +214,45 @@ struct SettingsView: View {
             Text(runner.displayStatus)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).fixedSize()
+            // Phase 2: lifecycle controls
+            if runner.isRunning {
+                Button(action: { lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) } },
+                       label: { Text("Stop").font(.caption2) })
+                    .buttonStyle(.bordered)
+                    .help("Stop runner service")
+            } else {
+                Button(action: { lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) } },
+                       label: { Text("Resume").font(.caption2) })
+                    .buttonStyle(.bordered)
+                    .help("Start runner service")
+            }
+            Button(action: { runnerBeingConfigured = runner }, label: {
+                Image(systemName: "gearshape").font(.caption2)
+            })
+            .buttonStyle(.plain)
+            .help("Configure runner")
+            Button(action: { runnerPendingRemoval = runner }, label: {
+                Image(systemName: "minus.circle").font(.caption2).foregroundColor(.red)
+            })
+            .buttonStyle(.plain)
+            .help("Remove runner")
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
+    }
+
+    /// Dispatches a lifecycle action to a background thread and refreshes the
+    /// runner list on the main thread when complete.
+    private func lifecycleAction(_ action: @escaping () -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            action()
+            DispatchQueue.main.async { localRunnerStore.refresh() }
+        }
     }
 
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
         case .running: return .green
+        case .busy:    return .yellow
         case .idle:    return .gray
         case .offline: return .red
         }
@@ -251,8 +334,6 @@ struct SettingsView: View {
             Text("General")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            // String-label init — no closure on Toggle, so .onChange(perform:) is
-            // the sole closure in the chain. Fixes multiple_closures_with_trailing_closure.
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .toggleStyle(.switch)
                 .font(.system(size: 12))
@@ -299,7 +380,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             Divider().padding(.leading, 12)
-            // Auth reads token via: gh auth token > GH_TOKEN > GITHUB_TOKEN (see Auth.swift).
             Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 4)
@@ -317,7 +397,6 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
-            // ⚠️ Placeholder links — gated behind DEBUG so they never ship to users.
             Divider().padding(.leading, 12)
             linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
             Divider().padding(.leading, 12)
@@ -353,9 +432,6 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
-    /// Applies the launch-at-login preference change.
-    /// Passed as a function reference to `.onChange(of:perform:)` — no trailing
-    /// closure on the Toggle call-chain (fixes multiple_closures_with_trailing_closure).
     private func applyLaunchAtLogin(_ enabled: Bool) {
         LoginItem.setEnabled(enabled)
     }
@@ -387,8 +463,6 @@ struct SettingsView: View {
         ).buttonStyle(.plain)
     }
 
-    /// Opens the GitHub PAT setup docs in the default browser.
-    /// Device-flow URL requires a user_code the app never generates — PAT docs are correct (ref #221).
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
@@ -397,3 +471,80 @@ struct SettingsView: View {
     }
 }
 // swiftlint:enable type_body_length
+
+// MARK: - RunnerConfigSheet
+
+/// Phase 2: Inline sheet for editing a runner's labels and work folder.
+/// Changes are applied immediately via `RunnerLifecycleService`.
+struct RunnerConfigSheet: View {
+    let runner: RunnerModel
+    @Binding var isPresented: RunnerModel?
+    let onSave: () -> Void
+
+    @State private var labelsText: String
+    @State private var workFolderText: String
+    @State private var isSaving = false
+
+    init(runner: RunnerModel, isPresented: Binding<RunnerModel?>, onSave: @escaping () -> Void) {
+        self.runner = runner
+        self._isPresented = isPresented
+        self.onSave = onSave
+        self._labelsText = State(initialValue: runner.labels.joined(separator: ", "))
+        self._workFolderText = State(initialValue: runner.workFolder ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Configure \"\(runner.runnerName)\"")
+                .font(.headline)
+                .padding(.bottom, 4)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Labels (comma-separated)").font(.caption).foregroundColor(.secondary)
+                TextField("e.g. self-hosted, macOS, arm64", text: $labelsText)
+                    .textFieldStyle(.roundedBorder)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Work folder").font(.caption).foregroundColor(.secondary)
+                TextField("e.g. _work", text: $workFolderText)
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack {
+                Spacer()
+                Button(action: { isPresented = nil }, label: { Text("Cancel") })
+                    .keyboardShortcut(.cancelAction)
+                Button(action: saveConfig, label: {
+                    if isSaving {
+                        ProgressView().scaleEffect(0.7)
+                    } else {
+                        Text("Save")
+                    }
+                })
+                .keyboardShortcut(.defaultAction)
+                .disabled(isSaving)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+    }
+
+    private func saveConfig() {
+        isSaving = true
+        let labels = labelsText
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let folder = workFolderText.trimmingCharacters(in: .whitespaces)
+        DispatchQueue.global(qos: .userInitiated).async {
+            RunnerLifecycleService.shared.updateConfig(
+                runner: runner,
+                labels: labels,
+                workFolder: folder.isEmpty ? "_work" : folder
+            )
+            DispatchQueue.main.async {
+                isSaving = false
+                isPresented = nil
+                onSave()
+            }
+        }
+    }
+}
