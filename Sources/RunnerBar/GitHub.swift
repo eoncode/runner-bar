@@ -9,7 +9,7 @@ var ghIsRateLimited: Bool = false
 
 /// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
 /// Returns `nil` on launch failure, timeout, empty response, or rate-limit (403/429).
-func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+func ghAPI(_ endpoint: String, method: String = "GET", args: [String] = [], timeout: TimeInterval = 20) -> Data? {
     // swiftlint:disable:next identifier_name
     guard let gh = ghBinaryPath() else {
         log("ghAPI › gh not found")
@@ -18,7 +18,15 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: gh)
-    task.arguments = ["api", endpoint]
+    task.arguments = ["api", "--method", method] + args + [endpoint]
+
+    // Explicitly inject the GitHub token into the environment (ref user request).
+    var env = ProcessInfo.processInfo.environment
+    if let token = githubToken() {
+        env["GH_TOKEN"] = token
+    }
+    task.environment = env
+
     task.standardOutput = pipe
     task.standardError = Pipe()
     var outputData = Data()
@@ -41,7 +49,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    log("ghAPI › \(method) \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
        let status = json["status"] as? String,
        status == "403" || status == "429" {
@@ -52,7 +60,95 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     return outputData.isEmpty ? nil : outputData
 }
 
+// MARK: - Registration & Removal Tokens
+
+private struct TokenResponse: Codable {
+    let token: String
+}
+
+private struct OrgSummary: Codable {
+    let login: String
+}
+
+private struct RepoSummary: Codable {
+    let fullName: String
+    enum CodingKeys: String, CodingKey { case fullName = "full_name" }
+}
+
+/// Fetches a registration token for the given scope (repo or org).
+func fetchRegistrationToken(scope: String) -> String? {
+    let endpoint = scope.contains("/")
+        ? "repos/\(scope)/actions/runners/registration-token"
+        : "orgs/\(scope)/actions/runners/registration-token"
+    guard let data = ghAPI(endpoint, method: "POST"),
+          let resp = try? JSONDecoder().decode(TokenResponse.self, from: data)
+    else { return nil }
+    return resp.token
+}
+
+/// Fetches the latest runner version from the GitHub Releases API.
+func fetchLatestRunnerVersion() -> String? {
+    struct Release: Codable { let tagName: String; enum CodingKeys: String, CodingKey { case tagName = "tag_name" } }
+    guard let data = ghAPI("repos/actions/runner/releases/latest"),
+          let release = try? JSONDecoder().decode(Release.self, from: data)
+    else { return nil }
+    // tag name is usually "v2.316.1", we want "2.316.1"
+    return release.tagName.hasPrefix("v") ? String(release.tagName.dropFirst()) : release.tagName
+}
+
+// MARK: - Discovery Helpers
+
+/// Fetches orgs the user belongs to, following pagination.
+func fetchUserOrgs() -> [String] {
+    // Using --paginate in gh api automatically merges paginated results into a single array
+    guard let data = ghAPI("user/orgs", args: ["--paginate"]),
+          let orgs = try? JSONDecoder().decode([OrgSummary].self, from: data)
+    else { return [] }
+    return orgs.map { $0.login }.sorted()
+}
+
+/// Fetches repos the user has access to, following pagination.
+func fetchUserRepos() -> [String] {
+    // Fetch up to 100 per page and follow all pages
+    guard let data = ghAPI("user/repos", args: ["-F", "per_page=100", "--paginate"]),
+          let repos = try? JSONDecoder().decode([RepoSummary].self, from: data)
+    else { return [] }
+    return repos.map { $0.fullName }.sorted()
+}
+
+/// Fetches a removal token for the given scope (repo or org).
+func fetchRemovalToken(scope: String) -> String? {
+    let endpoint = scope.contains("/")
+        ? "repos/\(scope)/actions/runners/remove-token"
+        : "orgs/\(scope)/actions/runners/remove-token"
+    guard let data = ghAPI(endpoint, method: "POST"),
+          let resp = try? JSONDecoder().decode(TokenResponse.self, from: data)
+    else { return nil }
+    return resp.token
+}
+
 // MARK: - URL helpers
+
+/// Extracts "owner/repo" or "org" from a GitHub URL (e.g. `https://github.com/owner/repo`).
+func extractScope(from url: String) -> String? {
+    let clean = url.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    let components = clean.components(separatedBy: "/")
+    // Search for the host segment to find where the scope starts
+    guard let hostIndex = components.firstIndex(where: { $0.contains("github.com") }) else {
+        // Fallback: if no github.com host found, handle as potential relative path or owner/repo string
+        let parts = components.filter { !$0.isEmpty }
+        if parts.count >= 2 { return "\(parts[0])/\(parts[1])" }
+        return parts.first
+    }
+    let remainder = components.suffix(from: hostIndex + 1).filter { !$0.isEmpty }
+    if remainder.count >= 2 {
+        let first = remainder[remainder.startIndex]
+        let second = remainder[remainder.index(after: remainder.startIndex)]
+        return "\(first)/\(second)"
+    } else {
+        return remainder.first
+    }
+}
 
 /// Extracts the "owner/repo" scope from a GitHub Actions job HTML URL.
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
@@ -140,12 +236,11 @@ func fetchRunners(for scope: String) -> [Runner] {
         path = "/orgs/\(scope)/actions/runners"
     }
     log("fetchRunners › \(path)")
-    let json = shell("/opt/homebrew/bin/gh api \(path)")
-    log("fetchRunners › response prefix: \(json.prefix(120))")
-    guard
-        let data = json.data(using: .utf8),
-        let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
-    else {
+    guard let data = ghAPI(path) else {
+        log("fetchRunners › fetch failed for scope: \(scope)")
+        return []
+    }
+    guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
         log("fetchRunners › decode failed for scope: \(scope)")
         return []
     }
@@ -246,6 +341,14 @@ func ghPost(_ endpoint: String) -> Bool {
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
     task.arguments = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
+
+    // Explicitly inject the GitHub token into the environment.
+    var env = ProcessInfo.processInfo.environment
+    if let token = githubToken() {
+        env["GH_TOKEN"] = token
+    }
+    task.environment = env
+
     task.standardOutput = Pipe()
     task.standardError = Pipe()
     do {
@@ -260,6 +363,14 @@ func ghPost(_ endpoint: String) -> Bool {
     timeoutItem.cancel()
     log("ghPost › \(endpoint) exit \(task.terminationStatus)")
     return task.terminationStatus == 0
+}
+
+// MARK: - Shell Escaping
+
+/// Escapes a string for use in a shell command by wrapping it in single quotes
+/// and escaping any existing single quotes.
+func shellEscape(_ arg: String) -> String {
+    "'" + arg.replacingOccurrences(of: "'", with: "'\\''") + "'"
 }
 
 // MARK: - Cancel run
