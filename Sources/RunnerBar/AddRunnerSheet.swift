@@ -12,15 +12,20 @@ import SwiftUI
 ///
 /// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
+    /// Binding that controls sheet presentation; set to `false` to dismiss.
     @Binding var isPresented: Bool
+    /// Called when registration succeeds so the caller can re-scan runners.
     let onComplete: () -> Void
 
     // MARK: Scope state
 
     /// Scope type selection for the new runner: a specific repository or an organisation.
     enum ScopeType: String, CaseIterable, Identifiable {
+        /// Register the runner under a specific repository (owner/repo).
         case repo = "Repository"
+        /// Register the runner under an entire organisation.
         case org = "Organisation"
+        /// Stable identifier for `ForEach` — uses the raw string value.
         var id: String { rawValue }
     }
 
@@ -61,13 +66,13 @@ struct AddRunnerSheet: View {
             if isLoadingScopes {
                 HStack {
                     ProgressView().scaleEffect(0.7)
-                    Text("Loading…").font(.caption).foregroundColor(.secondary)
+                    Text("Loading\u{2026}").font(.caption).foregroundColor(.secondary)
                 }
             } else if scopeType == .repo {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Repository").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedRepo) {
-                        Text("— select —").tag("")
+                        Text("\u2014 select \u2014").tag("")
                         ForEach(repos, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -76,7 +81,7 @@ struct AddRunnerSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Organisation").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedOrg) {
-                        Text("— select —").tag("")
+                        Text("\u2014 select \u2014").tag("")
                         ForEach(orgs, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -118,7 +123,7 @@ struct AddRunnerSheet: View {
                     if isRegistering {
                         HStack(spacing: 6) {
                             ProgressView().scaleEffect(0.7)
-                            Text("Registering…")
+                            Text("Registering\u{2026}")
                         }
                     } else {
                         Text("Add Runner")
