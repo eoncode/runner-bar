@@ -95,7 +95,6 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             let data = ghAPI(runsEndpoint(status: status)),
             let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
-        // insert+append pattern cannot be expressed as a where clause
         // swiftlint:disable for_where
         for run in resp.workflowRuns {
             if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
@@ -155,6 +154,86 @@ func fetchRunners(for scope: String) -> [Runner] {
 
 private struct RunnersResponse: Codable {
     let runners: [Runner]
+}
+
+// MARK: - User orgs and repos (Phase 3)
+
+/// Returns the login names of all organisations the authenticated user belongs to.
+/// Calls `GET /user/orgs`. Returns an empty array on error or if unauthenticated.
+func fetchUserOrgs() -> [String] {
+    guard let data = ghAPI("/user/orgs?per_page=100") else { return [] }
+    struct Org: Decodable { let login: String }
+    guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
+    return orgs.map(\.login)
+}
+
+/// Returns `owner/repo` strings for the authenticated user's repositories,
+/// sorted by most recently updated. Calls `GET /user/repos?sort=updated`.
+/// Returns an empty array on error or if unauthenticated.
+func fetchUserRepos() -> [String] {
+    guard let data = ghAPI("/user/repos?per_page=100&sort=updated") else { return [] }
+    struct Repo: Decodable {
+        let fullName: String
+        enum CodingKeys: String, CodingKey { case fullName = "full_name" }
+    }
+    guard let repos = try? JSONDecoder().decode([Repo].self, from: data) else { return [] }
+    return repos.map(\.fullName)
+}
+
+// MARK: - Registration token (Phase 3)
+
+/// Fetches a runner registration token for the given scope.
+/// - For repo-scoped runners: `POST /repos/{owner}/{repo}/actions/runners/registration-token`
+/// - For org-scoped runners:  `POST /orgs/{org}/actions/runners/registration-token`
+///
+/// Returns the `token` string on success, `nil` on API error or missing auth.
+func fetchRegistrationToken(scope: String) -> String? {
+    let endpoint: String
+    if scope.contains("/") {
+        endpoint = "repos/\(scope)/actions/runners/registration-token"
+    } else {
+        endpoint = "orgs/\(scope)/actions/runners/registration-token"
+    }
+    guard let ghPath = ghBinaryPath() else {
+        log("fetchRegistrationToken › gh not found")
+        return nil
+    }
+    // Must use POST — ghAPI() only does GET. Use ghPost-style Process.
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: ghPath)
+    task.arguments = ["api", "--method", "POST",
+                      "-H", "Accept: application/vnd.github+json",
+                      endpoint]
+    task.standardOutput = pipe
+    task.standardError = Pipe()
+    var outputData = Data()
+    let lock = NSLock()
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+        let chunk = handle.availableData
+        guard !chunk.isEmpty else { return }
+        lock.lock(); outputData.append(chunk); lock.unlock()
+    }
+    do { try task.run() } catch {
+        log("fetchRegistrationToken › launch error: \(error)")
+        pipe.fileHandleForReading.readabilityHandler = nil
+        return nil
+    }
+    let deadline = Date().addingTimeInterval(30)
+    while task.isRunning {
+        if Date() > deadline { task.terminate(); break }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    pipe.fileHandleForReading.readabilityHandler = nil
+    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    log("fetchRegistrationToken › \(endpoint) \(outputData.count)b exit \(task.terminationStatus)")
+    struct TokenResponse: Decodable { let token: String }
+    guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
+        log("fetchRegistrationToken › decode failed: \(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")")
+        return nil
+    }
+    return resp.token
 }
 
 // MARK: - Step log
