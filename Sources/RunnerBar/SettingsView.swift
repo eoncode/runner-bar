@@ -134,7 +134,7 @@ struct SettingsView: View {
         guard !trimmed.isEmpty else { return }
         ScopeStore.shared.add(trimmed)
         RunnerStore.shared.start()
-        // onMutate callback triggers store.reload()
+        store.reload()
         newScope = ""
     }
 
