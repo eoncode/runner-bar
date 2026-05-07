@@ -12,12 +12,14 @@ import Foundation
 struct RunnerModel: Identifiable, Hashable {
     // MARK: Identity
 
-    /// Stable, unique identifier derived from `agentId` when available, or a
-    /// hash of `runnerName + gitHubUrl` otherwise.
-    var id: String {
-        if let aid = agentId { return String(aid) }
-        return "\(runnerName)-\(gitHubUrl ?? "")"
-    }
+    /// Stable, unique identifier computed once at init-time from `agentId`
+    /// when available, or a composite `runnerName + gitHubUrl` string otherwise.
+    ///
+    /// Storing at init (not as a computed property) ensures SwiftUI `ForEach`
+    /// identity is stable across scans even if a runner is later enriched with
+    /// an `agentId` it didn't have on its first discovery (e.g. LaunchAgent-only
+    /// entry that gains a `.runner` JSON match on the next refresh).
+    let id: String
 
     /// Human-readable runner name (`runnerName` field in `.runner` JSON, or
     /// parsed from the LaunchAgent plist filename).
@@ -51,6 +53,31 @@ struct RunnerModel: Identifiable, Hashable {
     /// in the `ps aux` output at the last scan.
     var isRunning: Bool
 
+    // MARK: - Init
+
+    init(
+        runnerName: String,
+        gitHubUrl: String?,
+        agentId: Int?,
+        workFolder: String?,
+        installPath: String?,
+        isRunning: Bool
+    ) {
+        self.runnerName = runnerName
+        self.gitHubUrl = gitHubUrl
+        self.agentId = agentId
+        self.workFolder = workFolder
+        self.installPath = installPath
+        self.isRunning = isRunning
+        // Compute id once at init so SwiftUI identity is stable even when
+        // the model is later enriched with an agentId on a subsequent scan.
+        if let aid = agentId {
+            self.id = String(aid)
+        } else {
+            self.id = "\(runnerName)-\(gitHubUrl ?? "")"
+        }
+    }
+
     // MARK: - Display helpers
 
     /// Short status string used in the Settings view runner list.
@@ -68,6 +95,7 @@ enum RunnerStatusColor {
     case running
     /// Runner is installed but its process is not currently active.
     case idle
-    /// Runner is registered but has been taken offline (used for future API enrichment).
-    case offline
+    /// Runner is registered but has been taken offline.
+    /// Reserved for Phase 4 API enrichment — not produced by LocalRunnerScanner.
+    case offline // Phase 4
 }

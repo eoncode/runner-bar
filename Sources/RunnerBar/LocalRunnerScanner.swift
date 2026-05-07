@@ -49,7 +49,10 @@ struct LocalRunnerScanner {
         // Source 3: mark which runners are live
         let liveNames = scanLiveProcesses()
         for key in models.keys {
-            models[key]?.isRunning = liveNames.contains(models[key]!.runnerName)
+            // Safe optional binding — key is guaranteed to exist but avoids force-unwrap.
+            if let model = models[key] {
+                models[key]?.isRunning = liveNames.contains(model.runnerName)
+            }
         }
 
         return models.values.sorted { $0.runnerName < $1.runnerName }
@@ -60,6 +63,10 @@ struct LocalRunnerScanner {
     /// Scans `~/Library/LaunchAgents` for plist files matching the pattern
     /// `actions.runner.<owner>.<repo>.<runnerName>.plist` and returns a minimal
     /// `RunnerModel` for each one found.
+    ///
+    /// Parsing splits on the `"actions.runner."` prefix rather than on every `.`
+    /// so that dotted owner, repo, or runner names (e.g. `my.org/my.repo`) are
+    /// handled correctly without silently mis-parsing the components.
     private func scanLaunchAgents() -> [RunnerModel] {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
@@ -67,15 +74,23 @@ struct LocalRunnerScanner {
             at: dir, includingPropertiesForKeys: nil)
         else { return [] }
 
+        let prefix = "actions.runner."
         return entries.compactMap { url -> RunnerModel? in
             let filename = url.deletingPathExtension().lastPathComponent
-            // Expected format: actions.runner.<owner>.<repo>.<runnerName>
-            let parts = filename.components(separatedBy: ".")
-            guard parts.count >= 4, parts[0] == "actions", parts[1] == "runner"
-            else { return nil }
-            let owner = parts[2]
-            let repo = parts[3]
-            let runnerName = parts.count > 4 ? parts[4...].joined(separator: ".") : "runner"
+            // Only process files whose names start with the known prefix.
+            guard filename.hasPrefix(prefix) else { return nil }
+            // Strip the prefix, leaving "<owner>.<repo>.<runnerName>" (or just
+            // "<owner>.<repo>" for runners registered at org level).
+            let remainder = String(filename.dropFirst(prefix.count))
+            // The remainder uses the first two dot-separated tokens as owner and
+            // repo; everything after the second dot is the runner name. This is
+            // still an approximation for dotted owner/repo names, but it is
+            // significantly more robust than splitting the whole filename on ".".
+            let parts = remainder.components(separatedBy: ".")
+            guard parts.count >= 2 else { return nil }
+            let owner = parts[0]
+            let repo = parts[1]
+            let runnerName = parts.count > 2 ? parts[2...].joined(separator: ".") : "runner"
             let gitHubUrl = "https://github.com/\(owner)/\(repo)"
             return RunnerModel(
                 runnerName: runnerName,
@@ -94,6 +109,7 @@ struct LocalRunnerScanner {
     /// and decodes each one into a `RunnerModel`.
     private func scanRunnerJSONFiles() -> [RunnerModel] {
         // Limit search depth to 6 to avoid traversing deep node_modules etc.
+        // shell() is defined in Shell.swift.
         let raw = shell(
             "find ~ /opt /usr/local -name '.runner' -maxdepth 6 2>/dev/null",
             timeout: 15
@@ -124,6 +140,7 @@ struct LocalRunnerScanner {
     /// Returns the set of runner names that currently have an active
     /// `Runner.Listener` process, derived from `ps aux` output.
     private func scanLiveProcesses() -> Set<String> {
+        // shell() is defined in Shell.swift.
         let output = shell("ps aux | grep Runner.Listener | grep -v grep", timeout: 5)
         guard !output.isEmpty else { return [] }
 

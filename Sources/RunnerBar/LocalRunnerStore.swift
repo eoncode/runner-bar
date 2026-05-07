@@ -21,7 +21,7 @@ final class LocalRunnerStore: ObservableObject {
     @Published private(set) var runners: [RunnerModel] = []
 
     /// `true` while a background scan is in progress.
-    @Published private(set) var isScanning: Bool = false
+    @Published private(set) var isScanning: Bool = true
 
     // MARK: Private
 
@@ -37,13 +37,17 @@ final class LocalRunnerStore: ObservableObject {
     /// Triggers a fresh scan on a background thread. The published `runners`
     /// array is updated on the main thread when the scan finishes.
     ///
-    /// Always called from the main thread (.onAppear, button tap), so setting
-    /// `isScanning = true` synchronously here is safe and closes the race window
-    /// where two rapid calls could both pass the guard before the async set fired.
+    /// `@MainActor` enforces the main-thread call-site contract at compile time
+    /// (previously only documented in comments). `isScanning = true` is set
+    /// synchronously before dispatching background work to close the race window
+    /// where two rapid calls could both pass the guard.
+    ///
+    /// ⚠️ REGRESSION GUARD: `isScanning = true` must remain synchronous here.
+    /// Moving it into a `DispatchQueue.main.async` block re-opens the concurrent-
+    /// scan race condition that was fixed in a previous commit.
+    @MainActor
     func refresh() {
         guard !isScanning else { return }
-        // ⚠️ REGRESSION GUARD: must remain synchronous — setting isScanning async
-        // (via DispatchQueue.main.async) re-opens the concurrent-scan race condition.
         isScanning = true
         queue.async { [weak self] in
             guard let self else { return }
