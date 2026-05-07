@@ -20,8 +20,16 @@ struct Runner: Codable, Identifiable {
     /// Populated by `RunnerStore.fetch()` after the API response is decoded \u2014
     /// not present in the JSON payload.
     var metrics: RunnerMetrics?
+    /// Local installation path from .runner file or LaunchAgent plist.
+    /// `nil` if discovered only via GitHub API.
+    var installPath: String?
+    /// GitHub URL (org or repo) where this runner is registered.
+    /// Used for targeted API enrichment in Phase 4.
+    var gitHubUrl: String?
+    /// `true` if this runner was discovered via local scan (LaunchAgents/.runner files).
+    var isLocal: Bool = false
 
-    /// Excludes `metrics` from JSON decoding \u2014 it is assigned locally after fetch,
+    /// Excludes `metrics`, `installPath`, `gitHubUrl`, `isLocal` from JSON decoding \u2014 it is assigned locally after fetch,
     /// not returned by the GitHub API.
     enum CodingKeys: String, CodingKey { case id, name, status, busy }
 

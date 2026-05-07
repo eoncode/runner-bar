@@ -150,7 +150,13 @@ func fetchRunners(for scope: String) -> [Runner] {
         return []
     }
     log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
-    return response.runners
+    // Enrich with gitHubUrl for Phase 4 API enrichment
+    let gitHubUrl = scope.contains("/") ? "https://github.com/\(scope)" : "https://github.com/\(scope)"
+    return response.runners.map {
+        var runner = $0
+        runner.gitHubUrl = gitHubUrl
+        return runner
+    }
 }
 
 private struct RunnersResponse: Codable {
