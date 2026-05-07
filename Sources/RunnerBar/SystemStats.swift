@@ -79,7 +79,7 @@ final class SystemStatsViewModel: ObservableObject {
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             DispatchQueue.global(qos: .utility).async { self?.sample() }
-        }
+        } // swiftlint:disable:this multiple_closures_with_trailing_closure
     }
 
     deinit { timer?.invalidate() }

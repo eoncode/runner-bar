@@ -116,7 +116,7 @@ final class RunnerStore {
             repeats: false
         ) { [weak self] _ in
             self?.fetch()
-        }
+        } // swiftlint:disable:this multiple_closures_with_trailing_closure
     }
 
     /// Fetches runners, jobs, and action groups for all scopes on a background thread.

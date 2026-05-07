@@ -57,7 +57,7 @@ struct SettingsView: View {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
-            }
+            } // swiftlint:disable:this multiple_closures_with_trailing_closure
         }
         .onDisappear {
             // Clear the closure to avoid stale-capture reload after view is gone
