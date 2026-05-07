@@ -3,8 +3,7 @@ import SwiftUI
 
 // MARK: - SettingsView
 
-/// Phase 4 — Settings view: General, Scopes, Notifications, App sections.
-/// Phase 5 will add Account (GitHub auth + version).
+/// Phase 5 — Settings view: General, Scopes, Notifications, App, Account sections.
 /// Phase 6 will add Legal/telemetry.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
@@ -14,6 +13,13 @@ struct SettingsView: View {
     @ObservedObject private var notifications = NotificationPrefsStore.shared
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var isAuthenticated = (githubToken() != nil)
+
+    private var appVersion: String {
+        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(ver) (\(build))"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -21,24 +27,20 @@ struct SettingsView: View {
             HStack {
                 Button(action: onBack) {
                     HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.caption)
-                        Text("Back")
-                            .font(.system(size: 12))
+                        Image(systemName: "chevron.left").font(.caption)
+                        Text("Back").font(.system(size: 12))
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
                 Spacer()
-                Text("Settings")
-                    .font(.headline)
-                    .foregroundColor(.primary)
+                Text("Settings").font(.headline).foregroundColor(.primary)
                 Spacer()
                 Color.clear.frame(width: 44, height: 1)
             }
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
             Divider()
-            // ── Content sections
+            // ── Content
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     settingsSection(title: "General") {
@@ -82,7 +84,6 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
                     }
-                    // ── Notifications (Phase 4, ref #221)
                     settingsSection(title: "Notifications") {
                         toggleRow(label: "Notify on success", value: $notifications.notifyOnSuccess)
                         Divider().padding(.leading, 12)
@@ -93,10 +94,7 @@ struct SettingsView: View {
                             label: "Launch at login",
                             value: Binding(
                                 get: { launchAtLogin },
-                                set: { newValue in
-                                    launchAtLogin = newValue
-                                    LoginItem.setEnabled(newValue)
-                                }
+                                set: { v in launchAtLogin = v; LoginItem.setEnabled(v) }
                             )
                         )
                         Divider().padding(.leading, 12)
@@ -105,14 +103,36 @@ struct SettingsView: View {
                             Spacer()
                             Button(
                                 action: { NSApplication.shared.terminate(nil) },
-                                label: {
-                                    Text("Quit").font(.system(size: 12)).foregroundColor(.red)
-                                }
+                                label: { Text("Quit").font(.system(size: 12)).foregroundColor(.red) }
                             ).buttonStyle(.plain)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                     }
-                    // Phase 5 placeholder: Account section added here.
+                    // ── Account (Phase 5, ref #221)
+                    settingsSection(title: "Account") {
+                        HStack {
+                            Text("GitHub").font(.system(size: 13))
+                            Spacer()
+                            if isAuthenticated {
+                                HStack(spacing: 4) {
+                                    Circle().fill(Color.green).frame(width: 8, height: 8)
+                                    Text("Authenticated")
+                                        .font(.caption).foregroundColor(.secondary)
+                                }
+                            } else {
+                                Button(
+                                    action: signInWithGitHub,
+                                    label: {
+                                        Text("Sign in")
+                                            .font(.caption).foregroundColor(.orange)
+                                    }
+                                ).buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        Divider().padding(.leading, 12)
+                        infoRow(label: "Version", value: appVersion)
+                    }
                     // Phase 6 placeholder: Legal section added here.
                 }
                 .padding(.bottom, 16)
@@ -120,6 +140,7 @@ struct SettingsView: View {
         }
         // ⚠️ REGRESSION GUARD: keep idealWidth: 420 — matches PopoverMainView (ref #52 #54 #57)
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        .onAppear { isAuthenticated = (githubToken() != nil) }
     }
 
     // MARK: - Actions
@@ -130,6 +151,12 @@ struct SettingsView: View {
         ScopeStore.shared.add(trimmed)
         RunnerStore.shared.start()
         newScope = ""
+    }
+
+    private func signInWithGitHub() {
+        let script = "tell application \"Terminal\" to do script \"gh auth login\""
+        NSAppleScript(source: script)?.executeAndReturnError(nil)
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
 
     // MARK: - Section builder
@@ -146,12 +173,10 @@ struct SettingsView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 16)
                 .padding(.bottom, 4)
-            VStack(spacing: 0) {
-                content()
-            }
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(6)
-            .padding(.horizontal, 12)
+            VStack(spacing: 0) { content() }
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(6)
+                .padding(.horizontal, 12)
         }
     }
 
@@ -164,8 +189,7 @@ struct SettingsView: View {
             Spacer()
             Toggle("", isOn: value).labelsHidden().toggleStyle(.switch)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
     @ViewBuilder
@@ -179,12 +203,20 @@ struct SettingsView: View {
             Text(label).font(.system(size: 13))
             Spacer()
             Text("\(value.wrappedValue)\(unit)")
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
+                .font(.system(size: 13)).foregroundColor(.secondary)
                 .frame(minWidth: 36, alignment: .trailing)
             Stepper("", value: value, in: range).labelsHidden()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func infoRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 13))
+            Spacer()
+            Text(value).font(.system(size: 13)).foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 }
