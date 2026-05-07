@@ -159,10 +159,14 @@ struct SettingsView: View {
         settingsSection(title: "Legal") {
             // Bound directly to LegalPrefsStore — persisted via @Published+didSet (ref #221 review).
             toggleRow(label: "Share analytics", value: $legal.analyticsEnabled)
+#if DEBUG
+            // ⚠️ Real Privacy Policy and EULA URLs not yet available.
+            // Gated behind DEBUG so placeholder links never ship to users (ref #221 review).
             Divider().padding(.leading, 12)
             linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
             Divider().padding(.leading, 12)
             linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar")
+#endif
         }
     }
 
