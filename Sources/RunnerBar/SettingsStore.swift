@@ -16,10 +16,11 @@ final class SettingsStore: ObservableObject {
     /// Polling interval in seconds (default 30, range 10–300).
     @Published var pollingInterval: Int {
         didSet {
-            // clamp to documented range so stored value is always valid
             let clamped = min(max(pollingInterval, 10), 300)
-            if clamped != pollingInterval { pollingInterval = clamped; return }
-            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
+            // Always persist the clamped value; re-assign only if out of range.
+            // Re-assigning re-triggers didSet, but then clamped == pollingInterval so no recursion.
+            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
+            if clamped != pollingInterval { pollingInterval = clamped }
         }
     }
 
