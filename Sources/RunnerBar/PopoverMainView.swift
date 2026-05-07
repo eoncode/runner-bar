@@ -1,4 +1,3 @@
-import ServiceManagement
 import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
@@ -24,9 +23,9 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     /// Called when the user taps an action group row to drill into action detail.
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when the user taps the settings button.
+    let onSelectSettings: () -> Void
 
-    @State private var newScope = ""
-    @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
 
@@ -37,6 +36,14 @@ struct PopoverMainView: View {
                 Text("RunnerBar v0.34") // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
+                Button(action: onSelectSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
+                .padding(.trailing, 4)
                 if isAuthenticated {
                     HStack(spacing: 4) {
                         Circle().fill(Color.green).frame(width: 8, height: 8)
@@ -156,60 +163,6 @@ struct PopoverMainView: View {
                 .padding(.bottom, 6)
             }
             Divider()
-
-            // ── Runners
-            if !store.runners.isEmpty {
-                Text("Local runners")
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-                ForEach(store.runners, id: \.id) { runner in
-                    HStack(spacing: 8) {
-                        Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
-                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
-                        Spacer()
-                        Text(runner.displayStatus)
-                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                }
-                Divider()
-            }
-
-            // ── Scopes
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Scopes").font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                ForEach(ScopeStore.shared.scopes, id: \.self) { scopeStr in
-                    HStack {
-                        Text(scopeStr).font(.system(size: 12))
-                        Spacer()
-                        Button(action: { ScopeStore.shared.remove(scopeStr); store.reload() }, label: {
-                            Image(systemName: "minus.circle").foregroundColor(.red)
-                        }).buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 2)
-                }
-                HStack {
-                    TextField("owner/repo or org", text: $newScope)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
-                        .onSubmit { submitScope() }
-                    Button(action: submitScope) {
-                        Image(systemName: "plus.circle")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 4)
-            }
-            Divider()
-            Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 12))
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin) { _, newValue in
-                LoginItem.setEnabled(newValue)
-            }
             Button(action: { NSApplication.shared.terminate(nil) }, label: {
                 Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
             })
@@ -224,16 +177,6 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Helpers
-
-    /// Validates and persists a new scope, triggers polling, reloads the observable, and clears the field.
-    private func submitScope() {
-        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        ScopeStore.shared.add(trimmed)
-        RunnerStore.shared.start()
-        store.reload()
-        newScope = ""
-    }
 
     /// Dot color for an action group based on its status.
     @ViewBuilder
@@ -308,11 +251,6 @@ struct PopoverMainView: View {
         case "cancelled": return .orange
         default: return .secondary
         }
-    }
-
-    /// Runner status dot color.
-    private func dotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 
     /// Opens Terminal and runs `gh auth login`.
