@@ -128,7 +128,8 @@ final class RunnerStore {
         } else {
             interval = configured
         }
-        log("RunnerStore › next poll in \(Int(interval))s (active=\(hasActive) rateLimited=\(isRateLimited) configured=\(Int(configured))s)")
+        log("RunnerStore › next poll in \(Int(interval))s"
+            + " (active=\(hasActive) rateLimited=\(isRateLimited) configured=\(Int(configured))s)")
         timer = Timer.scheduledTimer(
             withTimeInterval: interval,
             repeats: false
