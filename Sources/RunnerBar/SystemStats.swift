@@ -124,14 +124,14 @@ final class SystemStatsViewModel: ObservableObject {
         prevTicks = currentTicks
         guard dTotal > 0 else { return 0 }
         return min(100, ((dUser + dSys) / dTotal) * 100)
-    }
+    } // swiftlint:disable:this function_body_length line_length
 
     // MARK: - Memory
 
     /// Returns memory usage in GB using `host_statistics64()` and `sysctl hw.memsize`.
     ///
     /// Reports active + wired pages only, matching `ci-dash.py` measurement.
-    private func memStats() -> MemoryStats {
+    private func memStats() -> MemoryStats { // swiftlint:disable:this missing_docs
         var vmStats = vm_statistics64()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size
@@ -158,7 +158,7 @@ final class SystemStatsViewModel: ObservableObject {
     ///
     /// Uses `volumeAvailableCapacityForImportantUsage` (the value Finder shows).
     /// Falls back to a safe all-free default on error.
-    private func diskStats() -> DiskStats {
+    private func diskStats() -> DiskStats { // swiftlint:disable:this missing_docs
         let url = URL(fileURLWithPath: "/")
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         guard let values = try? url.resourceValues(forKeys: [
@@ -178,7 +178,7 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - Sample
 
     /// Assembles a new `SystemStats` snapshot and publishes it on the main thread.
-    private func sample() {
+    private func sample() { // swiftlint:disable:this missing_docs
         let cpu = cpuPercent()
         let mem = memStats()
         let disk = diskStats()

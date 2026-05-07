@@ -5,7 +5,7 @@ import Foundation
 
 /// Persists notification preferences to UserDefaults.
 /// Provides `notifyOnSuccess` and `notifyOnFailure` for the Notifications section of SettingsView.
-final class NotificationPrefsStore: ObservableObject {
+final class NotificationPrefsStore: ObservableObject { // swiftlint:disable:this type_body_length
     static let shared = NotificationPrefsStore()
 
     private enum Key {

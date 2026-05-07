@@ -4,7 +4,7 @@ import SwiftUI
 /// Token required. Purely additive — never modifies existing runners.
 struct AddRunnerView: View {
     let onDismiss: () -> Void
-    
+
     @State private var scopeType: ScopeType = .repo
     @State private var selectedOrg = ""
     @State private var selectedRepo = ""
@@ -16,12 +16,12 @@ struct AddRunnerView: View {
     @State private var errorMessage: String?
     @State private var organizations: [String] = []
     @State private var repositories: [String] = []
-    
+
     enum ScopeType: String, CaseIterable {
         case repo = "Repository"
         case org = "Organization"
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
@@ -35,14 +35,14 @@ struct AddRunnerView: View {
             fetchRepositories()
         }
     }
-    
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Add Runner").font(.headline)
             Text("Register a new self-hosted runner to your GitHub organization or repository.").font(.subheadline).foregroundColor(.secondary)
         }
     }
-    
+
     private var form: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
@@ -53,7 +53,7 @@ struct AddRunnerView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                
+
                 if scopeType == .org {
                     // Organization selector
                     if isFetchingOrgs {
@@ -81,15 +81,15 @@ struct AddRunnerView: View {
                         }
                     }
                 }
-                
+
                 // Runner name field
                 TextField("Runner name", text: $runnerName)
                     .textFieldStyle(.roundedBorder)
-                
+
                 // Labels field (optional)
                 TextField("Labels (comma-separated)", text: $labels)
                     .textFieldStyle(.roundedBorder)
-                
+
                 if let error = errorMessage {
                     Text(error).font(.caption).foregroundColor(.red)
                 }
@@ -97,7 +97,7 @@ struct AddRunnerView: View {
             .padding(8)
         }
     }
-    
+
     private var actionButtons: some View {
         HStack {
             Spacer()
@@ -113,14 +113,14 @@ struct AddRunnerView: View {
             .disabled(!canRegister || isRegistering)
         }
     }
-    
+
     private var canRegister: Bool {
         let hasScope = scopeType == .org ? !selectedOrg.isEmpty : !selectedRepo.isEmpty
         return hasScope && !runnerName.isEmpty
     }
-    
+
     // MARK: - API Calls
-    
+
     private func fetchOrganizations() {
         isFetchingOrgs = true
         DispatchQueue.global(qos: .background).async {
@@ -144,7 +144,7 @@ struct AddRunnerView: View {
             }
         }
     }
-    
+
     private func fetchRepositories() {
         isFetchingRepos = true
         DispatchQueue.global(qos: .background).async {
@@ -168,15 +168,15 @@ struct AddRunnerView: View {
             }
         }
     }
-    
+
     private func registerRunner() {
         isRegistering = true
         errorMessage = nil
-        
+
         let scope = scopeType == .org ? selectedOrg : selectedRepo
         let endpoint = scopeType == .org ? "/orgs/\(scope)/actions/runners/registration-token" : "/repos/\(scope)/actions/runners/registration-token"
-        
-        
+
+
         // Validate runner name: alphanumeric, hyphen, underscore only
         let nameRegex = #"^[a-zA-Z0-9_-]+$"#
         guard NSPredicate(format: "SELF MATCHES %@", nameRegex).evaluate(with: runnerName) else {
@@ -184,7 +184,7 @@ struct AddRunnerView: View {
             isRegistering = false
             return
         }
-        
+
         // Validate labels: alphanumeric, comma, hyphen, underscore only
         if !labels.isEmpty {
             let labelsRegex = #"^[a-zA-Z0-9,_-]+$"#
@@ -194,7 +194,7 @@ struct AddRunnerView: View {
                 return
             }
         }
-        
+
         DispatchQueue.global(qos: .background).async {
             // Step 1: Get registration token
             guard let tokenData = ghAPI(endpoint),
@@ -205,12 +205,12 @@ struct AddRunnerView: View {
                 }
                 return
             }
-            
+
             // Step 2: Detect architecture and fetch latest version
             let archScript = "uname -m"
             let archResult = shell(archScript, timeout: 5)
             let arch: String = archResult.trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" ? "osx-arm64" : "osx-x64"
-            
+
             // Fetch latest runner version from GitHub Releases API
             let ghPath = ghBinaryPath() ?? "/opt/homebrew/bin/gh"
             let releaseJson = shell("\(ghPath) api /repos/actions/runner/releases/latest", timeout: 30)
@@ -220,7 +220,7 @@ struct AddRunnerView: View {
                let tagName = json["tag_name"] as? String {
                 version = tagName.replacingOccurrences(of: "v", with: "")
             }
-            
+
             let tarballName = "actions-runner-\(arch)-\(version).tar.gz"
             let downloadUrl = "https://github.com/actions/runner/releases/download/v\(version)/\(tarballName)"
             let labelsArg = labels.isEmpty ? "" : "--labels \(labels)"
@@ -231,16 +231,16 @@ struct AddRunnerView: View {
                 tar xzf \(tarballName) && \\
                 ./config.sh --url https://github.com/\(scope) --token \(tokenResp.token) --name \(runnerName) \(labelsArg) --unattended
             """
-            
+
             let configResult = shell(configCmd, timeout: 120)
-            
+
             if configResult.contains("Added") {
                 // Step 3: Install as service
                 _ = shell("cd ~/actions-runner-\(scope)-\(runnerName) && ./svc.sh install", timeout: 30)
-                
+
                 // Step 4: Start the service
                 _ = shell("cd ~/actions-runner-\(scope)-\(runnerName) && ./svc.sh start", timeout: 30)
-                
+
                 DispatchQueue.main.async {
                     log("registerRunner › successfully registered \(runnerName)")
                     RunnerStore.shared.start()

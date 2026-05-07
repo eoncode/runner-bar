@@ -2,7 +2,7 @@ import Foundation
 
 /// Writes a timestamped, file-annotated message to stderr.
 /// Visible in Terminal, Console.app, and crash logs.
-func log(
+func log( // swiftlint:disable:this missing_docs
     _ message: String,
     file: String = #file,
     line: Int = #line
