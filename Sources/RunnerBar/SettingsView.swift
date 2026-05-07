@@ -103,7 +103,7 @@ struct SettingsView: View {
             }
         }
         .alert(
-            "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "\"\"")\"",
+            "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "\"\")\"",
             isPresented: Binding(
                 get: { runnerPendingRemoval != nil },
                 set: { if !$0 { runnerPendingRemoval = nil } }
@@ -206,14 +206,18 @@ struct SettingsView: View {
                 .lineLimit(1).fixedSize()
             if runner.isRunning {
                 Button(
-                    action: { lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) }},
+                    action: {
+                        lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) }
+                    },
                     label: { Text("Stop").font(.caption2) }
                 )
                 .buttonStyle(.bordered)
                 .help("Stop runner service")
             } else {
                 Button(
-                    action: { lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) }},
+                    action: {
+                        lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) }
+                    },
                     label: { Text("Resume").font(.caption2) }
                 )
                 .buttonStyle(.bordered)
