@@ -204,9 +204,11 @@ struct SettingsView: View {
                 TextField("owner/repo or org", text: $newScope)
                     .textFieldStyle(.roundedBorder).font(.system(size: 12))
                     .onSubmit { submitScope() }
-                Button(action: submitScope) {
+                // Explicit label: arg — avoids multiple_closures_with_trailing_closure
+                // (action: is closure-typed, so trailing { } would be a second closure).
+                Button(action: submitScope, label: {
                     Image(systemName: "plus.circle")
-                }
+                })
                 .buttonStyle(.plain)
                 .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
             }
