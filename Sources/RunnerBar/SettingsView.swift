@@ -103,7 +103,7 @@ struct SettingsView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            
+
             // Section 1: Local Runners (auto-discovered, no token needed)
             if !store.runners.isEmpty {
                 ForEach(store.runners, id: \.id) { runner in
@@ -114,7 +114,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             }
-            
+
             // Scopes section (existing functionality)
             Text("Scopes").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
@@ -147,9 +147,9 @@ struct SettingsView: View {
             AddRunnerView(onDismiss: { showingAddRunnerSheet = false })
         }
     }
-    
+
     @State private var showingAddRunnerSheet = false
-    
+
     private func runnerRow(_ runner: Runner) -> some View {
         HStack(spacing: 8) {
             Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
@@ -164,7 +164,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
-    
+
     private func lifecycleControls(for runner: Runner) -> some View {
         HStack(spacing: 4) {
             // Resume/Stop button
@@ -174,7 +174,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
             .help(runner.status == "online" ? "Stop runner" : "Start runner")
-            
+
             // Remove button
             Button(action: { removeRunner(runner) }) {
                 Image(systemName: "trash").font(.system(size: 10))
@@ -184,7 +184,7 @@ struct SettingsView: View {
             .help("Remove runner")
         }
     }
-    
+
     private func toggleRunner(_ runner: Runner) {
         // Phase 2: Use launchctl to start/stop runner
         let action = runner.status == "online" ? "stop" : "start"
@@ -193,7 +193,7 @@ struct SettingsView: View {
         log("toggleRunner › \(action) \(runner.name)")
         store.reload()
     }
-    
+
     private func removeRunner(_ runner: Runner) {
         // Phase 2: Show confirmation alert before removing
         let alert = NSAlert()
@@ -202,7 +202,7 @@ struct SettingsView: View {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
-        
+
         if alert.runModal() == .alertFirstButtonReturn {
             // Run svc.sh uninstall and config.sh remove
             if let installPath = runner.installPath {

@@ -157,24 +157,24 @@ final class RunnerStore {
     func fetchAndEnrichRunners() -> [Runner] {
         // Phase 1: Local runner discovery (no token required)
         let localRunners = LocalRunnerScanner.scan().map { $0.toRunner() }
-        
+
         // GitHub API runners (requires token)
         var apiRunners: [Runner] = []
         for scope in ScopeStore.shared.scopes {
             apiRunners.append(contentsOf: fetchRunners(for: scope))
         }
-        
+
         // Merge: start with local runners, enrich with API data where available
         // Use gitHubUrl + name as merge key
         var merged: [String: Runner] = [:]
-        
+
         // First, add all local runners
         for var runner in localRunners {
             runner.isLocal = true
             let key = "\(runner.gitHubUrl ?? "")/\(runner.name)"
             merged[key] = runner
         }
-        
+
         // Then, enrich/replace with API data
         for var runner in apiRunners {
             // Try to find matching local runner by name within same scope
@@ -190,7 +190,7 @@ final class RunnerStore {
                 merged[key] = runner
             }
         }
-        
+
         let allRunners = Array(merged.values)
         let metrics = allWorkerMetrics()
         var busyRunners = allRunners.filter { $0.busy }
