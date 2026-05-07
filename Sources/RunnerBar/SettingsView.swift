@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// Settings view — Phase 1 shell + Phase 2 runner management.
+/// Settings view — complete implementation for all phases 1-6.
 ///
-/// Contains the shared settings UI where subsequent phases will add
-/// notifications, general toggles, and about sections.
-/// Phase 2 adds runner list display and scope add/remove (in parallel with
-/// the main view). Phase 3 will remove runner management from the main view.
+/// Contains the shared settings UI with runner management, notifications
+/// (placeholder, out of scope per AGENTS.md), general toggles,
+/// and about section.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -13,6 +12,15 @@ struct SettingsView: View {
     @ObservedObject var store: RunnerStoreObservable
 
     @State private var newScope = ""
+    @State private var launchAtLogin = LoginItem.isEnabled
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    private var appBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -39,7 +47,6 @@ struct SettingsView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
 
-                // Runners list
                 if !store.runners.isEmpty {
                     ForEach(store.runners, id: \.id) { runner in
                         HStack(spacing: 8) {
@@ -57,7 +64,6 @@ struct SettingsView: View {
                         .padding(.horizontal, 12).padding(.vertical, 4)
                 }
 
-                // Scopes
                 Text("Scopes").font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
                 ForEach(ScopeStore.shared.scopes, id: \.self) { scopeStr in
@@ -86,36 +92,56 @@ struct SettingsView: View {
             }
             Divider()
 
-            // ── Notifications (Phase 4)
+            // ── Notifications (Phase 4 — out of scope, placeholder)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Notifications")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.top, 8)
-                Text("Coming in Phase 4")
+                Text("Not available in this version")
                     .font(.system(size: 12)).foregroundColor(.secondary)
                     .padding(.horizontal, 12)
             }
             Divider()
 
             // ── General (Phase 5)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("General")
                     .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                Text("Coming in Phase 5")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+                Toggle(isOn: $launchAtLogin) {
+                    Text("Launch at login").font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .onChange(of: launchAtLogin) { _, newValue in
+                    LoginItem.setEnabled(newValue)
+                }
             }
             Divider()
 
             // ── About (Phase 6)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("About")
                     .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                Text("Coming in Phase 6")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+
+                HStack {
+                    Text("Version").font(.system(size: 12))
+                    Spacer()
+                    Text("\(appVersion) (\(appBuild))").font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 2)
+
+                HStack {
+                    Text("RunnerBar").font(.system(size: 12))
+                    Spacer()
+                    Text("dev.eonist.runnerbar").font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 2)
+
+                Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 2)
             }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {

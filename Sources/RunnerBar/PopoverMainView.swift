@@ -1,4 +1,3 @@
-import ServiceManagement
 import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
@@ -27,7 +26,6 @@ struct PopoverMainView: View {
     /// Called when the user taps the settings button.
     let onSelectSettings: () -> Void
 
-    @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
 
@@ -165,15 +163,6 @@ struct PopoverMainView: View {
                 .padding(.bottom, 6)
             }
             Divider()
-
-            Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 12))
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin) { _, newValue in
-                LoginItem.setEnabled(newValue)
-            }
             Button(action: { NSApplication.shared.terminate(nil) }, label: {
                 Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
             })
