@@ -11,14 +11,11 @@ struct SettingsView: View {
 
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
+    /// Phase 6: legal prefs via dedicated store, consistent with other stores (ref #221 review).
+    @ObservedObject private var legal = LegalPrefsStore.shared
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
-    /// Phase 6: analytics opt-IN — default false, user must explicitly enable (ref #221 review).
-    @State private var analyticsEnabled: Bool = {
-        guard UserDefaults.standard.object(forKey: "legal.analyticsEnabled") != nil else { return false }
-        return UserDefaults.standard.bool(forKey: "legal.analyticsEnabled")
-    }()
 
     private var appVersion: String {
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -160,16 +157,8 @@ struct SettingsView: View {
 
     private var legalSection: some View {
         settingsSection(title: "Legal") {
-            toggleRow(
-                label: "Share analytics",
-                value: Binding(
-                    get: { analyticsEnabled },
-                    set: { newValue in
-                        analyticsEnabled = newValue
-                        UserDefaults.standard.set(newValue, forKey: "legal.analyticsEnabled")
-                    }
-                )
-            )
+            // Bound directly to LegalPrefsStore — persisted via @Published+didSet (ref #221 review).
+            toggleRow(label: "Share analytics", value: $legal.analyticsEnabled)
             Divider().padding(.leading, 12)
             linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
             Divider().padding(.leading, 12)
