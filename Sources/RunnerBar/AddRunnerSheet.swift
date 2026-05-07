@@ -172,7 +172,6 @@ struct AddRunnerSheet: View {
         let name = runnerName.trimmingCharacters(in: .whitespaces)
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
         let dir = installDir.trimmingCharacters(in: .whitespaces)
-
         DispatchQueue.global(qos: .userInitiated).async {
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
@@ -182,49 +181,13 @@ struct AddRunnerSheet: View {
                 }
                 return
             }
-            let ghURL = "https://github.com/\(scope)"
             try? FileManager.default.createDirectory(
                 atPath: dir,
                 withIntermediateDirectories: true
             )
-            // Use Process.arguments so token/name/url are never shell-interpolated.
-            // This prevents breakage or injection via crafted runner names or tokens.
-            let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
-            let task = Process()
-            task.executableURL = configURL
-            task.currentDirectoryURL = URL(fileURLWithPath: dir)
-            var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
-            if !labels.isEmpty {
-                args += ["--labels", labels]
-            }
-            task.arguments = args
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = pipe
-            var outputData = Data()
-            let lock = NSLock()
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                guard !chunk.isEmpty else { return }
-                lock.lock(); outputData.append(chunk); lock.unlock()
-            }
-            do { try task.run() } catch {
-                pipe.fileHandleForReading.readabilityHandler = nil
-                DispatchQueue.main.async {
-                    isRegistering = false
-                    errorMessage = "config.sh launch error: \(error.localizedDescription)"
-                }
-                return
-            }
-            let deadline = Date().addingTimeInterval(60)
-            while task.isRunning {
-                if Date() > deadline { task.terminate(); break }
-                Thread.sleep(forTimeInterval: 0.05)
-            }
-            pipe.fileHandleForReading.readabilityHandler = nil
-            let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-            if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-            let output = String(data: outputData, encoding: .utf8) ?? ""
+            let ghURL = "https://github.com/\(scope)"
+            let output = runRegistrationCommand(dir: dir, ghURL: ghURL,
+                                                token: token, name: name, labels: labels)
             let failed = output.lowercased().contains("error")
                 || output.lowercased().contains("failed")
             DispatchQueue.main.async {
@@ -237,5 +200,49 @@ struct AddRunnerSheet: View {
                 }
             }
         }
+    }
+
+    /// Runs `config.sh` via `Process.arguments` so token/name/url are never
+    /// shell-interpolated. Arguments are passed as discrete array entries,
+    /// matching the pattern used in `fetchRegistrationToken`.
+    ///
+    /// ⚠️ Blocking — must only be called from a background thread.
+    private func runRegistrationCommand(
+        dir: String,
+        ghURL: String,
+        token: String,
+        name: String,
+        labels: String
+    ) -> String {
+        let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
+        let task = Process()
+        task.executableURL = configURL
+        task.currentDirectoryURL = URL(fileURLWithPath: dir)
+        var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
+        if !labels.isEmpty { args += ["--labels", labels] }
+        task.arguments = args
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        var outputData = Data()
+        let lock = NSLock()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            lock.lock(); outputData.append(chunk); lock.unlock()
+        }
+        do { try task.run() } catch {
+            pipe.fileHandleForReading.readabilityHandler = nil
+            return "config.sh launch error: \(error.localizedDescription)"
+        }
+        let deadline = Date().addingTimeInterval(60)
+        while task.isRunning {
+            if Date() > deadline { task.terminate(); break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        pipe.fileHandleForReading.readabilityHandler = nil
+        let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+        if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+        return String(data: outputData, encoding: .utf8) ?? ""
     }
 }
