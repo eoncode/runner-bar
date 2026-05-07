@@ -68,14 +68,6 @@ struct SettingsView: View {
                     .font(.system(size: 12)).foregroundColor(.secondary)
                     .padding(.horizontal, 12)
             }
-
-            Divider()
-
-            Button(action: onBack) {
-                Text("Back").font(.system(size: 12)).foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 6)
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
     }
