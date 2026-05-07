@@ -11,6 +11,8 @@ struct SettingsView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
 
+    @ObservedObject private var settings = SettingsStore.shared
+
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
 
@@ -92,7 +94,7 @@ struct SettingsView: View {
             }
             Divider()
 
-            // ── Notifications (Phase 4 — out of scope, placeholder)
+            // ── Notifications (Phase 4 — placeholder)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Notifications")
                     .font(.caption).foregroundColor(.secondary)
@@ -116,6 +118,23 @@ struct SettingsView: View {
                 .onChange(of: launchAtLogin) { _, newValue in
                     LoginItem.setEnabled(newValue)
                 }
+                Divider().padding(.leading, 12)
+                Toggle(isOn: $settings.showDimmedRunners) {
+                    Text("Show offline runners").font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                Divider().padding(.leading, 12)
+                HStack {
+                    Text("Polling interval").font(.system(size: 12))
+                    Spacer()
+                    Text("\(settings.pollingInterval)s")
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                        .frame(minWidth: 36, alignment: .trailing)
+                    Stepper("", value: $settings.pollingInterval, in: 10...300)
+                        .labelsHidden()
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
             }
             Divider()
 
@@ -128,7 +147,8 @@ struct SettingsView: View {
                 HStack {
                     Text("Version").font(.system(size: 12))
                     Spacer()
-                    Text("\(appVersion) (\(appBuild))").font(.system(size: 12)).foregroundColor(.secondary)
+                    Text("\(appVersion) (\(appBuild))")
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 2)
 
