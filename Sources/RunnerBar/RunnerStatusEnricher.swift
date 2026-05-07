@@ -13,15 +13,17 @@ import Foundation
 struct RunnerStatusEnricher {
     // MARK: - Shared singleton
 
+    /// The shared `RunnerStatusEnricher` instance used throughout the app.
     static let shared = RunnerStatusEnricher()
     private init() {}
 
     // MARK: - Codable schema
 
+    /// Decodable mirror of one runner entry from the GitHub Actions runners API.
     private struct APIRunner: Decodable {
         let id: Int
         let name: String
-        let status: String      // "online" | "offline"
+        let status: String
         let busy: Bool
     }
 
@@ -34,13 +36,20 @@ struct RunnerStatusEnricher {
     /// Fetches live GitHub status for all runners whose `gitHubUrl` is known
     /// and returns a new array with `githubStatus` and `isBusy` populated.
     /// Runners without a `gitHubUrl` are returned unchanged.
-    ///
-    /// - Parameter runners: The array of `RunnerModel` values from Phase 1 scan.
-    /// - Returns: Enriched copy of the input array.
     func enrich(runners: [RunnerModel]) -> [RunnerModel] {
         guard !runners.isEmpty else { return runners }
 
-        // Group runners by scope string ("owner/repo" or "org").
+        let apiLookup = buildAPILookup(for: runners)
+        return runners.map { applyEnrichment(to: $0, lookup: apiLookup) }
+    }
+
+    // MARK: - Private helpers
+
+    /// Fetches runner status from the GitHub API for each unique scope in `runners`
+    /// and returns a lookup keyed by `agentId` (primary) and `name` (fallback).
+    private func buildAPILookup(
+        for runners: [RunnerModel]
+    ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
         var scopeToRunners: [String: [RunnerModel]] = [:]
         for runner in runners {
             guard let urlStr = runner.gitHubUrl,
@@ -49,17 +58,13 @@ struct RunnerStatusEnricher {
             scopeToRunners[scope, default: []].append(runner)
         }
 
-        // Fetch API data per scope and build a lookup: agentId → APIRunner.
-        var apiByID: [Int: APIRunner] = [:]
-        var apiByName: [String: APIRunner] = [:]
+        var byID:   [Int: APIRunner]    = [:]
+        var byName: [String: APIRunner] = [:]
 
         for scope in scopeToRunners.keys {
-            let endpoint: String
-            if scope.contains("/") {
-                endpoint = "repos/\(scope)/actions/runners?per_page=100"
-            } else {
-                endpoint = "orgs/\(scope)/actions/runners?per_page=100"
-            }
+            let endpoint = scope.contains("/")
+                ? "repos/\(scope)/actions/runners?per_page=100"
+                : "orgs/\(scope)/actions/runners?per_page=100"
             guard let data = ghAPI(endpoint),
                   let page = try? JSONDecoder().decode(APIRunnersPage.self, from: data)
             else {
@@ -67,41 +72,43 @@ struct RunnerStatusEnricher {
                 continue
             }
             for apiRunner in page.runners {
-                apiByID[apiRunner.id] = apiRunner
-                apiByName[apiRunner.name] = apiRunner
+                byID[apiRunner.id] = apiRunner
+                byName[apiRunner.name] = apiRunner
             }
             log("RunnerStatusEnricher › \(page.runners.count) runner(s) from GitHub for \(scope)")
         }
+        return (byID, byName)
+    }
 
-        // Apply enrichment and log divergence.
-        return runners.map { runner in
-            var enriched = runner
-            let apiRunner: APIRunner?
-            if let aid = runner.agentId {
-                apiRunner = apiByID[aid]
-            } else {
-                apiRunner = apiByName[runner.runnerName]
-            }
-            guard let api = apiRunner else { return enriched }
-            enriched.githubStatus = api.status
-            enriched.isBusy = api.busy
-            // Log divergence: local launchctl vs GitHub API disagreement.
-            if runner.isRunning && api.status == "offline" {
-                log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
-                    "launchctl=running but GitHub=offline")
-            } else if !runner.isRunning && api.status == "online" {
-                log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
-                    "launchctl=idle but GitHub=online")
-            }
-            return enriched
+    /// Applies GitHub API status to a single `RunnerModel`, logging divergence.
+    private func applyEnrichment(
+        to runner: RunnerModel,
+        lookup: (byID: [Int: APIRunner], byName: [String: APIRunner])
+    ) -> RunnerModel {
+        var enriched = runner
+        let apiRunner: APIRunner?
+        if let aid = runner.agentId {
+            apiRunner = lookup.byID[aid]
+        } else {
+            apiRunner = lookup.byName[runner.runnerName]
         }
+        guard let api = apiRunner else { return enriched }
+        enriched.githubStatus = api.status
+        enriched.isBusy = api.busy
+        if runner.isRunning && api.status == "offline" {
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
+                "launchctl=running but GitHub=offline")
+        } else if !runner.isRunning && api.status == "online" {
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
+                "launchctl=idle but GitHub=online")
+        }
+        return enriched
     }
 
     // MARK: - Helpers
 
-    /// Converts a `gitHubUrl` (e.g. `https://github.com/owner/repo` or
-    /// `https://github.com/myorg`) into a scope string (`"owner/repo"` or
-    /// `"myorg"`) suitable for the GitHub Actions runners API.
+    /// Converts a `gitHubUrl` into a scope string (`"owner/repo"` or `"org"`)
+    /// suitable for the GitHub Actions runners API.
     private func scopeFrom(gitHubUrl: String) -> String? {
         guard let url = URL(string: gitHubUrl) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }

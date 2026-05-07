@@ -93,8 +93,6 @@ struct RunnerModel: Identifiable, Hashable {
         self.isRunning = isRunning
         self.githubStatus = githubStatus
         self.isBusy = isBusy
-        // Compute id once at init so SwiftUI identity is stable even when
-        // the model is later enriched with an agentId on a subsequent scan.
         if let aid = agentId {
             self.id = String(aid)
         } else {
@@ -108,9 +106,9 @@ struct RunnerModel: Identifiable, Hashable {
     /// Prefers the GitHub-enriched status when available (Phase 4), falling
     /// back to the local launchctl state otherwise.
     var displayStatus: String {
-        if let gh = githubStatus {
+        if let ghStatus = githubStatus {
             if isBusy { return "busy" }
-            return gh  // "online" or "offline"
+            return ghStatus
         }
         return isRunning ? "running" : "idle"
     }
@@ -121,8 +119,8 @@ struct RunnerModel: Identifiable, Hashable {
     /// - `.idle` (grey): installed but not currently active
     /// - `.offline` (red): GitHub reports offline, or runner registered but down
     var statusColor: RunnerStatusColor {
-        if let gh = githubStatus {
-            if gh == "offline" { return .offline }
+        if let ghStatus = githubStatus {
+            if ghStatus == "offline" { return .offline }
             return isBusy ? .busy : .running
         }
         return isRunning ? .running : .idle
@@ -141,5 +139,5 @@ enum RunnerStatusColor {
     case busy
     /// Runner is registered but has been taken offline.
     /// Reserved for Phase 4 API enrichment — not produced by LocalRunnerScanner.
-    case offline // Phase 4
+    case offline
 }

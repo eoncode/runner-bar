@@ -17,6 +17,7 @@ struct AddRunnerSheet: View {
 
     // MARK: Scope state
 
+    /// Scope type selection for the new runner: a specific repository or an organisation.
     enum ScopeType: String, CaseIterable, Identifiable {
         case repo = "Repository"
         case org  = "Organisation"
@@ -50,15 +51,13 @@ struct AddRunnerSheet: View {
             Text("Add runner")
                 .font(.headline)
 
-            // Scope type picker
             Picker("Scope", selection: $scopeType) {
-                ForEach(ScopeType.allCases) { t in
-                    Text(t.rawValue).tag(t)
+                ForEach(ScopeType.allCases) { scopeOption in
+                    Text(scopeOption.rawValue).tag(scopeOption)
                 }
             }
             .pickerStyle(.segmented)
 
-            // Org / Repo selector
             if isLoadingScopes {
                 HStack {
                     ProgressView().scaleEffect(0.7)
@@ -84,21 +83,18 @@ struct AddRunnerSheet: View {
                 }
             }
 
-            // Runner name
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runner name").font(.caption).foregroundColor(.secondary)
                 TextField("e.g. my-mac-runner", text: $runnerName)
                     .textFieldStyle(.roundedBorder)
             }
 
-            // Labels
             VStack(alignment: .leading, spacing: 4) {
                 Text("Labels (comma-separated)").font(.caption).foregroundColor(.secondary)
                 TextField("e.g. self-hosted,macOS,arm64", text: $labelsText)
                     .textFieldStyle(.roundedBorder)
             }
 
-            // Install directory
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runner install directory").font(.caption).foregroundColor(.secondary)
                 TextField("", text: $installDir)
@@ -106,7 +102,6 @@ struct AddRunnerSheet: View {
                     .font(.system(size: 11, design: .monospaced))
             }
 
-            // Error banner
             if let err = errorMessage {
                 Text(err)
                     .font(.caption).foregroundColor(.red)
@@ -115,7 +110,6 @@ struct AddRunnerSheet: View {
                     .cornerRadius(6)
             }
 
-            // Actions
             HStack {
                 Spacer()
                 Button(action: { isPresented = false }, label: { Text("Cancel") })
@@ -169,13 +163,12 @@ struct AddRunnerSheet: View {
         guard canRegister else { return }
         errorMessage = nil
         isRegistering = true
-        let scope    = effectiveScope
-        let name     = runnerName.trimmingCharacters(in: .whitespaces)
-        let labels   = labelsText.trimmingCharacters(in: .whitespaces)
-        let dir      = installDir.trimmingCharacters(in: .whitespaces)
+        let scope  = effectiveScope
+        let name   = runnerName.trimmingCharacters(in: .whitespaces)
+        let labels = labelsText.trimmingCharacters(in: .whitespaces)
+        let dir    = installDir.trimmingCharacters(in: .whitespaces)
 
         DispatchQueue.global(qos: .userInitiated).async {
-            // 1. Fetch registration token
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
                     isRegistering = false
@@ -184,22 +177,11 @@ struct AddRunnerSheet: View {
                 }
                 return
             }
-
-            // 2. Determine GitHub URL from scope
-            let ghURL: String
-            if scope.contains("/") {
-                ghURL = "https://github.com/\(scope)"
-            } else {
-                ghURL = "https://github.com/\(scope)"
-            }
-
-            // 3. Ensure install dir exists
+            let ghURL = "https://github.com/\(scope)"
             try? FileManager.default.createDirectory(
                 atPath: dir,
                 withIntermediateDirectories: true
             )
-
-            // 4. Run config.sh
             let labelArg = labels.isEmpty ? "" : " --labels \"\(labels)\""
             let cmd = "cd \"\(dir)\" && ./config.sh" +
                 " --url \"\(ghURL)\"" +
@@ -210,7 +192,6 @@ struct AddRunnerSheet: View {
             let output = shell(cmd, timeout: 60)
             let failed = output.lowercased().contains("error")
                 || output.lowercased().contains("failed")
-
             DispatchQueue.main.async {
                 isRegistering = false
                 if failed {

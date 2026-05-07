@@ -12,6 +12,7 @@ import Foundation
 struct RunnerLifecycleService {
     // MARK: - Shared singleton
 
+    /// The shared `RunnerLifecycleService` instance used throughout the app.
     static let shared = RunnerLifecycleService()
     private init() {}
 
@@ -21,9 +22,6 @@ struct RunnerLifecycleService {
     /// gitHubUrl. The label format used by the runner agent installer is:
     /// `actions.runner.<owner>.<repo>.<runnerName>` for repo-scoped runners, or
     /// `actions.runner.<org>.<runnerName>` for org-scoped runners.
-    ///
-    /// This is a best-effort derivation — if the exact label isn't known, the
-    /// method falls back to a prefix match via `launchctl list`.
     func serviceLabel(for runner: RunnerModel) -> String? {
         guard let urlStr = runner.gitHubUrl,
               let url = URL(string: urlStr)
@@ -40,18 +38,14 @@ struct RunnerLifecycleService {
 
     /// Looks up the exact launchd label for this runner by scanning
     /// `launchctl list` output for a label that contains the runner name.
-    /// Returns nil if not found.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
         let output = shell("launchctl list 2>/dev/null | grep actions.runner", timeout: 5)
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
             guard cols.count >= 3 else { continue }
             let label = cols[2].trimmingCharacters(in: .whitespaces)
-            if label.contains(runner.runnerName) {
-                return label
-            }
+            if label.contains(runner.runnerName) { return label }
         }
-        // Fall back to derived label
         return serviceLabel(for: runner)
     }
 
@@ -89,21 +83,18 @@ struct RunnerLifecycleService {
 
     /// Uninstalls and de-registers the runner.
     /// Runs `./svc.sh uninstall` then `./config.sh remove` from the runner's
-    /// `installPath`. Both scripts require a GitHub token to be available in
-    /// the environment (via `gh auth` or GH_TOKEN / GITHUB_TOKEN).
-    /// Returns `true` if both scripts exit 0.
+    /// `installPath`. Requires a GitHub token in the environment.
+    /// Returns `true` if both scripts exit without error output.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         guard let path = runner.installPath else {
             log("RunnerLifecycle › remove: no installPath for \(runner.runnerName)")
             return false
         }
-        // Uninstall launchd service first, then de-register via GitHub API.
         let svcResult = shell("cd \"\(path)\" && ./svc.sh uninstall 2>&1", timeout: 30)
         log("RunnerLifecycle › svc.sh uninstall: \(svcResult.prefix(120))")
         let cfgResult = shell("cd \"\(path)\" && ./config.sh remove --unattended 2>&1", timeout: 30)
         log("RunnerLifecycle › config.sh remove: \(cfgResult.prefix(120))")
-        // Both should complete without error text to be considered success.
         let failed = cfgResult.lowercased().contains("error")
             || cfgResult.lowercased().contains("failed")
         return !failed
@@ -112,9 +103,7 @@ struct RunnerLifecycleService {
     // MARK: - Rename
 
     /// Renames the runner by patching the `runnerName` field in the `.runner`
-    /// JSON file at `installPath`. Note: renaming requires de-registration and
-    /// re-registration with GitHub; this method only patches the local JSON.
-    /// A full re-registration flow is a Phase 3+ concern.
+    /// JSON file at `installPath`.
     @discardableResult
     func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
@@ -147,10 +136,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Update config (labels / workFolder)
 
-    /// Writes updated labels and workFolder to the `.runner` JSON at
-    /// `installPath`. Does not call the GitHub API — only patches local JSON.
-    /// For label changes to take effect with GitHub, the runner must be
-    /// re-registered (Phase 3 concern).
+    /// Writes updated labels and workFolder to the `.runner` JSON at `installPath`.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
@@ -166,8 +152,6 @@ struct RunnerLifecycleService {
             return false
         }
         json["workFolder"] = workFolder
-        // GitHub stores labels as array of {id, name, type} objects; for local
-        // storage we write a simpler [String] representation.
         json["customLabels"] = labels
         guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
         else { return false }

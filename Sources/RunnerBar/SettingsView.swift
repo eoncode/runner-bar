@@ -36,9 +36,7 @@ struct SettingsView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
-    /// Becomes `true` after the first scan completes. Used to suppress the
-    /// "No local runners found" empty-state placeholder until at least one scan
-    /// has finished — avoids a misleading flash before the initial scan runs.
+    /// Becomes `true` after the first scan completes.
     @State private var hasLoadedOnce = false
     /// Phase 2: runner pending removal confirmation.
     @State private var runnerPendingRemoval: RunnerModel?
@@ -85,29 +83,24 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
-            // Phase 1: trigger local runner scan immediately on appear (no token needed)
             localRunnerStore.refresh()
         }
-        // Two-parameter form — preferred over single-closure form deprecated in macOS 14+.
         .onChange(of: localRunnerStore.isScanning) { _, scanning in
             if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
             ScopeStore.shared.onMutate = nil
         }
-        // Phase 3: Add Runner sheet
         .sheet(isPresented: $showAddRunnerSheet) {
             AddRunnerSheet(isPresented: $showAddRunnerSheet) {
                 localRunnerStore.refresh()
             }
         }
-        // Phase 2: Config sheet
         .sheet(item: $runnerBeingConfigured) { runner in
             RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
                 localRunnerStore.refresh()
             }
         }
-        // Phase 2: Remove confirmation alert
         .alert(
             "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "\"\")\"",
             isPresented: Binding(
@@ -151,16 +144,12 @@ struct SettingsView: View {
 
     // MARK: Phase 1 + 2 + 4 — Local Runners
 
-    /// Section 1: displays all locally-installed runners discovered by
-    /// `LocalRunnerScanner`, enriched with GitHub API status (Phase 4).
-    /// Each row has lifecycle controls (Phase 2).
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Local runners")
                     .font(.caption).foregroundColor(.secondary)
                 Spacer()
-                // Phase 3: Add Runner button
                 Button(action: { showAddRunnerSheet = true }, label: {
                     Image(systemName: "plus")
                         .font(.caption)
@@ -214,17 +203,20 @@ struct SettingsView: View {
             Text(runner.displayStatus)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).fixedSize()
-            // Phase 2: lifecycle controls
             if runner.isRunning {
-                Button(action: { lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) } },
-                       label: { Text("Stop").font(.caption2) })
-                    .buttonStyle(.bordered)
-                    .help("Stop runner service")
+                Button(
+                    action: { lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) } },
+                    label: { Text("Stop").font(.caption2) }
+                )
+                .buttonStyle(.bordered)
+                .help("Stop runner service")
             } else {
-                Button(action: { lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) } },
-                       label: { Text("Resume").font(.caption2) })
-                    .buttonStyle(.bordered)
-                    .help("Start runner service")
+                Button(
+                    action: { lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) } },
+                    label: { Text("Resume").font(.caption2) }
+                )
+                .buttonStyle(.bordered)
+                .help("Start runner service")
             }
             Button(action: { runnerBeingConfigured = runner }, label: {
                 Image(systemName: "gearshape").font(.caption2)
@@ -240,8 +232,6 @@ struct SettingsView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
 
-    /// Dispatches a lifecycle action to a background thread and refreshes the
-    /// runner list on the main thread when complete.
     private func lifecycleAction(_ action: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             action()
@@ -258,7 +248,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Section 2: API-registered runner scopes (existing)
+    // MARK: - Section 2: API-registered runner scopes
 
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -471,80 +461,3 @@ struct SettingsView: View {
     }
 }
 // swiftlint:enable type_body_length
-
-// MARK: - RunnerConfigSheet
-
-/// Phase 2: Inline sheet for editing a runner's labels and work folder.
-/// Changes are applied immediately via `RunnerLifecycleService`.
-struct RunnerConfigSheet: View {
-    let runner: RunnerModel
-    @Binding var isPresented: RunnerModel?
-    let onSave: () -> Void
-
-    @State private var labelsText: String
-    @State private var workFolderText: String
-    @State private var isSaving = false
-
-    init(runner: RunnerModel, isPresented: Binding<RunnerModel?>, onSave: @escaping () -> Void) {
-        self.runner = runner
-        self._isPresented = isPresented
-        self.onSave = onSave
-        self._labelsText = State(initialValue: runner.labels.joined(separator: ", "))
-        self._workFolderText = State(initialValue: runner.workFolder ?? "")
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Configure \"\(runner.runnerName)\"")
-                .font(.headline)
-                .padding(.bottom, 4)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Labels (comma-separated)").font(.caption).foregroundColor(.secondary)
-                TextField("e.g. self-hosted, macOS, arm64", text: $labelsText)
-                    .textFieldStyle(.roundedBorder)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Work folder").font(.caption).foregroundColor(.secondary)
-                TextField("e.g. _work", text: $workFolderText)
-                    .textFieldStyle(.roundedBorder)
-            }
-            HStack {
-                Spacer()
-                Button(action: { isPresented = nil }, label: { Text("Cancel") })
-                    .keyboardShortcut(.cancelAction)
-                Button(action: saveConfig, label: {
-                    if isSaving {
-                        ProgressView().scaleEffect(0.7)
-                    } else {
-                        Text("Save")
-                    }
-                })
-                .keyboardShortcut(.defaultAction)
-                .disabled(isSaving)
-            }
-        }
-        .padding(20)
-        .frame(width: 360)
-    }
-
-    private func saveConfig() {
-        isSaving = true
-        let labels = labelsText
-            .components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        let folder = workFolderText.trimmingCharacters(in: .whitespaces)
-        DispatchQueue.global(qos: .userInitiated).async {
-            RunnerLifecycleService.shared.updateConfig(
-                runner: runner,
-                labels: labels,
-                workFolder: folder.isEmpty ? "_work" : folder
-            )
-            DispatchQueue.main.async {
-                isSaving = false
-                isPresented = nil
-                onSave()
-            }
-        }
-    }
-}
