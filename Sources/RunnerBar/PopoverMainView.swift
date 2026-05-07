@@ -253,11 +253,14 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Opens Terminal and runs `gh auth login`.
+    /// Opens the GitHub PAT setup docs in the default browser.
+    /// NSAppleScript/Terminal removed — device-flow requires a user_code the app never generates.
+    /// Auth.swift resolves token via: gh auth token → GH_TOKEN → GITHUB_TOKEN (ref #221 #246).
     private func signInWithGitHub() {
-        let script = "tell application \"Terminal\" to do script \"gh auth login\""
-        NSAppleScript(source: script)?.executeAndReturnError(nil)
-        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
+        let urlString = "https://docs.github.com/en/authentication/" +
+            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 // swiftlint:enable type_body_length
