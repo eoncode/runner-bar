@@ -2,7 +2,7 @@ import Foundation
 import ServiceManagement
 import SwiftUI
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 // MARK: - SettingsView
 
 /// Settings view — complete implementation for all phases 1-6.
@@ -528,7 +528,8 @@ struct SettingsView: View {
             // Create a dedicated directory for the runner
             let home = NSHomeDirectory()
             let sanitizedScope = scope.replacingOccurrences(of: "/", with: "-")
-            let installDir = (home as NSString).appendingPathComponent("actions-runner-\(sanitizedScope)-\(nameSnapshot)")
+            let dirName = "actions-runner-\(sanitizedScope)-\(nameSnapshot)"
+            let installDir = (home as NSString).appendingPathComponent(dirName)
 
             // 1. Create directory
             shell("mkdir -p \(shellEscape(installDir))")
@@ -540,7 +541,8 @@ struct SettingsView: View {
 
                 let arch = shell("uname -m") == "arm64" ? "arm64" : "x64"
                 let version = fetchLatestRunnerVersion() ?? "2.316.1"
-                let downloadUrl = "https://github.com/actions/runner/releases/download/v\(version)/actions-runner-osx-\(arch)-\(version).tar.gz"
+                let downloadUrl = "https://github.com/actions/runner/releases/download/" +
+                    "v\(version)/actions-runner-osx-\(arch)-\(version).tar.gz"
                 let tarball = (installDir as NSString).appendingPathComponent("runner.tar.gz")
 
                 shell("curl -L -o \(shellEscape(tarball)) \(downloadUrl)")
@@ -549,7 +551,9 @@ struct SettingsView: View {
 
             // 3. Configure
             let labelsArg = labelsSnapshot.isEmpty ? "" : "--labels \(shellEscape(labelsSnapshot))"
-            let configCmd = "cd \(shellEscape(installDir)) && ./config.sh --url https://github.com/\(scope) --token \(shellEscape(token)) --name \(shellEscape(nameSnapshot)) \(labelsArg) --unattended"
+            let configCmd = "cd \(shellEscape(installDir)) && ./config.sh " +
+                "--url https://github.com/\(scope) --token \(shellEscape(token)) " +
+                "--name \(shellEscape(nameSnapshot)) \(labelsArg) --unattended"
             let configResult = shell(configCmd)
 
             if configResult.contains("failed") || configResult.contains("Error") {
