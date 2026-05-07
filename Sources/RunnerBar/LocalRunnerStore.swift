@@ -36,9 +36,15 @@ final class LocalRunnerStore: ObservableObject {
 
     /// Triggers a fresh scan on a background thread. The published `runners`
     /// array is updated on the main thread when the scan finishes.
+    ///
+    /// Always called from the main thread (.onAppear, button tap), so setting
+    /// `isScanning = true` synchronously here is safe and closes the race window
+    /// where two rapid calls could both pass the guard before the async set fired.
     func refresh() {
         guard !isScanning else { return }
-        DispatchQueue.main.async { self.isScanning = true }
+        // ⚠️ REGRESSION GUARD: must remain synchronous — setting isScanning async
+        // (via DispatchQueue.main.async) re-opens the concurrent-scan race condition.
+        isScanning = true
         queue.async { [weak self] in
             guard let self else { return }
             let result = self.scanner.scan()
