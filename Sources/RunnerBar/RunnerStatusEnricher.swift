@@ -6,8 +6,8 @@ import Foundation
 /// from the GitHub API.
 ///
 /// Uses the `gitHubUrl` already stored in each runner to call only the targeted
-/// API endpoints — no brute-force org/repo iteration. One API call per unique
-/// scope (owner/repo or org) in the runner list.
+/// API endpoints — no brute-force org/repo iteration. One API call (or paginated
+/// series) per unique scope (owner/repo or org) in the runner list.
 ///
 /// All methods are synchronous and blocking — always call from a background thread.
 struct RunnerStatusEnricher {
@@ -45,9 +45,10 @@ struct RunnerStatusEnricher {
 
     // MARK: - Private helpers
 
-    /// Fetches runner status from the GitHub API for each unique scope in `runners`
-    /// and returns a lookup keyed by `agentId` (primary) and `"scope/name"` (fallback).
-    /// The fallback key is scope-qualified to prevent cross-scope name collisions.
+    /// Fetches runner status from the GitHub API for each unique scope in `runners`,
+    /// following Link rel=next pagination so all runners are captured even when a
+    /// scope has more than 100. Returns a lookup keyed by `agentId` (primary) and
+    /// `"scope/name"` (fallback, scope-qualified to prevent cross-scope collisions).
     private func buildAPILookup(
         for runners: [RunnerModel]
     ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
@@ -63,23 +64,35 @@ struct RunnerStatusEnricher {
         var byName: [String: APIRunner] = [:]
 
         for scope in scopeToRunners.keys {
-            // TODO: paginate (Link rel=next) — currently limited to first 100 runners per scope.
-            let endpoint = scope.contains("/")
+            let baseEndpoint = scope.contains("/")
                 ? "repos/\(scope)/actions/runners?per_page=100"
                 : "orgs/\(scope)/actions/runners?per_page=100"
-            guard let data = ghAPI(endpoint),
-                  let page = try? JSONDecoder().decode(APIRunnersPage.self, from: data)
-            else {
+            // Paginate: ghAPIPaginated follows Link rel=next and concatenates
+            // all pages into a single JSON array stream, which gh serialises
+            // as an array-of-arrays. We collect the flat list from all pages.
+            guard let data = ghAPIPaginated(baseEndpoint) else {
                 log("RunnerStatusEnricher › API call failed for scope: \(scope)")
                 continue
             }
-            for apiRunner in page.runners {
+            // gh --paginate wraps each page in an object; we may receive either
+            // a single {"runners":[...]} or a concatenated stream depending on
+            // gh version. Attempt object decode first, fall back to array of objects.
+            let allRunners: [APIRunner]
+            if let page = try? JSONDecoder().decode(APIRunnersPage.self, from: data) {
+                allRunners = page.runners
+            } else if let pages = try? JSONDecoder().decode([APIRunnersPage].self, from: data) {
+                allRunners = pages.flatMap(\.runners)
+            } else {
+                log("RunnerStatusEnricher › decode failed for scope: \(scope)")
+                continue
+            }
+            for apiRunner in allRunners {
                 byID[apiRunner.id] = apiRunner
                 // Key by "scope/name" to prevent silent overwrites when runners
                 // across different scopes share the same name.
                 byName["\(scope)/\(apiRunner.name)"] = apiRunner
             }
-            log("RunnerStatusEnricher › \(page.runners.count) runner(s) from GitHub for \(scope)")
+            log("RunnerStatusEnricher › \(allRunners.count) runner(s) from GitHub for \(scope)")
         }
         return (byID, byName)
     }

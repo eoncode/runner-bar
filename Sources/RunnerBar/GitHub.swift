@@ -51,6 +51,54 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     return outputData.isEmpty ? nil : outputData
 }
 
+/// Calls `gh api --paginate` to follow Link rel=next automatically and
+/// returns the concatenated raw data of all pages, or `nil` on failure.
+///
+/// The `--paginate` flag makes `gh` emit a JSON array stream where each page
+/// is appended without a separator.  For array endpoints (orgs, repos,
+/// runners) the caller decodes the combined stream as a flat JSON array.
+func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
+    // swiftlint:disable:next identifier_name
+    guard let gh = ghBinaryPath() else {
+        log("ghAPIPaginated › gh not found")
+        return nil
+    }
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: gh)
+    task.arguments = ["api", "--paginate", endpoint]
+    task.standardOutput = pipe
+    task.standardError = Pipe()
+    var outputData = Data()
+    let lock = NSLock()
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+        let chunk = handle.availableData
+        guard !chunk.isEmpty else { return }
+        lock.lock(); outputData.append(chunk); lock.unlock()
+    }
+    do { try task.run() } catch {
+        log("ghAPIPaginated › launch error: \(error)")
+        pipe.fileHandleForReading.readabilityHandler = nil
+        return nil
+    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
+    pipe.fileHandleForReading.readabilityHandler = nil
+    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
+       let status = json["status"] as? String,
+       status == "403" || status == "429" {
+        ghIsRateLimited = true
+        log("ghAPIPaginated › rate limit (\(status)): \(endpoint)")
+        return nil
+    }
+    return outputData.isEmpty ? nil : outputData
+}
+
 // MARK: - URL helpers
 
 /// Extracts the "owner/repo" scope from a GitHub Actions job HTML URL.
@@ -158,21 +206,22 @@ private struct RunnersResponse: Codable {
 // MARK: - User orgs and repos (Phase 3)
 
 /// Returns the login names of all organisations the authenticated user belongs to.
-/// Calls `GET /user/orgs`. Returns an empty array on error or if unauthenticated.
-/// TODO: paginate (Link rel=next) — currently limited to first 100 orgs.
+/// Calls `GET /user/orgs` and follows Link rel=next pagination to return all orgs.
+/// Returns an empty array on error or if unauthenticated.
 func fetchUserOrgs() -> [String] {
-    guard let data = ghAPI("/user/orgs?per_page=100") else { return [] }
+    // --paginate makes gh follow Link rel=next and concatenate all pages.
+    guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
     return orgs.map(\.login)
 }
 
 /// Returns `owner/repo` strings for the authenticated user's repositories,
-/// sorted by most recently updated. Calls `GET /user/repos?sort=updated`.
+/// sorted by most recently updated. Calls `GET /user/repos?sort=updated`
+/// and follows Link rel=next pagination to return all repos.
 /// Returns an empty array on error or if unauthenticated.
-/// TODO: paginate (Link rel=next) — currently limited to first 100 repos.
 func fetchUserRepos() -> [String] {
-    guard let data = ghAPI("/user/repos?per_page=100&sort=updated") else { return [] }
+    guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
     struct Repo: Decodable {
         let fullName: String
         enum CodingKeys: String, CodingKey { case fullName = "full_name" }
