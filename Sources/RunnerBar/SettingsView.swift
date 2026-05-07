@@ -117,7 +117,6 @@ struct SettingsView: View {
                     .font(.system(size: 12)).foregroundColor(.secondary)
                     .padding(.horizontal, 12)
             }
-        }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             ScopeStore.shared.onMutate = { [weak store] in
