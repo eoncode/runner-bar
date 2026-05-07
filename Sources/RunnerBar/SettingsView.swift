@@ -3,7 +3,6 @@ import SwiftUI
 
 // MARK: - SettingsView
 
-// swiftlint:disable type_body_length
 /// Phase 6 — Settings view: General, Scopes, Notifications, App, Account, Legal.
 /// All phases of issue #221 are now implemented.
 struct SettingsView: View {
@@ -194,7 +193,6 @@ struct SettingsView: View {
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
     }
 }
-// swiftlint:enable type_body_length
 
 // MARK: - Layout helpers
 
