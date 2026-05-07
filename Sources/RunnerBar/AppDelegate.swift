@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+// swiftlint:disable type_body_length
 // MARK: - NavState
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59)
@@ -25,6 +26,8 @@ private enum NavState {
     case actionJobDetail(ActiveJob, ActionGroup)
     /// Actions path level 4a: log output for a step reached via an action group.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
+    /// Settings view.
+    case settings
 }
 
 // MARK: - AppDelegate
@@ -119,6 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                 self.navigate(to: self.actionDetailView(group: latest))
+            },
+            onSelectSettings: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.settingsView())
             }
         ))
     }
@@ -190,6 +197,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
+    /// Settings view.
+    private func settingsView() -> AnyView {
+        savedNavState = .settings
+        return AnyView(SettingsView(
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            }
+        ))
+    }
+
     /// Navigation level 3: log output for a step (Jobs path).
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
@@ -227,6 +245,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
             let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
             return logViewFromAction(job: liveJob, step: step, group: liveGroup)
+        case .settings:
+            return settingsView()
         }
     }
 
@@ -273,3 +293,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 }
+// swiftlint:enable type_body_length

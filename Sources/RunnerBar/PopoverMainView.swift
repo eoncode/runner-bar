@@ -24,6 +24,8 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     /// Called when the user taps an action group row to drill into action detail.
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when the user taps the settings button.
+    let onSelectSettings: () -> Void
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -37,6 +39,14 @@ struct PopoverMainView: View {
                 Text("RunnerBar v0.34") // ⚠️ bump on every commit
                     .font(.headline).foregroundColor(.secondary)
                 Spacer()
+                Button(action: onSelectSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
+                .padding(.trailing, 4)
                 if isAuthenticated {
                     HStack(spacing: 4) {
                         Circle().fill(Color.green).frame(width: 8, height: 8)
