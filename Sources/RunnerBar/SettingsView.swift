@@ -27,6 +27,10 @@ struct SettingsView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    /// Becomes `true` after the first scan completes. Used to suppress the
+    /// "No local runners found" empty-state placeholder until at least one scan
+    /// has finished — avoids a misleading flash before the initial scan runs.
+    @State private var hasLoadedOnce = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -68,6 +72,11 @@ struct SettingsView: View {
             }
             // Phase 1: trigger local runner scan immediately on appear (no token needed)
             localRunnerStore.refresh()
+        }
+        .onChange(of: localRunnerStore.isScanning) { scanning in
+            // Mark that at least one scan has completed so the empty-state
+            // placeholder is only shown after real data (not before first scan).
+            if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
             // Clear the closure to avoid stale-capture reload after view is gone
@@ -123,7 +132,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
 
-            if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning {
+            if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
                 Text("No local runners found")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)

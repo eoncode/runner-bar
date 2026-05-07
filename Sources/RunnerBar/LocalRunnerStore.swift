@@ -21,7 +21,13 @@ final class LocalRunnerStore: ObservableObject {
     @Published private(set) var runners: [RunnerModel] = []
 
     /// `true` while a background scan is in progress.
-    @Published private(set) var isScanning: Bool = true
+    ///
+    /// Defaults to `false` so that the `guard !isScanning` check in `refresh()`
+    /// does not block the very first scan triggered from `.onAppear`.
+    /// (A previous iteration defaulted this to `true` to suppress an empty-state
+    /// flash in `SettingsView`, but that caused the initial scan to never fire.
+    /// The empty-state flash is now handled in the view via `hasLoadedOnce`.)
+    @Published private(set) var isScanning: Bool = false
 
     // MARK: Private
 
