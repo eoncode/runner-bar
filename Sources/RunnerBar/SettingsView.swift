@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import ServiceManagement
 import SwiftUI
 
@@ -242,8 +243,8 @@ struct SettingsView: View {
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
         case .running: return .green
-        case .busy:    return .yellow
-        case .idle:    return .gray
+        case .busy: return .yellow
+        case .idle: return .gray
         case .offline: return .red
         }
     }
@@ -461,3 +462,4 @@ struct SettingsView: View {
     }
 }
 // swiftlint:enable type_body_length
+// swiftlint:enable file_length

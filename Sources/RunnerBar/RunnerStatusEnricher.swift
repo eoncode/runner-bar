@@ -58,7 +58,7 @@ struct RunnerStatusEnricher {
             scopeToRunners[scope, default: []].append(runner)
         }
 
-        var byID:   [Int: APIRunner]    = [:]
+        var byID: [Int: APIRunner] = [:]
         var byName: [String: APIRunner] = [:]
 
         for scope in scopeToRunners.keys {
@@ -113,8 +113,8 @@ struct RunnerStatusEnricher {
         guard let url = URL(string: gitHubUrl) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
         switch parts.count {
-        case 2:  return "\(parts[0])/\(parts[1])"
-        case 1:  return parts[0]
+        case 2: return "\(parts[0])/\(parts[1])"
+        case 1: return parts[0]
         default: return nil
         }
     }

@@ -20,22 +20,22 @@ struct AddRunnerSheet: View {
     /// Scope type selection for the new runner: a specific repository or an organisation.
     enum ScopeType: String, CaseIterable, Identifiable {
         case repo = "Repository"
-        case org  = "Organisation"
+        case org = "Organisation"
         var id: String { rawValue }
     }
 
     @State private var scopeType: ScopeType = .repo
     @State private var selectedRepo = ""
-    @State private var selectedOrg  = ""
+    @State private var selectedOrg = ""
     @State private var repos: [String] = []
-    @State private var orgs:  [String] = []
+    @State private var orgs: [String] = []
     @State private var isLoadingScopes = false
 
     // MARK: Runner config state
 
-    @State private var runnerName  = ""
-    @State private var labelsText  = "self-hosted,macOS"
-    @State private var installDir  = (FileManager.default
+    @State private var runnerName = ""
+    @State private var labelsText = "self-hosted,macOS"
+    @State private var installDir = (FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent("actions-runner").path)
 
@@ -148,10 +148,10 @@ struct AddRunnerSheet: View {
         isLoadingScopes = true
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchedRepos = fetchUserRepos()
-            let fetchedOrgs  = fetchUserOrgs()
+            let fetchedOrgs = fetchUserOrgs()
             DispatchQueue.main.async {
                 repos = fetchedRepos
-                orgs  = fetchedOrgs
+                orgs = fetchedOrgs
                 if let first = fetchedRepos.first { selectedRepo = first }
                 if let firstOrg = fetchedOrgs.first { selectedOrg = firstOrg }
                 isLoadingScopes = false
@@ -163,10 +163,10 @@ struct AddRunnerSheet: View {
         guard canRegister else { return }
         errorMessage = nil
         isRegistering = true
-        let scope  = effectiveScope
-        let name   = runnerName.trimmingCharacters(in: .whitespaces)
+        let scope = effectiveScope
+        let name = runnerName.trimmingCharacters(in: .whitespaces)
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
-        let dir    = installDir.trimmingCharacters(in: .whitespaces)
+        let dir = installDir.trimmingCharacters(in: .whitespaces)
 
         DispatchQueue.global(qos: .userInitiated).async {
             guard let token = fetchRegistrationToken(scope: scope) else {
