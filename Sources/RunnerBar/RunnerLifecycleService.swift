@@ -37,22 +37,28 @@ struct RunnerLifecycleService {
     }
 
     /// Looks up the exact launchd label for this runner by scanning
-    /// `launchctl list` output for a label that contains the runner name.
+    /// `launchctl list` output for a label whose last dot-separated component
+    /// equals the runner name exactly.
+    ///
+    /// Uses `hasSuffix("." + runnerName)` rather than `contains(runnerName)`
+    /// to prevent a runner named "ci-runner" from matching
+    /// "actions.runner.org.repo.ci-runner-backup" or similar.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
         let output = shell("launchctl list 2>/dev/null | grep actions.runner", timeout: 5)
+        let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
             guard cols.count >= 3 else { continue }
             let label = cols[2].trimmingCharacters(in: .whitespaces)
-            if label.contains(runner.runnerName) { return label }
+            if label.hasSuffix(exactSuffix) { return label }
         }
         return serviceLabel(for: runner)
     }
 
     // MARK: - Start
 
-    /// Starts the runner's launchd service.
-    /// Returns `true` on success (exit 0), `false` otherwise.
+    /// Starts the runner’s launchd service.
+    /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -66,8 +72,8 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Stops the runner's launchd service.
-    /// Returns `true` on success, `false` otherwise.
+    /// Stops the runner’s launchd service.
+    /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -84,7 +90,7 @@ struct RunnerLifecycleService {
     /// Uninstalls and de-registers the runner.
     ///
     /// Runs `./svc.sh uninstall` then `./config.sh remove --unattended` from the
-    /// runner's `installPath` using `Process.arguments` so the path is never
+    /// runner’s `installPath` using `Process.arguments` so the path is never
     /// interpolated into a shell string.
     ///
     /// ⚠️ Blocking — must only be called from a background thread.
