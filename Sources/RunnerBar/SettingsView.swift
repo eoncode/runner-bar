@@ -8,6 +8,10 @@ import SwiftUI
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
+///
+/// Phase 1 (issue #251): Local Runners section auto-populates at launch via
+/// `LocalRunnerStore`, which calls `LocalRunnerScanner` on a background thread.
+/// No GitHub token is required for this section.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -17,6 +21,8 @@ struct SettingsView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
     @ObservedObject private var legal = LegalPrefsStore.shared
+    /// Drives the Local Runners section (Phase 1 — no token required).
+    @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -36,6 +42,8 @@ struct SettingsView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    localRunnersSection
+                    Divider()
                     runnerSection
                     Divider()
                     notificationsSection
@@ -58,6 +66,8 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
+            // Phase 1: trigger local runner scan immediately on appear (no token needed)
+            localRunnerStore.refresh()
         }
         .onDisappear {
             // Clear the closure to avoid stale-capture reload after view is gone
@@ -83,6 +93,78 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
     }
+
+    // MARK: Phase 1 — Local Runners (no GitHub token required)
+
+    /// Section 1: displays all locally-installed runners discovered by
+    /// `LocalRunnerScanner`. Renders instantly at launch without any API call.
+    /// Status dots reflect whether the runner process is live on this machine.
+    private var localRunnersSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Local runners")
+                    .font(.caption).foregroundColor(.secondary)
+                Spacer()
+                if localRunnerStore.isScanning {
+                    // Lightweight spinner shown during background scan
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Button(action: { localRunnerStore.refresh() }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh local runner list")
+                }
+            }
+            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+
+            if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning {
+                Text("No local runners found")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+            } else {
+                ForEach(localRunnerStore.runners) { runner in
+                    localRunnerRow(runner)
+                }
+            }
+        }
+    }
+
+    private func localRunnerRow(_ runner: RunnerModel) -> some View {
+        HStack(spacing: 8) {
+            // Status dot: green = running, grey = idle
+            Circle()
+                .fill(localRunnerDotColor(for: runner))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(runner.runnerName)
+                    .font(.system(size: 13)).lineLimit(1)
+                if let url = runner.gitHubUrl {
+                    Text(url)
+                        .font(.caption2).foregroundColor(.secondary).lineLimit(1)
+                }
+            }
+            Spacer()
+            Text(runner.displayStatus)
+                .font(.caption).foregroundColor(.secondary)
+                .lineLimit(1).fixedSize()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 5)
+    }
+
+    private func localRunnerDotColor(for runner: RunnerModel) -> Color {
+        switch runner.statusColor {
+        case .running: return .green
+        case .idle:    return .gray
+        case .offline: return .red
+        }
+    }
+
+    // MARK: - Section 2: API-registered runner scopes (existing)
 
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
