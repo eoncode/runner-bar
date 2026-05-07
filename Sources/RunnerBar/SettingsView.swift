@@ -66,7 +66,6 @@ struct SettingsView: View {
                         Spacer()
                         Button(action: {
                             ScopeStore.shared.remove(scopeStr)
-                            store.reload()
                         }, label: {
                             Image(systemName: "minus.circle").foregroundColor(.red)
                         }).buttonStyle(.plain)
@@ -120,6 +119,11 @@ struct SettingsView: View {
             }
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        .onAppear {
+            ScopeStore.shared.onMutate = { [weak store] in
+                store?.reload()
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -130,6 +134,7 @@ struct SettingsView: View {
         guard !trimmed.isEmpty else { return }
         ScopeStore.shared.add(trimmed)
         RunnerStore.shared.start()
+        // onMutate callback triggers store.reload()
         newScope = ""
     }
 
