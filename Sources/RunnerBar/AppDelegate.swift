@@ -136,7 +136,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
 /// View factory methods extracted into an extension to keep AppDelegate body under 200 lines.
 extension AppDelegate {
-
     /// Re-fetches step data for `job` if steps are missing or stale.
     func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
