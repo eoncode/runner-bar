@@ -56,7 +56,7 @@ struct SettingsView: View {
 
     /// Alert title for the runner-removal confirmation dialog.
     private var removalAlertTitle: String {
-        let name = runnerPendingRemoval?.runnerName ?? ""
+        let name = runnerPendingRemoval?.runnerName ?? "this runner"
         return "Remove runner \"\(name)\""
     }
 
