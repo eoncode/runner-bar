@@ -66,13 +66,13 @@ struct AddRunnerSheet: View {
             if isLoadingScopes {
                 HStack {
                     ProgressView().scaleEffect(0.7)
-                    Text("Loading\u{2026}").font(.caption).foregroundColor(.secondary)
+                    Text("Loading…").font(.caption).foregroundColor(.secondary)
                 }
             } else if scopeType == .repo {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Repository").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedRepo) {
-                        Text("\u2014 select \u2014").tag("")
+                        Text("— select —").tag("")
                         ForEach(repos, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -81,7 +81,7 @@ struct AddRunnerSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Organisation").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedOrg) {
-                        Text("\u2014 select \u2014").tag("")
+                        Text("— select —").tag("")
                         ForEach(orgs, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -123,7 +123,7 @@ struct AddRunnerSheet: View {
                     if isRegistering {
                         HStack(spacing: 6) {
                             ProgressView().scaleEffect(0.7)
-                            Text("Registering\u{2026}")
+                            Text("Registering…")
                         }
                     } else {
                         Text("Add Runner")
@@ -186,34 +186,34 @@ struct AddRunnerSheet: View {
                 withIntermediateDirectories: true
             )
             let ghURL = "https://github.com/\(scope)"
-            let output = runRegistrationCommand(dir: dir, ghURL: ghURL,
-                                                token: token, name: name, labels: labels)
-            let failed = output.lowercased().contains("error")
-                || output.lowercased().contains("failed")
+            let exitCode = runRegistrationCommand(dir: dir, ghURL: ghURL,
+                                                  token: token, name: name, labels: labels)
             DispatchQueue.main.async {
                 isRegistering = false
-                if failed {
-                    errorMessage = "config.sh failed: \(output.prefix(200))"
-                } else {
+                if exitCode == 0 {
                     isPresented = false
                     onComplete()
+                } else {
+                    errorMessage = "config.sh failed (exit \(exitCode)). " +
+                        "Check that the token is valid and config.sh is executable."
                 }
             }
         }
     }
 
     /// Runs `config.sh` via `Process.arguments` so token/name/url are never
-    /// shell-interpolated. Arguments are passed as discrete array entries,
-    /// matching the pattern used in `fetchRegistrationToken`.
+    /// shell-interpolated. Arguments are passed as discrete array entries.
     ///
     /// ⚠️ Blocking — must only be called from a background thread.
+    ///
+    /// Returns the process exit code (0 = success).
     private func runRegistrationCommand(
         dir: String,
         ghURL: String,
         token: String,
         name: String,
         labels: String
-    ) -> String {
+    ) -> Int32 {
         let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
         let task = Process()
         task.executableURL = configURL
@@ -233,16 +233,18 @@ struct AddRunnerSheet: View {
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            return "config.sh launch error: \(error.localizedDescription)"
+            log("runRegistrationCommand › launch error: \(error)")
+            return 1
         }
-        let deadline = Date().addingTimeInterval(60)
-        while task.isRunning {
-            if Date() > deadline { task.terminate(); break }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
+        let timeoutItem = DispatchWorkItem { task.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
         pipe.fileHandleForReading.readabilityHandler = nil
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
         if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-        return String(data: outputData, encoding: .utf8) ?? ""
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        log("runRegistrationCommand › exit=\(task.terminationStatus): \(output.prefix(120))")
+        return task.terminationStatus
     }
 }

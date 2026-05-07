@@ -33,11 +33,10 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
-    let deadline = Date().addingTimeInterval(timeout)
-    while task.isRunning {
-        if Date() > deadline { task.terminate(); break }
-        Thread.sleep(forTimeInterval: 0.05)
-    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
@@ -160,6 +159,7 @@ private struct RunnersResponse: Codable {
 
 /// Returns the login names of all organisations the authenticated user belongs to.
 /// Calls `GET /user/orgs`. Returns an empty array on error or if unauthenticated.
+/// TODO: paginate (Link rel=next) — currently limited to first 100 orgs.
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPI("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
@@ -170,6 +170,7 @@ func fetchUserOrgs() -> [String] {
 /// Returns `owner/repo` strings for the authenticated user's repositories,
 /// sorted by most recently updated. Calls `GET /user/repos?sort=updated`.
 /// Returns an empty array on error or if unauthenticated.
+/// TODO: paginate (Link rel=next) — currently limited to first 100 repos.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPI("/user/repos?per_page=100&sort=updated") else { return [] }
     struct Repo: Decodable {
@@ -200,7 +201,6 @@ func fetchRegistrationToken(scope: String) -> String? {
         log("fetchRegistrationToken › gh not found")
         return nil
     }
-    // Must use POST — ghAPI() only does GET. Use ghPost-style Process.
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -221,11 +221,10 @@ func fetchRegistrationToken(scope: String) -> String? {
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
-    let deadline = Date().addingTimeInterval(30)
-    while task.isRunning {
-        if Date() > deadline { task.terminate(); break }
-        Thread.sleep(forTimeInterval: 0.05)
-    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
