@@ -238,12 +238,9 @@ struct SettingsView: View {
             Text("General")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 12))
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
+            // Extracted into its own var so .onChange(perform:) is isolated
+            // from the toggle label closure — avoids multiple_closures_with_trailing_closure.
+            launchAtLoginToggle
             Divider().padding(.leading, 12)
             Toggle(isOn: $settings.showDimmedRunners) {
                 Text("Show offline runners").font(.system(size: 12))
@@ -262,6 +259,19 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
+    }
+
+    /// Isolated sub-view for the launch-at-login toggle.
+    ///
+    /// Keeping `.onChange(of:perform:)` in its own `@ViewBuilder` var ensures
+    /// that SwiftLint never sees a second closure on the same call-chain,
+    /// preventing the `multiple_closures_with_trailing_closure` violation.
+    @ViewBuilder private var launchAtLoginToggle: some View {
+        let toggle = Toggle(isOn: $launchAtLogin, label: { Text("Launch at login").font(.system(size: 12)) })
+        toggle
+            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
     }
 
     private var accountSection: some View {
@@ -339,7 +349,8 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
-    /// Called by `.onChange(of: launchAtLogin, perform:)` — extracted to avoid
+    /// Applies the launch-at-login preference change.
+    /// Passed as a function reference to `.onChange(of:perform:)` to avoid
     /// the `multiple_closures_with_trailing_closure` SwiftLint violation.
     private func applyLaunchAtLogin(_ enabled: Bool) {
         LoginItem.setEnabled(enabled)
