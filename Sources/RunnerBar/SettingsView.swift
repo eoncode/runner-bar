@@ -92,7 +92,9 @@ struct SettingsView: View {
             }
             localRunnerStore.refresh()
         }
-        .onChange(of: localRunnerStore.isScanning) { _, scanning in
+        // Single-parameter form: compatible with macOS 13+.
+        // The two-parameter { _, newValue in } form requires macOS 14+.
+        .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
@@ -115,6 +117,13 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
+                // Gate on token: de-registration requires GitHub auth.
+                // Without a token svc.sh uninstall succeeds but config.sh remove
+                // fails, leaving a ghost registration on the GitHub side.
+                guard isAuthenticated else {
+                    runnerPendingRemoval = nil
+                    return
+                }
                 runnerPendingRemoval = nil
                 DispatchQueue.global(qos: .userInitiated).async {
                     RunnerLifecycleService.shared.remove(runner: runner)
@@ -122,8 +131,13 @@ struct SettingsView: View {
                 }
             }
         } message: {
-            Text("This will run ./svc.sh uninstall and ./config.sh remove. " +
-                 "A GitHub token is required for de-registration.")
+            if isAuthenticated {
+                Text("This will run ./svc.sh uninstall and ./config.sh remove. " +
+                     "A GitHub token is required for de-registration.")
+            } else {
+                Text("A GitHub token is required to de-register the runner from GitHub. " +
+                     "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
+            }
         }
     }
 
