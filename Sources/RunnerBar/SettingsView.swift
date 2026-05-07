@@ -8,6 +8,10 @@ import SwiftUI
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
+    /// Called after a scope is added or removed so the caller can trigger an immediate reload.
+    /// Without this, newly added scopes would not appear until the next scheduled poll (regression
+    /// vs the previous PopoverMainView behaviour — ref #221 self-review).
+    let onScopeChanged: () -> Void
 
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
@@ -83,7 +87,11 @@ struct SettingsView: View {
                     Text(scope).font(.system(size: 12))
                     Spacer()
                     Button(
-                        action: { ScopeStore.shared.remove(scope); RunnerStore.shared.start() },
+                        action: {
+                            ScopeStore.shared.remove(scope)
+                            RunnerStore.shared.start()
+                            onScopeChanged()
+                        },
                         label: { Image(systemName: "minus.circle").foregroundColor(.red) }
                     ).buttonStyle(.plain)
                 }
@@ -183,6 +191,9 @@ struct SettingsView: View {
         guard !trimmed.isEmpty else { return }
         ScopeStore.shared.add(trimmed)
         RunnerStore.shared.start()
+        // Notify caller (AppDelegate) to reload observable immediately so the new scope
+        // appears in the popover without waiting for the next scheduled poll (ref #221 self-review).
+        onScopeChanged()
         newScope = ""
     }
 

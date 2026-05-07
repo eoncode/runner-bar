@@ -183,6 +183,11 @@ extension AppDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())
+            },
+            // Reload observable immediately when a scope is added/removed so the change
+            // is visible without waiting for the next scheduled poll (ref #221 self-review).
+            onScopeChanged: { [weak self] in
+                self?.observable.reload()
             }
         ))
     }
