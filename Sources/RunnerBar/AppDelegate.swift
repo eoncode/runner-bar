@@ -88,173 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    // MARK: - View factories
-
-    /// Re-fetches step data for `job` if steps are missing or stale.
-    private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
-        guard job.steps.isEmpty
-                || job.steps.contains(where: { $0.status == "in_progress" }),
-              let scope = scopeFromHtmlUrl(job.htmlUrl),
-              let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
-        else { return job }
-        let iso = ISO8601DateFormatter()
-        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
-    }
-
-    /// Navigation level 1: runner status + jobs + actions.
-    private func mainView() -> AnyView {
-        savedNavState = nil
-        return AnyView(PopoverMainView(
-            store: observable,
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.popoverIsOpen else { return }
-                        self.navigate(to: self.detailView(job: enriched))
-                    }
-                }
-            },
-            onSelectAction: { [weak self] group in
-                guard let self else { return }
-                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
-            },
-            // Phase 0 (ref #221): gear button opens Settings view.
-            onOpenSettings: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
-        ))
-    }
-
-    /// Navigation: Settings view (Phase 0, ref #221).
-    private func settingsView() -> AnyView {
-        savedNavState = .settings
-        return AnyView(SettingsView(
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            }
-        ))
-    }
-
-    /// Navigation level 2a: flat job list for a commit/PR group.
-    private func actionDetailView(group: ActionGroup) -> AnyView {
-        savedNavState = .actionDetail(group)
-        return AnyView(ActionDetailView(
-            group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.popoverIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
-                    }
-                }
-            }
-        ))
-    }
-
-    /// Navigation level 3a: JobDetailView reached via an ActionGroup.
-    private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
-        savedNavState = .actionJobDetail(job, group)
-        return AnyView(JobDetailView(
-            job: job,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
-            },
-            onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
-            }
-        ))
-    }
-
-    /// Navigation level 4a: StepLogView reached via an ActionGroup.
-    private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
-        savedNavState = .actionStepLog(job, step, group)
-        return AnyView(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            }
-        ))
-    }
-
-    /// Navigation level 2: step list for a job (Jobs path).
-    private func detailView(job: ActiveJob) -> AnyView {
-        savedNavState = .jobDetail(job)
-        return AnyView(JobDetailView(
-            job: job,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
-            }
-        ))
-    }
-
-    /// Navigation level 3: log output for a step (Jobs path).
-    private func logView(job: ActiveJob, step: JobStep) -> AnyView {
-        savedNavState = .stepLog(job, step)
-        return AnyView(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
-            }
-        ))
-    }
-
-    /// Returns a refreshed view for `state` using live RunnerStore data, or `nil` if stale.
-    private func validatedView(for state: NavState) -> AnyView? {
-        savedNavState = nil
-        let store = RunnerStore.shared
-        switch state {
-        case .main:
-            return nil
-        case .settings:
-            // Settings view is stateless — always safe to restore.
-            return settingsView()
-        case .jobDetail(let job):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailView(job: live)
-        case .stepLog(let job, let step):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return logView(job: live, step: step)
-        case .actionDetail(let group):
-            guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            return actionDetailView(group: live)
-        case .actionJobDetail(let job, let group):
-            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailViewFromAction(job: liveJob, group: liveGroup)
-        case .actionStepLog(let job, let step, let group):
-            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
-        }
-    }
-
     // MARK: - Navigation
 
     /// Swaps the hosting controller's root view. ZERO size changes. Forever.
-    private func navigate(to view: AnyView) {
+    func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
 
@@ -291,6 +128,173 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
             navigate(to: restored)
+        }
+    }
+}
+
+// MARK: - AppDelegate + View Factories
+
+/// View factory methods extracted into an extension to keep AppDelegate body under 200 lines.
+extension AppDelegate {
+
+    /// Re-fetches step data for `job` if steps are missing or stale.
+    func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
+        guard job.steps.isEmpty
+                || job.steps.contains(where: { $0.status == "in_progress" }),
+              let scope = scopeFromHtmlUrl(job.htmlUrl),
+              let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
+        else { return job }
+        let iso = ISO8601DateFormatter()
+        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
+    }
+
+    /// Navigation level 1: runner status + jobs + actions.
+    func mainView() -> AnyView {
+        savedNavState = nil
+        return AnyView(PopoverMainView(
+            store: observable,
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailView(job: enriched))
+                    }
+                }
+            },
+            onSelectAction: { [weak self] group in
+                guard let self else { return }
+                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                self.navigate(to: self.actionDetailView(group: latest))
+            },
+            // Phase 0 (ref #221): gear button opens Settings view.
+            onOpenSettings: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.settingsView())
+            }
+        ))
+    }
+
+    /// Navigation: Settings view (Phase 0, ref #221).
+    func settingsView() -> AnyView {
+        savedNavState = .settings
+        return AnyView(SettingsView(
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            }
+        ))
+    }
+
+    /// Navigation level 2a: flat job list for a commit/PR group.
+    func actionDetailView(group: ActionGroup) -> AnyView {
+        savedNavState = .actionDetail(group)
+        return AnyView(ActionDetailView(
+            group: group,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            },
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+                    }
+                }
+            }
+        ))
+    }
+
+    /// Navigation level 3a: JobDetailView reached via an ActionGroup.
+    func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
+        savedNavState = .actionJobDetail(job, group)
+        return AnyView(JobDetailView(
+            job: job,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.actionDetailView(group: group))
+            },
+            onSelectStep: { [weak self] step in
+                guard let self else { return }
+                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+            }
+        ))
+    }
+
+    /// Navigation level 4a: StepLogView reached via an ActionGroup.
+    func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
+        savedNavState = .actionStepLog(job, step, group)
+        return AnyView(StepLogView(
+            job: job,
+            step: step,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+            }
+        ))
+    }
+
+    /// Navigation level 2: step list for a job (Jobs path).
+    func detailView(job: ActiveJob) -> AnyView {
+        savedNavState = .jobDetail(job)
+        return AnyView(JobDetailView(
+            job: job,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            },
+            onSelectStep: { [weak self] step in
+                guard let self else { return }
+                self.navigate(to: self.logView(job: job, step: step))
+            }
+        ))
+    }
+
+    /// Navigation level 3: log output for a step (Jobs path).
+    func logView(job: ActiveJob, step: JobStep) -> AnyView {
+        savedNavState = .stepLog(job, step)
+        return AnyView(StepLogView(
+            job: job,
+            step: step,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.detailView(job: job))
+            }
+        ))
+    }
+
+    /// Returns a refreshed view for `state` using live RunnerStore data, or `nil` if stale.
+    func validatedView(for state: NavState) -> AnyView? {
+        savedNavState = nil
+        let store = RunnerStore.shared
+        switch state {
+        case .main:
+            return nil
+        case .settings:
+            // Settings view is stateless — always safe to restore.
+            return settingsView()
+        case .jobDetail(let job):
+            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
+            return detailView(job: live)
+        case .stepLog(let job, let step):
+            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
+            return logView(job: live, step: step)
+        case .actionDetail(let group):
+            guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
+            return actionDetailView(group: live)
+        case .actionJobDetail(let job, let group):
+            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
+            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
+            return detailViewFromAction(job: liveJob, group: liveGroup)
+        case .actionStepLog(let job, let step, let group):
+            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
+            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
+            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
         }
     }
 }
