@@ -77,9 +77,11 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
+    // Explicit label: on all Button(action:label:) calls throughout this file—
+    // prevents multiple_closures_with_trailing_closure SwiftLint violations.
     private var headerBar: some View {
         HStack {
-            Button(action: onBack) {
+            Button(action: onBack, label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .medium))
@@ -87,7 +89,7 @@ struct SettingsView: View {
                         .font(.headline)
                 }
                 .foregroundColor(.primary)
-            }
+            })
             .buttonStyle(.plain)
             Spacer()
         }
@@ -110,11 +112,11 @@ struct SettingsView: View {
                         .scaleEffect(0.6)
                         .frame(width: 14, height: 14)
                 } else {
-                    Button(action: { localRunnerStore.refresh() }) {
+                    Button(action: { localRunnerStore.refresh() }, label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                    }
+                    })
                     .buttonStyle(.plain)
                     .help("Refresh local runner list")
                 }
@@ -204,8 +206,6 @@ struct SettingsView: View {
                 TextField("owner/repo or org", text: $newScope)
                     .textFieldStyle(.roundedBorder).font(.system(size: 12))
                     .onSubmit { submitScope() }
-                // Explicit label: arg — avoids multiple_closures_with_trailing_closure
-                // (action: is closure-typed, so trailing { } would be a second closure).
                 Button(action: submitScope, label: {
                     Image(systemName: "plus.circle")
                 })
@@ -281,9 +281,9 @@ struct SettingsView: View {
                         Text("Authenticated").font(.caption).foregroundColor(.secondary)
                     }
                 } else {
-                    Button(action: signInWithGitHub) {
+                    Button(action: signInWithGitHub, label: {
                         Text("Sign in").font(.caption).foregroundColor(.orange)
-                    }.buttonStyle(.plain)
+                    }).buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
