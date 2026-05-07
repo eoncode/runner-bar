@@ -224,6 +224,8 @@ struct SettingsView: View {
                     .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 2)
             }
         }
+        // ⚠️ REGRESSION GUARD — do not remove or change idealWidth: 420.
+        // Matches PopoverMainView frame contract. Removing this breaks popover sizing (ref #52 #54 #57).
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
