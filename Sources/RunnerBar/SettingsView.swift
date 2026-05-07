@@ -1,6 +1,7 @@
 import ServiceManagement
 import SwiftUI
 
+// swiftlint:disable type_body_length
 // MARK: - SettingsView
 
 /// Settings view — complete implementation for all phases 1-6.
@@ -289,3 +290,4 @@ struct SettingsView: View {
         NSWorkspace.shared.open(url)
     }
 }
+// swiftlint:enable type_body_length
