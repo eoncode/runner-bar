@@ -135,7 +135,8 @@ struct SettingsView: View {
                 HStack {
                     Text("RunnerBar").font(.system(size: 12))
                     Spacer()
-                    Text("dev.eonist.runnerbar").font(.system(size: 12)).foregroundColor(.secondary)
+                    Text(Bundle.main.bundleIdentifier ?? "dev.eonist.runnerbar")
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 2)
 
@@ -143,6 +144,7 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 2)
             }
+        }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             ScopeStore.shared.onMutate = { [weak store] in
