@@ -3,7 +3,6 @@ import SwiftUI
 
 // MARK: - SettingsView
 
-// swiftlint:disable type_body_length
 /// Phase 2 — Settings view with runner management duplicated from PopoverMainView.
 /// ⚠️ Phase 3 will remove these controls from PopoverMainView AFTER Phase 2 is verified.
 /// ❌ Do NOT remove from PopoverMainView until Phase 3 is explicitly approved (ref #221).
@@ -34,7 +33,6 @@ struct SettingsView: View {
                     .font(.headline)
                     .foregroundColor(.primary)
                 Spacer()
-                // Balance the back button width so the title is centred.
                 Color.clear.frame(width: 44, height: 1)
             }
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
@@ -61,12 +59,15 @@ struct SettingsView: View {
                             HStack {
                                 Text(scope).font(.system(size: 12))
                                 Spacer()
-                                Button(action: {
-                                    ScopeStore.shared.remove(scope)
-                                    RunnerStore.shared.start()
-                                }, label: {
-                                    Image(systemName: "minus.circle").foregroundColor(.red)
-                                }).buttonStyle(.plain)
+                                Button(
+                                    action: {
+                                        ScopeStore.shared.remove(scope)
+                                        RunnerStore.shared.start()
+                                    },
+                                    label: {
+                                        Image(systemName: "minus.circle").foregroundColor(.red)
+                                    }
+                                ).buttonStyle(.plain)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 4)
                             Divider().padding(.leading, 12)
@@ -101,11 +102,14 @@ struct SettingsView: View {
                             Text("Quit RunnerBar")
                                 .font(.system(size: 13))
                             Spacer()
-                            Button(action: { NSApplication.shared.terminate(nil) }) {
-                                Text("Quit")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.red)
-                            }.buttonStyle(.plain)
+                            Button(
+                                action: { NSApplication.shared.terminate(nil) },
+                                label: {
+                                    Text("Quit")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.red)
+                                }
+                            ).buttonStyle(.plain)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                     }
@@ -191,4 +195,3 @@ struct SettingsView: View {
         .padding(.vertical, 8)
     }
 }
-// swiftlint:enable type_body_length
