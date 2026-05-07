@@ -3,7 +3,7 @@ import SwiftUI
 /// Settings view — complete implementation for all phases 1-6.
 ///
 /// Contains the shared settings UI with runner management, notifications,
-/// general toggles, legal preferences, and about section.
+/// general toggles, account, legal preferences, and about section.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -16,6 +16,7 @@ struct SettingsView: View {
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var isAuthenticated = (githubToken() != nil)
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -147,6 +148,35 @@ struct SettingsView: View {
             }
             Divider()
 
+            // ── Account
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Account")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+                HStack {
+                    Text("GitHub").font(.system(size: 12))
+                    Spacer()
+                    if isAuthenticated {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            Text("Authenticated")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Button(action: signInWithGitHub) {
+                            Text("Sign in").font(.caption).foregroundColor(.orange)
+                        }.buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                Divider().padding(.leading, 12)
+                // Auth reads token via: `gh auth token` > GH_TOKEN > GITHUB_TOKEN (see Auth.swift).
+                Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.bottom, 8)
+            }
+            Divider()
+
             // ── Legal
             VStack(alignment: .leading, spacing: 0) {
                 Text("Legal")
@@ -196,6 +226,7 @@ struct SettingsView: View {
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
+            isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
@@ -217,6 +248,16 @@ struct SettingsView: View {
     /// Runner status dot color.
     private func runnerDotColor(for runner: Runner) -> Color {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+    }
+
+    /// Opens the GitHub PAT setup docs in the default browser.
+    /// Device-flow URL omitted: it requires a user_code the app never generates.
+    /// Auth.swift reads token via `gh auth token` / GH_TOKEN / GITHUB_TOKEN.
+    private func signInWithGitHub() {
+        let path = "https://docs.github.com/en/authentication/" +
+            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        guard let url = URL(string: path) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// A tappable row that opens a URL in the default browser.
