@@ -33,6 +33,10 @@ final class SettingsStore: ObservableObject {
         // clamp on read so a previously-stored out-of-range value is corrected immediately
         let clamped = stored > 0 ? min(max(stored, 10), 300) : 30
         pollingInterval = clamped
+        // didSet is not triggered during init, so explicitly repair the stored value if needed
+        if stored != clamped {
+            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
+        }
         if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
             showDimmedRunners = true
         } else {
