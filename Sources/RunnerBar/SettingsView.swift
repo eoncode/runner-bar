@@ -3,8 +3,8 @@ import SwiftUI
 
 // MARK: - SettingsView
 
-/// Phase 5 — Settings view: General, Scopes, Notifications, App, Account sections.
-/// Phase 6 will add Legal/telemetry.
+/// Phase 6 — Settings view: General, Scopes, Notifications, App, Account, Legal.
+/// All phases of issue #221 are now implemented.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -14,6 +14,11 @@ struct SettingsView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    /// Phase 6: analytics opt-out, persisted in UserDefaults (default true).
+    @State private var analyticsEnabled: Bool = {
+        guard UserDefaults.standard.object(forKey: "legal.analyticsEnabled") != nil else { return true }
+        return UserDefaults.standard.bool(forKey: "legal.analyticsEnabled")
+    }()
 
     private var appVersion: String {
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -111,7 +116,6 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                     }
-                    // ── Account (Phase 5, ref #221)
                     settingsSection(title: "Account") {
                         HStack {
                             Text("GitHub").font(.system(size: 13))
@@ -136,7 +140,23 @@ struct SettingsView: View {
                         Divider().padding(.leading, 12)
                         infoRow(label: "Version", value: appVersion)
                     }
-                    // Phase 6 placeholder: Legal section added here.
+                    // ── Legal (Phase 6, ref #221)
+                    settingsSection(title: "Legal") {
+                        toggleRow(
+                            label: "Share analytics",
+                            value: Binding(
+                                get: { analyticsEnabled },
+                                set: { newValue in
+                                    analyticsEnabled = newValue
+                                    UserDefaults.standard.set(newValue, forKey: "legal.analyticsEnabled")
+                                }
+                            )
+                        )
+                        Divider().padding(.leading, 12)
+                        linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
+                        Divider().padding(.leading, 12)
+                        linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar")
+                    }
                 }
                 .padding(.bottom, 16)
             }
@@ -221,5 +241,22 @@ struct SettingsView: View {
             Text(value).font(.system(size: 13)).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func linkRow(label: String, url: String) -> some View {
+        Button(
+            action: {
+                if let dest = URL(string: url) { NSWorkspace.shared.open(dest) }
+            },
+            label: {
+                HStack {
+                    Text(label).font(.system(size: 13)).foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+            }
+        ).buttonStyle(.plain)
     }
 }
