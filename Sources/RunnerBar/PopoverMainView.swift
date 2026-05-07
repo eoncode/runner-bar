@@ -1,4 +1,3 @@
-import ServiceManagement
 import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
@@ -16,7 +15,8 @@ import SwiftUI
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
 // swiftlint:disable type_body_length
-/// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
+/// Root popover view. Shows system stats, action groups, active jobs, and runners.
+/// Phase 3 (ref #221): scopes, launch-at-login, and quit moved to Settings.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
@@ -27,8 +27,6 @@ struct PopoverMainView: View {
     /// Called when the user taps the gear button to open Settings. Added Phase 0 (ref #221).
     let onOpenSettings: () -> Void
 
-    @State private var newScope = ""
-    @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
 
@@ -184,47 +182,6 @@ struct PopoverMainView: View {
                 }
                 Divider()
             }
-
-            // ── Scopes
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Scopes").font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                ForEach(ScopeStore.shared.scopes, id: \.self) { scopeStr in
-                    HStack {
-                        Text(scopeStr).font(.system(size: 12))
-                        Spacer()
-                        Button(action: { ScopeStore.shared.remove(scopeStr); store.reload() }, label: {
-                            Image(systemName: "minus.circle").foregroundColor(.red)
-                        }).buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 2)
-                }
-                HStack {
-                    TextField("owner/repo or org", text: $newScope)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
-                        .onSubmit { submitScope() }
-                    Button(action: submitScope) {
-                        Image(systemName: "plus.circle")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 4)
-            }
-            Divider()
-            Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 12))
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin) { _, newValue in
-                LoginItem.setEnabled(newValue)
-            }
-            Button(action: { NSApplication.shared.terminate(nil) }, label: {
-                Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
-            })
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 6)
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
@@ -234,16 +191,6 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Helpers
-
-    /// Validates and persists a new scope, triggers polling, reloads the observable, and clears the field.
-    private func submitScope() {
-        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        ScopeStore.shared.add(trimmed)
-        RunnerStore.shared.start()
-        store.reload()
-        newScope = ""
-    }
 
     /// Dot color for an action group based on its status.
     @ViewBuilder
