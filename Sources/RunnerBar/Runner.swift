@@ -7,14 +7,14 @@ import Foundation
 /// each runner with local `metrics` sourced from `ps aux`.
 struct Runner: Codable, Identifiable {
     /// GitHub's unique numeric ID for this runner.
-    let id: Int
+    var id: Int
     /// Human-readable runner name as configured on the host machine.
     let name: String
     /// Runner connectivity status as reported by the GitHub API: `"online"` or `"offline"`.
-    let status: String
+    var status: String
     /// `true` when the runner is currently executing a job.
     /// A busy+online runner shows a yellow dot in the UI.
-    let busy: Bool
+    var busy: Bool
     /// CPU/memory utilisation from the local `ps aux` snapshot.
     /// `nil` if no matching `Runner.Worker` process was found for this runner's slot.
     /// Populated by `RunnerStore.fetch()` after the API response is decoded \u2014

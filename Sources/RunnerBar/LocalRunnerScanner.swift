@@ -19,13 +19,17 @@ struct LocalRunnerScanner {
         /// Converts to a RunnerModel for display in SettingsView.
         func toRunner() -> Runner {
             // Create a Runner with local info; status derived from isRunning
-            return Runner(
-                id: agentId ?? name.hashValue,
+            var runner = Runner(
+                id: agentId ?? 0,
                 name: name,
                 status: isRunning ? "online" : "offline",
                 busy: false, // Will be enriched later via API if token available
                 metrics: nil
             )
+            runner.installPath = installPath
+            runner.gitHubUrl = gitHubUrl
+            runner.isLocal = true
+            return runner
         }
     }
     
@@ -138,7 +142,7 @@ struct LocalRunnerScanner {
         ]
         
         for basePath in searchPaths {
-            let findCommand = "find \"\(basePath)\" -name \".runner\" -maxdepth 6 2>/dev/null"
+            let findCommand = "find \"\(basePath)\" -maxdepth 6 -name \".runner\" 2>/dev/null"
             let output = shell(findCommand, timeout: 10)
             let paths = output.components(separatedBy: "\n").filter { !$0.isEmpty }
             

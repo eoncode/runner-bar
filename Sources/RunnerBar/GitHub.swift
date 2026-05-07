@@ -140,7 +140,11 @@ func fetchRunners(for scope: String) -> [Runner] {
         path = "/orgs/\(scope)/actions/runners"
     }
     log("fetchRunners › \(path)")
-    let json = shell("/opt/homebrew/bin/gh api \(path)")
+    guard let ghPath = ghBinaryPath() else {
+        log("fetchRunners › gh not found")
+        return []
+    }
+    let json = shell("\(ghPath) api \(path)")
     log("fetchRunners › response prefix: \(json.prefix(120))")
     guard
         let data = json.data(using: .utf8),
@@ -151,7 +155,7 @@ func fetchRunners(for scope: String) -> [Runner] {
     }
     log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
     // Enrich with gitHubUrl for Phase 4 API enrichment
-    let gitHubUrl = scope.contains("/") ? "https://github.com/\(scope)" : "https://github.com/\(scope)"
+    let gitHubUrl = "https://github.com/\(scope)"
     return response.runners.map {
         var runner = $0
         runner.gitHubUrl = gitHubUrl

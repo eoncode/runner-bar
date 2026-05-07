@@ -92,8 +92,11 @@ struct SettingsView: View {
                 Spacer()
                 // Phase 3: Add Runner button (token required)
                 if isAuthenticated {
-                    Button(action: { showingAddRunnerSheet = true }) {
+                    Button(
+                        action: { showingAddRunnerSheet = true },
+                        label: {
                         Image(systemName: "plus").font(.system(size: 12))
+                        }
                     }
                     .buttonStyle(.plain)
                     .help("Add new runner")

@@ -124,7 +124,13 @@ struct AddRunnerView: View {
     private func fetchOrganizations() {
         isFetchingOrgs = true
         DispatchQueue.global(qos: .background).async {
-            let json = shell("/opt/homebrew/bin/gh api /user/orgs")
+            guard let ghPath = ghBinaryPath() else {
+                DispatchQueue.main.async {
+                    isFetchingOrgs = false
+                }
+                return
+            }
+            let json = shell("\(ghPath) api /user/orgs")
             if let data = json.data(using: .utf8),
                let orgs = try? JSONDecoder().decode([OrgResponse].self, from: data) {
                 DispatchQueue.main.async {
@@ -142,7 +148,13 @@ struct AddRunnerView: View {
     private func fetchRepositories() {
         isFetchingRepos = true
         DispatchQueue.global(qos: .background).async {
-            let json = shell("/opt/homebrew/bin/gh api /user/repos?per_page=100")
+            guard let ghPath = ghBinaryPath() else {
+                DispatchQueue.main.async {
+                    isFetchingRepos = false
+                }
+                return
+            }
+            let json = shell("\(ghPath) api /user/repos?per_page=100")
             if let data = json.data(using: .utf8),
                let repos = try? JSONDecoder().decode([RepoResponse].self, from: data) {
                 DispatchQueue.main.async {
@@ -164,6 +176,25 @@ struct AddRunnerView: View {
         let scope = scopeType == .org ? selectedOrg : selectedRepo
         let endpoint = scopeType == .org ? "/orgs/\(scope)/actions/runners/registration-token" : "/repos/\(scope)/actions/runners/registration-token"
         
+        
+        // Validate runner name: alphanumeric, hyphen, underscore only
+        let nameRegex = #"^[a-zA-Z0-9_-]+$"#
+        guard NSPredicate(format: "SELF MATCHES %@", nameRegex).evaluate(with: runnerName) else {
+            errorMessage = "Runner name must contain only letters, numbers, hyphens, and underscores."
+            isRegistering = false
+            return
+        }
+        
+        // Validate labels: alphanumeric, comma, hyphen, underscore only
+        if !labels.isEmpty {
+            let labelsRegex = #"^[a-zA-Z0-9,_-]+$"#
+            guard NSPredicate(format: "SELF MATCHES %@", labelsRegex).evaluate(with: labels) else {
+                errorMessage = "Labels must contain only letters, numbers, commas, hyphens, and underscores."
+                isRegistering = false
+                return
+            }
+        }
+        
         DispatchQueue.global(qos: .background).async {
             // Step 1: Get registration token
             guard let tokenData = ghAPI(endpoint),
@@ -175,13 +206,29 @@ struct AddRunnerView: View {
                 return
             }
             
-            // Step 2: Run config.sh with token
+            // Step 2: Detect architecture and fetch latest version
+            let archScript = "uname -m"
+            let archResult = shell(archScript, timeout: 5)
+            let arch: String = archResult.trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" ? "osx-arm64" : "osx-x64"
+            
+            // Fetch latest runner version from GitHub Releases API
+            let ghPath = ghBinaryPath() ?? "/opt/homebrew/bin/gh"
+            let releaseJson = shell("\(ghPath) api /repos/actions/runner/releases/latest", timeout: 30)
+            var version = "2.322.0" // fallback
+            if let jsonData = releaseJson.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+               let tagName = json["tag_name"] as? String {
+                version = tagName.replacingOccurrences(of: "v", with: "")
+            }
+            
+            let tarballName = "actions-runner-\(arch)-\(version).tar.gz"
+            let downloadUrl = "https://github.com/actions/runner/releases/download/v\(version)/\(tarballName)"
             let labelsArg = labels.isEmpty ? "" : "--labels \(labels)"
             let configCmd = """
-                mkdir -p ~/actions-runner-\(scope)-\(runnerName) && \
-                cd ~/actions-runner-\(scope)-\(runnerName) && \
-                curl -O -L https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-osx-arm64-2.322.0.tar.gz && \
-                tar xzf actions-runner-osx-arm64-2.322.0.tar.gz && \
+                mkdir -p ~/actions-runner-\(scope)-\(runnerName) && \\
+                cd ~/actions-runner-\(scope)-\(runnerName) && \\
+                curl -O -L \(downloadUrl) && \\
+                tar xzf \(tarballName) && \\
                 ./config.sh --url https://github.com/\(scope) --token \(tokenResp.token) --name \(runnerName) \(labelsArg) --unattended
             """
             
@@ -190,6 +237,9 @@ struct AddRunnerView: View {
             if configResult.contains("Added") {
                 // Step 3: Install as service
                 _ = shell("cd ~/actions-runner-\(scope)-\(runnerName) && ./svc.sh install", timeout: 30)
+                
+                // Step 4: Start the service
+                _ = shell("cd ~/actions-runner-\(scope)-\(runnerName) && ./svc.sh start", timeout: 30)
                 
                 DispatchQueue.main.async {
                     log("registerRunner › successfully registered \(runnerName)")
@@ -204,22 +254,4 @@ struct AddRunnerView: View {
             }
         }
     }
-}
-
-// MARK: - Codable Responses
-
-private struct OrgResponse: Codable {
-    let login: String
-}
-
-private struct RepoResponse: Codable {
-    let fullName: String
-    
-    enum CodingKeys: String, CodingKey {
-        case fullName = "full_name"
-    }
-}
-
-private struct RegistrationTokenResponse: Codable {
-    let token: String
 }
