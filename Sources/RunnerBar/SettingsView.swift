@@ -512,62 +512,29 @@ struct SettingsView: View {
         let scope = addScopeType == .org ? selectedOrg : selectedRepo
         let nameSnapshot = runnerName
         let labelsSnapshot = labels
-
         isAddingRunner = true
         errorMessage = nil
-
         DispatchQueue.global(qos: .userInitiated).async {
             guard let token = fetchRegistrationToken(scope: scope) else {
-                Task { @MainActor in
-                    self.errorMessage = "Failed to fetch registration token"
-                    self.isAddingRunner = false
-                }
+                failAddRunner(reason: "Failed to fetch registration token")
                 return
             }
-
-            // Create a dedicated directory for the runner
-            let home = NSHomeDirectory()
-            let sanitizedScope = scope.replacingOccurrences(of: "/", with: "-")
-            let dirName = "actions-runner-\(sanitizedScope)-\(nameSnapshot)"
-            let installDir = (home as NSString).appendingPathComponent(dirName)
-
-            // 1. Create directory
+            let installDir = prepareInstallDir(scope: scope, name: nameSnapshot)
             shell("mkdir -p \(shellEscape(installDir))")
-
-            // 2. Download latest runner if not present
-            let configPath = (installDir as NSString).appendingPathComponent("config.sh")
-            if !FileManager.default.fileExists(atPath: configPath) {
-                log("performAddRunner › downloading runner binary...")
-
-                let arch = shell("uname -m") == "arm64" ? "arm64" : "x64"
-                let version = fetchLatestRunnerVersion() ?? "2.316.1"
-                let downloadUrl = "https://github.com/actions/runner/releases/download/" +
-                    "v\(version)/actions-runner-osx-\(arch)-\(version).tar.gz"
-                let tarball = (installDir as NSString).appendingPathComponent("runner.tar.gz")
-
-                shell("curl -L -o \(shellEscape(tarball)) \(downloadUrl)")
-                shell("tar xzf \(shellEscape(tarball)) -C \(shellEscape(installDir))")
+            if !ensureRunnerBinary(at: installDir) {
+                failAddRunner(reason: "Failed to download runner binary")
+                return
             }
-
-            // 3. Configure
             let labelsArg = labelsSnapshot.isEmpty ? "" : "--labels \(shellEscape(labelsSnapshot))"
             let configCmd = "cd \(shellEscape(installDir)) && ./config.sh " +
                 "--url https://github.com/\(scope) --token \(shellEscape(token)) " +
                 "--name \(shellEscape(nameSnapshot)) \(labelsArg) --unattended"
-            let configResult = shell(configCmd)
-
-            if configResult.contains("failed") || configResult.contains("Error") {
-                 Task { @MainActor in
-                    self.errorMessage = "Configuration failed. Check logs."
-                    self.isAddingRunner = false
-                }
+            if shell(configCmd).lowercased().contains("failed") {
+                failAddRunner(reason: "Configuration failed. Check logs.")
                 return
             }
-
-            // 4. Install and Start service
             shell("cd \(shellEscape(installDir)) && ./svc.sh install")
             shell("cd \(shellEscape(installDir)) && ./svc.sh start")
-
             Task { @MainActor in
                 self.isAddingRunner = false
                 self.showAddFlow = false
@@ -576,6 +543,34 @@ struct SettingsView: View {
                 self.localRunnerStore.refresh()
             }
         }
+    }
+
+    private func failAddRunner(reason: String) {
+        Task { @MainActor in
+            self.errorMessage = reason
+            self.isAddingRunner = false
+        }
+    }
+
+    private func prepareInstallDir(scope: String, name: String) -> String {
+        let home = NSHomeDirectory()
+        let sanitizedScope = scope.replacingOccurrences(of: "/", with: "-")
+        let dirName = "actions-runner-\(sanitizedScope)-\(name)"
+        return (home as NSString).appendingPathComponent(dirName)
+    }
+
+    private func ensureRunnerBinary(at installDir: String) -> Bool {
+        let configPath = (installDir as NSString).appendingPathComponent("config.sh")
+        if FileManager.default.fileExists(atPath: configPath) { return true }
+        log("performAddRunner › downloading runner binary...")
+        let arch = shell("uname -m") == "arm64" ? "arm64" : "x64"
+        let version = fetchLatestRunnerVersion() ?? "2.316.1"
+        let downloadUrl = "https://github.com/actions/runner/releases/download/" +
+            "v\(version)/actions-runner-osx-\(arch)-\(version).tar.gz"
+        let tarball = (installDir as NSString).appendingPathComponent("runner.tar.gz")
+        shell("curl -L -o \(shellEscape(tarball)) \(downloadUrl)")
+        shell("tar xzf \(shellEscape(tarball)) -C \(shellEscape(installDir))")
+        return FileManager.default.fileExists(atPath: configPath)
     }
 
     private func linkRow(label: String, url: String) -> some View {
