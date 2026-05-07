@@ -33,19 +33,37 @@ struct LocalRunnerScanner {
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
     /// This is a synchronous, blocking call — always invoke from a background thread.
     func scan() -> [RunnerModel] {
-        var models: [String: RunnerModel] = [:]   // keyed by stable id
+        var models: [String: RunnerModel] = []
 
-        // Source 2 first: .runner JSON is most authoritative — richer data
+        // Source 2 first: .runner JSON is most authoritative — richer data.
+        // JSON models are inserted under their stable id (agentId or composite).
         for model in scanRunnerJSONFiles() {
             models[model.id] = model
         }
 
-        // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found
-        for model in scanLaunchAgents() where models[model.id] == nil {
-            models[model.id] = model
+        // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found.
+        // Skip if a JSON model already covers the same runner: detect overlap by
+        // checking whether any existing JSON entry has the same runnerName+gitHubUrl
+        // composite key as the LaunchAgent candidate. This prevents a second dict
+        // entry for the same physical runner and avoids SwiftUI id churn on the
+        // next scan (when JSON supersedes a previously LaunchAgent-only entry).
+        for model in scanLaunchAgents() {
+            let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
+            let alreadyCoveredByJSON = models.values.contains { existing in
+                // A JSON model covers this LaunchAgent entry when its
+                // runnerName+gitHubUrl composite matches — regardless of whether
+                // the JSON model's id is agentId-based or composite.
+                let existingComposite = "\(existing.runnerName)-\(existing.gitHubUrl ?? "")"
+                return existingComposite == compositeKey
+            }
+            guard !alreadyCoveredByJSON else { continue }
+            // Only insert if no entry exists yet under this composite key.
+            if models[compositeKey] == nil {
+                models[compositeKey] = model
+            }
         }
 
-        // Source 3: mark which runners are live
+        // Source 3: mark which runners are live.
         let liveLabels = scanLiveServices()
         for key in models.keys {
             // Safe optional binding — key is guaranteed to exist but avoids force-unwrap.
