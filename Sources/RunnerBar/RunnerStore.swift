@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
 
 // MARK: - AggregateStatus
 
@@ -45,6 +46,8 @@ final class RunnerStore {
 
     /// Currently known self-hosted runners. Main-thread only.
     private(set) var runners: [Runner] = []
+    /// Local discovered runners. Main-thread only.
+    private(set) var localRunners: [Runner] = []
     /// Jobs to display: live + recently completed (dimmed). Capped at 3. Main-thread only.
     private(set) var jobs: [ActiveJob] = []
     /// Action groups to display: live + recently completed (dimmed). Capped at 5. Main-thread only.
@@ -129,6 +132,7 @@ final class RunnerStore {
             guard let self else { return }
             ghIsRateLimited = false
             let enrichedRunners = self.fetchAndEnrichRunners()
+            let local = LocalRunnerScanner.scan()
             let jobResult = self.buildJobState(snapPrev: snapPrev, snapCache: snapCache)
             let groupResult = self.buildGroupState(
                 snapPrevGroups: snapPrevGroups,
@@ -137,6 +141,7 @@ final class RunnerStore {
             )
             DispatchQueue.main.async {
                 self.runners = enrichedRunners
+                self.localRunners = local
                 self.jobs = jobResult.display
                 self.completedCache = jobResult.newCache
                 self.prevLiveJobs = jobResult.newPrevLive
@@ -169,5 +174,47 @@ final class RunnerStore {
             idleRunners[idx].metrics = slotIdx < metrics.count ? metrics[slotIdx] : nil
         }
         return busyRunners + idleRunners
+    }
+
+    /// Forces a manual refresh of the store.
+    func reload() {
+        fetch()
+    }
+}
+
+// MARK: - RunnerStoreObservable
+
+/// Bridges the `RunnerStore` singleton into SwiftUI's observation system.
+/// Used by `AppDelegate` and view hierarchy (ref #52 #54 #57).
+final class RunnerStoreObservable: ObservableObject {
+    @Published private(set) var runners: [Runner] = []
+    @Published private(set) var localRunners: [Runner] = []
+    @Published private(set) var jobs: [ActiveJob] = []
+    @Published private(set) var actions: [ActionGroup] = []
+    @Published private(set) var isRateLimited = false
+
+    private var cancellable: AnyCancellable?
+
+    init() {
+        runners = RunnerStore.shared.runners
+        localRunners = RunnerStore.shared.localRunners
+        jobs = RunnerStore.shared.jobs
+        actions = RunnerStore.shared.actions
+        isRateLimited = RunnerStore.shared.isRateLimited
+
+        RunnerStore.shared.onChange = { [weak self] in
+            self?.reload()
+        }
+    }
+
+    /// Pulls latest snapshots from the `RunnerStore` singleton.
+    func reload() {
+        withAnimation(nil) {
+            runners = RunnerStore.shared.runners
+            localRunners = RunnerStore.shared.localRunners
+            jobs = RunnerStore.shared.jobs
+            actions = RunnerStore.shared.actions
+            isRateLimited = RunnerStore.shared.isRateLimited
+        }
     }
 }

@@ -15,26 +15,33 @@ struct Runner: Codable, Identifiable {
     /// `true` when the runner is currently executing a job.
     /// A busy+online runner shows a yellow dot in the UI.
     let busy: Bool
+
+    /// Local-only properties for discovery (Phase 1).
+    var agentId: Int?
+    var installPath: String?
+    var isRunning: Bool = false
+    var gitHubUrl: String?
+    var isLocal: Bool = false
+
     /// CPU/memory utilisation from the local `ps aux` snapshot.
     /// `nil` if no matching `Runner.Worker` process was found for this runner's slot.
-    /// Populated by `RunnerStore.fetch()` after the API response is decoded \u2014
+    /// Populated by `RunnerStore.fetch()` after the API response is decoded —
     /// not present in the JSON payload.
     var metrics: RunnerMetrics?
 
-    /// Excludes `metrics` from JSON decoding \u2014 it is assigned locally after fetch,
-    /// not returned by the GitHub API.
+    /// Excludes non-API fields from JSON decoding.
     enum CodingKeys: String, CodingKey { case id, name, status, busy }
 
     /// A single-line status string for display in the runner list row.
     ///
     /// Possible formats:
-    /// - `"offline"` \u2014 runner is not connected
-    /// - `"idle (CPU: \u2014 MEM: \u2014)"` \u2014 online but no matching process found
-    /// - `"active (CPU: 12.3% MEM: 4.5%)"` \u2014 online and executing a job
+    /// - `"offline"` — runner is not connected
+    /// - `"idle (CPU: — MEM: —)"` — online but no matching process found
+    /// - `"active (CPU: 12.3% MEM: 4.5%)"` — online and executing a job
     var displayStatus: String {
         if status == "offline" { return "offline" }
         let label = busy ? "active" : "idle"
-        guard let runnerMetrics = metrics else { return "\(label) (CPU: \u2014 MEM: \u2014)" }
+        guard let runnerMetrics = metrics else { return "\(label) (CPU: — MEM: —)" }
         let cpu = String(format: "%.1f", runnerMetrics.cpu)
         let mem = String(format: "%.1f", runnerMetrics.mem)
         return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"

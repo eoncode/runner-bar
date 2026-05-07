@@ -9,7 +9,7 @@ var ghIsRateLimited: Bool = false
 
 /// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
 /// Returns `nil` on launch failure, timeout, empty response, or rate-limit (403/429).
-func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+func ghAPI(_ endpoint: String, method: String = "GET", timeout: TimeInterval = 20) -> Data? {
     // swiftlint:disable:next identifier_name
     guard let gh = ghBinaryPath() else {
         log("ghAPI › gh not found")
@@ -18,7 +18,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: gh)
-    task.arguments = ["api", endpoint]
+    task.arguments = ["api", "--method", method, endpoint]
     task.standardOutput = pipe
     task.standardError = Pipe()
     var outputData = Data()
@@ -41,7 +41,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    log("ghAPI › \(method) \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
        let status = json["status"] as? String,
        status == "403" || status == "429" {
@@ -50,6 +50,42 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         return nil
     }
     return outputData.isEmpty ? nil : outputData
+}
+
+// MARK: - Registration Token
+
+/// Fetches a registration token for the given scope (repo or org).
+func fetchRegistrationToken(scope: String) -> String? {
+    let endpoint = scope.contains("/")
+        ? "repos/\(scope)/actions/runners/registration-token"
+        : "orgs/\(scope)/actions/runners/registration-token"
+
+    guard let data = ghAPI(endpoint, method: "POST"),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let token = json["token"] as? String
+    else { return nil }
+
+    return token
+}
+
+// MARK: - Discovery Helpers
+
+/// Fetches orgs the user belongs to.
+func fetchUserOrgs() -> [String] {
+    guard let data = ghAPI("user/orgs"),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { return [] }
+
+    return json.compactMap { $0["login"] as? String }
+}
+
+/// Fetches repos the user has access to.
+func fetchUserRepos() -> [String] {
+    guard let data = ghAPI("user/repos?per_page=100"),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { return [] }
+
+    return json.compactMap { $0["full_name"] as? String }
 }
 
 // MARK: - URL helpers
@@ -140,12 +176,11 @@ func fetchRunners(for scope: String) -> [Runner] {
         path = "/orgs/\(scope)/actions/runners"
     }
     log("fetchRunners › \(path)")
-    let json = shell("/opt/homebrew/bin/gh api \(path)")
-    log("fetchRunners › response prefix: \(json.prefix(120))")
-    guard
-        let data = json.data(using: .utf8),
-        let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
-    else {
+    guard let data = ghAPI(path) else {
+        log("fetchRunners › fetch failed for scope: \(scope)")
+        return []
+    }
+    guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
         log("fetchRunners › decode failed for scope: \(scope)")
         return []
     }
@@ -239,27 +274,7 @@ func ghBinaryPath() -> String? {
 /// Must be called from a background thread.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
-    guard let ghPath = ghBinaryPath() else {
-        log("ghPost › gh not found")
-        return false
-    }
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
-    task.standardOutput = Pipe()
-    task.standardError = Pipe()
-    do {
-        try task.run()
-    } catch {
-        log("ghPost › launch error: \(error)")
-        return false
-    }
-    let timeoutItem = DispatchWorkItem(block: { task.terminate() })
-    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    log("ghPost › \(endpoint) exit \(task.terminationStatus)")
-    return task.terminationStatus == 0
+    return ghAPI(endpoint, method: "POST") != nil
 }
 
 // MARK: - Cancel run

@@ -22,6 +22,16 @@ struct SettingsView: View {
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
 
+    // Add Runner flow state
+    @State private var showAddFlow = false
+    @State private var addScopeType: AddScopeType = .repo
+    @State private var selectedOrg = ""
+    @State private var selectedRepo = ""
+    @State private var runnerName = ""
+    @State private var labels = ""
+    @State private var availableOrgs: [String] = []
+    @State private var availableRepos: [String] = []
+
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
@@ -30,13 +40,22 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
+    enum AddScopeType: String, CaseIterable, Identifiable {
+        case repo = "Repo", org = "Org"
+        var id: String { self.rawValue }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    runnerSection
+                    localRunnersSection
+                    Divider()
+                    addRunnerSection
+                    Divider()
+                    scopeSection
                     Divider()
                     notificationsSection
                     Divider()
@@ -58,6 +77,7 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
+            loadDiscoveryData()
         }
         .onDisappear {
             // Clear the closure to avoid stale-capture reload after view is gone
@@ -84,27 +104,106 @@ struct SettingsView: View {
         .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
     }
 
-    private var runnerSection: some View {
+    private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Runner management")
+            Text("Local Runners")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            if !store.runners.isEmpty {
-                ForEach(store.runners, id: \.id) { runner in
-                    HStack(spacing: 8) {
-                        Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
-                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
-                        Spacer()
-                        Text(runner.displayStatus)
-                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                }
-            } else {
-                Text("No runners configured")
+
+            if store.localRunners.isEmpty {
+                Text("No local runners discovered")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
+            } else {
+                ForEach(store.localRunners, id: \.id) { runner in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Circle().fill(runner.isRunning ? Color.green : Color.gray).frame(width: 8, height: 8)
+                            Text(runner.name).font(.system(size: 13)).lineLimit(1)
+                            Spacer()
+                            HStack(spacing: 12) {
+                                Button(action: { toggleRunner(runner) }) {
+                                    Image(systemName: runner.isRunning ? "stop.fill" : "play.fill")
+                                        .foregroundColor(runner.isRunning ? .red : .green)
+                                }.buttonStyle(.plain)
+
+                                Button(action: { removeRunner(runner) }) {
+                                    Image(systemName: "trash").foregroundColor(.secondary)
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                        if let url = runner.gitHubUrl {
+                            Text(url).font(.system(size: 10)).foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    Divider().padding(.leading, 12)
+                }
             }
+        }
+    }
+
+    private var addRunnerSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Add Runner")
+                    .font(.caption).foregroundColor(.secondary)
+                Spacer()
+                Button(action: { withAnimation { showAddFlow.toggle() } }) {
+                    Image(systemName: showAddFlow ? "minus.circle" : "plus.circle")
+                        .foregroundColor(.blue)
+                }.buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+
+            if showAddFlow {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("Scope", selection: $addScopeType) {
+                        ForEach(AddScopeType.allCases) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if addScopeType == .org {
+                        Picker("Organization", selection: $selectedOrg) {
+                            Text("Select an org").tag("")
+                            ForEach(availableOrgs, id: \.self) { org in
+                                Text(org).tag(org)
+                            }
+                        }
+                    } else {
+                        Picker("Repository", selection: $selectedRepo) {
+                            Text("Select a repo").tag("")
+                            ForEach(availableRepos, id: \.self) { repo in
+                                Text(repo).tag(repo)
+                            }
+                        }
+                    }
+
+                    TextField("Runner Name", text: $runnerName)
+                        .textFieldStyle(.roundedBorder)
+
+                    TextField("Labels (comma separated)", text: $labels)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button(action: performAddRunner) {
+                        Text("Configure and Start")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(runnerName.isEmpty || (addScopeType == .org ? selectedOrg.isEmpty : selectedRepo.isEmpty))
+                }
+                .padding(12)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal, 12).padding(.bottom, 8)
+            }
+        }
+    }
+
+    private var scopeSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Scopes").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
             ForEach(ScopeStore.shared.scopes, id: \.self) { scopeStr in
@@ -261,6 +360,17 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
+    private func loadDiscoveryData() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let orgs = fetchUserOrgs()
+            let repos = fetchUserRepos()
+            DispatchQueue.main.async {
+                self.availableOrgs = orgs
+                self.availableRepos = repos
+            }
+        }
+    }
+
     private func submitScope() {
         let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -270,8 +380,53 @@ struct SettingsView: View {
         newScope = ""
     }
 
-    private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+    private func toggleRunner(_ runner: Runner) {
+        let cmd = runner.isRunning ? "stop" : "start"
+        // Use the install path to find the plist or just use the name if we follow convention
+        // GitHub runners typically install plists with a specific naming scheme
+        // including the owner and repo.
+        let plistName = runner.installPath.flatMap { path -> String? in
+            let folder = (path as NSString).appendingPathComponent("Library/LaunchAgents")
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []
+            return files.first { $0.contains(runner.name) && $0.hasSuffix(".plist") }
+        } ?? "actions.runner.\(runner.name).plist"
+
+        let escapedPlist = shellEscape((NSHomeDirectory() as NSString)
+            .appendingPathComponent("Library/LaunchAgents/\(plistName)"))
+        shell("launchctl \(cmd) \(escapedPlist)")
+        RunnerStore.shared.reload()
+    }
+
+    private func removeRunner(_ runner: Runner) {
+        guard let path = runner.installPath else { return }
+        let escapedPath = shellEscape(path)
+        shell("cd \(escapedPath) && ./svc.sh uninstall && ./config.sh remove")
+        RunnerStore.shared.reload()
+    }
+
+    private func performAddRunner() {
+        let scope = addScopeType == .org ? selectedOrg : selectedRepo
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let token = fetchRegistrationToken(scope: scope) {
+                let escapedScope = shellEscape(scope)
+                let escapedToken = shellEscape(token)
+                let escapedName = shellEscape(runnerName)
+                let escapedLabels = shellEscape(labels)
+
+                shell("./config.sh --url https://github.com/\(escapedScope) --token \(escapedToken) --name \(escapedName) --labels \(escapedLabels)")
+                shell("./svc.sh install && ./svc.sh start")
+
+                DispatchQueue.main.async {
+                    showAddFlow = false
+                    RunnerStore.shared.reload()
+                }
+            }
+        }
+    }
+
+    /// Rudimentary shell escaping for safety.
+    private func shellEscape(_ input: String) -> String {
+        "'" + input.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private func linkRow(label: String, url: String) -> some View {
