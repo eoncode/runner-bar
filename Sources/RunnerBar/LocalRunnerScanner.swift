@@ -19,7 +19,6 @@ import Foundation
 /// Results from all three sources are merged and deduplicated by `agentId`
 /// (preferred) or the `runnerName + gitHubUrl` composite key.
 struct LocalRunnerScanner {
-
     // MARK: - .runner JSON schema
 
     /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
@@ -43,8 +42,8 @@ struct LocalRunnerScanner {
         }
 
         // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found
-        for model in scanLaunchAgents() {
-            if models[model.id] == nil { models[model.id] = model }
+        for model in scanLaunchAgents() where models[model.id] == nil {
+            models[model.id] = model
         }
 
         // Source 3: mark which runners are live

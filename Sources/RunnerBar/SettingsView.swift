@@ -245,9 +245,9 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin) { _, newValue in
+            .onChange(of: launchAtLogin, perform: { newValue in
                 LoginItem.setEnabled(newValue)
-            }
+            })
             Divider().padding(.leading, 12)
             Toggle(isOn: $settings.showDimmedRunners) {
                 Text("Show offline runners").font(.system(size: 12))
@@ -259,7 +259,7 @@ struct SettingsView: View {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
                 Text("\(settings.pollingInterval)s")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
+            .font(.system(size: 12)).foregroundColor(.secondary)
                     .frame(minWidth: 36, alignment: .trailing)
                 Stepper("", value: $settings.pollingInterval, in: 10...300)
                     .labelsHidden()

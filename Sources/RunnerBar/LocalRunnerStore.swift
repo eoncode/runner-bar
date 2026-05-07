@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 
 // MARK: - LocalRunnerStore
 
@@ -11,7 +11,6 @@ import Combine
 /// **Threading:** scanning is dispatched to a background queue to avoid blocking
 /// the main thread. `runners` is always updated on the main queue.
 final class LocalRunnerStore: ObservableObject {
-
     // MARK: Shared singleton
 
     static let shared = LocalRunnerStore()

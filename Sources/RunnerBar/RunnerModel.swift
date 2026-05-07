@@ -64,7 +64,10 @@ struct RunnerModel: Identifiable, Hashable {
 
 /// Semantic status colour used by the Settings view to colour the indicator dot.
 enum RunnerStatusColor {
+    /// Runner process is live and actively listening for jobs.
     case running
+    /// Runner is installed but its process is not currently active.
     case idle
+    /// Runner is registered but has been taken offline (used for future API enrichment).
     case offline
 }
