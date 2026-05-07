@@ -3,14 +3,15 @@ import SwiftUI
 
 // MARK: - SettingsView
 
-/// Phase 2 — Settings view with runner management duplicated from PopoverMainView.
-/// ⚠️ Phase 3 will remove these controls from PopoverMainView AFTER Phase 2 is verified.
-/// ❌ Do NOT remove from PopoverMainView until Phase 3 is explicitly approved (ref #221).
+/// Phase 4 — Settings view: General, Scopes, Notifications, App sections.
+/// Phase 5 will add Account (GitHub auth + version).
+/// Phase 6 will add Legal/telemetry.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
 
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var notifications = NotificationPrefsStore.shared
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
 
@@ -41,10 +42,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     settingsSection(title: "General") {
-                        toggleRow(
-                            label: "Show offline runners",
-                            value: $settings.showDimmedRunners
-                        )
+                        toggleRow(label: "Show offline runners", value: $settings.showDimmedRunners)
                         Divider().padding(.leading, 12)
                         stepperRow(
                             label: "Polling interval",
@@ -53,7 +51,6 @@ struct SettingsView: View {
                             range: 10...300
                         )
                     }
-                    // ── Runner management (Phase 2, ref #221)
                     settingsSection(title: "Scopes") {
                         ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
                             HStack {
@@ -85,7 +82,12 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
                     }
-                    // ── App
+                    // ── Notifications (Phase 4, ref #221)
+                    settingsSection(title: "Notifications") {
+                        toggleRow(label: "Notify on success", value: $notifications.notifyOnSuccess)
+                        Divider().padding(.leading, 12)
+                        toggleRow(label: "Notify on failure", value: $notifications.notifyOnFailure)
+                    }
                     settingsSection(title: "App") {
                         toggleRow(
                             label: "Launch at login",
@@ -99,21 +101,17 @@ struct SettingsView: View {
                         )
                         Divider().padding(.leading, 12)
                         HStack {
-                            Text("Quit RunnerBar")
-                                .font(.system(size: 13))
+                            Text("Quit RunnerBar").font(.system(size: 13))
                             Spacer()
                             Button(
                                 action: { NSApplication.shared.terminate(nil) },
                                 label: {
-                                    Text("Quit")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.red)
+                                    Text("Quit").font(.system(size: 12)).foregroundColor(.red)
                                 }
                             ).buttonStyle(.plain)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                     }
-                    // Phase 4 placeholder: Notifications section added here.
                     // Phase 5 placeholder: Account section added here.
                     // Phase 6 placeholder: Legal section added here.
                 }
@@ -162,12 +160,9 @@ struct SettingsView: View {
     @ViewBuilder
     private func toggleRow(label: String, value: Binding<Bool>) -> some View {
         HStack {
-            Text(label)
-                .font(.system(size: 13))
+            Text(label).font(.system(size: 13))
             Spacer()
-            Toggle("", isOn: value)
-                .labelsHidden()
-                .toggleStyle(.switch)
+            Toggle("", isOn: value).labelsHidden().toggleStyle(.switch)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -181,15 +176,13 @@ struct SettingsView: View {
         range: ClosedRange<Int>
     ) -> some View {
         HStack {
-            Text(label)
-                .font(.system(size: 13))
+            Text(label).font(.system(size: 13))
             Spacer()
             Text("\(value.wrappedValue)\(unit)")
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
                 .frame(minWidth: 36, alignment: .trailing)
-            Stepper("", value: value, in: range)
-                .labelsHidden()
+            Stepper("", value: value, in: range).labelsHidden()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
