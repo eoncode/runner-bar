@@ -63,6 +63,7 @@ struct RunnerStatusEnricher {
         var byName: [String: APIRunner] = [:]
 
         for scope in scopeToRunners.keys {
+            // TODO: paginate (Link rel=next) — currently limited to first 100 runners per scope.
             let endpoint = scope.contains("/")
                 ? "repos/\(scope)/actions/runners?per_page=100"
                 : "orgs/\(scope)/actions/runners?per_page=100"
