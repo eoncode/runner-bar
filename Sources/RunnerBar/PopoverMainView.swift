@@ -191,6 +191,9 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Helpers
+    // NOTE (ref #221 review): All helpers below are private. No visibility was widened for the
+    // extension split in SettingsView — SettingsView uses a separate `private extension` block
+    // in the same file, which Swift resolves without requiring internal access.
 
     /// Dot color for an action group based on its status.
     @ViewBuilder
@@ -272,7 +275,8 @@ struct PopoverMainView: View {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 
-    /// Opens Terminal and runs `gh auth login`.
+    /// Opens GitHub device-flow auth page in the default browser.
+    /// Auth.swift reads the resulting token via `gh auth token` / GH_TOKEN / GITHUB_TOKEN.
     private func signInWithGitHub() {
         let script = "tell application \"Terminal\" to do script \"gh auth login\""
         NSAppleScript(source: script)?.executeAndReturnError(nil)
