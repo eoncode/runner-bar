@@ -54,6 +54,12 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
+    /// Alert title for the runner-removal confirmation dialog.
+    private var removalAlertTitle: String {
+        let name = runnerPendingRemoval?.runnerName ?? ""
+        return "Remove runner \"\(name)\""
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -102,13 +108,10 @@ struct SettingsView: View {
                 localRunnerStore.refresh()
             }
         }
-        .alert(
-            "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "\"\")\"",
-            isPresented: Binding(
-                get: { runnerPendingRemoval != nil },
-                set: { if !$0 { runnerPendingRemoval = nil } }
-            )
-        ) {
+        .alert(removalAlertTitle, isPresented: Binding(
+            get: { runnerPendingRemoval != nil },
+            set: { if !$0 { runnerPendingRemoval = nil } }
+        )) {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
