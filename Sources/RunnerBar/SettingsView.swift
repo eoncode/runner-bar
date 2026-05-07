@@ -151,6 +151,12 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             Divider().padding(.leading, 12)
+            // Auth reads token via: gh auth token > GH_TOKEN > GITHUB_TOKEN (see Auth.swift).
+            Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.vertical, 4)
+            Divider().padding(.leading, 12)
             infoRow(label: "Version", value: appVersion)
         }
     }
@@ -180,10 +186,11 @@ struct SettingsView: View {
         newScope = ""
     }
 
+    /// Opens GitHub device-flow URL in the default browser.
+    /// Auth.swift reads the token via `gh auth token` / GH_TOKEN / GITHUB_TOKEN — no AppleScript.
     private func signInWithGitHub() {
-        let script = "tell application \"Terminal\" to do script \"gh auth login\""
-        NSAppleScript(source: script)?.executeAndReturnError(nil)
-        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
+        guard let url = URL(string: "https://github.com/login/device") else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 

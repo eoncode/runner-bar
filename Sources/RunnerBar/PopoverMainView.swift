@@ -275,12 +275,11 @@ struct PopoverMainView: View {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 
-    /// Opens GitHub device-flow auth page in the default browser.
-    /// Auth.swift reads the resulting token via `gh auth token` / GH_TOKEN / GITHUB_TOKEN.
+    /// Opens GitHub device-flow URL in the default browser.
+    /// Auth.swift reads the token via `gh auth token` / GH_TOKEN / GITHUB_TOKEN — no AppleScript.
     private func signInWithGitHub() {
-        let script = "tell application \"Terminal\" to do script \"gh auth login\""
-        NSAppleScript(source: script)?.executeAndReturnError(nil)
-        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
+        guard let url = URL(string: "https://github.com/login/device") else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 // swiftlint:enable type_body_length
