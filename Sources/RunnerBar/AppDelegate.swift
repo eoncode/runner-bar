@@ -204,7 +204,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())
-            }
+            },
+            store: observable
         ))
     }
 
