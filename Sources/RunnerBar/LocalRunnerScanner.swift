@@ -8,16 +8,15 @@ import Foundation
 /// 1. **LaunchAgents** — `~/Library/LaunchAgents/actions.runner.*.plist`
 ///    Parses `owner`, `repo`, and `runnerName` from the plist filename.
 ///
-/// 2. **`.runner` JSON files** — `find ~ /opt /usr/local -name ".runner" -maxdepth 6`
+/// 2. **`.runner` JSON files** — `find ~ /opt /usr/local -maxdepth 6 -name ".runner"`
 ///    Reads `gitHubUrl`, `runnerName`, `agentId`, and `workFolder` from each
 ///    file. This is the most authoritative local source.
 ///
-/// 3. **Live process check** — `ps aux | grep Runner.Listener`
-///    Flags which runners currently have an active `Runner.Listener` process,
-///    indicating they are actively polling for jobs.
-///
-/// Results from all three sources are merged and deduplicated by `agentId`
-/// (preferred) or the `runnerName + gitHubUrl` composite key.
+/// 3. **Live service check** — `launchctl list | grep actions.runner`
+///    Flags which runners currently have an active launchd service, indicating
+///    they are registered and running. Service labels embed owner, repo, and
+///    runnerName, so runners with identical names but different scopes are
+///    correctly distinguished — no cross-runner contamination.
 struct LocalRunnerScanner {
     // MARK: - .runner JSON schema
 
@@ -47,11 +46,14 @@ struct LocalRunnerScanner {
         }
 
         // Source 3: mark which runners are live
-        let liveNames = scanLiveProcesses()
+        let liveLabels = scanLiveServices()
         for key in models.keys {
             // Safe optional binding — key is guaranteed to exist but avoids force-unwrap.
             if let model = models[key] {
-                models[key]?.isRunning = liveNames.contains(model.runnerName)
+                // Match by service label which contains the runner name. This is
+                // scope-aware: two runners with the same name but different
+                // owner/repo get distinct labels and are matched independently.
+                models[key]?.isRunning = liveLabels.contains { $0.contains(model.runnerName) }
             }
         }
 
@@ -108,10 +110,12 @@ struct LocalRunnerScanner {
     /// Uses `find` to locate `.runner` JSON files in common install locations
     /// and decodes each one into a `RunnerModel`.
     private func scanRunnerJSONFiles() -> [RunnerModel] {
-        // Limit search depth to 6 to avoid traversing deep node_modules etc.
+        // -maxdepth MUST precede -name: on macOS BSD find, placing -maxdepth
+        // after a predicate applies the depth limit only to subtrees past that
+        // point, so the guard would not work and could traverse node_modules etc.
         // shell() is defined in Shell.swift.
         let raw = shell(
-            "find ~ /opt /usr/local -name '.runner' -maxdepth 6 2>/dev/null",
+            "find ~ /opt /usr/local -maxdepth 6 -name '.runner' 2>/dev/null",
             timeout: 15
         )
         guard !raw.isEmpty else { return [] }
@@ -135,24 +139,40 @@ struct LocalRunnerScanner {
             }
     }
 
-    // MARK: - Source 3: Live process check
+    // MARK: - Source 3: Live service check
 
-    /// Returns the set of runner names that currently have an active
-    /// `Runner.Listener` process, derived from `ps aux` output.
-    private func scanLiveProcesses() -> Set<String> {
+    /// Returns the set of launchd service labels for runner services that are
+    /// currently loaded and running, using `launchctl list | grep actions.runner`.
+    ///
+    /// This replaces the previous `ps aux | grep Runner.Listener` approach, which
+    /// was broken because `Runner.Listener` does not pass `--runnerName` — so the
+    /// old parsing never matched and `isRunning` was always `false`.
+    ///
+    /// Using launchctl service labels also fixes cross-runner contamination: two
+    /// runners with the same `runnerName` but different owner/repo get distinct
+    /// labels (e.g. `actions.runner.orgA.repoA.my-runner` vs
+    /// `actions.runner.orgB.repoB.my-runner`) and are matched independently.
+    private func scanLiveServices() -> Set<String> {
         // shell() is defined in Shell.swift.
-        let output = shell("ps aux | grep Runner.Listener | grep -v grep", timeout: 5)
+        let output = shell(
+            "launchctl list 2>/dev/null | grep actions.runner",
+            timeout: 5
+        )
         guard !output.isEmpty else { return [] }
 
-        var names = Set<String>()
+        var labels = Set<String>()
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            // Extract --runnerName argument from the process command line
-            if let range = line.range(of: "--runnerName ") {
-                let after = String(line[range.upperBound...])
-                let name = after.components(separatedBy: " ").first ?? ""
-                if !name.isEmpty { names.insert(name) }
+            // launchctl list output: "<PID/->\t<exitCode>\t<label>"
+            // A non-"-" PID in column 1 means the service is currently running.
+            let columns = line.components(separatedBy: "\t")
+            guard columns.count >= 3 else { continue }
+            let pid = columns[0].trimmingCharacters(in: .whitespaces)
+            let label = columns[2].trimmingCharacters(in: .whitespaces)
+            // Only count services with an active PID (not "-").
+            if pid != "-", !label.isEmpty {
+                labels.insert(label)
             }
         }
-        return names
+        return labels
     }
 }
