@@ -47,10 +47,12 @@ struct RunnerModel: Identifiable, Hashable {
     /// (the parent of the `.runner` JSON file, or the LaunchAgent install path).
     let installPath: String?
 
-    // MARK: Source: ps aux
+    // MARK: Source: launchctl
 
-    /// `true` when a `Runner.Listener` process for this runner was found
-    /// in the `ps aux` output at the last scan.
+    /// `true` when a launchd service with this runner's label was found in
+    /// `launchctl list` output at the last scan, indicating the runner is
+    /// actively registered and running. Determined by `LocalRunnerScanner`
+    /// using `launchctl list | grep actions.runner`.
     var isRunning: Bool
 
     // MARK: - Init
