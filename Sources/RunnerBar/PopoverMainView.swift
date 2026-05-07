@@ -275,10 +275,14 @@ struct PopoverMainView: View {
         runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 
-    /// Opens GitHub device-flow URL in the default browser.
+    /// Opens the GitHub PAT setup docs in the default browser.
+    /// The device-flow URL (github.com/login/device) requires a user_code the app never generates
+    /// and would show a blank \"Enter code\" page — PAT docs are the correct destination here.
     /// Auth.swift reads the token via `gh auth token` / GH_TOKEN / GITHUB_TOKEN — no AppleScript.
     private func signInWithGitHub() {
-        guard let url = URL(string: "https://github.com/login/device") else { return }
+        // swiftlint:disable:next line_length
+        let urlString = "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
     }
 }
