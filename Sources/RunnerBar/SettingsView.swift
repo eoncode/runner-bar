@@ -8,6 +8,10 @@ import SwiftUI
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
+///
+/// Phase 1 (issue #251): Local Runners section auto-populates at launch via
+/// `LocalRunnerStore`, which calls `LocalRunnerScanner` on a background thread.
+/// No GitHub token is required for this section.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -17,10 +21,16 @@ struct SettingsView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
     @ObservedObject private var legal = LegalPrefsStore.shared
+    /// Drives the Local Runners section (Phase 1 — no token required).
+    @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    /// Becomes `true` after the first scan completes. Used to suppress the
+    /// "No local runners found" empty-state placeholder until at least one scan
+    /// has finished — avoids a misleading flash before the initial scan runs.
+    @State private var hasLoadedOnce = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -36,6 +46,8 @@ struct SettingsView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    localRunnersSection
+                    Divider()
                     runnerSection
                     Divider()
                     notificationsSection
@@ -58,6 +70,13 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
+            // Phase 1: trigger local runner scan immediately on appear (no token needed)
+            localRunnerStore.refresh()
+        }
+        .onChange(of: localRunnerStore.isScanning) { scanning in
+            // Mark that at least one scan has completed so the empty-state
+            // placeholder is only shown after real data (not before first scan).
+            if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
             // Clear the closure to avoid stale-capture reload after view is gone
@@ -67,9 +86,11 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
+    // Explicit label: on all Button(action:label:) calls throughout this file—
+    // prevents multiple_closures_with_trailing_closure SwiftLint violations.
     private var headerBar: some View {
         HStack {
-            Button(action: onBack) {
+            Button(action: onBack, label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .medium))
@@ -77,12 +98,82 @@ struct SettingsView: View {
                         .font(.headline)
                 }
                 .foregroundColor(.primary)
-            }
+            })
             .buttonStyle(.plain)
             Spacer()
         }
         .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
     }
+
+    // MARK: Phase 1 — Local Runners (no GitHub token required)
+
+    /// Section 1: displays all locally-installed runners discovered by
+    /// `LocalRunnerScanner`. Renders instantly at launch without any API call.
+    /// Status dots reflect whether the runner process is live on this machine.
+    private var localRunnersSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Local runners")
+                    .font(.caption).foregroundColor(.secondary)
+                Spacer()
+                if localRunnerStore.isScanning {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Button(action: { localRunnerStore.refresh() }, label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    })
+                    .buttonStyle(.plain)
+                    .help("Refresh local runner list")
+                }
+            }
+            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+
+            if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
+                Text("No local runners found")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+            } else {
+                ForEach(localRunnerStore.runners) { runner in
+                    localRunnerRow(runner)
+                }
+            }
+        }
+    }
+
+    private func localRunnerRow(_ runner: RunnerModel) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(localRunnerDotColor(for: runner))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(runner.runnerName)
+                    .font(.system(size: 13)).lineLimit(1)
+                if let url = runner.gitHubUrl {
+                    Text(url)
+                        .font(.caption2).foregroundColor(.secondary).lineLimit(1)
+                }
+            }
+            Spacer()
+            Text(runner.displayStatus)
+                .font(.caption).foregroundColor(.secondary)
+                .lineLimit(1).fixedSize()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 5)
+    }
+
+    private func localRunnerDotColor(for runner: RunnerModel) -> Color {
+        switch runner.statusColor {
+        case .running: return .green
+        case .idle:    return .gray
+        case .offline: return .red
+        }
+    }
+
+    // MARK: - Section 2: API-registered runner scopes (existing)
 
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -124,9 +215,9 @@ struct SettingsView: View {
                 TextField("owner/repo or org", text: $newScope)
                     .textFieldStyle(.roundedBorder).font(.system(size: 12))
                     .onSubmit { submitScope() }
-                Button(action: submitScope) {
+                Button(action: submitScope, label: {
                     Image(systemName: "plus.circle")
-                }
+                })
                 .buttonStyle(.plain)
                 .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -158,14 +249,13 @@ struct SettingsView: View {
             Text("General")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $launchAtLogin) {
-                Text("Launch at login").font(.system(size: 12))
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .onChange(of: launchAtLogin) { _, newValue in
-                LoginItem.setEnabled(newValue)
-            }
+            // String-label init — no closure on Toggle, so .onChange(perform:) is
+            // the sole closure in the chain. Fixes multiple_closures_with_trailing_closure.
+            Toggle("Launch at login", isOn: $launchAtLogin)
+                .toggleStyle(.switch)
+                .font(.system(size: 12))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             Divider().padding(.leading, 12)
             Toggle(isOn: $settings.showDimmedRunners) {
                 Text("Show offline runners").font(.system(size: 12))
@@ -200,9 +290,9 @@ struct SettingsView: View {
                         Text("Authenticated").font(.caption).foregroundColor(.secondary)
                     }
                 } else {
-                    Button(action: signInWithGitHub) {
+                    Button(action: signInWithGitHub, label: {
                         Text("Sign in").font(.caption).foregroundColor(.orange)
-                    }.buttonStyle(.plain)
+                    }).buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -260,6 +350,13 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+
+    /// Applies the launch-at-login preference change.
+    /// Passed as a function reference to `.onChange(of:perform:)` — no trailing
+    /// closure on the Toggle call-chain (fixes multiple_closures_with_trailing_closure).
+    private func applyLaunchAtLogin(_ enabled: Bool) {
+        LoginItem.setEnabled(enabled)
+    }
 
     private func submitScope() {
         let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
