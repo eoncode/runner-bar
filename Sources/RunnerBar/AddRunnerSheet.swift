@@ -187,14 +187,44 @@ struct AddRunnerSheet: View {
                 atPath: dir,
                 withIntermediateDirectories: true
             )
-            let labelArg = labels.isEmpty ? "" : " --labels \"\(labels)\""
-            let cmd = "cd \"\(dir)\" && ./config.sh" +
-                " --url \"\(ghURL)\"" +
-                " --token \"\(token)\"" +
-                " --name \"\(name)\"" +
-                labelArg +
-                " --unattended 2>&1"
-            let output = shell(cmd, timeout: 60)
+            // Use Process.arguments so token/name/url are never shell-interpolated.
+            // This prevents breakage or injection via crafted runner names or tokens.
+            let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
+            let task = Process()
+            task.executableURL = configURL
+            task.currentDirectoryURL = URL(fileURLWithPath: dir)
+            var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
+            if !labels.isEmpty {
+                args += ["--labels", labels]
+            }
+            task.arguments = args
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = pipe
+            var outputData = Data()
+            let lock = NSLock()
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { return }
+                lock.lock(); outputData.append(chunk); lock.unlock()
+            }
+            do { try task.run() } catch {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                DispatchQueue.main.async {
+                    isRegistering = false
+                    errorMessage = "config.sh launch error: \(error.localizedDescription)"
+                }
+                return
+            }
+            let deadline = Date().addingTimeInterval(60)
+            while task.isRunning {
+                if Date() > deadline { task.terminate(); break }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            pipe.fileHandleForReading.readabilityHandler = nil
+            let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+            if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+            let output = String(data: outputData, encoding: .utf8) ?? ""
             let failed = output.lowercased().contains("error")
                 || output.lowercased().contains("failed")
             DispatchQueue.main.async {
