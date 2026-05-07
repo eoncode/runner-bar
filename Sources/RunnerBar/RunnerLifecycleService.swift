@@ -82,22 +82,78 @@ struct RunnerLifecycleService {
     // MARK: - Remove
 
     /// Uninstalls and de-registers the runner.
-    /// Runs `./svc.sh uninstall` then `./config.sh remove` from the runner's
-    /// `installPath`. Requires a GitHub token in the environment.
-    /// Returns `true` if both scripts exit without error output.
+    ///
+    /// Runs `./svc.sh uninstall` then `./config.sh remove --unattended` from the
+    /// runner's `installPath` using `Process.arguments` so the path is never
+    /// interpolated into a shell string.
+    ///
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// Requires a GitHub token (gh auth login, GH_TOKEN, or GITHUB_TOKEN).
+    ///
+    /// Returns `true` when both scripts exit with status 0.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         guard let path = runner.installPath else {
             log("RunnerLifecycle › remove: no installPath for \(runner.runnerName)")
             return false
         }
-        let svcResult = shell("cd \"\(path)\" && ./svc.sh uninstall 2>&1", timeout: 30)
-        log("RunnerLifecycle › svc.sh uninstall: \(svcResult.prefix(120))")
-        let cfgResult = shell("cd \"\(path)\" && ./config.sh remove --unattended 2>&1", timeout: 30)
-        log("RunnerLifecycle › config.sh remove: \(cfgResult.prefix(120))")
-        let failed = cfgResult.lowercased().contains("error")
-            || cfgResult.lowercased().contains("failed")
-        return !failed
+        let dir = URL(fileURLWithPath: path)
+        let svcOk = runScript(executableName: "svc.sh",
+                              arguments: ["uninstall"],
+                              workingDirectory: dir,
+                              timeout: 30,
+                              logTag: "svc.sh uninstall")
+        let cfgOk = runScript(executableName: "config.sh",
+                              arguments: ["remove", "--unattended"],
+                              workingDirectory: dir,
+                              timeout: 30,
+                              logTag: "config.sh remove")
+        return svcOk && cfgOk
+    }
+
+    /// Launches `<workingDirectory>/<executableName>` via `Process.arguments`
+    /// (no shell interpolation). Waits up to `timeout` seconds.
+    ///
+    /// ⚠️ Blocking — must only be called from a background thread.
+    ///
+    /// Returns `true` when the process exits with status 0.
+    private func runScript(
+        executableName: String,
+        arguments: [String],
+        workingDirectory: URL,
+        timeout: TimeInterval,
+        logTag: String
+    ) -> Bool {
+        let executableURL = workingDirectory.appendingPathComponent(executableName)
+        let task = Process()
+        task.executableURL = executableURL
+        task.currentDirectoryURL = workingDirectory
+        task.arguments = arguments
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        var outputData = Data()
+        let lock = NSLock()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            lock.lock(); outputData.append(chunk); lock.unlock()
+        }
+        do { try task.run() } catch {
+            pipe.fileHandleForReading.readabilityHandler = nil
+            log("RunnerLifecycle › \(logTag) launch error: \(error)")
+            return false
+        }
+        let timeoutItem = DispatchWorkItem { task.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
+        pipe.fileHandleForReading.readabilityHandler = nil
+        let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+        if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        log("RunnerLifecycle › \(logTag) exit=\(task.terminationStatus): \(output.prefix(120))")
+        return task.terminationStatus == 0
     }
 
     // MARK: - Rename
