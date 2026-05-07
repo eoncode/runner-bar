@@ -2,9 +2,8 @@ import SwiftUI
 
 /// Settings view — complete implementation for all phases 1-6.
 ///
-/// Contains the shared settings UI with runner management, notifications
-/// (placeholder, out of scope per AGENTS.md), general toggles,
-/// and about section.
+/// Contains the shared settings UI with runner management, notifications,
+/// general toggles, and about section.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -12,6 +11,7 @@ struct SettingsView: View {
     @ObservedObject var store: RunnerStoreObservable
 
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var notificationPrefs = NotificationPrefsStore.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -94,14 +94,22 @@ struct SettingsView: View {
             }
             Divider()
 
-            // ── Notifications (Phase 4 — placeholder)
-            VStack(alignment: .leading, spacing: 8) {
+            // ── Notifications (Phase 4)
+            VStack(alignment: .leading, spacing: 0) {
                 Text("Notifications")
                     .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                Text("Not available in this version")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+                Toggle(isOn: $notificationPrefs.notifyOnSuccess) {
+                    Text("Notify on success").font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                Divider().padding(.leading, 12)
+                Toggle(isOn: $notificationPrefs.notifyOnFailure) {
+                    Text("Notify on failure").font(.system(size: 12))
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 12).padding(.vertical, 6)
             }
             Divider()
 
