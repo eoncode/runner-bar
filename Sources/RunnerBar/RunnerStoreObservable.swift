@@ -9,7 +9,7 @@ import SwiftUI
 /// `reload()` is the ONE place where store state is copied into published properties.
 /// It always runs on the main thread and suppresses SwiftUI animations (ref #52 #54).
 final class RunnerStoreObservable: ObservableObject {
-    /// Action groups to display (live + recently completed, capped at 5).
+    /// Action groups to display (live + recently completed, capped at 10).
     @Published private(set) var actions: [ActionGroup] = []
     /// Jobs to display (live + recently completed, capped at 3).
     @Published private(set) var jobs: [ActiveJob] = []

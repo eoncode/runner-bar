@@ -54,13 +54,14 @@ struct PopoverMainView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Settings")
-                Button(action: { NSApplication.shared.terminate(nil) }, label: {
+                // fix #3 (#311): hide popover instead of terminating the app
+                Button(action: { NSApplication.shared.hide(nil) }, label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 })
                 .buttonStyle(.plain)
-                .help("Quit RunnerBar")
+                .help("Hide RunnerBar")
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider()
@@ -76,10 +77,7 @@ struct PopoverMainView: View {
                 Divider()
             }
 
-            // ── Actions
-            Text("Actions")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+            // ── Actions (no section label per spec #178)
             if store.actions.isEmpty {
                 Text("No recent actions")
                     .font(.caption).foregroundColor(.secondary)
@@ -88,132 +86,144 @@ struct PopoverMainView: View {
                 // Phase 5 (#305): ScrollView + visibleCount pagination
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: 0) {
-                // Phase 3 (#302): redesigned action row
-                // Layout: [pie] SHA  title·····  startedAgo  elapsed  jobs  status ›
-                ForEach(store.actions.prefix(visibleCount)) { actionGroup in
-                    Button(action: { onSelectAction(actionGroup) }, label: {
+                        // Phase 3 (#302): redesigned action row
+                        // Layout: [pie] SHA  title·····  startedAgo  elapsed  jobs  status ›
+                        ForEach(store.actions.prefix(visibleCount)) { actionGroup in
+                            Button(action: { onSelectAction(actionGroup) }, label: {
+                                HStack(spacing: 6) {
+                                    // Pie progress dot
+                                    PieProgressView(
+                                        progress: actionGroup.jobsTotal > 0
+                                            ? Double(actionGroup.jobsDone) / Double(actionGroup.jobsTotal)
+                                            : (actionGroup.groupStatus == .completed ? 1.0 : 0.0),
+                                        color: actionDotColor(for: actionGroup)
+                                    )
+                                    // SHA / PR label
+                                    Text(actionGroup.label)
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .frame(width: 46, alignment: .leading)
+                                    // Commit / PR title
+                                    Text(actionGroup.title)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(actionGroup.isDimmed ? .secondary : .primary)
+                                        .lineLimit(1).truncationMode(.tail)
+                                    Spacer()
+                                    // Started-ago timestamp
+                                    Text(actionGroup.startedAgo)
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 44, alignment: .trailing)
+                                    // Elapsed MM:SS
+                                    Text(actionGroup.elapsed)
+                                        .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                        .frame(width: 36, alignment: .trailing)
+                                    // Job progress fraction
+                                    Text(actionGroup.jobProgress)
+                                        .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                        .frame(width: 28, alignment: .trailing)
+                                    // Status text — uppercase per spec #178 #302 #285 (fix #1)
+                                    Text(actionStatusLabel(for: actionGroup))
+                                        .font(.caption)
+                                        .foregroundColor(actionStatusColor(for: actionGroup))
+                                        .frame(width: 60, alignment: .trailing)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2).foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 3)
+                            })
+                            .buttonStyle(.plain)
+                            // Phase 4 (#304): inline ↳ job rows for in-progress groups
+                            if actionGroup.groupStatus == .inProgress || actionGroup.groupStatus == .queued {
+                                ForEach(actionGroup.jobs.filter {
+                                    $0.status == "in_progress" || $0.status == "queued"
+                                }.prefix(3)) { job in
+                                    Button(action: { onSelectJob(job) }, label: {
+                                        HStack(spacing: 6) {
+                                            // indent
+                                            Text("↳")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                                .padding(.leading, 14)
+                                            // fix #4 (#311): real step completion fraction
+                                            let stepProgress: Double = {
+                                                let total = job.steps.count
+                                                guard total > 0 else {
+                                                    return job.status == "in_progress" ? 0.5 : 0.0
+                                                }
+                                                let done = job.steps.filter { $0.conclusion != nil }.count
+                                                return Double(done) / Double(total)
+                                            }()
+                                            PieProgressView(
+                                                progress: stepProgress,
+                                                color: jobDotColor(for: job),
+                                                size: 7
+                                            )
+                                            Text(job.name)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1).truncationMode(.tail)
+                                            Spacer()
+                                            // fix #2 (#311): uppercase per spec
+                                            Text(job.status == "in_progress" ? "IN PROGRESS" : "QUEUED")
+                                                .font(.caption)
+                                                .foregroundColor(job.status == "in_progress" ? .yellow : .blue)
+                                                .frame(width: 60, alignment: .trailing)
+                                            Text(job.elapsed)
+                                                .font(.caption.monospacedDigit())
+                                                .foregroundColor(.secondary)
+                                                .frame(width: 36, alignment: .trailing)
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption2).foregroundColor(.secondary)
+                                        }
+                                        .padding(.horizontal, 12).padding(.vertical, 2)
+                                    })
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        // fix #6 (#311): static label — dynamic count can be wrong when store paginates
+                        if store.actions.count > visibleCount {
+                            Button(action: { visibleCount += 10 }, label: {
+                                Text("Load 10 more actions…")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            })
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                        }
+                    }
+                }
+                .frame(maxHeight: 400)
+                .padding(.bottom, 6)
+            }
+
+            // ── Phase 6 (#307): Runners — only shown when ≥1 runner is active (no section label per spec)
+            let activeRunners = localRunners.runners.filter { $0.isRunning }
+            if !activeRunners.isEmpty {
+                Divider()
+                // fix #8 (#311): runner rows are tappable with > chevron
+                ForEach(activeRunners) { runner in
+                    Button(action: { /* onSelectRunner(runner) — no-op until runner detail view exists */ }, label: {
                         HStack(spacing: 6) {
-                            // Pie progress dot
-                            PieProgressView(
-                                progress: actionGroup.jobsTotal > 0
-                                    ? Double(actionGroup.jobsDone) / Double(actionGroup.jobsTotal)
-                                    : (actionGroup.groupStatus == .completed ? 1.0 : 0.0),
-                                color: actionDotColor(for: actionGroup)
-                            )
-                            // SHA / PR label
-                            Text(actionGroup.label)
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .frame(width: 46, alignment: .leading)
-                            // Commit / PR title
-                            Text(actionGroup.title)
+                            Circle()
+                                .fill(runnerDotColor(for: runner))
+                                .frame(width: 7, height: 7)
+                            Text(runner.runnerName)
                                 .font(.system(size: 12))
-                                .foregroundColor(actionGroup.isDimmed ? .secondary : .primary)
+                                .foregroundColor(.primary)
                                 .lineLimit(1).truncationMode(.tail)
                             Spacer()
-                            // Started-ago timestamp
-                            Text(actionGroup.startedAgo)
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
-                                .frame(width: 44, alignment: .trailing)
-                            // Elapsed MM:SS
-                            Text(actionGroup.elapsed)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 36, alignment: .trailing)
-                            // Job progress fraction
-                            Text(actionGroup.jobProgress)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 28, alignment: .trailing)
-                            // Status text
-                            Text(actionStatusLabel(for: actionGroup))
+                            Text(runner.statusDescription)
                                 .font(.caption)
-                                .foregroundColor(actionStatusColor(for: actionGroup))
-                                .frame(width: 60, alignment: .trailing)
+                                .foregroundColor(runnerDotColor(for: runner))
                             Image(systemName: "chevron.right")
                                 .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 3)
                     })
                     .buttonStyle(.plain)
-                    // Phase 4 (#304): inline ↳ job rows for in-progress groups
-                    if actionGroup.groupStatus == .inProgress || actionGroup.groupStatus == .queued {
-                        ForEach(actionGroup.jobs.filter {
-                            $0.status == "in_progress" || $0.status == "queued"
-                        }.prefix(3)) { job in
-                            Button(action: { onSelectJob(job) }, label: {
-                                HStack(spacing: 6) {
-                                    // indent
-                                    Text("↳")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                        .padding(.leading, 14)
-                                    PieProgressView(
-                                        progress: job.status == "in_progress" ? 0.5 : 0.0,
-                                        color: jobDotColor(for: job),
-                                        size: 7
-                                    )
-                                    Text(job.name)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1).truncationMode(.tail)
-                                    Spacer()
-                                    Text(job.status == "in_progress" ? "Running" : "Queued")
-                                        .font(.caption)
-                                        .foregroundColor(job.status == "in_progress" ? .yellow : .blue)
-                                        .frame(width: 46, alignment: .trailing)
-                                    Text(job.elapsed)
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 36, alignment: .trailing)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2).foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 2)
-                            })
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                    } // ForEach end
-                    // "Load 10 more" button — only shown when more groups exist
-                    if store.actions.count > visibleCount {
-                        Button(action: { visibleCount += 10 }, label: {
-                            Text("Load \(min(10, store.actions.count - visibleCount)) more")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        })
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                    }
-                    } // LazyVStack end
-                } // ScrollView end
-                .frame(maxHeight: 400)
-                .padding(.bottom, 6)
-            }
-
-            // ── Phase 6 (#307): Runners — only shown when ≥1 runner is active
-            let activeRunners = localRunners.runners.filter { $0.isRunning }
-            if !activeRunners.isEmpty {
-                Divider()
-                Text("Runners")
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-                ForEach(activeRunners) { runner in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(runnerDotColor(for: runner))
-                            .frame(width: 7, height: 7)
-                        Text(runner.runnerName)
-                            .font(.system(size: 12))
-                            .foregroundColor(.primary)
-                            .lineLimit(1).truncationMode(.tail)
-                        Spacer()
-                        Text(runner.statusDescription)
-                            .font(.caption)
-                            .foregroundColor(runnerDotColor(for: runner))
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 3)
                 }
                 .padding(.bottom, 6)
             }
@@ -223,6 +233,10 @@ struct PopoverMainView: View {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
             Task { await localRunners.refresh() }
+        }
+        // fix #11 (#311): stop stats timer when popover is dismissed
+        .onDisappear {
+            systemStats.stop()
         }
     }
 
@@ -245,17 +259,18 @@ struct PopoverMainView: View {
     }
 
     /// Human-readable status label for an action group.
+    /// Returns uppercase strings per spec (#178 #302 #285). fix #1 (#311)
     private func actionStatusLabel(for group: ActionGroup) -> String {
         switch group.groupStatus {
-        case .inProgress: return "Running"
-        case .queued:     return "Queued"
+        case .inProgress: return "IN PROGRESS"
+        case .queued:     return "QUEUED"
         case .completed:
             switch group.conclusion {
-            case "success":   return "Success"
-            case "failure":   return "Failed"
-            case "cancelled": return "Cancelled"
-            case "skipped":   return "Skipped"
-            default:          return "Done"
+            case "success":   return "SUCCESS"
+            case "failure":   return "FAILED"
+            case "cancelled": return "CANCELED"
+            case "skipped":   return "SKIPPED"
+            default:          return "DONE"
             }
         }
     }
@@ -304,9 +319,9 @@ struct PopoverMainView: View {
     /// Human-readable status label for a live job.
     private func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
-        case "in_progress": return "Running"
-        case "queued": return "Queued"
-        default: return job.status.capitalized
+        case "in_progress": return "IN PROGRESS"
+        case "queued": return "QUEUED"
+        default: return job.status.uppercased()
         }
     }
 
@@ -322,11 +337,11 @@ struct PopoverMainView: View {
     /// Human-readable conclusion label for a completed/dimmed job.
     private func conclusionLabel(for job: ActiveJob) -> String {
         switch job.conclusion {
-        case "success": return "Success"
-        case "failure": return "Failed"
-        case "cancelled": return "Cancelled"
-        case "skipped": return "Skipped"
-        default: return job.conclusion?.capitalized ?? "Done"
+        case "success":   return "SUCCESS"
+        case "failure":   return "FAILED"
+        case "cancelled": return "CANCELED"
+        case "skipped":   return "SKIPPED"
+        default: return job.conclusion?.uppercased() ?? "DONE"
         }
     }
 
