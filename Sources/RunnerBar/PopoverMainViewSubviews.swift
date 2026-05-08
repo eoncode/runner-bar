@@ -228,7 +228,9 @@ struct ActionRowView: View {
         .padding(.vertical, 3)
     }
 
-    /// Status badge (IN PROGRESS / QUEUED / SUCCESS / FAILED).
+    /// Status badge (IN PROGRESS / QUEUED / SUCCESS / FAILED / CANCELLED / SKIPPED).
+    /// Uses group.conclusion (computed from all runs) rather than a per-run allSatisfy
+    /// check so partially-live groups are never mis-labeled as failed.
     @ViewBuilder
     private var statusLabel: some View {
         switch group.groupStatus {
@@ -239,7 +241,7 @@ struct ActionRowView: View {
             Text("QUEUED")
                 .font(.system(size: 9, weight: .semibold)).foregroundColor(.blue)
         case .completed:
-            let success = group.runs.allSatisfy { $0.conclusion == "success" }
+            let success = group.conclusion == "success"
             Text(success ? "SUCCESS" : "FAILED")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(success ? .green : .red)
@@ -247,13 +249,14 @@ struct ActionRowView: View {
     }
 
     /// Status dot colour for this group.
+    /// Uses group.conclusion for the same reason as statusLabel.
     private var dotColor: Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
         case .queued: return .blue
         case .completed:
             if group.isDimmed { return .gray }
-            return group.runs.allSatisfy({ $0.conclusion == "success" }) ? .green : .red
+            return group.conclusion == "success" ? .green : .red
         }
     }
 }
