@@ -45,6 +45,8 @@ struct SettingsView: View {
     @State private var runnerBeingConfigured: RunnerModel?
     /// Phase 3: controls whether the Add Runner sheet is presented.
     @State private var showAddRunnerSheet = false
+    /// Surfaced when remove() returns false — cleared on next refresh.
+    @State private var removeErrorMessage: String?
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -125,9 +127,19 @@ struct SettingsView: View {
                     return
                 }
                 runnerPendingRemoval = nil
+                removeErrorMessage = nil
                 DispatchQueue.global(qos: .userInitiated).async {
-                    RunnerLifecycleService.shared.remove(runner: runner)
-                    DispatchQueue.main.async { localRunnerStore.refresh() }
+                    // Capture result: @discardableResult on remove() must not be
+                    // silently dropped. A false return means config.sh remove
+                    // failed and the GitHub registration was NOT cleaned up.
+                    let ok = RunnerLifecycleService.shared.remove(runner: runner)
+                    DispatchQueue.main.async {
+                        if !ok {
+                            removeErrorMessage = "De-registration failed — the runner may " +
+                                "still appear in GitHub. Check your token and try again."
+                        }
+                        localRunnerStore.refresh()
+                    }
                 }
             }
         } message: {
@@ -181,7 +193,10 @@ struct SettingsView: View {
                         .scaleEffect(0.6)
                         .frame(width: 14, height: 14)
                 } else {
-                    Button(action: { localRunnerStore.refresh() }, label: {
+                    Button(action: {
+                        removeErrorMessage = nil
+                        localRunnerStore.refresh()
+                    }, label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -191,6 +206,13 @@ struct SettingsView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+
+            if let errMsg = removeErrorMessage {
+                Text(errMsg)
+                    .font(.caption).foregroundColor(.red)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+                    .background(Color.red.opacity(0.07))
+            }
 
             if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
                 Text("No local runners found")
