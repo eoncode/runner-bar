@@ -3,19 +3,20 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-// AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
-// ❌ NEVER remove .frame(idealWidth: 420)
-// ❌ NEVER use .frame(width: 420)
-// ❌ NEVER remove maxWidth: .infinity (VStack must stretch to full popover width)
-// ❌ NEVER add .frame(height:) to root VStack
+//         AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
+//         ❌ NEVER remove .frame(idealWidth: 420)
+//         ❌ NEVER use .frame(width: 420)
+//         ❌ NEVER remove maxWidth: .infinity
+//         ❌ NEVER add .frame(height:) to root VStack
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
-// swiftlint:disable type_body_length
-/// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
+/// Root popover view — unified scrollable Actions list per issue #294.
+/// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
+/// file_length (<400) and type_body_length (<200) limits.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
@@ -28,234 +29,122 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
+    @State private var visibleCount: Int = 10
+    @State private var expandedGroupIDs: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header
-            HStack {
-                Text("RunnerBar v0.34") // ⚠️ bump on every commit
-                    .font(.headline).foregroundColor(.secondary)
-                Spacer()
-                Button(action: onSelectSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Settings")
-                .padding(.trailing, 4)
-                if isAuthenticated {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated").font(.caption).foregroundColor(.secondary)
-                    }
-                } else {
-                    Button(action: signInWithGitHub) {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.orange).frame(width: 8, height: 8)
-                            Text("Sign in with GitHub").font(.caption).foregroundColor(.orange)
-                        }
-                    }.buttonStyle(.plain)
+            PopoverHeaderView(
+                stats: systemStats.stats,
+                isAuthenticated: isAuthenticated,
+                onSelectSettings: onSelectSettings,
+                onSignIn: signInWithGitHub
+            )
+            // NOTE: no unconditional Divider() here — PopoverLocalRunnerRow owns its
+            // own leading + trailing Dividers inside its @ViewBuilder guard (fix #2).
+            if store.isRateLimited { rateLimitBanner; Divider() }
+            PopoverLocalRunnerRow(runners: store.runners)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    actionsSection
                 }
             }
-            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
             Divider()
-
-            if store.isRateLimited {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.yellow).font(.caption)
-                    Text("GitHub rate limit reached — pausing polls")
-                        .font(.caption).foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 4)
-                Divider()
-            }
-
-            // ── System
-            Text("System")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            SystemStatsView(stats: systemStats.stats)
-            Divider()
-
-            // ── Actions
-            Text("Actions")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            if store.actions.isEmpty {
-                Text("No recent actions")
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-            } else {
-                ForEach(store.actions.prefix(5)) { actionGroup in
-                    Button(action: { onSelectAction(actionGroup) }, label: {
-                        HStack(spacing: 8) {
-                            actionDot(for: actionGroup)
-                            Text(actionGroup.label)
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .frame(width: 52, alignment: .leading)
-                            Text(actionGroup.title)
-                                .font(.system(size: 12))
-                                .foregroundColor(actionGroup.isDimmed ? .secondary : .primary)
-                                .lineLimit(1).truncationMode(.tail)
-                            Spacer()
-                            if actionGroup.groupStatus == .inProgress
-                                || actionGroup.groupStatus == .queued {
-                                Text(actionGroup.currentJobName)
-                                    .font(.caption).foregroundColor(.secondary)
-                                    .lineLimit(1).truncationMode(.tail)
-                                    .frame(minWidth: 0, maxWidth: 80, alignment: .trailing)
-                            }
-                            Text(actionGroup.jobProgress)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 30, alignment: .trailing)
-                            Text(actionGroup.elapsed)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 40, alignment: .trailing)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 3)
-                    })
-                    .buttonStyle(.plain)
-                }
-                .padding(.bottom, 6)
-            }
-            Divider()
-
-            // ── Active Jobs
-            Text("Active Jobs")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            if store.jobs.isEmpty {
-                Text("No active jobs")
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-            } else {
-                ForEach(store.jobs.prefix(3)) { job in
-                    Button(action: { onSelectJob(job) }, label: {
-                        HStack(spacing: 8) {
-                            jobDot(for: job)
-                            Text(job.name)
-                                .font(.system(size: 12))
-                                .foregroundColor(job.isDimmed ? .secondary : .primary)
-                                .lineLimit(1).truncationMode(.tail)
-                            Spacer()
-                            Text(job.isDimmed ? conclusionLabel(for: job) : jobStatusLabel(for: job))
-                                .font(.caption)
-                                .foregroundColor(
-                                    job.isDimmed ? conclusionColor(for: job) : jobStatusColor(for: job)
-                                )
-                                .frame(width: 76, alignment: .trailing)
-                            Text(job.elapsed)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 40, alignment: .trailing)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 3)
-                    })
-                    .buttonStyle(.plain)
-                }
-                .padding(.bottom, 6)
-            }
-            Divider()
-            Button(action: { NSApplication.shared.terminate(nil) }, label: {
-                Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
-            })
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            quitButton
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
         }
+        // Fix #4: tear down the repeating timer/publisher on dismiss to prevent
+        // SystemStatsViewModel leaking CPU cycles after the view is gone.
+        .onDisappear {
+            systemStats.stop()
+        }
+    }
+
+    // MARK: - Rate limit banner
+
+    /// Yellow warning banner shown when GitHub rate-limit is hit.
+    private var rateLimitBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.yellow).font(.caption)
+            Text("GitHub rate limit reached — pausing polls")
+                .font(.caption).foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+    }
+
+    // MARK: - Actions section
+
+    /// Unified scrollable actions list with inline job expansion and pagination.
+    private var actionsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if store.actions.isEmpty {
+                Text("No recent actions")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+            } else {
+                let visible = Array(store.actions.prefix(visibleCount))
+                ForEach(visible) { group in
+                    ActionRowView(
+                        group: group,
+                        isExpanded: expandedGroupIDs.contains(group.id),
+                        onSelect: { onSelectAction(group) },
+                        onToggleExpand: { toggleExpand(group.id) }
+                    )
+                    if expandedGroupIDs.contains(group.id) {
+                        InlineJobRowsView(group: group, onSelectJob: onSelectJob)
+                    }
+                }
+                if store.actions.count > visibleCount { loadMoreButton }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// "Load 10 more actions…" pagination button.
+    private var loadMoreButton: some View {
+        Button(
+            action: { visibleCount += 10 },
+            label: {
+                Text("Load \(min(10, store.actions.count - visibleCount)) more actions…")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+        )
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    // MARK: - Quit
+
+    /// Quit RunnerBar button pinned to the bottom of the popover.
+    private var quitButton: some View {
+        Button(
+            action: { NSApplication.shared.terminate(nil) },
+            label: {
+                Text("Quit RunnerBar")
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+        )
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
     // MARK: - Helpers
 
-    /// Dot color for an action group based on its status.
-    @ViewBuilder
-    private func actionDot(for group: ActionGroup) -> some View {
-        Circle()
-            .fill(actionDotColor(for: group))
-            .frame(width: 8, height: 8)
-    }
-
-    /// Dot color for a job based on its status.
-    @ViewBuilder
-    private func jobDot(for job: ActiveJob) -> some View {
-        Circle()
-            .fill(jobDotColor(for: job))
-            .frame(width: 8, height: 8)
-    }
-
-    /// Color for an action group's status dot.
-    private func actionDotColor(for group: ActionGroup) -> Color {
-        switch group.groupStatus {
-        case .inProgress: return .yellow
-        case .queued: return .blue
-        case .completed:
-            if group.isDimmed { return .gray }
-            return group.runs.allSatisfy({ $0.conclusion == "success" }) ? .green : .red
-        }
-    }
-
-    /// Color for a job's status dot.
-    private func jobDotColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued": return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
-        }
-    }
-
-    /// Human-readable status label for a live job.
-    private func jobStatusLabel(for job: ActiveJob) -> String {
-        switch job.status {
-        case "in_progress": return "Running"
-        case "queued": return "Queued"
-        default: return job.status.capitalized
-        }
-    }
-
-    /// Foreground color for a live job's status label.
-    private func jobStatusColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued": return .blue
-        default: return .secondary
-        }
-    }
-
-    /// Human-readable conclusion label for a completed/dimmed job.
-    private func conclusionLabel(for job: ActiveJob) -> String {
-        switch job.conclusion {
-        case "success": return "Success"
-        case "failure": return "Failed"
-        case "cancelled": return "Cancelled"
-        case "skipped": return "Skipped"
-        default: return job.conclusion?.capitalized ?? "Done"
-        }
-    }
-
-    /// Foreground color for a completed job's conclusion label.
-    private func conclusionColor(for job: ActiveJob) -> Color {
-        switch job.conclusion {
-        case "success": return .green
-        case "failure": return .red
-        case "cancelled": return .orange
-        default: return .secondary
+    /// Toggles expand/collapse state for an action group.
+    private func toggleExpand(_ id: String) {
+        if expandedGroupIDs.contains(id) {
+            expandedGroupIDs.remove(id)
+        } else {
+            expandedGroupIDs.insert(id)
         }
     }
 
     /// Opens the GitHub PAT setup docs in the default browser.
-    /// NSAppleScript/Terminal removed — device-flow requires a user_code the app never generates.
-    /// Auth.swift resolves token via: gh auth token → GH_TOKEN → GITHUB_TOKEN (ref #221 #246).
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
@@ -263,4 +152,3 @@ struct PopoverMainView: View {
         NSWorkspace.shared.open(url)
     }
 }
-// swiftlint:enable type_body_length
