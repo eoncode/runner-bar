@@ -52,6 +52,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Body
 
+    /// The sheet's root view: scope picker, runner name/labels/dir fields, and Add/Cancel buttons.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner")
@@ -173,6 +174,7 @@ struct AddRunnerSheet: View {
         }
     }
 
+    // swiftlint:disable:next function_body_length
     private func register() {
         guard canRegister else { return }
         errorMessage = nil

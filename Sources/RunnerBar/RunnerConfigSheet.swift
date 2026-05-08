@@ -20,6 +20,7 @@ struct RunnerConfigSheet: View {
     /// Non-nil when `updateConfig` returns `false`; shown as an inline error.
     @State private var errorMessage: String?
 
+    /// Creates the sheet pre-populated with the runner's current labels and work folder.
     init(runner: RunnerModel, isPresented: Binding<RunnerModel?>, onSave: @escaping () -> Void) {
         self.runner = runner
         self._isPresented = isPresented
@@ -28,6 +29,7 @@ struct RunnerConfigSheet: View {
         self._workFolderText = State(initialValue: runner.workFolder ?? "")
     }
 
+    /// The sheet's root view: labels field, work-folder field, and Save/Cancel buttons.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Configure \"\(runner.runnerName)\"")
