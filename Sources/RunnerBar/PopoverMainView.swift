@@ -14,7 +14,7 @@ import SwiftUI
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
-/// Root popover view. Shows system stats, action groups, inline jobs, runners, and scope settings.
+/// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
@@ -51,13 +51,14 @@ struct PopoverMainView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 Divider()
             }
+            // ⚠️ SPEC ORDER (#296): Runners section ABOVE actions list.
+            RunnersListView(runners: store.runners)
             ActionsListView(
                 actions: store.actions,
                 visibleCount: $visibleCount,
                 expandedGroups: $expandedGroups,
                 onSelectAction: onSelectAction
             )
-            RunnersListView(runners: store.runners)
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
@@ -276,7 +277,9 @@ private struct ActionRowView: View {
         case .queued:     return .blue
         case .completed:
             if group.isDimmed { return .gray }
-            return group.runs.allSatisfy { $0.conclusion == "success" } ? .green : .red
+            // ⚠️ Use group.conclusion (the merged conclusion), NOT runs.allSatisfy —
+            // the latter mis-labels partial-success groups as red (fixed #311).
+            return group.conclusion == "success" ? .green : .red
         }
     }
 }
