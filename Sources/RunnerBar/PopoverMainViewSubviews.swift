@@ -61,24 +61,34 @@ struct PopoverHeaderView: View {
         }
     }
 
-    /// Inline CPU / MEM / DISK chips.
+    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
     /// would change `hc.view.fittingSize.height` and corrupt the popover frame in
     /// `AppDelegate.openPopover()` (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
-            statChip(label: "CPU", value: String(format: "%.1f%%", stats.cpuPct), pct: stats.cpuPct)
+            statChip(
+                label: "CPU",
+                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
+                pct: stats.cpuPct
+            )
             statChip(
                 label: "MEM",
-                value: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
+                value: blockBar(pct: stats.memTotalGB > 0
+                    ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
+                    + " "
+                    + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
                 pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
             )
             statChip(
                 label: "DISK",
-                value: String(
-                    format: "%d/%dGB",
-                    Int(stats.diskUsedGB.rounded()), Int(stats.diskTotalGB.rounded())
-                ),
+                value: blockBar(pct: stats.diskTotalGB > 0
+                    ? (stats.diskUsedGB / stats.diskTotalGB) * 100 : 0)
+                    + " "
+                    + String(
+                        format: "%d/%dGB",
+                        Int(stats.diskUsedGB.rounded()), Int(stats.diskTotalGB.rounded())
+                    ),
                 pct: stats.diskTotalGB > 0 ? (stats.diskUsedGB / stats.diskTotalGB) * 100 : 0
             )
         }
@@ -97,6 +107,14 @@ struct PopoverHeaderView: View {
                 .foregroundColor(usageColor(pct: pct))
                 .lineLimit(1)
         }
+    }
+
+    /// 3-character Unicode block bar scaled to `pct` (0–100).
+    /// Example: pct=67 → "██░", pct=100 → "███", pct=0 → "░░░".
+    private func blockBar(pct: Double, width: Int = 3) -> String {
+        let filled = Int((pct / 100.0 * Double(width)).rounded())
+        let f = max(0, min(width, filled))
+        return String(repeating: "█", count: f) + String(repeating: "░", count: width - f)
     }
 
     /// Traffic-light colour: red > 85 %, yellow > 60 %, green otherwise.
@@ -125,6 +143,7 @@ struct PopoverLocalRunnerRow: View {
 
     /// Runner rows (capped at 3) — overflow indicator — trailing Divider.
     /// Leading Divider is owned by the parent view.
+    /// Chevron intentionally omitted: runner detail navigation is not yet wired (ref #310).
     @ViewBuilder
     private func runnerList(_ active: [Runner]) -> some View {
         ForEach(active.prefix(3)) { runner in
@@ -137,7 +156,6 @@ struct PopoverLocalRunnerRow: View {
                     Text(String(format: "CPU: %.1f%%  MEM: %.1f%%", metrics.cpu, metrics.mem))
                         .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 }
-                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 3)
         }
@@ -242,37 +260,39 @@ struct ActionRowView: View {
 
 // MARK: - InlineJobRowsView
 
-/// Passive inline ↳ job rows shown beneath every in-progress action group.
-/// Always visible — no expand/collapse interaction. Capped at 4 with a
-/// `+ N more…` caption when the group has more active jobs.
+/// Passive read-only ↳ job rows shown beneath every in-progress action group.
+/// Rows have no tap action — spec mandates inline rows carry no `>` chevron and
+/// are not independently navigable (ref #324 Gap 2).
+/// Capped at `cap` rows; a tappable "+ N more jobs…" button reveals +4 at a time
+/// (ref #324 Gap 4).
 struct InlineJobRowsView: View {
     /// The parent action group whose active jobs are displayed.
     let group: ActionGroup
-    /// Called when the user taps a job row to drill into job detail.
-    let onSelectJob: (ActiveJob) -> Void
 
-    /// Maximum number of inline job rows to display before showing overflow caption.
-    private let cap = 4
+    /// Per-instance visible cap; starts at 4, increments +4 on each "load more" tap.
+    @State private var cap: Int = 4
 
     /// Jobs currently in-progress or queued inside this group.
     private var activeJobs: [ActiveJob] {
         group.jobs.filter { $0.status == "in_progress" || $0.status == "queued" }
     }
 
-    /// Renders up to `cap` job rows followed by an optional overflow caption.
+    /// Renders up to `cap` passive job rows followed by an optional load-more button.
     var body: some View {
         ForEach(activeJobs.prefix(cap)) { job in
-            Button(action: { onSelectJob(job) }, label: { jobRow(job) })
-                .buttonStyle(.plain)
+            jobRow(job)
         }
         if activeJobs.count > cap {
-            Text("+ \(activeJobs.count - cap) more…")
-                .font(.caption2).foregroundColor(.secondary)
-                .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+            Button(action: { cap += 4 }) {
+                Text("+ \(activeJobs.count - cap) more jobs…")
+                    .font(.caption2).foregroundColor(.accentColor)
+                    .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
         }
     }
 
-    /// Renders a single inline job row.
+    /// Renders a single inline job row (read-only — no Button wrapper per spec).
     /// Format: `↳ [●] JobName · Current step name  done/total  elapsed`
     /// The middle-dot segment is omitted when no in_progress step exists or step name is empty.
     private func jobRow(_ job: ActiveJob) -> some View {
