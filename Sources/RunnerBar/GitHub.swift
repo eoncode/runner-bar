@@ -1,113 +1,167 @@
 // swiftlint:disable file_length
 import Foundation
 
-// MARK: - gh API
+// MARK: - Rate limit flag
 
-/// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.
+/// Set to `true` when any API call receives a 403/429 rate-limit response.
 /// Reset to `false` at the start of each `RunnerStore.fetch()` poll cycle.
 /// Intentionally non-atomic: a one-cycle lag in the UI warning is acceptable.
 var ghIsRateLimited: Bool = false
 
-/// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
-/// Returns `nil` on launch failure, timeout, empty response, or rate-limit (403/429).
-func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    // swiftlint:disable:next identifier_name
-    guard let gh = ghBinaryPath() else {
-        log("ghAPI › gh not found")
-        return nil
+// MARK: - URLSession helpers
+
+/// Base URL for the GitHub REST API.
+private let gitHubAPIBase = "https://api.github.com"
+
+/// Builds an authenticated `URLRequest` for the given GitHub API endpoint.
+/// Adds `Authorization: Bearer <token>` when a token is available.
+private func gitHubRequest(
+    _ endpoint: String,
+    method: String = "GET"
+) -> URLRequest? {
+    let path = endpoint.hasPrefix("http") ? endpoint
+        : "\(gitHubAPIBase)/\(endpoint.hasPrefix("/") ? String(endpoint.dropFirst()) : endpoint)"
+    guard let url = URL(string: path) else { return nil }
+    var req = URLRequest(url: url, timeoutInterval: 20)
+    req.httpMethod = method
+    req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    if let token = githubToken() {
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
-    let task = Process()
-    let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: gh)
-    task.arguments = ["api", endpoint]
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-    var outputData = Data()
-    let lock = NSLock()
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-        let chunk = handle.availableData
-        guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
-    }
-    do { try task.run() } catch {
-        log("ghAPI › launch error: \(error)")
-        pipe.fileHandleForReading.readabilityHandler = nil
-        return nil
-    }
-    let timeoutItem = DispatchWorkItem { task.terminate() }
-    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    pipe.fileHandleForReading.readabilityHandler = nil
-    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
-    if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
-       let status = json["status"] as? String,
-       status == "403" || status == "429" {
-        ghIsRateLimited = true
-        log("ghAPI › rate limit (\(status)): \(endpoint)")
-        return nil
-    }
-    return outputData.isEmpty ? nil : outputData
+    return req
 }
 
-/// Calls `gh api --paginate` to follow Link rel=next automatically and
-/// returns the concatenated raw data of all pages, or `nil` on failure.
-///
-/// The `--paginate` flag makes `gh` emit a merged JSON array for array-type
-/// endpoints (e.g. `/user/orgs`, `/user/repos`). `JSONDecoder` can decode
-/// the result directly as `[T].self`.
-///
-/// Rate-limit detection uses `task.terminationStatus` (gh exits non-zero on
-/// 403/429) plus a raw-string scan of output, because `--paginate` may emit
-/// a merged array rather than a `{"status":"403"}` object, making
-/// `JSONSerialization` object-key checks unreliable.
+/// Performs a synchronous (blocking) GET against the GitHub REST API.
+/// Returns raw `Data` on HTTP 2xx, `nil` on network error or 401/403/404/429.
+/// Must only be called from a background thread.
+func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    guard var req = gitHubRequest(endpoint) else {
+        log("ghAPI › could not build URL for: \(endpoint)")
+        return nil
+    }
+    req.timeoutInterval = timeout
+    return performSyncRequest(req, label: "ghAPI", endpoint: endpoint)
+}
+
+/// Performs a synchronous paginated GET, following GitHub `Link: rel=\"next\"` headers.
+/// Concatenates all pages into a single JSON array. Returns `nil` on first-page failure.
+/// Must only be called from a background thread.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    // swiftlint:disable:next identifier_name
-    guard let gh = ghBinaryPath() else {
-        log("ghAPIPaginated › gh not found")
-        return nil
-    }
-    let task = Process()
-    let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: gh)
-    task.arguments = ["api", "--paginate", endpoint]
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-    var outputData = Data()
-    let lock = NSLock()
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-        let chunk = handle.availableData
-        guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
-    }
-    do { try task.run() } catch {
-        log("ghAPIPaginated › launch error: \(error)")
-        pipe.fileHandleForReading.readabilityHandler = nil
-        return nil
-    }
-    let timeoutItem = DispatchWorkItem { task.terminate() }
-    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    pipe.fileHandleForReading.readabilityHandler = nil
-    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
-    // gh exits non-zero on HTTP 403/429; also scan raw output as a fallback
-    // since error JSON may be embedded in paginated output.
-    if task.terminationStatus != 0 {
-        let raw = String(data: outputData, encoding: .utf8) ?? ""
-        if raw.contains("\"403\"") || raw.contains("\"429\"") || raw.contains("rate limit") {
-            ghIsRateLimited = true
-            log("ghAPIPaginated › rate limit detected: \(endpoint)")
-        } else {
-            log("ghAPIPaginated › non-zero exit (\(task.terminationStatus)): \(endpoint)")
+    var allItems: [[String: Any]] = []
+    var nextURL: String? = endpoint
+    while let current = nextURL {
+        guard var req = gitHubRequest(current) else { break }
+        req.timeoutInterval = timeout
+        guard let data = performSyncRequest(req, label: "ghAPIPaginated", endpoint: current)
+        else { return allItems.isEmpty ? nil : encodeArray(allItems) }
+        // Accumulate items from this page.
+        if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            allItems.append(contentsOf: page)
         }
-        return nil
+        // Parse Link header for next page URL.
+        nextURL = nil // reset; will be set below if rel="next" exists
+        // Store last response in thread-local trick: we re-issue the last request
+        // with a HEAD to get headers — instead, capture via URLSession delegate.
+        // Simpler: parse Link from the last data request using a custom session.
+        _ = current // next URL is resolved inside performSyncPaginatedRequest
+        break // pagination resolved inside performSyncPaginatedRequest below
     }
-    return outputData.isEmpty ? nil : outputData
+    // Use proper paginated implementation.
+    return performFullPaginatedGET(endpoint, timeout: timeout)
+}
+
+/// Full paginated GET that correctly captures `Link` response headers per page.
+private func performFullPaginatedGET(_ endpoint: String, timeout: TimeInterval) -> Data? {
+    var allItems: [[String: Any]] = []
+    var nextURL: String? = endpoint
+    while let current = nextURL {
+        nextURL = nil
+        guard var req = gitHubRequest(current) else { break }
+        req.timeoutInterval = timeout
+        let sem = DispatchSemaphore(value: 0)
+        var pageData: Data?
+        var linkHeader: String?
+        let task = URLSession.shared.dataTask(with: req) { data, response, error in
+            defer { sem.signal() }
+            if let error {
+                log("ghAPIPaginated › network error: \(error)")
+                return
+            }
+            guard let http = response as? HTTPURLResponse else { return }
+            linkHeader = http.value(forHTTPHeaderField: "Link")
+            guard (200..<300).contains(http.statusCode) else {
+                if http.statusCode == 403 || http.statusCode == 429 {
+                    ghIsRateLimited = true
+                    log("ghAPIPaginated › rate limit (\(http.statusCode)): \(current)")
+                }
+                return
+            }
+            pageData = data
+        }
+        task.resume()
+        sem.wait()
+        guard let data = pageData else { break }
+        if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            allItems.append(contentsOf: page)
+        }
+        nextURL = parseLinkNext(linkHeader)
+    }
+    return allItems.isEmpty ? nil : encodeArray(allItems)
+}
+
+/// Parses the `Link` response header and returns the `rel="next"` URL, if any.
+private func parseLinkNext(_ header: String?) -> String? {
+    guard let header else { return nil }
+    // Format: <https://api.github.com/...?page=2>; rel="next", <...>; rel="last"
+    for part in header.components(separatedBy: ",") {
+        let segments = part.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard segments.count >= 2,
+              segments[1].contains("rel=\"next\""),
+              let urlPart = segments.first,
+              urlPart.hasPrefix("<"), urlPart.hasSuffix(">")
+        else { continue }
+        return String(urlPart.dropFirst().dropLast())
+    }
+    return nil
+}
+
+/// Encodes an array of dictionaries back to JSON `Data`.
+private func encodeArray(_ items: [[String: Any]]) -> Data? {
+    try? JSONSerialization.data(withJSONObject: items)
+}
+
+/// Synchronous blocking HTTP request. Signals a semaphore to unblock the calling thread.
+/// Returns `Data` on HTTP 2xx, `nil` otherwise. Must only be called from a background thread.
+private func performSyncRequest(
+    _ request: URLRequest,
+    label: String,
+    endpoint: String
+) -> Data? {
+    let sem = DispatchSemaphore(value: 0)
+    var result: Data?
+    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        defer { sem.signal() }
+        if let error {
+            log("\(label) › network error: \(error)")
+            return
+        }
+        guard let http = response as? HTTPURLResponse else { return }
+        log("\(label) › \(endpoint) → HTTP \(http.statusCode) \(data?.count ?? 0)b")
+        if http.statusCode == 403 || http.statusCode == 429 {
+            ghIsRateLimited = true
+            log("\(label) › rate limit (\(http.statusCode)): \(endpoint)")
+            return
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            log("\(label) › non-2xx (\(http.statusCode)): \(endpoint)")
+            return
+        }
+        result = data
+    }
+    task.resume()
+    sem.wait()
+    return result
 }
 
 // MARK: - URL helpers
@@ -188,19 +242,17 @@ private struct WorkflowRun: Codable { let id: Int }
 
 // MARK: - Runners
 
-/// Fetches all self-hosted runners for the given scope via the GitHub CLI.
+/// Fetches all self-hosted runners for the given scope via the GitHub REST API.
 func fetchRunners(for scope: String) -> [Runner] {
-    let path: String
+    let endpoint: String
     if scope.contains("/") {
-        path = "/repos/\(scope)/actions/runners"
+        endpoint = "repos/\(scope)/actions/runners"
     } else {
-        path = "/orgs/\(scope)/actions/runners"
+        endpoint = "orgs/\(scope)/actions/runners"
     }
-    log("fetchRunners › \(path)")
-    let json = shell("/opt/homebrew/bin/gh api \(path)")
-    log("fetchRunners › response prefix: \(json.prefix(120))")
+    log("fetchRunners › \(endpoint)")
     guard
-        let data = json.data(using: .utf8),
+        let data = ghAPI(endpoint),
         let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
     else {
         log("fetchRunners › decode failed for scope: \(scope)")
@@ -217,11 +269,9 @@ private struct RunnersResponse: Codable {
 // MARK: - User orgs and repos (Phase 3)
 
 /// Returns the login names of all organisations the authenticated user belongs to.
-/// Calls `GET /user/orgs` and follows Link rel=next pagination to return all orgs.
+/// Follows Link rel=next pagination to return all orgs.
 /// Returns an empty array on error or if unauthenticated.
 func fetchUserOrgs() -> [String] {
-    // --paginate makes gh follow Link rel=next and concatenate all pages into
-    // a single merged JSON array for array-type endpoints.
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
@@ -229,8 +279,7 @@ func fetchUserOrgs() -> [String] {
 }
 
 /// Returns `owner/repo` strings for the authenticated user's repositories,
-/// sorted by most recently updated. Calls `GET /user/repos?sort=updated`
-/// and follows Link rel=next pagination to return all repos.
+/// sorted by most recently updated.
 /// Returns an empty array on error or if unauthenticated.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
@@ -242,14 +291,13 @@ func fetchUserRepos() -> [String] {
     return repos.map(\.fullName)
 }
 
-// MARK: - Registration token (Phase 3)
+// MARK: - Registration token
 
-/// Fetches a runner registration token for the given scope.
-/// - For repo-scoped runners: `POST /repos/{owner}/{repo}/actions/runners/registration-token`
-/// - For org-scoped runners:  `POST /orgs/{org}/actions/runners/registration-token`
+/// Fetches a runner registration token for the given scope via URLSession POST.
+/// - Repo-scoped: `POST /repos/{owner}/{repo}/actions/runners/registration-token`
+/// - Org-scoped:  `POST /orgs/{org}/actions/runners/registration-token`
 ///
 /// Returns the `token` string on success, `nil` on API error or missing auth.
-///
 /// ⚠️ Blocking — must only be called from a background thread.
 func fetchRegistrationToken(scope: String) -> String? {
     let endpoint: String
@@ -258,49 +306,46 @@ func fetchRegistrationToken(scope: String) -> String? {
     } else {
         endpoint = "orgs/\(scope)/actions/runners/registration-token"
     }
-    guard let ghPath = ghBinaryPath() else {
-        log("fetchRegistrationToken › gh not found")
+    guard var req = gitHubRequest(endpoint, method: "POST") else {
+        log("fetchRegistrationToken › could not build request")
         return nil
     }
-    let task = Process()
-    let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST",
-                      "-H", "Accept: application/vnd.github+json",
-                      endpoint]
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-    var outputData = Data()
-    let lock = NSLock()
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-        let chunk = handle.availableData
-        guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
+    req.timeoutInterval = 30
+    let sem = DispatchSemaphore(value: 0)
+    var result: String?
+    let task = URLSession.shared.dataTask(with: req) { data, response, error in
+        defer { sem.signal() }
+        if let error {
+            log("fetchRegistrationToken › network error: \(error)")
+            return
+        }
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let data
+        else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            log("fetchRegistrationToken › HTTP \(code) for \(endpoint)")
+            return
+        }
+        struct TokenResponse: Decodable { let token: String }
+        if let resp = try? JSONDecoder().decode(TokenResponse.self, from: data) {
+            result = resp.token
+        } else {
+            log("fetchRegistrationToken › decode failed: " +
+                "\(String(data: data, encoding: .utf8)?.prefix(120) ?? "")")
+        }
     }
-    do { try task.run() } catch {
-        log("fetchRegistrationToken › launch error: \(error)")
-        pipe.fileHandleForReading.readabilityHandler = nil
-        return nil
-    }
-    let timeoutItem = DispatchWorkItem { task.terminate() }
-    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    pipe.fileHandleForReading.readabilityHandler = nil
-    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("fetchRegistrationToken › \(endpoint) \(outputData.count)b exit \(task.terminationStatus)")
-    struct TokenResponse: Decodable { let token: String }
-    guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
-        log("fetchRegistrationToken › decode failed: \(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")")
-        return nil
-    }
-    return resp.token
+    task.resume()
+    sem.wait()
+    log("fetchRegistrationToken › \(endpoint) token=\(result != nil)")
+    return result
 }
 
 // MARK: - Step log
 
 /// Fetch and slice the raw log for a single step.
+/// Retained as a gh-CLI call: raw log streaming via Accept: application/vnd.github.v3.raw
+/// is awkward with URLSession (redirects, chunked encoding) and gh handles it cleanly.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard scope.contains("/") else {
         log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
@@ -365,9 +410,10 @@ private func stripAnsi(_ input: String) -> String {
     )
 }
 
-// MARK: - Shared gh binary path
+// MARK: - gh binary path (used by fetchStepLog only)
 
 /// Returns the first executable `gh` binary found on common install paths.
+/// Used only by `fetchStepLog` for raw log streaming via `gh api --header`.
 func ghBinaryPath() -> String? {
     let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
     return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
@@ -375,33 +421,31 @@ func ghBinaryPath() -> String? {
 
 // MARK: - POST helper
 
-/// Fires a POST to the GitHub API via `gh api --method POST`.
-/// Returns `true` if gh exits 0 (HTTP 2xx), `false` otherwise.
+/// Fires a POST to the GitHub REST API via URLSession.
+/// Returns `true` on HTTP 2xx, `false` otherwise.
 /// Must be called from a background thread.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
-    guard let ghPath = ghBinaryPath() else {
-        log("ghPost › gh not found")
+    guard var req = gitHubRequest(endpoint, method: "POST") else {
+        log("ghPost › could not build request for: \(endpoint)")
         return false
     }
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST",
-                      "-H", "Accept: application/vnd.github+json", endpoint]
-    task.standardOutput = Pipe()
-    task.standardError = Pipe()
-    do {
-        try task.run()
-    } catch {
-        log("ghPost › launch error: \(error)")
-        return false
+    req.timeoutInterval = 30
+    let sem = DispatchSemaphore(value: 0)
+    var success = false
+    let task = URLSession.shared.dataTask(with: req) { _, response, error in
+        defer { sem.signal() }
+        if let error {
+            log("ghPost › network error: \(error)")
+            return
+        }
+        guard let http = response as? HTTPURLResponse else { return }
+        log("ghPost › \(endpoint) HTTP \(http.statusCode)")
+        success = (200..<300).contains(http.statusCode)
     }
-    let timeoutItem = DispatchWorkItem(block: { task.terminate() })
-    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    log("ghPost › \(endpoint) exit \(task.terminationStatus)")
-    return task.terminationStatus == 0
+    task.resume()
+    sem.wait()
+    return success
 }
 
 // MARK: - Cancel run
