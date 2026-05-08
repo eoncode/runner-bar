@@ -58,11 +58,70 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     return result
 }
 
+// MARK: - Paginated URLSession helpers
+
+/// Result of a single paginated page fetch.
+private struct PageResult {
+    /// Raw response body, or `nil` on network / HTTP error.
+    let data: Data?
+    /// Value of the `Link` response header, if present.
+    let linkHeader: String?
+}
+
+/// Executes one synchronous GET request and returns the raw body + Link header.
+///
+/// Sets `ghIsRateLimited` on HTTP 403/429. Returns a `PageResult` with `data == nil`
+/// on any error so the caller can break the pagination loop cleanly.
+private func fetchOnePage(url: URL, token: String, timeout: TimeInterval) -> PageResult {
+    var request = URLRequest(url: url, timeoutInterval: timeout)
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var pageData: Data?
+    var linkHeader: String?
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        defer { semaphore.signal() }
+        if let error {
+            log("urlSessionAPIPaginated › network error: \(error)")
+            return
+        }
+        guard let http = response as? HTTPURLResponse else { return }
+        if http.statusCode == 403 || http.statusCode == 429 {
+            ghIsRateLimited = true
+            return
+        }
+        guard (200..<300).contains(http.statusCode) else { return }
+        linkHeader = http.value(forHTTPHeaderField: "Link")
+        pageData = data
+    }.resume()
+    semaphore.wait()
+
+    return PageResult(data: pageData, linkHeader: linkHeader)
+}
+
+/// Parses a GitHub `Link` header and returns the `rel="next"` URL, or `nil` if absent.
+private func parseNextURL(from linkHeader: String?) -> URL? {
+    guard
+        let link = linkHeader,
+        let nextRange = link.range(of: #"<([^>]+)>;\s*rel="next""#, options: .regularExpression)
+    else { return nil }
+    let bracketContent = link[nextRange]
+    guard
+        let urlStart = bracketContent.firstIndex(of: "<"),
+        let urlEnd   = bracketContent.firstIndex(of: ">")
+    else { return nil }
+    let urlString = String(bracketContent[bracketContent.index(after: urlStart)..<urlEnd])
+    return URL(string: urlString)
+}
+
 /// Follows GitHub's `Link: <url>; rel="next"` pagination via native `URLSession`,
 /// collecting all pages into a single merged JSON array.
 ///
-/// Falls back to `ghAPIPaginatedSubprocess` when no token is available.
-/// All execution is synchronous — must be called from a background thread.
+/// Prefers native URLSession over `gh api --paginate` so pagination works without
+/// the `gh` CLI installed. Falls back via `ghAPIPaginated` when no token is available.
 ///
 /// ⚠️ Must only be called from a background thread — never from the main thread.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
@@ -77,55 +136,14 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 20) -> D
     var allItems: [[String: Any]] = []
 
     while true {
-        var request = URLRequest(url: nextURL, timeoutInterval: timeout)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-
-        let semaphore = DispatchSemaphore(value: 0)
-        var pageData: Data?
-        var linkHeader: String?
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            defer { semaphore.signal() }
-            if let error {
-                log("urlSessionAPIPaginated › network error: \(error)")
-                return
-            }
-            if let http = response as? HTTPURLResponse {
-                if http.statusCode == 403 || http.statusCode == 429 {
-                    ghIsRateLimited = true
-                    return
-                }
-                guard (200..<300).contains(http.statusCode) else { return }
-                linkHeader = http.value(forHTTPHeaderField: "Link")
-            }
-            pageData = data
-        }.resume()
-        semaphore.wait()
-
-        guard let pageData else { break }
-        // Accumulate items: handle both array and object-with-array responses.
+        let page = fetchOnePage(url: nextURL, token: token, timeout: timeout)
+        guard let pageData = page.data else { break }
         if let items = try? JSONSerialization.jsonObject(with: pageData) as? [[String: Any]] {
             allItems.append(contentsOf: items)
         } else {
-            // Not an array page — return raw data (single-page object endpoint).
-            return pageData
+            return pageData   // single-page object endpoint — return raw
         }
-
-        // Parse Link header for rel="next".
-        guard
-            let link = linkHeader,
-            let nextRange = link.range(of: #"<([^>]+)>;\s*rel="next""#,
-                                       options: .regularExpression)
-        else { break }
-        let bracketContent = link[nextRange]
-        guard
-            let urlStart = bracketContent.firstIndex(of: "<"),
-            let urlEnd = bracketContent.firstIndex(of: ">")
-        else { break }
-        let urlString = String(bracketContent[bracketContent.index(after: urlStart)..<urlEnd])
-        guard let parsed = URL(string: urlString) else { break }
+        guard let parsed = parseNextURL(from: page.linkHeader) else { break }
         nextURL = parsed
     }
 
@@ -138,11 +156,9 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 20) -> D
 ///
 /// Callers are unchanged — this is a transparent drop-in for the old `gh`-only impl.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    // Try native URLSession first (no gh CLI required).
     if githubToken() != nil, let data = urlSessionAPI(endpoint, timeout: timeout) {
         return data
     }
-    // Fallback: gh CLI subprocess (existing users / CI without Keychain token).
     return ghAPISubprocess(endpoint, timeout: timeout)
 }
 
@@ -195,12 +211,10 @@ private func ghAPISubprocess(_ endpoint: String, timeout: TimeInterval = 20) -> 
 /// Prefers `urlSessionAPIPaginated` when a token is available; falls back
 /// to the `gh` CLI subprocess so existing users are never broken.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    // Native URLSession pagination — no gh CLI required.
     if githubToken() != nil,
        let data = urlSessionAPIPaginated(endpoint, timeout: timeout) {
         return data
     }
-    // Fallback: gh CLI --paginate subprocess.
     return ghAPIPaginatedSubprocess(endpoint, timeout: timeout)
 }
 
@@ -495,7 +509,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
 }
 
 private func stripAnsi(_ input: String) -> String {
-    guard let regex = try? NSRegularExpression(pattern: "\u001B\\[[0-9;]*[A-Za-z]") else {
+    guard let regex = try? NSRegularExpression(pattern: "\u{1B}\\[[0-9;]*[A-Za-z]") else {
         return input
     }
     return regex.stringByReplacingMatches(
