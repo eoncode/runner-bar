@@ -217,7 +217,7 @@ struct PopoverMainView: View {
 
     // MARK: - Helpers
 
-    /// Step completion fraction for a job’s `PieProgressView`.
+    /// Step completion fraction for a job's `PieProgressView`.
     /// Returns `done/total` when steps are available, else `0.5` for in-progress or `0.0`.
     private func stepProgress(for job: ActiveJob) -> Double {
         let total = job.steps.count
@@ -254,7 +254,7 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Foreground color for an action group’s status label.
+    /// Foreground color for an action group's status label.
     private func actionStatusColor(for group: ActionGroup) -> Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -265,7 +265,7 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Fill color for an action group’s pie progress dot.
+    /// Fill color for an action group's pie progress dot.
     private func actionDotColor(for group: ActionGroup) -> Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -276,7 +276,7 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Fill color for a local runner’s status dot.
+    /// Fill color for a local runner's status dot.
     private func runnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
         case .running: return .green
@@ -286,7 +286,7 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Fill color for a job’s pie progress dot.
+    /// Fill color for a job's pie progress dot.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
@@ -304,7 +304,7 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Foreground color for a live job’s status label.
+    /// Foreground color for a live job's status label.
     private func jobStatusColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
@@ -324,7 +324,7 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Foreground color for a completed job’s conclusion label.
+    /// Foreground color for a completed job's conclusion label.
     private func conclusionColor(for job: ActiveJob) -> Color {
         switch job.conclusion {
         case "success":   return .green
