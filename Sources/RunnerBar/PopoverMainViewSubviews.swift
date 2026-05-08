@@ -120,7 +120,7 @@ struct PopoverLocalRunnerRow: View {
         }
     }
 
-    /// Divider — runner rows — Divider stack for the active case.
+    /// Divider — runner rows (capped at 3) — overflow indicator — Divider.
     @ViewBuilder
     private func runnerList(_ active: [Runner]) -> some View {
         Divider()
@@ -140,6 +140,11 @@ struct PopoverLocalRunnerRow: View {
                     .font(.caption2).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 3)
+        }
+        if active.count > 3 {
+            Text("+ \(active.count - 3) more…")
+                .font(.caption2).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.vertical, 2)
         }
         Divider()
     }
@@ -276,13 +281,17 @@ struct InlineJobRowsView: View {
     }
 
     var body: some View {
-        // TODO: add "load more" affordance if activeJobs.count > 4 (see PR #313 review)
         ForEach(activeJobs.prefix(4)) { job in
             Button(
                 action: { onSelectJob(job) },
                 label: { jobRow(job) }
             )
             .buttonStyle(.plain)
+        }
+        if activeJobs.count > 4 {
+            Text("+ \(activeJobs.count - 4) more…")
+                .font(.caption2).foregroundColor(.secondary)
+                .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
         }
     }
 
