@@ -77,6 +77,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         RunnerStore.shared.start()
     }
 
+    // MARK: - URL scheme handler (Phase 5 — #326)
+
+    /// Handles the `runnerbar://oauth/callback` URL scheme redirect from GitHub OAuth.
+    ///
+    /// Called by macOS when the app is the registered handler for `runnerbar://`.
+    /// Delegates directly to `OAuthService` which validates `state` and exchanges
+    /// the authorization `code` for an access token stored in the Keychain.
+    ///
+    /// ⚠️ Do NOT rename `application(_:open:)` — macOS requires this exact selector.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "runnerbar" {
+            log("AppDelegate.application(_:open:) › \(url)")
+            OAuthService.shared.handleCallback(url: url)
+        }
+    }
+
     // MARK: - NSPopoverDelegate
 
     /// Resets navigation state after the popover closes.

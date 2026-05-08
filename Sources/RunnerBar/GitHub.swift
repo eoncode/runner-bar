@@ -8,9 +8,71 @@ import Foundation
 /// Intentionally non-atomic: a one-cycle lag in the UI warning is acceptable.
 var ghIsRateLimited: Bool = false
 
-/// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
-/// Returns `nil` on launch failure, timeout, empty response, or rate-limit (403/429).
+// MARK: - Native URLSession API (Phase 7 — #326)
+
+/// Calls the GitHub REST API using `URLSession` and an `Authorization: Bearer` header.
+///
+/// Tries the Keychain token first (stored by `OAuthService`), then falls back to
+/// `Auth.githubToken()` (gh CLI / env vars). Returns `nil` when no token is available
+/// or the request fails. All execution is synchronous via a semaphore so callers on
+/// background threads get the same blocking contract as `ghAPI`.
+///
+/// ⚠️ Must only be called from a background thread — never from the main thread.
+func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    guard let token = githubToken() else {
+        log("urlSessionAPI › no token available for \(endpoint)")
+        return nil
+    }
+    let base = "https://api.github.com/"
+    let path = endpoint.hasPrefix("/") ? String(endpoint.dropFirst()) : endpoint
+    guard let url = URL(string: base + path) else {
+        log("urlSessionAPI › bad URL: \(endpoint)")
+        return nil
+    }
+    var request = URLRequest(url: url, timeoutInterval: timeout)
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Data?
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        defer { semaphore.signal() }
+        if let error {
+            log("urlSessionAPI › network error for \(endpoint): \(error)")
+            return
+        }
+        if let http = response as? HTTPURLResponse {
+            log("urlSessionAPI › \(endpoint) → HTTP \(http.statusCode) " +
+                "\(data?.count ?? 0)b")
+            if http.statusCode == 403 || http.statusCode == 429 {
+                ghIsRateLimited = true
+                log("urlSessionAPI › rate limit (\(http.statusCode)): \(endpoint)")
+                return
+            }
+            guard (200..<300).contains(http.statusCode) else { return }
+        }
+        result = data
+    }.resume()
+    semaphore.wait()
+    return result
+}
+
+/// Calls the GitHub REST API, preferring the native `URLSession` path when a token
+/// is available. Falls back to the `gh` CLI subprocess for unauthenticated machines
+/// or when `URLSession` returns `nil`.
+///
+/// Callers are unchanged — this is a transparent drop-in for the old `gh`-only impl.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    // Try native URLSession first (no gh CLI required).
+    if githubToken() != nil, let data = urlSessionAPI(endpoint, timeout: timeout) {
+        return data
+    }
+    // Fallback: gh CLI subprocess (existing users / CI without Keychain token).
+    return ghAPISubprocess(endpoint, timeout: timeout)
+}
+
+/// Original `gh` CLI implementation, renamed for clarity. Called by `ghAPI` as fallback.
+private func ghAPISubprocess(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     // swiftlint:disable:next identifier_name
     guard let gh = ghBinaryPath() else {
         log("ghAPI › gh not found")
