@@ -106,6 +106,8 @@ private struct PopoverHeaderView: View {
             )
             .buttonStyle(.plain)
             .help("Settings")
+            // ⚠️ hide() is intentional for a menu-bar app — keeps the process alive.
+            // terminate(nil) would quit the app; hide(nil) just closes the popover.
             Button(
                 action: { NSApplication.shared.hide(nil) },
                 label: {
@@ -115,7 +117,7 @@ private struct PopoverHeaderView: View {
                 }
             )
             .buttonStyle(.plain)
-            .help("Hide RunnerBar")
+            .help("Close popover")
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
     }
@@ -188,12 +190,11 @@ private struct ActionRowView: View {
     let onToggleExpand: () -> Void
     let onSelect: () -> Void
 
-    /// Whether this group has expandable inline jobs.
+    /// Whether this group has expandable inline ↳ rows.
+    /// ⚠️ Gap 2 fix (#323 / #304): only in_progress jobs qualify — queued jobs are excluded.
     private var hasInlineJobs: Bool {
-        let isActive = actionGroup.groupStatus == .inProgress || actionGroup.groupStatus == .queued
-        return isActive && actionGroup.jobs.contains {
-            $0.status == "in_progress" || $0.status == "queued"
-        }
+        actionGroup.groupStatus == .inProgress &&
+            actionGroup.jobs.contains { $0.status == "in_progress" }
     }
 
     var body: some View {
@@ -246,9 +247,8 @@ private struct ActionRowView: View {
             .buttonStyle(.plain)
 
             if hasInlineJobs && isExpanded {
-                InlineJobsView(jobs: actionGroup.jobs.filter {
-                    $0.status == "in_progress" || $0.status == "queued"
-                })
+                // ⚠️ Gap 2 fix (#323 / #304): pass only in_progress jobs to InlineJobsView.
+                InlineJobsView(jobs: actionGroup.jobs.filter { $0.status == "in_progress" })
             }
         }
     }
@@ -294,6 +294,7 @@ private struct ActionRowView: View {
 // MARK: - InlineJobsView
 
 /// Container for all inline ↳ job sub-rows under a single action group (Phase 4 / #304).
+/// ⚠️ Receives only in_progress jobs — caller is responsible for pre-filtering.
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
 
@@ -307,6 +308,9 @@ private struct InlineJobsView: View {
 // MARK: - InlineJobRowView
 
 /// Single ↳ inline job sub-row (Phase 4 / #304).
+/// Shows: ↳ · pie-dot · job-name · current-step-title · step-fraction · elapsed
+/// ⚠️ Gap 1 fix (#323 / #304): replaced IN PROGRESS/QUEUED status label with
+///   step title + step fraction as specified in #304 acceptance criteria.
 private struct InlineJobRowView: View {
     let job: ActiveJob
 
@@ -324,10 +328,14 @@ private struct InlineJobRowView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
             Spacer()
-            Text(job.status == "in_progress" ? "IN PROGRESS" : "QUEUED")
-                .font(.caption)
-                .foregroundColor(job.status == "in_progress" ? .yellow : .blue)
-                .frame(width: 60, alignment: .trailing)
+            // Step title: first in_progress step name, or last completed step name.
+            Text(currentStepTitle(for: job))
+                .font(.caption).foregroundColor(.secondary)
+                .lineLimit(1).truncationMode(.tail)
+            // Step fraction e.g. "3/8"
+            Text(stepFraction(for: job))
+                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                .frame(width: 30, alignment: .trailing)
             Text(job.elapsed)
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 .frame(width: 36, alignment: .trailing)
@@ -335,11 +343,32 @@ private struct InlineJobRowView: View {
         .padding(.horizontal, 12).padding(.vertical, 2)
     }
 
+    /// Fraction of completed steps, e.g. 0.375 for 3 of 8 steps done.
     private func stepProgress(for job: ActiveJob) -> Double {
         let total = job.steps.count
         guard total > 0 else { return job.status == "in_progress" ? 0.5 : 0.0 }
         let done = job.steps.filter { $0.conclusion != nil }.count
         return Double(done) / Double(total)
+    }
+
+    /// Step fraction label, e.g. "3/8". Returns "" when no step data available.
+    private func stepFraction(for job: ActiveJob) -> String {
+        let total = job.steps.count
+        guard total > 0 else { return "" }
+        let done = job.steps.filter { $0.conclusion != nil }.count
+        return "\(done)/\(total)"
+    }
+
+    /// Returns the name of the first in_progress step; falls back to the last completed
+    /// step name; falls back to an em-dash when no step data is available.
+    private func currentStepTitle(for job: ActiveJob) -> String {
+        if let active = job.steps.first(where: { $0.status == "in_progress" }) {
+            return active.name
+        }
+        if let last = job.steps.last(where: { $0.conclusion != nil }) {
+            return last.name
+        }
+        return "—"
     }
 
     private func jobDotColor(for job: ActiveJob) -> Color {
@@ -381,12 +410,17 @@ private struct RunnersListView: View {
                         .font(.system(size: 12)).foregroundColor(.primary)
                         .lineLimit(1).truncationMode(.tail)
                     Spacer()
-                    // ⚠️ displayStatus shows "active (CPU: x.x% MEM: x.x%)" when metrics
-                    // are populated by RunnerStore.fetch(), or "idle (CPU: — MEM: —)" when
-                    // no matching process was found. Satisfies the CPU/MEM spec (#311).
-                    Text(runner.displayStatus)
-                        .font(.caption).foregroundColor(.secondary)
-                        .lineLimit(1)
+                    // ⚠️ Gap 4 fix (#323 / #307): show CPU% + MEM% from runner.metrics.
+                    // Falls back to em-dash when no matching ps aux process was found.
+                    if let m = runner.metrics {
+                        Text(String(format: "CPU: %.1f%%", m.cpu))
+                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                        Text(String(format: "MEM: %.1f%%", m.mem))
+                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                    } else {
+                        Text("CPU: — MEM: —")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
                     // ⚠️ Chevron shown for future navigability (#307 detail view not yet implemented)
                     Image(systemName: "chevron.right")
                         .font(.caption2).foregroundColor(.secondary.opacity(0.4))
