@@ -15,8 +15,8 @@ import SwiftUI
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
 /// Root popover view — unified scrollable Actions list per issue #294.
-/// Subviews live in PopoverMainViewSubviews.swift and PopoverProgressViews.swift
-/// to satisfy SwiftLint file_length (<400) and type_body_length (<200) limits.
+/// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
+/// file_length (<400) and type_body_length (<200) limits.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
@@ -31,8 +31,8 @@ struct PopoverMainView: View {
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
     @State private var expandedGroupIDs: Set<String> = []
-    /// Per-group inline-job display caps. Default 4; increments of 4 via "Load more jobs".
-    @State private var inlineJobsLimit: [String: Int] = [:]
+    /// Per-group inline job display cap. Keyed by group.id; defaults to 4 on first expand.
+    @State private var jobLimits: [String: Int] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -42,10 +42,14 @@ struct PopoverMainView: View {
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
             )
+            // NOTE: no unconditional Divider() here — PopoverLocalRunnerRow owns its
+            // own leading + trailing Dividers inside its @ViewBuilder guard.
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) { actionsSection }
+                VStack(alignment: .leading, spacing: 0) {
+                    actionsSection
+                }
             }
             Divider()
             quitButton
@@ -57,15 +61,14 @@ struct PopoverMainView: View {
         }
         .onDisappear { systemStats.stop() }
         .onChange(of: store.actions) { _, newActions in
-            let liveIDs = Set(newActions.map(\.id))
-            expandedGroupIDs = expandedGroupIDs.intersection(liveIDs)
-            inlineJobsLimit = inlineJobsLimit.filter { liveIDs.contains($0.key) }
+            let newIDs = Set(newActions.map(\.id))
+            expandedGroupIDs = expandedGroupIDs.intersection(newIDs)
+            jobLimits = jobLimits.filter { newIDs.contains($0.key) }
         }
     }
 
     // MARK: - Rate limit banner
 
-    /// Yellow warning banner shown when GitHub rate-limit is hit.
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -78,7 +81,6 @@ struct PopoverMainView: View {
 
     // MARK: - Actions section
 
-    /// Unified scrollable actions list with inline job expansion and pagination.
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -124,7 +126,6 @@ struct PopoverMainView: View {
 
     // MARK: - Quit
 
-    /// Quit RunnerBar button pinned to the bottom of the popover.
     private var quitButton: some View {
         Button(
             action: { NSApplication.shared.terminate(nil) },
@@ -139,24 +140,24 @@ struct PopoverMainView: View {
 
     // MARK: - Helpers
 
-    /// Toggles expand/collapse state for an action group.
     private func toggleExpand(_ id: String) {
         if expandedGroupIDs.contains(id) {
             expandedGroupIDs.remove(id)
         } else {
             expandedGroupIDs.insert(id)
+            if jobLimits[id] == nil { jobLimits[id] = 4 }
         }
     }
 
-    /// Returns a `Binding<Int>` into `inlineJobsLimit` for a group ID, defaulting to 4.
+    /// Returns a `Binding<Int>` into `jobLimits` for the given group id,
+    /// defaulting to 4 if the entry is absent.
     private func jobLimitBinding(for id: String) -> Binding<Int> {
         Binding(
-            get: { inlineJobsLimit[id] ?? 4 },
-            set: { inlineJobsLimit[id] = $0 }
+            get: { jobLimits[id] ?? 4 },
+            set: { jobLimits[id] = $0 }
         )
     }
 
-    /// Opens the GitHub PAT setup docs in the default browser.
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
