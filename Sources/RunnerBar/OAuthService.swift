@@ -13,27 +13,14 @@ import Foundation
 ///     `https://github.com/login/oauth/access_token`.
 ///  5. Token is stored in the Keychain and the completion handler is called.
 ///
-/// Client credentials are injected at build time via environment variables
-/// `RUNNERBAR_CLIENT_ID` and `RUNNERBAR_CLIENT_SECRET` (see build.sh).
-/// Hard-coded placeholders keep the build green without secrets in source.
+/// Client credentials are baked in at compile time via `Secrets.swift`,
+/// which `build.sh` generates from `RUNNERBAR_CLIENT_ID` /
+/// `RUNNERBAR_CLIENT_SECRET` before invoking `swift build`. The file
+/// contains placeholder constants so plain `swift build` stays green.
 final class OAuthService {
     /// The shared singleton instance used throughout the app.
     static let shared = OAuthService()
     private init() {}
-
-    // MARK: - Client credentials
-
-    /// GitHub OAuth App client ID.
-    /// Override at build time: `RUNNERBAR_CLIENT_ID=xxx swift build`
-    private var clientID: String {
-        ProcessInfo.processInfo.environment["RUNNERBAR_CLIENT_ID"] ?? "PLACEHOLDER_CLIENT_ID"
-    }
-
-    /// GitHub OAuth App client secret.
-    /// Override at build time: `RUNNERBAR_CLIENT_SECRET=xxx swift build`
-    private var clientSecret: String {
-        ProcessInfo.processInfo.environment["RUNNERBAR_CLIENT_SECRET"] ?? "PLACEHOLDER_CLIENT_SECRET"
-    }
 
     // MARK: - State
 
@@ -50,10 +37,10 @@ final class OAuthService {
         pendingState = state
         var components = URLComponents(string: "https://github.com/login/oauth/authorize")!
         components.queryItems = [
-            .init(name: "client_id", value: clientID),
-            .init(name: "redirect_uri", value: "runnerbar://oauth/callback"),
-            .init(name: "scope", value: scopes),
-            .init(name: "state", value: state)
+            .init(name: "client_id",     value: Secrets.clientID),
+            .init(name: "redirect_uri",  value: "runnerbar://oauth/callback"),
+            .init(name: "scope",         value: scopes),
+            .init(name: "state",         value: state)
         ]
         guard let url = components.url else {
             log("OAuthService.signIn › failed to build URL")
@@ -98,10 +85,10 @@ final class OAuthService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: String] = [
-            "client_id": clientID,
-            "client_secret": clientSecret,
-            "code": code,
-            "redirect_uri": "runnerbar://oauth/callback"
+            "client_id":     Secrets.clientID,
+            "client_secret": Secrets.clientSecret,
+            "code":          code,
+            "redirect_uri":  "runnerbar://oauth/callback"
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         log("OAuthService.exchangeCode › POST access_token")
