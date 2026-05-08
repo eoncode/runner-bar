@@ -126,9 +126,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
-                // Gate on token: de-registration requires GitHub auth.
-                // Without a token svc.sh uninstall succeeds but config.sh remove
-                // fails, leaving a ghost registration on the GitHub side.
                 guard isAuthenticated else {
                     runnerPendingRemoval = nil
                     return
@@ -136,9 +133,6 @@ struct SettingsView: View {
                 runnerPendingRemoval = nil
                 removeErrorMessage = nil
                 DispatchQueue.global(qos: .userInitiated).async {
-                    // Capture result: @discardableResult on remove() must not be
-                    // silently dropped. A false return means config.sh remove
-                    // failed and the GitHub registration was NOT cleaned up.
                     let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
                     DispatchQueue.main.async {
                         if !succeeded {
@@ -154,8 +148,8 @@ struct SettingsView: View {
                 Text("This will run ./svc.sh uninstall and ./config.sh remove. " +
                      "A GitHub token is required for de-registration.")
             } else {
-                Text("A GitHub token is required to de-register the runner from GitHub. " +
-                     "Sign in with GitHub, set GH_TOKEN, or run `gh auth login`, then try again.")
+                Text("A GitHub sign-in is required to de-register the runner from GitHub. " +
+                     "Sign in with GitHub, then try again.")
             }
         }
     }
@@ -411,7 +405,6 @@ struct SettingsView: View {
                 Text("GitHub").font(.system(size: 12))
                 Spacer()
                 if isAuthenticated {
-                    // Authenticated state: green dot + label + Sign out button.
                     HStack(spacing: 8) {
                         HStack(spacing: 4) {
                             Circle().fill(Color.green).frame(width: 8, height: 8)
@@ -426,7 +419,6 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
                 } else {
-                    // Unauthenticated state: prominent Sign in with GitHub button.
                     Button(action: signInWithGitHub, label: {
                         HStack(spacing: 4) {
                             Image(systemName: "person.badge.key")
@@ -441,14 +433,12 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             Divider().padding(.leading, 12)
-            // Hint text adapts to auth state.
             if isAuthenticated {
-                Text("Token stored securely in Keychain. Sign out to revoke access.")
+                Text("Token stored securely in Keychain. Signing out removes local credentials.")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
-                Text("Click \"Sign in with GitHub\" to authenticate via browser, " +
-                     "or set GH_TOKEN / GITHUB_TOKEN, or run `gh auth login`.")
+                Text("Click \"Sign in with GitHub\" to authenticate via browser.")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             }
@@ -532,13 +522,10 @@ struct SettingsView: View {
         ).buttonStyle(.plain)
     }
 
-    /// Triggers the native GitHub OAuth browser flow via OAuthService.
-    /// The browser redirects to runnerbar://oauth/callback which AppDelegate handles.
     private func signInWithGitHub() {
         OAuthService.shared.startLogin()
     }
 
-    /// Clears the Keychain token via OAuthService and updates UI immediately.
     private func signOutFromGitHub() {
         OAuthService.shared.signOut()
         isAuthenticated = false

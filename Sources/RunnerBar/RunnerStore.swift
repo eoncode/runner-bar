@@ -64,6 +64,9 @@ final class RunnerStore {
     /// True when the most recent poll detected a GitHub rate-limit response.
     private(set) var isRateLimited = false
 
+    /// Guards against in-flight fetch() calls completing after stop() and re-enabling polling.
+    private var isStopped = false
+
     /// One-shot adaptive poll timer. Rescheduled by `scheduleTimer()` after each fetch.
     private var timer: Timer?
 
@@ -95,6 +98,7 @@ final class RunnerStore {
     /// Starts (or restarts) the polling timer and fires an immediate fetch.
     func start() {
         log("RunnerStore › start")
+        isStopped = false
         timer?.invalidate()
         fetch()
     }
@@ -103,6 +107,7 @@ final class RunnerStore {
     /// Called by `OAuthService.signOut()` so no authenticated API requests fire post-signout.
     func stop() {
         log("RunnerStore › stop (sign-out)")
+        isStopped = true
         timer?.invalidate()
         timer = nil
         DispatchQueue.main.async { [weak self] in
@@ -140,7 +145,7 @@ final class RunnerStore {
         let snapPrevGroups = prevLiveGroups
         let snapGroupCache = actionGroupCache
         DispatchQueue.global(qos: .background).async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.isStopped else { return }
             ghIsRateLimited = false
             let enrichedRunners = self.fetchAndEnrichRunners()
             let jobResult = self.buildJobState(snapPrev: snapPrev, snapCache: snapCache)
@@ -150,6 +155,8 @@ final class RunnerStore {
                 jobCache: jobResult.newCache
             )
             DispatchQueue.main.async {
+                // Guard again on main thread — stop() may have fired while background work ran.
+                guard !self.isStopped else { return }
                 self.runners = enrichedRunners
                 self.jobs = jobResult.display
                 self.completedCache = jobResult.newCache

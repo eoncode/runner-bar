@@ -46,6 +46,9 @@ final class OAuthService {
     private let callbackHost = "oauth"
     private let scope = "repo read:org"
 
+    /// Pending CSRF state token. Set in `startLogin()`, validated in `handleCallback()`.
+    private var pendingState: String?
+
     private init() {}
 
     // MARK: - Login
@@ -53,26 +56,35 @@ final class OAuthService {
     /// Opens the GitHub OAuth authorization URL in the default browser.
     /// The user clicks Authorize once; GitHub then redirects to runnerbar://oauth/callback.
     func startLogin() {
+        // Fail fast if OAuth credentials are still placeholders.
+        guard !clientID.hasPrefix("<"), !clientSecret.hasPrefix("<") else {
+            log("OAuthService › missing OAuth client configuration — register at https://github.com/settings/applications/new")
+            return
+        }
+        let state = UUID().uuidString
+        pendingState = state
         var components = URLComponents(string: "https://github.com/login/oauth/authorize")
         components?.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "scope", value: scope),
-            URLQueryItem(name: "redirect_uri", value: "runnerbar://oauth/callback")
+            URLQueryItem(name: "redirect_uri", value: "runnerbar://oauth/callback"),
+            URLQueryItem(name: "state", value: state)
         ]
         guard let url = components?.url else {
             log("OAuthService › startLogin: could not build authorization URL")
             return
         }
-        log("OAuthService › opening browser for OAuth: \(url)")
+        log("OAuthService › opening browser for OAuth")
         NSWorkspace.shared.open(url)
     }
 
     // MARK: - Callback
 
-    /// Handles the `runnerbar://oauth/callback?code=...` URL delivered by macOS
+    /// Handles the `runnerbar://oauth/callback?code=...&state=...` URL delivered by macOS
     /// after the user authorizes the app on GitHub.
     ///
-    /// Exchanges the one-time `code` for an access token, stores it in the
+    /// Validates the `state` parameter to prevent CSRF/session-injection attacks, then
+    /// exchanges the one-time `code` for an access token, stores it in the
     /// Keychain, and posts `authStateChanged` so the UI updates reactively.
     func handleCallback(url: URL) async {
         guard
@@ -80,11 +92,15 @@ final class OAuthService {
             url.host == callbackHost,
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             let codeItem = components.queryItems?.first(where: { $0.name == "code" }),
-            let code = codeItem.value, !code.isEmpty
+            let stateItem = components.queryItems?.first(where: { $0.name == "state" }),
+            let code = codeItem.value, !code.isEmpty,
+            let returnedState = stateItem.value, returnedState == pendingState
         else {
-            log("OAuthService › handleCallback: invalid callback URL \(url)")
+            log("OAuthService › handleCallback: invalid or mismatched callback URL")
+            pendingState = nil
             return
         }
+        pendingState = nil
         log("OAuthService › exchanging code for token")
         await exchangeCode(code)
     }

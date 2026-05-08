@@ -25,12 +25,30 @@ enum KeychainHelper {
     }
 
     /// Writes (or overwrites) the token in the Keychain using the `-U` update flag.
-    static func write(_ token: String) {
-        // -U: update if the item already exists, add otherwise.
-        shell(
-            "security add-generic-password -s \(service) -a \(account) -w \(token) -U 2>/dev/null",
-            timeout: 5
-        )
+    /// Uses Process to pass the token as a discrete argument — never interpolated into
+    /// a shell string — so the credential cannot appear in logs or process listings.
+    @discardableResult
+    static func write(_ token: String) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        proc.arguments = [
+            "add-generic-password",
+            "-s", service,
+            "-a", account,
+            "-w", token,
+            "-U"
+        ]
+        // Suppress stderr — "security: SecKeychainItemModifyContent" noise on update.
+        proc.standardError = FileHandle.nullDevice
+        proc.standardOutput = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus == 0
+        } catch {
+            log("KeychainHelper › write failed: \(error)")
+            return false
+        }
     }
 
     /// Deletes the token from the Keychain. No-op if the entry does not exist.
