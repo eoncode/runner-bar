@@ -132,9 +132,9 @@ struct SettingsView: View {
                     // Capture result: @discardableResult on remove() must not be
                     // silently dropped. A false return means config.sh remove
                     // failed and the GitHub registration was NOT cleaned up.
-                    let ok = RunnerLifecycleService.shared.remove(runner: runner)
+                    let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
                     DispatchQueue.main.async {
-                        if !ok {
+                        if !succeeded {
                             removeErrorMessage = "De-registration failed — the runner may " +
                                 "still appear in GitHub. Check your token and try again."
                         }
