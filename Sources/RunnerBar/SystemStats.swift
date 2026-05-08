@@ -65,6 +65,10 @@ private struct DiskStats {
 
 /// ObservableObject that owns the 2-second polling loop for system metrics.
 ///
+/// Lifecycle: call `start()` from `.onAppear` and `stop()` from `.onDisappear`.
+/// The timer does NOT start automatically in `init()` — this avoids leaking a
+/// polling loop when the view is constructed but not yet on screen.
+///
 /// Threading model: Timer fires on main RunLoop, bounces work to a global
 /// utility queue, then publishes results back on the main thread.
 final class SystemStatsViewModel: ObservableObject {
@@ -74,15 +78,30 @@ final class SystemStatsViewModel: ObservableObject {
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
-    /// Initialises the view model and performs an eager sample.
-    init() {
+    /// Initialises the view model without starting the polling timer.
+    /// Call `start()` once the owning view appears on screen.
+    init() {}
+
+    deinit { timer?.invalidate() }
+
+    // MARK: - Lifecycle
+
+    /// Starts the 2-second polling loop and fires an eager sample immediately.
+    /// Idempotent: calling `start()` while already running restarts the timer cleanly.
+    func start() {
+        timer?.invalidate()
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             DispatchQueue.global(qos: .utility).async { self?.sample() }
         }
     }
 
-    deinit { timer?.invalidate() }
+    /// Stops the polling loop and releases the timer.
+    /// Safe to call from `.onDisappear` even if `start()` was never called.
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
 
     // MARK: - CPU
 
