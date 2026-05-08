@@ -152,6 +152,7 @@ private struct ActionsListView: View {
                             onSelect: { onSelectAction(actionGroup) }
                         )
                     }
+                    // Phase 5 (#305): pagination footer
                     if actions.count > visibleCount {
                         Button(
                             action: { visibleCount += 10 },
@@ -162,6 +163,12 @@ private struct ActionsListView: View {
                         )
                         .buttonStyle(.plain)
                         .padding(.horizontal, 12).padding(.vertical, 6)
+                    } else if visibleCount > 10 {
+                        // All actions loaded — replace button with muted end-of-list label.
+                        Text("No more actions")
+                            .font(.caption2).foregroundColor(.secondary.opacity(0.5))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 6)
                     }
                 }
             }
@@ -346,7 +353,9 @@ private struct InlineJobRowView: View {
 
 // MARK: - RunnersListView
 
-/// Conditional runners sub-section — only shown when ≥1 Runner is busy/active (Phase 6 / #307).
+/// Conditional runners sub-section — only shown when ≥1 Runner is busy (Phase 6 / #307).
+/// Spec: section is hidden entirely when no runners are active (busy = executing a job).
+/// Online-idle runners are intentionally excluded — presence = running.
 /// Driven by RunnerStore.runners via RunnerStoreObservable — no LocalRunnerStore dependency.
 /// ⚠️ Runner row navigation is intentionally disabled until #307 detail view is implemented.
 /// The chevron signals future navigability but the button is disabled to avoid no-op taps.
@@ -354,9 +363,10 @@ private struct RunnersListView: View {
     /// GitHub runners from RunnerStore (not LocalRunnerStore).
     let runners: [Runner]
 
-    /// Active runners: busy first, then online-only.
+    /// Only runners currently executing a job (busy = true).
+    /// ⚠️ Online-idle runners are excluded per spec (#307): section hidden when no runners active.
     private var activeRunners: [Runner] {
-        runners.filter { $0.busy || $0.status == "online" }
+        runners.filter { $0.busy }
     }
 
     var body: some View {
@@ -365,7 +375,7 @@ private struct RunnersListView: View {
             ForEach(activeRunners, id: \.id) { runner in
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(dotColor(for: runner))
+                        .fill(Color.yellow)
                         .frame(width: 7, height: 7)
                     Text(runner.name)
                         .font(.system(size: 12)).foregroundColor(.primary)
@@ -385,9 +395,5 @@ private struct RunnersListView: View {
             }
             .padding(.bottom, 6)
         }
-    }
-
-    private func dotColor(for runner: Runner) -> Color {
-        runner.busy ? .yellow : .green
     }
 }
