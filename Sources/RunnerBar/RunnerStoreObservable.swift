@@ -14,19 +14,19 @@ import SwiftUI
 @MainActor
 final class RunnerStoreObservable: ObservableObject {
     /// Action groups to display (live + recently completed, capped at 10).
-    @Published private(set) var actions: [ActionGroup] = []
+    @Published var actions: [ActionGroup] = []
     /// Jobs to display (live + recently completed, capped at 3).
-    @Published private(set) var jobs: [ActiveJob] = []
+    @Published var jobs: [ActiveJob] = []
     /// All known self-hosted runners.
-    @Published private(set) var runners: [Runner] = []
+    @Published var runners: [Runner] = []
     /// `true` when the most recent poll hit a GitHub rate limit.
-    @Published private(set) var isRateLimited: Bool = false
+    @Published var isRateLimited: Bool = false
 
     // MARK: - Reload
 
     /// Copies current `RunnerStore.shared` state into the published properties.
-    /// Must be called on the main thread. Uses `withAnimation(nil)` to prevent
-    /// layout thrashing (RULE 5 — ref #52 #54 #57).
+    /// Uses `withAnimation(nil)` to prevent layout thrashing (RULE 5 — ref #52 #54 #57).
+    /// Mutation is safe because the class is `@MainActor`.
     func reload() {
         let store = RunnerStore.shared
         withAnimation(nil) {
