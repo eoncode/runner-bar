@@ -39,7 +39,7 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Green dot when authenticated; tappable orange dot + caption when not.
+    /// Green dot when authenticated; tappable orange dot + `"Sign in"` caption when not.
     @ViewBuilder
     private var authIndicator: some View {
         if isAuthenticated {
@@ -62,6 +62,9 @@ struct PopoverHeaderView: View {
     }
 
     /// Inline CPU / MEM / DISK chips.
+    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
+    /// would change `hc.view.fittingSize.height` and corrupt the popover frame in
+    /// `AppDelegate.openPopover()` (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
             statChip(label: "CPU", value: String(format: "%.1f%%", stats.cpuPct), pct: stats.cpuPct)
@@ -82,14 +85,17 @@ struct PopoverHeaderView: View {
     }
 
     /// Single label+value chip coloured by usage level.
+    /// Both texts are `.lineLimit(1)` — load-bearing, see `systemStatsBadge` doc.
     private func statChip(label: String, value: String, pct: Double) -> some View {
         HStack(spacing: 3) {
             Text(label)
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(.secondary)
+                .lineLimit(1)
             Text(value)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(usageColor(pct: pct))
+                .lineLimit(1)
         }
     }
 
@@ -266,22 +272,28 @@ struct InlineJobRowsView: View {
         }
     }
 
-    /// Renders a single inline job row: indent arrow, pie dot, name, step, progress, elapsed.
+    /// Renders a single inline job row.
+    /// Format: `↳ [●] JobName · Current step name  done/total  elapsed`
+    /// The middle-dot segment is omitted when no in_progress step exists or step name is empty.
     private func jobRow(_ job: ActiveJob) -> some View {
-        HStack(spacing: 6) {
+        let currentStep = job.steps.first(where: { $0.status == "in_progress" })
+        let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+        let done = job.steps.filter { $0.conclusion != nil }.count
+        let total = job.steps.count
+        return HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
-            Text(job.name)
-                .font(.caption).foregroundColor(.secondary).lineLimit(1).truncationMode(.tail)
-            Spacer()
-            if let step = job.steps.first(where: { $0.status == "in_progress" }) {
-                Text(step.name)
-                    .font(.caption2).foregroundColor(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
-                    .frame(minWidth: 0, maxWidth: 120, alignment: .trailing)
+            // Job name + optional middle-dot step name, truncated together
+            Group {
+                if let name = stepName {
+                    Text(job.name + " · " + name)
+                } else {
+                    Text(job.name)
+                }
             }
-            let done = job.steps.filter { $0.conclusion != nil }.count
-            let total = job.steps.count
+            .font(.caption).foregroundColor(.secondary)
+            .lineLimit(1).truncationMode(.tail)
+            Spacer()
             if total > 0 {
                 Text("\(done)/\(total)")
                     .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
