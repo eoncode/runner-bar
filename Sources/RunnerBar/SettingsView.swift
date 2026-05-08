@@ -22,6 +22,9 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// OAuth (issue #325 Phase 3): `accountSection` uses `OAuthService` for
+/// native GitHub OAuth. `authStateChanged` notification drives reactive UI.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -94,6 +97,10 @@ struct SettingsView: View {
             }
             localRunnerStore.refresh()
         }
+        // Reacts to OAuthService sign-in / sign-out completing.
+        .onReceive(NotificationCenter.default.publisher(for: .authStateChanged)) { _ in
+            isAuthenticated = (githubToken() != nil)
+        }
         // Single-parameter form: compatible with macOS 13+.
         // The two-parameter { _, newValue in } form requires macOS 14+.
         .onChange(of: localRunnerStore.isScanning) { scanning in
@@ -147,8 +154,8 @@ struct SettingsView: View {
                 Text("This will run ./svc.sh uninstall and ./config.sh remove. " +
                      "A GitHub token is required for de-registration.")
             } else {
-                Text("A GitHub token is required to de-register the runner from GitHub. " +
-                     "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
+                Text("A GitHub sign-in is required to de-register the runner from GitHub. " +
+                     "Sign in with GitHub, then try again.")
             }
         }
     }
@@ -393,6 +400,8 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Account (OAuth — issue #325 Phase 3)
+
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
@@ -402,21 +411,46 @@ struct SettingsView: View {
                 Text("GitHub").font(.system(size: 12))
                 Spacer()
                 if isAuthenticated {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated").font(.caption).foregroundColor(.secondary)
+                    // Authenticated state: green dot + label + Sign out button.
+                    HStack(spacing: 8) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            Text("Authenticated")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        Button(action: signOutFromGitHub, label: {
+                            Text("Sign out")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        })
+                        .buttonStyle(.plain)
                     }
                 } else {
+                    // Unauthenticated state: prominent Sign in with GitHub button.
                     Button(action: signInWithGitHub, label: {
-                        Text("Sign in").font(.caption).foregroundColor(.orange)
-                    }).buttonStyle(.plain)
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.badge.key")
+                                .font(.caption)
+                            Text("Sign in with GitHub")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.orange)
+                    })
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             Divider().padding(.leading, 12)
-            Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 4)
+            // Hint text adapts to auth state.
+            if isAuthenticated {
+                Text("Token stored securely in Keychain. Signing out removes local credentials.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+            } else {
+                Text("Click \"Sign in with GitHub\" to authenticate via browser.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+            }
         }
     }
 
@@ -497,11 +531,16 @@ struct SettingsView: View {
         ).buttonStyle(.plain)
     }
 
+    /// Triggers the native GitHub OAuth browser flow via OAuthService.
+    /// The browser redirects to runnerbar://oauth/callback which AppDelegate handles.
     private func signInWithGitHub() {
-        let urlString = "https://docs.github.com/en/authentication/" +
-            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
-        guard let url = URL(string: urlString) else { return }
-        NSWorkspace.shared.open(url)
+        OAuthService.shared.startLogin()
+    }
+
+    /// Clears the Keychain token via OAuthService and updates UI immediately.
+    private func signOutFromGitHub() {
+        OAuthService.shared.signOut()
+        isAuthenticated = false
     }
 }
 // swiftlint:enable type_body_length
