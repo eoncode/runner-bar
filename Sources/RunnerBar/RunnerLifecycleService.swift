@@ -1,4 +1,3 @@
-// swiftlint:disable type_body_length
 import Foundation
 
 // MARK: - RunnerLifecycleService
@@ -163,7 +162,8 @@ struct RunnerLifecycleService {
             // Log a warning but continue: de-registering from GitHub is more
             // important than the local service uninstall, since a failed
             // svc.sh often means the service wasn't loaded (already stopped).
-            log("RunnerLifecycle › remove: svc.sh uninstall failed for \(runner.runnerName) — proceeding to config.sh remove")
+            log("RunnerLifecycle › remove: svc.sh uninstall failed for \(runner.runnerName)")
+            log("RunnerLifecycle › remove: proceeding to config.sh remove")
         }
         let cfgOk = runScript(executableName: "config.sh",
                               arguments: ["remove", "--unattended"],
@@ -299,4 +299,3 @@ struct RunnerLifecycleService {
         }
     }
 }
-// swiftlint:enable type_body_length

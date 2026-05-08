@@ -1,5 +1,6 @@
 import SwiftUI
 
+// swiftlint:disable type_body_length
 // MARK: - AddRunnerSheet
 
 /// Phase 3: Sheet view for onboarding a new self-hosted runner.
@@ -256,3 +257,4 @@ struct AddRunnerSheet: View {
         return task.terminationStatus
     }
 }
+// swiftlint:enable type_body_length
