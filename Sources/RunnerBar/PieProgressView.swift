@@ -29,15 +29,15 @@ struct PieProgressView: View {
             } else if progress > 0 {
                 // fix #5 (#314): filled pie wedge via Path, not a .stroke ring arc
                 GeometryReader { geo in
-                    let r = geo.size.width / 2
-                    let center = CGPoint(x: r, y: r)
+                    let radius = geo.size.width / 2
+                    let center = CGPoint(x: radius, y: radius)
                     let start = Angle.degrees(-90)
                     let end   = Angle.degrees(-90 + 360 * progress)
                     Path { path in
                         path.move(to: center)
                         path.addArc(
                             center: center,
-                            radius: r,
+                            radius: radius,
                             startAngle: start,
                             endAngle: end,
                             clockwise: false
