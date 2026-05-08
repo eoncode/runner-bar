@@ -111,13 +111,14 @@ struct PopoverMainView: View {
         .padding(.vertical, 4)
     }
 
-    /// “Load 10 more actions…” pagination button.
-    /// Action clamps visibleCount to store.actions.count to prevent overshoot.
+    /// Pagination button. Label and action both use the same `nextBatch` value
+    /// so the shown count exactly matches how many groups will appear on tap.
     private var loadMoreButton: some View {
-        Button(
-            action: { visibleCount = min(visibleCount + 10, store.actions.count) },
+        let nextBatch = min(10, store.actions.count - visibleCount)
+        return Button(
+            action: { visibleCount = min(visibleCount + nextBatch, store.actions.count) },
             label: {
-                Text("Load \(min(10, store.actions.count - visibleCount)) more actions…")
+                Text("Load \(nextBatch) more actions…")
                     .font(.caption).foregroundColor(.secondary)
             }
         )
