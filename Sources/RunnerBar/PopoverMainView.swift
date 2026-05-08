@@ -30,6 +30,8 @@ struct PopoverMainView: View {
     @StateObject private var systemStats = SystemStatsViewModel()
     /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
     @State private var visibleCount: Int = 10
+    /// Local runner store — drives Phase 6 runners sub-section.
+    @ObservedObject private var localRunners = LocalRunnerStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -189,11 +191,38 @@ struct PopoverMainView: View {
                 .frame(maxHeight: 400)
                 .padding(.bottom, 6)
             }
+
+            // ── Phase 6 (#307): Runners — only shown when ≥1 runner is active
+            let activeRunners = localRunners.runners.filter { $0.isRunning }
+            if !activeRunners.isEmpty {
+                Divider()
+                Text("Runners")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+                ForEach(activeRunners) { runner in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(runnerDotColor(for: runner))
+                            .frame(width: 7, height: 7)
+                        Text(runner.runnerName)
+                            .font(.system(size: 12))
+                            .foregroundColor(.primary)
+                            .lineLimit(1).truncationMode(.tail)
+                        Spacer()
+                        Text(runner.statusDescription)
+                            .font(.caption)
+                            .foregroundColor(runnerDotColor(for: runner))
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 3)
+                }
+                .padding(.bottom, 6)
+            }
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
+            Task { await localRunners.refresh() }
         }
     }
 
@@ -250,6 +279,16 @@ struct PopoverMainView: View {
         case .completed:
             if group.isDimmed { return .gray }
             return group.runs.allSatisfy({ $0.conclusion == "success" }) ? .green : .red
+        }
+    }
+
+    /// Dot color for a local runner based on its status.
+    private func runnerDotColor(for runner: RunnerModel) -> Color {
+        switch runner.statusColor {
+        case .running:  return .green
+        case .busy:     return .yellow
+        case .idle:     return .secondary
+        case .offline:  return .red
         }
     }
 
