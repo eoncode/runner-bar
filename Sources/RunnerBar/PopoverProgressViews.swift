@@ -58,9 +58,9 @@ enum RelativeTimeFormatter {
 
 // MARK: - ActionGroup + progressFraction
 
+/// Adds a pie-progress fraction property to `ActionGroup` for use with `PieProgressDot`.
 extension ActionGroup {
-    /// Radial progress fraction (0.0–1.0) for use with `PieProgressDot`.
-    /// Returns `nil` (indeterminate) while queued or when no jobs are available.
+    /// Radial progress fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
     var progressFraction: Double? {
         switch groupStatus {
         case .queued:
@@ -76,9 +76,9 @@ extension ActionGroup {
 
 // MARK: - ActiveJob + progressFraction
 
+/// Adds a pie-progress fraction property to `ActiveJob` for use with `PieProgressDot`.
 extension ActiveJob {
-    /// Radial progress fraction (0.0–1.0) for use with `PieProgressDot`.
-    /// Returns `nil` (indeterminate) while queued or when no steps are available.
+    /// Radial progress fraction (0.0–1.0). Returns `nil` while queued or when no steps are available.
     var progressFraction: Double? {
         switch status {
         case "queued":
