@@ -77,6 +77,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         RunnerStore.shared.start()
     }
 
+    // MARK: - URL scheme callback (OAuth)
+
+    /// Called by macOS when the app is opened via the `runnerbar://` URL scheme.
+    /// Delegates OAuth callbacks (`runnerbar://oauth/callback?code=...`) to `OAuthService`.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard
+            let url = urls.first,
+            url.scheme == "runnerbar",
+            url.host == "oauth"
+        else { return }
+        log("AppDelegate › received OAuth callback URL")
+        Task { await OAuthService.shared.handleCallback(url: url) }
+    }
+
     // MARK: - NSPopoverDelegate
 
     /// Resets navigation state after the popover closes.

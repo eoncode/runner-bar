@@ -18,5 +18,14 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>runnerbar</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
