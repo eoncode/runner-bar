@@ -213,7 +213,6 @@ private struct ActionRowView: View {
             actionGroup.jobs.contains { $0.status == "in_progress" }
     }
 
-    // swiftlint:disable:next function_body_length
     var body: some View {
         VStack(spacing: 0) {
             Button(action: onSelect, label: {
@@ -394,7 +393,7 @@ private struct InlineJobRowView: View {
         return "—"
     }
 
-    /// Fill color for the inline job’s pie-progress dot.
+    /// Fill color for the inline job's pie-progress dot.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
@@ -436,10 +435,10 @@ private struct RunnersListView: View {
                     Spacer()
                     // ⚠️ Gap 4 fix (#323 / #307): show CPU% + MEM% from runner.metrics.
                     // Falls back to em-dash when no matching ps aux process was found.
-                    if let m = runner.metrics {
-                        Text(String(format: "CPU: %.1f%%", m.cpu))
+                    if let metrics = runner.metrics {
+                        Text(String(format: "CPU: %.1f%%", metrics.cpu))
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                        Text(String(format: "MEM: %.1f%%", m.mem))
+                        Text(String(format: "MEM: %.1f%%", metrics.mem))
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                     } else {
                         Text("CPU: — MEM: —")
