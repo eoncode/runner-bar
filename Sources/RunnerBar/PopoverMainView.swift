@@ -70,6 +70,8 @@ struct PopoverMainView: View {
             expandedGroups = Set(inProgressIDs)
         }
         .onDisappear { systemStats.stop() }
+        // Reset pagination when the action list is replaced by a fresh store poll.
+        .onChange(of: store.actions.count) { _ in visibleCount = 10 }
     }
 }
 
@@ -343,6 +345,8 @@ private struct InlineJobRowView: View {
 
 /// Conditional runners sub-section — only shown when ≥1 Runner is busy/active (Phase 6 / #307).
 /// Driven by RunnerStore.runners via RunnerStoreObservable — no LocalRunnerStore dependency.
+/// ⚠️ Runner row navigation is intentionally disabled until #307 detail view is implemented.
+/// The chevron signals future navigability but the button is disabled to avoid no-op taps.
 private struct RunnersListView: View {
     /// GitHub runners from RunnerStore (not LocalRunnerStore).
     let runners: [Runner]
@@ -356,26 +360,21 @@ private struct RunnersListView: View {
         if !activeRunners.isEmpty {
             Divider()
             ForEach(activeRunners, id: \.id) { runner in
-                Button(
-                    action: {},
-                    label: {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(dotColor(for: runner))
-                                .frame(width: 7, height: 7)
-                            Text(runner.name)
-                                .font(.system(size: 12)).foregroundColor(.primary)
-                                .lineLimit(1).truncationMode(.tail)
-                            Spacer()
-                            Text(runner.busy ? "BUSY" : "ONLINE")
-                                .font(.caption).foregroundColor(dotColor(for: runner))
-                            Image(systemName: "chevron.right")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 3)
-                    }
-                )
-                .buttonStyle(.plain)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(dotColor(for: runner))
+                        .frame(width: 7, height: 7)
+                    Text(runner.name)
+                        .font(.system(size: 12)).foregroundColor(.primary)
+                        .lineLimit(1).truncationMode(.tail)
+                    Spacer()
+                    Text(runner.busy ? "BUSY" : "ONLINE")
+                        .font(.caption).foregroundColor(dotColor(for: runner))
+                    // ⚠️ Chevron shown for future navigability (#307 detail view not yet implemented)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2).foregroundColor(.secondary.opacity(0.4))
+                }
+                .padding(.horizontal, 12).padding(.vertical, 3)
             }
             .padding(.bottom, 6)
         }
