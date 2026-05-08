@@ -17,11 +17,9 @@ struct PieProgressDot: View {
 
     var body: some View {
         ZStack {
-            // Background ring
             Circle()
                 .stroke(color.opacity(0.25), lineWidth: 1.5)
                 .frame(width: size, height: size)
-            // Filled pie slice
             if let fraction = progress, fraction > 0 {
                 Circle()
                     .trim(from: 0, to: min(1, CGFloat(fraction)))
@@ -29,7 +27,6 @@ struct PieProgressDot: View {
                     .rotationEffect(.degrees(-90))
                     .frame(width: size, height: size)
             } else if progress == nil {
-                // Indeterminate: full solid dot
                 Circle().fill(color).frame(width: size * 0.55, height: size * 0.55)
             }
         }
@@ -42,24 +39,57 @@ struct PieProgressDot: View {
 /// Formats a `Date` into a compact relative string like `"3m ago"`, `"1h ago"`, `"2d ago"`.
 ///
 /// Intended for one-off formatting in row views; not observation-based —
-/// callers should refresh on a suitable timer tick (e.g. every 60 s).
+/// callers should refresh on a suitable timer tick.
 enum RelativeTimeFormatter {
     /// Returns a short relative string for the interval between `date` and `now`.
-    /// - Returns `"just now"` for intervals < 60 s.
-    /// - Returns `"Nm ago"` for intervals < 60 min.
-    /// - Returns `"Nh ago"` for intervals < 48 h.
-    /// - Returns `"Nd ago"` for longer intervals.
+    /// Returns `"just now"` for intervals < 60 s, `"Nm ago"` < 60 min,
+    /// `"Nh ago"` < 48 h, and `"Nd ago"` otherwise.
     static func string(from date: Date, relativeTo now: Date = Date()) -> String {
         let seconds = max(0, now.timeIntervalSince(date))
         switch seconds {
-        case ..<60:
-            return "just now"
-        case ..<3_600:
-            return "\(Int(seconds / 60))m ago"
-        case ..<172_800:
-            return "\(Int(seconds / 3_600))h ago"
+        case ..<60:      return "just now"
+        case ..<3_600:   return "\(Int(seconds / 60))m ago"
+        case ..<172_800: return "\(Int(seconds / 3_600))h ago"
+        default:         return "\(Int(seconds / 86_400))d ago"
+        }
+    }
+}
+
+// MARK: - ActionGroup + progressFraction
+
+extension ActionGroup {
+    /// Radial progress fraction (0.0–1.0) for `PieProgressDot`.
+    /// In-progress: ratio of concluded jobs to total.
+    /// Completed: 1.0. Queued or no jobs: nil (indeterminate ring).
+    var progressFraction: Double? {
+        switch groupStatus {
+        case .queued:
+            return nil
+        case .completed:
+            return 1.0
+        case .inProgress:
+            guard jobsTotal > 0 else { return nil }
+            return Double(jobsDone) / Double(jobsTotal)
+        }
+    }
+}
+
+// MARK: - ActiveJob + progressFraction
+
+extension ActiveJob {
+    /// Radial progress fraction (0.0–1.0) for `PieProgressDot`.
+    /// In-progress: ratio of concluded steps to total steps.
+    /// Completed: 1.0. Queued or no steps: nil (indeterminate ring).
+    var progressFraction: Double? {
+        switch status {
+        case "queued":
+            return nil
+        case "completed":
+            return 1.0
         default:
-            return "\(Int(seconds / 86_400))d ago"
+            guard !steps.isEmpty else { return nil }
+            let done = steps.filter { $0.conclusion != nil }.count
+            return Double(done) / Double(steps.count)
         }
     }
 }
