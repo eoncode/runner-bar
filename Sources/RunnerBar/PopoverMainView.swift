@@ -16,9 +16,13 @@ import SwiftUI
 
 /// Root popover view — unified scrollable Actions list per issue #294.
 struct PopoverMainView: View {
+    /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
+    /// Called when the user taps a job row to drill into job detail.
     let onSelectJob: (ActiveJob) -> Void
+    /// Called when the user taps an action group row to drill into action detail.
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when the user taps the settings button.
     let onSelectSettings: () -> Void
 
     @State private var isAuthenticated = (githubToken() != nil)
@@ -29,7 +33,8 @@ struct PopoverMainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerRow
-            Divider()
+            // NOTE: no unconditional Divider() here — localRunnerRow owns its own
+            // leading + trailing Dividers inside the @ViewBuilder guard (fix #2).
             if store.isRateLimited { rateLimitBanner; Divider() }
             localRunnerRow
             ScrollView {
@@ -45,10 +50,16 @@ struct PopoverMainView: View {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
         }
+        // Fix #4: stop the repeating timer/publisher when the popover is dismissed
+        // to prevent SystemStatsViewModel leaking CPU cycles after the view is gone.
+        .onDisappear {
+            systemStats.stop()
+        }
     }
 
     // MARK: - Header
 
+    /// Header row: system stats on the left, auth indicator + settings + close on the right.
     private var headerRow: some View {
         HStack(spacing: 6) {
             systemStatsBadge
@@ -83,6 +94,7 @@ struct PopoverMainView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
+    /// Inline CPU / MEM / DISK chips for the header.
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
             statChip(
@@ -113,6 +125,7 @@ struct PopoverMainView: View {
         }
     }
 
+    /// Single label+value chip with a usage-based colour.
     private func statChip(label: String, value: String, pct: Double) -> some View {
         HStack(spacing: 3) {
             Text(label)
@@ -126,6 +139,7 @@ struct PopoverMainView: View {
 
     // MARK: - Rate limit banner
 
+    /// Yellow warning banner shown when GitHub rate-limit is hit.
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -138,6 +152,8 @@ struct PopoverMainView: View {
 
     // MARK: - Local runner row
 
+    /// Conditionally shows online runners — hidden when all runners are idle/offline.
+    /// Owns its own leading + trailing Dividers so the caller never adds an extra one.
     @ViewBuilder
     private var localRunnerRow: some View {
         let activeRunners = store.runners.filter { $0.status == "online" }
@@ -166,6 +182,7 @@ struct PopoverMainView: View {
 
     // MARK: - Actions section
 
+    /// Unified scrollable actions list with inline job expansion and pagination.
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -206,6 +223,7 @@ struct PopoverMainView: View {
 
     // MARK: - Quit
 
+    /// Quit RunnerBar button pinned to the bottom of the popover.
     private var quitButton: some View {
         Button(
             action: { NSApplication.shared.terminate(nil) },
@@ -220,6 +238,7 @@ struct PopoverMainView: View {
 
     // MARK: - Helpers
 
+    /// Toggles expand/collapse state for an action group.
     private func toggleExpand(_ id: String) {
         if expandedGroupIDs.contains(id) {
             expandedGroupIDs.remove(id)
@@ -228,12 +247,14 @@ struct PopoverMainView: View {
         }
     }
 
+    /// Returns a traffic-light colour based on a usage percentage.
     private func usageColor(pct: Double) -> Color {
         if pct > 85 { return .red }
         if pct > 60 { return .yellow }
         return .green
     }
 
+    /// Opens the GitHub PAT setup docs in the default browser.
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
@@ -244,21 +265,48 @@ struct PopoverMainView: View {
 
 // MARK: - ActionRowView
 
-/// Extracted to satisfy SwiftLint file_length (<400 lines) and
-/// multiple_closures_with_trailing_closure rules.
+/// Single action-group row.
+/// Fix #1: expand chevron is NOT nested inside the outer row Button — it lives in a
+/// separate Button alongside the row content inside a plain HStack, so onToggleExpand
+/// fires reliably on macOS SwiftUI without being swallowed by the row tap target.
 private struct ActionRowView: View {
+    /// The action group this row represents.
     let group: ActionGroup
+    /// Whether the inline job rows beneath this group are currently expanded.
     let isExpanded: Bool
+    /// Called when the user taps the main row area (navigate to action detail).
     let onSelect: () -> Void
+    /// Called when the user taps the expand/collapse chevron.
     let onToggleExpand: () -> Void
 
     var body: some View {
+        // Two independent tappable zones in the same visual row:
+        //   1. rowContentButton — covers label, title, stats → navigates to detail
+        //   2. expandButton     — chevron on the right       → toggles inline jobs
+        // Using a plain HStack (not nesting one Button inside another's label)
+        // ensures macOS SwiftUI delivers taps to the correct target.
+        HStack(spacing: 0) {
+            rowContentButton
+            if group.groupStatus == .inProgress && !group.jobs.isEmpty {
+                expandButton
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundColor(.secondary)
+                    .padding(.trailing, 12)
+            }
+        }
+    }
+
+    /// The selectable portion of the row (everything except the expand chevron).
+    private var rowContentButton: some View {
         Button(action: onSelect, label: { rowContent })
             .buttonStyle(.plain)
     }
 
+    /// Visual content of the main row area.
     private var rowContent: some View {
         HStack(spacing: 8) {
+            // TODO: replace with pie-dot radial progress indicator — see #310 / #182
             Circle().fill(dotColor).frame(width: 8, height: 8)
             Text(group.label)
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
@@ -281,20 +329,25 @@ private struct ActionRowView: View {
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 .frame(width: 40, alignment: .trailing)
             statusLabel
-            if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                Button(action: onToggleExpand, label: {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2).foregroundColor(.secondary)
-                })
-                .buttonStyle(.plain)
-            } else {
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
-            }
         }
-        .padding(.horizontal, 12).padding(.vertical, 3)
+        .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 3)
     }
 
+    /// The expand/collapse chevron button (only shown for in-progress rows with jobs).
+    private var expandButton: some View {
+        Button(
+            action: onToggleExpand,
+            label: {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+        )
+        .buttonStyle(.plain)
+        .padding(.trailing, 12)
+        .padding(.vertical, 3)
+    }
+
+    /// Status badge (IN PROGRESS / QUEUED / SUCCESS / FAILED).
     @ViewBuilder
     private var statusLabel: some View {
         switch group.groupStatus {
@@ -312,6 +365,7 @@ private struct ActionRowView: View {
         }
     }
 
+    /// Status dot colour for this group.
     private var dotColor: Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -325,21 +379,29 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobRowsView
 
+/// Inline ↳ job rows shown beneath an expanded action group.
 private struct InlineJobRowsView: View {
+    /// The parent action group whose jobs are displayed.
     let group: ActionGroup
+    /// Called when the user taps a job row.
     let onSelectJob: (ActiveJob) -> Void
 
+    /// Jobs currently in-progress or queued inside this group.
     private var activeJobs: [ActiveJob] {
         group.jobs.filter { $0.status == "in_progress" || $0.status == "queued" }
     }
 
     var body: some View {
         ForEach(activeJobs.prefix(4)) { job in
-            Button(action: { onSelectJob(job) }, label: { jobRow(job) })
-                .buttonStyle(.plain)
+            Button(
+                action: { onSelectJob(job) },
+                label: { jobRow(job) }
+            )
+            .buttonStyle(.plain)
         }
     }
 
+    /// Visual content for a single inline job row.
     private func jobRow(_ job: ActiveJob) -> some View {
         HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary)
@@ -369,6 +431,7 @@ private struct InlineJobRowsView: View {
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
     }
 
+    /// Status dot colour for a job.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
