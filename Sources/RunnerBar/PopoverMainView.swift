@@ -39,13 +39,13 @@ struct PopoverMainView: View {
             HStack(spacing: 6) {
                 SystemStatsView(stats: systemStats.stats).statsContent
                 Spacer()
-                // Show orange dot next to gear when not authenticated
+                // fix #8 (#314): route to Settings instead of external PAT docs URL
                 if !isAuthenticated {
-                    Button(action: signInWithGitHub) {
+                    Button(action: onSelectSettings) {
                         Circle().fill(Color.orange).frame(width: 7, height: 7)
                     }
                     .buttonStyle(.plain)
-                    .help("Not authenticated — tap to set up a GitHub token")
+                    .help("Not authenticated — open Settings to add a GitHub token")
                 }
                 Button(action: onSelectSettings) {
                     Image(systemName: "gearshape")
@@ -123,7 +123,7 @@ struct PopoverMainView: View {
                                     Text(actionGroup.jobProgress)
                                         .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                                         .frame(width: 28, alignment: .trailing)
-                                    // Status text — uppercase per spec #178 #302 #285 (fix #1)
+                                    // Status text — uppercase per spec #178 #302 #285
                                     Text(actionStatusLabel(for: actionGroup))
                                         .font(.caption)
                                         .foregroundColor(actionStatusColor(for: actionGroup))
@@ -135,55 +135,50 @@ struct PopoverMainView: View {
                             })
                             .buttonStyle(.plain)
                             // Phase 4 (#304): inline ↳ job rows for in-progress groups
+                            // fix #9 (#314): passive info rows — no Button/chevron/onSelectJob
                             if actionGroup.groupStatus == .inProgress || actionGroup.groupStatus == .queued {
                                 ForEach(actionGroup.jobs.filter {
                                     $0.status == "in_progress" || $0.status == "queued"
                                 }.prefix(3)) { job in
-                                    Button(action: { onSelectJob(job) }, label: {
-                                        HStack(spacing: 6) {
-                                            // indent
-                                            Text("↳")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                                .padding(.leading, 14)
-                                            // fix #4 (#311): real step completion fraction
-                                            let stepProgress: Double = {
-                                                let total = job.steps.count
-                                                guard total > 0 else {
-                                                    return job.status == "in_progress" ? 0.5 : 0.0
-                                                }
-                                                let done = job.steps.filter { $0.conclusion != nil }.count
-                                                return Double(done) / Double(total)
-                                            }()
-                                            PieProgressView(
-                                                progress: stepProgress,
-                                                color: jobDotColor(for: job),
-                                                size: 7
-                                            )
-                                            Text(job.name)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                                .lineLimit(1).truncationMode(.tail)
-                                            Spacer()
-                                            // fix #2 (#311): uppercase per spec
-                                            Text(job.status == "in_progress" ? "IN PROGRESS" : "QUEUED")
-                                                .font(.caption)
-                                                .foregroundColor(job.status == "in_progress" ? .yellow : .blue)
-                                                .frame(width: 60, alignment: .trailing)
-                                            Text(job.elapsed)
-                                                .font(.caption.monospacedDigit())
-                                                .foregroundColor(.secondary)
-                                                .frame(width: 36, alignment: .trailing)
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption2).foregroundColor(.secondary)
-                                        }
-                                        .padding(.horizontal, 12).padding(.vertical, 2)
-                                    })
-                                    .buttonStyle(.plain)
+                                    HStack(spacing: 6) {
+                                        Text("↳")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .padding(.leading, 14)
+                                        // Real step completion fraction (fix #4 / #311)
+                                        let stepProgress: Double = {
+                                            let total = job.steps.count
+                                            guard total > 0 else {
+                                                return job.status == "in_progress" ? 0.5 : 0.0
+                                            }
+                                            let done = job.steps.filter { $0.conclusion != nil }.count
+                                            return Double(done) / Double(total)
+                                        }()
+                                        PieProgressView(
+                                            progress: stepProgress,
+                                            color: jobDotColor(for: job),
+                                            size: 7
+                                        )
+                                        Text(job.name)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1).truncationMode(.tail)
+                                        Spacer()
+                                        // Uppercase per spec
+                                        Text(job.status == "in_progress" ? "IN PROGRESS" : "QUEUED")
+                                            .font(.caption)
+                                            .foregroundColor(job.status == "in_progress" ? .yellow : .blue)
+                                            .frame(width: 60, alignment: .trailing)
+                                        Text(job.elapsed)
+                                            .font(.caption.monospacedDigit())
+                                            .foregroundColor(.secondary)
+                                            .frame(width: 36, alignment: .trailing)
+                                    }
+                                    .padding(.horizontal, 12).padding(.vertical, 2)
                                 }
                             }
                         }
-                        // fix #6 (#311): static label — dynamic count can be wrong when store paginates
+                        // Static label — dynamic count can mislead when store paginates
                         if store.actions.count > visibleCount {
                             Button(action: { visibleCount += 10 }, label: {
                                 Text("Load 10 more actions…")
@@ -203,9 +198,9 @@ struct PopoverMainView: View {
             let activeRunners = localRunners.runners.filter { $0.isRunning }
             if !activeRunners.isEmpty {
                 Divider()
-                // fix #8 (#311): runner rows are tappable with > chevron
+                // Runner rows: tappable with chevron per #307
                 ForEach(activeRunners) { runner in
-                    Button(action: { /* onSelectRunner(runner) — no-op until runner detail view exists */ }, label: {
+                    Button(action: { /* runner detail view — no-op until #307 detail is implemented */ }, label: {
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(runnerDotColor(for: runner))
@@ -234,7 +229,7 @@ struct PopoverMainView: View {
             systemStats.start()
             Task { await localRunners.refresh() }
         }
-        // fix #11 (#311): stop stats timer when popover is dismissed
+        // Stop stats timer when popover is dismissed (fix #11 / #311)
         .onDisappear {
             systemStats.stop()
         }
@@ -259,7 +254,7 @@ struct PopoverMainView: View {
     }
 
     /// Human-readable status label for an action group.
-    /// Returns uppercase strings per spec (#178 #302 #285). fix #1 (#311)
+    /// Returns uppercase strings per spec (#178 #302 #285).
     private func actionStatusLabel(for group: ActionGroup) -> String {
         switch group.groupStatus {
         case .inProgress: return "IN PROGRESS"
@@ -355,14 +350,10 @@ struct PopoverMainView: View {
         }
     }
 
-    /// Opens the GitHub PAT setup docs in the default browser.
-    /// NSAppleScript/Terminal removed — device-flow requires a user_code the app never generates.
-    /// Auth.swift resolves token via: gh auth token → GH_TOKEN → GITHUB_TOKEN (ref #221 #246).
+    /// Routes to Settings. Auth.swift resolves token via:
+    /// gh auth token → GH_TOKEN → GITHUB_TOKEN (ref #221 #246).
     private func signInWithGitHub() {
-        let urlString = "https://docs.github.com/en/authentication/" +
-            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
-        guard let url = URL(string: urlString) else { return }
-        NSWorkspace.shared.open(url)
+        onSelectSettings()
     }
 }
 // swiftlint:enable type_body_length

@@ -8,6 +8,10 @@ import SwiftUI
 ///
 /// `reload()` is the ONE place where store state is copied into published properties.
 /// It always runs on the main thread and suppresses SwiftUI animations (ref #52 #54).
+///
+/// `@MainActor` provides compile-time enforcement that all mutations happen on the
+/// main thread, preventing accidental background-context calls (fix #6 / #314).
+@MainActor
 final class RunnerStoreObservable: ObservableObject {
     /// Action groups to display (live + recently completed, capped at 10).
     @Published private(set) var actions: [ActionGroup] = []

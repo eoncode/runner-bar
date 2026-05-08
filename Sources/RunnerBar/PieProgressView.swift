@@ -6,8 +6,8 @@ import SwiftUI
 ///
 /// Visual states:
 /// - `progress == 0.0` → empty circle outline only
-/// - `0.0 < progress < 1.0` → partial arc from 12 o'clock clockwise (◔ ◑ ◕)
-/// - `progress == 1.0` → solid filled circle (●)
+/// - `0.0 < progress < 1.0` → partial filled wedge from 12 o'clock clockwise (◔ ◑ ◕)
+/// - `progress >= 1.0` → solid filled circle (●)
 ///
 /// Used in action rows (size: 8) and inline ↳ child job rows (size: 7).
 struct PieProgressView: View {
@@ -20,15 +20,32 @@ struct PieProgressView: View {
 
     var body: some View {
         ZStack {
+            // Background ring
             Circle()
                 .stroke(color.opacity(0.25), lineWidth: size * 0.25)
             if progress >= 1.0 {
+                // Full fill
                 Circle().fill(color)
             } else if progress > 0 {
-                Circle()
-                    .trim(from: 0, to: CGFloat(progress))
-                    .rotation(.degrees(-90))
-                    .stroke(color, style: StrokeStyle(lineWidth: size * 0.25, lineCap: .round))
+                // fix #5 (#314): filled pie wedge via Path, not a .stroke ring arc
+                GeometryReader { geo in
+                    let r = geo.size.width / 2
+                    let center = CGPoint(x: r, y: r)
+                    let start = Angle.degrees(-90)
+                    let end   = Angle.degrees(-90 + 360 * progress)
+                    Path { path in
+                        path.move(to: center)
+                        path.addArc(
+                            center: center,
+                            radius: r,
+                            startAngle: start,
+                            endAngle: end,
+                            clockwise: false
+                        )
+                        path.closeSubpath()
+                    }
+                    .fill(color)
+                }
             }
         }
         .frame(width: size, height: size)
