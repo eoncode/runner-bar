@@ -14,7 +14,6 @@ import SwiftUI
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
-// swiftlint:disable type_body_length
 /// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
@@ -31,34 +30,34 @@ struct PopoverMainView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header
-            HStack {
-                Text("RunnerBar v0.34") // ⚠️ bump on every commit
-                    .font(.headline).foregroundColor(.secondary)
+            // ── Header: stats + optional auth badge + gear + close (Phase 2 / #299)
+            HStack(spacing: 6) {
+                SystemStatsView(stats: systemStats.stats).statsContent
                 Spacer()
+                // Show orange dot next to gear when not authenticated
+                if !isAuthenticated {
+                    Button(action: signInWithGitHub) {
+                        Circle().fill(Color.orange).frame(width: 7, height: 7)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Not authenticated — tap to set up a GitHub token")
+                }
                 Button(action: onSelectSettings) {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Settings")
-                .padding(.trailing, 4)
-                if isAuthenticated {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated").font(.caption).foregroundColor(.secondary)
-                    }
-                } else {
-                    Button(action: signInWithGitHub) {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.orange).frame(width: 8, height: 8)
-                            Text("Sign in with GitHub").font(.caption).foregroundColor(.orange)
-                        }
-                    }.buttonStyle(.plain)
-                }
+                Button(action: { NSApplication.shared.terminate(nil) }, label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                })
+                .buttonStyle(.plain)
+                .help("Quit RunnerBar")
             }
-            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
+            .padding(.horizontal, 12).padding(.vertical, 6)
             Divider()
 
             if store.isRateLimited {
@@ -71,13 +70,6 @@ struct PopoverMainView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 Divider()
             }
-
-            // ── System
-            Text("System")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            SystemStatsView(stats: systemStats.stats)
-            Divider()
 
             // ── Actions
             Text("Actions")
@@ -162,12 +154,6 @@ struct PopoverMainView: View {
                 }
                 .padding(.bottom, 6)
             }
-            Divider()
-            Button(action: { NSApplication.shared.terminate(nil) }, label: {
-                Text("Quit RunnerBar").font(.system(size: 12)).foregroundColor(.secondary)
-            })
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 6)
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
@@ -263,4 +249,3 @@ struct PopoverMainView: View {
         NSWorkspace.shared.open(url)
     }
 }
-// swiftlint:enable type_body_length

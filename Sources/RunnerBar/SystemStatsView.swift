@@ -37,7 +37,14 @@ struct SystemStatsView: View {
     /// Injected snapshot — updated every 2 s by SystemStatsViewModel.
     let stats: SystemStats
 
-    var body: some View {
+    // ⚠️ REGRESSION GUARD: .lineLimit(1) on statsContent is LOAD-BEARING.
+    // Without it, the DISK label can wrap and break fittingSize popover height.
+    // Do NOT remove .lineLimit(1) from statsContent.
+
+    /// Inner content — usable inline without double-padding.
+    /// When embedding in a combined header HStack (Phase 2 / #299), use
+    /// this directly and apply padding on the outer container.
+    var statsContent: some View {
         HStack(spacing: 6) {
             cpuSegment
             memSegment
@@ -46,10 +53,15 @@ struct SystemStatsView: View {
         // CRITICAL: .lineLimit(1) prevents the DISK label from wrapping and
         // breaking fittingSize-based popover height in AppDelegate.
         .lineLimit(1)
+    }
+
+    /// Standalone usage (backward compat) — wraps statsContent with row padding.
+    var body: some View {
+        statsContent
         // RULE 2 (from PopoverMainView): all rows use .padding(.horizontal, 12).
         // Do not change this without changing every other row's padding too.
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
     }
 
     // ── CPU segment ──────────────────────────────────────────────────────────────
