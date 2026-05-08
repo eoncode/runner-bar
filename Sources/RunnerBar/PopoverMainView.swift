@@ -14,6 +14,7 @@ import SwiftUI
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
+// swiftlint:disable type_body_length
 /// Root popover view. Shows system stats, action groups, active jobs, runners, and scope settings.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
@@ -80,33 +81,48 @@ struct PopoverMainView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
+                // Phase 3 (#302): redesigned action row
+                // Layout: [pie] SHA  title·····  startedAgo  elapsed  jobs  status ›
                 ForEach(store.actions.prefix(5)) { actionGroup in
                     Button(action: { onSelectAction(actionGroup) }, label: {
-                        HStack(spacing: 8) {
-                            actionDot(for: actionGroup)
+                        HStack(spacing: 6) {
+                            // Pie progress dot
+                            PieProgressView(
+                                progress: actionGroup.jobsTotal > 0
+                                    ? Double(actionGroup.jobsDone) / Double(actionGroup.jobsTotal)
+                                    : (actionGroup.groupStatus == .completed ? 1.0 : 0.0),
+                                color: actionDotColor(for: actionGroup)
+                            )
+                            // SHA / PR label
                             Text(actionGroup.label)
                                 .font(.caption.monospacedDigit())
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
-                                .frame(width: 52, alignment: .leading)
+                                .frame(width: 46, alignment: .leading)
+                            // Commit / PR title
                             Text(actionGroup.title)
                                 .font(.system(size: 12))
                                 .foregroundColor(actionGroup.isDimmed ? .secondary : .primary)
                                 .lineLimit(1).truncationMode(.tail)
                             Spacer()
-                            if actionGroup.groupStatus == .inProgress
-                                || actionGroup.groupStatus == .queued {
-                                Text(actionGroup.currentJobName)
-                                    .font(.caption).foregroundColor(.secondary)
-                                    .lineLimit(1).truncationMode(.tail)
-                                    .frame(minWidth: 0, maxWidth: 80, alignment: .trailing)
-                            }
-                            Text(actionGroup.jobProgress)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 30, alignment: .trailing)
+                            // Started-ago timestamp
+                            Text(actionGroup.startedAgo)
+                                .font(.caption.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 44, alignment: .trailing)
+                            // Elapsed MM:SS
                             Text(actionGroup.elapsed)
                                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 40, alignment: .trailing)
+                                .frame(width: 36, alignment: .trailing)
+                            // Job progress fraction
+                            Text(actionGroup.jobProgress)
+                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                .frame(width: 28, alignment: .trailing)
+                            // Status text
+                            Text(actionStatusLabel(for: actionGroup))
+                                .font(.caption)
+                                .foregroundColor(actionStatusColor(for: actionGroup))
+                                .frame(width: 60, alignment: .trailing)
                             Image(systemName: "chevron.right")
                                 .font(.caption2).foregroundColor(.secondary)
                         }
@@ -180,6 +196,33 @@ struct PopoverMainView: View {
             .frame(width: 8, height: 8)
     }
 
+    /// Human-readable status label for an action group.
+    private func actionStatusLabel(for group: ActionGroup) -> String {
+        switch group.groupStatus {
+        case .inProgress: return "Running"
+        case .queued:     return "Queued"
+        case .completed:
+            switch group.conclusion {
+            case "success":   return "Success"
+            case "failure":   return "Failed"
+            case "cancelled": return "Cancelled"
+            case "skipped":   return "Skipped"
+            default:          return "Done"
+            }
+        }
+    }
+
+    /// Foreground color for an action group's status label.
+    private func actionStatusColor(for group: ActionGroup) -> Color {
+        switch group.groupStatus {
+        case .inProgress: return .yellow
+        case .queued:     return .blue
+        case .completed:
+            if group.isDimmed { return .secondary }
+            return group.conclusion == "success" ? .green : .red
+        }
+    }
+
     /// Color for an action group's status dot.
     private func actionDotColor(for group: ActionGroup) -> Color {
         switch group.groupStatus {
@@ -249,3 +292,4 @@ struct PopoverMainView: View {
         NSWorkspace.shared.open(url)
     }
 }
+// swiftlint:enable type_body_length

@@ -121,6 +121,19 @@ struct ActionGroup: Identifiable {
         return "—"
     }
 
+    /// How long ago the group started, as a short human string, e.g. "3m ago", "1h ago".
+    /// Uses `firstJobStartedAt` when available, falls back to `createdAt`.
+    /// Returns "—" if neither timestamp is available.
+    var startedAgo: String {
+        let ref = firstJobStartedAt ?? createdAt
+        guard let ref = ref else { return "—" }
+        let sec = Int(Date().timeIntervalSince(ref))
+        guard sec >= 0 else { return "—" }
+        if sec < 60  { return "\(sec)s ago" }
+        if sec < 3600 { return "\(sec / 60)m ago" }
+        return "\(sec / 3600)h ago"
+    }
+
     /// Elapsed time derived from min(job.startedAt) → max(job.completedAt).
     var elapsed: String {
         if let start = firstJobStartedAt {
