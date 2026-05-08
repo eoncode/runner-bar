@@ -32,6 +32,7 @@ extension Notification.Name {
 /// If a GitHub App is ever adopted in future (tokens expire in 1 hr), the
 /// structure of this service makes that upgrade path straightforward.
 final class OAuthService {
+    /// Shared singleton — global access point for the GitHub OAuth flow.
     static let shared = OAuthService()
 
     // Replace these values after registering your OAuth App at:
@@ -89,7 +90,7 @@ final class OAuthService {
 
     // MARK: - Token exchange
 
-    /// POSTs the one-time code to GitHub’s token endpoint and stores the result.
+    /// POSTs the one-time code to GitHub's token endpoint and stores the result.
     private func exchangeCode(_ code: String) async {
         guard let url = URL(string: "https://github.com/login/oauth/access_token") else { return }
         var request = URLRequest(url: url)
@@ -134,6 +135,7 @@ final class OAuthService {
     /// `RunnerStore` observes `authStateChanged` to stop polling and clear state.
     func signOut() {
         KeychainHelper.delete()
+        RunnerStore.shared.stop()
         log("OAuthService › signed out, Keychain token deleted")
         Task { await postAuthStateChanged() }
     }
