@@ -44,30 +44,10 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     return performSyncRequest(req, label: "ghAPI", endpoint: endpoint)
 }
 
-/// Performs a synchronous paginated GET, following GitHub `Link: rel=\"next\"` headers.
+/// Performs a synchronous paginated GET, following GitHub `Link: rel="next"` headers.
 /// Concatenates all pages into a single JSON array. Returns `nil` on first-page failure.
 /// Must only be called from a background thread.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    var allItems: [[String: Any]] = []
-    var nextURL: String? = endpoint
-    while let current = nextURL {
-        guard var req = gitHubRequest(current) else { break }
-        req.timeoutInterval = timeout
-        guard let data = performSyncRequest(req, label: "ghAPIPaginated", endpoint: current)
-        else { return allItems.isEmpty ? nil : encodeArray(allItems) }
-        // Accumulate items from this page.
-        if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-            allItems.append(contentsOf: page)
-        }
-        // Parse Link header for next page URL.
-        nextURL = nil // reset; will be set below if rel="next" exists
-        // Store last response in thread-local trick: we re-issue the last request
-        // with a HEAD to get headers — instead, capture via URLSession delegate.
-        // Simpler: parse Link from the last data request using a custom session.
-        _ = current // next URL is resolved inside performSyncPaginatedRequest
-        break // pagination resolved inside performSyncPaginatedRequest below
-    }
-    // Use proper paginated implementation.
     return performFullPaginatedGET(endpoint, timeout: timeout)
 }
 
@@ -344,8 +324,12 @@ func fetchRegistrationToken(scope: String) -> String? {
 // MARK: - Step log
 
 /// Fetch and slice the raw log for a single step.
-/// Retained as a gh-CLI call: raw log streaming via Accept: application/vnd.github.v3.raw
+///
+/// Retained as a gh-CLI call: raw log streaming via `Accept: application/vnd.github.v3.raw`
 /// is awkward with URLSession (redirects, chunked encoding) and gh handles it cleanly.
+///
+/// ⚠️ Returns `nil` for users who authenticate via OAuth only (no `gh` installed).
+/// Follow-up migration to URLSession tracked in #336.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard scope.contains("/") else {
         log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
