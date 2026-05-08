@@ -83,6 +83,7 @@ struct PopoverMainView: View {
     // MARK: - Actions section
 
     /// Paginated list of action groups with always-visible inline job rows for in-progress groups.
+    /// Inline job rows are read-only (no tap action) per spec #324 Gap 2.
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -97,7 +98,7 @@ struct PopoverMainView: View {
                         onSelect: { onSelectAction(group) }
                     )
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(group: group, onSelectJob: onSelectJob)
+                        InlineJobRowsView(group: group)
                     }
                 }
                 loadMoreButton
