@@ -3,6 +3,7 @@ import Foundation
 
 // MARK: - Notification
 
+/// Extensions to `Notification.Name` for runner-bar–specific notifications.
 extension Notification.Name {
     /// Posted on the main thread after a successful OAuth token exchange or sign-out.
     /// Observers (e.g. SettingsView) use this to update auth-related UI reactively.
