@@ -18,5 +18,16 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>dev.eonist.runnerbar.oauth</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>runnerbar</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
