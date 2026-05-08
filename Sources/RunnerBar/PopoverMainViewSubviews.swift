@@ -103,7 +103,8 @@ struct PopoverHeaderView: View {
 // MARK: - PopoverLocalRunnerRow
 
 /// Conditionally shows online local runners — hidden when all are idle/offline.
-/// Owns its own leading + trailing Dividers so the caller never adds an extra one.
+/// The parent (PopoverMainView) always renders a leading Divider above this view.
+/// This view only renders a trailing Divider after its runner rows.
 struct PopoverLocalRunnerRow: View {
     /// All known runners; view filters to online ones internally.
     let runners: [Runner]
@@ -113,10 +114,10 @@ struct PopoverLocalRunnerRow: View {
         if !active.isEmpty { runnerList(active) }
     }
 
-    /// Divider — runner rows (capped at 3) — overflow indicator — Divider.
+    /// Runner rows (capped at 3) — overflow indicator — trailing Divider.
+    /// Leading Divider is owned by the parent view.
     @ViewBuilder
     private func runnerList(_ active: [Runner]) -> some View {
-        Divider()
         ForEach(active.prefix(3)) { runner in
             HStack(spacing: 8) {
                 Circle().fill(runner.busy ? Color.yellow : Color.green).frame(width: 8, height: 8)
@@ -166,10 +167,12 @@ struct ActionRowView: View {
         }
     }
 
+    /// Tappable main area of the row (navigates to action detail).
     private var rowContentButton: some View {
         Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
     }
 
+    /// Row content: pie dot, label, title, and trailing meta.
     private var rowContent: some View {
         HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
@@ -209,6 +212,7 @@ struct ActionRowView: View {
         statusChip
     }
 
+    /// Expand/collapse chevron button for groups with in-progress jobs.
     private var expandButton: some View {
         Button(
             action: onToggleExpand,
@@ -257,7 +261,7 @@ struct ActionRowView: View {
 struct InlineJobRowsView: View {
     /// The parent action group whose jobs are displayed.
     let group: ActionGroup
-    /// Current display cap for this group’s inline jobs. Mutated by "Load more jobs" tap.
+    /// Current display cap for this group's inline jobs. Mutated by "Load more jobs" tap.
     @Binding var jobLimit: Int
     /// Called when the user taps a job row.
     let onSelectJob: (ActiveJob) -> Void
@@ -293,6 +297,7 @@ struct InlineJobRowsView: View {
         }
     }
 
+    /// Renders a single inline job row with pie dot, step progress, and elapsed time.
     private func jobRow(_ job: ActiveJob) -> some View {
         HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
@@ -320,6 +325,7 @@ struct InlineJobRowsView: View {
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
     }
 
+    /// Pie dot colour for a job row.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow

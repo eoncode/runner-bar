@@ -42,9 +42,13 @@ struct PopoverMainView: View {
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
             )
-            // NOTE: no unconditional Divider() here — PopoverLocalRunnerRow owns its
-            // own leading + trailing Dividers inside its @ViewBuilder guard.
+            // Always render a separator after the header so the divider is visible
+            // even when isRateLimited==false and all runners are offline (PopoverLocalRunnerRow
+            // renders nothing in that case, taking its leading Divider with it).
+            Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
+            // PopoverLocalRunnerRow no longer provides a leading Divider (parent owns it above).
+            // It still provides a trailing Divider after its runner rows.
             PopoverLocalRunnerRow(runners: store.runners)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -69,6 +73,7 @@ struct PopoverMainView: View {
 
     // MARK: - Rate limit banner
 
+    /// Yellow warning strip shown when the GitHub API rate limit is reached.
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -81,6 +86,7 @@ struct PopoverMainView: View {
 
     // MARK: - Actions section
 
+    /// Scrollable list of action groups with inline job expansion and pagination.
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -104,28 +110,33 @@ struct PopoverMainView: View {
                         )
                     }
                 }
-                if store.actions.count > visibleCount { loadMoreButton }
+                loadMoreButton
             }
         }
         .padding(.vertical, 4)
     }
 
-    /// Pagination button. Label and action both use the same `nextBatch` value.
+    /// Pagination button. Guards against a zero-batch edge case (renders nothing when
+    /// `store.actions.count <= visibleCount`). Label and increment use the same `nextBatch`.
+    @ViewBuilder
     private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
-        return Button(
-            action: { visibleCount = min(visibleCount + nextBatch, store.actions.count) },
-            label: {
-                Text("Load \(nextBatch) more actions…")
-                    .font(.caption).foregroundColor(.secondary)
-            }
-        )
-        .buttonStyle(.plain)
-        .padding(.horizontal, 12).padding(.vertical, 6)
+        if nextBatch > 0 {
+            Button(
+                action: { visibleCount += nextBatch },
+                label: {
+                    Text("Load \(nextBatch) more actions…")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            )
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+        }
     }
 
     // MARK: - Quit
 
+    /// Quit RunnerBar button pinned to the popover bottom.
     private var quitButton: some View {
         Button(
             action: { NSApplication.shared.terminate(nil) },
@@ -140,6 +151,7 @@ struct PopoverMainView: View {
 
     // MARK: - Helpers
 
+    /// Toggles expanded state for a group and seeds its job-limit on first expand.
     private func toggleExpand(_ id: String) {
         if expandedGroupIDs.contains(id) {
             expandedGroupIDs.remove(id)
@@ -158,6 +170,10 @@ struct PopoverMainView: View {
         )
     }
 
+    /// Opens the GitHub PAT setup docs in the default browser.
+    /// NSAppleScript/Terminal-based device-flow was removed — the app never generates
+    /// a user_code so the flow could never complete (ref #221).
+    /// Auth.swift resolves the token via: `gh auth token` → `GH_TOKEN` → `GITHUB_TOKEN` (ref #246).
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
