@@ -15,8 +15,8 @@ import SwiftUI
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 
 /// Root popover view — unified scrollable Actions list per issue #294.
-/// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
-/// file_length (<400) and type_body_length (<200) limits.
+/// Subviews live in PopoverMainViewSubviews.swift and PopoverProgressViews.swift
+/// to satisfy SwiftLint file_length (<400) and type_body_length (<200) limits.
 struct PopoverMainView: View {
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
@@ -31,6 +31,8 @@ struct PopoverMainView: View {
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
     @State private var expandedGroupIDs: Set<String> = []
+    /// Per-group inline-job display caps. Default 4; increments of 4 via "Load more jobs".
+    @State private var inlineJobsLimit: [String: Int] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -40,14 +42,10 @@ struct PopoverMainView: View {
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
             )
-            // NOTE: no unconditional Divider() here — PopoverLocalRunnerRow owns its
-            // own leading + trailing Dividers inside its @ViewBuilder guard (fix #2).
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    actionsSection
-                }
+                VStack(alignment: .leading, spacing: 0) { actionsSection }
             }
             Divider()
             quitButton
@@ -57,16 +55,11 @@ struct PopoverMainView: View {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
         }
-        // Fix #4: tear down the repeating timer/publisher on dismiss to prevent
-        // SystemStatsViewModel leaking CPU cycles after the view is gone.
-        .onDisappear {
-            systemStats.stop()
-        }
-        // Prune expand state for groups that have been removed from the store
-        // so expandedGroupIDs never holds stale IDs after a reload.
+        .onDisappear { systemStats.stop() }
         .onChange(of: store.actions) { _, newActions in
-            expandedGroupIDs = expandedGroupIDs
-                .intersection(Set(newActions.map(\.id)))
+            let liveIDs = Set(newActions.map(\.id))
+            expandedGroupIDs = expandedGroupIDs.intersection(liveIDs)
+            inlineJobsLimit = inlineJobsLimit.filter { liveIDs.contains($0.key) }
         }
     }
 
@@ -102,7 +95,11 @@ struct PopoverMainView: View {
                         onToggleExpand: { toggleExpand(group.id) }
                     )
                     if expandedGroupIDs.contains(group.id) {
-                        InlineJobRowsView(group: group, onSelectJob: onSelectJob)
+                        InlineJobRowsView(
+                            group: group,
+                            jobLimit: jobLimitBinding(for: group.id),
+                            onSelectJob: onSelectJob
+                        )
                     }
                 }
                 if store.actions.count > visibleCount { loadMoreButton }
@@ -111,8 +108,7 @@ struct PopoverMainView: View {
         .padding(.vertical, 4)
     }
 
-    /// Pagination button. Label and action both use the same `nextBatch` value
-    /// so the shown count exactly matches how many groups will appear on tap.
+    /// Pagination button. Label and action both use the same `nextBatch` value.
     private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
         return Button(
@@ -150,6 +146,14 @@ struct PopoverMainView: View {
         } else {
             expandedGroupIDs.insert(id)
         }
+    }
+
+    /// Returns a `Binding<Int>` into `inlineJobsLimit` for a group ID, defaulting to 4.
+    private func jobLimitBinding(for id: String) -> Binding<Int> {
+        Binding(
+            get: { inlineJobsLimit[id] ?? 4 },
+            set: { inlineJobsLimit[id] = $0 }
+        )
     }
 
     /// Opens the GitHub PAT setup docs in the default browser.

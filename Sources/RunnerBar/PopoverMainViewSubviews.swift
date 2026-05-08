@@ -63,11 +63,7 @@ struct PopoverHeaderView: View {
     /// Inline CPU / MEM / DISK chips.
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
-            statChip(
-                label: "CPU",
-                value: String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
-            )
+            statChip(label: "CPU", value: String(format: "%.1f%%", stats.cpuPct), pct: stats.cpuPct)
             statChip(
                 label: "MEM",
                 value: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
@@ -77,8 +73,7 @@ struct PopoverHeaderView: View {
                 label: "DISK",
                 value: String(
                     format: "%d/%dGB",
-                    Int(stats.diskUsedGB.rounded()),
-                    Int(stats.diskTotalGB.rounded())
+                    Int(stats.diskUsedGB.rounded()), Int(stats.diskTotalGB.rounded())
                 ),
                 pct: stats.diskTotalGB > 0 ? (stats.diskUsedGB / stats.diskTotalGB) * 100 : 0
             )
@@ -97,7 +92,7 @@ struct PopoverHeaderView: View {
         }
     }
 
-    /// Traffic-light colour based on a usage percentage.
+    /// Traffic-light colour: red > 85 %, yellow > 60 %, green otherwise.
     private func usageColor(pct: Double) -> Color {
         if pct > 85 { return .red }
         if pct > 60 { return .yellow }
@@ -108,16 +103,14 @@ struct PopoverHeaderView: View {
 // MARK: - PopoverLocalRunnerRow
 
 /// Conditionally shows online local runners — hidden when all are idle/offline.
-/// Owns its own leading + trailing Dividers so the caller never adds an extra one (fix #2).
+/// Owns its own leading + trailing Dividers so the caller never adds an extra one.
 struct PopoverLocalRunnerRow: View {
     /// All known runners; view filters to online ones internally.
     let runners: [Runner]
 
     var body: some View {
         let active = runners.filter { $0.status == "online" }
-        if !active.isEmpty {
-            runnerList(active)
-        }
+        if !active.isEmpty { runnerList(active) }
     }
 
     /// Divider — runner rows (capped at 3) — overflow indicator — Divider.
@@ -126,9 +119,7 @@ struct PopoverLocalRunnerRow: View {
         Divider()
         ForEach(active.prefix(3)) { runner in
             HStack(spacing: 8) {
-                Circle()
-                    .fill(runner.busy ? Color.yellow : Color.green)
-                    .frame(width: 8, height: 8)
+                Circle().fill(runner.busy ? Color.yellow : Color.green).frame(width: 8, height: 8)
                 Text(runner.name)
                     .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
                 Spacer()
@@ -136,8 +127,7 @@ struct PopoverLocalRunnerRow: View {
                     Text(String(format: "CPU: %.1f%%  MEM: %.1f%%", metrics.cpu, metrics.mem))
                         .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
+                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 3)
         }
@@ -152,9 +142,8 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 
-/// Single action-group row.
-/// Fix #1: expand chevron is NOT nested inside the outer row Button — it lives in a
-/// separate Button in an HStack so onToggleExpand fires reliably on macOS SwiftUI.
+/// Single action-group row with pie progress dot, started-ago timestamp,
+/// and spec-parity typography.
 struct ActionRowView: View {
     /// The action group this row represents.
     let group: ActionGroup
@@ -166,34 +155,24 @@ struct ActionRowView: View {
     let onToggleExpand: () -> Void
 
     var body: some View {
-        // Two independent tappable zones in the same visual row:
-        //   1. rowContentButton — label + title + stats → navigates to detail
-        //   2. expandButton / static chevron on the right → toggles inline jobs
-        // A plain HStack (not nesting one Button inside another's label)
-        // ensures macOS SwiftUI delivers taps to the correct target.
         HStack(spacing: 0) {
             rowContentButton
             if group.groupStatus == .inProgress && !group.jobs.isEmpty {
                 expandButton
             } else {
                 Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
-                    .padding(.trailing, 12)
+                    .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
             }
         }
     }
 
-    /// The selectable portion of the row (everything except the expand chevron).
     private var rowContentButton: some View {
-        Button(action: onSelect, label: { rowContent })
-            .buttonStyle(.plain)
+        Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
     }
 
-    /// Visual content of the main row area.
     private var rowContent: some View {
-        HStack(spacing: 8) {
-            // TODO: replace with pie-dot radial progress indicator — see #310 / #182
-            Circle().fill(dotColor).frame(width: 8, height: 8)
+        HStack(spacing: 6) {
+            PieProgressDot(progress: group.progressFraction, color: dotColor)
             Text(group.label)
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 .lineLimit(1).frame(width: 52, alignment: .leading)
@@ -202,24 +181,34 @@ struct ActionRowView: View {
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail)
             Spacer()
-            if group.groupStatus == .inProgress || group.groupStatus == .queued {
-                Text(group.currentJobName)
-                    .font(.caption).foregroundColor(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
-                    .frame(minWidth: 0, maxWidth: 80, alignment: .trailing)
-            }
-            Text(group.jobProgress)
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .frame(width: 30, alignment: .trailing)
-            Text(group.elapsed)
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .frame(width: 40, alignment: .trailing)
-            statusLabel
+            metaTrailing
         }
         .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 3)
     }
 
-    /// The expand/collapse chevron button (only for in-progress rows with jobs).
+    /// Trailing meta: started-ago + elapsed + job progress + status chip.
+    @ViewBuilder
+    private var metaTrailing: some View {
+        if let start = group.firstJobStartedAt {
+            Text(RelativeTimeFormatter.string(from: start))
+                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .frame(width: 44, alignment: .trailing)
+        }
+        if group.groupStatus == .inProgress || group.groupStatus == .queued {
+            Text(group.currentJobName)
+                .font(.caption).foregroundColor(.secondary)
+                .lineLimit(1).truncationMode(.tail)
+                .frame(minWidth: 0, maxWidth: 72, alignment: .trailing)
+        }
+        Text(group.jobProgress)
+            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .frame(width: 30, alignment: .trailing)
+        Text(group.elapsed)
+            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .frame(width: 40, alignment: .trailing)
+        statusChip
+    }
+
     private var expandButton: some View {
         Button(
             action: onToggleExpand,
@@ -228,33 +217,28 @@ struct ActionRowView: View {
                     .font(.caption2).foregroundColor(.secondary)
             }
         )
-        .buttonStyle(.plain)
-        .padding(.trailing, 12)
-        .padding(.vertical, 3)
+        .buttonStyle(.plain).padding(.trailing, 12).padding(.vertical, 3)
     }
 
-    /// Status badge (IN PROGRESS / QUEUED / SUCCESS / FAILED / CANCELLED / SKIPPED).
-    /// Uses group.conclusion (computed from all runs) rather than a per-run allSatisfy
-    /// check so partially-live groups are never mis-labeled as failed.
+    /// Status chip with bold weight for spec parity (#178).
     @ViewBuilder
-    private var statusLabel: some View {
+    private var statusChip: some View {
         switch group.groupStatus {
         case .inProgress:
             Text("IN PROGRESS")
-                .font(.system(size: 9, weight: .semibold)).foregroundColor(.yellow)
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.yellow)
         case .queued:
             Text("QUEUED")
-                .font(.system(size: 9, weight: .semibold)).foregroundColor(.blue)
+                .font(.system(size: 9, weight: .bold)).foregroundColor(.blue)
         case .completed:
             let success = group.conclusion == "success"
             Text(success ? "SUCCESS" : "FAILED")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: 9, weight: .bold))
                 .foregroundColor(success ? .green : .red)
         }
     }
 
-    /// Status dot colour for this group.
-    /// Uses group.conclusion for the same reason as statusLabel.
+    /// Pie dot colour derived from group status and conclusion.
     private var dotColor: Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -269,9 +253,12 @@ struct ActionRowView: View {
 // MARK: - InlineJobRowsView
 
 /// Inline ↳ job rows shown beneath an expanded action group.
+/// Supports paginated reveal via `jobLimit` binding (tappable "Load more jobs" affordance).
 struct InlineJobRowsView: View {
     /// The parent action group whose jobs are displayed.
     let group: ActionGroup
+    /// Current display cap for this group’s inline jobs. Mutated by "Load more jobs" tap.
+    @Binding var jobLimit: Int
     /// Called when the user taps a job row.
     let onSelectJob: (ActiveJob) -> Void
 
@@ -281,29 +268,37 @@ struct InlineJobRowsView: View {
     }
 
     var body: some View {
-        ForEach(activeJobs.prefix(4)) { job in
+        let capped = Array(activeJobs.prefix(jobLimit))
+        ForEach(capped) { job in
+            Button(action: { onSelectJob(job) }, label: { jobRow(job) })
+                .buttonStyle(.plain)
+        }
+        overflowFooter
+    }
+
+    /// "+ N more…" caption or "Load more jobs" button depending on remaining count.
+    @ViewBuilder
+    private var overflowFooter: some View {
+        let remaining = activeJobs.count - jobLimit
+        if remaining > 0 {
             Button(
-                action: { onSelectJob(job) },
-                label: { jobRow(job) }
+                action: { jobLimit = min(jobLimit + 4, activeJobs.count) },
+                label: {
+                    Text(remaining <= 4 ? "+ \(remaining) more…" : "Load more jobs…")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
             )
             .buttonStyle(.plain)
-        }
-        if activeJobs.count > 4 {
-            Text("+ \(activeJobs.count - 4) more…")
-                .font(.caption2).foregroundColor(.secondary)
-                .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+            .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
         }
     }
 
-    /// Visual content for a single inline job row.
     private func jobRow(_ job: ActiveJob) -> some View {
         HStack(spacing: 6) {
-            Text("↳").font(.caption).foregroundColor(.secondary)
-                .frame(width: 16, alignment: .trailing)
-            Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
+            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
+            PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Text(job.name)
-                .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).truncationMode(.tail)
+                .font(.caption).foregroundColor(.secondary).lineLimit(1).truncationMode(.tail)
             Spacer()
             if let step = job.steps.first(where: { $0.status == "in_progress" }) {
                 Text(step.name)
@@ -325,7 +320,6 @@ struct InlineJobRowsView: View {
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
     }
 
-    /// Status dot colour for a job.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
