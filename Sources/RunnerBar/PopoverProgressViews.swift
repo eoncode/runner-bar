@@ -15,6 +15,7 @@ struct PieProgressDot: View {
     /// Dot diameter; defaults to 8 to match existing action-row dots.
     var size: CGFloat = 8
 
+    /// Renders the pie arc, indeterminate ring, or empty ring depending on `progress`.
     var body: some View {
         ZStack {
             Circle()
@@ -58,9 +59,8 @@ enum RelativeTimeFormatter {
 // MARK: - ActionGroup + progressFraction
 
 extension ActionGroup {
-    /// Radial progress fraction (0.0–1.0) for `PieProgressDot`.
-    /// In-progress: ratio of concluded jobs to total.
-    /// Completed: 1.0. Queued or no jobs: nil (indeterminate ring).
+    /// Radial progress fraction (0.0–1.0) for use with `PieProgressDot`.
+    /// Returns `nil` (indeterminate) while queued or when no jobs are available.
     var progressFraction: Double? {
         switch groupStatus {
         case .queued:
@@ -77,9 +77,8 @@ extension ActionGroup {
 // MARK: - ActiveJob + progressFraction
 
 extension ActiveJob {
-    /// Radial progress fraction (0.0–1.0) for `PieProgressDot`.
-    /// In-progress: ratio of concluded steps to total steps.
-    /// Completed: 1.0. Queued or no steps: nil (indeterminate ring).
+    /// Radial progress fraction (0.0–1.0) for use with `PieProgressDot`.
+    /// Returns `nil` (indeterminate) while queued or when no steps are available.
     var progressFraction: Double? {
         switch status {
         case "queued":
