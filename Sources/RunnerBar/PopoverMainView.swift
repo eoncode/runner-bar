@@ -129,44 +129,44 @@ struct PopoverMainView: View {
                         .padding(.horizontal, 12).padding(.vertical, 3)
                     })
                     .buttonStyle(.plain)
-                }
-                .padding(.bottom, 6)
-            }
-            Divider()
-
-            // ── Active Jobs
-            Text("Active Jobs")
-                .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            if store.jobs.isEmpty {
-                Text("No active jobs")
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-            } else {
-                ForEach(store.jobs.prefix(3)) { job in
-                    Button(action: { onSelectJob(job) }, label: {
-                        HStack(spacing: 8) {
-                            jobDot(for: job)
-                            Text(job.name)
-                                .font(.system(size: 12))
-                                .foregroundColor(job.isDimmed ? .secondary : .primary)
-                                .lineLimit(1).truncationMode(.tail)
-                            Spacer()
-                            Text(job.isDimmed ? conclusionLabel(for: job) : jobStatusLabel(for: job))
-                                .font(.caption)
-                                .foregroundColor(
-                                    job.isDimmed ? conclusionColor(for: job) : jobStatusColor(for: job)
-                                )
-                                .frame(width: 76, alignment: .trailing)
-                            Text(job.elapsed)
-                                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                                .frame(width: 40, alignment: .trailing)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2).foregroundColor(.secondary)
+                    // Phase 4 (#304): inline ↳ job rows for in-progress groups
+                    if actionGroup.groupStatus == .inProgress || actionGroup.groupStatus == .queued {
+                        ForEach(actionGroup.jobs.filter {
+                            $0.status == "in_progress" || $0.status == "queued"
+                        }.prefix(3)) { job in
+                            Button(action: { onSelectJob(job) }, label: {
+                                HStack(spacing: 6) {
+                                    // indent
+                                    Text("↳")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .padding(.leading, 14)
+                                    PieProgressView(
+                                        progress: job.status == "in_progress" ? 0.5 : 0.0,
+                                        color: jobDotColor(for: job),
+                                        size: 7
+                                    )
+                                    Text(job.name)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1).truncationMode(.tail)
+                                    Spacer()
+                                    Text(job.status == "in_progress" ? "Running" : "Queued")
+                                        .font(.caption)
+                                        .foregroundColor(job.status == "in_progress" ? .yellow : .blue)
+                                        .frame(width: 46, alignment: .trailing)
+                                    Text(job.elapsed)
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 36, alignment: .trailing)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2).foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 2)
+                            })
+                            .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 3)
-                    })
-                    .buttonStyle(.plain)
+                    }
                 }
                 .padding(.bottom, 6)
             }
