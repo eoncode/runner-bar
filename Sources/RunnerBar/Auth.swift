@@ -34,11 +34,11 @@ func githubToken() -> String? {
 /// Accepts the known prefixes for OAuth (ghp_), server-to-server (ghs_),
 /// user-to-server (ghu_), refresh (ghr_), fine-grained PATs (github_pat_),
 /// and legacy 40-char hex tokens.
-private func isValidGitHubToken(_ s: String) -> Bool {
-    guard !s.isEmpty else { return false }
+private func isValidGitHubToken(_ token: String) -> Bool {
+    guard !token.isEmpty else { return false }
     let knownPrefixes = ["ghp_", "ghs_", "ghu_", "ghr_", "github_pat_"]
-    if knownPrefixes.contains(where: { s.hasPrefix($0) }) { return true }
+    if knownPrefixes.contains(where: { token.hasPrefix($0) }) { return true }
     // Legacy 40-char lowercase hex token (classic PAT before prefix era).
-    if s.count == 40 && s.allSatisfy({ $0.isHexDigit }) { return true }
+    if token.count == 40 && token.allSatisfy({ $0.isHexDigit }) { return true }
     return false
 }
