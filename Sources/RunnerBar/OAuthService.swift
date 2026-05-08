@@ -37,10 +37,10 @@ final class OAuthService {
         pendingState = state
         var components = URLComponents(string: "https://github.com/login/oauth/authorize")!
         components.queryItems = [
-            .init(name: "client_id",     value: Secrets.clientID),
-            .init(name: "redirect_uri",  value: "runnerbar://oauth/callback"),
-            .init(name: "scope",         value: scopes),
-            .init(name: "state",         value: state)
+            .init(name: "client_id", value: Secrets.clientID),
+            .init(name: "redirect_uri", value: "runnerbar://oauth/callback"),
+            .init(name: "scope", value: scopes),
+            .init(name: "state", value: state)
         ]
         guard let url = components.url else {
             log("OAuthService.signIn › failed to build URL")
@@ -85,10 +85,10 @@ final class OAuthService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: String] = [
-            "client_id":     Secrets.clientID,
+            "client_id": Secrets.clientID,
             "client_secret": Secrets.clientSecret,
-            "code":          code,
-            "redirect_uri":  "runnerbar://oauth/callback"
+            "code": code,
+            "redirect_uri": "runnerbar://oauth/callback"
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         log("OAuthService.exchangeCode › POST access_token")

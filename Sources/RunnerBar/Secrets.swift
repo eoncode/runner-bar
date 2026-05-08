@@ -9,6 +9,8 @@
 // To build a release binary locally:
 //   RUNNERBAR_CLIENT_ID=xxx RUNNERBAR_CLIENT_SECRET=yyy ./build.sh
 
+/// Compile-time OAuth client credentials injected by build.sh.
+/// Placeholder values are used for development builds without real credentials.
 enum Secrets {
     /// GitHub OAuth App client ID. Replaced at build time by build.sh.
     static let clientID: String = "PLACEHOLDER_CLIENT_ID"
