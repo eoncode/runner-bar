@@ -16,7 +16,7 @@ struct JobPollResult {
 struct GroupPollResult {
     /// Action groups to display in the popover.
     let display: [ActionGroup]
-    /// Updated group cache, trimmed to 5 entries.
+    /// Updated group cache, trimmed to 30 entries.
     let newGroupCache: [String: ActionGroup]
     /// Live-group snapshot for the next poll's diff.
     let newPrevLiveGroups: [String: ActionGroup]
@@ -143,7 +143,7 @@ extension RunnerStore {
             dimmed.isDimmed = true
             newCache[group.id] = dimmed
         }
-        trimGroupCache(&newCache, limit: 5)
+        trimGroupCache(&newCache, limit: 30)
 
         let newPrevLive = Dictionary(uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
         let display = buildGroupDisplay(live: liveGroups, cache: newCache)
@@ -216,7 +216,9 @@ extension RunnerStore {
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
-    /// Assembles the ordered group display list: in_progress → queued → cached done, capped at 5.
+    /// Assembles the ordered group display list: in_progress → queued → cached done, capped at 30.
+    /// 30 matches the trimGroupCache limit so all cached groups are reachable via
+    /// the "Load more" pagination in PopoverMainView (visibleCount starts at 10, steps by 10).
     private func buildGroupDisplay(
         live: [ActionGroup],
         cache: [String: ActionGroup]
@@ -229,9 +231,9 @@ extension RunnerStore {
             > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
         var display: [ActionGroup] = []
-        for grp in inProgress where display.count < 5 { display.append(grp) }
-        for grp in queued     where display.count < 5 { display.append(grp) }
-        for grp in cached where display.count < 5 && !liveDisplayIDs.contains(grp.id) {
+        for grp in inProgress where display.count < 30 { display.append(grp) }
+        for grp in queued     where display.count < 30 { display.append(grp) }
+        for grp in cached where display.count < 30 && !liveDisplayIDs.contains(grp.id) {
             display.append(grp)
         }
         return display
