@@ -138,6 +138,10 @@ struct RunnerLifecycleService {
     /// runner's `installPath` using `Process.arguments` so the path is never
     /// interpolated into a shell string.
     ///
+    /// If `svc.sh uninstall` fails, a warning is logged and the method still
+    /// proceeds to `config.sh remove` to avoid leaving a ghost registration on
+    /// the GitHub side. The return value reflects whether both steps succeeded.
+    ///
     /// ⚠️ Blocking — must only be called from a background thread.
     /// Requires a GitHub token (gh auth login, GH_TOKEN, or GITHUB_TOKEN).
     ///
@@ -154,6 +158,12 @@ struct RunnerLifecycleService {
                               workingDirectory: dir,
                               timeout: 30,
                               logTag: "svc.sh uninstall")
+        if !svcOk {
+            // Log a warning but continue: de-registering from GitHub is more
+            // important than the local service uninstall, since a failed
+            // svc.sh often means the service wasn't loaded (already stopped).
+            log("RunnerLifecycle › remove: svc.sh uninstall failed for \(runner.runnerName) — proceeding to config.sh remove")
+        }
         let cfgOk = runScript(executableName: "config.sh",
                               arguments: ["remove", "--unattended"],
                               workingDirectory: dir,
@@ -217,6 +227,10 @@ struct RunnerLifecycleService {
     // until re-registration is implemented.
     /// Renames the runner by patching the `runnerName` field in the `.runner`
     /// JSON file at `installPath`.
+    ///
+    /// ⚠️ Incomplete — does NOT re-register the runner with GitHub.
+    /// Local state and GitHub state will diverge silently if called.
+    /// Deferred to Phase 2 follow-up issue. Do not expose via UI.
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
@@ -250,8 +264,12 @@ struct RunnerLifecycleService {
     // MARK: - Update config (labels / workFolder)
 
     /// Writes updated labels and workFolder to the `.runner` JSON at `installPath`.
+    ///
     /// Note: the runner agent caches config in memory — changes take effect after
     /// the next runner restart.
+    ///
+    /// TODO: add `customLabels` to `RunnerJSON` in `LocalRunnerScanner` so labels
+    /// written here are re-read on the next scan and reflected in `RunnerModel.labels`.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
@@ -267,8 +285,6 @@ struct RunnerLifecycleService {
             return false
         }
         json["workFolder"] = workFolder
-        // TODO: add customLabels to RunnerJSON in LocalRunnerScanner so labels
-        // written here are re-read on the next scan and reflected in RunnerModel.labels.
         json["customLabels"] = labels
         guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
         else { return false }

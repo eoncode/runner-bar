@@ -3,7 +3,9 @@ import SwiftUI
 // MARK: - RunnerConfigSheet
 
 /// Phase 2: Inline sheet for editing a runner's labels and work folder.
-/// Changes are applied immediately via `RunnerLifecycleService`.
+/// Changes are written to the `.runner` JSON file via `RunnerLifecycleService`.
+/// The runner agent caches config in memory — changes take effect after the
+/// next runner restart.
 struct RunnerConfigSheet: View {
     /// The runner whose configuration is being edited.
     let runner: RunnerModel
@@ -33,6 +35,12 @@ struct RunnerConfigSheet: View {
                 Text("Labels (comma-separated)").font(.caption).foregroundColor(.secondary)
                 TextField("e.g. self-hosted, macOS, arm64", text: $labelsText)
                     .textFieldStyle(.roundedBorder)
+                // Labels are written to .runner JSON. The scanner reads systemLabels
+                // (not customLabels) on the next scan, so the labels list shown in
+                // Settings may not reflect these changes until the runner is restarted
+                // and re-scanned with the updated agent config.
+                Text("Changes take effect after the next runner restart.")
+                    .font(.caption2).foregroundColor(.secondary)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Work folder").font(.caption).foregroundColor(.secondary)

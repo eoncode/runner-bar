@@ -54,9 +54,14 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Calls `gh api --paginate` to follow Link rel=next automatically and
 /// returns the concatenated raw data of all pages, or `nil` on failure.
 ///
-/// The `--paginate` flag makes `gh` emit a JSON array stream where each page
-/// is appended without a separator.  For array endpoints (orgs, repos,
-/// runners) the caller decodes the combined stream as a flat JSON array.
+/// The `--paginate` flag makes `gh` emit a merged JSON array for array-type
+/// endpoints (e.g. `/user/orgs`, `/user/repos`). `JSONDecoder` can decode
+/// the result directly as `[T].self`.
+///
+/// Rate-limit detection uses `task.terminationStatus` (gh exits non-zero on
+/// 403/429) plus a raw-string scan of output, because `--paginate` may emit
+/// a merged array rather than a `{"status":"403"}` object, making
+/// `JSONSerialization` object-key checks unreliable.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     // swiftlint:disable:next identifier_name
     guard let gh = ghBinaryPath() else {
@@ -89,11 +94,16 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
     log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
-    if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
-       let status = json["status"] as? String,
-       status == "403" || status == "429" {
-        ghIsRateLimited = true
-        log("ghAPIPaginated › rate limit (\(status)): \(endpoint)")
+    // gh exits non-zero on HTTP 403/429; also scan raw output as a fallback
+    // since error JSON may be embedded in paginated output.
+    if task.terminationStatus != 0 {
+        let raw = String(data: outputData, encoding: .utf8) ?? ""
+        if raw.contains("\"403\"") || raw.contains("\"429\"") || raw.contains("rate limit") {
+            ghIsRateLimited = true
+            log("ghAPIPaginated › rate limit detected: \(endpoint)")
+        } else {
+            log("ghAPIPaginated › non-zero exit (\(task.terminationStatus)): \(endpoint)")
+        }
         return nil
     }
     return outputData.isEmpty ? nil : outputData
@@ -209,7 +219,8 @@ private struct RunnersResponse: Codable {
 /// Calls `GET /user/orgs` and follows Link rel=next pagination to return all orgs.
 /// Returns an empty array on error or if unauthenticated.
 func fetchUserOrgs() -> [String] {
-    // --paginate makes gh follow Link rel=next and concatenate all pages.
+    // --paginate makes gh follow Link rel=next and concatenate all pages into
+    // a single merged JSON array for array-type endpoints.
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }

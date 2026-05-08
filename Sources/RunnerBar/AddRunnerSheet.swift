@@ -76,6 +76,10 @@ struct AddRunnerSheet: View {
                         ForEach(repos, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
+                    if repos.isEmpty {
+                        Text("No repositories found. Run `gh auth login` or set GH_TOKEN.")
+                            .font(.caption2).foregroundColor(.secondary)
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
@@ -85,6 +89,10 @@ struct AddRunnerSheet: View {
                         ForEach(orgs, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
+                    if orgs.isEmpty {
+                        Text("No organisations found. Run `gh auth login` or set GH_TOKEN.")
+                            .font(.caption2).foregroundColor(.secondary)
+                    }
                 }
             }
 
