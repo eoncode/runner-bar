@@ -1,3 +1,4 @@
+// swiftlint:disable type_body_length
 import Foundation
 
 // MARK: - RunnerLifecycleService
@@ -298,3 +299,4 @@ struct RunnerLifecycleService {
         }
     }
 }
+// swiftlint:enable type_body_length

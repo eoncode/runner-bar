@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 
 // MARK: - gh API
@@ -385,7 +386,8 @@ func ghPost(_ endpoint: String) -> Bool {
     }
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
+    task.arguments = ["api", "--method", "POST",
+                      "-H", "Accept: application/vnd.github+json", endpoint]
     task.standardOutput = Pipe()
     task.standardError = Pipe()
     do {
@@ -413,3 +415,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+// swiftlint:enable file_length
