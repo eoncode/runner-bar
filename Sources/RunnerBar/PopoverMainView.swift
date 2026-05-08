@@ -1,5 +1,10 @@
 import SwiftUI
 
+// swiftlint:disable file_length
+// Reason: PopoverMainView and all its private sub-views live in one file for
+// co-location. Each struct is small; the total line count reflects SwiftUI
+// verbosity, not unrelated code. Splitting would hurt navigability.
+
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
@@ -80,8 +85,11 @@ struct PopoverMainView: View {
 
 /// Header row: system stats + auth dot + gear + close (Phase 2 / #299).
 private struct PopoverHeaderView: View {
+    /// System stats view-model for CPU/MEM/DISK display.
     let systemStats: SystemStatsViewModel
+    /// Whether a GitHub token is present; drives the orange auth-warning dot.
     let isAuthenticated: Bool
+    /// Called when the user taps the gear or the orange auth dot.
     let onSelectSettings: () -> Void
 
     var body: some View {
@@ -127,9 +135,13 @@ private struct PopoverHeaderView: View {
 
 /// Scrollable actions list with per-group expand/collapse and pagination (Phase 3–5 / #302 #304 #305).
 private struct ActionsListView: View {
+    /// Action groups from the store (full list; view enforces display cap via visibleCount).
     let actions: [ActionGroup]
+    /// Number of rows currently shown; incremented by 10 on "Load more".
     @Binding var visibleCount: Int
+    /// IDs of groups whose inline job sub-rows are expanded.
     @Binding var expandedGroups: Set<String>
+    /// Called when the user taps an action group row.
     let onSelectAction: (ActionGroup) -> Void
 
     var body: some View {
@@ -185,9 +197,13 @@ private struct ActionsListView: View {
 /// Single action group row with pie dot, label, title, timestamps, status, and expand toggle
 /// for inline job sub-rows (Phase 3–4 / #302 #304).
 private struct ActionRowView: View {
+    /// The action group this row represents.
     let actionGroup: ActionGroup
+    /// Whether the inline job sub-rows are currently expanded.
     let isExpanded: Bool
+    /// Toggles the expanded state for this group's inline jobs.
     let onToggleExpand: () -> Void
+    /// Navigates to the action detail view.
     let onSelect: () -> Void
 
     /// Whether this group has expandable inline ↳ rows.
@@ -197,6 +213,7 @@ private struct ActionRowView: View {
             actionGroup.jobs.contains { $0.status == "in_progress" }
     }
 
+    // swiftlint:disable:next function_body_length
     var body: some View {
         VStack(spacing: 0) {
             Button(action: onSelect, label: {
@@ -253,6 +270,7 @@ private struct ActionRowView: View {
         }
     }
 
+    /// Short status label shown in the trailing column of an action row.
     private func actionStatusLabel(for group: ActionGroup) -> String {
         switch group.groupStatus {
         case .inProgress: return "IN PROGRESS"
@@ -268,6 +286,7 @@ private struct ActionRowView: View {
         }
     }
 
+    /// Foreground color for the trailing status label of an action row.
     private func actionStatusColor(for group: ActionGroup) -> Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -278,6 +297,7 @@ private struct ActionRowView: View {
         }
     }
 
+    /// Fill color for the pie-progress dot of an action row.
     private func actionDotColor(for group: ActionGroup) -> Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -296,6 +316,7 @@ private struct ActionRowView: View {
 /// Container for all inline ↳ job sub-rows under a single action group (Phase 4 / #304).
 /// ⚠️ Receives only in_progress jobs — caller is responsible for pre-filtering.
 private struct InlineJobsView: View {
+    /// Pre-filtered in_progress jobs to render as ↳ child rows (max 5 shown).
     let jobs: [ActiveJob]
 
     var body: some View {
@@ -308,10 +329,11 @@ private struct InlineJobsView: View {
 // MARK: - InlineJobRowView
 
 /// Single ↳ inline job sub-row (Phase 4 / #304).
-/// Shows: ↳ · pie-dot · job-name · current-step-title · step-fraction · elapsed
+/// Shows: ↳ · pie-dot · job-name · current-step-title · step-fraction · elapsed.
 /// ⚠️ Gap 1 fix (#323 / #304): replaced IN PROGRESS/QUEUED status label with
 ///   step title + step fraction as specified in #304 acceptance criteria.
 private struct InlineJobRowView: View {
+    /// The in_progress job this row represents.
     let job: ActiveJob
 
     var body: some View {
@@ -343,7 +365,8 @@ private struct InlineJobRowView: View {
         .padding(.horizontal, 12).padding(.vertical, 2)
     }
 
-    /// Fraction of completed steps, e.g. 0.375 for 3 of 8 steps done.
+    /// Completion fraction 0.0–1.0 based on steps with a non-nil conclusion.
+    /// Falls back to 0.5 when in_progress with no step data, or 0.0 when queued.
     private func stepProgress(for job: ActiveJob) -> Double {
         let total = job.steps.count
         guard total > 0 else { return job.status == "in_progress" ? 0.5 : 0.0 }
@@ -351,7 +374,7 @@ private struct InlineJobRowView: View {
         return Double(done) / Double(total)
     }
 
-    /// Step fraction label, e.g. "3/8". Returns "" when no step data available.
+    /// Step fraction label, e.g. `"3/8"`. Returns `""` when no step data is available.
     private func stepFraction(for job: ActiveJob) -> String {
         let total = job.steps.count
         guard total > 0 else { return "" }
@@ -359,8 +382,8 @@ private struct InlineJobRowView: View {
         return "\(done)/\(total)"
     }
 
-    /// Returns the name of the first in_progress step; falls back to the last completed
-    /// step name; falls back to an em-dash when no step data is available.
+    /// Name of the first `in_progress` step; falls back to the last completed step;
+    /// falls back to an em-dash when no step data is available.
     private func currentStepTitle(for job: ActiveJob) -> String {
         if let active = job.steps.first(where: { $0.status == "in_progress" }) {
             return active.name
@@ -371,6 +394,7 @@ private struct InlineJobRowView: View {
         return "—"
     }
 
+    /// Fill color for the inline job’s pie-progress dot.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
@@ -392,8 +416,8 @@ private struct RunnersListView: View {
     /// GitHub runners from RunnerStore (not LocalRunnerStore).
     let runners: [Runner]
 
-    /// Only runners currently executing a job (busy = true).
-    /// ⚠️ Online-idle runners are excluded per spec (#307): section hidden when no runners active.
+    /// Runners currently executing a job (`busy == true`).
+    /// Online-idle runners are excluded per spec (#307).
     private var activeRunners: [Runner] {
         runners.filter { $0.busy }
     }
@@ -431,3 +455,5 @@ private struct RunnersListView: View {
         }
     }
 }
+
+// swiftlint:enable file_length
