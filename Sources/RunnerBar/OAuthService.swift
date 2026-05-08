@@ -17,6 +17,7 @@ import Foundation
 /// `RUNNERBAR_CLIENT_ID` and `RUNNERBAR_CLIENT_SECRET` (see build.sh).
 /// Hard-coded placeholders keep the build green without secrets in source.
 final class OAuthService {
+    /// The shared singleton instance used throughout the app.
     static let shared = OAuthService()
     private init() {}
 

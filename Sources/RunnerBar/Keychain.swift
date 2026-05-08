@@ -37,9 +37,9 @@ enum Keychain {
             "security add-generic-password -s \"\(service)\" -a \"\(account)\" -w \"\(token)\"",
             timeout: 5
         )
-        let ok = !result.lowercased().contains("error")
-        log("Keychain.save › success=\(ok)")
-        return ok
+        let success = !result.lowercased().contains("error")
+        log("Keychain.save › success=\(success)")
+        return success
     }
 
     // MARK: - Delete
@@ -52,9 +52,9 @@ enum Keychain {
             timeout: 5
         )
         // exit 44 = item not found — treat as success.
-        let ok = result.isEmpty || result.lowercased().contains("deleted")
+        let success = result.isEmpty || result.lowercased().contains("deleted")
             || result.lowercased().contains("44")
-        log("Keychain.delete › success=\(ok)")
-        return ok
+        log("Keychain.delete › success=\(success)")
+        return success
     }
 }
