@@ -62,6 +62,12 @@ struct PopoverMainView: View {
         .onDisappear {
             systemStats.stop()
         }
+        // Prune expand state for groups that have been removed from the store
+        // so expandedGroupIDs never holds stale IDs after a reload.
+        .onChange(of: store.actions) { _, newActions in
+            expandedGroupIDs = expandedGroupIDs
+                .intersection(Set(newActions.map(\.id)))
+        }
     }
 
     // MARK: - Rate limit banner
@@ -105,10 +111,11 @@ struct PopoverMainView: View {
         .padding(.vertical, 4)
     }
 
-    /// "Load 10 more actions…" pagination button.
+    /// “Load 10 more actions…” pagination button.
+    /// Action clamps visibleCount to store.actions.count to prevent overshoot.
     private var loadMoreButton: some View {
         Button(
-            action: { visibleCount += 10 },
+            action: { visibleCount = min(visibleCount + 10, store.actions.count) },
             label: {
                 Text("Load \(min(10, store.actions.count - visibleCount)) more actions…")
                     .font(.caption).foregroundColor(.secondary)

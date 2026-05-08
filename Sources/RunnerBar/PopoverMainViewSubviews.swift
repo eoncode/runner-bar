@@ -38,7 +38,7 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Green dot when authenticated; tappable orange dot when not.
+    /// Green dot when authenticated; tappable orange dot + caption when not.
     @ViewBuilder
     private var authIndicator: some View {
         if isAuthenticated {
@@ -46,7 +46,14 @@ struct PopoverHeaderView: View {
         } else {
             Button(
                 action: onSignIn,
-                label: { Circle().fill(Color.orange).frame(width: 7, height: 7) }
+                label: {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.orange).frame(width: 7, height: 7)
+                        Text("Sign in")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
             )
             .buttonStyle(.plain)
             .help("Sign in with GitHub")
@@ -266,6 +273,7 @@ struct InlineJobRowsView: View {
     }
 
     var body: some View {
+        // TODO: add "load more" affordance if activeJobs.count > 4 (see PR #313 review)
         ForEach(activeJobs.prefix(4)) { job in
             Button(
                 action: { onSelectJob(job) },
