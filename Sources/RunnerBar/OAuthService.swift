@@ -31,32 +31,44 @@ final class OAuthService {
     // MARK: - Sign in
 
     /// Starts the OAuth flow by opening the GitHub authorisation URL in the browser.
-    /// - Parameter scopes: GitHub permission scopes (default: `repo` + `read:org`).
-    func signIn(scopes: String = "repo,read:org") {
+    /// - Parameter scopes: Space-separated GitHub permission scopes per RFC 6749 §3.3
+    ///   (default: `repo read:org`).
+    func signIn(scopes: String = "repo read:org") {
         let state = UUID().uuidString.replacingOccurrences(of: "-", with: "")
         pendingState = state
         var components = URLComponents(string: "https://github.com/login/oauth/authorize")!
         components.queryItems = [
             .init(name: "client_id", value: Secrets.clientID),
             .init(name: "redirect_uri", value: "runnerbar://oauth/callback"),
-            .init(name: "scope", value: scopes),
+            .init(name: "scope", value: scopes),   // space-separated, RFC 6749 §3.3
             .init(name: "state", value: state)
         ]
         guard let url = components.url else {
             log("OAuthService.signIn › failed to build URL")
+            finish(success: false)   // #8: resolve spinner on URL build failure
             return
         }
         log("OAuthService.signIn › opening \(url)")
-        NSWorkspace.shared.open(url)
+        let opened = NSWorkspace.shared.open(url)
+        if !opened {
+            log("OAuthService.signIn › NSWorkspace.open failed")
+            finish(success: false)   // #8: resolve spinner when browser fails to open
+        }
     }
 
     // MARK: - Callback
 
     /// Called by `AppDelegate.application(_:open:)` when the `runnerbar://` URL is received.
     ///
-    /// Validates the `state` parameter, then exchanges the `code` for an access token.
+    /// Validates the `state` parameter (including nil-state CSRF guard), then
+    /// exchanges the `code` for an access token.
     func handleCallback(url: URL) {
         log("OAuthService.handleCallback › \(url)")
+        // #7: reject immediately when no sign-in is in flight (nil pendingState).
+        guard pendingState != nil else {
+            log("OAuthService.handleCallback › no in-flight login, ignoring callback")
+            return
+        }
         guard
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             let codeItem = components.queryItems?.first(where: { $0.name == "code" }),
@@ -133,6 +145,7 @@ final class OAuthService {
 
     // MARK: - Auth state
 
-    /// Returns `true` if a Keychain token is present.
-    var isSignedIn: Bool { Keychain.token() != nil }
+    /// Returns `true` if any token source is available: Keychain, gh CLI, or env vars.
+    /// Mirrors the full `githubToken()` priority chain so the UI reflects all auth sources.
+    var isSignedIn: Bool { githubToken() != nil }
 }

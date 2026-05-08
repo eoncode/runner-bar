@@ -10,7 +10,8 @@ import Foundation
 ///
 /// ⚠️ All `security` invocations use direct Process argument arrays —
 /// the token value is NEVER interpolated into a shell string to prevent
-/// shell injection. (ref: review issue #1, PR #341)
+/// shell injection. Exit status is read from `terminationStatus` after
+/// `waitUntilExit()` — not from stderr substrings.
 enum Keychain {
     /// The service name used for all keychain items.
     private static let service = "dev.eonist.runnerbar"
@@ -21,9 +22,17 @@ enum Keychain {
 
     // MARK: - Private helpers
 
-    /// Runs `security` with the given arguments using a direct Process
-    /// argument array (no shell, no interpolation). Returns trimmed stdout.
-    private static func runSecurity(args: [String], timeout: TimeInterval = 5) -> String {
+    /// Result of a `security` invocation.
+    private struct SecurityResult {
+        /// Trimmed stdout+stderr output.
+        let output: String
+        /// Process exit status (0 = success, 44 = item not found, etc.).
+        let status: Int32
+    }
+
+    /// Runs `security` with the given arguments using a direct Process argument
+    /// array (no shell, no interpolation). Blocks until exit or timeout.
+    private static func runSecurity(args: [String], timeout: TimeInterval = 5) -> SecurityResult {
         let task = Process()
         let pipe = Pipe()
         task.executableURL = URL(fileURLWithPath: securityPath)
@@ -34,16 +43,22 @@ enum Keychain {
             try task.run()
         } catch {
             log("Keychain.runSecurity › launch error: \(error)")
-            return ""
+            return SecurityResult(output: "", status: -1)
         }
+        // Enforce timeout; fall back to waitUntilExit for the normal path.
         let deadline = Date().addingTimeInterval(timeout)
         while task.isRunning {
-            if Date() > deadline { task.terminate(); break }
+            if Date() > deadline {
+                task.terminate()
+                break
+            }
             Thread.sleep(forTimeInterval: 0.02)
         }
+        task.waitUntilExit()  // ensure terminationStatus is populated
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)?
+        let output = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return SecurityResult(output: output, status: task.terminationStatus)
     }
 
     // MARK: - Read
@@ -56,7 +71,8 @@ enum Keychain {
             "-a", account,
             "-w"
         ])
-        return result.isEmpty || result.hasPrefix("security:") ? nil : result
+        guard result.status == 0, !result.output.isEmpty else { return nil }
+        return result.output
     }
 
     // MARK: - Write
@@ -74,8 +90,8 @@ enum Keychain {
             "-a", account,
             "-w", token          // ← argv element, not shell string
         ])
-        let success = !result.lowercased().contains("error")
-        log("Keychain.save › success=\(success)")
+        let success = result.status == 0
+        log("Keychain.save › status=\(result.status) success=\(success)")
         return success
     }
 
@@ -89,10 +105,9 @@ enum Keychain {
             "-s", service,
             "-a", account
         ])
-        // exit 44 = item not found — treat as success.
-        let success = result.isEmpty || result.lowercased().contains("deleted")
-            || result.contains("44")
-        log("Keychain.delete › success=\(success)")
+        // exit 0 = deleted, exit 44 = item not found (treat as success).
+        let success = result.status == 0 || result.status == 44
+        log("Keychain.delete › status=\(result.status) success=\(success)")
         return success
     }
 }
