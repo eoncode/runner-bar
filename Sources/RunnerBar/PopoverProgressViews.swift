@@ -5,30 +5,54 @@ import SwiftUI
 /// Small pie/radial fill indicator that replaces the plain `Circle` dot on action
 /// and job rows. Sized to match the existing 8 pt dot footprint so layout is unchanged.
 ///
-/// - `progress`: 0.0–1.0 fill fraction. Pass `nil` for an indeterminate ring.
-/// - `color`: fill and stroke color — matches existing green/yellow/blue/red/gray semantics.
+/// - `progress`: 0.0–1.0 fill fraction for a filled wedge. Pass `nil` for an indeterminate ring.
+/// - `color`: fill colour — matches existing green/yellow/blue/red/gray semantics.
 struct PieProgressDot: View {
-    /// Radial fill fraction (0.0–1.0). Nil renders a plain unfilled ring.
+    /// Radial fill fraction (0.0–1.0). Nil renders a thin unfilled ring (indeterminate).
     let progress: Double?
-    /// Fill and stroke colour.
+    /// Wedge fill and ring stroke colour.
     let color: Color
     /// Dot diameter; defaults to 8 to match existing action-row dots.
     var size: CGFloat = 8
 
-    /// Renders the pie arc, indeterminate ring, or empty ring depending on `progress`.
+    /// Renders a filled pie-wedge, indeterminate ring, or empty ring depending on `progress`.
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(color.opacity(0.25), lineWidth: 1.5)
-                .frame(width: size, height: size)
-            if let fraction = progress, fraction > 0 {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let radius = side / 2
+            ZStack {
+                // Background ring
                 Circle()
-                    .trim(from: 0, to: min(1, CGFloat(fraction)))
-                    .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: size, height: size)
-            } else if progress == nil {
-                Circle().fill(color).frame(width: size * 0.55, height: size * 0.55)
+                    .stroke(color.opacity(0.25), lineWidth: 1)
+                    .frame(width: side, height: side)
+                if let fraction = progress {
+                    if fraction >= 1 {
+                        // Full fill
+                        Circle().fill(color).frame(width: side, height: side)
+                    } else if fraction > 0 {
+                        // Filled wedge from -90° sweeping clockwise
+                        Path { path in
+                            path.move(to: center)
+                            path.addArc(
+                                center: center,
+                                radius: radius,
+                                startAngle: .degrees(-90),
+                                endAngle: .degrees(-90 + fraction * 360),
+                                clockwise: false
+                            )
+                            path.closeSubpath()
+                        }
+                        .fill(color)
+                    }
+                    // fraction == 0: only the background ring shows
+                } else {
+                    // Indeterminate: small filled centre dot
+                    Circle()
+                        .fill(color)
+                        .frame(width: side * 0.5, height: side * 0.5)
+                        .position(center)
+                }
             }
         }
         .frame(width: size, height: size)
@@ -60,7 +84,7 @@ enum RelativeTimeFormatter {
 
 /// Adds a pie-progress fraction property to `ActionGroup` for use with `PieProgressDot`.
 extension ActionGroup {
-    /// Radial progress fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
+    /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
     var progressFraction: Double? {
         switch groupStatus {
         case .queued:
@@ -78,7 +102,7 @@ extension ActionGroup {
 
 /// Adds a pie-progress fraction property to `ActiveJob` for use with `PieProgressDot`.
 extension ActiveJob {
-    /// Radial progress fraction (0.0–1.0). Returns `nil` while queued or when no steps are available.
+    /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no steps are available.
     var progressFraction: Double? {
         switch status {
         case "queued":

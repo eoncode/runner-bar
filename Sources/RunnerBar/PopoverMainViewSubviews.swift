@@ -13,6 +13,7 @@ struct PopoverHeaderView: View {
     /// Called when the user taps the orange auth dot.
     let onSignIn: () -> Void
 
+    /// Renders the header HStack with stats, auth, settings and close controls.
     var body: some View {
         HStack(spacing: 6) {
             systemStatsBadge
@@ -105,10 +106,12 @@ struct PopoverHeaderView: View {
 /// Conditionally shows online local runners — hidden when all are idle/offline.
 /// The parent (PopoverMainView) always renders a leading Divider above this view.
 /// This view only renders a trailing Divider after its runner rows.
+/// Triggers a `LocalRunnerStore.shared.refresh()` on appear.
 struct PopoverLocalRunnerRow: View {
     /// All known runners; view filters to online ones internally.
     let runners: [Runner]
 
+    /// Renders runner rows if any are online, or nothing otherwise.
     var body: some View {
         let active = runners.filter { $0.status == "online" }
         if !active.isEmpty { runnerList(active) }
@@ -144,32 +147,21 @@ struct PopoverLocalRunnerRow: View {
 // MARK: - ActionRowView
 
 /// Single action-group row with pie progress dot, started-ago timestamp,
-/// and spec-parity typography.
+/// and spec-parity typography (#178). Inline job rows are always visible
+/// beneath in-progress groups — there is no expand/collapse interaction.
 struct ActionRowView: View {
     /// The action group this row represents.
     let group: ActionGroup
-    /// Whether the inline job rows beneath this group are currently expanded.
-    let isExpanded: Bool
     /// Called when the user taps the main row area (navigate to action detail).
     let onSelect: () -> Void
-    /// Called when the user taps the expand/collapse chevron.
-    let onToggleExpand: () -> Void
 
+    /// Renders the tappable row content with a trailing chevron.
     var body: some View {
         HStack(spacing: 0) {
-            rowContentButton
-            if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                expandButton
-            } else {
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
-            }
+            Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
         }
-    }
-
-    /// Tappable main area of the row (navigates to action detail).
-    private var rowContentButton: some View {
-        Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
     }
 
     /// Row content: pie dot, label, title, and trailing meta.
@@ -189,7 +181,7 @@ struct ActionRowView: View {
         .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 3)
     }
 
-    /// Trailing meta: started-ago + elapsed + job progress + status chip.
+    /// Trailing meta: started-ago + current job name + job progress + elapsed + status chip.
     @ViewBuilder
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
@@ -210,18 +202,6 @@ struct ActionRowView: View {
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
             .frame(width: 40, alignment: .trailing)
         statusChip
-    }
-
-    /// Expand/collapse chevron button for groups with in-progress jobs.
-    private var expandButton: some View {
-        Button(
-            action: onToggleExpand,
-            label: {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
-            }
-        )
-        .buttonStyle(.plain).padding(.trailing, 12).padding(.vertical, 3)
     }
 
     /// Status chip with bold weight for spec parity (#178).
@@ -256,48 +236,37 @@ struct ActionRowView: View {
 
 // MARK: - InlineJobRowsView
 
-/// Inline ↳ job rows shown beneath an expanded action group.
-/// Supports paginated reveal via `jobLimit` binding (tappable "Load more jobs" affordance).
+/// Passive inline ↳ job rows shown beneath every in-progress action group.
+/// Always visible — no expand/collapse interaction. Capped at 4 with a
+/// `+ N more…` caption when the group has more active jobs.
 struct InlineJobRowsView: View {
-    /// The parent action group whose jobs are displayed.
+    /// The parent action group whose active jobs are displayed.
     let group: ActionGroup
-    /// Current display cap for this group's inline jobs. Mutated by "Load more jobs" tap.
-    @Binding var jobLimit: Int
-    /// Called when the user taps a job row.
+    /// Called when the user taps a job row to drill into job detail.
     let onSelectJob: (ActiveJob) -> Void
+
+    /// Maximum number of inline job rows to display before showing overflow caption.
+    private let cap = 4
 
     /// Jobs currently in-progress or queued inside this group.
     private var activeJobs: [ActiveJob] {
         group.jobs.filter { $0.status == "in_progress" || $0.status == "queued" }
     }
 
+    /// Renders up to `cap` job rows followed by an optional overflow caption.
     var body: some View {
-        let capped = Array(activeJobs.prefix(jobLimit))
-        ForEach(capped) { job in
+        ForEach(activeJobs.prefix(cap)) { job in
             Button(action: { onSelectJob(job) }, label: { jobRow(job) })
                 .buttonStyle(.plain)
         }
-        overflowFooter
-    }
-
-    /// "+ N more…" caption or "Load more jobs" button depending on remaining count.
-    @ViewBuilder
-    private var overflowFooter: some View {
-        let remaining = activeJobs.count - jobLimit
-        if remaining > 0 {
-            Button(
-                action: { jobLimit = min(jobLimit + 4, activeJobs.count) },
-                label: {
-                    Text(remaining <= 4 ? "+ \(remaining) more…" : "Load more jobs…")
-                        .font(.caption2).foregroundColor(.secondary)
-                }
-            )
-            .buttonStyle(.plain)
-            .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+        if activeJobs.count > cap {
+            Text("+ \(activeJobs.count - cap) more…")
+                .font(.caption2).foregroundColor(.secondary)
+                .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
         }
     }
 
-    /// Renders a single inline job row with pie dot, step progress, and elapsed time.
+    /// Renders a single inline job row: indent arrow, pie dot, name, step, progress, elapsed.
     private func jobRow(_ job: ActiveJob) -> some View {
         HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)

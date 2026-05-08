@@ -29,11 +29,10 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
+    /// Number of action groups currently visible in the paginated list.
     @State private var visibleCount: Int = 10
-    @State private var expandedGroupIDs: Set<String> = []
-    /// Per-group inline job display cap. Keyed by group.id; defaults to 4 on first expand.
-    @State private var jobLimits: [String: Int] = [:]
 
+    /// Root layout: header → divider → optional rate-limit banner → runners → scrollable actions → quit.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
@@ -43,18 +42,17 @@ struct PopoverMainView: View {
                 onSignIn: signInWithGitHub
             )
             // Always render a separator after the header so the divider is visible
-            // even when isRateLimited==false and all runners are offline (PopoverLocalRunnerRow
-            // renders nothing in that case, taking its leading Divider with it).
+            // even when isRateLimited==false and all runners are offline.
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
-            // PopoverLocalRunnerRow no longer provides a leading Divider (parent owns it above).
-            // It still provides a trailing Divider after its runner rows.
             PopoverLocalRunnerRow(runners: store.runners)
+                .onAppear { Task { await LocalRunnerStore.shared.refresh() } }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     actionsSection
                 }
             }
+            .frame(maxHeight: 400)
             Divider()
             quitButton
         }
@@ -64,11 +62,9 @@ struct PopoverMainView: View {
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        .onChange(of: store.actions) { _, newActions in
-            let newIDs = Set(newActions.map(\.id))
-            expandedGroupIDs = expandedGroupIDs.intersection(newIDs)
-            jobLimits = jobLimits.filter { newIDs.contains($0.key) }
-        }
+        // Reset pagination when the action list changes (e.g. after token refresh)
+        // so the user never lands on an empty page.
+        .onChange(of: store.actions) { _, _ in visibleCount = 10 }
     }
 
     // MARK: - Rate limit banner
@@ -86,7 +82,7 @@ struct PopoverMainView: View {
 
     // MARK: - Actions section
 
-    /// Scrollable list of action groups with inline job expansion and pagination.
+    /// Paginated list of action groups with always-visible inline job rows for in-progress groups.
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -98,16 +94,10 @@ struct PopoverMainView: View {
                 ForEach(visible) { group in
                     ActionRowView(
                         group: group,
-                        isExpanded: expandedGroupIDs.contains(group.id),
-                        onSelect: { onSelectAction(group) },
-                        onToggleExpand: { toggleExpand(group.id) }
+                        onSelect: { onSelectAction(group) }
                     )
-                    if expandedGroupIDs.contains(group.id) {
-                        InlineJobRowsView(
-                            group: group,
-                            jobLimit: jobLimitBinding(for: group.id),
-                            onSelectJob: onSelectJob
-                        )
+                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
+                        InlineJobRowsView(group: group, onSelectJob: onSelectJob)
                     }
                 }
                 loadMoreButton
@@ -116,8 +106,7 @@ struct PopoverMainView: View {
         .padding(.vertical, 4)
     }
 
-    /// Pagination button. Guards against a zero-batch edge case (renders nothing when
-    /// `store.actions.count <= visibleCount`). Label and increment use the same `nextBatch`.
+    /// Pagination button; renders nothing when all groups are already visible.
     @ViewBuilder
     private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
@@ -150,25 +139,6 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Helpers
-
-    /// Toggles expanded state for a group and seeds its job-limit on first expand.
-    private func toggleExpand(_ id: String) {
-        if expandedGroupIDs.contains(id) {
-            expandedGroupIDs.remove(id)
-        } else {
-            expandedGroupIDs.insert(id)
-            if jobLimits[id] == nil { jobLimits[id] = 4 }
-        }
-    }
-
-    /// Returns a `Binding<Int>` into `jobLimits` for the given group id,
-    /// defaulting to 4 if the entry is absent.
-    private func jobLimitBinding(for id: String) -> Binding<Int> {
-        Binding(
-            get: { jobLimits[id] ?? 4 },
-            set: { jobLimits[id] = $0 }
-        )
-    }
 
     /// Opens the GitHub PAT setup docs in the default browser.
     /// NSAppleScript/Terminal-based device-flow was removed — the app never generates
