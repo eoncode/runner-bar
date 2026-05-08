@@ -112,9 +112,9 @@ struct PopoverHeaderView: View {
     /// 3-character Unicode block bar scaled to `pct` (0–100).
     /// Example: pct=67 → "██░", pct=100 → "███", pct=0 → "░░░".
     private func blockBar(pct: Double, width: Int = 3) -> String {
-        let filled = Int((pct / 100.0 * Double(width)).rounded())
-        let f = max(0, min(width, filled))
-        return String(repeating: "█", count: f) + String(repeating: "░", count: width - f)
+        let raw = Int((pct / 100.0 * Double(width)).rounded())
+        let filledCount = max(0, min(width, raw))
+        return String(repeating: "█", count: filledCount) + String(repeating: "░", count: width - filledCount)
     }
 
     /// Traffic-light colour: red > 85 %, yellow > 60 %, green otherwise.
@@ -283,11 +283,14 @@ struct InlineJobRowsView: View {
             jobRow(job)
         }
         if activeJobs.count > cap {
-            Button(action: { cap += 4 }) {
-                Text("+ \(activeJobs.count - cap) more jobs…")
-                    .font(.caption2).foregroundColor(.accentColor)
-                    .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
-            }
+            Button(
+                action: { cap += 4 },
+                label: {
+                    Text("+ \(activeJobs.count - cap) more jobs…")
+                        .font(.caption2).foregroundColor(.accentColor)
+                        .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+                }
+            )
             .buttonStyle(.plain)
         }
     }
