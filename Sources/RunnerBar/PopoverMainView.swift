@@ -28,6 +28,8 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
+    /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
+    @State private var visibleCount: Int = 10
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -81,9 +83,12 @@ struct PopoverMainView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
+                // Phase 5 (#305): ScrollView + visibleCount pagination
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
                 // Phase 3 (#302): redesigned action row
                 // Layout: [pie] SHA  title·····  startedAgo  elapsed  jobs  status ›
-                ForEach(store.actions.prefix(5)) { actionGroup in
+                ForEach(store.actions.prefix(visibleCount)) { actionGroup in
                     Button(action: { onSelectAction(actionGroup) }, label: {
                         HStack(spacing: 6) {
                             // Pie progress dot
@@ -168,6 +173,20 @@ struct PopoverMainView: View {
                         }
                     }
                 }
+                    } // ForEach end
+                    // "Load 10 more" button — only shown when more groups exist
+                    if store.actions.count > visibleCount {
+                        Button(action: { visibleCount += 10 }, label: {
+                            Text("Load \(min(10, store.actions.count - visibleCount)) more")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        })
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                    }
+                    } // LazyVStack end
+                } // ScrollView end
+                .frame(maxHeight: 400)
                 .padding(.bottom, 6)
             }
         }
