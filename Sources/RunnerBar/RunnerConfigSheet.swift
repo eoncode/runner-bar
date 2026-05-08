@@ -17,6 +17,8 @@ struct RunnerConfigSheet: View {
     @State private var labelsText: String
     @State private var workFolderText: String
     @State private var isSaving = false
+    /// Non-nil when `updateConfig` returns `false`; shown as an inline error.
+    @State private var errorMessage: String?
 
     init(runner: RunnerModel, isPresented: Binding<RunnerModel?>, onSave: @escaping () -> Void) {
         self.runner = runner
@@ -47,6 +49,11 @@ struct RunnerConfigSheet: View {
                 TextField("e.g. _work", text: $workFolderText)
                     .textFieldStyle(.roundedBorder)
             }
+            if let msg = errorMessage {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
             HStack {
                 Spacer()
                 Button(action: { isPresented = nil }, label: { Text("Cancel") })
@@ -68,21 +75,26 @@ struct RunnerConfigSheet: View {
 
     private func saveConfig() {
         isSaving = true
+        errorMessage = nil
         let labels = labelsText
             .components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         let folder = workFolderText.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
-            RunnerLifecycleService.shared.updateConfig(
+            let ok = RunnerLifecycleService.shared.updateConfig(
                 runner: runner,
                 labels: labels,
                 workFolder: folder.isEmpty ? "_work" : folder
             )
             DispatchQueue.main.async {
                 isSaving = false
-                isPresented = nil
-                onSave()
+                if ok {
+                    isPresented = nil
+                    onSave()
+                } else {
+                    errorMessage = "Failed to save — check that the runner's .runner file exists and is writable."
+                }
             }
         }
     }
