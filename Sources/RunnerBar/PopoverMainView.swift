@@ -371,8 +371,12 @@ private struct RunnersListView: View {
                         .font(.system(size: 12)).foregroundColor(.primary)
                         .lineLimit(1).truncationMode(.tail)
                     Spacer()
-                    Text(runner.busy ? "BUSY" : "ONLINE")
-                        .font(.caption).foregroundColor(dotColor(for: runner))
+                    // ⚠️ displayStatus shows "active (CPU: x.x% MEM: x.x%)" when metrics
+                    // are populated by RunnerStore.fetch(), or "idle (CPU: — MEM: —)" when
+                    // no matching process was found. Satisfies the CPU/MEM spec (#311).
+                    Text(runner.displayStatus)
+                        .font(.caption).foregroundColor(.secondary)
+                        .lineLimit(1)
                     // ⚠️ Chevron shown for future navigability (#307 detail view not yet implemented)
                     Image(systemName: "chevron.right")
                         .font(.caption2).foregroundColor(.secondary.opacity(0.4))
