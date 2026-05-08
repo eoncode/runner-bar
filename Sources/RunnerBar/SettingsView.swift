@@ -94,6 +94,10 @@ struct SettingsView: View {
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = OAuthService.shared.isSignedIn
+            // #9: Reset stale spinner in case a previous OAuth round-trip
+            // was abandoned mid-flight (e.g. user switched views before
+            // the browser callback arrived).
+            isSigningIn = false
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
@@ -518,10 +522,12 @@ struct SettingsView: View {
     // MARK: Phase 6 — OAuth sign-in / sign-out
 
     /// Starts the native OAuth flow. Shows a spinner while the browser round-trip is in flight.
-    /// `OAuthService.onCompletion` is cleared after use; registering it here is safe to re-enter.
+    /// Registers a one-shot completion via `OAuthService.setCompletion(_:)` — uses `[weak self]`
+    /// to avoid a retain cycle, with a nil-guard so stale closures are safe.
     private func signInWithGitHub() {
         isSigningIn = true
-        OAuthService.shared.onCompletion = { [self] success in
+        OAuthService.shared.setCompletion { [weak self] success in
+            guard let self else { return }
             isSigningIn = false
             isAuthenticated = success
             if success { store.reload() }

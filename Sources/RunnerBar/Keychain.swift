@@ -10,8 +10,8 @@ import Foundation
 ///
 /// ⚠️ All `security` invocations use direct Process argument arrays —
 /// the token value is NEVER interpolated into a shell string to prevent
-/// shell injection. Exit status is read from `terminationStatus` after
-/// `waitUntilExit()` — not from stderr substrings.
+/// shell injection. Exit status is read from `terminationStatus` via
+/// `terminationHandler` + `DispatchSemaphore` — no busy-wait spin loop.
 enum Keychain {
     /// The service name used for all keychain items.
     private static let service = "dev.eonist.runnerbar"
@@ -19,6 +19,9 @@ enum Keychain {
     private static let account = "github-oauth-token"
     /// Absolute path to the `security` binary.
     private static let securityPath = "/usr/bin/security"
+    /// `security delete-generic-password` exits 44 when item is not found.
+    /// Treat this as success — the desired post-condition (item absent) is met.
+    private static let notFoundExitStatus = Int32(44)
 
     // MARK: - Private helpers
 
@@ -31,7 +34,8 @@ enum Keychain {
     }
 
     /// Runs `security` with the given arguments using a direct Process argument
-    /// array (no shell, no interpolation). Blocks until exit or timeout.
+    /// array (no shell, no interpolation). Blocks until exit or `timeout` elapses
+    /// using a DispatchSemaphore + terminationHandler — no busy-wait.
     private static func runSecurity(args: [String], timeout: TimeInterval = 5) -> SecurityResult {
         let task = Process()
         let pipe = Pipe()
@@ -39,22 +43,24 @@ enum Keychain {
         task.arguments = args
         task.standardOutput = pipe
         task.standardError  = pipe
+
+        let semaphore = DispatchSemaphore(value: 0)
+        task.terminationHandler = { _ in semaphore.signal() }
+
         do {
             try task.run()
         } catch {
             log("Keychain.runSecurity › launch error: \(error)")
             return SecurityResult(output: "", status: -1)
         }
-        // Enforce timeout; fall back to waitUntilExit for the normal path.
-        let deadline = Date().addingTimeInterval(timeout)
-        while task.isRunning {
-            if Date() > deadline {
-                task.terminate()
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.02)
+
+        // Wait up to `timeout` seconds; terminate if the process overruns.
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            task.terminate()
+            // Give terminationHandler a moment to fire after terminate().
+            _ = semaphore.wait(timeout: .now() + 1)
         }
-        task.waitUntilExit()  // ensure terminationStatus is populated
+
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -105,8 +111,9 @@ enum Keychain {
             "-s", service,
             "-a", account
         ])
-        // exit 0 = deleted, exit 44 = item not found (treat as success).
-        let success = result.status == 0 || result.status == 44
+        // Exit 0 = deleted. Exit `notFoundExitStatus` (44) = item was already
+        // absent — the desired post-condition is met either way.
+        let success = result.status == 0 || result.status == notFoundExitStatus
         log("Keychain.delete › status=\(result.status) success=\(success)")
         return success
     }

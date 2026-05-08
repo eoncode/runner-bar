@@ -25,8 +25,23 @@ final class OAuthService {
     // MARK: - State
 
     private var pendingState: String?
-    /// Called on completion: `true` = signed in, `false` = cancelled/failed.
-    var onCompletion: ((Bool) -> Void)?
+    /// Registered completion handler. Use `setCompletion(_:)` / `consumeCompletion()`
+    /// rather than assigning directly to avoid external mutation races.
+    private var completionHandler: ((Bool) -> Void)?
+
+    // MARK: - Completion API
+
+    /// Registers a one-shot completion handler for the current sign-in flow.
+    /// Replaces any previously registered handler.
+    func setCompletion(_ handler: @escaping (Bool) -> Void) {
+        completionHandler = handler
+    }
+
+    /// Fires and clears the registered completion handler.
+    /// Safe to call when no handler is registered (no-op).
+    func consumeCompletion(success: Bool) {
+        finish(success: success)
+    }
 
     // MARK: - Sign in
 
@@ -45,14 +60,14 @@ final class OAuthService {
         ]
         guard let url = components.url else {
             log("OAuthService.signIn › failed to build URL")
-            finish(success: false)   // #8: resolve spinner on URL build failure
+            finish(success: false)   // resolve spinner on URL build failure
             return
         }
         log("OAuthService.signIn › opening \(url)")
         let opened = NSWorkspace.shared.open(url)
         if !opened {
             log("OAuthService.signIn › NSWorkspace.open failed")
-            finish(success: false)   // #8: resolve spinner when browser fails to open
+            finish(success: false)   // resolve spinner when browser fails to open
         }
     }
 
@@ -64,7 +79,7 @@ final class OAuthService {
     /// exchanges the `code` for an access token.
     func handleCallback(url: URL) {
         log("OAuthService.handleCallback › \(url)")
-        // #7: reject immediately when no sign-in is in flight (nil pendingState).
+        // Reject immediately when no sign-in is in flight (nil pendingState).
         guard pendingState != nil else {
             log("OAuthService.handleCallback › no in-flight login, ignoring callback")
             return
@@ -130,8 +145,8 @@ final class OAuthService {
 
     private func finish(success: Bool) {
         DispatchQueue.main.async { [weak self] in
-            self?.onCompletion?(success)
-            self?.onCompletion = nil
+            self?.completionHandler?(success)
+            self?.completionHandler = nil
         }
     }
 
