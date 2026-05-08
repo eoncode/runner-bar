@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 
 // MARK: - gh API
@@ -33,11 +34,10 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
-    let deadline = Date().addingTimeInterval(timeout)
-    while task.isRunning {
-        if Date() > deadline { task.terminate(); break }
-        Thread.sleep(forTimeInterval: 0.05)
-    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
@@ -47,6 +47,64 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
        status == "403" || status == "429" {
         ghIsRateLimited = true
         log("ghAPI › rate limit (\(status)): \(endpoint)")
+        return nil
+    }
+    return outputData.isEmpty ? nil : outputData
+}
+
+/// Calls `gh api --paginate` to follow Link rel=next automatically and
+/// returns the concatenated raw data of all pages, or `nil` on failure.
+///
+/// The `--paginate` flag makes `gh` emit a merged JSON array for array-type
+/// endpoints (e.g. `/user/orgs`, `/user/repos`). `JSONDecoder` can decode
+/// the result directly as `[T].self`.
+///
+/// Rate-limit detection uses `task.terminationStatus` (gh exits non-zero on
+/// 403/429) plus a raw-string scan of output, because `--paginate` may emit
+/// a merged array rather than a `{"status":"403"}` object, making
+/// `JSONSerialization` object-key checks unreliable.
+func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
+    // swiftlint:disable:next identifier_name
+    guard let gh = ghBinaryPath() else {
+        log("ghAPIPaginated › gh not found")
+        return nil
+    }
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: gh)
+    task.arguments = ["api", "--paginate", endpoint]
+    task.standardOutput = pipe
+    task.standardError = Pipe()
+    var outputData = Data()
+    let lock = NSLock()
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+        let chunk = handle.availableData
+        guard !chunk.isEmpty else { return }
+        lock.lock(); outputData.append(chunk); lock.unlock()
+    }
+    do { try task.run() } catch {
+        log("ghAPIPaginated › launch error: \(error)")
+        pipe.fileHandleForReading.readabilityHandler = nil
+        return nil
+    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
+    pipe.fileHandleForReading.readabilityHandler = nil
+    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    // gh exits non-zero on HTTP 403/429; also scan raw output as a fallback
+    // since error JSON may be embedded in paginated output.
+    if task.terminationStatus != 0 {
+        let raw = String(data: outputData, encoding: .utf8) ?? ""
+        if raw.contains("\"403\"") || raw.contains("\"429\"") || raw.contains("rate limit") {
+            ghIsRateLimited = true
+            log("ghAPIPaginated › rate limit detected: \(endpoint)")
+        } else {
+            log("ghAPIPaginated › non-zero exit (\(task.terminationStatus)): \(endpoint)")
+        }
         return nil
     }
     return outputData.isEmpty ? nil : outputData
@@ -95,7 +153,6 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             let data = ghAPI(runsEndpoint(status: status)),
             let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
-        // insert+append pattern cannot be expressed as a where clause
         // swiftlint:disable for_where
         for run in resp.workflowRuns {
             if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
@@ -155,6 +212,90 @@ func fetchRunners(for scope: String) -> [Runner] {
 
 private struct RunnersResponse: Codable {
     let runners: [Runner]
+}
+
+// MARK: - User orgs and repos (Phase 3)
+
+/// Returns the login names of all organisations the authenticated user belongs to.
+/// Calls `GET /user/orgs` and follows Link rel=next pagination to return all orgs.
+/// Returns an empty array on error or if unauthenticated.
+func fetchUserOrgs() -> [String] {
+    // --paginate makes gh follow Link rel=next and concatenate all pages into
+    // a single merged JSON array for array-type endpoints.
+    guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
+    struct Org: Decodable { let login: String }
+    guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
+    return orgs.map(\.login)
+}
+
+/// Returns `owner/repo` strings for the authenticated user's repositories,
+/// sorted by most recently updated. Calls `GET /user/repos?sort=updated`
+/// and follows Link rel=next pagination to return all repos.
+/// Returns an empty array on error or if unauthenticated.
+func fetchUserRepos() -> [String] {
+    guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
+    struct Repo: Decodable {
+        let fullName: String
+        enum CodingKeys: String, CodingKey { case fullName = "full_name" }
+    }
+    guard let repos = try? JSONDecoder().decode([Repo].self, from: data) else { return [] }
+    return repos.map(\.fullName)
+}
+
+// MARK: - Registration token (Phase 3)
+
+/// Fetches a runner registration token for the given scope.
+/// - For repo-scoped runners: `POST /repos/{owner}/{repo}/actions/runners/registration-token`
+/// - For org-scoped runners:  `POST /orgs/{org}/actions/runners/registration-token`
+///
+/// Returns the `token` string on success, `nil` on API error or missing auth.
+///
+/// ⚠️ Blocking — must only be called from a background thread.
+func fetchRegistrationToken(scope: String) -> String? {
+    let endpoint: String
+    if scope.contains("/") {
+        endpoint = "repos/\(scope)/actions/runners/registration-token"
+    } else {
+        endpoint = "orgs/\(scope)/actions/runners/registration-token"
+    }
+    guard let ghPath = ghBinaryPath() else {
+        log("fetchRegistrationToken › gh not found")
+        return nil
+    }
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: ghPath)
+    task.arguments = ["api", "--method", "POST",
+                      "-H", "Accept: application/vnd.github+json",
+                      endpoint]
+    task.standardOutput = pipe
+    task.standardError = Pipe()
+    var outputData = Data()
+    let lock = NSLock()
+    pipe.fileHandleForReading.readabilityHandler = { handle in
+        let chunk = handle.availableData
+        guard !chunk.isEmpty else { return }
+        lock.lock(); outputData.append(chunk); lock.unlock()
+    }
+    do { try task.run() } catch {
+        log("fetchRegistrationToken › launch error: \(error)")
+        pipe.fileHandleForReading.readabilityHandler = nil
+        return nil
+    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
+    pipe.fileHandleForReading.readabilityHandler = nil
+    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    log("fetchRegistrationToken › \(endpoint) \(outputData.count)b exit \(task.terminationStatus)")
+    struct TokenResponse: Decodable { let token: String }
+    guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
+        log("fetchRegistrationToken › decode failed: \(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")")
+        return nil
+    }
+    return resp.token
 }
 
 // MARK: - Step log
@@ -245,7 +386,8 @@ func ghPost(_ endpoint: String) -> Bool {
     }
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
+    task.arguments = ["api", "--method", "POST",
+                      "-H", "Accept: application/vnd.github+json", endpoint]
     task.standardOutput = Pipe()
     task.standardError = Pipe()
     do {
@@ -273,3 +415,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+// swiftlint:enable file_length
