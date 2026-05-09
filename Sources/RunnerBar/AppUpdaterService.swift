@@ -32,11 +32,11 @@ final class AppUpdaterService: ObservableObject {
     /// **directly** via `@ObservedObject` so `downloadedAppBundle` changes
     /// trigger view re-renders without needing a forwarding publisher.
     ///
-    /// ⚠️ owner must match the GitHub org/user that publishes Releases.
-    /// Releases live under eoncode/runner-bar, NOT eonist/runner-bar.
-    // NB: gh-pages is hosted under eonist/runner-bar (install.sh bootstrap),
-    //     but GitHub Releases (AppUpdater source) live under eoncode/runner-bar.
-    //     See DEPLOYMENT.md for the rationale.
+    /// ⚠️ `owner` must match the GitHub org/user that publishes Releases.
+    /// Releases live under `eoncode/runner-bar`, NOT `eonist/runner-bar`.
+    /// NB: gh-pages is hosted under `eonist/runner-bar` (install.sh bootstrap),
+    /// but GitHub Releases (AppUpdater source) live under `eoncode/runner-bar`.
+    /// See DEPLOYMENT.md for the rationale.
     let updater = AppUpdater(owner: "eoncode", repo: "runner-bar")
 
     /// `true` while a manual `checkForUpdates()` call is in-flight.
