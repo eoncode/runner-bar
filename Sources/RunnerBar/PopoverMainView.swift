@@ -397,8 +397,9 @@ private struct InlineJobRowView: View {
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.leading, 14)
             // Uses ActiveJob.progressFraction (model layer) — nil = indeterminate dot.
+            // Mirrors the pattern ActionRowView uses for actionGroup.progressFraction.
             PieProgressView(
-                progress: jobProgressFraction(for: job),
+                progress: job.progressFraction,
                 color: jobDotColor(for: job),
                 size: 7
             )
@@ -419,18 +420,6 @@ private struct InlineJobRowView: View {
                 .frame(width: 36, alignment: .trailing)
         }
         .padding(.horizontal, 12).padding(.vertical, 2)
-    }
-
-    /// Completion fraction 0.0–1.0 based on steps with a non-nil conclusion.
-    /// Returns `nil` (indeterminate) when in_progress with no step data, or when queued.
-    private func jobProgressFraction(for job: ActiveJob) -> Double? {
-        let total = job.steps.count
-        guard total > 0 else {
-            // No step data yet: indeterminate for in_progress, nil (indeterminate) for queued.
-            return nil
-        }
-        let done = job.steps.filter { $0.conclusion != nil }.count
-        return Double(done) / Double(total)
     }
 
     /// Step fraction label, e.g. `"3/8"`. Returns `""` when no step data is available.

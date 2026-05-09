@@ -47,6 +47,28 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         let m = secs / 60; let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
+
+    // MARK: - Progress fraction (model layer — keeps view bodies clean)
+
+    /// Completion fraction 0.0–1.0 based on concluded steps, or `nil` (indeterminate)
+    /// when status is queued or no step data is available.
+    ///
+    /// - `nil`   → indeterminate (queued / no steps loaded yet) — renders a centre dot
+    /// - `1.0`   → all steps concluded
+    /// - `0..<1` → partial (concludedSteps / totalSteps)
+    ///
+    /// Consumed by `PieProgressView(progress: job.progressFraction, ...)` in
+    /// `InlineJobRowView` — mirrors `ActionGroup.progressFraction` at the group level.
+    var progressFraction: Double? {
+        switch status {
+        case "queued": return nil
+        case "completed": return 1.0
+        default:
+            guard !steps.isEmpty else { return nil }
+            let done = steps.filter { $0.conclusion != nil }.count
+            return Double(done) / Double(steps.count)
+        }
+    }
 }
 
 // MARK: - JobStep
