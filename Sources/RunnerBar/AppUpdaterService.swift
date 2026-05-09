@@ -46,26 +46,29 @@ final class AppUpdaterService: ObservableObject {
     /// Drives the "Checking…" spinner in `SettingsView.updateRow`.
     @Published var isChecking = false
 
-    /// Non-nil if the last manual check failed. Drives the "Check failed" row
+    /// Non-nil if the last manual check or install failed. Drives the "Check failed" row
     /// in `SettingsView.updateRow`. Cleared on the next `checkForUpdates()` call.
     @Published var lastCheckError: Error?
 
-    // Intentionally empty: singleton construction is fully handled
-    // by the `updater` property initialiser above.
-    private init() {}
+    private init() {
+        // Intentionally empty: singleton construction is fully handled
+        // by the `updater` property initialiser above.
+    }
 
     /// Triggers a foreground update check and updates `isChecking`.
+    /// Guards against concurrent in-flight calls — safe to call from a button action.
     func checkForUpdates() {
+        guard !isChecking else { return }
         isChecking = true
         lastCheckError = nil
         updater.check(
-            { [weak self] in
-                DispatchQueue.main.async { self?.isChecking = false }
+            { [self] in
+                DispatchQueue.main.async { self.isChecking = false }
             },
-            { [weak self] error in
+            { [self] error in
                 DispatchQueue.main.async {
-                    self?.isChecking = false
-                    self?.lastCheckError = error
+                    self.isChecking = false
+                    self.lastCheckError = error
                 }
                 Logger.log("AppUpdater check failed: \(error)")
             }

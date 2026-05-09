@@ -37,11 +37,11 @@ struct SettingsView: View {
     @ObservedObject private var legal = LegalPrefsStore.shared
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
-    /// Drives isChecking / lastCheckError / updater.state in updateRow (Phase 5 — ref #345).
-    /// AppUpdaterService is an ObservableObject; AppUpdater (its `updater` property) is also
-    /// an ObservableObject. We observe the service directly — `updater.state` is accessed
-    /// via `updaterService.updater.state` so SwiftUI re-renders when `state` changes.
+    /// Drives isChecking / lastCheckError in updateRow (Phase 5 — ref #345).
     @ObservedObject private var updaterService = AppUpdaterService.shared
+    /// Drives updater.state changes in updateRow — observed directly so SwiftUI
+    /// re-renders when state transitions (downloading → downloaded, etc.).
+    @ObservedObject private var updater = AppUpdaterService.shared.updater
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -476,11 +476,10 @@ struct SettingsView: View {
         }
     }
 
-    /// Update status row driven by AppUpdater v0.1.9's `UpdateState` enum.
+    /// Update status row driven by AppUpdater 0.1.9's `UpdateState` enum.
     ///
-    /// Observes `updaterService` (AppUpdaterService) for `isChecking` / `lastCheckError`.
-    /// The install-ready state is detected via `updaterService.updater.state` pattern match
-    /// on `.downloaded(_, _, bundle)` — the v0.1.9 API (ref #345, #356).
+    /// Observes `updaterService` for `isChecking` / `lastCheckError`,
+    /// and `updater` directly for `state` so transitions trigger re-renders.
     ///
     /// States:
     /// - `isChecking == true`          → spinner + "Checking…"
@@ -513,12 +512,13 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
                 }
-            } else if case .downloaded(_, _, let bundle) = updaterService.updater.state {
+            } else if case .downloaded(_, _, let bundle) = updater.state {
                 Button("Install & Relaunch") {
                     do {
-                        try updaterService.updater.install(bundle)
+                        try updater.install(bundle)
                     } catch {
                         Logger.log("AppUpdater install failed: \(error)")
+                        updaterService.lastCheckError = error
                     }
                 }
                 .font(.caption)

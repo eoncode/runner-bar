@@ -77,12 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         RunnerStore.shared.start()
 
-        // Start background update checks (ref #345).
-        // AppUpdaterService.shared initialises AppUpdater with a 24h
-        // NSBackgroundActivityScheduler — accessing .shared is sufficient.
-        // checkForUpdates() fires an eager check so users see current state
-        // the first time they open Settings → About, without waiting 24h.
-        _ = AppUpdaterService.shared
+        // Kick off an eager update check at launch (ref #345).
+        // AppUpdaterService.shared also starts the 24h background scheduler.
         AppUpdaterService.shared.checkForUpdates()
     }
 
