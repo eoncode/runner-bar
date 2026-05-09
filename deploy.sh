@@ -10,14 +10,19 @@ echo "→ Renaming artifact for GitHub Releases..."
 mv dist/RunnerBar.zip "dist/${ASSET}"
 
 # GitHub Release — required for AppUpdater asset discovery (ref #345).
-# --clobber overwrites an existing release for this tag so CI retries
-# and manual re-runs don't fail with set -e when the tag already exists.
-echo "→ Creating GitHub Release ${VERSION}..."
-gh release create "v${VERSION}" \
-  "dist/${ASSET}" \
-  --title "v${VERSION}" \
-  --notes "Release ${VERSION}" \
-  --clobber
+# Use a create-or-upload pattern so CI retries and manual re-runs for the
+# same tag don't fail under set -e. --clobber is only valid on
+# `gh release upload`, not `gh release create`.
+echo "→ Publishing GitHub Release ${VERSION}..."
+if gh release view "v${VERSION}" >/dev/null 2>&1; then
+  # Release already exists — overwrite the asset in-place.
+  gh release upload "v${VERSION}" "dist/${ASSET}" --clobber
+else
+  gh release create "v${VERSION}" \
+    "dist/${ASSET}" \
+    --title "v${VERSION}" \
+    --notes "Release ${VERSION}"
+fi
 
 # gh-pages — kept for install.sh bootstrap (curl | bash first-install).
 echo "→ Deploying to gh-pages for install.sh bootstrap..."
