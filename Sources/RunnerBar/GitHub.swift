@@ -351,7 +351,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
 }
 
 private func stripAnsi(_ input: String) -> String {
-    guard let regex = try? NSRegularExpression(pattern: "\u001B\\[[0-9;]*[A-Za-z]") else {
+    guard let regex = try? NSRegularExpression(pattern: "\u{001B}\\[[0-9;]*[A-Za-z]") else {
         return input
     }
     return regex.stringByReplacingMatches(
