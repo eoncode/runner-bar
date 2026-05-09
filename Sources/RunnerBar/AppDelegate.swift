@@ -12,7 +12,7 @@ import SwiftUI
 //   • Detail views contain ScrollView which reports 0 fittingSize.height. Use a
 //     fixed detailHeight for them instead, capped so they don't overflow the screen.
 //   • Main view has no ScrollView — fittingSize is reliable on the next tick.
-//   • Both hc.view.setFrameSize AND popover.contentSize MUST be updated together.
+//   • Both hostCtrl.view.setFrameSize AND popover.contentSize MUST be updated together.
 //     Updating only one leaves NSPopover chrome and NSView frame out of sync → clipping.
 //
 // ❌ NEVER set sizingOptions = .preferredContentSize
@@ -278,39 +278,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     ///                  whose fittingSize.height is 0). When nil, defer one run-loop tick
     ///                  then measure fittingSize — correct for the main view (no ScrollView).
     ///
-    /// ⚠️ Both hc.view.setFrameSize AND popover.contentSize MUST be set; one alone causes clipping.
+    /// ⚠️ Both hostCtrl.view.setFrameSize AND popover.contentSize MUST be set; one alone causes clipping.
     /// ⚠️ Do NOT call layoutSubtreeIfNeeded() synchronously after rootView swap — SwiftUI
     ///     defers layout to the next run-loop tick; the reading will return the OLD size.
     @MainActor
     private func navigate(to view: AnyView, fixedHeight: CGFloat?) {
-        guard let hc = hostingController, let pop = popover else {
+        guard let hostCtrl = hostingController, let pop = popover else {
             hostingController?.rootView = view
             return
         }
-        hc.rootView = view
+        hostCtrl.rootView = view
         guard popoverIsOpen else { return }
 
-        if let h = fixedHeight {
+        if let fixedH = fixedHeight {
             // Detail view: apply immediately — height is known, no layout pass needed.
-            applySize(NSSize(width: PopoverSize.width, height: min(h, PopoverSize.maxHeight)),
-                      hc: hc, pop: pop)
+            applySize(NSSize(width: PopoverSize.width, height: min(fixedH, PopoverSize.maxHeight)),
+                      hostCtrl: hostCtrl, pop: pop)
         } else {
             // Main view: defer one tick so SwiftUI can complete its layout pass,
             // then re-read the true fittingSize.
-            DispatchQueue.main.async { [weak self, weak hc, weak pop] in
-                guard let self, let hc, let pop, self.popoverIsOpen else { return }
-                hc.view.layoutSubtreeIfNeeded()
-                let fit = hc.view.fittingSize
-                let h = fit.height > 0 ? fit.height : PopoverSize.fallbackHeight
-                self.applySize(NSSize(width: PopoverSize.width, height: min(h, PopoverSize.maxHeight)),
-                               hc: hc, pop: pop)
+            DispatchQueue.main.async { [weak self, weak hostCtrl, weak pop] in
+                guard let self, let hostCtrl, let pop, self.popoverIsOpen else { return }
+                hostCtrl.view.layoutSubtreeIfNeeded()
+                let fittingH = hostCtrl.view.fittingSize.height
+                let clampedH = fittingH > 0 ? fittingH : PopoverSize.fallbackHeight
+                self.applySize(NSSize(width: PopoverSize.width, height: min(clampedH, PopoverSize.maxHeight)),
+                               hostCtrl: hostCtrl, pop: pop)
             }
         }
     }
 
     @MainActor
-    private func applySize(_ size: NSSize, hc: NSHostingController<AnyView>, pop: NSPopover) {
-        hc.view.setFrameSize(size)
+    private func applySize(_ size: NSSize, hostCtrl: NSHostingController<AnyView>, pop: NSPopover) {
+        hostCtrl.view.setFrameSize(size)
         pop.contentSize = size
     }
 
@@ -341,20 +341,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
         // Restore saved detail-nav state if the user re-opens while on a detail view.
-        if let saved = savedNavState, let (restored, h) = validatedView(for: saved) {
-            navigate(to: restored, fixedHeight: h)
+        if let saved = savedNavState, let (restored, savedH) = validatedView(for: saved) {
+            navigate(to: restored, fixedHeight: savedH)
             return
         }
         // Measure main view on next tick (SwiftUI needs one layout pass first).
         DispatchQueue.main.async { [weak self, weak hostingController, weak popover] in
-            guard let self, let hc = hostingController, let pop = popover,
+            guard let self, let hostCtrl = hostingController, let pop = popover,
                   self.popoverIsOpen else { return }
-            hc.view.layoutSubtreeIfNeeded()
-            let fit = hc.view.fittingSize
-            let h = fit.height > 0 ? fit.height : PopoverSize.fallbackHeight
+            hostCtrl.view.layoutSubtreeIfNeeded()
+            let fittingH = hostCtrl.view.fittingSize.height
+            let clampedH = fittingH > 0 ? fittingH : PopoverSize.fallbackHeight
             self.applySize(NSSize(width: PopoverSize.width,
-                                  height: min(h, PopoverSize.maxHeight)),
-                           hc: hc, pop: pop)
+                                  height: min(clampedH, PopoverSize.maxHeight)),
+                           hostCtrl: hostCtrl, pop: pop)
         }
     }
 }
