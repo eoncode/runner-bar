@@ -7,15 +7,16 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/s1ntoneli/AppUpdater",
-            .upToNextMajor(from: "2.0.0")
+            exact: "0.1.9"
+            // Pinned exact: prevents silent resolution that could break
+            // skipCodeSignValidation or rename state enum cases.
+            // Before bumping: check https://github.com/s1ntoneli/AppUpdater/releases
         )
     ],
     targets: [
         .executableTarget(
             name: "RunnerBar",
-            dependencies: [
-                .product(name: "AppUpdater", package: "AppUpdater")
-            ],
+            dependencies: ["AppUpdater"],
             path: "Sources/RunnerBar"
         )
     ]

@@ -5,16 +5,11 @@ VERSION=$(cat dist/version.txt)
 ASSET="runner-bar-${VERSION}.zip"
 
 # Preflight: fail fast with a clear message if the build artifact is missing.
-# A missing zip leads to a GitHub Release with no asset, breaking AppUpdater.
-if [ ! -f dist/RunnerBar.zip ]; then
-  echo "✗ dist/RunnerBar.zip not found — run build.sh first" >&2
+# build.sh produces the correctly-named zip directly — no mv step needed.
+if [ ! -f "dist/${ASSET}" ]; then
+  echo "✗ dist/${ASSET} not found — run build.sh first" >&2
   exit 1
 fi
-
-# Rename artifact — use mv to avoid leaving a stale dist/RunnerBar.zip
-# alongside the versioned asset between runs.
-echo "→ Renaming artifact for GitHub Releases..."
-mv dist/RunnerBar.zip "dist/${ASSET}"
 
 # GitHub Release — required for AppUpdater asset discovery (ref #345).
 # Use a create-or-upload pattern so CI retries and manual re-runs for the
