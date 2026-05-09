@@ -77,7 +77,8 @@ struct PopoverMainView: View {
         .onDisappear { systemStats.stop() }
         // Reset pagination when the action list is replaced by a fresh store poll.
         // Observes the full array (not just count) so a same-size refresh also resets.
-        .onChange(of: store.actions) { _, _ in visibleCount = 10 }
+        // onChange(of:perform:) used for macOS 13 compatibility — project min target is 13.0.
+        .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 }
 
