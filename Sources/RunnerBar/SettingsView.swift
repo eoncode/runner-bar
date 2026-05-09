@@ -481,8 +481,14 @@ struct SettingsView: View {
     }
 
     /// Reactive control for the Updates row, driven by AppUpdater.state.
-    /// The `default` branch intentionally catches `.checking` and any future
-    /// states added by the library — showing "Up to date" is the safe fallback.
+    ///
+    /// State mapping:
+    /// - `.none` → Check for updates button
+    /// - `.newVersionDetected` → version label (release.tagName already contains `v`)
+    /// - `.downloading` → progress bar
+    /// - `.downloaded` → Install & Relaunch button
+    /// - `.error` → red `Check failed` label + Retry button
+    /// - `.checking` and any future states → `Up to date` (safe fallback via `default`)
     @ViewBuilder
     private var updatesControl: some View {
         switch appUpdater.state {
@@ -492,7 +498,9 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.accentColor)
         case .newVersionDetected(let release, _):
-            Text("v\(release.tagName) available")
+            // release.tagName already includes the `v` prefix (e.g. "v0.7.0").
+            // Do NOT add another "v" prefix here — would produce "vv0.7.0".
+            Text("\(release.tagName) available")
                 .font(.caption)
                 .foregroundColor(.orange)
         case .downloading(_, _, let fraction):
@@ -502,6 +510,18 @@ struct SettingsView: View {
             Button("Install & Relaunch") { appUpdater.install() }
                 .font(.caption)
                 .buttonStyle(.bordered)
+        case .error:
+            // Network failure, rate-limit, or malformed response.
+            // Show a visible error so users know the check did not succeed.
+            HStack(spacing: 6) {
+                Text("Check failed")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                Button("Retry") { appUpdater.check() }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+            }
         default:
             // .checking and any future AppUpdater states fall through here.
             Text("Up to date")

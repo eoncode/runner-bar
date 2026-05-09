@@ -5,9 +5,11 @@ let package = Package(
     name: "RunnerBar",
     platforms: [.macOS(.v13)],
     dependencies: [
-        // 0.1.5 is the minimum version that introduced skipCodeSignValidation.
-        // 1.0.0 does not exist as a tag — do not bump without verifying tags first.
-        .package(url: "https://github.com/s1ntoneli/AppUpdater", from: "0.1.5")
+        // Pinned exact: prevents silent 0.2.x resolution that could break
+        // skipCodeSignValidation or rename state enum cases.
+        // Before bumping: check release notes at
+        // https://github.com/s1ntoneli/AppUpdater/releases
+        .package(url: "https://github.com/s1ntoneli/AppUpdater", exact: "0.1.9")
     ],
     targets: [
         .executableTarget(
