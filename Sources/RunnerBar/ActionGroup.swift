@@ -1,5 +1,5 @@
 import Foundation
-// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
+// swiftlint:disable opening_brace identifier_name orphaned_doc_comment
 
 // MARK: - GroupStatus
 
@@ -20,10 +20,15 @@ enum GroupStatus {
 /// Holds only the data needed for display and job fetching — deliberately
 /// minimal so the full job list lives on the parent ActionGroup instead.
 struct WorkflowRunRef: Identifiable {
+    /// Unique GitHub run identifier.
     let id: Int
-    let name: String         // workflow file name, e.g. "SonarQube", "vitest"
+    /// Workflow file name, e.g. "SonarQube", "vitest".
+    let name: String
+    /// Current run status: `queued`, `in_progress`, or `completed`.
     let status: String
+    /// Final outcome when status is `completed`.
     let conclusion: String?
+    /// URL to the run's page on github.com.
     let htmlUrl: String?
 }
 
@@ -369,4 +374,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment
+// swiftlint:enable opening_brace identifier_name orphaned_doc_comment

@@ -27,6 +27,7 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         guard line.contains("Runner.Worker") || line.contains("Runner.Listener") else { continue }
         // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND…
         let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+        // swiftlint:disable:next identifier_name
         guard parts.count > 3,
               let cpu = Double(parts[2]),
               let mem = Double(parts[3]) else { continue }
