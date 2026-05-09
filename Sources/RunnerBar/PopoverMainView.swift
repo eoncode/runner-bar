@@ -9,7 +9,8 @@ import SwiftUI
 // ❌ NEVER remove maxWidth: .infinity
 // ❌ NEVER add .frame(height:) or .frame(maxHeight:) anywhere inside the view body
 // ❌ NEVER wrap the actions list in a ScrollView — fittingSize cannot measure through it
-// The maxHeight cap lives ONLY in AppDelegate (PopoverSize.maxHeight), applied once before .show().
+//    The maxHeight cap lives ONLY in AppDelegate (PopoverSize.maxHeight), applied once before .show().
+// ❌ NEVER add expandedGroups toggle for in-progress groups — they are ALWAYS expanded per spec #296
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
@@ -25,8 +26,8 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
+    /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
     @State private var visibleCount: Int = 10
-    @State private var expandedGroups: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -51,7 +52,6 @@ struct PopoverMainView: View {
             ActionsListView(
                 actions: store.actions,
                 visibleCount: $visibleCount,
-                expandedGroups: $expandedGroups,
                 onSelectAction: onSelectAction
             )
         }
@@ -59,10 +59,6 @@ struct PopoverMainView: View {
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
-            let inProgressIDs = store.actions
-                .filter { $0.groupStatus == .inProgress }
-                .map { $0.id }
-            expandedGroups = Set(inProgressIDs)
         }
         .onDisappear { systemStats.stop() }
         .onChange(of: store.actions) { _ in visibleCount = 10 }
@@ -176,11 +172,12 @@ private struct PopoverHeaderView: View {
 
 /// Actions list with per-group expand/collapse and pagination (Phase 3–5 / #302 #304 #305).
 /// ❌ NO ScrollView — fittingSize cannot measure through a ScrollView.
-/// ❌ NO .frame(maxHeight:) — height cap lives only in AppDelegate.PopoverSize.maxHeight.
+/// ❌ NO .frame(maxHeight:) — height cap lives only in AppDelegate (maxHeight: 620).
+/// ⚠️ In-progress groups are ALWAYS expanded — no toggle per spec #296.
+///    Queued/completed groups are never expanded (no inline jobs for them).
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
-    @Binding var expandedGroups: Set<String>
     let onSelectAction: (ActionGroup) -> Void
 
     var body: some View {
@@ -193,14 +190,6 @@ private struct ActionsListView: View {
                 ForEach(actions.prefix(visibleCount)) { actionGroup in
                     ActionRowView(
                         actionGroup: actionGroup,
-                        isExpanded: expandedGroups.contains(actionGroup.id),
-                        onToggleExpand: {
-                            if expandedGroups.contains(actionGroup.id) {
-                                expandedGroups.remove(actionGroup.id)
-                            } else {
-                                expandedGroups.insert(actionGroup.id)
-                            }
-                        },
                         onSelect: { onSelectAction(actionGroup) }
                     )
                 }
@@ -228,13 +217,17 @@ private struct ActionsListView: View {
 
 // MARK: - ActionRowView
 
+/// Single action group row.
+/// ⚠️ In-progress groups: inline ↳ job rows are ALWAYS shown — no toggle.
+/// ⚠️ Do NOT guard on job.status == "in_progress" for inline rows — queued jobs
+///    at job-level still belong to an actively running workflow (#296).
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
-    let isExpanded: Bool
-    let onToggleExpand: () -> Void
     let onSelect: () -> Void
 
-    private var hasInlineJobs: Bool {
+    /// Inline jobs are shown when the group is in_progress and has jobs.
+    /// This is computed directly — no @State toggle — so it's always in sync with live data.
+    private var showInlineJobs: Bool {
         actionGroup.groupStatus == .inProgress && !actionGroup.jobs.isEmpty
     }
 
@@ -265,31 +258,25 @@ private struct ActionRowView: View {
                         Text(actionGroup.jobProgress)
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                             .frame(width: 28, alignment: .trailing)
+                        // ⚠️ width 80 required — "IN PROGRESS" is 11 chars in .caption.
+                        // width 60 causes line-wrap and double-height rows (#296).
                         Text(actionStatusLabel(for: actionGroup))
                             .font(.caption)
                             .foregroundColor(actionStatusColor(for: actionGroup))
                             .frame(width: 80, alignment: .trailing)
                             .lineLimit(1)
-                        if hasInlineJobs {
-                            Button(
-                                action: onToggleExpand,
-                                label: {
-                                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                        .font(.caption2).foregroundColor(.secondary)
-                                }
-                            )
-                            .buttonStyle(.plain)
-                        } else {
-                            Image(systemName: "chevron.right")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption2).foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 12).padding(.vertical, 3)
                 }
             )
             .buttonStyle(.plain)
 
-            if hasInlineJobs && isExpanded {
+            // ⚠️ Always shown when in_progress — no toggle needed.
+            // Includes queued jobs at job-level; they belong to the active run.
+            // Filter: exclude only jobs that have already concluded.
+            if showInlineJobs {
                 InlineJobsView(
                     jobs: actionGroup.jobs.filter { $0.conclusion == nil }
                 )
