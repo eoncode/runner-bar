@@ -3,30 +3,13 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - AddRunnerSheet
 
-/// Phase 3: Sheet view for onboarding a new self-hosted runner.
-///
-/// The user picks a scope (org or repo), names the runner, optionally sets
-/// labels, and taps Confirm. The sheet fetches a registration token via the
-/// GitHub API, then runs `./config.sh` in the runner install directory to
-/// complete registration. On success it dismisses itself and calls `onComplete`
-/// so the caller can re-scan and show the new runner.
-///
-/// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
-    /// Binding that controls sheet presentation; set to `false` to dismiss.
     @Binding var isPresented: Bool
-    /// Called when registration succeeds so the caller can re-scan runners.
     let onComplete: () -> Void
 
-    // MARK: Scope state
-
-    /// Scope type selection for the new runner: a specific repository or an organisation.
     enum ScopeType: String, CaseIterable, Identifiable {
-        /// Register the runner under a specific repository (owner/repo).
         case repo = "Repository"
-        /// Register the runner under an entire organisation.
         case org = "Organisation"
-        /// Stable identifier for `ForEach` — uses the raw string value.
         var id: String { rawValue }
     }
 
@@ -36,23 +19,14 @@ struct AddRunnerSheet: View {
     @State private var repos: [String] = []
     @State private var orgs: [String] = []
     @State private var isLoadingScopes = false
-
-    // MARK: Runner config state
-
     @State private var runnerName = ""
     @State private var labelsText = "self-hosted,macOS"
     @State private var installDir = (FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent("actions-runner").path)
-
-    // MARK: Registration state
-
     @State private var isRegistering = false
     @State private var errorMessage: String?
 
-    // MARK: - Body
-
-    /// The sheet's root view: scope picker, runner name/labels/dir fields, and Add/Cancel buttons.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner")
@@ -68,13 +42,13 @@ struct AddRunnerSheet: View {
             if isLoadingScopes {
                 HStack {
                     ProgressView().scaleEffect(0.7)
-                    Text("Loading…").font(.caption).foregroundColor(.secondary)
+                    Text("Loading\u{2026}").font(.caption).foregroundColor(.secondary)
                 }
             } else if scopeType == .repo {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Repository").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedRepo) {
-                        Text("— select —").tag("")
+                        Text("\u{2014} select \u{2014}").tag("")
                         ForEach(repos, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -87,7 +61,7 @@ struct AddRunnerSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Organisation").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedOrg) {
-                        Text("— select —").tag("")
+                        Text("\u{2014} select \u{2014}").tag("")
                         ForEach(orgs, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -133,7 +107,7 @@ struct AddRunnerSheet: View {
                     if isRegistering {
                         HStack(spacing: 6) {
                             ProgressView().scaleEffect(0.7)
-                            Text("Registering…")
+                            Text("Registering\u{2026}")
                         }
                     } else {
                         Text("Add Runner")
@@ -147,8 +121,6 @@ struct AddRunnerSheet: View {
         .frame(width: 400)
         .onAppear(perform: loadScopes)
     }
-
-    // MARK: - Helpers
 
     private var effectiveScope: String {
         scopeType == .repo ? selectedRepo : selectedOrg
@@ -184,26 +156,22 @@ struct AddRunnerSheet: View {
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
         let dir = installDir.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
-            // Security: validate that installDir resolves to a path inside the
-            // user's home directory before executing config.sh there.
-            // A freeform path like ~/../../usr/local/bin could otherwise cause
-            // an arbitrary executable to be launched with the user's privileges.
             let homeDir = FileManager.default.homeDirectoryForCurrentUser
-                .resolvingSymlinksInPath.path
+                .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
-                .resolvingSymlinksInPath.path
+                .resolvingSymlinksInPath().path
             guard resolvedDir.hasPrefix(homeDir) else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage = "Install directory must be inside your home folder (~/…)."
+                    errorMessage = "Install directory must be inside your home folder (~/\u{2026})."
                 }
                 return
             }
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage = "Failed to fetch registration token. " +
-                        "Ensure `gh auth login` has been run or GH_TOKEN is set."
+                    errorMessage = "Failed to fetch registration token. "
+                        + "Ensure `gh auth login` has been run or GH_TOKEN is set."
                 }
                 return
             }
@@ -228,19 +196,13 @@ struct AddRunnerSheet: View {
                     isPresented = false
                     onComplete()
                 } else {
-                    errorMessage = "config.sh failed (exit \(exitCode)). " +
-                        "Check that the token is valid and config.sh is executable."
+                    errorMessage = "config.sh failed (exit \(exitCode)). "
+                        + "Check that the token is valid and config.sh is executable."
                 }
             }
         }
     }
 
-    /// Runs `config.sh` via `Process.arguments` so token/name/url are never
-    /// shell-interpolated. Arguments are passed as discrete array entries.
-    ///
-    /// ⚠️ Blocking — must only be called from a background thread.
-    ///
-    /// Returns the process exit code (0 = success).
     private func runRegistrationCommand(
         dir: String,
         ghURL: String,
@@ -267,7 +229,7 @@ struct AddRunnerSheet: View {
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            log("runRegistrationCommand › launch error: \(error)")
+            log("runRegistrationCommand \u{203A} launch error: \(error)")
             return 1
         }
         let timeoutItem = DispatchWorkItem { task.terminate() }
@@ -278,7 +240,7 @@ struct AddRunnerSheet: View {
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
         if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
         let output = String(data: outputData, encoding: .utf8) ?? ""
-        log("runRegistrationCommand › exit=\(task.terminationStatus): \(output.prefix(120))")
+        log("runRegistrationCommand \u{203A} exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus
     }
 }

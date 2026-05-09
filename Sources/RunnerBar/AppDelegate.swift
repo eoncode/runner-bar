@@ -12,43 +12,29 @@ import SwiftUI
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 340) from PopoverMainView
 
-/// Navigation state machine for the popover's view hierarchy.
 private enum NavState {
-    /// Root level: PopoverMainView.
     case main
-    /// Jobs path level 2: step list for a job.
     case jobDetail(ActiveJob)
-    /// Jobs path level 3: log output for a step.
     case stepLog(ActiveJob, JobStep)
-    /// Actions path level 2a: job list for a commit/PR group.
     case actionDetail(ActionGroup)
-    /// Actions path level 3a: step list for a job reached via an action group.
     case actionJobDetail(ActiveJob, ActionGroup)
-    /// Actions path level 4a: log output for a step reached via an action group.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
-    /// Settings view.
     case settings
 }
 
 // MARK: - AppDelegate
 
-/// Application delegate. Owns the status-bar item, NSPopover, and navigation state.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var hostingController: NSHostingController<AnyView>?
-    private let observable = RunnerStoreObservable()
+    @MainActor private lazy var observable = RunnerStoreObservable()
     private var savedNavState: NavState?
-
-    // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
-
-    /// Fixed popover width matching PopoverMainView's .frame(idealWidth: 340).
     private static let fixedWidth: CGFloat = 340
 
     // MARK: - App lifecycle
 
-    /// Bootstraps the status-bar item, hosting controller, and popover at launch.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -72,15 +58,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             self.statusItem?.button?.image = makeStatusIcon(
                 for: RunnerStore.shared.aggregateStatus
             )
-            if !self.popoverIsOpen { self.observable.reload() }
+            if !self.popoverIsOpen {
+                DispatchQueue.main.async { self.observable.reload() }
+            }
         }
         RunnerStore.shared.start()
     }
 
     // MARK: - NSPopoverDelegate
 
-    /// Resets navigation state after the popover closes.
-    /// ❌ NEVER call reload() here.
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
@@ -91,7 +77,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - View factories
 
-    /// Re-fetches step data for `job` if steps are missing or stale.
     private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
@@ -103,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    /// Navigation level 1: runner status + jobs + actions.
+    @MainActor
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -130,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 2a: flat job list for a commit/PR group.
+    @MainActor
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
         return AnyView(ActionDetailView(
@@ -152,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 3a: JobDetailView reached via an ActionGroup.
+    @MainActor
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
         return AnyView(JobDetailView(
@@ -168,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 4a: StepLogView reached via an ActionGroup.
+    @MainActor
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -181,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 2: step list for a job (Jobs path).
+    @MainActor
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         return AnyView(JobDetailView(
@@ -197,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Settings view.
+    @MainActor
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
@@ -209,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 3: log output for a step (Jobs path).
+    @MainActor
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -222,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Returns a refreshed view for `state` using live RunnerStore data, or `nil` if stale.
+    @MainActor
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -253,14 +238,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller's root view. ZERO size changes. Forever.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
 
     // MARK: - Popover show/hide
 
-    /// Toggles the popover open or closed.
     @objc private func togglePopover() {
         guard let popover else { return }
         if popover.isShown {
@@ -270,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover. The ONE safe site for sizing.
+    @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,

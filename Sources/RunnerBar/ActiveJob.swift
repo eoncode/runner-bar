@@ -4,31 +4,17 @@ import Foundation
 
 /// Represents a single GitHub Actions job that is live or recently completed.
 struct ActiveJob: Identifiable, Codable, Equatable {
-    /// GitHub-assigned job identifier.
     let id: Int
-    /// Display name of the job.
     let name: String
-    /// Current lifecycle status (`queued`, `in_progress`, `completed`).
     let status: String
-    /// Final outcome once the job finishes (`success`, `failure`, `cancelled`, etc.).
     let conclusion: String?
-    /// When the job runner picked up the job.
     let startedAt: Date?
-    /// When the job was added to the queue.
     let createdAt: Date?
-    /// When the job finished.
     let completedAt: Date?
-    /// Deep-link URL on github.com for this job.
     let htmlUrl: String?
-    /// `true` when the job is shown as a dimmed historical entry.
     let isDimmed: Bool
-    /// Ordered list of steps within this job.
     let steps: [JobStep]
 
-    /// Human-readable elapsed time string.
-    /// Queued jobs always show "00:00".
-    /// Completed jobs return "--:--" when timestamps are unavailable.
-    /// Live jobs fall back to createdAt while startedAt may not yet be set.
     var elapsed: String {
         guard status != "queued" else { return "00:00" }
         if conclusion != nil {
@@ -48,17 +34,6 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         return String(format: "%02d:%02d", m, s)
     }
 
-    // MARK: - Progress fraction (model layer — keeps view bodies clean)
-
-    /// Completion fraction 0.0–1.0 based on concluded steps, or `nil` (indeterminate)
-    /// when status is queued or no step data is available.
-    ///
-    /// - `nil`   → indeterminate (queued / no steps loaded yet) — renders a centre dot
-    /// - `1.0`   → all steps concluded
-    /// - `0..<1` → partial (concludedSteps / totalSteps)
-    ///
-    /// Consumed by `PieProgressView(progress: job.progressFraction, ...)` in
-    /// `InlineJobRowView` — mirrors `ActionGroup.progressFraction` at the group level.
     var progressFraction: Double? {
         switch status {
         case "queued": return nil
@@ -73,22 +48,14 @@ struct ActiveJob: Identifiable, Codable, Equatable {
 
 // MARK: - JobStep
 
-/// A single step within an `ActiveJob`, matching the GitHub API `steps` array.
 struct JobStep: Identifiable, Codable, Equatable {
-    /// Step sequence number (1-based).
     let id: Int
-    /// Display name of the step.
     let name: String
-    /// Lifecycle status of the step.
     let status: String
-    /// Conclusion of the step once finished.
     let conclusion: String?
-    /// When this step started.
     let startedAt: Date?
-    /// When this step finished.
     let completedAt: Date?
 
-    /// SF Symbol or emoji icon representing the step's conclusion.
     var conclusionIcon: String {
         switch conclusion {
         case "success": return "✓"
@@ -99,7 +66,6 @@ struct JobStep: Identifiable, Codable, Equatable {
         }
     }
 
-    /// Human-readable elapsed time for this step.
     var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
@@ -120,7 +86,7 @@ struct JobStep: Identifiable, Codable, Equatable {
 
 // MARK: - JobPayload (API decoding)
 
-/// Raw API shape for a single job returned by `GET /repos/{owner}/{repo}/actions/jobs/{job_id}`.
+/// Raw API shape for a single job — Decodable only (no Encodable needed).
 struct JobPayload: Decodable {
     let id: Int
     let name: String
@@ -143,9 +109,7 @@ struct JobPayload: Decodable {
 
 // MARK: - ActiveJob factory
 
-/// RunnerStore extension providing the `ActiveJob` factory method.
 extension RunnerStore {
-    /// Builds an `ActiveJob` from a decoded `JobPayload`.
     func makeActiveJob(
         from payload: JobPayload,
         iso: ISO8601DateFormatter,
@@ -168,5 +132,5 @@ extension RunnerStore {
 
 // MARK: - Codable helpers
 
-/// Shared response wrapper used by ActionGroup.swift and RunnerStoreState.swift.
-struct JobsResponse: Codable { let jobs: [JobPayload] }
+/// Shared response wrapper — Decodable only (JobPayload is not Encodable).
+struct JobsResponse: Decodable { let jobs: [JobPayload] }

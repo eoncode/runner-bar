@@ -7,26 +7,16 @@ import SwiftUI
 // Log MUST be inside ScrollView. Header MUST be outside ScrollView.
 // ❌ NEVER add .idealWidth, .frame(height:), .fixedSize(), or resize here.
 
-/// Shows the raw log text for a single `JobStep`.
-///
-/// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
-/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background thread.
 struct StepLogView: View {
-    /// The job that owns this step.
     let job: ActiveJob
-    /// The step whose log will be displayed.
     let step: JobStep
-    /// Called when the user taps the back button.
     let onBack: () -> Void
 
-    /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
     @State private var logText: String?
-    /// True while the background fetch is in-flight.
     @State private var isLoading = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header — always visible, OUTSIDE ScrollView
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -61,7 +51,6 @@ struct StepLogView: View {
                 .padding(.bottom, 6)
             Divider()
 
-            // ── Log — INSIDE ScrollView
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -90,14 +79,12 @@ struct StepLogView: View {
         .onAppear { loadLog() }
     }
 
-    // MARK: - Log loading
-
     private func loadLog() {
         isLoading = true
         let jobID = job.id
         let stepNum = step.id
         let scope: String = {
-            let parts = job.htmlUrl.components(separatedBy: "/")
+            let parts = job.htmlUrl?.components(separatedBy: "/") ?? []
             if parts.count >= 5 {
                 let owner = parts[3]
                 let repo = parts[4]
