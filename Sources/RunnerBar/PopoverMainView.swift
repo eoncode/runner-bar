@@ -82,6 +82,39 @@ struct PopoverMainView: View {
     }
 }
 
+// MARK: - MiniBarView
+
+/// A fixed-size inline progress bar used in stat chips.
+/// Replaces the Unicode block-character approach which rendered as boxes on some
+/// macOS system fonts. Draws a track + filled rectangle in native SwiftUI.
+private struct MiniBarView: View {
+    /// Fill fraction 0.0–1.0.
+    let fraction: Double
+    /// Width of the bar in points.
+    var width: CGFloat = 22
+    /// Height of the bar in points.
+    var height: CGFloat = 6
+
+    private var clampedFraction: Double { max(0, min(1, fraction)) }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.primary.opacity(0.12))
+                .frame(width: width, height: height)
+            RoundedRectangle(cornerRadius: 1)
+                .fill(barColor)
+                .frame(width: CGFloat(clampedFraction) * width, height: height)
+        }
+    }
+
+    private var barColor: Color {
+        if clampedFraction > 0.85 { return .red }
+        if clampedFraction > 0.60 { return .yellow }
+        return .green
+    }
+}
+
 // MARK: - PopoverHeaderView
 
 /// Header row: system stats + auth indicator + gear + close (Phase 2 / #299).
@@ -94,20 +127,20 @@ private struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             statChip(
                 label: "CPU",
-                bar: blockBar(pct: systemStats.stats.cpuPct),
+                fraction: systemStats.stats.cpuPct / 100,
                 value: String(format: "%.1f%%", systemStats.stats.cpuPct)
             )
             statChip(
                 label: "MEM",
-                bar: blockBar(pct: systemStats.stats.memTotalGB > 0
-                    ? (systemStats.stats.memUsedGB / systemStats.stats.memTotalGB) * 100 : 0),
+                fraction: systemStats.stats.memTotalGB > 0
+                    ? systemStats.stats.memUsedGB / systemStats.stats.memTotalGB : 0,
                 value: String(format: "%.1f/%.0fGB",
                               systemStats.stats.memUsedGB, systemStats.stats.memTotalGB)
             )
             statChip(
                 label: "DISK",
-                bar: blockBar(pct: systemStats.stats.diskTotalGB > 0
-                    ? (systemStats.stats.diskUsedGB / systemStats.stats.diskTotalGB) * 100 : 0),
+                fraction: systemStats.stats.diskTotalGB > 0
+                    ? systemStats.stats.diskUsedGB / systemStats.stats.diskTotalGB : 0,
                 value: String(format: "%.0f/%.0fGB",
                               systemStats.stats.diskUsedGB, systemStats.stats.diskTotalGB)
             )
@@ -151,21 +184,14 @@ private struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
-    /// Renders a single stat chip: label + block-bar + value in a monospaced font.
-    /// ⚠️ Font must be .monospacedDigit() — block characters vary in proportional fonts.
+    /// Renders a single stat chip: label + native bar + value.
     @ViewBuilder
-    private func statChip(label: String, bar: String, value: String) -> some View {
-        HStack(spacing: 2) {
+    private func statChip(label: String, fraction: Double, value: String) -> some View {
+        HStack(spacing: 4) {
             Text(label).font(.caption2).foregroundColor(.secondary)
-            Text("\(bar) \(value)").font(.caption2.monospacedDigit()).foregroundColor(.primary)
+            MiniBarView(fraction: fraction)
+            Text(value).font(.caption2.monospacedDigit()).foregroundColor(.primary)
         }
-    }
-
-    /// 3-character Unicode block bar scaled to `pct` (0–100).
-    /// ⚠️ Use only in monospaced-font contexts.
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let filled = max(0, min(width, Int((pct / 100.0 * Double(width)).rounded())))
-        return String(repeating: "█", count: filled) + String(repeating: "░", count: width - filled)
     }
 }
 
