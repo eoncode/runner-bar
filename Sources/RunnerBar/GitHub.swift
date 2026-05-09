@@ -215,8 +215,6 @@ private struct RunnersResponse: Codable {
 // MARK: - User orgs and repos (Phase 3)
 
 /// Returns the login names of all organisations the authenticated user belongs to.
-/// Calls `GET /user/orgs` and follows Link rel=next pagination to return all orgs.
-/// Returns an empty array on error or if unauthenticated.
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
@@ -224,10 +222,7 @@ func fetchUserOrgs() -> [String] {
     return orgs.map(\.login)
 }
 
-/// Returns `owner/repo` strings for the authenticated user's repositories,
-/// sorted by most recently updated. Calls `GET /user/repos?sort=updated`
-/// and follows Link rel=next pagination to return all repos.
-/// Returns an empty array on error or if unauthenticated.
+/// Returns `owner/repo` strings for the authenticated user's repositories.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
     struct Repo: Decodable {
@@ -241,11 +236,6 @@ func fetchUserRepos() -> [String] {
 // MARK: - Registration token (Phase 3)
 
 /// Fetches a runner registration token for the given scope.
-/// - For repo-scoped runners: `POST /repos/{owner}/{repo}/actions/runners/registration-token`
-/// - For org-scoped runners:  `POST /orgs/{org}/actions/runners/registration-token`
-///
-/// Returns the `token` string on success, `nil` on API error or missing auth.
-///
 /// ⚠️ Blocking — must only be called from a background thread.
 func fetchRegistrationToken(scope: String) -> String? {
     let endpoint: String
@@ -411,4 +401,3 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
-// swiftlint:enable file_length
