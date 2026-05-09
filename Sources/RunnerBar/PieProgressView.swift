@@ -11,6 +11,10 @@ import SwiftUI
 /// - `progress >= 1.0`       → solid filled circle (●), no outline ring
 ///
 /// Used in action rows (size: 8) and inline ↳ child job rows (size: 7).
+///
+/// ⚠️ REGRESSION GUARD — GeometryReader must be .frame(width: size, height: size).
+/// Without the explicit frame, GeometryReader expands to fill parent and the
+/// center/radius calculation produces an oversized wedge (#296 regression).
 struct PieProgressView: View {
     /// Completion fraction from 0.0 to 1.0, or `nil` for an indeterminate state.
     /// Use `nil` for queued / no-step-data states — semantically cleaner than `0.5`.
@@ -31,7 +35,9 @@ struct PieProgressView: View {
                     Circle()
                         .stroke(color.opacity(0.25), lineWidth: size * 0.25)
                     if progress > 0 {
-                        // Filled pie wedge via Path (fix #5 / #314)
+                        // ⚠️ GeometryReader MUST be .frame(width: size, height: size).
+                        // Without it, GeometryReader fills the parent ZStack and the
+                        // center/radius values are wrong (too large), breaking the wedge.
                         GeometryReader { geo in
                             let radius = geo.size.width / 2
                             let center = CGPoint(x: radius, y: radius)
@@ -50,6 +56,7 @@ struct PieProgressView: View {
                             }
                             .fill(color)
                         }
+                        .frame(width: size, height: size)
                     }
                 }
             } else {

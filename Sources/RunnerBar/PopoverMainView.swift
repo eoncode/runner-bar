@@ -260,10 +260,13 @@ private struct ActionRowView: View {
     let onToggleExpand: () -> Void
     let onSelect: () -> Void
 
-    /// ⚠️ Gap 2 fix (#323 / #304): only in_progress jobs qualify — queued jobs are excluded.
+    /// True when this group is in_progress — inline ↳ rows are shown regardless of
+    /// whether individual jobs have reached in_progress yet (they may still be queued
+    /// at the job level while the run-level status is already in_progress).
+    /// ⚠️ Do NOT guard on job.status == "in_progress" here — that hides jobs that are
+    /// queued at job level but belong to an actively running workflow (#296 regression).
     private var hasInlineJobs: Bool {
-        actionGroup.groupStatus == .inProgress &&
-            actionGroup.jobs.contains { $0.status == "in_progress" }
+        actionGroup.groupStatus == .inProgress && !actionGroup.jobs.isEmpty
     }
 
     var body: some View {
@@ -293,10 +296,13 @@ private struct ActionRowView: View {
                         Text(actionGroup.jobProgress)
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                             .frame(width: 28, alignment: .trailing)
+                        // ⚠️ width 80 required — "IN PROGRESS" is 11 chars in .caption.
+                        // width 60 causes line-wrap and double-height rows (#296).
                         Text(actionStatusLabel(for: actionGroup))
                             .font(.caption)
                             .foregroundColor(actionStatusColor(for: actionGroup))
-                            .frame(width: 60, alignment: .trailing)
+                            .frame(width: 80, alignment: .trailing)
+                            .lineLimit(1)
                         if hasInlineJobs {
                             Button(
                                 action: onToggleExpand,
@@ -317,8 +323,12 @@ private struct ActionRowView: View {
             .buttonStyle(.plain)
 
             if hasInlineJobs && isExpanded {
-                // ⚠️ Gap 2 fix (#323 / #304): pass only in_progress jobs to InlineJobsView.
-                InlineJobsView(jobs: actionGroup.jobs.filter { $0.status == "in_progress" })
+                // Show all jobs belonging to the in_progress group.
+                // Includes queued jobs — they are part of the active run even if not
+                // yet running at job level. Pre-filter to exclude concluded jobs only.
+                InlineJobsView(
+                    jobs: actionGroup.jobs.filter { $0.conclusion == nil }
+                )
             }
         }
     }
@@ -362,7 +372,7 @@ private struct ActionRowView: View {
 // MARK: - InlineJobsView
 
 /// Container for inline ↳ job sub-rows under a single action group (Phase 4 / #304).
-/// ⚠️ Receives only in_progress jobs — caller is responsible for pre-filtering.
+/// ⚠️ Receives non-concluded jobs — caller filters out jobs with conclusion != nil.
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
     @State private var cap: Int = 4
@@ -444,6 +454,8 @@ private struct InlineJobRowView: View {
 // MARK: - RunnersListView
 
 /// Conditional runners sub-section — only shown when ≥1 Runner is busy (Phase 6 / #307).
+/// Renders a top Divider when active (separates from header) and a bottom Divider
+/// (separates from actions list below).
 private struct RunnersListView: View {
     let runners: [Runner]
 
@@ -451,7 +463,6 @@ private struct RunnersListView: View {
 
     var body: some View {
         if !activeRunners.isEmpty {
-            Divider()
             ForEach(activeRunners, id: \.id) { runner in
                 HStack(spacing: 6) {
                     Circle().fill(Color.yellow).frame(width: 7, height: 7)
@@ -472,7 +483,7 @@ private struct RunnersListView: View {
                 }
                 .padding(.horizontal, 12).padding(.vertical, 3)
             }
-            .padding(.bottom, 6)
+            Divider()
         }
     }
 }

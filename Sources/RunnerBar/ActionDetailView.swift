@@ -136,9 +136,14 @@ struct ActionDetailView: View {
                         ForEach(group.jobs) { job in
                             Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(jobDotColor(for: job))
-                                        .frame(width: 7, height: 7)
+                                    // ⚠️ PieProgressView — not plain Circle().
+                                    // Plain Circle() was replaced to match the spec (#296 / #178)
+                                    // and be consistent with the main popover row dots.
+                                    PieProgressView(
+                                        progress: job.progressFraction,
+                                        color: jobDotColor(for: job),
+                                        size: 7
+                                    )
                                     Text(job.name)
                                         .font(.system(size: 12))
                                         .foregroundColor(job.isDimmed ? .secondary : .primary)
@@ -190,9 +195,16 @@ struct ActionDetailView: View {
 
     // MARK: - Job row helpers
 
+    /// Dot color for a job row in ActionDetailView.
+    /// Uses PieProgressView so color must match the same semantics as the main popover.
     private func jobDotColor(for job: ActiveJob) -> Color {
-        if job.isDimmed { return .secondary }
-        return job.status == "in_progress" ? .yellow : .gray
+        switch job.status {
+        case "in_progress": return .yellow
+        case "queued":      return .blue
+        default:
+            if job.isDimmed { return .gray }
+            return job.conclusion == "success" ? .green : .red
+        }
     }
 
     private func jobStatusLabel(for job: ActiveJob) -> String {
