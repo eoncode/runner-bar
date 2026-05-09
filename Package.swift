@@ -5,7 +5,10 @@ let package = Package(
     name: "RunnerBar",
     platforms: [.macOS(.v13)],
     dependencies: [
-        .package(url: "https://github.com/s1ntoneli/AppUpdater", from: "1.0.0")
+        .package(
+            url: "https://github.com/s1ntoneli/AppUpdater",
+            .upToNextMajor(from: "2.0.0")
+        )
     ],
     targets: [
         .executableTarget(

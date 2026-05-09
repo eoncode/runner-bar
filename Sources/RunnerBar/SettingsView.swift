@@ -25,7 +25,7 @@ import SwiftUI
 /// live GitHub API status (online/offline/busy) after each local scan.
 ///
 /// Phase 5 (issue #345): `aboutSection` gains an update row backed by
-/// `AppUpdaterService`, showing download progress and an install button.
+/// `AppUpdaterService`. States: idle → checking → ready-to-install.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -38,6 +38,7 @@ struct SettingsView: View {
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
     /// Drives the update row in aboutSection (Phase 5 — ref #345).
+    /// Observes both `updater.downloadedAppBundle` and `isChecking`.
     @ObservedObject private var updaterService = AppUpdaterService.shared
 
     @State private var newScope = ""
@@ -473,49 +474,45 @@ struct SettingsView: View {
         }
     }
 
-    /// Update status row. Observes `AppUpdaterService.shared.updater.state`.
-    /// States: none (idle + manual check button), downloading (progress bar),
-    /// downloaded (install button). All other states render nothing.
+    /// Update status row driven by AppUpdater v2's `downloadedAppBundle` optional.
+    ///
+    /// States:
+    /// - `isChecking == true`  → spinner + "Checking…"
+    /// - `downloadedAppBundle != nil` → "Install & Relaunch" button
+    /// - idle → "Check now" button
+    ///
+    /// AppUpdater v2 has no `.state` enum; progress is not exposed externally.
+    /// The download happens internally and surfaces only via `downloadedAppBundle`.
     @ViewBuilder
     private var updateRow: some View {
-        switch updaterService.updater.state {
-        case .none:
-            HStack {
-                Text("Updates").font(.system(size: 12))
-                Spacer()
-                Button("Check now") { updaterService.updater.check() }
-                    .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 2)
-
-        case .downloading(let release, _, let fraction):
-            HStack {
-                Text("Downloading v\(release.tagName.description)…")
-                    .font(.system(size: 12))
-                Spacer()
-                ProgressView(value: fraction)
-                    .frame(width: 80)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 2)
-
-        case .downloaded(let release, _, let bundle):
-            HStack {
-                Text("v\(release.tagName.description) ready")
-                    .font(.system(size: 12))
-                Spacer()
+        HStack {
+            Text("Updates").font(.system(size: 12))
+            Spacer()
+            if updaterService.isChecking {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 14, height: 14)
+                    Text("Checking…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else if let bundle = updaterService.updater.downloadedAppBundle {
                 Button("Install & Relaunch") {
                     updaterService.updater.install(bundle)
                 }
                 .font(.caption)
                 .buttonStyle(.bordered)
+            } else {
+                Button("Check now") {
+                    updaterService.checkForUpdates()
+                }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12).padding(.vertical, 2)
-
-        default:
-            EmptyView()
         }
+        .padding(.horizontal, 12).padding(.vertical, 2)
     }
 
     // MARK: - Helpers
