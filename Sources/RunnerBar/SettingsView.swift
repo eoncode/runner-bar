@@ -522,12 +522,12 @@ struct SettingsView: View {
     // MARK: Phase 6 — OAuth sign-in / sign-out
 
     /// Starts the native OAuth flow. Shows a spinner while the browser round-trip is in flight.
-    /// Registers a one-shot completion via `OAuthService.setCompletion(_:)` — uses `[weak self]`
-    /// to avoid a retain cycle, with a nil-guard so stale closures are safe.
+    /// Registers a one-shot completion via `OAuthService.setCompletion(_:)`.
+    /// SettingsView is a struct (value type) — capture list uses direct capture;
+    /// no [weak self] needed or valid here.
     private func signInWithGitHub() {
         isSigningIn = true
-        OAuthService.shared.setCompletion { [weak self] success in
-            guard let self else { return }
+        OAuthService.shared.setCompletion { success in
             isSigningIn = false
             isAuthenticated = success
             if success { store.reload() }
