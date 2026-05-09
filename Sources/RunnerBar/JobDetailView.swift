@@ -43,7 +43,7 @@ struct JobDetailView: View {
                         let jobID = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         if scopeStr.isEmpty {
-                            log("ReRunButton › could not derive scope from htmlUrl: \(job.htmlUrl)")
+                            log("ReRunButton › could not derive scope from htmlUrl: \(job.htmlUrl ?? "nil")")
                         }
                         DispatchQueue.global(qos: .userInitiated).async {
                             let isOk = scopeStr.contains("/")
@@ -58,7 +58,7 @@ struct JobDetailView: View {
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         let runID = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
-                            log("CancelButton › could not derive scope/runID from htmlUrl: \(job.htmlUrl)")
+                            log("CancelButton › could not derive scope/runID from htmlUrl: \(job.htmlUrl ?? "nil")")
                             completion(false)
                             return
                         }

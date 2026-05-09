@@ -24,7 +24,10 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+// @unchecked Sendable: AppDelegate manages its own thread safety via @MainActor
+// isolation and weak captures. The compiler cannot verify this statically because
+// NSObject subclasses are not Sendable by default.
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @unchecked Sendable {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var hostingController: NSHostingController<AnyView>?

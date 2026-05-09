@@ -15,7 +15,11 @@ import Foundation
 /// same background thread to enrich each runner with live GitHub API status
 /// (online/offline/busy). Enrichment is skipped silently when no GitHub token
 /// is present, preserving Phase 1 behaviour for unauthenticated users.
-final class LocalRunnerStore: ObservableObject {
+///
+/// `@unchecked Sendable`: background dispatch uses a dedicated serial queue and
+/// all `@Published` mutations hop back to the main queue, satisfying thread safety
+/// manually. The compiler cannot verify this for `ObservableObject` subclasses.
+final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     // MARK: Shared singleton
 
     static let shared = LocalRunnerStore()
