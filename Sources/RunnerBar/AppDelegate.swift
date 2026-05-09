@@ -40,14 +40,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
-    /// Retained AppUpdater instance — checks GitHub Releases every 24 h.
-    private var appUpdater: AppUpdater?
 
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
 
     /// Fixed popover width matching PopoverMainView's .frame(idealWidth: 340).
     private static let fixedWidth: CGFloat = 340
+
+    /// Auto-updater — polls GitHub Releases every 24 h via NSBackgroundActivityScheduler.
+    /// lazy var ensures it is always non-nil without a force-unwrap at the call site.
+    /// skipCodeSignValidation required: RunnerBar uses ad-hoc signing (codesign --sign -).
+    private lazy var appUpdater: AppUpdater = {
+        let updater = AppUpdater(owner: "eonist", repo: "runner-bar")
+        updater.skipCodeSignValidation = true
+        return updater
+    }()
 
     // MARK: - App lifecycle
 
@@ -79,11 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         RunnerStore.shared.start()
 
-        // Auto-update: checks GitHub Releases on launch and every 24 h.
-        // skipCodeSignValidation required — RunnerBar uses ad-hoc signing (codesign --sign -).
-        let updater = AppUpdater(owner: "eonist", repo: "runner-bar")
-        updater.skipCodeSignValidation = true
-        appUpdater = updater
+        // Fire an immediate check so users see current update status the first
+        // time they open Settings, without waiting for the 24 h scheduler.
+        appUpdater.check()
     }
 
     // MARK: - NSPopoverDelegate
@@ -206,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Settings view — receives the AppUpdater instance for the Updates row.
+    /// Settings view — receives the shared AppUpdater instance for the Updates row.
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
@@ -215,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.navigate(to: self.mainView())
             },
             store: observable,
-            appUpdater: appUpdater!
+            appUpdater: appUpdater
         ))
     }
 

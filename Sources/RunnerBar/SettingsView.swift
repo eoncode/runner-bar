@@ -445,7 +445,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Phase 5 — About + Updates
+    // MARK: - About + Updates
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -481,6 +481,8 @@ struct SettingsView: View {
     }
 
     /// Reactive control for the Updates row, driven by AppUpdater.state.
+    /// The `default` branch intentionally catches `.checking` and any future
+    /// states added by the library — showing "Up to date" is the safe fallback.
     @ViewBuilder
     private var updatesControl: some View {
         switch appUpdater.state {
@@ -501,6 +503,7 @@ struct SettingsView: View {
                 .font(.caption)
                 .buttonStyle(.bordered)
         default:
+            // .checking and any future AppUpdater states fall through here.
             Text("Up to date")
                 .font(.caption)
                 .foregroundColor(.secondary)
