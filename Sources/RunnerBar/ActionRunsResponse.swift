@@ -32,7 +32,7 @@ struct RunPayload: Codable {
     let createdAt: String?
     /// ISO 8601 timestamp of the most recent update.
     let updatedAt: String?
-    /// URL to the run's page on github.com.
+    /// URL to the run’s page on github.com.
     let htmlUrl: String?
     /// The head commit metadata, if available.
     let headCommit: HeadCommit?
@@ -56,15 +56,15 @@ struct RunPayload: Codable {
 // MARK: - HeadCommit / PRRef
 
 /// Minimal head-commit payload — only the commit message is needed.
-struct HeadCommit: Codable { 
+struct HeadCommit: Codable {
     /// The full commit message.
-    let message: String 
+    let message: String
 }
 
 /// Minimal pull-request reference — only the PR number is needed.
-struct PRRef: Codable { 
+struct PRRef: Codable {
     /// The pull request number.
-    let number: Int 
+    let number: Int
 }
 
 // MARK: - PR label
