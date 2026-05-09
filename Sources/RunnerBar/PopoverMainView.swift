@@ -127,26 +127,20 @@ private struct PopoverHeaderView: View {
                 .buttonStyle(.plain)
                 .help("Not authenticated — open Settings to add a GitHub token")
             }
-            Button(
-                action: onSelectSettings,
-                label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                }
-            )
+            Button(action: onSelectSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
             .buttonStyle(.plain)
             .help("Settings")
             // ⚠️ hide() is intentional for a menu-bar app — keeps the process alive.
             // terminate(nil) would quit the app; hide(nil) just closes the popover.
-            Button(
-                action: { NSApplication.shared.hide(nil) },
-                label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-            )
+            Button(action: { NSApplication.shared.hide(nil) }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
             .buttonStyle(.plain)
             .help("Close popover")
         }
@@ -213,13 +207,10 @@ private struct ActionsListView: View {
                     }
                     // Phase 5 (#305): pagination footer
                     if actions.count > visibleCount {
-                        Button(
-                            action: { visibleCount += 10 },
-                            label: {
-                                Text("Load 10 more actions…")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                        )
+                        Button(action: { visibleCount += 10 }) {
+                            Text("Load 10 more actions…")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
                         .buttonStyle(.plain)
                         .padding(.horizontal, 12).padding(.vertical, 6)
                     } else if visibleCount > 10 {
@@ -258,9 +249,10 @@ private struct ActionRowView: View {
             actionGroup.jobs.contains { $0.status == "in_progress" }
     }
 
+    // swiftlint:disable:next function_body_length
     var body: some View {
         VStack(spacing: 0) {
-            Button(action: onSelect, label: {
+            Button(action: onSelect) {
                 HStack(spacing: 6) {
                     // Uses ActionGroup.progressFraction (model layer) — nil = indeterminate dot.
                     PieProgressView(
@@ -289,13 +281,10 @@ private struct ActionRowView: View {
                         .foregroundColor(actionStatusColor(for: actionGroup))
                         .frame(width: 60, alignment: .trailing)
                     if hasInlineJobs {
-                        Button(
-                            action: onToggleExpand,
-                            label: {
-                                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                    .font(.caption2).foregroundColor(.secondary)
-                            }
-                        )
+                        Button(action: onToggleExpand) {
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .font(.caption2).foregroundColor(.secondary)
+                        }
                         .buttonStyle(.plain)
                     } else {
                         Image(systemName: "chevron.right")
@@ -303,7 +292,7 @@ private struct ActionRowView: View {
                     }
                 }
                 .padding(.horizontal, 12).padding(.vertical, 3)
-            })
+            }
             .buttonStyle(.plain)
 
             if hasInlineJobs && isExpanded {
