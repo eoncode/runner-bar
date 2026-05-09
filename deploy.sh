@@ -3,13 +3,14 @@ set -e
 
 VERSION=$(cat dist/version.txt)
 
-echo "→ Deploying $VERSION to gh-pages..."
+echo "→ Deploying $VERSION to gh-pages (curl bootstrap)..."
 
 if [ ! -d "_pages" ]; then
     git worktree add _pages gh-pages
 fi
 
-cp dist/RunnerBar.zip _pages/
+# Keep gh-pages updated for the curl bootstrap installer (install.sh).
+cp "dist/runner-bar-${VERSION}.zip" _pages/RunnerBar.zip
 cp dist/version.txt _pages/
 cp install.sh _pages/
 
@@ -21,4 +22,13 @@ cd ..
 
 git worktree remove _pages --force
 
+# Publish a GitHub Release with the versioned zip as an asset.
+# AppUpdater polls GitHub Releases for runner-bar-<version>.zip assets.
+echo "→ Creating GitHub Release v${VERSION}..."
+gh release create "v${VERSION}" \
+    "dist/runner-bar-${VERSION}.zip" \
+    --title "v${VERSION}" \
+    --notes "Release ${VERSION}"
+
 echo "✓ Deployed — https://eonist.github.io/runner-bar/"
+echo "✓ GitHub Release — https://github.com/eonist/runner-bar/releases/tag/v${VERSION}"

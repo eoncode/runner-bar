@@ -1,4 +1,5 @@
 // swiftlint:disable file_length
+import AppUpdater
 import ServiceManagement
 import SwiftUI
 
@@ -22,11 +23,16 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// Phase 5 (issue #346): In-app auto-update via AppUpdater. The `appUpdater`
+/// instance is owned by AppDelegate and passed in here for display only.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
     /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
+    /// AppUpdater instance owned by AppDelegate — drives the Updates row.
+    @ObservedObject var appUpdater: AppUpdater
 
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
@@ -439,6 +445,8 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: Phase 5 — About + Updates
+
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("About")
@@ -458,9 +466,44 @@ struct SettingsView: View {
                     .font(.system(size: 12)).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 2)
+            Divider().padding(.leading, 12)
+            // Updates row — reactive on AppUpdater.state (ObservableObject)
+            HStack {
+                Text("Updates").font(.system(size: 12))
+                Spacer()
+                updatesControl
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
             Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
                 .font(.system(size: 11)).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
+        }
+    }
+
+    /// Reactive control for the Updates row, driven by AppUpdater.state.
+    @ViewBuilder
+    private var updatesControl: some View {
+        switch appUpdater.state {
+        case .none:
+            Button("Check for updates") { appUpdater.check() }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+        case .newVersionDetected(let release, _):
+            Text("v\(release.tagName) available")
+                .font(.caption)
+                .foregroundColor(.orange)
+        case .downloading(_, _, let fraction):
+            ProgressView(value: fraction)
+                .frame(width: 80)
+        case .downloaded:
+            Button("Install & Relaunch") { appUpdater.install() }
+                .font(.caption)
+                .buttonStyle(.bordered)
+        default:
+            Text("Up to date")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 

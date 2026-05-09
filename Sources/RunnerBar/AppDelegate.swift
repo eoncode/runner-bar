@@ -1,4 +1,5 @@
 import AppKit
+import AppUpdater
 import SwiftUI
 
 // swiftlint:disable type_body_length
@@ -39,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
+    /// Retained AppUpdater instance — checks GitHub Releases every 24 h.
+    private var appUpdater: AppUpdater?
 
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
@@ -48,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - App lifecycle
 
-    /// Bootstraps the status-bar item, hosting controller, and popover at launch.
+    /// Bootstraps the status-bar item, hosting controller, popover, and auto-updater at launch.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -75,6 +78,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             if !self.popoverIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
+
+        // Auto-update: checks GitHub Releases on launch and every 24 h.
+        // skipCodeSignValidation required — RunnerBar uses ad-hoc signing (codesign --sign -).
+        let updater = AppUpdater(owner: "eonist", repo: "runner-bar")
+        updater.skipCodeSignValidation = true
+        appUpdater = updater
     }
 
     // MARK: - NSPopoverDelegate
@@ -197,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Settings view.
+    /// Settings view — receives the AppUpdater instance for the Updates row.
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
@@ -205,7 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.mainView())
             },
-            store: observable
+            store: observable,
+            appUpdater: appUpdater!
         ))
     }
 

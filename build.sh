@@ -21,11 +21,12 @@ cp "Resources/Info.plist" \
 echo "→ Ad-hoc signing..."
 codesign --force --deep --sign - "$OUT_DIR/$APP_NAME.app"
 
+# Zip named runner-bar-<version>.zip — required by s1ntoneli/AppUpdater asset convention.
 echo "→ Zipping..."
 ditto -c -k --keepParent \
     "$OUT_DIR/$APP_NAME.app" \
-    "$OUT_DIR/RunnerBar.zip"
+    "$OUT_DIR/runner-bar-${VERSION}.zip"
 
 echo "$VERSION" > "$OUT_DIR/version.txt"
 
-echo "✓ Done — dist/RunnerBar.zip is ready"
+echo "✓ Done — dist/runner-bar-${VERSION}.zip is ready"
