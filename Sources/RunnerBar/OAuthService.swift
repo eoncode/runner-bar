@@ -152,10 +152,12 @@ final class OAuthService {
 
     // MARK: - Sign out
 
-    /// Removes the stored token from the Keychain.
+    /// Removes the stored token from the Keychain and stops the polling store
+    /// so any in-flight background fetches cannot repopulate state after sign-out.
     func signOut() {
+        RunnerStore.shared.stop()
         Keychain.delete()
-        log("OAuthService.signOut › token cleared")
+        log("OAuthService.signOut › token cleared, polling stopped")
     }
 
     // MARK: - Auth state
