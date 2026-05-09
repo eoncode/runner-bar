@@ -37,9 +37,12 @@ struct SettingsView: View {
     @ObservedObject private var legal = LegalPrefsStore.shared
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
-    /// Drives the update row in aboutSection (Phase 5 — ref #345).
-    /// Observes both `updater.downloadedAppBundle` and `isChecking`.
+    /// Drives isChecking / lastCheckError state in updateRow (Phase 5 — ref #345).
     @ObservedObject private var updaterService = AppUpdaterService.shared
+    /// Observed directly so `downloadedAppBundle` changes trigger re-renders.
+    /// AppUpdater is itself an ObservableObject; observing only the parent
+    /// service would not propagate nested @Published changes. (ref #345)
+    @ObservedObject private var updater = AppUpdaterService.shared.updater
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -476,13 +479,15 @@ struct SettingsView: View {
 
     /// Update status row driven by AppUpdater v2's `downloadedAppBundle` optional.
     ///
+    /// Observes `updater` (AppUpdater) directly — not via the service wrapper —
+    /// so `downloadedAppBundle` `@Published` changes reliably invalidate this view.
+    /// `updaterService` is observed separately for `isChecking` / `lastCheckError`.
+    ///
     /// States:
     /// - `isChecking == true`  → spinner + "Checking…"
+    /// - `lastCheckError != nil` → "Check failed" + Retry button
     /// - `downloadedAppBundle != nil` → "Install & Relaunch" button
     /// - idle → "Check now" button
-    ///
-    /// AppUpdater v2 has no `.state` enum; progress is not exposed externally.
-    /// The download happens internally and surfaces only via `downloadedAppBundle`.
     @ViewBuilder
     private var updateRow: some View {
         HStack {
@@ -497,9 +502,25 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-            } else if let bundle = updaterService.updater.downloadedAppBundle {
+            } else if updaterService.lastCheckError != nil {
+                HStack(spacing: 6) {
+                    Text("Check failed")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button("Retry") {
+                        updaterService.checkForUpdates()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+                }
+            } else if let bundle = updater.downloadedAppBundle {
                 Button("Install & Relaunch") {
-                    updaterService.updater.install(bundle)
+                    do {
+                        try updaterService.updater.install(bundle)
+                    } catch {
+                        Logger.log("AppUpdater install failed: \(error)")
+                    }
                 }
                 .font(.caption)
                 .buttonStyle(.bordered)

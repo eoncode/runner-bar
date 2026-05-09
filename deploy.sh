@@ -4,6 +4,13 @@ set -e
 VERSION=$(cat dist/version.txt)
 ASSET="runner-bar-${VERSION}.zip"
 
+# Preflight: fail fast with a clear message if the build artifact is missing.
+# A missing zip leads to a GitHub Release with no asset, breaking AppUpdater.
+if [ ! -f dist/RunnerBar.zip ]; then
+  echo "✗ dist/RunnerBar.zip not found — run build.sh first" >&2
+  exit 1
+fi
+
 # Rename artifact — use mv to avoid leaving a stale dist/RunnerBar.zip
 # alongside the versioned asset between runs.
 echo "→ Renaming artifact for GitHub Releases..."
@@ -37,7 +44,9 @@ cp install.sh _pages/
 
 cd _pages
 git add -A
-git commit -m "Release ${VERSION}"
+# Guard: git commit exits non-zero if nothing changed (e.g. re-deploy of same
+# version). Under set -e this would abort before push and worktree cleanup.
+git diff --cached --quiet || git commit -m "Release ${VERSION}"
 git push origin gh-pages
 cd ..
 
