@@ -124,14 +124,10 @@ struct ActionGroup: Identifiable {
     /// How long ago the group started, as a short human string, e.g. "3m ago", "1h ago".
     /// Uses `firstJobStartedAt` when available, falls back to `createdAt`.
     /// Returns "—" if neither timestamp is available.
+    /// Delegates to `RelativeTimeFormatter` for testable, injectable formatting.
     var startedAgo: String {
-        let ref = firstJobStartedAt ?? createdAt
-        guard let ref = ref else { return "—" }
-        let sec = Int(Date().timeIntervalSince(ref))
-        guard sec >= 0 else { return "—" }
-        if sec < 60  { return "\(sec)s ago" }
-        if sec < 3600 { return "\(sec / 60)m ago" }
-        return "\(sec / 3600)h ago"
+        guard let ref = firstJobStartedAt ?? createdAt else { return "—" }
+        return RelativeTimeFormatter.string(from: ref)
     }
 
     /// Elapsed time derived from min(job.startedAt) → max(job.completedAt).
@@ -148,6 +144,24 @@ struct ActionGroup: Identifiable {
         guard sec >= 0 else { return "00:00" }
         let m = sec / 60; let s = sec % 60
         return String(format: "%02d:%02d", m, s)
+    }
+
+    // MARK: - Progress fraction (model layer — keeps view bodies clean)
+
+    /// Completion fraction 0.0–1.0 for the pie-progress dot, or `nil` (indeterminate)
+    /// when status is queued or no job data is available.
+    ///
+    /// - `nil`  → indeterminate (queued / no jobs loaded yet)
+    /// - `1.0`  → completed
+    /// - `0..<1` → partial (jobsDone / jobsTotal)
+    var progressFraction: Double? {
+        switch groupStatus {
+        case .queued:    return nil
+        case .completed: return 1.0
+        case .inProgress:
+            guard jobsTotal > 0 else { return nil }
+            return Double(jobsDone) / Double(jobsTotal)
+        }
     }
 }
 

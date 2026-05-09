@@ -77,30 +77,53 @@ struct PopoverMainView: View {
         }
         .onDisappear { systemStats.stop() }
         // Reset pagination when the action list is replaced by a fresh store poll.
-        .onChange(of: store.actions.count) { _ in visibleCount = 10 }
+        // Observes the full array (not just count) so a same-size refresh also resets.
+        .onChange(of: store.actions) { _, _ in visibleCount = 10 }
     }
 }
 
 // MARK: - PopoverHeaderView
 
-/// Header row: system stats + auth dot + gear + close (Phase 2 / #299).
+/// Header row: system stats + auth indicator + gear + close (Phase 2 / #299).
 private struct PopoverHeaderView: View {
     /// System stats view-model for CPU/MEM/DISK display.
     let systemStats: SystemStatsViewModel
-    /// Whether a GitHub token is present; drives the orange auth-warning dot.
+    /// Whether a GitHub token is present; drives the orange auth-warning indicator.
     let isAuthenticated: Bool
-    /// Called when the user taps the gear or the orange auth dot.
+    /// Called when the user taps the gear or the orange auth indicator.
     let onSelectSettings: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            SystemStatsView(stats: systemStats.stats).statsContent
+            // Stat chips: blockBar prefix + value, monospaced to keep layout stable.
+            statChip(
+                label: "CPU",
+                bar: blockBar(pct: systemStats.stats.cpuPct),
+                value: String(format: "%.1f%%", systemStats.stats.cpuPct)
+            )
+            statChip(
+                label: "MEM",
+                bar: blockBar(pct: systemStats.stats.memTotalGB > 0
+                    ? (systemStats.stats.memUsedGB / systemStats.stats.memTotalGB) * 100 : 0),
+                value: String(format: "%.1f/%.0fGB",
+                              systemStats.stats.memUsedGB, systemStats.stats.memTotalGB)
+            )
+            statChip(
+                label: "DISK",
+                bar: blockBar(pct: systemStats.stats.diskTotalGB > 0
+                    ? (systemStats.stats.diskUsedGB / systemStats.stats.diskTotalGB) * 100 : 0),
+                value: String(format: "%.0f/%.0fGB",
+                              systemStats.stats.diskUsedGB, systemStats.stats.diskTotalGB)
+            )
             Spacer()
             if !isAuthenticated {
-                Button(
-                    action: onSelectSettings,
-                    label: { Circle().fill(Color.orange).frame(width: 7, height: 7) }
-                )
+                // Auth indicator: orange dot + "Sign in" caption for discoverability.
+                Button(action: onSelectSettings) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.orange).frame(width: 7, height: 7)
+                        Text("Sign in").font(.caption2).foregroundColor(.secondary)
+                    }
+                }
                 .buttonStyle(.plain)
                 .help("Not authenticated — open Settings to add a GitHub token")
             }
@@ -128,6 +151,28 @@ private struct PopoverHeaderView: View {
             .help("Close popover")
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    /// Renders a single stat chip: label + block-bar + value in a monospaced font.
+    /// ⚠️ Font must be .monospacedDigit() — block characters vary in proportional fonts.
+    @ViewBuilder
+    private func statChip(label: String, bar: String, value: String) -> some View {
+        HStack(spacing: 2) {
+            Text(label)
+                .font(.caption2).foregroundColor(.secondary)
+            Text("\(bar) \(value)")
+                .font(.caption2.monospacedDigit()).foregroundColor(.primary)
+        }
+    }
+
+    /// 3-character Unicode block bar scaled to `pct` (0–100).
+    /// `pct=67` → `"██░"`, `pct=100` → `"███"`, `pct=0` → `"░░░"`.
+    /// ⚠️ Use only in monospaced-font contexts — block characters are variable-width
+    /// in proportional fonts and will misalign adjacent text.
+    private func blockBar(pct: Double, width: Int = 3) -> String {
+        let filled = max(0, min(width, Int((pct / 100.0 * Double(width)).rounded())))
+        return String(repeating: "█", count: filled)
+            + String(repeating: "░", count: width - filled)
     }
 }
 
@@ -217,10 +262,9 @@ private struct ActionRowView: View {
         VStack(spacing: 0) {
             Button(action: onSelect, label: {
                 HStack(spacing: 6) {
+                    // Uses ActionGroup.progressFraction (model layer) — nil = indeterminate dot.
                     PieProgressView(
-                        progress: actionGroup.jobsTotal > 0
-                            ? Double(actionGroup.jobsDone) / Double(actionGroup.jobsTotal)
-                            : (actionGroup.groupStatus == .completed ? 1.0 : 0.0),
+                        progress: actionGroup.progressFraction,
                         color: actionDotColor(for: actionGroup)
                     )
                     Text(actionGroup.label)
@@ -312,15 +356,27 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobsView
 
-/// Container for all inline ↳ job sub-rows under a single action group (Phase 4 / #304).
+/// Container for inline ↳ job sub-rows under a single action group (Phase 4 / #304).
+/// Shows up to `cap` rows by default; a "+ N more jobs…" button reveals the rest.
 /// ⚠️ Receives only in_progress jobs — caller is responsible for pre-filtering.
 private struct InlineJobsView: View {
-    /// Pre-filtered in_progress jobs to render as ↳ child rows (max 5 shown).
+    /// Pre-filtered in_progress jobs to render as ↳ child rows.
     let jobs: [ActiveJob]
+    /// Maximum rows shown before the load-more button appears. Increments by 4 per tap.
+    @State private var cap: Int = 4
 
     var body: some View {
-        ForEach(jobs.prefix(5)) { job in
+        ForEach(jobs.prefix(cap)) { job in
             InlineJobRowView(job: job)
+        }
+        if jobs.count > cap {
+            Button(action: { cap += 4 }) {
+                Text("+ \(jobs.count - cap) more job\(jobs.count - cap == 1 ? "" : "s")…")
+                    .font(.caption2).foregroundColor(.accentColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 26).padding(.trailing, 12).padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
         }
     }
 }
@@ -340,8 +396,9 @@ private struct InlineJobRowView: View {
             Text("↳")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.leading, 14)
+            // Uses ActiveJob.progressFraction (model layer) — nil = indeterminate dot.
             PieProgressView(
-                progress: stepProgress(for: job),
+                progress: jobProgressFraction(for: job),
                 color: jobDotColor(for: job),
                 size: 7
             )
@@ -365,10 +422,13 @@ private struct InlineJobRowView: View {
     }
 
     /// Completion fraction 0.0–1.0 based on steps with a non-nil conclusion.
-    /// Falls back to 0.5 when in_progress with no step data, or 0.0 when queued.
-    private func stepProgress(for job: ActiveJob) -> Double {
+    /// Returns `nil` (indeterminate) when in_progress with no step data, or when queued.
+    private func jobProgressFraction(for job: ActiveJob) -> Double? {
         let total = job.steps.count
-        guard total > 0 else { return job.status == "in_progress" ? 0.5 : 0.0 }
+        guard total > 0 else {
+            // No step data yet: indeterminate for in_progress, nil (indeterminate) for queued.
+            return nil
+        }
         let done = job.steps.filter { $0.conclusion != nil }.count
         return Double(done) / Double(total)
     }

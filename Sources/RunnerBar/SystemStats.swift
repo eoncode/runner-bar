@@ -65,8 +65,13 @@ private struct DiskStats {
 
 /// ObservableObject that owns the 2-second polling loop for system metrics.
 ///
-/// Threading model: Timer fires on main RunLoop, bounces work to a global
-/// utility queue, then publishes results back on the main thread.
+/// Threading model: all samples are dispatched on a private serial queue
+/// (`samplingQueue`) to prevent `prevTicks` races, then published to SwiftUI
+/// on the main thread via `DispatchQueue.main.async`.
+///
+/// Lifecycle: `init()` is intentionally a no-op. The owner (PopoverMainView)
+/// calls `start()` in `.onAppear` and `stop()` in `.onDisappear` so the timer
+/// only runs while the popover is visible.
 final class SystemStatsViewModel: ObservableObject {
     /// The latest system snapshot. SwiftUI views observe this via `@Published`.
     @Published var stats: SystemStats = .zero
@@ -74,15 +79,37 @@ final class SystemStatsViewModel: ObservableObject {
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
-    /// Initialises the view model and performs an eager sample.
+    /// Private serial queue for all `sample()` dispatches.
+    /// Serial prevents concurrent `prevTicks` mutations that would skew CPU %.
+    private let samplingQueue = DispatchQueue(
+        label: "RunnerBar.SystemStatsViewModel.sampling",
+        qos: .utility
+    )
+
+    /// Intentionally empty — lifecycle is controlled via `start()` / `stop()`.
     init() {
-        sample()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            DispatchQueue.global(qos: .utility).async { self?.sample() }
-        }
+        // no-op: timer starts only when the popover appears
     }
 
     deinit { timer?.invalidate() }
+
+    // MARK: - Lifecycle
+
+    /// Starts the 2-second sampling loop. Safe to call multiple times — invalidates
+    /// any existing timer before creating a new one. Performs an eager first sample.
+    func start() {
+        timer?.invalidate()
+        samplingQueue.async { [weak self] in self?.sample() }
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.samplingQueue.async { [weak self] in self?.sample() }
+        }
+    }
+
+    /// Stops the sampling loop. Called in `.onDisappear` to avoid background polling.
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
 
     // MARK: - CPU
 
@@ -178,6 +205,7 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - Sample
 
     /// Assembles a new `SystemStats` snapshot and publishes it on the main thread.
+    /// Must be called on `samplingQueue` to avoid `prevTicks` data races.
     private func sample() {
         let cpu = cpuPercent()
         let mem = memStats()
