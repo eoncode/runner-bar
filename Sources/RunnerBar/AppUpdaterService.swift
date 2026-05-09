@@ -22,10 +22,10 @@ final class AppUpdaterService: ObservableObject {
     /// The underlying updater. `SettingsView` observes `updater.state`
     /// directly via `@ObservedObject`.
     let updater: AppUpdater = {
-        let u = AppUpdater(owner: "eonist", repo: "runner-bar")
+        let instance = AppUpdater(owner: "eonist", repo: "runner-bar")
         // ⚠️ REQUIRED for ad-hoc signed builds — see header comment.
-        u.skipCodeSignValidation = true
-        return u
+        instance.skipCodeSignValidation = true
+        return instance
     }()
 
     private init() {}
