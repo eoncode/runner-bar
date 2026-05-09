@@ -28,7 +28,7 @@ struct WorkflowRunRef: Identifiable {
     let status: String
     /// Final outcome when status is `completed`.
     let conclusion: String?
-    /// URL to the run's page on github.com.
+    /// URL to the run’s page on github.com.
     let htmlUrl: String?
 }
 
@@ -174,6 +174,7 @@ struct ActionGroup: Identifiable {
 
 /// Equatable conformance required by SwiftUI `.onChange(of:)` on `[ActionGroup]`.
 extension ActionGroup: Equatable {
+    /// Returns `true` when two groups have the same ID, dimmed state, job list, and run IDs.
     static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
         lhs.id == rhs.id
             && lhs.isDimmed == rhs.isDimmed

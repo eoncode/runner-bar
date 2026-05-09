@@ -2,6 +2,9 @@ import Foundation
 
 // MARK: - LocalRunnerScanner
 
+/// Scans the local machine for installed GitHub Actions self-hosted runners.
+/// Combines results from `.runner` JSON files, LaunchAgent plists, and
+/// live `launchctl` service names to produce a deduplicated `[RunnerModel]`.
 struct LocalRunnerScanner {
     private struct RunnerJSON: Decodable {
         let gitHubUrl: String?
@@ -10,6 +13,8 @@ struct LocalRunnerScanner {
         let workFolder: String?
     }
 
+    /// Scans all known runner sources and returns a sorted, deduplicated list
+    /// of locally installed runners with their live-service status populated.
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 

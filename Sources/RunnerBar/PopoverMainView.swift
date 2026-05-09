@@ -1,10 +1,5 @@
 import SwiftUI
 
-// swiftlint:disable file_length
-// Reason: PopoverMainView and all its private sub-views live in one file for
-// co-location. Each struct is small; the total line count reflects SwiftUI
-// verbosity, not unrelated code. Splitting would hurt navigability.
-
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
@@ -32,7 +27,7 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
-    /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
+    /// Number of action groups visible. Starts at 10, incremented by 10 on “Load more”.
     @State private var visibleCount: Int = 10
     /// Set of action group IDs whose inline job sub-rows are expanded.
     /// In-progress groups default to expanded; queued groups default to collapsed.
@@ -487,5 +482,3 @@ private struct RunnersListView: View {
         }
     }
 }
-
-// swiftlint:enable file_length

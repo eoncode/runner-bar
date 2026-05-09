@@ -67,7 +67,7 @@ extension RunnerStore {
         let inProgCount = liveJobs.filter { $0.status == "in_progress" }.count
         let queuedCount = liveJobs.filter { $0.status == "queued" }.count
         log(
-            "RunnerStore \u{203A} \(inProgCount) in_progress \(queuedCount) queued"
+            "RunnerStore › \(inProgCount) in_progress \(queuedCount) queued"
             + " | cache: \(newCache.count) | display: \(display.count)"
         )
         return JobPollResult(display: display, newCache: newCache, newPrevLive: newPrevLive)
@@ -145,7 +145,7 @@ extension RunnerStore {
         let inProgCount = liveGroups.filter { $0.groupStatus == .inProgress }.count
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
         log(
-            "RunnerStore \u{203A} groups: \(inProgCount) in_progress \(queuedCount) queued"
+            "RunnerStore › groups: \(inProgCount) in_progress \(queuedCount) queued"
             + " | cache: \(newCache.count) | display: \(display.count)"
         )
         let enriched = display.map { $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) }
