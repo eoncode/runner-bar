@@ -6,24 +6,18 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ───────────────────────────────────────────────────────────────
-//   Root MUST use .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-//   Height is set by AppDelegate.navigate(to:fixedHeight:) — never by this view.
+// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
+//   Receives the same FIXED frame from AppDelegate as JobDetailView.
+//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
 //   ScrollView absorbs overflow — do NOT fight the frame.
-//   ❌ NEVER add .frame(height:) or .frame(maxHeight:) to root
-//   ❌ NEVER add .fixedSize() to root or ScrollView
-//   ❌ NEVER add maxHeight cap to ScrollView — causes side-jump regression
 //
-// ── LAYOUT RULES ─────────────────────────────────────────────────────────────────
-//   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
+// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
+//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 //   ✔ Job list MUST be inside ScrollView
+//   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ❌ NEVER put header inside ScrollView
+//   ❌ NEVER add .idealWidth or .frame(height:) to root
 //   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
-//
-// ── HEIGHT SIZING ────────────────────────────────────────────────────────────────
-//   Height is controlled by PopoverSize.actionDetailHeight() in AppDelegate.
-//   That function sizes based on group.jobs.count so the popover fits content.
-//   Do NOT replicate height logic here.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -41,7 +35,8 @@ struct ActionDetailView: View {
 
     /// Drives the live elapsed timer every second.
     @State private var tick = 0
-    /// Held so we can invalidate on disappear and prevent timer accumulation.
+    /// Held so we can invalidate on disappear and prevent timer accumulation
+    /// when the user navigates away and back (AppDelegate swaps rootView each time).
     @State private var tickTimer: Timer?
 
     var body: some View {
@@ -141,6 +136,9 @@ struct ActionDetailView: View {
                         ForEach(group.jobs) { job in
                             Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
+                                    // ⚠️ PieProgressView — not plain Circle().
+                                    // Plain Circle() was replaced to match the spec (#296 / #178)
+                                    // and be consistent with the main popover row dots.
                                     PieProgressView(
                                         progress: job.progressFraction,
                                         color: jobDotColor(for: job),
@@ -182,9 +180,6 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ maxWidth + maxHeight BOTH required. Height is set by AppDelegate via
-        // navigate(to:fixedHeight:) using PopoverSize.actionDetailHeight(for:).
-        // Width: .infinity fills the fixed 420pt popover — removing it causes side-jump.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
@@ -200,6 +195,8 @@ struct ActionDetailView: View {
 
     // MARK: - Job row helpers
 
+    /// Dot color for a job row in ActionDetailView.
+    /// Uses PieProgressView so color must match the same semantics as the main popover.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
