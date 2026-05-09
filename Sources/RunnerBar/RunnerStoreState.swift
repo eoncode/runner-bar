@@ -8,7 +8,7 @@ struct JobPollResult {
     let display: [ActiveJob]
     /// Updated completed-job cache, trimmed to 30 entries.
     let newCache: [Int: ActiveJob]
-    /// Live-job snapshot for the next poll’s diff.
+    /// Live-job snapshot for the next poll's diff.
     let newPrevLive: [Int: ActiveJob]
 }
 
@@ -18,12 +18,13 @@ struct GroupPollResult {
     let display: [ActionGroup]
     /// Updated group cache, trimmed to 50 entries.
     let newGroupCache: [String: ActionGroup]
-    /// Live-group snapshot for the next poll’s diff.
+    /// Live-group snapshot for the next poll's diff.
     let newPrevLiveGroups: [String: ActionGroup]
 }
 
 // MARK: - Job state builder
 
+/// Job-state building helpers for `RunnerStore`.
 extension RunnerStore {
     /// Fetches live jobs, reconciles completions against the previous snapshot,
     /// updates the completed-job cache, and returns a `JobPollResult`.
@@ -113,6 +114,7 @@ extension RunnerStore {
 
 // MARK: - Group state builder
 
+/// Group-state building helpers for `RunnerStore`.
 extension RunnerStore {
     /// Fetches live action groups, reconciles completions against the previous snapshot,
     /// updates the group cache, and returns a `GroupPollResult`.
