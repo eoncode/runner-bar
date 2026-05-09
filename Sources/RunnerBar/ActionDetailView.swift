@@ -6,68 +6,25 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── LIVE DATA ────────────────────────────────────────────────────────────────────
-//   ActionDetailView owns an ActionDetailStore (@StateObject) that polls
-//   RunnerStore.shared every 1 s. The group prop from AppDelegate is only the
-//   INITIAL snapshot — all live UI reads from liveStore.group instead.
-//   ❌ NEVER pass group directly to sub-views — always use liveStore.group.
-//
 // ── FRAME CONTRACT ───────────────────────────────────────────────────────────────
-//   Root uses .frame(maxWidth: .infinity, alignment: .top) — NO maxHeight.
-//   Fits to content. ScrollView is capped at maxHeight:360 for overflow.
-//   ❌ NEVER add maxHeight:.infinity to root
-//   ❌ NEVER add .frame(height:) to root
+//   Root MUST use .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   Height is set by AppDelegate.navigate(to:fixedHeight:) — never by this view.
+//   ScrollView absorbs overflow — do NOT fight the frame.
+//   ❌ NEVER add .frame(height:) or .frame(maxHeight:) to root
+//   ❌ NEVER add .fixedSize() to root or ScrollView
+//   ❌ NEVER add maxHeight cap to ScrollView — causes side-jump regression
 //
 // ── LAYOUT RULES ─────────────────────────────────────────────────────────────────
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ✔ Job list MUST be inside ScrollView
 //   ❌ NEVER put header inside ScrollView
 //   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
+//
+// ── HEIGHT SIZING ────────────────────────────────────────────────────────────────
+//   Height is controlled by PopoverSize.actionDetailHeight() in AppDelegate.
+//   That function sizes based on group.jobs.count so the popover fits content.
+//   Do NOT replicate height logic here.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// MARK: - ActionDetailStore
-
-/// Lightweight ObservableObject that keeps ActionDetailView in sync with live
-/// RunnerStore data. Polls every 1 s — same cadence as the elapsed tick timer.
-///
-/// Using a dedicated store (rather than re-using RunnerStoreObservable) avoids
-/// cross-talk: ActionDetailView is a pushed detail screen and should not force
-/// the entire main view to redraw on every tick.
-@MainActor
-final class ActionDetailStore: ObservableObject {
-    /// The live group, updated every poll tick. Starts as the snapshot passed
-    /// from AppDelegate, then replaced with fresh data from RunnerStore.
-    @Published private(set) var group: ActionGroup
-    private let groupID: String
-    private var timer: Timer?
-
-    init(initial group: ActionGroup) {
-        self.group = group
-        self.groupID = group.id
-    }
-
-    func start() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in
-                // Replace with the freshest snapshot from RunnerStore.
-                // Falls back to the last known value when the group has left the store
-                // (e.g. run was cancelled and purged) so the UI doesn't blank out.
-                if let live = RunnerStore.shared.actions.first(where: { $0.id == self.groupID }) {
-                    self.group = live
-                }
-            }
-        }
-    }
-
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
-}
-
-// MARK: - ActionDetailView
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
@@ -77,23 +34,17 @@ final class ActionDetailStore: ObservableObject {
 ///   → JobDetailView (step list)   ← existing, unchanged
 ///   → StepLogView (log)           ← existing, unchanged
 struct ActionDetailView: View {
-    /// Initial snapshot from AppDelegate. Live data comes from liveStore.group.
-    let initialGroup: ActionGroup
+    let group: ActionGroup
     let onBack: () -> Void
     /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
     let onSelectJob: (ActiveJob) -> Void
 
-    @StateObject private var liveStore: ActionDetailStore
-
-    init(group: ActionGroup, onBack: @escaping () -> Void, onSelectJob: @escaping (ActiveJob) -> Void) {
-        self.initialGroup = group
-        self.onBack = onBack
-        self.onSelectJob = onSelectJob
-        _liveStore = StateObject(wrappedValue: ActionDetailStore(initial: group))
-    }
+    /// Drives the live elapsed timer every second.
+    @State private var tick = 0
+    /// Held so we can invalidate on disappear and prevent timer accumulation.
+    @State private var tickTimer: Timer?
 
     var body: some View {
-        let group = liveStore.group
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header: OUTSIDE ScrollView — always visible at top
@@ -143,7 +94,7 @@ struct ActionDetailView: View {
                     },
                     isDisabled: false
                 )
-                Text(group.elapsed)
+                Text(elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
             }
@@ -177,8 +128,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list: INSIDE ScrollView, capped so view fits to content.
-            // maxHeight:360 matches ActionsListView pattern. ScrollView handles overflow.
+            // ── Jobs list: INSIDE ScrollView
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
@@ -231,17 +181,22 @@ struct ActionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // Cap height so view fits to content for small job counts.
-            // ScrollView takes over for large job lists.
-            .frame(maxHeight: 360)
-            .padding(.bottom, 6)
         }
-        // ⚠️ NO maxHeight:.infinity — let VStack size to its content.
-        // AppDelegate sizes the popover via fittingSize after navigate().
-        .frame(maxWidth: .infinity, alignment: .top)
-        .onAppear { liveStore.start() }
-        .onDisappear { liveStore.stop() }
+        // ⚠️ maxWidth + maxHeight BOTH required. Height is set by AppDelegate via
+        // navigate(to:fixedHeight:) using PopoverSize.actionDetailHeight(for:).
+        // Width: .infinity fills the fixed 420pt popover — removing it causes side-jump.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear {
+            tickTimer?.invalidate()
+            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
+        }
+        .onDisappear {
+            tickTimer?.invalidate()
+            tickTimer = nil
+        }
     }
+
+    private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     // MARK: - Job row helpers
 

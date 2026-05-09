@@ -8,12 +8,19 @@ import SwiftUI
 //
 // SIZING RULES:
 //   • fittingSize must be read on the NEXT run-loop tick after rootView swap.
-//     SwiftUI defers layout; reading it synchronously returns the PREVIOUS view's size.
+//     SwiftUI defers layout; reading it synchronously returns the PREVIOUS view’s size.
 //   • Detail views contain ScrollView which reports 0 fittingSize.height. Use a
-//     fixed detailHeight for them instead, capped so they don't overflow the screen.
+//     fixed detailHeight for them instead, capped so they don’t overflow the screen.
 //   • Main view has no ScrollView — fittingSize is reliable on the next tick.
 //   • Both hostCtrl.view.setFrameSize AND popover.contentSize MUST be updated together.
 //     Updating only one leaves NSPopover chrome and NSView frame out of sync → clipping.
+//
+// WIDTH RULES (anti side-jump):
+//   • Width is ALWAYS PopoverSize.width (420). Never derive from fittingSize.width.
+//   • PopoverMainView uses .frame(idealWidth: 420). Detail views use maxWidth:.infinity.
+//   • Changing width while popover is shown causes the popover to jump sideways.
+//   ❌ NEVER use fittingSize.width for any navigate() call
+//   ❌ NEVER pass a width other than PopoverSize.width to applySize()
 //
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize from outside navigate()
@@ -25,12 +32,21 @@ import SwiftUI
 private enum PopoverSize {
     static let width: CGFloat = 420
     static let fallbackHeight: CGFloat = 300
-    /// Fixed height for all views that contain a ScrollView (detail + settings).
-    /// ScrollView reports 0 for fittingSize.height so we use a constant instead.
-    /// Tall enough for ~10 job rows; the ScrollView handles overflow.
+    /// Fixed height for views with ScrollView that cannot use fittingSize.
+    /// Used for JobDetailView, StepLogView, SettingsView.
     static let detailHeight: CGFloat = 480
     /// Maximum popover height on screen (leaves room for the menu bar).
     static let maxHeight: CGFloat = 620
+
+    /// Content-fitted height for ActionDetailView.
+    /// Header + title block is ~110 pt. Each job row is ~26 pt.
+    /// Capped at detailHeight so very long lists don’t overflow the screen.
+    static func actionDetailHeight(jobCount: Int) -> CGFloat {
+        let headerPt: CGFloat = 110
+        let rowPt: CGFloat = 26
+        let raw = headerPt + CGFloat(max(1, jobCount)) * rowPt + 16 // 16 pt bottom pad
+        return min(raw, detailHeight)
+    }
 }
 
 private enum NavState {
@@ -131,7 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             onSelectAction: { [weak self] group in
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest), fixedHeight: PopoverSize.detailHeight)
+                let h = PopoverSize.actionDetailHeight(jobCount: latest.jobs.count)
+                self.navigate(to: self.actionDetailView(group: latest), fixedHeight: h)
             },
             onSelectSettings: { [weak self] in
                 guard let self else { return }
@@ -147,7 +164,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             group: group,
             onBack: { [weak self] in
                 guard let self else { return }
-                // nil fixedHeight → measure main view via fittingSize on next tick
                 self.navigate(to: self.mainView(), fixedHeight: nil)
             },
             onSelectJob: { [weak self] job in
@@ -171,7 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             job: job,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group), fixedHeight: PopoverSize.detailHeight)
+                let h = PopoverSize.actionDetailHeight(jobCount: group.jobs.count)
+                self.navigate(to: self.actionDetailView(group: group), fixedHeight: h)
             },
             onSelectStep: { [weak self] step in
                 guard let self else { return }
@@ -189,8 +206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             step: step,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group),
-                              fixedHeight: PopoverSize.detailHeight)
+                let h = PopoverSize.actionDetailHeight(jobCount: group.jobs.count)
+                self.navigate(to: self.detailViewFromAction(job: job, group: group), fixedHeight: h)
             }
         ))
     }
@@ -251,7 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             return (logView(job: live, step: step), PopoverSize.detailHeight)
         case .actionDetail(let group):
             guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            return (actionDetailView(group: live), PopoverSize.detailHeight)
+            return (actionDetailView(group: live), PopoverSize.actionDetailHeight(jobCount: live.jobs.count))
         case .actionJobDetail(let job, let group):
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
             let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
@@ -275,9 +292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     ///                  whose fittingSize.height is 0). When nil, defer one run-loop tick
     ///                  then measure fittingSize — correct for the main view (no ScrollView).
     ///
+    /// ⚠️ Width is ALWAYS PopoverSize.width. Never varies. Changing width while shown = side-jump.
     /// ⚠️ Both hostCtrl.view.setFrameSize AND popover.contentSize MUST be set; one alone causes clipping.
-    /// ⚠️ Do NOT call layoutSubtreeIfNeeded() synchronously after rootView swap — SwiftUI
-    ///     defers layout to the next run-loop tick; the reading will return the OLD size.
     @MainActor
     private func navigate(to view: AnyView, fixedHeight: CGFloat?) {
         guard let hostCtrl = hostingController, let pop = popover else {
@@ -288,12 +304,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         guard popoverIsOpen else { return }
 
         if let h = fixedHeight {
-            // Detail view: apply immediately — height is known, no layout pass needed.
             applySize(NSSize(width: PopoverSize.width, height: min(h, PopoverSize.maxHeight)),
                       hc: hostCtrl, pop: pop)
         } else {
-            // Main view: defer one tick so SwiftUI can complete its layout pass,
-            // then re-read the true fittingSize.
             DispatchQueue.main.async { [weak self, weak hostCtrl, weak pop] in
                 guard let self, let hostCtrl, let pop, self.popoverIsOpen else { return }
                 hostCtrl.view.layoutSubtreeIfNeeded()
@@ -331,18 +344,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
-        // Show with a safe fallback size first, then measure fittingSize on the next tick.
         let tempSize = NSSize(width: PopoverSize.width, height: PopoverSize.fallbackHeight)
         hostingController.view.setFrameSize(tempSize)
         popover.contentSize = tempSize
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
-        // Restore saved detail-nav state if the user re-opens while on a detail view.
         if let saved = savedNavState, let (restored, h) = validatedView(for: saved) {
             navigate(to: restored, fixedHeight: h)
             return
         }
-        // Measure main view on next tick (SwiftUI needs one layout pass first).
         DispatchQueue.main.async { [weak self, weak hostingController, weak popover] in
             guard let self, let hostCtrl = hostingController, let pop = popover,
                   self.popoverIsOpen else { return }
