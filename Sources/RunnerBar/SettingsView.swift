@@ -37,12 +37,11 @@ struct SettingsView: View {
     @ObservedObject private var legal = LegalPrefsStore.shared
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
-    /// Drives isChecking / lastCheckError state in updateRow (Phase 5 — ref #345).
+    /// Drives isChecking / lastCheckError / updater.state in updateRow (Phase 5 — ref #345).
+    /// AppUpdaterService is an ObservableObject; AppUpdater (its `updater` property) is also
+    /// an ObservableObject. We observe the service directly — `updater.state` is accessed
+    /// via `updaterService.updater.state` so SwiftUI re-renders when `state` changes.
     @ObservedObject private var updaterService = AppUpdaterService.shared
-    /// Observed directly so `downloadedAppBundle` changes trigger re-renders.
-    /// AppUpdater is itself an ObservableObject; observing only the parent
-    /// service would not propagate nested @Published changes. (ref #345)
-    @ObservedObject private var updater = AppUpdaterService.shared.updater
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -477,17 +476,17 @@ struct SettingsView: View {
         }
     }
 
-    /// Update status row driven by AppUpdater v2's `downloadedAppBundle` optional.
+    /// Update status row driven by AppUpdater v0.1.9's `UpdateState` enum.
     ///
-    /// Observes `updater` (AppUpdater) directly — not via the service wrapper —
-    /// so `downloadedAppBundle` `@Published` changes reliably invalidate this view.
-    /// `updaterService` is observed separately for `isChecking` / `lastCheckError`.
+    /// Observes `updaterService` (AppUpdaterService) for `isChecking` / `lastCheckError`.
+    /// The install-ready state is detected via `updaterService.updater.state` pattern match
+    /// on `.downloaded(_, _, bundle)` — the v0.1.9 API (ref #345, #356).
     ///
     /// States:
-    /// - `isChecking == true`  → spinner + "Checking…"
-    /// - `lastCheckError != nil` → "Check failed" + Retry button
-    /// - `downloadedAppBundle != nil` → "Install & Relaunch" button
-    /// - idle → "Check now" button
+    /// - `isChecking == true`          → spinner + "Checking…"
+    /// - `lastCheckError != nil`        → "Check failed" (red) + Retry button
+    /// - `.downloaded(_, _, bundle)`    → "Install & Relaunch" button
+    /// - idle / `.none` / downloading   → "Check now" button
     @ViewBuilder
     private var updateRow: some View {
         HStack {
@@ -506,15 +505,15 @@ struct SettingsView: View {
                 HStack(spacing: 6) {
                     Text("Check failed")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.red)
                     Button("Retry") {
                         updaterService.checkForUpdates()
                     }
                     .font(.caption)
                     .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.accentColor)
                 }
-            } else if let bundle = updater.downloadedAppBundle {
+            } else if case .downloaded(_, _, let bundle) = updaterService.updater.state {
                 Button("Install & Relaunch") {
                     do {
                         try updaterService.updater.install(bundle)
