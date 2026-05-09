@@ -244,7 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Popover show/hide
 
-    @objc private func togglePopover() {
+    // @MainActor required: calls openPopover() which is MainActor-isolated (fix #314).
+    @MainActor @objc private func togglePopover() {
         guard let popover else { return }
         if popover.isShown {
             popover.performClose(nil)

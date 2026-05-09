@@ -165,6 +165,18 @@ struct ActionGroup: Identifiable {
     }
 }
 
+// MARK: - Equatable
+
+/// Equatable conformance required by SwiftUI `.onChange(of:)` on `[ActionGroup]`.
+extension ActionGroup: Equatable {
+    static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
+        lhs.id == rhs.id
+            && lhs.isDimmed == rhs.isDimmed
+            && lhs.jobs == rhs.jobs
+            && lhs.runs.map({ $0.id }) == rhs.runs.map({ $0.id })
+    }
+}
+
 // MARK: - Fetch + Group
 
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
@@ -283,8 +295,8 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
             name: s.name,
             status: s.status,
             conclusion: s.conclusion,
-            startedAt: s.startedAt.flatMap { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+            startedAt: s.startedAt,
+            completedAt: s.completedAt
         )
     }
     return ActiveJob(
