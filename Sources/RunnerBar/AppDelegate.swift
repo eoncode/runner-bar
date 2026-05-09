@@ -6,11 +6,22 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59)
 // sizingOptions: default. Height read via fittingSize ONCE per open.
-// navigate() = rootView swap ONLY. Zero size changes. Ever.
+// navigate() = rootView swap + popover resize.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
+// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true from outside navigate()
 // ❌ NEVER add objectWillChange.send() in reload()
-// ❌ NEVER remove .frame(idealWidth: 340) from PopoverMainView
+// ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
+
+// MARK: - Constants
+private enum PopoverSize {
+    /// Fixed width for all popover content (main + detail views).
+    static let width: CGFloat = 420
+    /// Fallback height used during initial launch before fittingSize is available.
+    static let initialHeight: CGFloat = 300
+    /// Fixed height for all detail / settings views (ActionDetailView, JobDetailView, StepLogView, SettingsView).
+    /// These views are taller than the compact main popover and need an explicit height so content is not clipped.
+    static let detailHeight: CGFloat = 480
+}
 
 private enum NavState {
     case main
@@ -20,6 +31,14 @@ private enum NavState {
     case actionJobDetail(ActiveJob, ActionGroup)
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
     case settings
+
+    /// Whether this nav state should use the taller detailHeight instead of fittingSize.
+    var isDetailView: Bool {
+        switch self {
+        case .main: return false
+        default: return true
+        }
+    }
 }
 
 // MARK: - AppDelegate
@@ -34,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     @MainActor private lazy var observable = RunnerStoreObservable()
     private var savedNavState: NavState?
     private var popoverIsOpen = false
-    private static let fixedWidth: CGFloat = 340
+    // Legacy alias kept so existing call-sites compile without change.
+    private static let fixedWidth: CGFloat = PopoverSize.width
 
     // MARK: - App lifecycle
 
@@ -46,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             button.target = self
         }
         let controller = NSHostingController(rootView: mainView())
-        let initialSize = NSSize(width: Self.fixedWidth, height: 300)
+        let initialSize = NSSize(width: PopoverSize.width, height: PopoverSize.initialHeight)
         controller.view.frame = NSRect(origin: .zero, size: initialSize)
         hostingController = controller
         let pop = NSPopover()
@@ -102,18 +122,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
                         guard self.popoverIsOpen else { return }
-                        self.navigate(to: self.detailView(job: enriched))
+                        self.navigate(to: self.detailView(job: enriched), isDetail: true)
                     }
                 }
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
+                self.navigate(to: self.actionDetailView(group: latest), isDetail: true)
             },
             onSelectSettings: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.settingsView())
+                self.navigate(to: self.settingsView(), isDetail: true)
             }
         ))
     }
@@ -125,7 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             group: group,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.mainView())
+                self.navigate(to: self.mainView(), isDetail: false)
             },
             onSelectJob: { [weak self] job in
                 guard let self else { return }
@@ -133,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
                         guard self.popoverIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group), isDetail: true)
                     }
                 }
             }
@@ -147,11 +167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             job: job,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
+                self.navigate(to: self.actionDetailView(group: group), isDetail: true)
             },
             onSelectStep: { [weak self] step in
                 guard let self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group), isDetail: true)
             }
         ))
     }
@@ -164,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             step: step,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+                self.navigate(to: self.detailViewFromAction(job: job, group: group), isDetail: true)
             }
         ))
     }
@@ -176,11 +196,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             job: job,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.mainView())
+                self.navigate(to: self.mainView(), isDetail: false)
             },
             onSelectStep: { [weak self] step in
                 guard let self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
+                self.navigate(to: self.logView(job: job, step: step), isDetail: true)
             }
         ))
     }
@@ -191,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         return AnyView(SettingsView(
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.mainView())
+                self.navigate(to: self.mainView(), isDetail: false)
             },
             store: observable
         ))
@@ -205,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             step: step,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
+                self.navigate(to: self.detailView(job: job), isDetail: true)
             }
         ))
     }
@@ -241,8 +261,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    private func navigate(to view: AnyView) {
+    /// Swap the root view and, if the popover is already visible, resize it to match the new content.
+    ///
+    /// - Parameters:
+    ///   - view:     The new root view to show.
+    ///   - isDetail: `true` → use fixed `PopoverSize.detailHeight` (detail / settings views).
+    ///               `false` → re-measure main view via `fittingSize` (compact popover).
+    ///
+    /// ⚠️ REGRESSION GUARD: setFrameSize + contentSize MUST both be updated; updating only one
+    /// leaves the NSPopover frame and the NSView frame out of sync, causing clipping (#296).
+    @MainActor
+    private func navigate(to view: AnyView, isDetail: Bool) {
+        guard let hc = hostingController, let popover else {
+            hostingController?.rootView = view
+            return
+        }
         hostingController?.rootView = view
+        guard popoverIsOpen else { return }
+        let targetHeight: CGFloat
+        if isDetail {
+            targetHeight = PopoverSize.detailHeight
+        } else {
+            // Re-measure the main view after the rootView swap.
+            hc.view.layoutSubtreeIfNeeded()
+            let fit = hc.view.fittingSize
+            targetHeight = fit.height > 0 ? fit.height : PopoverSize.initialHeight
+        }
+        let newSize = NSSize(width: PopoverSize.width, height: targetHeight)
+        hc.view.setFrameSize(newSize)
+        popover.contentSize = newSize
     }
 
     // MARK: - Popover show/hide
@@ -266,10 +313,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
+        // Size from the main view's fitting height (compact layout).
+        hostingController.view.layoutSubtreeIfNeeded()
         let fittingWidth = hostingController.view.fittingSize.width
+        let fittingHeight = hostingController.view.fittingSize.height
         let size = NSSize(
-            width: fittingWidth > 0 ? fittingWidth : Self.fixedWidth,
-            height: hostingController.view.fittingSize.height
+            width: fittingWidth > 0 ? fittingWidth : PopoverSize.width,
+            height: fittingHeight > 0 ? fittingHeight : PopoverSize.initialHeight
         )
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
@@ -277,7 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         popover.contentViewController?.view.window?.makeKey()
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
-            navigate(to: restored)
+            navigate(to: restored, isDetail: saved.isDetailView)
         }
     }
 }
