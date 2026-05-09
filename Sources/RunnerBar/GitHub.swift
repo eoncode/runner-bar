@@ -95,8 +95,6 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
     log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
-    // gh exits non-zero on HTTP 403/429; also scan raw output as a fallback
-    // since error JSON may be embedded in paginated output.
     if task.terminationStatus != 0 {
         let raw = String(data: outputData, encoding: .utf8) ?? ""
         if raw.contains("\"403\"") || raw.contains("\"429\"") || raw.contains("rate limit") {
@@ -220,8 +218,6 @@ private struct RunnersResponse: Codable {
 /// Calls `GET /user/orgs` and follows Link rel=next pagination to return all orgs.
 /// Returns an empty array on error or if unauthenticated.
 func fetchUserOrgs() -> [String] {
-    // --paginate makes gh follow Link rel=next and concatenate all pages into
-    // a single merged JSON array for array-type endpoints.
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
@@ -396,7 +392,7 @@ func ghPost(_ endpoint: String) -> Bool {
         log("ghPost › launch error: \(error)")
         return false
     }
-    let timeoutItem = DispatchWorkItem(block: { task.terminate() })
+    let timeoutItem = DispatchWorkItem { task.terminate() }
     DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
     task.waitUntilExit()
     timeoutItem.cancel()
