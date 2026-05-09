@@ -2,21 +2,31 @@ import Foundation
 
 // MARK: - Poll result value types
 
+/// Result value returned by `buildJobState` after a single poll cycle.
 struct JobPollResult {
+    /// Jobs to display in the popover (in_progress → queued → cached done).
     let display: [ActiveJob]
+    /// Updated completed-job cache, trimmed to 30 entries.
     let newCache: [Int: ActiveJob]
+    /// Live-job snapshot for the next poll’s diff.
     let newPrevLive: [Int: ActiveJob]
 }
 
+/// Result value returned by `buildGroupState` after a single poll cycle.
 struct GroupPollResult {
+    /// Action groups to display in the popover.
     let display: [ActionGroup]
+    /// Updated group cache, trimmed to 50 entries.
     let newGroupCache: [String: ActionGroup]
+    /// Live-group snapshot for the next poll’s diff.
     let newPrevLiveGroups: [String: ActionGroup]
 }
 
 // MARK: - Job state builder
 
 extension RunnerStore {
+    /// Fetches live jobs, reconciles completions against the previous snapshot,
+    /// updates the completed-job cache, and returns a `JobPollResult`.
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
         for scope in ScopeStore.shared.scopes {
@@ -104,6 +114,8 @@ extension RunnerStore {
 // MARK: - Group state builder
 
 extension RunnerStore {
+    /// Fetches live action groups, reconciles completions against the previous snapshot,
+    /// updates the group cache, and returns a `GroupPollResult`.
     func buildGroupState(
         snapPrevGroups: [String: ActionGroup],
         snapGroupCache: [String: ActionGroup],
