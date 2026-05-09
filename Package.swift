@@ -4,9 +4,15 @@ import PackageDescription
 let package = Package(
     name: "RunnerBar",
     platforms: [.macOS(.v13)],
+    dependencies: [
+        .package(url: "https://github.com/s1ntoneli/AppUpdater", from: "1.0.0")
+    ],
     targets: [
         .executableTarget(
             name: "RunnerBar",
+            dependencies: [
+                .product(name: "AppUpdater", package: "AppUpdater")
+            ],
             path: "Sources/RunnerBar"
         )
     ]

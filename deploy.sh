@@ -2,9 +2,21 @@
 set -e
 
 VERSION=$(cat dist/version.txt)
+ASSET="runner-bar-${VERSION}.zip"
 
-echo "→ Deploying $VERSION to gh-pages..."
+echo "→ Renaming artifact for GitHub Releases..."
+cp dist/RunnerBar.zip "dist/${ASSET}"
 
+# GitHub Release — required for AppUpdater asset discovery (ref #345).
+# AppUpdater looks for an asset named <repo>-<semver>.zip on the release.
+echo "→ Creating GitHub Release $VERSION..."
+gh release create "v${VERSION}" \
+  "dist/${ASSET}" \
+  --title "v${VERSION}" \
+  --notes "Release $VERSION"
+
+# gh-pages — kept for install.sh bootstrap (curl | bash first-install).
+echo "→ Deploying to gh-pages for install.sh bootstrap..."
 if [ ! -d "_pages" ]; then
     git worktree add _pages gh-pages
 fi
@@ -21,4 +33,4 @@ cd ..
 
 git worktree remove _pages --force
 
-echo "✓ Deployed — https://eonist.github.io/runner-bar/"
+echo "✓ Done — https://github.com/eonist/runner-bar/releases/tag/v${VERSION}"

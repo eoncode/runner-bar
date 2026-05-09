@@ -1,4 +1,5 @@
 // swiftlint:disable file_length
+import AppUpdater
 import ServiceManagement
 import SwiftUI
 
@@ -22,6 +23,9 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// Phase 5 (issue #345): `aboutSection` gains an update row backed by
+/// `AppUpdaterService`, showing download progress and an install button.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -33,6 +37,8 @@ struct SettingsView: View {
     @ObservedObject private var legal = LegalPrefsStore.shared
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
+    /// Drives the update row in aboutSection (Phase 5 — ref #345).
+    @ObservedObject private var updaterService = AppUpdaterService.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -439,6 +445,8 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: Phase 5 — About + update row (ref #345)
+
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("About")
@@ -458,9 +466,55 @@ struct SettingsView: View {
                     .font(.system(size: 12)).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 2)
+            updateRow
             Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
                 .font(.system(size: 11)).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
+        }
+    }
+
+    /// Update status row. Observes `AppUpdaterService.shared.updater.state`.
+    /// States: none (idle + manual check button), downloading (progress bar),
+    /// downloaded (install button). All other states render nothing.
+    @ViewBuilder
+    private var updateRow: some View {
+        switch updaterService.updater.state {
+        case .none:
+            HStack {
+                Text("Updates").font(.system(size: 12))
+                Spacer()
+                Button("Check now") { updaterService.updater.check() }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 2)
+
+        case .downloading(let release, _, let fraction):
+            HStack {
+                Text("Downloading v\(release.tagName.description)…")
+                    .font(.system(size: 12))
+                Spacer()
+                ProgressView(value: fraction)
+                    .frame(width: 80)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 2)
+
+        case .downloaded(let release, _, let bundle):
+            HStack {
+                Text("v\(release.tagName.description) ready")
+                    .font(.system(size: 12))
+                Spacer()
+                Button("Install & Relaunch") {
+                    updaterService.updater.install(bundle)
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 2)
+
+        default:
+            EmptyView()
         }
     }
 
