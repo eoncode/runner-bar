@@ -6,12 +6,9 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
-// SIZING CONTRACT:
+// SIZING CONTRACT (mirrors main branch exactly):
 //   navigate() = rootView swap ONLY. Zero size changes. Ever.
-//   Size is set ONCE per open in openPopover().
-//   Height is ALWAYS maxHeight (620) — fixed, not a cap.
-//   Width comes from fittingSize (idealWidth: 420 contract).
-//   ScrollView in ActionsListView + ActionDetailView absorbs spare space.
+//   Size is set ONCE per open in openPopover() from fittingSize, capped at maxHeight.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER touch contentSize or setFrameSize inside navigate()
@@ -19,7 +16,6 @@ import SwiftUI
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ❌ NEVER guard observable.reload() on !popoverIsOpen — store polls must
 //    always reach the view while the popover is visible (#296 regression fix)
-// ❌ NEVER use fittingSize.height as popover height — detail views will clip
 
 private enum NavState {
     case main
@@ -42,9 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var popoverIsOpen = false
 
     private static let fixedWidth: CGFloat = 420
-    /// Popover height is always this value — fixed, not a cap.
-    /// All views (main + detail) are designed to fill this height via ScrollView.
-    private static let fixedHeight: CGFloat = 620
+    /// Maximum popover height. Applied as a cap on fittingSize.height in openPopover().
+    /// Prevents an unbounded VStack (no ScrollView) from making the popover taller than the screen.
+    private static let maxHeight: CGFloat = 620
 
     // MARK: - App lifecycle
 
@@ -55,8 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             button.action = #selector(togglePopover)
             button.target = self
         }
-        let initialSize = NSSize(width: Self.fixedWidth, height: Self.fixedHeight)
         let controller = NSHostingController(rootView: mainView())
+        let initialSize = NSSize(width: Self.fixedWidth, height: 300)
         controller.view.frame = NSRect(origin: .zero, size: initialSize)
         hostingController = controller
         let pop = NSPopover()
@@ -69,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
+            // ⚠️ Always reload — do NOT guard on !popoverIsOpen.
             DispatchQueue.main.async { self.observable.reload() }
         }
         RunnerStore.shared.start()
@@ -263,8 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Always uses fixedWidth x fixedHeight (420x620).
-    /// All views fill this frame via ScrollView — no clipping on navigate().
+    /// Order: reload() → fittingSize → cap at maxHeight → setFrameSize → contentSize → show().
+    /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -274,7 +271,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let size = NSSize(width: Self.fixedWidth, height: Self.fixedHeight)
+        let fitting = hostingController.view.fittingSize
+        let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+        let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
+        let size = NSSize(width: width, height: height)
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
