@@ -5,14 +5,41 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - SettingsView
 
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  ☠️  SettingsView — POPOVER SIZING CONTRACT — READ BEFORE ANY EDIT  ☠️      ║
+// ╠══════════════════════════════════════════════════════════════════════════════╣
+// ║                                                                              ║
+// ║  Popover height is set ONCE in AppDelegate.openPopover() via fittingSize.   ║
+// ║  SwiftUI computes fittingSize by offering the view an UNCONSTRAINED size.   ║
+// ║  Any modifier that forces infinite height CORRUPTS fittingSize.width and    ║
+// ║  causes AppKit to mis-position the popover anchor (side-jump regression).   ║
+// ║                                                                              ║
+// ║  THE ONE FRAME RULE for the root VStack:                                    ║
+// ║    .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)            ║
+// ║    ❌ NEVER change idealWidth without updating AppDelegate.fixedWidth        ║
+// ║    ❌ NEVER add maxHeight: .infinity to the root VStack                     ║
+// ║    ❌ NEVER add .frame(height:) to the root VStack                          ║
+// ║    ❌ NEVER add .fixedSize() to the root VStack                             ║
+// ║    ❌ NEVER add .frame(maxHeight:) to the ScrollView                        ║
+// ║                                                                              ║
+// ║  reload() rules — see RunnerStoreObservable.swift:                          ║
+// ║    ❌ NEVER call store.reload() outside submitScope()                       ║
+// ║    ❌ NEVER add store.reload() to onAppear (it runs before popover is open) ║
+// ║                                                                              ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
 /// Settings view — complete implementation for all phases 1-6.
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
 ///
-/// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.fixedWidth (480).
+/// ⚠️ SIZING GUARD: .frame(idealWidth: 480) on the root VStack MUST match
+/// AppDelegate.fixedWidth (480). Mismatch causes fittingSize.height to be
+/// computed at the wrong width, wrapping content and mis-sizing the popover.
 /// ❌ NEVER change idealWidth without updating fixedWidth in AppDelegate.
 struct SettingsView: View {
+    /// Called when the user taps the back chevron — wired to AppDelegate.navigate(to: mainView()).
+    /// ❌ NEVER call navigate() directly from here. Always use this callback.
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
 
@@ -43,11 +70,28 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
+    // ╔══════════════════════════════════════════════════════════════════════╗
+    // ║  ☠️  body — FRAME CONTRACT — NEVER VIOLATE  ☠️                      ║
+    // ╠══════════════════════════════════════════════════════════════════════╣
+    // ║  The root VStack MUST end with:                                      ║
+    // ║    .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)    ║
+    // ║                                                                      ║
+    // ║  ❌ NEVER add .frame(maxHeight: .infinity) to the root VStack       ║
+    // ║  ❌ NEVER add .frame(height:) to the root VStack                    ║
+    // ║  ❌ NEVER add .frame(maxHeight:) to the ScrollView                  ║
+    // ║  ❌ NEVER add .fixedSize() to the root VStack or ScrollView         ║
+    // ║                                                                      ║
+    // ║  idealWidth 480 MUST match AppDelegate.fixedWidth.                  ║
+    // ║  If they ever diverge, fittingSize is computed at the wrong width   ║
+    // ║  → text wraps → popover is wrong height → side-jump regression.     ║
+    // ╚══════════════════════════════════════════════════════════════════════╝
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
             ScrollView {
+                // ❌ NEVER add .frame(maxHeight:) to this ScrollView.
+                // Height is driven by fittingSize in AppDelegate.openPopover().
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
                     Divider()
@@ -66,9 +110,13 @@ struct SettingsView: View {
                 .padding(.bottom, 16)
             }
         }
-        // ⚠️ REGRESSION GUARD: keep idealWidth: 480 — matches PopoverMainView and AppDelegate.fixedWidth.
+        // ⚠️ THE ONE FRAME RULE — MUST match AppDelegate.fixedWidth (480).
+        // ❌ NEVER change idealWidth without updating AppDelegate.fixedWidth.
+        // ❌ NEVER add maxHeight here — it corrupts fittingSize.width.
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
+            // ❌ NEVER call store.reload() here — openPopover() already called it
+            // before showing the popover. Calling it again here can clobber state.
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
@@ -128,6 +176,11 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
+    /// Navigation header with back button.
+    ///
+    /// ❌ NEVER call navigate() directly here — use the `onBack` closure.
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to this HStack.
+    /// Doing so corrupts the parent fittingSize and causes popover mis-sizing.
     private var headerBar: some View {
         HStack {
             Button(action: onBack, label: {
@@ -147,6 +200,11 @@ struct SettingsView: View {
 
     // MARK: Phase 1 + 2 + 4 — Local Runners
 
+    /// Local runner rows section.
+    ///
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to any VStack/HStack here.
+    /// ❌ NEVER add .frame(maxHeight: .infinity) — it corrupts fittingSize.
+    /// All sizing is driven by the root frame contract in body.
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -199,6 +257,11 @@ struct SettingsView: View {
         }
     }
 
+    /// Single local runner row.
+    ///
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to the outer HStack.
+    /// ❌ NEVER add .frame(maxHeight: .infinity) to the VStack inside.
+    /// Row height is determined by content — let SwiftUI measure it naturally.
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
         HStack(spacing: 6) {
             Circle()
@@ -215,7 +278,7 @@ struct SettingsView: View {
             Spacer()
             Text(runner.displayStatus)
                 .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).fixedSize()
+                .lineLimit(1).fixedSize()  // ✔ fixedSize() on a single small label is SAFE
             if runner.isRunning {
                 Button(
                     action: {
@@ -249,6 +312,10 @@ struct SettingsView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
 
+    /// Dispatches a runner lifecycle action on a background thread, then refreshes on main.
+    ///
+    /// ❌ NEVER call store.reload() here — lifecycle changes do not affect RunnerStore
+    /// action/job data. Calling reload() here would fire a redundant publish cycle.
     private func lifecycleAction(_ action: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             action()
@@ -267,6 +334,9 @@ struct SettingsView: View {
 
     // MARK: - Section 2: API-registered runner scopes
 
+    /// API-registered runner scopes section.
+    ///
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to any VStack/HStack here.
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Runner management")
@@ -279,7 +349,7 @@ struct SettingsView: View {
                         Text(runner.name).font(.system(size: 13)).lineLimit(1)
                         Spacer()
                         Text(runner.displayStatus)
-                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
+                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()  // ✔ safe on small label
                     }
                     .padding(.horizontal, 12).padding(.vertical, 5)
                 }
@@ -318,6 +388,8 @@ struct SettingsView: View {
     }
 
     // #11: Each toggle row uses HStack so label stays leading and toggle stays trailing.
+    /// Notifications section.
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to any HStack here.
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications")
@@ -341,6 +413,8 @@ struct SettingsView: View {
         }
     }
 
+    /// General settings section.
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to any HStack/VStack here.
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General")
@@ -386,6 +460,8 @@ struct SettingsView: View {
         }
     }
 
+    /// Account section.
+    /// ❌ NEVER add .frame(height:) or .fixedSize() to the outer HStack here.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
@@ -465,6 +541,11 @@ struct SettingsView: View {
         LoginItem.setEnabled(enabled)
     }
 
+    /// Adds a scope and triggers a full data reload.
+    ///
+    /// ✔ store.reload() is CORRECT here — user just mutated the scope list,
+    ///   RunnerStore needs to re-fetch with the new scope before the next poll.
+    /// ❌ NEVER add a second store.reload() elsewhere in SettingsView.
     private func submitScope() {
         let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
