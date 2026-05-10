@@ -9,9 +9,6 @@ import SwiftUI
 // SIZING CONTRACT (mirrors main branch exactly):
 //   navigate() = rootView swap ONLY. Zero size changes. Ever.
 //   Size is set ONCE per open in openPopover() from fittingSize, capped at maxHeight.
-//   minHeight ensures detail views (ActionDetailView / JobDetailView) always have
-//   enough frame to render their ScrollView content — the main view on a single-row
-//   poll can produce a fittingSize as small as ~80px which traps detail in a tiny frame.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER touch contentSize or setFrameSize inside navigate()
@@ -41,12 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var popoverIsOpen = false
 
     private static let fixedWidth: CGFloat = 420
-    /// Maximum popover height. Applied as a cap in openPopover().
+    /// Maximum popover height. Applied as a cap on fittingSize.height in openPopover().
+    /// Prevents an unbounded VStack (no ScrollView) from making the popover taller than the screen.
     private static let maxHeight: CGFloat = 620
-    /// Minimum popover height. Ensures ActionDetailView / JobDetailView always
-    /// have enough frame to render their ScrollView content even when the main
-    /// view's fittingSize is small (single-row poll → ~80px).
-    private static let minHeight: CGFloat = 360
 
     // MARK: - App lifecycle
 
@@ -268,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Order: reload() → fittingSize → clamp(minHeight, maxHeight) → setFrameSize → contentSize → show().
+    /// Order: reload() → fittingSize → cap at maxHeight → setFrameSize → contentSize → show().
     /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
     @MainActor
     private func openPopover() {
@@ -281,10 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         observable.reload()
         let fitting = hostingController.view.fittingSize
         let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
-        let rawHeight = fitting.height > 0 ? fitting.height : 300
-        // Clamp between minHeight and maxHeight so detail views always have
-        // a usable frame even when the main view only has 1-2 rows visible.
-        let height = min(max(rawHeight, Self.minHeight), Self.maxHeight)
+        let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
         let size = NSSize(width: width, height: height)
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
