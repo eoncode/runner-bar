@@ -6,20 +6,19 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
-// SIZING CONTRACT (mirrors main branch exactly):
+// SIZING CONTRACT (identical to main branch):
 //   navigate() = rootView swap ONLY. Zero size changes. Ever.
 //   Size is set ONCE per open in openPopover() from fittingSize, capped at maxHeight.
-//   layoutSubtreeIfNeeded() is called after reload() so SwiftUI flushes its layout
-//   pass before fittingSize is read. Without this, fittingSize reflects the stale
-//   frame from the previous close, not the current content.
+//   reload() is guarded by !popoverIsOpen — data is frozen while popover is open.
+//   PopoverMainView has NO ScrollView, so fittingSize is always accurate.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER touch contentSize or setFrameSize inside navigate()
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ❌ NEVER add a minHeight floor — layoutSubtreeIfNeeded() makes fittingSize accurate
-// ❌ NEVER guard observable.reload() on !popoverIsOpen — store polls must
-//    always reach the view while the popover is visible (#296 regression fix)
+// ❌ NEVER remove the !popoverIsOpen guard on reload() in onChange
+//    Removing it lets polls fire @Published while open, re-rendering
+//    against a fixed frame and corrupting layout on every poll cycle.
 
 private enum NavState {
     case main
@@ -43,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     private static let fixedWidth: CGFloat = 420
     /// Maximum popover height. Applied as a cap on fittingSize.height in openPopover().
-    /// Prevents an unbounded VStack (no ScrollView) from making the popover taller than the screen.
     private static let maxHeight: CGFloat = 620
 
     // MARK: - App lifecycle
@@ -69,10 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
-            // ⚠️ Always reload — do NOT guard on !popoverIsOpen.
-            // Store polls must reach the SwiftUI view while the popover is visible
-            // so runners and inline jobs update in real time (#296 regression fix).
-            DispatchQueue.main.async { self.observable.reload() }
+            // ⚠️ MUST guard on !popoverIsOpen — matches main branch contract.
+            // Polling while open fires @Published into SwiftUI against a fixed
+            // frame, causing layout corruption on every cycle. Data is frozen
+            // while open; reload() fires once at open time in openPopover().
+            if !self.popoverIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
     }
@@ -266,15 +265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Order: reload() → layoutSubtreeIfNeeded() → fittingSize → cap at maxHeight
+    /// Order: popoverIsOpen = true → reload() → fittingSize → cap at maxHeight
     ///        → setFrameSize → contentSize → show().
-    ///
-    /// layoutSubtreeIfNeeded() flushes the SwiftUI layout pass that reload() triggers
-    /// via @Published. Without it, fittingSize reflects the stale frame from the
-    /// previous close (often a 1-row ~80px main view), causing ActionDetailView's
-    /// ScrollView to be crammed into that tiny frame and cutting off all job rows.
-    ///
-    /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
+    /// ❌ NEVER touch size after show().
+    /// ❌ NEVER call setFrameSize while isShown == true.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -284,9 +278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
-        // Flush the SwiftUI layout pass so fittingSize reflects current content,
-        // not the stale frame from the previous session.
-        hostingController.view.layoutSubtreeIfNeeded()
         let fitting = hostingController.view.fittingSize
         let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
         let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
