@@ -28,6 +28,9 @@ import SwiftUI
 // ║    ❌ NEVER use onLogLoaded to call setFrameSize or contentSize              ║
 // ║    ❌ NEVER wire onLogLoaded to any AppKit sizing API                        ║
 // ║                                                                              ║
+// ║  If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT        ║
+// ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
+// ║  is removed is major major major.                                           ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 
 /// Shows the raw log text for a single `JobStep`.
@@ -48,6 +51,7 @@ struct StepLogView: View {
     /// the SIZING CONTRACT comment at the top of this file first. Passing any
     /// AppKit sizing call here while popover.isShown == true will reintroduce
     /// issue #13 (popover side-jump on log load). Don't do it.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     var onLogLoaded: (() -> Void)? = nil
 
     /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
@@ -59,6 +63,7 @@ struct StepLogView: View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Header — always visible, OUTSIDE ScrollView ──────────────────────
             // ❌ NEVER move this inside the ScrollView — it must stay visible always.
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -98,6 +103,7 @@ struct StepLogView: View {
             // ❌ NEVER add .frame(height:) to this ScrollView.
             // The popover height is set once in openPopover() via fittingSize.
             // The ScrollView is what absorbs log content of any length safely.
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -124,6 +130,7 @@ struct StepLogView: View {
         }
         // ❌ NEVER change maxHeight to a fixed value — the popover height is
         // driven by fittingSize in openPopover(), not by this frame modifier.
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
@@ -153,6 +160,7 @@ struct StepLogView: View {
                 // If you are reading this because you want to add a resize call:
                 // STOP. Read the SIZING CONTRACT at the top of this file.
                 // Calling any AppKit sizing API here causes issue #13 (side-jump).
+                // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
                 onLogLoaded?()
             }
         }

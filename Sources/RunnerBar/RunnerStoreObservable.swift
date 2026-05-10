@@ -4,35 +4,6 @@ import SwiftUI
 
 // MARK: - RunnerStoreObservable
 
-// ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║  ☠️  RunnerStoreObservable — REGRESSION CONTRACT — READ BEFORE EDITING  ☠️  ║
-// ╠══════════════════════════════════════════════════════════════════════════════╣
-// ║                                                                              ║
-// ║  This class is the ONLY bridge between RunnerStore and SwiftUI views.        ║
-// ║  It is intentionally NOT @MainActor (see reload() docstring for why).        ║
-// ║                                                                              ║
-// ║  WHAT BROKE IN THE PAST AND MUST NEVER HAPPEN AGAIN:                        ║
-// ║                                                                              ║
-// ║  1. objectWillChange.send() was added inside reload().                       ║
-// ║     Result: double-publish, SwiftUI re-rendered twice per poll cycle,        ║
-// ║     causing the popover to flicker and fittingSize to be re-evaluated        ║
-// ║     at the wrong time. NEVER add objectWillChange.send() here.               ║
-// ║                                                                              ║
-// ║  2. reload() was called from popoverDidClose() in AppDelegate.               ║
-// ║     Result: clobbered savedNavState, user lost navigation position.          ║
-// ║     NEVER call reload() from popoverDidClose().                              ║
-// ║                                                                              ║
-// ║  3. reload() was made async or dispatched to a background queue.             ║
-// ║     Result: race condition — published properties updated off main thread,   ║
-// ║     SwiftUI threw runtime warnings and occasionally crashed.                 ║
-// ║     NEVER make reload() async. NEVER dispatch it off the main thread.        ║
-// ║                                                                              ║
-// ║  4. withAnimation(nil) was removed from reload().                            ║
-// ║     Result: SwiftUI's default spring animation ran on every poll, causing    ║
-// ║     rows to visually bounce every 30 s. NEVER remove withAnimation(nil).     ║
-// ║                                                                              ║
-// ╚══════════════════════════════════════════════════════════════════════════════╝
-
 /// Observable bridge between the singleton `RunnerStore` and SwiftUI views.
 /// `PopoverMainView`, `SettingsView`, and `AppDelegate` hold one shared instance.
 /// Call `reload()` to pull the latest state from `RunnerStore.shared` onto the main thread.
@@ -53,29 +24,13 @@ final class RunnerStoreObservable: ObservableObject {
 
     init() {}
 
-    // ╔═══════════════════════════════════════════════════════════════════════╗
-    // ║  ☠️  reload() — ABSOLUTE RULES — NEVER VIOLATE THESE  ☠️             ║
-    // ╠═══════════════════════════════════════════════════════════════════════╣
-    // ║                                                                       ║
-    // ║  ❌ NEVER add objectWillChange.send() here — causes double-publish   ║
-    // ║     and popover flicker. The @Published properties already fire it.   ║
-    // ║                                                                       ║
-    // ║  ❌ NEVER remove withAnimation(nil) — removing it re-enables SwiftUI ║
-    // ║     default spring animation on every poll, making rows bounce.       ║
-    // ║                                                                       ║
-    // ║  ❌ NEVER make this function async or move it off the main thread     ║
-    // ║     RunnerStore.onChange already guarantees main-thread delivery.     ║
-    // ║                                                                       ║
-    // ║  ❌ NEVER call this from popoverDidClose() in AppDelegate             ║
-    // ║     It clobbers savedNavState and loses nav position on reopen.       ║
-    // ║                                                                       ║
-    // ║  ✔  ONLY call from:                                                   ║
-    // ║      - AppDelegate.openPopover() (once, before popover.show())        ║
-    // ║      - RunnerStore.onChange handler (when popoverIsOpen == false)     ║
-    // ║      - SettingsView.submitScope() after a user scope mutation          ║
-    // ║      - PopoverMainView runnerRefreshTimer (every 5 s, on main thread) ║
-    // ║                                                                       ║
-    // ╚═══════════════════════════════════════════════════════════════════════╝
+    /// Pulls the current state from `RunnerStore.shared` with no animation
+    /// (see REGRESSION GUARD in PopoverMainView — NEVER add animation here).
+    /// ❌ NEVER add objectWillChange.send() here — double-publish causes flicker.
+    /// ❌ NEVER remove withAnimation(nil) — removing it re-enables SwiftUI spring animation on every poll.
+    /// ❌ NEVER make this async or move it off the main thread.
+    /// ❌ NEVER call this from popoverDidClose() — clobbers savedNavState.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     func reload() {
         withAnimation(nil) {
             runners = RunnerStore.shared.runners

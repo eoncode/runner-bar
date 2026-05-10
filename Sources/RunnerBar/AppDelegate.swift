@@ -50,6 +50,9 @@ import SwiftUI
 // ║  These two calls are safe there because the popover is NOT yet shown.       ║
 // ║  Replicate them anywhere else and you will break sizing or cause jumping.   ║
 // ║                                                                              ║
+// ║  If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT        ║
+// ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
+// ║  is removed is major major major.                                           ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 
 /// Navigation state machine for the popover's view hierarchy.
@@ -83,12 +86,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     // Guards the onChange handler so it does not call reload() while the
     // popover is open (which would clobber the live view mid-navigation).
+    // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     private var popoverIsOpen = false
 
     /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 420).
     /// ❌ NEVER change this value without also updating idealWidth in PopoverMainView.
     /// Mismatch causes fittingSize.height to be computed at the wrong width,
     /// wrapping text and producing an incorrect popover height.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     private static let fixedWidth: CGFloat = 420
 
     // MARK: - App lifecycle
@@ -127,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Resets navigation state after the popover closes.
     /// ❌ NEVER call reload() here — it mutates observable state on a just-closed
     /// popover and can clobber savedNavState before openPopover() reads it.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
@@ -221,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// setFrameSize + contentSize while popover.isShown == true, making AppKit
     /// recompute the screen anchor and jump the popover sideways on every log load.
     /// StepLogView's ScrollView absorbs log content of any length. No resize needed.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -231,6 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
             }
             // ☠️ NO onLogLoaded — see docstring above. Do NOT add it.
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
         ))
     }
 
@@ -266,6 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     ///
     /// ☠️ onLogLoaded IS NOT PASSED HERE — DO NOT ADD IT.
     /// See logViewFromAction() for the full explanation.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -276,6 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.navigate(to: self.detailView(job: job))
             }
             // ☠️ NO onLogLoaded — do NOT add it. See logViewFromAction() docstring.
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
         ))
     }
 
@@ -324,6 +334,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ║  AppKit to recompute the screen anchor → popover jumps sideways.     ║
     // ║  This was issue #13. It was fixed by making this a one-liner.        ║
     // ║  Do not break it again.                                              ║
+    // ║                                                                      ║
+    // ║  If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ║
+    // ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this    ║
+    // ║  comment is removed is major major major.                            ║
     // ╚══════════════════════════════════════════════════════════════════════╝
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
@@ -355,6 +369,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ║  fittingSize is read here so the popover height fits the CURRENT        ║
     // ║  rootView content (main = short, detail = taller, log = tallest).       ║
     // ║  Removing the fittingSize read causes all views to render at 300pt.     ║
+    // ║                                                                          ║
+    // ║  If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT    ║
+    // ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this        ║
+    // ║  comment is removed is major major major.                               ║
     // ╚══════════════════════════════════════════════════════════════════════════╝
     private func openPopover() {
         guard let button = statusItem?.button,
