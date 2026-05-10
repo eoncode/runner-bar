@@ -13,6 +13,9 @@ import SwiftUI
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
+// RULE 6: ❌ NEVER add .frame(maxHeight:) to the ScrollView — height is driven
+//         entirely by fittingSize in AppDelegate.openPopover(). Capping the
+//         ScrollView height here clips content and causes popover mis-sizing.
 
 /// Root popover view — unified scrollable Actions list per issue #294.
 /// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
@@ -32,7 +35,7 @@ struct PopoverMainView: View {
     /// Number of action groups currently visible in the paginated list.
     @State private var visibleCount: Int = 10
 
-    /// Root layout: header → divider → optional rate-limit banner → runners → scrollable actions → quit.
+    /// Root layout: header → divider → optional rate-limit banner → runners → scrollable actions.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
@@ -52,9 +55,7 @@ struct PopoverMainView: View {
                     actionsSection
                 }
             }
-            .frame(maxHeight: 400)
-            Divider()
-            quitButton
+            // ❌ DO NOT add .frame(maxHeight:) here — see RULE 6 above.
         }
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
@@ -126,27 +127,9 @@ struct PopoverMainView: View {
         }
     }
 
-    // MARK: - Quit
-
-    /// Quit RunnerBar button pinned to the popover bottom.
-    private var quitButton: some View {
-        Button(
-            action: { NSApplication.shared.terminate(nil) },
-            label: {
-                Text("Quit RunnerBar")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
-            }
-        )
-        .buttonStyle(.plain)
-        .padding(.horizontal, 12).padding(.vertical, 6)
-    }
-
     // MARK: - Helpers
 
     /// Opens the GitHub PAT setup docs in the default browser.
-    /// NSAppleScript/Terminal-based device-flow was removed — the app never generates
-    /// a user_code so the flow could never complete (ref #221).
-    /// Auth.swift resolves the token via: `gh auth token` → `GH_TOKEN` → `GITHUB_TOKEN` (ref #246).
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"

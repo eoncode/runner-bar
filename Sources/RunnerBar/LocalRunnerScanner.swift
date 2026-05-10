@@ -8,15 +8,17 @@ import Foundation
 /// 1. **LaunchAgents** — `~/Library/LaunchAgents/actions.runner.*.plist`
 ///    Parses `owner`, `repo`, and `runnerName` from the plist filename.
 ///
-/// 2. **`.runner` JSON files** — `find ~ /opt /usr/local -maxdepth 6 -name ".runner"`
-///    Reads `gitHubUrl`, `runnerName`, `agentId`, and `workFolder` from each
-///    file. This is the most authoritative local source.
+/// 2. **`.runner` JSON files** — searches known runner install paths only
+///    (NOT `~` wholesale, which triggers macOS TCC permission dialogs for
+///    Desktop/Documents/Downloads). Searches:
+///    `~/actions-runner`, `~/runner`, `~/github-runner`, `/opt/actions-runner`,
+///    `/opt/runner`, `/usr/local/actions-runner`, `/usr/local/runner`
+///    up to depth 6. This avoids the TCC prompt while still covering all
+///    common self-hosted runner install locations.
 ///
 /// 3. **Live service check** — `launchctl list | grep actions.runner`
 ///    Flags which runners currently have an active launchd service, indicating
-///    they are registered and running. Service labels embed owner, repo, and
-///    runnerName, so runners with identical names but different scopes are
-///    correctly distinguished — no cross-runner contamination.
+///    they are registered and running.
 struct LocalRunnerScanner {
     // MARK: - .runner JSON schema
 
@@ -36,28 +38,18 @@ struct LocalRunnerScanner {
         var models: [String: RunnerModel] = [:]
 
         // Source 2 first: .runner JSON is most authoritative — richer data.
-        // JSON models are inserted under their stable id (agentId or composite).
         for model in scanRunnerJSONFiles() {
             models[model.id] = model
         }
 
         // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found.
-        // Skip if a JSON model already covers the same runner: detect overlap by
-        // checking whether any existing JSON entry has the same runnerName+gitHubUrl
-        // composite key as the LaunchAgent candidate. This prevents a second dict
-        // entry for the same physical runner and avoids SwiftUI id churn on the
-        // next scan (when JSON supersedes a previously LaunchAgent-only entry).
         for model in scanLaunchAgents() {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
             let alreadyCoveredByJSON = models.values.contains { existing in
-                // A JSON model covers this LaunchAgent entry when its
-                // runnerName+gitHubUrl composite matches — regardless of whether
-                // the JSON model's id is agentId-based or composite.
                 let existingComposite = "\(existing.runnerName)-\(existing.gitHubUrl ?? "")"
                 return existingComposite == compositeKey
             }
             guard !alreadyCoveredByJSON else { continue }
-            // Only insert if no entry exists yet under this composite key.
             if models[compositeKey] == nil {
                 models[compositeKey] = model
             }
@@ -66,11 +58,7 @@ struct LocalRunnerScanner {
         // Source 3: mark which runners are live.
         let liveLabels = scanLiveServices()
         for key in models.keys {
-            // Safe optional binding — key is guaranteed to exist but avoids force-unwrap.
             if let model = models[key] {
-                // Match by service label which contains the runner name. This is
-                // scope-aware: two runners with the same name but different
-                // owner/repo get distinct labels and are matched independently.
                 models[key]?.isRunning = liveLabels.contains { $0.contains(model.runnerName) }
             }
         }
@@ -80,13 +68,6 @@ struct LocalRunnerScanner {
 
     // MARK: - Source 1: LaunchAgents
 
-    /// Scans `~/Library/LaunchAgents` for plist files matching the pattern
-    /// `actions.runner.<owner>.<repo>.<runnerName>.plist` and returns a minimal
-    /// `RunnerModel` for each one found.
-    ///
-    /// Parsing splits on the `"actions.runner."` prefix rather than on every `.`
-    /// so that dotted owner, repo, or runner names (e.g. `my.org/my.repo`) are
-    /// handled correctly without silently mis-parsing the components.
     private func scanLaunchAgents() -> [RunnerModel] {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
@@ -97,15 +78,8 @@ struct LocalRunnerScanner {
         let prefix = "actions.runner."
         return entries.compactMap { url -> RunnerModel? in
             let filename = url.deletingPathExtension().lastPathComponent
-            // Only process files whose names start with the known prefix.
             guard filename.hasPrefix(prefix) else { return nil }
-            // Strip the prefix, leaving "<owner>.<repo>.<runnerName>" (or just
-            // "<owner>.<repo>" for runners registered at org level).
             let remainder = String(filename.dropFirst(prefix.count))
-            // The remainder uses the first two dot-separated tokens as owner and
-            // repo; everything after the second dot is the runner name. This is
-            // still an approximation for dotted owner/repo names, but it is
-            // significantly more robust than splitting the whole filename on ".".
             let parts = remainder.components(separatedBy: ".")
             guard parts.count >= 2 else { return nil }
             let owner = parts[0]
@@ -125,15 +99,24 @@ struct LocalRunnerScanner {
 
     // MARK: - Source 2: .runner JSON files
 
-    /// Uses `find` to locate `.runner` JSON files in common install locations
-    /// and decodes each one into a `RunnerModel`.
+    /// Searches known runner install locations only — avoids scanning `~` wholesale
+    /// which would trigger macOS TCC prompts for Desktop/Documents/Downloads (macOS 14+).
     private func scanRunnerJSONFiles() -> [RunnerModel] {
-        // -maxdepth MUST precede -name: on macOS BSD find, placing -maxdepth
-        // after a predicate applies the depth limit only to subtrees past that
-        // point, so the guard would not work and could traverse node_modules etc.
-        // shell() is defined in Shell.swift.
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        // Known self-hosted runner install directories — explicit paths only.
+        // ⚠️ DO NOT add `~` or `$HOME` here: broad home-dir scans trigger TCC dialogs.
+        let searchPaths = [
+            "\(home)/actions-runner",
+            "\(home)/runner",
+            "\(home)/github-runner",
+            "/opt/actions-runner",
+            "/opt/runner",
+            "/usr/local/actions-runner",
+            "/usr/local/runner",
+        ].joined(separator: " ")
+
         let raw = shell(
-            "find ~ /opt /usr/local -maxdepth 6 -name '.runner' 2>/dev/null",
+            "find \(searchPaths) -maxdepth 6 -name '.runner' 2>/dev/null",
             timeout: 15
         )
         guard !raw.isEmpty else { return [] }
@@ -159,19 +142,7 @@ struct LocalRunnerScanner {
 
     // MARK: - Source 3: Live service check
 
-    /// Returns the set of launchd service labels for runner services that are
-    /// currently loaded and running, using `launchctl list | grep actions.runner`.
-    ///
-    /// This replaces the previous `ps aux | grep Runner.Listener` approach, which
-    /// was broken because `Runner.Listener` does not pass `--runnerName` — so the
-    /// old parsing never matched and `isRunning` was always `false`.
-    ///
-    /// Using launchctl service labels also fixes cross-runner contamination: two
-    /// runners with the same `runnerName` but different owner/repo get distinct
-    /// labels (e.g. `actions.runner.orgA.repoA.my-runner` vs
-    /// `actions.runner.orgB.repoB.my-runner`) and are matched independently.
     private func scanLiveServices() -> Set<String> {
-        // shell() is defined in Shell.swift.
         let output = shell(
             "launchctl list 2>/dev/null | grep actions.runner",
             timeout: 5
@@ -180,13 +151,10 @@ struct LocalRunnerScanner {
 
         var labels = Set<String>()
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            // launchctl list output: "<PID/->\t<exitCode>\t<label>"
-            // A non-"-" PID in column 1 means the service is currently running.
             let columns = line.components(separatedBy: "\t")
             guard columns.count >= 3 else { continue }
             let pid = columns[0].trimmingCharacters(in: .whitespaces)
             let label = columns[2].trimmingCharacters(in: .whitespaces)
-            // Only count services with an active PID (not "-").
             if pid != "-", !label.isEmpty {
                 labels.insert(label)
             }
