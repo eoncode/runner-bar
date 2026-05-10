@@ -6,16 +6,16 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59)
 // sizingOptions: default. Height read via fittingSize ONCE per open.
-// navigate() = rootView swap ONLY. Zero size changes. Ever.
+// navigate() = rootView swap + async remeasure ONLY. No sync size changes.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
+// ❌ NEVER touch contentSize or setFrameSize synchronously while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ⚠️ fixedWidth MUST match PopoverMainView’s .frame(idealWidth: 420).
+// ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 420).
 //     Mismatching these causes fittingSize.height to be calculated at the
 //     wrong width, wrapping content and producing an incorrect popover height.
 
-/// Navigation state machine for the popover’s view hierarchy.
+/// Navigation state machine for the popover's view hierarchy.
 private enum NavState {
     /// Root level: PopoverMainView.
     case main
@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
 
-    /// Fixed popover width — MUST match PopoverMainView’s .frame(idealWidth: 420).
+    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 420).
     /// ❌ NEVER set this to a value other than 420 without also updating idealWidth in PopoverMainView.
     private static let fixedWidth: CGFloat = 420
 
@@ -257,10 +257,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller’s root view. ZERO size changes. Forever.
-    /// ❌ NEVER touch contentSize or setFrameSize here — causes popover positioning regression.
+    /// Swaps the hosting controller's root view, then remeasures and resizes the popover
+    /// on the next run-loop turn so SwiftUI has laid out the new content.
+    ///
+    /// The async dispatch is the ONLY safe way to resize after a rootView swap:
+    /// - The swap itself is synchronous (zero cost, no flicker).
+    /// - The resize runs one run-loop turn later, after SwiftUI has committed the new layout.
+    /// - setFrameSize + contentSize are safe here because they run *after* the view is stable.
+    /// ❌ NEVER move the resize into the synchronous part of this function.
+    /// ❌ NEVER call this from a background thread.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
+        guard let hostingController, let popover, popover.isShown else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  let hc = self.hostingController,
+                  let pop = self.popover,
+                  pop.isShown else { return }
+            let newHeight = hc.view.fittingSize.height
+            guard newHeight > 0 else { return }
+            let newSize = NSSize(width: Self.fixedWidth, height: newHeight)
+            hc.view.setFrameSize(newSize)
+            pop.contentSize = newSize
+        }
     }
 
     // MARK: - Popover show/hide
@@ -275,7 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover. The ONE safe site for sizing.
+    /// Opens the popover. The ONE safe site for initial sizing.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
