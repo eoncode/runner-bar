@@ -9,22 +9,19 @@ import SwiftUI
 // ❌ NEVER remove maxWidth: .infinity
 // ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the ScrollView or any container
 //    The height is driven by fittingSize in AppDelegate, read once before show().
-// ❌ NEVER add expandedGroups toggle for in-progress groups — they are ALWAYS expanded per spec #296
 // ❌ NEVER add .onChange(of: store.actions) { visibleCount = 10 } — this resets inline
-//    job rows on every poll cycle. visibleCount resets via @State default on each open.
+//    job rows on every poll cycle.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 // RULE 6: ActionsListView uses ScrollView with NO .frame(maxHeight:).
-//         Height is driven by fittingSize in AppDelegate only.
-//         InlineJobsView has NO cap — all non-concluded jobs shown immediately per spec #178.
 //
-// INLINE JOBS SPEC (#178 #296):
-//   Show inline ↳ job rows when groupStatus == .inProgress OR .queued AND jobs are known.
-//   Do NOT restrict to inProgress-only — queued groups may already have job data.
-//   Filter: exclude jobs where conclusion != nil (already done).
+// INLINE JOBS SPEC (#178):
+//   Show ↳ job rows ONLY for jobs with status == "in_progress".
+//   ❌ NEVER show queued jobs inline — spec says only actively running jobs expand.
+//   Filter: $0.status == "in_progress" (NOT conclusion == nil).
 
 /// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
@@ -35,8 +32,6 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
-    /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
-    /// Resets to 10 naturally each time AppDelegate recreates PopoverMainView on open/close.
     @State private var visibleCount: Int = 10
 
     var body: some View {
@@ -57,7 +52,6 @@ struct PopoverMainView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 Divider()
             }
-            // ⚠️ SPEC ORDER (#296): Runners section ABOVE actions list.
             RunnersListView(runners: store.runners)
             ActionsListView(
                 actions: store.actions,
@@ -71,7 +65,6 @@ struct PopoverMainView: View {
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        // ⚠️ NO .onChange(of: store.actions) resetting visibleCount here.
     }
 }
 
@@ -180,9 +173,6 @@ private struct PopoverHeaderView: View {
 
 // MARK: - ActionsListView
 
-/// Scrollable actions list with pagination (Phase 3–5 / #302 #304 #305).
-/// ⚠️ ScrollView has NO .frame(maxHeight:) — height is driven by AppDelegate.fittingSize only.
-/// ⚠️ In-progress AND queued groups with known jobs are expanded — per spec #178 #296.
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
@@ -228,18 +218,15 @@ private struct ActionsListView: View {
 // MARK: - ActionRowView
 
 /// Single action group row.
-/// ⚠️ Inline ↳ job rows shown for inProgress AND queued groups that already have job data.
-/// ⚠️ Do NOT restrict to inProgress-only — queued groups at workflow level may have job data.
-/// ⚠️ Filter: exclude only jobs that have already concluded (conclusion != nil).
+/// ⚠️ Inline ↳ job rows shown ONLY for jobs with status == "in_progress".
+/// ❌ NEVER change filter to conclusion==nil — queued jobs must not appear inline per spec #178.
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
 
-    /// Show inline jobs for any active group (in_progress or queued) that has job data.
-    /// Per spec #178: the ↳ rows must appear as soon as job data is available.
-    private var showInlineJobs: Bool {
-        (actionGroup.groupStatus == .inProgress || actionGroup.groupStatus == .queued)
-            && !actionGroup.jobs.isEmpty
+    /// In-progress jobs to show inline. Only jobs actively running per spec #178.
+    private var inProgressJobs: [ActiveJob] {
+        actionGroup.jobs.filter { $0.status == "in_progress" }
     }
 
     var body: some View {
@@ -270,7 +257,6 @@ private struct ActionRowView: View {
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                             .frame(width: 28, alignment: .trailing)
                         // ⚠️ width 80 required — "IN PROGRESS" is 11 chars in .caption.
-                        // width 60 causes line-wrap and double-height rows (#296).
                         Text(actionStatusLabel(for: actionGroup))
                             .font(.caption)
                             .foregroundColor(actionStatusColor(for: actionGroup))
@@ -284,12 +270,10 @@ private struct ActionRowView: View {
             )
             .buttonStyle(.plain)
 
-            // ⚠️ Inline job rows: shown for inProgress + queued groups with known jobs.
-            // Filter: exclude jobs that have already concluded.
-            if showInlineJobs {
-                InlineJobsView(
-                    jobs: actionGroup.jobs.filter { $0.conclusion == nil }
-                )
+            // ⚠️ Inline job rows: in_progress jobs ONLY per spec #178.
+            // ❌ NEVER change to conclusion==nil — that shows queued jobs too.
+            if !inProgressJobs.isEmpty {
+                InlineJobsView(jobs: inProgressJobs)
             }
         }
     }
@@ -332,9 +316,8 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobsView
 
-/// Container for inline ↳ job sub-rows under a single action group (Phase 4 / #304).
-/// ⚠️ Receives non-concluded jobs — caller filters out jobs with conclusion != nil.
-/// ⚠️ NO cap — all jobs are shown immediately per spec #178.
+/// Inline ↳ job rows under a running action group.
+/// ⚠️ Receives in_progress jobs only — caller filters to status=="in_progress".
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
 
@@ -357,7 +340,7 @@ private struct InlineJobRowView: View {
                 .padding(.leading, 14)
             PieProgressView(
                 progress: job.progressFraction,
-                color: jobDotColor(for: job),
+                color: .yellow,
                 size: 7
             )
             Text(job.name)
@@ -387,25 +370,12 @@ private struct InlineJobRowView: View {
     private func currentStepTitle(for job: ActiveJob) -> String {
         if let active = job.steps.first(where: { $0.status == "in_progress" }) { return active.name }
         if let last = job.steps.last(where: { $0.conclusion != nil }) { return last.name }
-        switch job.status {
-        case "queued":      return "Queued"
-        case "in_progress": return "Starting…"
-        default:            return "—"
-        }
-    }
-
-    private func jobDotColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued":      return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
-        }
+        return "Starting…"
     }
 }
 
 // MARK: - RunnersListView
 
-/// Conditional runners sub-section — only shown when ≥1 Runner is busy (Phase 6 / #307).
 private struct RunnersListView: View {
     let runners: [Runner]
 

@@ -6,11 +6,12 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// AppDelegate.navigate(to:) resizes the popover to fittingSize after each swap.
-// This view uses .frame(maxWidth:.infinity, maxHeight:.infinity) so it fills
-// the resized popover correctly. DO NOT remove maxHeight:.infinity here.
+// Height is driven by AppDelegate.openPopover() fittingSize — read once per open.
+// This view must NOT use maxHeight:.infinity — that stretches it to the main
+// view's pre-existing frame. Use maxWidth:.infinity only.
 // Header is OUTSIDE ScrollView. Job list is INSIDE ScrollView.
-// ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
+// ❌ NEVER add maxHeight:.infinity to the root frame — causes inherited height bug.
+// ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 struct ActionDetailView: View {
@@ -159,7 +160,9 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ maxWidth:.infinity only. NO maxHeight:.infinity — that inherits main view's
+        // frame height instead of sizing to this view's own content via fittingSize.
+        .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
