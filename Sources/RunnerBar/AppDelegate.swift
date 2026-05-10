@@ -4,25 +4,26 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - NavState
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59)
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #13)
 // sizingOptions: default. Height read via fittingSize ONCE per open.
 // navigate() = rootView swap + async remeasure ONLY. No sync size changes.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize synchronously while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 480) from PopoverMainView
+// ❌ NEVER use fittingSize.width in openPopover() — always use Self.fixedWidth.
+//     fittingSize.width is non-deterministic when maxHeight:.infinity views are
+//     present; using it causes the popover to shift horizontally on open (#13).
 // ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 480).
 //     Mismatching these causes fittingSize.height to be calculated at the
 //     wrong width, wrapping content and producing an incorrect popover height.
 //
-// #21: StepLogView calls onLogLoaded() once the async log fetch completes.
-//     AppDelegate uses remeasurePopover() (same logic as navigate's async block)
-//     to resize the popover so the log content is not clipped.
-//     IMPORTANT: onLogLoaded dispatches with TWO async hops (nested
-//     DispatchQueue.main.async calls) so SwiftUI has two run-loop turns to
-//     commit the new log layout before fittingSize is sampled. One hop is
-//     insufficient because fittingSize still reflects the spinner size on the
-//     first turn after isLoading flips to false.
+// #21 / #13: onLogLoaded MUST be nil at all StepLogView call sites.
+//     See StepLogView sizing contract. Passing remeasurePopover() there
+//     triggers a setFrameSize while popover.isShown == true which causes
+//     the popover to jump sideways on screen (issue #13).
+//     The ScrollView inside StepLogView absorbs log content of any length.
+//     No resize is needed or safe after log load.
 
 /// Navigation state machine for the popover's view hierarchy.
 private enum NavState {
@@ -185,6 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Navigation level 4a: StepLogView reached via an ActionGroup.
+    ///
+    /// ❌ NEVER pass onLogLoaded here. See StepLogView sizing contract (#13).
+    /// The ScrollView absorbs log content of any length. No resize after log load.
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -193,15 +197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            },
-            // #21: Two async hops so SwiftUI has two run-loop turns to commit
-            // the log layout before fittingSize is sampled. See REGRESSION GUARD.
-            onLogLoaded: { [weak self] in
-                guard let self else { return }
-                DispatchQueue.main.async {
-                    self.remeasurePopover()
-                }
             }
+            // onLogLoaded intentionally omitted — see StepLogView sizing contract.
         ))
     }
 
@@ -234,6 +231,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Navigation level 3: log output for a step (Jobs path).
+    ///
+    /// ❌ NEVER pass onLogLoaded here. See StepLogView sizing contract (#13).
+    /// The ScrollView absorbs log content of any length. No resize after log load.
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -242,15 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
-            },
-            // #21: Two async hops so SwiftUI has two run-loop turns to commit
-            // the log layout before fittingSize is sampled. See REGRESSION GUARD.
-            onLogLoaded: { [weak self] in
-                guard let self else { return }
-                DispatchQueue.main.async {
-                    self.remeasurePopover()
-                }
             }
+            // onLogLoaded intentionally omitted — see StepLogView sizing contract.
         ))
     }
 
@@ -304,8 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Re-measures `hostingController.view.fittingSize` and applies it to the popover.
     ///
-    /// Called by `navigate()` (via async dispatch) and by `StepLogView.onLogLoaded`
-    /// (via two nested async dispatches, #21). Both call sites are always on the main thread.
+    /// Called by `navigate()` via async dispatch only. Always on the main thread.
     /// ❌ NEVER call from a background thread.
     private func remeasurePopover() {
         guard let hc = hostingController,
@@ -331,6 +323,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Opens the popover. The ONE safe site for initial sizing.
+    ///
+    /// ❌ NEVER use fittingSize.width here — always use Self.fixedWidth.
+    ///    fittingSize.width is non-deterministic when views with maxHeight:.infinity
+    ///    are present (e.g. StepLogView). Using it causes the popover to shift
+    ///    horizontally on open, producing the side-jump regression (#13).
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
@@ -339,9 +336,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let fittingWidth = hostingController.view.fittingSize.width
         let size = NSSize(
-            width: fittingWidth > 0 ? fittingWidth : Self.fixedWidth,
+            width: Self.fixedWidth,
             height: hostingController.view.fittingSize.height
         )
         hostingController.view.setFrameSize(size)
