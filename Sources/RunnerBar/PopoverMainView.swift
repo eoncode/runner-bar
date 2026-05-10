@@ -1,13 +1,16 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
+// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
 // AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
 // ❌ NEVER remove .frame(idealWidth: 420)
 // ❌ NEVER use .frame(width: 420)
-// ❌ NEVER remove maxWidth: .infinity (VStack must stretch to full popover width)
-// ❌ NEVER add .frame(height:) to root VStack
+// ❌ NEVER remove maxWidth: .infinity
+// ❌ NEVER add .frame(height:) or .frame(maxHeight:) anywhere inside the view body
+// ❌ NEVER wrap the actions list in a ScrollView — fittingSize cannot measure through it
+//    The maxHeight cap lives ONLY in AppDelegate (PopoverSize.maxHeight), applied once before .show().
+// ❌ NEVER add expandedGroups toggle for in-progress groups — they are ALWAYS expanded per spec #296
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
@@ -16,22 +19,15 @@ import SwiftUI
 
 /// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
-    /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
-    /// Called when the user taps a job row to drill into job detail.
     let onSelectJob: (ActiveJob) -> Void
-    /// Called when the user taps an action group row to drill into action detail.
     let onSelectAction: (ActionGroup) -> Void
-    /// Called when the user taps the settings button.
     let onSelectSettings: () -> Void
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
-    /// Number of action groups visible. Starts at 10, incremented by 10 on “Load more”.
+    /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
     @State private var visibleCount: Int = 10
-    /// Set of action group IDs whose inline job sub-rows are expanded.
-    /// In-progress groups default to expanded; queued groups default to collapsed.
-    @State private var expandedGroups: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,7 +52,6 @@ struct PopoverMainView: View {
             ActionsListView(
                 actions: store.actions,
                 visibleCount: $visibleCount,
-                expandedGroups: $expandedGroups,
                 onSelectAction: onSelectAction
             )
         }
@@ -64,30 +59,17 @@ struct PopoverMainView: View {
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
-            let inProgressIDs = store.actions
-                .filter { $0.groupStatus == .inProgress }
-                .map { $0.id }
-            expandedGroups = Set(inProgressIDs)
         }
         .onDisappear { systemStats.stop() }
-        // Reset pagination when the action list is replaced by a fresh store poll.
-        // Observes the full array (not just count) so a same-size refresh also resets.
-        // onChange(of:perform:) used for macOS 13 compatibility — project min target is 13.0.
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 }
 
 // MARK: - MiniBarView
 
-/// A fixed-size inline progress bar used in stat chips.
-/// Replaces the Unicode block-character approach which rendered as boxes on some
-/// macOS system fonts. Draws a track + filled rectangle in native SwiftUI.
 private struct MiniBarView: View {
-    /// Fill fraction 0.0–1.0.
     let fraction: Double
-    /// Width of the bar in points.
     var width: CGFloat = 22
-    /// Height of the bar in points.
     var height: CGFloat = 6
 
     private var clampedFraction: Double { max(0, min(1, fraction)) }
@@ -112,7 +94,6 @@ private struct MiniBarView: View {
 
 // MARK: - PopoverHeaderView
 
-/// Header row: system stats + auth indicator + gear + close (Phase 2 / #299).
 private struct PopoverHeaderView: View {
     let systemStats: SystemStatsViewModel
     let isAuthenticated: Bool
@@ -141,7 +122,6 @@ private struct PopoverHeaderView: View {
             )
             Spacer()
             if !isAuthenticated {
-                // Auth indicator: orange dot + "Sign in" caption for discoverability.
                 Button(
                     action: onSelectSettings,
                     label: {
@@ -164,7 +144,6 @@ private struct PopoverHeaderView: View {
             )
             .buttonStyle(.plain)
             .help("Settings")
-            // ⚠️ hide() is intentional for a menu-bar app — keeps the process alive.
             Button(
                 action: { NSApplication.shared.hide(nil) },
                 label: {
@@ -179,7 +158,6 @@ private struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
-    /// Renders a single stat chip: label + native bar + value.
     @ViewBuilder
     private func statChip(label: String, fraction: Double, value: String) -> some View {
         HStack(spacing: 4) {
@@ -192,11 +170,14 @@ private struct PopoverHeaderView: View {
 
 // MARK: - ActionsListView
 
-/// Scrollable actions list with per-group expand/collapse and pagination (Phase 3–5 / #302 #304 #305).
+/// Actions list with per-group expand/collapse and pagination (Phase 3–5 / #302 #304 #305).
+/// ❌ NO ScrollView — fittingSize cannot measure through a ScrollView.
+/// ❌ NO .frame(maxHeight:) — height cap lives only in AppDelegate (maxHeight: 620).
+/// ⚠️ In-progress groups are ALWAYS expanded — no toggle per spec #296.
+///    Queued/completed groups are never expanded (no inline jobs for them).
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
-    @Binding var expandedGroups: Set<String>
     let onSelectAction: (ActionGroup) -> Void
 
     var body: some View {
@@ -205,41 +186,30 @@ private struct ActionsListView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 4)
         } else {
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    ForEach(actions.prefix(visibleCount)) { actionGroup in
-                        ActionRowView(
-                            actionGroup: actionGroup,
-                            isExpanded: expandedGroups.contains(actionGroup.id),
-                            onToggleExpand: {
-                                if expandedGroups.contains(actionGroup.id) {
-                                    expandedGroups.remove(actionGroup.id)
-                                } else {
-                                    expandedGroups.insert(actionGroup.id)
-                                }
-                            },
-                            onSelect: { onSelectAction(actionGroup) }
-                        )
-                    }
-                    if actions.count > visibleCount {
-                        Button(
-                            action: { visibleCount += 10 },
-                            label: {
-                                Text("Load 10 more actions…")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                    } else if visibleCount > 10 {
-                        Text("No more actions")
-                            .font(.caption2).foregroundColor(.secondary.opacity(0.5))
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 6)
-                    }
+            VStack(spacing: 0) {
+                ForEach(actions.prefix(visibleCount)) { actionGroup in
+                    ActionRowView(
+                        actionGroup: actionGroup,
+                        onSelect: { onSelectAction(actionGroup) }
+                    )
+                }
+                if actions.count > visibleCount {
+                    Button(
+                        action: { visibleCount += 10 },
+                        label: {
+                            Text("Load 10 more actions…")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    )
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                } else if visibleCount > 10 {
+                    Text("No more actions")
+                        .font(.caption2).foregroundColor(.secondary.opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 6)
                 }
             }
-            .frame(maxHeight: 400)
             .padding(.bottom, 6)
         }
     }
@@ -247,20 +217,17 @@ private struct ActionsListView: View {
 
 // MARK: - ActionRowView
 
-/// Single action group row with pie dot, label, title, timestamps, status, and expand toggle
-/// for inline job sub-rows (Phase 3–4 / #302 #304).
+/// Single action group row.
+/// ⚠️ In-progress groups: inline ↳ job rows are ALWAYS shown — no toggle.
+/// ⚠️ Do NOT guard on job.status == "in_progress" for inline rows — queued jobs
+///    at job-level still belong to an actively running workflow (#296).
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
-    let isExpanded: Bool
-    let onToggleExpand: () -> Void
     let onSelect: () -> Void
 
-    /// True when this group is in_progress — inline ↳ rows are shown regardless of
-    /// whether individual jobs have reached in_progress yet (they may still be queued
-    /// at the job level while the run-level status is already in_progress).
-    /// ⚠️ Do NOT guard on job.status == "in_progress" here — that hides jobs that are
-    /// queued at job level but belong to an actively running workflow (#296 regression).
-    private var hasInlineJobs: Bool {
+    /// Inline jobs are shown when the group is in_progress and has jobs.
+    /// This is computed directly — no @State toggle — so it's always in sync with live data.
+    private var showInlineJobs: Bool {
         actionGroup.groupStatus == .inProgress && !actionGroup.jobs.isEmpty
     }
 
@@ -298,29 +265,18 @@ private struct ActionRowView: View {
                             .foregroundColor(actionStatusColor(for: actionGroup))
                             .frame(width: 80, alignment: .trailing)
                             .lineLimit(1)
-                        if hasInlineJobs {
-                            Button(
-                                action: onToggleExpand,
-                                label: {
-                                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                        .font(.caption2).foregroundColor(.secondary)
-                                }
-                            )
-                            .buttonStyle(.plain)
-                        } else {
-                            Image(systemName: "chevron.right")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption2).foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 12).padding(.vertical, 3)
                 }
             )
             .buttonStyle(.plain)
 
-            if hasInlineJobs && isExpanded {
-                // Show all jobs belonging to the in_progress group.
-                // Includes queued jobs — they are part of the active run even if not
-                // yet running at job level. Pre-filter to exclude concluded jobs only.
+            // ⚠️ Always shown when in_progress — no toggle needed.
+            // Includes queued jobs at job-level; they belong to the active run.
+            // Filter: exclude only jobs that have already concluded.
+            if showInlineJobs {
                 InlineJobsView(
                     jobs: actionGroup.jobs.filter { $0.conclusion == nil }
                 )
@@ -393,7 +349,6 @@ private struct InlineJobsView: View {
 
 // MARK: - InlineJobRowView
 
-/// Single ↳ inline job sub-row (Phase 4 / #304).
 private struct InlineJobRowView: View {
     let job: ActiveJob
 
@@ -449,8 +404,6 @@ private struct InlineJobRowView: View {
 // MARK: - RunnersListView
 
 /// Conditional runners sub-section — only shown when ≥1 Runner is busy (Phase 6 / #307).
-/// Renders a top Divider when active (separates from header) and a bottom Divider
-/// (separates from actions list below).
 private struct RunnersListView: View {
     let runners: [Runner]
 

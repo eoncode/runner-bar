@@ -28,7 +28,7 @@ struct WorkflowRunRef: Identifiable {
     let status: String
     /// Final outcome when status is `completed`.
     let conclusion: String?
-    /// URL to the run’s page on github.com.
+    /// URL to the run's page on github.com.
     let htmlUrl: String?
 }
 
@@ -63,6 +63,7 @@ struct ActionGroup: Identifiable {
     /// Timestamps derived from job data, not run-level API fields.
     /// Mirrors ci-dash.py's `first_job_started_at` / `last_job_completed_at`.
     var firstJobStartedAt: Date?
+    /// Last job completion time across all runs in this group.
     var lastJobCompletedAt: Date?
 
     /// Fallback creation time from the representative run.
@@ -121,8 +122,8 @@ struct ActionGroup: Identifiable {
 
     /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
+        if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
         return "—"
     }
 
@@ -141,14 +142,14 @@ struct ActionGroup: Identifiable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            let minutes = sec / 60; let seconds = sec % 60
+            return String(format: "%02d:%02d", minutes, seconds)
         }
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let minutes = sec / 60; let seconds = sec % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     // MARK: - Progress fraction (model layer — keeps view bodies clean)
@@ -172,9 +173,9 @@ struct ActionGroup: Identifiable {
 
 // MARK: - Equatable
 
-/// Equatable conformance required by SwiftUI `.onChange(of:)` on `[ActionGroup]`.
 extension ActionGroup: Equatable {
     /// Returns `true` when two groups have the same ID, dimmed state, job list, and run IDs.
+    // swiftlint:disable:next missing_docs
     static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
         lhs.id == rhs.id
             && lhs.isDimmed == rhs.isDimmed
@@ -293,27 +294,27 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 // MARK: - Private helpers
 
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
-func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
+func makeActiveJob(from payload: JobPayload, iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+    let steps: [JobStep] = (payload.steps ?? []).enumerated().map { idx, step in
         JobStep(
             id: idx + 1,
-            name: s.name,
-            status: s.status,
-            conclusion: s.conclusion,
-            startedAt: s.startedAt,
-            completedAt: s.completedAt
+            name: step.name,
+            status: step.status,
+            conclusion: step.conclusion,
+            startedAt: step.startedAt,
+            completedAt: step.completedAt
         )
     }
     return ActiveJob(
-        id: j.id,
-        name: j.name,
-        status: j.status,
-        conclusion: j.conclusion,
-        startedAt: j.startedAt.flatMap { iso.date(from: $0) },
-        createdAt: j.createdAt.flatMap { iso.date(from: $0) },
-        completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl: j.htmlUrl,
+        id: payload.id,
+        name: payload.name,
+        status: payload.status,
+        conclusion: payload.conclusion,
+        startedAt: payload.startedAt.flatMap { iso.date(from: $0) },
+        createdAt: payload.createdAt.flatMap { iso.date(from: $0) },
+        completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
+        htmlUrl: payload.htmlUrl,
         isDimmed: isDimmed,
         steps: steps
     )
