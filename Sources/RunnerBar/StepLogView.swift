@@ -1,16 +1,34 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Layout contract
-// Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).
-// Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
-// Log MUST be inside ScrollView. Header MUST be outside ScrollView.
-// ❌ NEVER add .idealWidth, .frame(height:), .fixedSize(), or resize here.
-//
-// #21: onLogLoaded() is called once isLoading transitions to false.
-// AppDelegate passes a closure that calls remeasurePopover() so the popover
-// window height is updated to show the loaded log content correctly.
-// The closure fires on the main thread (DispatchQueue.main.async in loadLog).
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  ☠️  StepLogView — LAYOUT + SIZING CONTRACT  ☠️                              ║
+// ╠══════════════════════════════════════════════════════════════════════════════╣
+// ║  Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).        ║
+// ║                                                                              ║
+// ║  LAYOUT RULES:                                                               ║
+// ║    • Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)  ║
+// ║    • Log content MUST be inside the ScrollView.                             ║
+// ║    • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
+// ║    ❌ NEVER add .idealWidth here                                             ║
+// ║    ❌ NEVER add .frame(height:) here                                         ║
+// ║    ❌ NEVER add .fixedSize() here                                            ║
+// ║    ❌ NEVER add .frame(maxHeight:) to the ScrollView                        ║
+// ║                                                                              ║
+// ║  onLogLoaded — ☠️ TRAP — READ THIS BEFORE TOUCHING:                         ║
+// ║    onLogLoaded exists as an optional closure. AppDelegate does NOT pass it.  ║
+// ║    In the past someone passed a remeasurePopover() closure here which        ║
+// ║    called setFrameSize + contentSize while popover.isShown == true.         ║
+// ║    This caused the popover to jump sideways on screen (issue #13).          ║
+// ║    AppDelegate intentionally leaves onLogLoaded = nil at both call sites:   ║
+// ║      - logView(job:step:)                                                    ║
+// ║      - logViewFromAction(job:step:group:)                                    ║
+// ║    The ScrollView absorbs log content of any length. No resize is needed.   ║
+// ║    ❌ NEVER pass a resize/remeasure closure to onLogLoaded                  ║
+// ║    ❌ NEVER use onLogLoaded to call setFrameSize or contentSize              ║
+// ║    ❌ NEVER wire onLogLoaded to any AppKit sizing API                        ║
+// ║                                                                              ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
 /// Shows the raw log text for a single `JobStep`.
 ///
@@ -23,10 +41,13 @@ struct StepLogView: View {
     let step: JobStep
     /// Called when the user taps the back button.
     let onBack: () -> Void
-    /// #21: Called once on the main thread when the async log fetch completes
-    /// (whether the result is a non-empty string, empty string, or nil).
-    /// AppDelegate uses this to re-measure and resize the popover so the
-    /// window height reflects actual log content rather than the spinner.
+    /// Optional callback fired on the main thread when the async log fetch completes.
+    ///
+    /// ☠️ AppDelegate does NOT pass this closure. It exists only as an extension
+    /// point. If you are tempted to pass a resize/remeasure closure here, read
+    /// the SIZING CONTRACT comment at the top of this file first. Passing any
+    /// AppKit sizing call here while popover.isShown == true will reintroduce
+    /// issue #13 (popover side-jump on log load). Don't do it.
     var onLogLoaded: (() -> Void)? = nil
 
     /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
@@ -36,7 +57,8 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header — always visible, OUTSIDE ScrollView
+            // ── Header — always visible, OUTSIDE ScrollView ──────────────────────
+            // ❌ NEVER move this inside the ScrollView — it must stay visible always.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -71,7 +93,11 @@ struct StepLogView: View {
                 .padding(.bottom, 6)
             Divider()
 
-            // ── Log — INSIDE ScrollView
+            // ── Log — INSIDE ScrollView ──────────────────────────────────────────
+            // ❌ NEVER add .frame(maxHeight:) to this ScrollView.
+            // ❌ NEVER add .frame(height:) to this ScrollView.
+            // The popover height is set once in openPopover() via fittingSize.
+            // The ScrollView is what absorbs log content of any length safely.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -96,6 +122,8 @@ struct StepLogView: View {
                 }
             }
         }
+        // ❌ NEVER change maxHeight to a fixed value — the popover height is
+        // driven by fittingSize in openPopover(), not by this frame modifier.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
@@ -120,8 +148,11 @@ struct StepLogView: View {
             DispatchQueue.main.async {
                 logText = text ?? ""
                 isLoading = false
-                // #21: Notify AppDelegate to remeasure the popover now that log
-                // content (or the empty-state) has replaced the spinner.
+                // ☠️ onLogLoaded is intentionally nil in production.
+                // AppDelegate does NOT pass this closure.
+                // If you are reading this because you want to add a resize call:
+                // STOP. Read the SIZING CONTRACT at the top of this file.
+                // Calling any AppKit sizing API here causes issue #13 (side-jump).
                 onLogLoaded?()
             }
         }
