@@ -6,9 +6,13 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
-// SIZING CONTRACT (mirrors main branch exactly):
-//   openPopover() reads fittingSize ONCE before .show(). No cap. No maxHeight.
-//   navigate() = rootView swap ONLY. ZERO size changes. Ever.
+// SIZING CONTRACT:
+//   openPopover() reads fittingSize ONCE before .show().
+//   For main view: sized from mainView() fittingSize.
+//   For restored detail view: navigate() is called BEFORE show(), then
+//     fittingSize is re-read from the new rootView and size is updated.
+//     This is the ONE safe site — setFrameSize before show() only.
+//   navigate() post-show() = rootView swap ONLY. ZERO size changes. Ever.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER touch contentSize or setFrameSize inside navigate()
@@ -245,6 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     // MARK: - Navigation
 
     /// Swaps the hosting controller's root view. ZERO size changes. Ever.
+    /// Safe to call before show() or after show().
     /// ❌ NEVER add setFrameSize or contentSize here — popover jumps if touched while isShown.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
@@ -262,7 +267,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Reads fittingSize ONCE before .show() — no cap, no maxHeight — matches main branch.
+    ///
+    /// Sizing steps:
+    ///   1. Restore saved nav state (if any) via navigate() — rootView is now the detail view.
+    ///   2. Read fittingSize from the CURRENT rootView (main or detail).
+    ///   3. setFrameSize + contentSize BEFORE show().
+    ///
+    /// This means detail views are always sized to their own content, not main's content.
     /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
     @MainActor
     private func openPopover() {
@@ -273,6 +284,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
+
+        // Restore saved nav state BEFORE reading fittingSize so the size
+        // reflects the detail view's content, not the main view's content.
+        if let saved = savedNavState,
+           let restored = validatedView(for: saved) {
+            navigate(to: restored)
+        }
+
         let fitting = hc.view.fittingSize
         let width  = fitting.width  > 0 ? fitting.width  : Self.fixedWidth
         let height = fitting.height > 0 ? fitting.height : 300
@@ -281,10 +300,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
-        if let saved = savedNavState,
-           let restored = validatedView(for: saved) {
-            navigate(to: restored)
-        }
     }
 }
 // swiftlint:enable type_body_length
