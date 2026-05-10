@@ -303,3 +303,7 @@ If any value in your file differs from this table, **that is the regression** â€
 ---
 
 *References: issues #51, #52, #53, #54, #57 â€” regression history on feat/job-detail-steps branch.*
+
+```prompt to create this md file
+we are suffering from major regression with side jumping app when we cahnge sizing. please read these [https://github.com/eoncode/runner-bar/issues/51%20and%20https://github.com/eoncode/runner-bar/issues/54%20and%20https://github.com/eoncode/runner-bar/issues/321%20and%20https://github.com/eoncode/runner-bar/issues/52%20and%20https://github.com/eoncode/runner-bar/issues/57](https://github.com/eoncode/runner-bar/issues/51%20and%20https://github.com/eoncode/runner-bar/issues/54%20and%20https://github.com/eoncode/runner-bar/issues/321%20and%20https://github.com/eoncode/runner-bar/issues/52%20and%20https://github.com/eoncode/runner-bar/issues/57) and make a definitive guide how to avoid side jumping issues in statusbar app. also read the internet on this topic. as this app cant be the only one struggling with this. return a markdown bloack with the definitive guide.
+```
