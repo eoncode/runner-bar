@@ -41,7 +41,7 @@ struct WorkflowRunRef: Identifiable {
 /// Hierarchy: ActionGroup → jobs (flat across all sibling runs) → JobStep → log.
 /// `ActionDetailView` drills into the flat job list; `JobDetailView`/`StepLogView`
 /// are reused unchanged below that.
-struct ActionGroup: Identifiable {
+struct ActionGroup: Identifiable, Equatable {
     let headSha: String         // head_sha — kept as the underlying group identity
     let label: String           // "#1270" if PR, else "d6281b" (sha[:7])
     let title: String           // commit/PR message first line (≤40 chars)
@@ -169,17 +169,10 @@ struct ActionGroup: Identifiable {
             return Double(jobsDone) / Double(jobsTotal)
         }
     }
-}
 
-// MARK: - Equatable
-
-extension ActionGroup: Equatable {
     /// Returns `true` when two groups have the same ID, dimmed state, job list, and run IDs.
     static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
-        lhs.id == rhs.id
-            && lhs.isDimmed == rhs.isDimmed
-            && lhs.jobs == rhs.jobs
-            && lhs.runs.map({ $0.id }) == rhs.runs.map({ $0.id })
+        lhs.id == rhs.id && lhs.isDimmed == rhs.isDimmed && lhs.jobs == rhs.jobs && lhs.runs.map({ $0.id }) == rhs.runs.map({ $0.id })
     }
 }
 
