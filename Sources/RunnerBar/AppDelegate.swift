@@ -7,13 +7,11 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
 // SIZING CONTRACT:
-//   openPopover()  → synchronous fittingSize read → resize → show()
-//   navigate(to:)  → rootView swap → one async tick → fittingSize → resize
-//   Both paths cap at maxHeight:620.
-//   The !isShown guard must NEVER appear on the resize block — it silently
-//   kills the resize when the popover opens or navigates quickly.
+//   Size is set ONCE per open in openPopover().
+//   navigate() = rootView swap ONLY. ZERO size changes. Ever.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while isShown (except in navigate)
+// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
+// ❌ NEVER touch contentSize or setFrameSize inside navigate()
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ❌ NEVER guard observable.reload() on !popoverIsOpen
@@ -242,22 +240,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps the rootView then resizes the popover to the new content's fittingSize.
-    /// One async tick is needed so SwiftUI completes a layout pass with the new view
-    /// before fittingSize is sampled. The !isShown guard is intentionally absent —
-    /// it would silently kill the resize when navigating on a fast machine.
+    /// Swaps the hosting controller's root view. ZERO size changes. Ever.
+    /// ❌ NEVER add setFrameSize or contentSize here — popover jumps if touched while isShown.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
-        guard let hc = hostingController, let popover else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            let fitting = hc.view.fittingSize
-            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
-            let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
-            let size = NSSize(width: width, height: height)
-            hc.view.setFrameSize(size)
-            popover.contentSize = size
-        }
     }
 
     // MARK: - Popover show/hide
@@ -271,7 +257,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover. Sizes synchronously from fittingSize before show().
+    /// Opens the popover. The ONE safe site for sizing.
+    /// Reads fittingSize synchronously after reload(), caps at maxHeight, then shows.
+    /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
