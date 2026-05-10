@@ -162,6 +162,21 @@ extension RunnerStore {
         )
     }
 
+    /// Merges live `jobCache` data into a group's job list.
+    /// For each job in `jobs`, if the cache has a fresher copy (more steps, or a conclusion)
+    /// the cached version is used instead. This prevents stale step data from persisting
+    /// across polls when a job completes between group fetches.
+    private func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
+        jobs.map { job in
+            guard let cached = jobCache[job.id] else { return job }
+            // Prefer cache when it has a conclusion the live job lacks,
+            // or when it has more step data.
+            let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
+            let cacheHasMoreSteps = cached.steps.count > job.steps.count
+            return (cacheHasConclusion || cacheHasMoreSteps) ? cached : job
+        }
+    }
+
     /// Rebuilds the cache keyed by head_sha for `fetchActionGroups`.
     private func makeShaKeyedCache(_ cache: [String: ActionGroup]) -> [String: ActionGroup] {
         Dictionary(

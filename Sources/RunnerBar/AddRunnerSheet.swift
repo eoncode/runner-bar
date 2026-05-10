@@ -189,9 +189,9 @@ struct AddRunnerSheet: View {
             // A freeform path like ~/../../usr/local/bin could otherwise cause
             // an arbitrary executable to be launched with the user's privileges.
             let homeDir = FileManager.default.homeDirectoryForCurrentUser
-                .resolvingSymlinksInPath.path
+                .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
-                .resolvingSymlinksInPath.path
+                .resolvingSymlinksInPath().path
             guard resolvedDir.hasPrefix(homeDir) else {
                 DispatchQueue.main.async {
                     isRegistering = false

@@ -33,7 +33,7 @@ struct LocalRunnerScanner {
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
     /// This is a synchronous, blocking call — always invoke from a background thread.
     func scan() -> [RunnerModel] {
-        var models: [String: RunnerModel] = []
+        var models: [String: RunnerModel] = [:]
 
         // Source 2 first: .runner JSON is most authoritative — richer data.
         // JSON models are inserted under their stable id (agentId or composite).

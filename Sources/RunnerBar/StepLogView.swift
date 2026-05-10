@@ -97,7 +97,7 @@ struct StepLogView: View {
         let jobID = job.id
         let stepNum = step.id
         let scope: String = {
-            let parts = job.htmlUrl.components(separatedBy: "/")
+            let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
             if parts.count >= 5 {
                 let owner = parts[3]
                 let repo = parts[4]

@@ -108,7 +108,7 @@ struct JobPayload: Decodable {
     let createdAt: String?
     let completedAt: String?
     let htmlUrl: String?
-    let steps: [JobStep]?
+    let steps: [StepPayload]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion, steps
@@ -116,6 +116,26 @@ struct JobPayload: Decodable {
         case createdAt = "created_at"
         case completedAt = "completed_at"
         case htmlUrl = "html_url"
+    }
+}
+
+// MARK: - StepPayload (API decoding)
+
+/// Raw API shape for a single step inside a `JobPayload`.
+/// Kept separate from `JobStep` so that `JobStep` remains `Codable` with `Date` fields
+/// while the API always delivers timestamps as ISO-8601 strings.
+struct StepPayload: Decodable {
+    let number: Int
+    let name: String
+    let status: String
+    let conclusion: String?
+    let startedAt: String?
+    let completedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case number, name, status, conclusion
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
     }
 }
 
@@ -139,7 +159,16 @@ extension RunnerStore {
             completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
             htmlUrl: payload.htmlUrl,
             isDimmed: isDimmed,
-            steps: payload.steps ?? []
+            steps: (payload.steps ?? []).enumerated().map { idx, s in
+                JobStep(
+                    id: idx + 1,
+                    name: s.name,
+                    status: s.status,
+                    conclusion: s.conclusion,
+                    startedAt: s.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                )
+            }
         )
     }
 }
@@ -147,4 +176,4 @@ extension RunnerStore {
 // MARK: - Codable helpers
 
 /// Shared response wrapper used by ActionGroup.swift and RunnerStoreState.swift.
-struct JobsResponse: Codable { let jobs: [JobPayload] }
+struct JobsResponse: Decodable { let jobs: [JobPayload] }
