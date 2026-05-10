@@ -16,9 +16,9 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // THE ONE FRAME RULE (applies to THIS file and EVERY detail/settings view):
 //
-//   .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+//   .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
 //
-//   • idealWidth: 480  — MUST match AppDelegate.fixedWidth (currently 480).
+//   • idealWidth: 420  — MUST match AppDelegate.fixedWidth (currently 420).
 //                        If you change fixedWidth in AppDelegate, change this too.
 //   • maxWidth: .infinity — lets the view fill the popover width.
 //   • NO maxHeight — letting SwiftUI compute natural height from content is what
@@ -46,7 +46,7 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
 //   Broken by: adding .frame(maxHeight: .infinity) to root (multiple times)
-//   Fixed by:  replacing with .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+//   Fixed by:  replacing with .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
 //   Bug ref:   issue #294, commits 318da0b, fd1c960
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -74,7 +74,7 @@ struct ActionDetailView: View {
         // Do NOT add .frame(maxHeight:), .frame(height:), or .fixedSize() here.
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────────────────────────────
+            // ── Header ────────────────────────────────────────────────────────────
             // MUST remain OUTSIDE ScrollView. Do not move into ScrollView.
             // Adding .fixedSize() or .frame(height:) to this HStack will
             // corrupt the parent fittingSize — see regression guard above.
@@ -89,7 +89,7 @@ struct ActionDetailView: View {
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ load-bearing — pushes buttons to right edge
+                Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
@@ -103,27 +103,22 @@ struct ActionDetailView: View {
                     },
                     isDisabled: group.groupStatus == .inProgress
                 )
-                // #17: CancelButton is ONLY shown when the run is in-progress.
-                // When not in-progress, the button is completely removed from the
-                // layout (not just hidden with opacity:0) so Re-run is flush-right
-                // and properly aligned next to the elapsed timer.
-                // ❌ NEVER add back a faded/invisible-but-present CancelButton here —
-                //    it leaves ghost layout space that makes Re-run look misaligned.
-                if group.groupStatus == .inProgress {
-                    CancelButton(
-                        action: { completion in
-                            let scope = group.repo
-                            let runIDs = group.runs.map { $0.id }
-                            DispatchQueue.global(qos: .userInitiated).async {
-                                let ok = runIDs.allSatisfy { runID in
-                                    cancelRun(runID: runID, scope: scope)
-                                }
-                                completion(ok)
+                // ⚠️ CancelButton: when isDisabled=true it is INVISIBLE (opacity 0).
+                // This is intentional — do not change to a faded state.
+                // See CancelButton.swift regression guard.
+                CancelButton(
+                    action: { completion in
+                        let scope = group.repo
+                        let runIDs = group.runs.map { $0.id }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let ok = runIDs.allSatisfy { runID in
+                                cancelRun(runID: runID, scope: scope)
                             }
-                        },
-                        isDisabled: false
-                    )
-                }
+                            completion(ok)
+                        }
+                    },
+                    isDisabled: group.groupStatus != .inProgress
+                )
                 LogCopyButton(
                     fetch: { completion in
                         let g = group
@@ -141,7 +136,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ────────────────────────────────────────────────────────────────────
+            // ── Group title block ─────────────────────────────────────────────────
             // .fixedSize(horizontal:false,vertical:true) is BANNED on group.title Text.
             // Use lineLimit + truncationMode instead. See regression guard above.
             VStack(alignment: .leading, spacing: 2) {
@@ -172,7 +167,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list: MUST be inside ScrollView ───────────────────────────────────────────
+            // ── Jobs list: MUST be inside ScrollView ─────────────────────────────
             // NEVER move the header above outside into here.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -226,14 +221,14 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ═══════════════════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.
-        // idealWidth MUST match AppDelegate.fixedWidth (480).
+        // idealWidth MUST match AppDelegate.fixedWidth (420).
         // DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // DO NOT remove idealWidth: 480
+        // DO NOT remove idealWidth: 420
         // DO NOT add .frame(height:) or .fixedSize() here
-        // ═══════════════════════════════════════════════════════════════════════════════
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        // ════════════════════════════════════════════════════════════════════════
+        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }

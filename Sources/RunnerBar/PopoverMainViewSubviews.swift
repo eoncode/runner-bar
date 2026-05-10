@@ -152,9 +152,10 @@ struct PopoverLocalRunnerRow: View {
 /// and spec-parity typography (#178).
 ///
 /// #22: Title text uses `.layoutPriority(1)` so it claims horizontal space
-/// before the fixed trailing columns. The `currentJobName` field uses
-/// `.frame(maxWidth: 80)` to cap how much space it can claim, preventing
-/// it from stealing room from the title on wider rows.
+/// before the fixed trailing columns. The `currentJobName` field drops its
+/// `frame(width:)` cap and uses `layoutPriority(0)` (default) so it yields
+/// space to the title rather than competing for it. The popover is now 480 pt
+/// wide (was 420), giving ~60 pt more room across the board.
 struct ActionRowView: View {
     let group: ActionGroup
     let onSelect: () -> Void
@@ -196,13 +197,13 @@ struct ActionRowView: View {
                 .frame(width: 44, alignment: .trailing)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
-            // #22: frame(maxWidth: 80) caps currentJobName so it cannot steal
-            // horizontal space from the title (which has layoutPriority 1).
+            // #8 #22: No frame(width:) cap — currentJobName is allowed to be as wide
+            // as it needs but yields to the title (layoutPriority 0 < title's 1).
             // lineLimit(1) + truncationMode(.tail) still prevent height growth.
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
-                .frame(maxWidth: 80, alignment: .trailing)
+                .layoutPriority(0)
         }
         // #7: lineLimit(1) prevents jobProgress/elapsed from wrapping (load-bearing)
         Text(group.jobProgress)
