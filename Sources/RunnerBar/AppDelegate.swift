@@ -5,18 +5,15 @@ import SwiftUI
 // MARK: - NavState
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
-//
-// SIZING CONTRACT:
-//   openPopover() reads fittingSize SYNCHRONOUSLY, sets setFrameSize + contentSize,
-//   then calls pop.show(). ALL of this happens in one synchronous block.
-//   navigate() = rootView swap ONLY. ZERO size changes. Forever.
+// sizingOptions: default. Height read via fittingSize ONCE per open.
+// navigate() = rootView swap ONLY. Zero size changes. Ever.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER wrap openPopover() sizing in DispatchQueue.main.async — pop.show() must
-//      fire AFTER contentSize is set or the popover anchors at the wrong position.
-// ❌ NEVER call setFrameSize or contentSize while popover.isShown == true
+// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ❌ NEVER add size changes to navigate() — it is a rootView swap ONLY, forever.
+// ❌ NEVER add @MainActor to openPopover() or any view factory — it breaks the
+//      synchronous sizing contract by hopping the main actor asynchronously.
+// ❌ NEVER add @unchecked Sendable or @MainActor lazy var observable.
 
 private enum NavState {
     case main
@@ -30,15 +27,15 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @unchecked Sendable {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var hostingController: NSHostingController<AnyView>?
-    @MainActor private lazy var observable = RunnerStoreObservable()
+    private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
-    /// Ideal/fallback width when fittingSize returns 0.
+    /// Ideal/fallback width matching PopoverMainView’s .frame(idealWidth: 420).
     private static let idealWidth: CGFloat = 420
     /// Hard cap on popover width.
     private static let maxWidth: CGFloat = 540
@@ -93,7 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
               let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
         else { return job }
-        return makeActiveJob(from: fresh, iso: ISO8601DateFormatter(), isDimmed: job.isDimmed)
+        let iso = ISO8601DateFormatter()
+        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
     private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
@@ -102,7 +100,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         return fetched.first(where: { $0.id == group.id }) ?? group
     }
 
-    @MainActor
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -135,7 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
         return AnyView(ActionDetailView(
@@ -157,7 +153,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
         return AnyView(JobDetailView(
@@ -173,7 +168,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -186,7 +180,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         return AnyView(JobDetailView(
@@ -202,7 +195,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
@@ -214,7 +206,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -227,7 +218,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         ))
     }
 
-    @MainActor
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -258,44 +248,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps rootView. ZERO size changes — ever. (ref #52 #54 #57 #296)
-    /// ❌ NEVER add setFrameSize or contentSize here.
+    /// Swaps the hosting controller’s root view. ZERO size changes. Forever.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
 
     // MARK: - Popover show/hide
 
-    @MainActor @objc private func togglePopover() {
-        guard let pop = popover else { return }
-        if pop.isShown {
-            pop.performClose(nil)
+    @objc private func togglePopover() {
+        guard let popover else { return }
+        if popover.isShown {
+            popover.performClose(nil)
         } else {
             openPopover()
         }
     }
 
-    /// Opens the popover. Sizing is SYNCHRONOUS — read fittingSize, setFrameSize,
-    /// contentSize, then pop.show() all in one block.
-    /// ❌ NEVER wrap this in DispatchQueue.main.async — pop.show() must be called
-    ///    AFTER contentSize is set or the popover anchors at the wrong screen position.
-    @MainActor
+    /// Opens the popover. The ONE safe site for sizing.
+    /// Reads fittingSize synchronously, sets size, then calls show — all in one block.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
-              let hc = hostingController,
-              let pop = popover
+              let popover,
+              let hostingController
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let fitting = hc.view.fittingSize
-        let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
-        let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
+        let fittingWidth = hostingController.view.fittingSize.width
+        let fittingHeight = hostingController.view.fittingSize.height
+        let width  = min(max(fittingWidth  > 0 ? fittingWidth  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
+        let height = min(max(fittingHeight > 0 ? fittingHeight : 300, Self.minHeight), Self.maxHeight)
         let size = NSSize(width: width, height: height)
-        hc.view.setFrameSize(size)
-        pop.contentSize = size
-        pop.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-        pop.contentViewController?.view.window?.makeKey()
+        hostingController.view.setFrameSize(size)
+        popover.contentSize = size
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        popover.contentViewController?.view.window?.makeKey()
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
             navigate(to: restored)
