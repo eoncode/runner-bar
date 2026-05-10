@@ -6,21 +6,17 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
-// SIZING CONTRACT (mirrors main branch exactly):
-//   navigate() = rootView swap ONLY. Zero size changes. Ever.
-//   Size is set ONCE per open in openPopover().
-//   fittingSize is read SYNCHRONOUSLY after reload() — same as main branch.
-//   A one-tick async deferral was tried and removed: the !isShown guard
-//   caused the block to silently bail when anything raced ahead of it,
-//   leaving height at initialSize(300) and clipping content (bug #2).
+// SIZING CONTRACT:
+//   openPopover()  → synchronous fittingSize read → resize → show()
+//   navigate(to:)  → rootView swap → one async tick → fittingSize → resize
+//   Both paths cap at maxHeight:620.
+//   The !isShown guard must NEVER appear on the resize block — it silently
+//   kills the resize when the popover opens or navigates quickly.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
-// ❌ NEVER touch contentSize or setFrameSize inside navigate()
+// ❌ NEVER touch contentSize or setFrameSize while isShown (except in navigate)
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ❌ NEVER guard observable.reload() on !popoverIsOpen — store polls must
-//    always reach the view while the popover is visible (#296 regression fix)
-// ❌ NEVER wrap fittingSize read in DispatchQueue.main.async with !isShown guard
+// ❌ NEVER guard observable.reload() on !popoverIsOpen
 
 private enum NavState {
     case main
@@ -43,7 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var popoverIsOpen = false
 
     private static let fixedWidth: CGFloat = 420
-    /// Maximum popover height cap applied to fittingSize in openPopover().
     private static let maxHeight: CGFloat = 620
 
     // MARK: - App lifecycle
@@ -247,9 +242,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller's root view. ZERO size changes. Ever.
+    /// Swaps the rootView then resizes the popover to the new content's fittingSize.
+    /// One async tick is needed so SwiftUI completes a layout pass with the new view
+    /// before fittingSize is sampled. The !isShown guard is intentionally absent —
+    /// it would silently kill the resize when navigating on a fast machine.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
+        guard let hc = hostingController, let popover else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let fitting = hc.view.fittingSize
+            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+            let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
+            let size = NSSize(width: width, height: height)
+            hc.view.setFrameSize(size)
+            popover.contentSize = size
+        }
     }
 
     // MARK: - Popover show/hide
@@ -263,11 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover. The ONE safe site for sizing.
-    /// Order: reload() → fittingSize (synchronous) → cap at maxHeight → setFrameSize → contentSize → show().
-    /// Synchronous read matches the working main branch. The async+!isShown approach
-    /// was removed: it silently bailed when the popover opened fast, leaving height=300.
-    /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
+    /// Opens the popover. Sizes synchronously from fittingSize before show().
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,

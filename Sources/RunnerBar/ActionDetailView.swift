@@ -3,48 +3,28 @@ import SwiftUI
 // swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
+// ⚠️ REGRESSION GUARD
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
-//   The popover size is set ONCE from mainView()'s fittingSize in openPopover().
-//   Detail views must NOT use maxHeight:.infinity — that stretches them to fill
-//   the main-view height, leaving empty space when content is shorter (bug #1).
-//   The root frame uses maxWidth:.infinity ONLY. ScrollView absorbs any overflow.
-//
-// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth: .infinity, alignment: .top)  — NO maxHeight
-//   ✔ Job list MUST be inside ScrollView
-//   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
-//   ❌ NEVER put header inside ScrollView
-//   ❌ NEVER add .idealWidth or .frame(height:) to root
-//   ❌ NEVER add .frame(maxHeight: .infinity) — it inherits main view height
-//   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
+// AppDelegate.navigate(to:) resizes the popover to fittingSize after each swap.
+// This view uses .frame(maxWidth:.infinity, maxHeight:.infinity) so it fills
+// the resized popover correctly. DO NOT remove maxHeight:.infinity here.
+// Header is OUTSIDE ScrollView. Job list is INSIDE ScrollView.
+// ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
-///
-/// Drill-down chain:
-///   PopoverMainView (action row tap)
-///   → ActionDetailView            ← this view
-///   → JobDetailView (step list)   ← existing, unchanged
-///   → StepLogView (log)           ← existing, unchanged
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
-    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
     let onSelectJob: (ActiveJob) -> Void
 
-    /// Drives the live elapsed timer every second.
     @State private var tick = 0
-    /// Held so we can invalidate on disappear and prevent timer accumulation
-    /// when the user navigates away and back (AppDelegate swaps rootView each time).
     @State private var tickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header: OUTSIDE ScrollView — always visible at top
+            // ── Header: OUTSIDE ScrollView
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -55,7 +35,7 @@ struct ActionDetailView: View {
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
+                Spacer()
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
@@ -138,7 +118,6 @@ struct ActionDetailView: View {
                         ForEach(group.jobs) { job in
                             Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
-                                    // ⚠️ PieProgressView — not plain Circle().
                                     PieProgressView(
                                         progress: job.progressFraction,
                                         color: jobDotColor(for: job),
@@ -149,7 +128,7 @@ struct ActionDetailView: View {
                                         .foregroundColor(job.isDimmed ? .secondary : .primary)
                                         .lineLimit(1)
                                         .truncationMode(.tail)
-                                    Spacer()  // ⚠️ load-bearing
+                                    Spacer()
                                     if let conclusion = job.conclusion {
                                         Text(conclusionLabel(conclusion))
                                             .font(.caption)
@@ -180,11 +159,7 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ maxWidth only — NO maxHeight. Detail view must shrink-wrap to content.
-        // maxHeight:.infinity was removed: it stretched the view to the full
-        // popover height set by mainView's fittingSize, leaving empty space below
-        // the job list when fewer jobs were present (bug #1 / ref #178).
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -196,8 +171,6 @@ struct ActionDetailView: View {
     }
 
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
-
-    // MARK: - Job row helpers
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
