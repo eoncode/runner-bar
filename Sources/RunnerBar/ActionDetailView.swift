@@ -11,7 +11,9 @@ import SwiftUI
 // .fixedSize(horizontal: false, vertical: true) — tells SwiftUI the content
 // wants its ideal (content-driven) height. DO NOT remove that modifier.
 // Header is OUTSIDE ScrollView. Job list is INSIDE ScrollView.
-// ❌ NEVER add maxHeight:.infinity to the root frame — causes inherited height bug.
+// ❌ NEVER remove .maxHeight:.infinity from root — detail views are shown via
+//    navigate() AFTER show(), so they must fill the existing popover frame.
+//    Removing it causes a frame mismatch that makes AppKit jump the popover sideways.
 // ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack.
 // ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks.
 // ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump.
@@ -167,8 +169,9 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // maxWidth only. NO maxHeight — height driven by fittingSize in AppDelegate.
-        .frame(maxWidth: .infinity, alignment: .top)
+        // ⚠️ REGRESSION GUARD: maxHeight:.infinity is REQUIRED — detail views are shown
+        // via navigate() AFTER show(), so they must fill the existing popover frame.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }

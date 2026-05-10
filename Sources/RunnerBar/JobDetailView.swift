@@ -6,7 +6,9 @@ import SwiftUI
 // ScrollView absorbs overflow — NEVER fight the frame.
 // ❌ NEVER put header inside ScrollView
 // ❌ NEVER add .frame(height:) to root
-// ❌ NEVER add .maxHeight:.infinity to root — stretches into main view's pre-existing frame
+// ❌ NEVER remove .maxHeight:.infinity from root — detail views are shown via
+//    navigate() AFTER show(), so they must fill the existing popover frame.
+//    Removing it causes a frame mismatch that makes AppKit jump the popover sideways.
 // ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack
 //    — it is LOAD-BEARING for correct fittingSize in AppDelegate.openPopover()
 // ❌ NEVER call navigate() directly — use onBack/onSelectStep callbacks
@@ -144,9 +146,9 @@ struct JobDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // maxWidth only. NO maxHeight — height driven by fittingSize in AppDelegate.
-        // ❌ NEVER add maxHeight:.infinity — stretches into main view's pre-existing frame.
-        .frame(maxWidth: .infinity, alignment: .top)
+        // ⚠️ REGRESSION GUARD: maxHeight:.infinity is REQUIRED — detail views are shown
+        // via navigate() AFTER show(), so they must fill the existing popover frame.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,
