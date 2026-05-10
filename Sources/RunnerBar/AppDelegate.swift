@@ -9,8 +9,10 @@ import SwiftUI
 // SIZING CONTRACT (mirrors main branch exactly):
 //   navigate() = rootView swap ONLY. Zero size changes. Ever.
 //   Size is set ONCE per open in openPopover().
-//   reload() fires FIRST, then ONE DispatchQueue.main.async defers the
-//   fittingSize read until SwiftUI has had a layout pass with fresh data.
+//   fittingSize is read SYNCHRONOUSLY after reload() — same as main branch.
+//   A one-tick async deferral was tried and removed: the !isShown guard
+//   caused the block to silently bail when anything raced ahead of it,
+//   leaving height at initialSize(300) and clipping content (bug #2).
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER touch contentSize or setFrameSize inside navigate()
@@ -18,8 +20,7 @@ import SwiftUI
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ❌ NEVER guard observable.reload() on !popoverIsOpen — store polls must
 //    always reach the view while the popover is visible (#296 regression fix)
-// ❌ NEVER read fittingSize synchronously after reload() — SwiftUI needs one
-//    runloop tick to propagate the new data before layout is stable
+// ❌ NEVER wrap fittingSize read in DispatchQueue.main.async with !isShown guard
 
 private enum NavState {
     case main
@@ -263,37 +264,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Order: reload() → one runloop tick (DispatchQueue.main.async) →
-    ///        fittingSize → cap at maxHeight → setFrameSize → contentSize → show().
+    /// Order: reload() → fittingSize (synchronous) → cap at maxHeight → setFrameSize → contentSize → show().
+    /// Synchronous read matches the working main branch. The async+!isShown approach
+    /// was removed: it silently bailed when the popover opened fast, leaving height=300.
     /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
-    /// ❌ NEVER read fittingSize synchronously after reload() — SwiftUI needs one tick.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
-              let popover
+              let popover,
+              let hc = hostingController
         else { return }
         popoverIsOpen = true
         observable.reload()
-        // ⚠️ Defer size measurement one runloop tick so SwiftUI propagates
-        // fresh data into the layout tree before we read fittingSize.
-        DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  let hc = self.hostingController,
-                  !popover.isShown
-            else { return }
-            let fitting = hc.view.fittingSize
-            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
-            let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
-            let size = NSSize(width: width, height: height)
-            hc.view.setFrameSize(size)
-            popover.contentSize = size
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-            popover.contentViewController?.view.window?.makeKey()
-            if let saved = self.savedNavState,
-               let restored = self.validatedView(for: saved) {
-                self.navigate(to: restored)
-            }
+        let fitting = hc.view.fittingSize
+        let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+        let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
+        let size = NSSize(width: width, height: height)
+        hc.view.setFrameSize(size)
+        popover.contentSize = size
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        popover.contentViewController?.view.window?.makeKey()
+        if let saved = savedNavState,
+           let restored = validatedView(for: saved) {
+            navigate(to: restored)
         }
     }
 }

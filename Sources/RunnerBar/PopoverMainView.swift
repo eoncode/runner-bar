@@ -380,10 +380,17 @@ private struct InlineJobRowView: View {
         return "\(done)/\(total)"
     }
 
+    /// Returns the current step title, or — when there are no steps — a human-readable
+    /// job status string so queued/in-progress jobs display meaningful state instead of "—".
     private func currentStepTitle(for job: ActiveJob) -> String {
         if let active = job.steps.first(where: { $0.status == "in_progress" }) { return active.name }
         if let last = job.steps.last(where: { $0.conclusion != nil }) { return last.name }
-        return "—"
+        // No steps yet (job is queued or just started) — show status text.
+        switch job.status {
+        case "queued":      return "Queued"
+        case "in_progress": return "Starting…"
+        default:            return "—"
+        }
     }
 
     private func jobDotColor(for job: ActiveJob) -> Color {

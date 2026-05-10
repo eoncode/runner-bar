@@ -7,16 +7,18 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
-//   Receives the same FIXED frame from AppDelegate as JobDetailView.
-//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
-//   ScrollView absorbs overflow — do NOT fight the frame.
+//   The popover size is set ONCE from mainView()'s fittingSize in openPopover().
+//   Detail views must NOT use maxHeight:.infinity — that stretches them to fill
+//   the main-view height, leaving empty space when content is shorter (bug #1).
+//   The root frame uses maxWidth:.infinity ONLY. ScrollView absorbs any overflow.
 //
 // ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   ✔ Root: .frame(maxWidth: .infinity, alignment: .top)  — NO maxHeight
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ❌ NEVER put header inside ScrollView
 //   ❌ NEVER add .idealWidth or .frame(height:) to root
+//   ❌ NEVER add .frame(maxHeight: .infinity) — it inherits main view height
 //   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -137,8 +139,6 @@ struct ActionDetailView: View {
                             Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
                                     // ⚠️ PieProgressView — not plain Circle().
-                                    // Plain Circle() was replaced to match the spec (#296 / #178)
-                                    // and be consistent with the main popover row dots.
                                     PieProgressView(
                                         progress: job.progressFraction,
                                         color: jobDotColor(for: job),
@@ -180,7 +180,11 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ maxWidth only — NO maxHeight. Detail view must shrink-wrap to content.
+        // maxHeight:.infinity was removed: it stretched the view to the full
+        // popover height set by mainView's fittingSize, leaving empty space below
+        // the job list when fewer jobs were present (bug #1 / ref #178).
+        .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -195,8 +199,6 @@ struct ActionDetailView: View {
 
     // MARK: - Job row helpers
 
-    /// Dot color for a job row in ActionDetailView.
-    /// Uses PieProgressView so color must match the same semantics as the main popover.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
