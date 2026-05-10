@@ -293,9 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
-              button.window != nil,
-              let popover,
-              let hostingController
+              button.window != nil
         else { return }
         popoverIsOpen = true
         observable.reload()
@@ -305,19 +303,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         // to process the published changes and produce current fittingSize.
         DispatchQueue.main.async { [weak self] in
             guard let self,
-                  let hostingController = self.hostingController,
-                  let popover = self.popover,
-                  let button = self.statusItem?.button,
-                  button.window != nil
+                  let hc = self.hostingController,
+                  let pop = self.popover,
+                  let btn = self.statusItem?.button,
+                  btn.window != nil
             else { return }
-            let fitting = hostingController.view.fittingSize
+            let fitting = hc.view.fittingSize
             let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
             let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
             let size = NSSize(width: width, height: height)
-            hostingController.view.setFrameSize(size)
-            popover.contentSize = size
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-            popover.contentViewController?.view.window?.makeKey()
+            hc.view.setFrameSize(size)
+            pop.contentSize = size
+            pop.show(relativeTo: btn.bounds, of: btn, preferredEdge: .maxY)
+            pop.contentViewController?.view.window?.makeKey()
             if let saved = self.savedNavState,
                let restored = self.validatedView(for: saved) {
                 self.navigate(to: restored)
