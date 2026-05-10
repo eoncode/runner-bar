@@ -10,9 +10,12 @@ import SwiftUI
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
-// ❌ NEVER remove .frame(idealWidth: 340) from PopoverMainView
+// ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
+// ⚠️ fixedWidth MUST match PopoverMainView’s .frame(idealWidth: 420).
+//     Mismatching these causes fittingSize.height to be calculated at the
+//     wrong width, wrapping content and producing an incorrect popover height.
 
-/// Navigation state machine for the popover's view hierarchy.
+/// Navigation state machine for the popover’s view hierarchy.
 private enum NavState {
     /// Root level: PopoverMainView.
     case main
@@ -43,8 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
 
-    /// Fixed popover width matching PopoverMainView's .frame(idealWidth: 340).
-    private static let fixedWidth: CGFloat = 340
+    /// Fixed popover width — MUST match PopoverMainView’s .frame(idealWidth: 420).
+    /// ❌ NEVER set this to a value other than 420 without also updating idealWidth in PopoverMainView.
+    private static let fixedWidth: CGFloat = 420
 
     // MARK: - App lifecycle
 
@@ -253,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller's root view. ZERO size changes. Forever.
+    /// Swaps the hosting controller’s root view. ZERO size changes. Forever.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }

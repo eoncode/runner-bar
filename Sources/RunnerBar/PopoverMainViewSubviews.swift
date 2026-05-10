@@ -4,16 +4,11 @@ import SwiftUI
 
 /// Header row: system stats left, auth indicator + settings + close right.
 struct PopoverHeaderView: View {
-    /// Latest system stats snapshot.
     let stats: SystemStats
-    /// Whether the user has a valid GitHub token.
     let isAuthenticated: Bool
-    /// Called when the user taps the settings gear.
     let onSelectSettings: () -> Void
-    /// Called when the user taps the orange auth dot.
     let onSignIn: () -> Void
 
-    /// Renders the header HStack with stats, auth, settings and close controls.
     var body: some View {
         HStack(spacing: 6) {
             systemStatsBadge
@@ -39,7 +34,6 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Green dot when authenticated; tappable orange dot + `"Sign in"` caption when not.
     @ViewBuilder
     private var authIndicator: some View {
         if isAuthenticated {
@@ -109,15 +103,12 @@ struct PopoverHeaderView: View {
         }
     }
 
-    /// 3-character Unicode block bar scaled to `pct` (0–100).
-    /// Example: pct=67 → "██░", pct=100 → "███", pct=0 → "░░░".
     private func blockBar(pct: Double, width: Int = 3) -> String {
         let raw = Int((pct / 100.0 * Double(width)).rounded())
         let filledCount = max(0, min(width, raw))
         return String(repeating: "█", count: filledCount) + String(repeating: "░", count: width - filledCount)
     }
 
-    /// Traffic-light colour: red > 85 %, yellow > 60 %, green otherwise.
     private func usageColor(pct: Double) -> Color {
         if pct > 85 { return .red }
         if pct > 60 { return .yellow }
@@ -128,22 +119,14 @@ struct PopoverHeaderView: View {
 // MARK: - PopoverLocalRunnerRow
 
 /// Conditionally shows online local runners — hidden when all are idle/offline.
-/// The parent (PopoverMainView) always renders a leading Divider above this view.
-/// This view only renders a trailing Divider after its runner rows.
-/// Triggers a `LocalRunnerStore.shared.refresh()` on appear.
 struct PopoverLocalRunnerRow: View {
-    /// All known runners; view filters to online ones internally.
     let runners: [Runner]
 
-    /// Renders runner rows if any are online, or nothing otherwise.
     var body: some View {
         let active = runners.filter { $0.status == "online" }
         if !active.isEmpty { runnerList(active) }
     }
 
-    /// Runner rows (capped at 3) — overflow indicator — trailing Divider.
-    /// Leading Divider is owned by the parent view.
-    /// Chevron intentionally omitted: runner detail navigation is not yet wired (ref #310).
     @ViewBuilder
     private func runnerList(_ active: [Runner]) -> some View {
         ForEach(active.prefix(3)) { runner in
@@ -171,15 +154,11 @@ struct PopoverLocalRunnerRow: View {
 // MARK: - ActionRowView
 
 /// Single action-group row with pie progress dot, started-ago timestamp,
-/// and spec-parity typography (#178). Inline job rows are always visible
-/// beneath in-progress groups — there is no expand/collapse interaction.
+/// and spec-parity typography (#178).
 struct ActionRowView: View {
-    /// The action group this row represents.
     let group: ActionGroup
-    /// Called when the user taps the main row area (navigate to action detail).
     let onSelect: () -> Void
 
-    /// Renders the tappable row content with a trailing chevron.
     var body: some View {
         HStack(spacing: 0) {
             Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
@@ -188,7 +167,6 @@ struct ActionRowView: View {
         }
     }
 
-    /// Row content: pie dot, label, title, and trailing meta.
     private var rowContent: some View {
         HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
@@ -205,7 +183,6 @@ struct ActionRowView: View {
         .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 3)
     }
 
-    /// Trailing meta: started-ago + current job name + job progress + elapsed + status chip.
     @ViewBuilder
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
@@ -228,25 +205,29 @@ struct ActionRowView: View {
         statusChip
     }
 
-    /// Status chip with bold weight for spec parity (#178).
+    /// Status chip — .lineLimit(1) + .fixedSize(horizontal: true, vertical: false) prevents
+    /// multi-word labels like "IN PROGRESS" from wrapping onto a second line, which would
+    /// corrupt fittingSize.height and cause the popover to be mis-sized (ref #52 #54).
     @ViewBuilder
     private var statusChip: some View {
         switch group.groupStatus {
         case .inProgress:
             Text("IN PROGRESS")
                 .font(.system(size: 9, weight: .bold)).foregroundColor(.yellow)
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         case .queued:
             Text("QUEUED")
                 .font(.system(size: 9, weight: .bold)).foregroundColor(.blue)
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         case .completed:
             let success = group.conclusion == "success"
             Text(success ? "SUCCESS" : "FAILED")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundColor(success ? .green : .red)
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         }
     }
 
-    /// Pie dot colour derived from group status and conclusion.
     private var dotColor: Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
@@ -261,23 +242,18 @@ struct ActionRowView: View {
 // MARK: - InlineJobRowsView
 
 /// Passive read-only ↳ job rows shown beneath every in-progress action group.
-/// Rows have no tap action — spec mandates inline rows carry no `>` chevron and
-/// are not independently navigable (ref #324 Gap 2).
-/// Capped at `cap` rows; a tappable "+ N more jobs…" button reveals +4 at a time
-/// (ref #324 Gap 4).
+/// Only shows jobs that are currently `in_progress` — queued and completed jobs
+/// are intentionally excluded (per spec: inline rows communicate active work only).
+/// Rows have no tap action per spec #324 Gap 2.
 struct InlineJobRowsView: View {
-    /// The parent action group whose active jobs are displayed.
     let group: ActionGroup
-
-    /// Per-instance visible cap; starts at 4, increments +4 on each "load more" tap.
     @State private var cap: Int = 4
 
-    /// Jobs currently in-progress or queued inside this group.
+    /// Only in-progress jobs — ❌ never include queued or completed jobs here.
     private var activeJobs: [ActiveJob] {
-        group.jobs.filter { $0.status == "in_progress" || $0.status == "queued" }
+        group.jobs.filter { $0.status == "in_progress" }
     }
 
-    /// Renders up to `cap` passive job rows followed by an optional load-more button.
     var body: some View {
         ForEach(activeJobs.prefix(cap)) { job in
             jobRow(job)
@@ -295,9 +271,6 @@ struct InlineJobRowsView: View {
         }
     }
 
-    /// Renders a single inline job row (read-only — no Button wrapper per spec).
-    /// Format: `↳ [●] JobName · Current step name  done/total  elapsed`
-    /// The middle-dot segment is omitted when no in_progress step exists or step name is empty.
     private func jobRow(_ job: ActiveJob) -> some View {
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
         let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
@@ -306,7 +279,6 @@ struct InlineJobRowsView: View {
         return HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
-            // Job name + optional middle-dot step name, truncated together
             Group {
                 if let name = stepName {
                     Text(job.name + " · " + name)
@@ -329,7 +301,6 @@ struct InlineJobRowsView: View {
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
     }
 
-    /// Pie dot colour for a job row.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
