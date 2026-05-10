@@ -15,7 +15,11 @@ import Foundation
 /// same background thread to enrich each runner with live GitHub API status
 /// (online/offline/busy). Enrichment is skipped silently when no GitHub token
 /// is present, preserving Phase 1 behaviour for unauthenticated users.
-final class LocalRunnerStore: ObservableObject {
+///
+/// `@unchecked Sendable`: all mutable state is protected by DispatchQueue
+/// serialisation (background queue for reads, main queue for writes to
+/// `@Published` properties). Safe to cross actor boundaries.
+final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     // MARK: Shared singleton
 
     static let shared = LocalRunnerStore()
@@ -26,9 +30,6 @@ final class LocalRunnerStore: ObservableObject {
     @Published private(set) var runners: [RunnerModel] = []
 
     /// `true` while a background scan is in progress.
-    ///
-    /// Defaults to `false` so that the `guard !isScanning` check in `refresh()`
-    /// does not block the very first scan triggered from `.onAppear`.
     @Published private(set) var isScanning: Bool = false
 
     // MARK: Private

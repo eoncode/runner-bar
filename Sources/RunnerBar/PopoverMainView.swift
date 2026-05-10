@@ -44,12 +44,11 @@ struct PopoverMainView: View {
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
             )
-            // Always render a separator after the header so the divider is visible
-            // even when isRateLimited==false and all runners are offline.
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
-                .onAppear { Task { await LocalRunnerStore.shared.refresh() } }
+                // refresh() is @MainActor, not async — no await needed.
+                .onAppear { Task { LocalRunnerStore.shared.refresh() } }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     actionsSection
@@ -63,16 +62,12 @@ struct PopoverMainView: View {
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        // Reset pagination when the action list changes (e.g. after token refresh)
-        // so the user never lands on an empty page.
-        // ⚠️ Use the macOS 13-compatible single-value form — project targets macOS 13.0.
-        // ❌ NEVER use { _, _ in } (two-argument closure) — that requires macOS 14+.
+        // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
     // MARK: - Rate limit banner
 
-    /// Yellow warning strip shown when the GitHub API rate limit is reached.
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -85,8 +80,6 @@ struct PopoverMainView: View {
 
     // MARK: - Actions section
 
-    /// Paginated list of action groups with always-visible inline job rows for in-progress groups.
-    /// Inline job rows are read-only (no tap action) per spec #324 Gap 2.
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -110,7 +103,6 @@ struct PopoverMainView: View {
         .padding(.vertical, 4)
     }
 
-    /// Pagination button; renders nothing when all groups are already visible.
     @ViewBuilder
     private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
@@ -129,7 +121,6 @@ struct PopoverMainView: View {
 
     // MARK: - Helpers
 
-    /// Opens the GitHub PAT setup docs in the default browser.
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
