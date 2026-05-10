@@ -3,15 +3,14 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-// AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
-// ❌ NEVER remove .frame(idealWidth: 420)
-// ❌ NEVER use .frame(width: 420)
-// ❌ NEVER remove maxWidth: .infinity
-// ❌ NEVER add .frame(height:) or .frame(maxHeight:) anywhere inside the view body
-// ❌ NEVER wrap the actions list in a ScrollView — fittingSize cannot measure through it
-//    The maxHeight cap lives ONLY in AppDelegate (PopoverSize.maxHeight), applied once before .show().
-// ❌ NEVER add expandedGroups toggle for in-progress groups — they are ALWAYS expanded per spec #296
+// RULE 1: Root VStack MUST use .frame(maxWidth: .infinity, alignment: .top)
+//   The header block is sticky/pinned. The actions list is in a ScrollView
+//   capped at PopoverLayout.maxBodyHeight so it never overflows the window.
+// ❌ NEVER use .frame(width:) fixed width on root
+// ❌ NEVER add .frame(height:) or .frame(maxHeight:) on the root VStack
+// ❌ NEVER remove the ScrollView from the actions body — it prevents the
+//   header being pushed out of view when "Load more" expands the list.
+// ❌ NEVER add expandedGroups toggle for in-progress groups — always expanded per spec #296
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
@@ -21,9 +20,17 @@ import SwiftUI
 // INLINE JOBS SPEC (#178 active mode):
 //   Only jobs with status == "in_progress" appear as inline ↳ child rows.
 //   Queued jobs are NOT shown inline — they haven't started and have no step data.
-//   Concluded jobs (conclusion != nil) are NOT shown inline.
 
-/// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
+// MARK: - Layout constants
+
+private enum PopoverLayout {
+    /// Matches AppDelegate.maxHeight (620). Header ~120pt, leaves 500 for scroll body.
+    static let maxBodyHeight: CGFloat = 500
+    /// Ideal/minimum width.
+    static let idealWidth: CGFloat = 420
+}
+
+/// Root popover view. Sticky header (stats + runners) + scrollable actions body.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -32,11 +39,11 @@ struct PopoverMainView: View {
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
-    /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
     @State private var visibleCount: Int = 10
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // ⚠️ STICKY HEADER — always visible, never scrolled away.
             PopoverHeaderView(
                 systemStats: systemStats,
                 isAuthenticated: isAuthenticated,
@@ -53,15 +60,20 @@ struct PopoverMainView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 Divider()
             }
-            // ⚠️ SPEC ORDER (#296): Runners section ABOVE actions list.
+            // ⚠️ SPEC ORDER (#296): Runners section ABOVE actions list, still in sticky block.
             RunnersListView(runners: store.runners)
-            ActionsListView(
-                actions: store.actions,
-                visibleCount: $visibleCount,
-                onSelectAction: onSelectAction
-            )
+
+            // ⚠️ SCROLLABLE BODY — capped so it never overflows the popover window.
+            ScrollView(.vertical, showsIndicators: true) {
+                ActionsListView(
+                    actions: store.actions,
+                    visibleCount: $visibleCount,
+                    onSelectAction: onSelectAction
+                )
+            }
+            .frame(maxHeight: PopoverLayout.maxBodyHeight)
         }
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: PopoverLayout.idealWidth, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
@@ -176,11 +188,8 @@ private struct PopoverHeaderView: View {
 
 // MARK: - ActionsListView
 
-/// Actions list with per-group expand/collapse and pagination (Phase 3–5 / #302 #304 #305).
-/// ❌ NO ScrollView — fittingSize cannot measure through a ScrollView.
-/// ❌ NO .frame(maxHeight:) — height cap lives only in AppDelegate (maxHeight: 620).
-/// ⚠️ In-progress groups are ALWAYS expanded — no toggle per spec #296.
-///    Queued/completed groups are never expanded (no inline jobs for them).
+/// Actions list with pagination (Phase 3–5 / #302 #304 #305).
+/// Lives inside a ScrollView — "Load more" grows the content, not the window.
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
@@ -224,17 +233,11 @@ private struct ActionsListView: View {
 // MARK: - ActionRowView
 
 /// Single action group row.
-/// ⚠️ In-progress groups: inline ↓ job rows are ALWAYS shown — no toggle.
 /// ⚠️ SPEC #178 active mode: ONLY jobs with status == "in_progress" appear inline.
-///    Queued jobs have not been picked up by a runner yet — no step data,
-///    no meaningful progress — so they are hidden from the inline sub-rows.
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
 
-    /// Inline jobs: only actively running jobs when the group is in_progress.
-    /// Queued jobs are excluded — they have no step data and per spec #178
-    /// only active jobs are shown in the inline child rows.
     private var inlineJobs: [ActiveJob] {
         guard actionGroup.groupStatus == .inProgress else { return [] }
         return actionGroup.jobs.filter { $0.status == "in_progress" }
@@ -267,7 +270,6 @@ private struct ActionRowView: View {
                         Text(actionGroup.jobProgress)
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                             .frame(width: 28, alignment: .trailing)
-                        // ⚠️ width 80 required — "IN PROGRESS" is 11 chars in .caption.
                         Text(actionStatusLabel(for: actionGroup))
                             .font(.caption)
                             .foregroundColor(actionStatusColor(for: actionGroup))
@@ -281,7 +283,6 @@ private struct ActionRowView: View {
             )
             .buttonStyle(.plain)
 
-            // ⚠️ Spec #178 active mode: only in_progress jobs shown inline.
             if !inlineJobs.isEmpty {
                 InlineJobsView(jobs: inlineJobs)
             }
@@ -326,8 +327,7 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobsView
 
-/// Container for inline ↳ job sub-rows under a single action group (Phase 4 / #304).
-/// ⚠️ Receives ONLY in_progress jobs — caller filters to status == "in_progress".
+/// Container for inline ↳ job sub-rows. Receives ONLY in_progress jobs.
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
     @State private var cap: Int = 4
@@ -363,7 +363,7 @@ private struct InlineJobRowView: View {
                 .padding(.leading, 14)
             PieProgressView(
                 progress: job.progressFraction,
-                color: .yellow,  // always yellow — only in_progress jobs reach here
+                color: .yellow,
                 size: 7
             )
             Text(job.name)
@@ -388,8 +388,6 @@ private struct InlineJobRowView: View {
         .padding(.horizontal, 12).padding(.vertical, 2)
     }
 
-    /// Returns step progress fraction string (e.g. "3/8").
-    /// Returns "" when no steps are loaded yet — don't show "0/0".
     private func stepFraction(for job: ActiveJob) -> String {
         let total = job.steps.count
         guard total > 0 else { return "" }
@@ -397,11 +395,6 @@ private struct InlineJobRowView: View {
         return "\(done)/\(total)"
     }
 
-    /// Returns the current step title for the inline row.
-    /// Priority:
-    ///   1. First in_progress step name.
-    ///   2. Last concluded step name (job finishing up).
-    ///   3. "In Progress" — job is running but no step detail yet.
     private func currentStepTitle(for job: ActiveJob) -> String {
         if let active = job.steps.first(where: { $0.status == "in_progress" }) { return active.name }
         if let last = job.steps.last(where: { $0.conclusion != nil }) { return last.name }
