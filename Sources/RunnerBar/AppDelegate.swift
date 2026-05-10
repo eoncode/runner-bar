@@ -7,15 +7,14 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
 // SIZING CONTRACT:
-//   openPopover() sets size from PopoverMainView fittingSize (deferred one tick).
-//   navigate() resizes the popover to the incoming view's fittingSize (deferred one tick).
-//   Both width and height are content-driven, capped at maxWidth/maxHeight.
+//   openPopover() sets size from fittingSize ONCE, deferred one async tick so SwiftUI
+//   has completed a full layout pass. navigate() = rootView swap ONLY. ZERO size changes.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER call setFrameSize while popover.isShown == true from outside navigate()/openPopover()
+// ❌ NEVER call setFrameSize or set contentSize while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ❌ NEVER remove the !popoverIsOpen guard on reload() in onChange
 // ❌ NEVER move the fittingSize read back to the same tick as reload()
+// ❌ NEVER add size changes to navigate() — it is a rootView swap ONLY, forever.
 
 private enum NavState {
     case main
@@ -39,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     /// Ideal/fallback width when fittingSize returns 0.
     private static let idealWidth: CGFloat = 420
-    /// Hard cap on popover width — content drives width up to this.
+    /// Hard cap on popover width.
     private static let maxWidth: CGFloat = 540
     /// Hard cap on popover height.
     private static let maxHeight: CGFloat = 620
@@ -257,20 +256,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps rootView and resizes popover to fit the new view's content.
-    /// Width is content-driven up to maxWidth; height is content-driven up to maxHeight.
+    /// Swaps rootView. ZERO size changes — ever. This is the safe contract (ref #52 #54 #57 #296).
+    /// ❌ NEVER add setFrameSize or contentSize here. The popover is sized ONCE in openPopover().
     private func navigate(to view: AnyView) {
-        guard let hc = hostingController, let pop = popover else { return }
-        hc.rootView = view
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.popoverIsOpen else { return }
-            let fitting = hc.view.fittingSize
-            let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
-            let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
-            let size = NSSize(width: width, height: height)
-            hc.view.setFrameSize(size)
-            pop.contentSize = size
-        }
+        hostingController?.rootView = view
     }
 
     // MARK: - Popover show/hide
@@ -284,8 +273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover. Size is set from fittingSize deferred one async tick.
-    /// ❌ NEVER move fittingSize read back to same tick as reload().
+    /// Opens the popover. Size is set from fittingSize deferred one async tick so SwiftUI
+    /// completes a full layout pass before we read it. NEVER move this read to the same tick
+    /// as reload() — fittingSize will be stale and the popover will be the wrong size.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -302,7 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             else { return }
             let fitting = hc.view.fittingSize
             let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
-            let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
+            let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
             let size = NSSize(width: width, height: height)
             hc.view.setFrameSize(size)
             pop.contentSize = size

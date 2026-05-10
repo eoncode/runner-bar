@@ -3,21 +3,26 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 420, alignment: .top)
-//   ❌ NEVER add maxWidth: .infinity to the root frame — it makes fittingSize.width
-//      return the window width instead of content width, causing navigate() to
-//      resize the popover and shift it sideways on every navigation. (#296 side-jump)
-//   ✔ idealWidth: 420 lets fittingSize return ~420 so navigate() keeps the popover stable.
-// ❌ NEVER use .frame(width:) fixed width on root
-// ❌ NEVER add .frame(height:) or .frame(maxHeight:) on the root VStack
-// ❌ NEVER remove the ScrollView from the actions body — it prevents the
-//   header being pushed out of view when "Load more" expands the list.
-// ❌ NEVER add expandedGroups toggle for in-progress groups — always expanded per spec #296
+// RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//   maxWidth: .infinity lets the VStack fill the popover width (correct visual behaviour).
+//   idealWidth: 420 drives fittingSize.width so openPopover() sizes correctly.
+//   ❌ NEVER remove idealWidth: 420
+//   ❌ NEVER remove maxWidth: .infinity — without it rows won't fill the full width
+//   ❌ NEVER use .frame(width: 420) fixed — breaks fittingSize
+//   ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the root VStack
+//   This is safe because navigate() does ZERO sizing — maxWidth:.infinity only
+//   expands within the already-fixed popover frame set by openPopover().
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
+//
+// SCROLLVIEW RULE (#296):
+//   ❌ NEVER wrap ActionsListView in a ScrollView with a fixed maxHeight.
+//   A capped ScrollView clips inline job rows that haven't been laid out at fittingSize
+//   read time, causing them to be invisible. The popover height is capped by AppDelegate
+//   (maxHeight: 620) — let the VStack grow naturally and let fittingSize report it.
 //
 // INLINE JOBS SPEC (#178 active mode):
 //   Only jobs with status == "in_progress" appear as inline ↳ child rows.
@@ -26,19 +31,17 @@ import SwiftUI
 //   inlineJobs reactively — no extra @State or id() trick needed.
 //
 // onChange(of: store.actions):
-//   Only reset visibleCount when it has been paged beyond 10. Resetting on every
-//   poll update would wipe inline jobs during the empty→populated enrichment cycle.
+//   Only reset visibleCount when paged beyond 10. Resetting on every poll update
+//   would wipe inline job rows during the empty→populated enrichment cycle.
 
 // MARK: - Layout constants
 
 private enum PopoverLayout {
-    /// Matches AppDelegate.maxHeight (620). Header ~120pt, leaves 500 for scroll body.
-    static let maxBodyHeight: CGFloat = 500
-    /// Ideal/minimum width.
+    /// Ideal/minimum width — must match AppDelegate.idealWidth.
     static let idealWidth: CGFloat = 420
 }
 
-/// Root popover view. Sticky header (stats + runners) + scrollable actions body.
+/// Root popover view. Sticky header (stats + runners) + actions list.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -51,7 +54,7 @@ struct PopoverMainView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ⚠️ STICKY HEADER — always visible, never scrolled away.
+            // ⚠️ STICKY HEADER — always visible.
             PopoverHeaderView(
                 systemStats: systemStats,
                 isAuthenticated: isAuthenticated,
@@ -68,29 +71,26 @@ struct PopoverMainView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 Divider()
             }
-            // ⚠️ SPEC ORDER (#296): Runners section ABOVE actions list, still in sticky block.
+            // ⚠️ SPEC ORDER (#296): Runners ABOVE actions list.
             RunnersListView(runners: store.runners)
 
-            // ⚠️ SCROLLABLE BODY — capped so it never overflows the popover window.
-            ScrollView(.vertical, showsIndicators: true) {
-                ActionsListView(
-                    actions: store.actions,
-                    visibleCount: $visibleCount,
-                    onSelectAction: onSelectAction
-                )
-            }
-            .frame(maxHeight: PopoverLayout.maxBodyHeight)
+            // ⚠️ NO ScrollView — let the VStack grow naturally so fittingSize captures
+            //    all inline job rows. AppDelegate caps height at 620pt.
+            ActionsListView(
+                actions: store.actions,
+                visibleCount: $visibleCount,
+                onSelectAction: onSelectAction
+            )
         }
-        // ⚠️ NO maxWidth: .infinity — idealWidth drives fittingSize so navigate() stays stable.
-        .frame(idealWidth: PopoverLayout.idealWidth, alignment: .top)
+        // ⚠️ maxWidth: .infinity fills popover width. idealWidth drives fittingSize.
+        //    Safe because navigate() is a zero-size rootView swap — it never re-reads fittingSize.
+        .frame(idealWidth: PopoverLayout.idealWidth, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        // ⚠️ Only reset visibleCount when user has paged beyond default.
-        //    Do NOT reset on every poll update — that would wipe inline job rows
-        //    during the empty→populated enrichment cycle each poll tick.
+        // ⚠️ Only reset when user has paged past default — do NOT reset on every poll tick.
         .onChange(of: store.actions) { _ in
             if visibleCount > 10 { visibleCount = 10 }
         }
@@ -203,7 +203,6 @@ private struct PopoverHeaderView: View {
 // MARK: - ActionsListView
 
 /// Actions list with pagination (Phase 3–5 / #302 #304 #305).
-/// Lives inside a ScrollView — "Load more" grows the content, not the window.
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
@@ -247,9 +246,8 @@ private struct ActionsListView: View {
 // MARK: - ActionRowView
 
 /// Single action group row.
-/// ⚠️ SPEC #178 active mode: ONLY jobs with status == "in_progress" appear inline.
-/// ActionRowView receives the full ActionGroup value — inlineJobs re-evaluates
-/// automatically when store.actions is updated by the poll enrichment cycle.
+/// ⚠️ SPEC #178: ONLY jobs with status == "in_progress" appear inline.
+/// ActionRowView is a value type — inlineJobs re-evaluates reactively when store.actions updates.
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
