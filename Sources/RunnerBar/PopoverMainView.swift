@@ -7,15 +7,17 @@ import SwiftUI
 // ❌ NEVER remove .frame(idealWidth: 420)
 // ❌ NEVER use .frame(width: 420)
 // ❌ NEVER remove maxWidth: .infinity
-// ❌ NEVER add .frame(height:) or .frame(maxHeight:) anywhere inside the view body
-// ❌ NEVER wrap the actions list in a ScrollView — fittingSize cannot measure through it
-//    The maxHeight cap lives ONLY in AppDelegate (PopoverSize.maxHeight), applied once before .show().
+// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the ScrollView or any container
+//    The maxHeight cap lives ONLY in AppDelegate (maxHeight: 620), applied once before .show().
 // ❌ NEVER add expandedGroups toggle for in-progress groups — they are ALWAYS expanded per spec #296
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
+// RULE 6: ActionsListView uses ScrollView with NO .frame(maxHeight:).
+//         AppDelegate.maxHeight = 620 is the only height ceiling.
+//         InlineJobsView has NO cap — all non-concluded jobs are shown immediately per spec #178.
 
 /// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
@@ -170,11 +172,9 @@ private struct PopoverHeaderView: View {
 
 // MARK: - ActionsListView
 
-/// Actions list with per-group expand/collapse and pagination (Phase 3–5 / #302 #304 #305).
-/// ❌ NO ScrollView — fittingSize cannot measure through a ScrollView.
-/// ❌ NO .frame(maxHeight:) — height cap lives only in AppDelegate (maxHeight: 620).
-/// ⚠️ In-progress groups are ALWAYS expanded — no toggle per spec #296.
-///    Queued/completed groups are never expanded (no inline jobs for them).
+/// Scrollable actions list with pagination (Phase 3–5 / #302 #304 #305).
+/// ⚠️ ScrollView has NO .frame(maxHeight:) — height cap is AppDelegate.maxHeight = 620 only.
+/// ⚠️ In-progress groups are ALWAYS expanded — no toggle per spec #296/#178.
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
@@ -186,28 +186,30 @@ private struct ActionsListView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 4)
         } else {
-            VStack(spacing: 0) {
-                ForEach(actions.prefix(visibleCount)) { actionGroup in
-                    ActionRowView(
-                        actionGroup: actionGroup,
-                        onSelect: { onSelectAction(actionGroup) }
-                    )
-                }
-                if actions.count > visibleCount {
-                    Button(
-                        action: { visibleCount += 10 },
-                        label: {
-                            Text("Load 10 more actions…")
-                                .font(.caption).foregroundColor(.secondary)
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                } else if visibleCount > 10 {
-                    Text("No more actions")
-                        .font(.caption2).foregroundColor(.secondary.opacity(0.5))
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 6)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(actions.prefix(visibleCount)) { actionGroup in
+                        ActionRowView(
+                            actionGroup: actionGroup,
+                            onSelect: { onSelectAction(actionGroup) }
+                        )
+                    }
+                    if actions.count > visibleCount {
+                        Button(
+                            action: { visibleCount += 10 },
+                            label: {
+                                Text("Load 10 more actions…")
+                                    .font(.caption).foregroundColor(.secondary)
+                            }
+                        )
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                    } else if visibleCount > 10 {
+                        Text("No more actions")
+                            .font(.caption2).foregroundColor(.secondary.opacity(0.5))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 6)
+                    }
                 }
             }
             .padding(.bottom, 6)
@@ -225,8 +227,7 @@ private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
 
-    /// Inline jobs are shown when the group is in_progress and has jobs.
-    /// This is computed directly — no @State toggle — so it's always in sync with live data.
+    /// Inline jobs shown when group is in_progress and has jobs — pure computed, no @State.
     private var showInlineJobs: Bool {
         actionGroup.groupStatus == .inProgress && !actionGroup.jobs.isEmpty
     }
@@ -273,7 +274,7 @@ private struct ActionRowView: View {
             )
             .buttonStyle(.plain)
 
-            // ⚠️ Always shown when in_progress — no toggle needed.
+            // ⚠️ Always shown when in_progress — no toggle.
             // Includes queued jobs at job-level; they belong to the active run.
             // Filter: exclude only jobs that have already concluded.
             if showInlineJobs {
@@ -324,25 +325,14 @@ private struct ActionRowView: View {
 
 /// Container for inline ↳ job sub-rows under a single action group (Phase 4 / #304).
 /// ⚠️ Receives non-concluded jobs — caller filters out jobs with conclusion != nil.
+/// ⚠️ NO cap — all jobs are shown immediately per spec #178.
+///    With 10 jobs, all 10 must be visible without any "Load more" interaction.
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
-    @State private var cap: Int = 4
 
     var body: some View {
-        ForEach(jobs.prefix(cap)) { job in
+        ForEach(jobs) { job in
             InlineJobRowView(job: job)
-        }
-        if jobs.count > cap {
-            Button(
-                action: { cap += 4 },
-                label: {
-                    Text("+ \(jobs.count - cap) more job\(jobs.count - cap == 1 ? "" : "s")…")
-                        .font(.caption2).foregroundColor(.accentColor)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 26).padding(.trailing, 12).padding(.vertical, 2)
-                }
-            )
-            .buttonStyle(.plain)
         }
     }
 }
