@@ -5,6 +5,13 @@ import Foundation
 /// Scans the local machine for installed GitHub Actions self-hosted runners.
 /// Combines results from `.runner` JSON files, LaunchAgent plists, and
 /// live `launchctl` service names to produce a deduplicated `[RunnerModel]`.
+///
+/// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING
+/// scanRunnerJSONFiles() MUST only search explicit known runner install paths.
+/// ❌ NEVER use `find ~` or broad home-directory traversal — triggers macOS TCC
+///   sandbox permission dialog ("RunnerBar would like to access data from other apps")
+///   and crashes on denial. Only search these specific directories:
+///   ~/actions-runner, ~/.github/runners, ~/runner, /opt/actions-runner
 struct LocalRunnerScanner {
     private struct RunnerJSON: Decodable {
         let gitHubUrl: String?
@@ -74,8 +81,19 @@ struct LocalRunnerScanner {
     }
 
     private func scanRunnerJSONFiles() -> [RunnerModel] {
+        // ⚠️ Search explicit paths ONLY. Do NOT use `find ~` — triggers TCC permission
+        // dialog for broad home traversal on macOS 13+. These paths cover all
+        // standard GitHub Actions self-hosted runner install locations.
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let searchPaths = [
+            "\(home)/actions-runner",
+            "\(home)/.github/runners",
+            "\(home)/runner",
+            "/opt/actions-runner"
+        ].joined(separator: " ")
+
         let raw = shell(
-            "find ~ /opt /usr/local -maxdepth 6 -name '.runner' 2>/dev/null",
+            "find \(searchPaths) -maxdepth 4 -name '.runner' 2>/dev/null",
             timeout: 15
         )
         guard !raw.isEmpty else { return [] }
