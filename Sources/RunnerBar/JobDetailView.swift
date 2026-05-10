@@ -5,8 +5,12 @@ import SwiftUI
 // navigate() = rootView swap ONLY inside the fixed popover frame.
 // ScrollView absorbs overflow — NEVER fight the frame.
 // ❌ NEVER put header inside ScrollView
-// ❌ NEVER add .frame(height:) or .fixedSize() to root
+// ❌ NEVER add .frame(height:) to root
+// ❌ NEVER add .maxHeight:.infinity to root — stretches into main view's pre-existing frame
+// ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack
+//    — it is LOAD-BEARING for correct fittingSize in AppDelegate.openPopover()
 // ❌ NEVER call navigate() directly — use onBack/onSelectStep callbacks
+// ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 ///
@@ -95,6 +99,9 @@ struct JobDetailView: View {
             Divider()
 
             // ── Steps list: INSIDE ScrollView
+            // ⚠️ .fixedSize(horizontal:false,vertical:true) on the VStack is LOAD-BEARING.
+            // It tells SwiftUI this content wants its ideal height, so AppDelegate's
+            // fittingSize read returns the correct content height. DO NOT remove.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
@@ -133,10 +140,13 @@ struct JobDetailView: View {
                         }
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // maxWidth only. NO maxHeight — height driven by fittingSize in AppDelegate.
+        // ❌ NEVER add maxHeight:.infinity — stretches into main view's pre-existing frame.
+        .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,

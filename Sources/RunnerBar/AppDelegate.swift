@@ -7,9 +7,7 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
 // SIZING CONTRACT (mirrors main branch exactly):
-//   openPopover() calls layoutSubtreeIfNeeded() then reads fittingSize ONCE
-//   before .show(). layoutSubtreeIfNeeded() is required — without it SwiftUI
-//   returns near-zero height for ScrollView-containing views.
+//   openPopover() reads fittingSize ONCE before .show(). No cap. No maxHeight.
 //   navigate() = rootView swap ONLY. ZERO size changes. Ever.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
@@ -21,6 +19,10 @@ import SwiftUI
 //    double-reload and layout thrash while the popover is open.
 // ❌ NEVER call navigate(to: restored) BEFORE show() — races with reload().
 //    Nav restore MUST happen after show().
+// ❌ NEVER call layoutSubtreeIfNeeded() in openPopover() — forces AppKit layout
+//    at old frame size and causes popover to jump sideways on reopen.
+//    Dynamic height is solved in the views via .fixedSize(horizontal:false,vertical:true)
+//    on VStack content inside ScrollView — NOT in AppDelegate.
 
 private enum NavState {
     case main
@@ -266,17 +268,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    ///
-    /// Sizing:
-    ///   1. reload() updates the observable with latest store state.
-    ///   2. layoutSubtreeIfNeeded() forces SwiftUI to resolve all content
-    ///      heights — required so ScrollView-containing views report correct
-    ///      fittingSize instead of near-zero.
-    ///   3. Read fittingSize ONCE, setFrameSize + contentSize, then show().
-    ///   4. After show(), restore savedNavState if present.
-    ///
+    /// Reads fittingSize ONCE before .show() — no cap, no maxHeight.
+    /// fittingSize returns correct height because views use
+    /// .fixedSize(horizontal:false,vertical:true) on ScrollView VStack content.
     /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown.
-    /// ❌ NEVER move nav restore to before show() — races with reload().
+    /// ❌ NEVER call layoutSubtreeIfNeeded() — causes sideways jump on reopen.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -286,9 +282,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
-        // Force SwiftUI layout pass so fittingSize reflects actual content height.
-        // Without this, ScrollView containers return near-zero fittingSize.
-        hc.view.layoutSubtreeIfNeeded()
         let fitting = hc.view.fittingSize
         let width  = fitting.width  > 0 ? fitting.width  : Self.fixedWidth
         let height = fitting.height > 0 ? fitting.height : 300

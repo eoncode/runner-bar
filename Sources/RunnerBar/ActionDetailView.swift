@@ -7,11 +7,14 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Height is driven by AppDelegate.openPopover() fittingSize — read once per open.
-// This view must NOT use maxHeight:.infinity — that stretches it to the main
-// view's pre-existing frame. Use maxWidth:.infinity only.
+// fittingSize works correctly because the VStack inside ScrollView uses
+// .fixedSize(horizontal: false, vertical: true) — tells SwiftUI the content
+// wants its ideal (content-driven) height. DO NOT remove that modifier.
 // Header is OUTSIDE ScrollView. Job list is INSIDE ScrollView.
 // ❌ NEVER add maxHeight:.infinity to the root frame — causes inherited height bug.
+// ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack.
 // ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks.
+// ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 struct ActionDetailView: View {
@@ -107,6 +110,9 @@ struct ActionDetailView: View {
             Divider()
 
             // ── Jobs list: INSIDE ScrollView
+            // ⚠️ .fixedSize(horizontal:false,vertical:true) on the VStack is LOAD-BEARING.
+            // It tells SwiftUI this content wants its ideal height, so AppDelegate's
+            // fittingSize read returns the correct content height. DO NOT remove.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
@@ -157,11 +163,11 @@ struct ActionDetailView: View {
                         }
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ maxWidth:.infinity only. NO maxHeight:.infinity — that inherits main view's
-        // frame height instead of sizing to this view's own content via fittingSize.
+        // maxWidth only. NO maxHeight — height driven by fittingSize in AppDelegate.
         .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()

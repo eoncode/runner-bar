@@ -22,6 +22,14 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING
+/// Height is driven by AppDelegate.openPopover() fittingSize — read once per open.
+/// fittingSize works correctly because the VStack inside ScrollView uses
+/// .fixedSize(horizontal: false, vertical: true). DO NOT remove that modifier.
+/// ❌ NEVER add maxHeight:.infinity to any container.
+/// ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack.
+/// ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -66,6 +74,9 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
+            // ⚠️ .fixedSize(horizontal:false,vertical:true) on the inner VStack is LOAD-BEARING.
+            // It tells SwiftUI this content wants its ideal height, so AppDelegate's
+            // fittingSize read returns the correct content height. DO NOT remove.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -82,6 +93,7 @@ struct SettingsView: View {
                     Divider()
                     aboutSection
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 16)
             }
         }
