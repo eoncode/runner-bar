@@ -101,9 +101,41 @@ struct ActionGroup: Identifiable, Equatable {
         return .completed
     }
 
-    /// Group conclusion: only non-nil when every run has concluded.
-    /// Priority: failure > cancelled > skipped > success.
+    /// Group conclusion derived preferentially from jobs, falling back to runs.
+    ///
+    /// ⚠️ WHY WE USE JOBS, NOT RUNS:
+    /// The GitHub API can report a run-level conclusion of "failure" even when every
+    /// individual job succeeded. This happens when a job was retried: the first
+    /// attempt creates a run whose conclusion is "failure", but the retry run's jobs
+    /// all show "success". Since we flatten all jobs from all sibling runs, using
+    /// job-level conclusions is authoritative.
+    ///
+    /// Priority order: failure > cancelled > skipped > success.
+    ///
+    /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
+    /// has not yet concluded, to prevent a premature FAILED badge.
     var conclusion: String? {
+        // ── Job-based conclusion (preferred) ────────────────────────────────────────
+        // Use job data when available and fully loaded.
+        if !jobs.isEmpty {
+            // Only conclude when every single job has a conclusion.
+            // If even one is nil the run is still in progress — return nil.
+            guard jobs.allSatisfy({ $0.conclusion != nil }) else { return nil }
+
+            // All jobs are done. Derive group conclusion from their results.
+            // ⚠️ Do NOT change this to read from runs[].conclusion — run-level API
+            // conclusions are stale and can report "failure" even when all jobs pass
+            // (e.g. after a retry). This caused the spurious FAILED badge (issue #294).
+            if jobs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
+            if jobs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
+            if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+            return "success"
+        }
+
+        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ─────────────
+        // ⚠️ This path is only reached when jobs is empty (loading state).
+        // Once jobs are populated the block above takes over.
+        // Do NOT move the run-based logic back to be the primary path — see above.
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
@@ -112,8 +144,12 @@ struct ActionGroup: Identifiable, Equatable {
     }
 
     /// Number of jobs with a concluded result across all sibling runs.
+    ///
+    /// ⚠️ "Concluded" means: success, failure, cancelled, skipped, or timed_out.
+    /// We count ALL non-nil conclusions, not just success+skipped, so that
+    /// jobsDone/jobsTotal reflects actual completion state (not just passed jobs).
     var jobsDone: Int {
-        jobs.filter { $0.conclusion == "success" || $0.conclusion == "skipped" }.count
+        jobs.filter { $0.conclusion != nil }.count
     }
 
     /// Total job count across all sibling runs.

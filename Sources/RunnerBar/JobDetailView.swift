@@ -1,15 +1,53 @@
 import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57)
-// navigate() = rootView swap ONLY inside the fixed popover frame.
-// ScrollView absorbs overflow — NEVER fight the frame.
-// ❌ NEVER put header inside ScrollView
-// ❌ NEVER add .frame(height:) or .fixedSize(horizontal:false,vertical:true) to root
-// ❌ NEVER use maxHeight:.infinity on root — it corrupts fittingSize and causes side-jump
-// ❌ NEVER call navigate() directly — use onBack/onSelectStep callbacks
-// ✔ Root frame MUST be .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-//   This matches AppDelegate.fixedWidth and lets fittingSize.height be correct.
+// ════════════════════════════════════════════════════════════════════════════════
+// ⚠️⚠️⚠️  POPOVER SIDE-JUMP REGRESSION GUARD — READ THIS BEFORE ANY EDIT  ⚠️⚠️⚠️
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// SYMPTOM:  Popover jumps sideways (shifts left/right) when navigate() is called.
+// ROOT CAUSE: AppDelegate sizes the popover window using SwiftUI's fittingSize.
+//             fittingSize is computed by offering the view an UNCONSTRAINED size.
+//             If the view expands to fill infinite height (maxHeight: .infinity),
+//             SwiftUI returns a non-deterministic fittingSize.width, which causes
+//             AppKit to re-position the popover anchor every time the root view swaps.
+//
+// ════════════════════════════════════════════════════════════════════════════════
+// THE ONE FRAME RULE (applies to THIS file and EVERY detail/settings view):
+//
+//   .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//
+//   • idealWidth: 420  — MUST match AppDelegate.fixedWidth (currently 420).
+//                        If you change fixedWidth in AppDelegate, change this too.
+//   • maxWidth: .infinity — lets the view fill the popover width.
+//   • NO maxHeight — letting SwiftUI compute natural height from content is what
+//                    allows the popover to resize correctly on navigate().
+//   • NO .frame(height:) anywhere on the root VStack.
+//   • NO .fixedSize(horizontal: false, vertical: true) on any direct child of the
+//     root VStack — this forces an infinite-height layout pass and corrupts fittingSize.
+//
+// ════════════════════════════════════════════════════════════════════════════════
+// BANNED modifiers on the ROOT VStack or any DIRECT CHILD of it:
+//
+//   ❌ .frame(maxHeight: .infinity)         — corrupts fittingSize.width
+//   ❌ .frame(height: <any constant>)       — prevents popover from resizing
+//   ❌ .fixedSize(horizontal: false, vertical: true)  — forces unconstrained height
+//   ❌ .fixedSize()                         — same problem
+//   ❌ navigate() called directly           — use onBack / onSelectStep callbacks
+//
+// SAFE modifiers (inside HStack/ScrollView children, not root level):
+//
+//   ✔ .fixedSize() on individual Text labels inside HStack — fine, scoped
+//   ✔ .frame(width:) on fixed-width labels — fine
+//   ✔ .lineLimit(N) on Text — fine
+//   ✔ .frame(maxWidth: .infinity, alignment: .leading) inside ScrollView — fine
+//
+// ════════════════════════════════════════════════════════════════════════════════
+// HISTORY:
+//   Broken by: adding .frame(maxHeight: .infinity) to root (multiple times)
+//   Fixed by:  replacing with .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//   Bug ref:   issue #294, commits 318da0b, fd1c960
+// ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 ///
@@ -28,8 +66,14 @@ struct JobDetailView: View {
     @State private var tickTimer: Timer?
 
     var body: some View {
+        // ⚠️ ROOT VStack — frame contract enforced at the BOTTOM of this body.
+        // Do NOT add .frame(maxHeight:), .frame(height:), or .fixedSize() here.
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header: OUTSIDE ScrollView — always visible at top
+
+            // ── Header ────────────────────────────────────────────────────────────
+            // MUST remain OUTSIDE ScrollView. Do not move into ScrollView.
+            // Adding .fixedSize() or .frame(height:) to this HStack will
+            // corrupt the parent fittingSize — see regression guard above.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -37,6 +81,7 @@ struct JobDetailView: View {
                         Text("Jobs").font(.caption)
                     }
                     .foregroundColor(.secondary)
+                    // ✔ .fixedSize() here is SAFE — scoped to this small label HStack.
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
@@ -46,7 +91,7 @@ struct JobDetailView: View {
                         let jobID = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         if scopeStr.isEmpty {
-                            log("ReRunButton \u203a could not derive scope from htmlUrl: \(String(describing: job.htmlUrl))")
+                            log("ReRunButton › could not derive scope from htmlUrl: \(String(describing: job.htmlUrl))")
                         }
                         DispatchQueue.global(qos: .userInitiated).async {
                             let isOk = scopeStr.contains("/")
@@ -56,12 +101,16 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
                 )
+                // ⚠️ CancelButton: when isDisabled=true it is INVISIBLE (opacity 0).
+                // This is intentional — do not change to a faded state.
+                // The hidden placeholder preserves HStack spacing when cancel IS available.
+                // See CancelButton.swift regression guard.
                 CancelButton(
                     action: { completion in
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         let runID = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
-                            log("CancelButton \u203a could not derive scope/runID from htmlUrl: \(String(describing: job.htmlUrl))")
+                            log("CancelButton › could not derive scope/runID from htmlUrl: \(String(describing: job.htmlUrl))")
                             completion(false)
                             return
                         }
@@ -89,17 +138,21 @@ struct JobDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
+            // ── Job title ─────────────────────────────────────────────────────────
+            // lineLimit(2) is safe here. .fixedSize(horizontal:false,vertical:true)
+            // is BANNED — it forces an unconstrained vertical layout pass on the
+            // root VStack which corrupts fittingSize. lineLimit(2) alone is enough.
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
-                // ⚠️ fixedSize(horizontal:false,vertical:true) intentionally retained here:
-                // job.name is a short single-line label in practice; lineLimit(2) caps growth.
-                .fixedSize(horizontal: false, vertical: true)
+                // ⚠️ DO NOT ADD .fixedSize(horizontal: false, vertical: true) here.
+                // It was removed intentionally. See regression guard at top of file.
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             Divider()
 
-            // ── Steps list: INSIDE ScrollView
+            // ── Steps list: MUST be inside ScrollView ─────────────────────────────
+            // NEVER move the header above outside into here.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
@@ -138,12 +191,17 @@ struct JobDetailView: View {
                         }
                     }
                 }
+                // ✔ .frame(maxWidth: .infinity) inside ScrollView is SAFE.
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ REGRESSION GUARD: idealWidth:420 MUST match AppDelegate.fixedWidth.
-        // maxHeight:.infinity is BANNED here — it expands the view beyond fittingSize and
-        // causes the popover to jump sideways on navigate() (ref #52 #54 #57).
+        // ════════════════════════════════════════════════════════════════════════
+        // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.
+        // idealWidth MUST match AppDelegate.fixedWidth (420).
+        // DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // DO NOT remove idealWidth: 420
+        // DO NOT add .frame(height:) or .fixedSize() here
+        // ════════════════════════════════════════════════════════════════════════
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
