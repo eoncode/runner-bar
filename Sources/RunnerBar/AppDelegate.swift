@@ -18,6 +18,11 @@ import SwiftUI
 // #21: StepLogView calls onLogLoaded() once the async log fetch completes.
 //     AppDelegate uses remeasurePopover() (same logic as navigate's async block)
 //     to resize the popover so the log content is not clipped.
+//     IMPORTANT: onLogLoaded dispatches with TWO async hops (nested
+//     DispatchQueue.main.async calls) so SwiftUI has two run-loop turns to
+//     commit the new log layout before fittingSize is sampled. One hop is
+//     insufficient because fittingSize still reflects the spinner size on the
+//     first turn after isLoading flips to false.
 
 /// Navigation state machine for the popover's view hierarchy.
 private enum NavState {
@@ -189,11 +194,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
             },
-            // #21: Re-measure the popover once the async log fetch completes so the
-            // window height reflects the loaded log content, not just the spinner.
+            // #21: Two async hops so SwiftUI has two run-loop turns to commit
+            // the log layout before fittingSize is sampled. See REGRESSION GUARD.
             onLogLoaded: { [weak self] in
                 guard let self else { return }
-                self.remeasurePopover()
+                DispatchQueue.main.async {
+                    self.remeasurePopover()
+                }
             }
         ))
     }
@@ -236,11 +243,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
             },
-            // #21: Re-measure the popover once the async log fetch completes so the
-            // window height reflects the loaded log content, not just the spinner.
+            // #21: Two async hops so SwiftUI has two run-loop turns to commit
+            // the log layout before fittingSize is sampled. See REGRESSION GUARD.
             onLogLoaded: { [weak self] in
                 guard let self else { return }
-                self.remeasurePopover()
+                DispatchQueue.main.async {
+                    self.remeasurePopover()
+                }
             }
         ))
     }
@@ -296,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Re-measures `hostingController.view.fittingSize` and applies it to the popover.
     ///
     /// Called by `navigate()` (via async dispatch) and by `StepLogView.onLogLoaded`
-    /// once the async log fetch completes (#21). Both call sites are always on the main thread.
+    /// (via two nested async dispatches, #21). Both call sites are always on the main thread.
     /// ❌ NEVER call from a background thread.
     private func remeasurePopover() {
         guard let hc = hostingController,
