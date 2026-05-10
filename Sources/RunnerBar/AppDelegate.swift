@@ -10,10 +10,14 @@ import SwiftUI
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize synchronously while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
-// ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 420).
+// ❌ NEVER remove .frame(idealWidth: 480) from PopoverMainView
+// ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 480).
 //     Mismatching these causes fittingSize.height to be calculated at the
 //     wrong width, wrapping content and producing an incorrect popover height.
+//
+// #21: StepLogView calls onLogLoaded() once the async log fetch completes.
+//     AppDelegate uses remeasurePopover() (same logic as navigate's async block)
+//     to resize the popover so the log content is not clipped.
 
 /// Navigation state machine for the popover's view hierarchy.
 private enum NavState {
@@ -46,9 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
 
-    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 420).
-    /// ❌ NEVER set this to a value other than 420 without also updating idealWidth in PopoverMainView.
-    private static let fixedWidth: CGFloat = 420
+    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 480).
+    /// #22: Widened from 420 → 480 to give action-row titles more horizontal space
+    /// and prevent truncation of multi-word workflow/job names.
+    /// ❌ NEVER set this to a value other than 480 without also updating idealWidth
+    ///    in PopoverMainView AND SettingsView.
+    private static let fixedWidth: CGFloat = 480
 
     // MARK: - App lifecycle
 
@@ -181,6 +188,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
+            },
+            // #21: Re-measure the popover once the async log fetch completes so the
+            // window height reflects the loaded log content, not just the spinner.
+            onLogLoaded: { [weak self] in
+                guard let self else { return }
+                self.remeasurePopover()
             }
         ))
     }
@@ -222,6 +235,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
+            },
+            // #21: Re-measure the popover once the async log fetch completes so the
+            // window height reflects the loaded log content, not just the spinner.
+            onLogLoaded: { [weak self] in
+                guard let self else { return }
+                self.remeasurePopover()
             }
         ))
     }
@@ -270,16 +289,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         hostingController?.rootView = view
         guard let hostingController, let popover, popover.isShown else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  let hc = self.hostingController,
-                  let pop = self.popover,
-                  pop.isShown else { return }
-            let newHeight = hc.view.fittingSize.height
-            guard newHeight > 0 else { return }
-            let newSize = NSSize(width: Self.fixedWidth, height: newHeight)
-            hc.view.setFrameSize(newSize)
-            pop.contentSize = newSize
+            self?.remeasurePopover()
         }
+    }
+
+    /// Re-measures `hostingController.view.fittingSize` and applies it to the popover.
+    ///
+    /// Called by `navigate()` (via async dispatch) and by `StepLogView.onLogLoaded`
+    /// once the async log fetch completes (#21). Both call sites are always on the main thread.
+    /// ❌ NEVER call from a background thread.
+    private func remeasurePopover() {
+        guard let hc = hostingController,
+              let pop = popover,
+              pop.isShown else { return }
+        let newHeight = hc.view.fittingSize.height
+        guard newHeight > 0 else { return }
+        let newSize = NSSize(width: Self.fixedWidth, height: newHeight)
+        hc.view.setFrameSize(newSize)
+        pop.contentSize = newSize
     }
 
     // MARK: - Popover show/hide

@@ -6,6 +6,11 @@ import SwiftUI
 // Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
 // Log MUST be inside ScrollView. Header MUST be outside ScrollView.
 // ❌ NEVER add .idealWidth, .frame(height:), .fixedSize(), or resize here.
+//
+// #21: onLogLoaded() is called once isLoading transitions to false.
+// AppDelegate passes a closure that calls remeasurePopover() so the popover
+// window height is updated to show the loaded log content correctly.
+// The closure fires on the main thread (DispatchQueue.main.async in loadLog).
 
 /// Shows the raw log text for a single `JobStep`.
 ///
@@ -18,6 +23,11 @@ struct StepLogView: View {
     let step: JobStep
     /// Called when the user taps the back button.
     let onBack: () -> Void
+    /// #21: Called once on the main thread when the async log fetch completes
+    /// (whether the result is a non-empty string, empty string, or nil).
+    /// AppDelegate uses this to re-measure and resize the popover so the
+    /// window height reflects actual log content rather than the spinner.
+    var onLogLoaded: (() -> Void)? = nil
 
     /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
     @State private var logText: String?
@@ -110,6 +120,9 @@ struct StepLogView: View {
             DispatchQueue.main.async {
                 logText = text ?? ""
                 isLoading = false
+                // #21: Notify AppDelegate to remeasure the popover now that log
+                // content (or the empty-state) has replaced the spinner.
+                onLogLoaded?()
             }
         }
     }

@@ -2,10 +2,10 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+// RULE 1: Root VStack MUST use .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
 //         AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
-//         ❌ NEVER remove .frame(idealWidth: 420)
-//         ❌ NEVER use .frame(width: 420)
+//         ❌ NEVER remove .frame(idealWidth: 480)
+//         ❌ NEVER use .frame(width: 480)
 //         ❌ NEVER remove maxWidth: .infinity
 //         ❌ NEVER add .frame(height:) to root VStack
 //
@@ -22,6 +22,10 @@ import SwiftUI
 //         metrics live. The timer is started in .onAppear and invalidated in
 //         .onDisappear. ❌ NEVER remove this timer or the runner rows will show
 //         stale metrics while the system-stats header updates normally.
+//
+// RULE 8 (#22): idealWidth is 480 (was 420). AppDelegate.fixedWidth is also 480.
+//         ❌ NEVER change one without changing the other or fittingSize height
+//         will be computed at the wrong width, wrapping text and mis-sizing the popover.
 
 /// Root popover view — unified scrollable Actions list per issue #294.
 /// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
@@ -67,24 +71,16 @@ struct PopoverMainView: View {
             }
             // ❌ DO NOT add .frame(maxHeight:) here — see RULE 6 above.
         }
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
             // #19: Start the 5 s runner-metrics refresh timer.
-            // This keeps CPU/MEM values in PopoverLocalRunnerRow live while the
-            // popover is open. The timer fires on the main run loop (default) so
-            // UI updates are safe without DispatchQueue.main.async wrappers.
-            // ❌ Do NOT increase the interval beyond 10 s — runner metrics become
-            //    noticeably stale and users reported confusion (issue #19).
             startRunnerRefreshTimer()
         }
         .onDisappear {
             systemStats.stop()
             // #19: Invalidate when the popover closes to avoid a timer leak.
-            // AppDelegate calls navigate() which swaps rootView; the old
-            // PopoverMainView fires onDisappear and we MUST stop the timer here
-            // or it will keep firing against a deallocated store reference.
             stopRunnerRefreshTimer()
         }
         // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
@@ -99,12 +95,7 @@ struct PopoverMainView: View {
             withTimeInterval: 5,
             repeats: true
         ) { [self] _ in
-            // Refresh local runner process state (CPU/MEM via RunnerMetrics).
-            // This is a @MainActor call on LocalRunnerStore — safe here because
-            // Timer fires on the main run loop.
             LocalRunnerStore.shared.refresh()
-            // Pull updated runners into the SwiftUI observable so the row redraws.
-            // reload() uses withAnimation(nil) — see REGRESSION GUARD RULE 5.
             store.reload()
         }
     }

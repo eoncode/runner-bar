@@ -9,6 +9,9 @@ import SwiftUI
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
+///
+/// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.fixedWidth (480).
+/// ❌ NEVER change idealWidth without updating fixedWidth in AppDelegate.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -63,8 +66,8 @@ struct SettingsView: View {
                 .padding(.bottom, 16)
             }
         }
-        // ⚠️ REGRESSION GUARD: keep idealWidth: 420 — matches PopoverMainView (ref #52 #54 #57)
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        // ⚠️ REGRESSION GUARD: keep idealWidth: 480 — matches PopoverMainView and AppDelegate.fixedWidth.
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
@@ -352,8 +355,13 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            HStack {
-                Text("Show offline runners").font(.system(size: 12))
+            // #23: "Show offline runners" row with subtitle explaining what it does.
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show offline runners").font(.system(size: 12))
+                    Text("Include runners that are offline or unreachable in the runner list")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
                 Spacer()
                 Toggle("", isOn: $settings.showDimmedRunners)
                     .toggleStyle(.switch).labelsHidden()

@@ -150,6 +150,12 @@ struct PopoverLocalRunnerRow: View {
 
 /// Single action-group row with pie progress dot, started-ago timestamp,
 /// and spec-parity typography (#178).
+///
+/// #22: Title text uses `.layoutPriority(1)` so it claims horizontal space
+/// before the fixed trailing columns. The `currentJobName` field drops its
+/// `frame(width:)` cap and uses `layoutPriority(0)` (default) so it yields
+/// space to the title rather than competing for it. The popover is now 480 pt
+/// wide (was 420), giving ~60 pt more room across the board.
 struct ActionRowView: View {
     let group: ActionGroup
     let onSelect: () -> Void
@@ -168,10 +174,13 @@ struct ActionRowView: View {
             Text(group.label)
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 .lineLimit(1).frame(width: 52, alignment: .leading)
+            // #22: layoutPriority(1) gives the title first claim on available width.
+            // ❌ NEVER add .frame(width:) here — it would reintroduce truncation.
             Text(group.title)
                 .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail)
+                .layoutPriority(1)
             Spacer()
             metaTrailing
         }
@@ -188,11 +197,13 @@ struct ActionRowView: View {
                 .frame(width: 44, alignment: .trailing)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
-            // #8: lineLimit(1) + fixed frame prevents currentJobName from wrapping (load-bearing)
+            // #8 #22: No frame(width:) cap — currentJobName is allowed to be as wide
+            // as it needs but yields to the title (layoutPriority 0 < title's 1).
+            // lineLimit(1) + truncationMode(.tail) still prevent height growth.
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
-                .frame(minWidth: 0, maxWidth: 72, alignment: .trailing)
+                .layoutPriority(0)
         }
         // #7: lineLimit(1) prevents jobProgress/elapsed from wrapping (load-bearing)
         Text(group.jobProgress)
@@ -242,7 +253,7 @@ struct ActionRowView: View {
 
 // MARK: - InlineJobRowsView
 
-/// Passive read-only \u21b3 job rows shown beneath every in-progress action group.
+/// Passive read-only ↳ job rows shown beneath every in-progress action group.
 /// Only shows jobs that are currently `in_progress` — queued and completed jobs
 /// are intentionally excluded (per spec: inline rows communicate active work only).
 /// Rows have no tap action per spec #324 Gap 2.
@@ -250,7 +261,7 @@ struct InlineJobRowsView: View {
     let group: ActionGroup
     @State private var cap: Int = 4
 
-    /// Only in-progress jobs — \u274c never include queued or completed jobs here.
+    /// Only in-progress jobs — ❌ never include queued or completed jobs here.
     private var activeJobs: [ActiveJob] {
         group.jobs.filter { $0.status == "in_progress" }
     }
