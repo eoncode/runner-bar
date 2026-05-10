@@ -369,9 +369,14 @@ private struct InlineJobRowView: View {
             Text(currentStepTitle(for: job))
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
-            Text(stepFraction(for: job))
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .frame(width: 30, alignment: .trailing)
+            let frac = stepFraction(for: job)
+            if !frac.isEmpty {
+                Text(frac)
+                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                    .frame(width: 30, alignment: .trailing)
+            } else {
+                Spacer().frame(width: 30)
+            }
             Text(job.elapsed)
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                 .frame(width: 36, alignment: .trailing)
@@ -379,6 +384,8 @@ private struct InlineJobRowView: View {
         .padding(.horizontal, 12).padding(.vertical, 2)
     }
 
+    /// Returns step progress fraction string (e.g. "3/8").
+    /// Returns "" when no steps are loaded yet (queued job — don't show "0/0").
     private func stepFraction(for job: ActiveJob) -> String {
         let total = job.steps.count
         guard total > 0 else { return "" }
@@ -386,9 +393,17 @@ private struct InlineJobRowView: View {
         return "\(done)/\(total)"
     }
 
+    /// Returns the current step title for the inline row.
+    /// Priority:
+    ///   1. First in_progress step name.
+    ///   2. Last concluded step name (job finishing up).
+    ///   3. "In Progress" — job is running but no step detail yet.
+    ///   4. "Queued" — job is waiting to be picked up by a runner.
     private func currentStepTitle(for job: ActiveJob) -> String {
         if let active = job.steps.first(where: { $0.status == "in_progress" }) { return active.name }
         if let last = job.steps.last(where: { $0.conclusion != nil }) { return last.name }
+        if job.status == "in_progress" { return "In Progress" }
+        if job.status == "queued"      { return "Queued" }
         return "—"
     }
 
