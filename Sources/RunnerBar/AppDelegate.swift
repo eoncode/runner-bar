@@ -8,7 +8,9 @@ import SwiftUI
 //
 // SIZING CONTRACT (mirrors main branch exactly):
 //   navigate() = rootView swap ONLY. Zero size changes. Ever.
-//   Size is set ONCE per open in openPopover() from fittingSize, capped at maxHeight.
+//   Size is set ONCE per open in openPopover().
+//   reload() fires FIRST, then ONE DispatchQueue.main.async defers the
+//   fittingSize read until SwiftUI has had a layout pass with fresh data.
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER touch contentSize or setFrameSize inside navigate()
@@ -16,6 +18,8 @@ import SwiftUI
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ❌ NEVER guard observable.reload() on !popoverIsOpen — store polls must
 //    always reach the view while the popover is visible (#296 regression fix)
+// ❌ NEVER read fittingSize synchronously after reload() — SwiftUI needs one
+//    runloop tick to propagate the new data before layout is stable
 
 private enum NavState {
     case main
@@ -38,8 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var popoverIsOpen = false
 
     private static let fixedWidth: CGFloat = 420
-    /// Maximum popover height. Applied as a cap on fittingSize.height in openPopover().
-    /// Prevents an unbounded VStack (no ScrollView) from making the popover taller than the screen.
+    /// Maximum popover height cap applied to fittingSize in openPopover().
     private static let maxHeight: CGFloat = 620
 
     // MARK: - App lifecycle
@@ -260,28 +263,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Order: reload() → fittingSize → cap at maxHeight → setFrameSize → contentSize → show().
+    /// Order: reload() → one runloop tick (DispatchQueue.main.async) →
+    ///        fittingSize → cap at maxHeight → setFrameSize → contentSize → show().
     /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown == true.
+    /// ❌ NEVER read fittingSize synchronously after reload() — SwiftUI needs one tick.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
-              let popover,
-              let hostingController
+              let popover
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let fitting = hostingController.view.fittingSize
-        let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
-        let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
-        let size = NSSize(width: width, height: height)
-        hostingController.view.setFrameSize(size)
-        popover.contentSize = size
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-        popover.contentViewController?.view.window?.makeKey()
-        if let saved = savedNavState,
-           let restored = validatedView(for: saved) {
-            navigate(to: restored)
+        // ⚠️ Defer size measurement one runloop tick so SwiftUI propagates
+        // fresh data into the layout tree before we read fittingSize.
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  let hc = self.hostingController,
+                  !popover.isShown
+            else { return }
+            let fitting = hc.view.fittingSize
+            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+            let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
+            let size = NSSize(width: width, height: height)
+            hc.view.setFrameSize(size)
+            popover.contentSize = size
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+            popover.contentViewController?.view.window?.makeKey()
+            if let saved = self.savedNavState,
+               let restored = self.validatedView(for: saved) {
+                self.navigate(to: restored)
+            }
         }
     }
 }

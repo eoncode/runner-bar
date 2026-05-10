@@ -10,6 +10,8 @@ import SwiftUI
 // ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the ScrollView or any container
 //    The maxHeight cap lives ONLY in AppDelegate (maxHeight: 620), applied once before .show().
 // ❌ NEVER add expandedGroups toggle for in-progress groups — they are ALWAYS expanded per spec #296
+// ❌ NEVER add .onChange(of: store.actions) { visibleCount = 10 } — this resets inline
+//    job rows on every poll cycle. visibleCount resets via @State default on each open.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
@@ -29,6 +31,7 @@ struct PopoverMainView: View {
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
     /// Number of action groups visible. Starts at 10, incremented by 10 on "Load more".
+    /// Resets to 10 naturally each time AppDelegate recreates PopoverMainView on open/close.
     @State private var visibleCount: Int = 10
 
     var body: some View {
@@ -63,7 +66,8 @@ struct PopoverMainView: View {
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        .onChange(of: store.actions) { _ in visibleCount = 10 }
+        // ⚠️ NO .onChange(of: store.actions) resetting visibleCount here.
+        // That caused inline job rows to collapse on every poll cycle.
     }
 }
 
