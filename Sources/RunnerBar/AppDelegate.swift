@@ -6,23 +6,16 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
-// SIZING CONTRACT (identical to main branch):
-//   navigate() = rootView swap ONLY. Zero size changes. Ever.
-//   Size is set ONCE per open in openPopover(), deferred one async tick so
-//   SwiftUI layout from reload() is current before fittingSize is read.
-//   reload() is guarded by !popoverIsOpen — data is frozen while popover is open.
-//   PopoverMainView has NO ScrollView, so fittingSize is always accurate.
+// SIZING CONTRACT:
+//   openPopover() sets size once from PopoverMainView fittingSize (deferred one tick).
+//   navigate() resizes the popover to the incoming view's fittingSize so detail
+//   views shrink/grow to fit their content rather than inheriting main-view height.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
-// ❌ NEVER touch contentSize or setFrameSize inside navigate()
+// ❌ NEVER call setFrameSize while popover.isShown == true from outside navigate()
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ❌ NEVER remove the !popoverIsOpen guard on reload() in onChange
-//    Removing it lets polls fire @Published while open, re-rendering
-//    against a fixed frame and corrupting layout on every poll cycle.
 // ❌ NEVER move the fittingSize read back to the same tick as reload()
-//    SwiftUI batches @Published layout async — reading fittingSize
-//    synchronously after reload() returns stale size from prev open.
 
 private enum NavState {
     case main
@@ -45,8 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var popoverIsOpen = false
 
     private static let fixedWidth: CGFloat = 420
-    /// Maximum popover height. Applied as a cap on fittingSize.height in openPopover().
     private static let maxHeight: CGFloat = 620
+    private static let minHeight: CGFloat = 120
 
     // MARK: - App lifecycle
 
@@ -71,10 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
-            // ⚠️ MUST guard on !popoverIsOpen — matches main branch contract.
-            // Polling while open fires @Published into SwiftUI against a fixed
-            // frame, causing layout corruption on every cycle. Data is frozen
-            // while open; reload() fires once at open time in openPopover().
             if !self.popoverIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
@@ -102,7 +91,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         return makeActiveJob(from: fresh, iso: ISO8601DateFormatter(), isDimmed: job.isDimmed)
     }
 
-    /// Enriches group.jobs on background if empty; returns group with jobs populated.
     private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
         guard group.jobs.isEmpty else { return group }
         let fetched = fetchActionGroups(for: group.repo)
@@ -126,9 +114,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
-                // ⚠️ Enrich jobs on background before navigating — group.jobs may be
-                // empty if the workflow just started and the first fetch hasn't completed.
-                // Same pattern as onSelectJob / enrichStepsIfNeeded.
                 DispatchQueue.global(qos: .userInitiated).async {
                     let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                     let enriched = self.enrichGroupIfNeeded(latest)
@@ -268,28 +253,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller's root view. ZERO size changes. Ever.
+    /// Swaps rootView and resizes popover to fit the new view's content.
+    /// This allows detail views to be shorter than the main view.
     private func navigate(to view: AnyView) {
-        hostingController?.rootView = view
+        guard let hc = hostingController, let pop = popover else { return }
+        hc.rootView = view
+        // Defer one tick so SwiftUI lays out the new rootView before we measure.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.popoverIsOpen else { return }
+            let fitting = hc.view.fittingSize
+            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+            let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
+            let size = NSSize(width: width, height: height)
+            hc.view.setFrameSize(size)
+            pop.contentSize = size
+        }
     }
 
     // MARK: - Popover show/hide
 
     @MainActor @objc private func togglePopover() {
-        guard let popover else { return }
-        if popover.isShown {
-            popover.performClose(nil)
+        guard let pop = popover else { return }
+        if pop.isShown {
+            pop.performClose(nil)
         } else {
             openPopover()
         }
     }
 
-    /// Opens the popover. The ONE safe site for sizing.
-    /// reload() fires first, then sizing is deferred one async tick so SwiftUI
-    /// can process @Published layout changes before fittingSize is read.
+    /// Opens the popover. Size is set once from PopoverMainView fittingSize,
+    /// deferred one async tick so SwiftUI layout from reload() is current.
     /// ❌ NEVER move fittingSize read back to same tick as reload().
-    /// ❌ NEVER touch size after show().
-    /// ❌ NEVER call setFrameSize while isShown == true.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -297,10 +291,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
-        // ⚠️ Defer one runloop tick — SwiftUI batches @Published layout updates
-        // asynchronously. Reading fittingSize on the same tick as reload() returns
-        // stale geometry from the previous open. One async hop gives SwiftUI time
-        // to process the published changes and produce current fittingSize.
         DispatchQueue.main.async { [weak self] in
             guard let self,
                   let hc = self.hostingController,

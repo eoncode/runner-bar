@@ -7,12 +7,11 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
-//   Receives the same FIXED frame from AppDelegate as JobDetailView.
-//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
+//   Popover is resized by AppDelegate.navigate() to this view's fittingSize.
 //   ScrollView absorbs overflow — do NOT fight the frame.
 //
 // ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   ✔ Root: .frame(maxWidth: .infinity, alignment: .top) — NO maxHeight: .infinity
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ❌ NEVER put header inside ScrollView
@@ -137,8 +136,6 @@ struct ActionDetailView: View {
                             Button(action: { onSelectJob(job) }, label: {
                                 HStack(spacing: 8) {
                                     // ⚠️ PieProgressView — not plain Circle().
-                                    // Plain Circle() was replaced to match the spec (#296 / #178)
-                                    // and be consistent with the main popover row dots.
                                     PieProgressView(
                                         progress: job.progressFraction,
                                         color: jobDotColor(for: job),
@@ -180,7 +177,8 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ NO maxHeight: .infinity — height is driven by fittingSize via AppDelegate.navigate()
+        .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -195,28 +193,34 @@ struct ActionDetailView: View {
 
     // MARK: - Job row helpers
 
-    /// Dot color for a job row in ActionDetailView.
-    /// Uses PieProgressView so color must match the same semantics as the main popover.
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
-        case "queued":      return .blue
+        case "queued":      return group.groupStatus == .inProgress ? .yellow : .blue
         default:
             if job.isDimmed { return .gray }
             return job.conclusion == "success" ? .green : .red
         }
     }
 
+    /// Returns the status label for a job without a conclusion.
+    /// Per spec #178: queued jobs inside an in-progress group show "In Progress"
+    /// because they are part of an active workflow run.
     private func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "In Progress"
-        case "queued":      return "Queued"
-        default:            return "Pending"
+        case "queued":
+            return group.groupStatus == .inProgress ? "In Progress" : "Queued"
+        default: return "Pending"
         }
     }
 
     private func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? .yellow : .secondary
+        switch job.status {
+        case "in_progress": return .yellow
+        case "queued":      return group.groupStatus == .inProgress ? .yellow : .secondary
+        default:            return .secondary
+        }
     }
 
     private func conclusionLabel(_ c: String) -> String {
