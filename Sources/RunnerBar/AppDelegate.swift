@@ -5,37 +5,35 @@ import SwiftUI
 // MARK: - NavState
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59)
-// sizingOptions: default. Height read via fittingSize ONCE per open.
-// navigate() = rootView swap ONLY. Zero size changes. Ever.
+// sizingOptions: default (NOT .preferredContentSize — that fights layout).
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ⚠️ fixedWidth MUST match PopoverMainView’s .frame(idealWidth: 420).
-//     Mismatching these causes fittingSize.height to be calculated at the
-//     wrong width, wrapping content and producing an incorrect popover height.
+//     Mismatching these causes fittingSize.height to be computed at the wrong
+//     width, wrapping content and producing an incorrect popover height.
+//
+// HEIGHT SIZING STRATEGY:
+//   openPopover() measures fittingSize and sizes the popover BEFORE show().
+//   navigate() re-measures fittingSize AFTER swapping rootView so every
+//   detail view gets its own natural content height. This is safe because
+//   we are doing an explicit, deliberate setFrameSize+contentSize update
+//   (NOT using .preferredContentSize which causes position jumps). The
+//   popover window anchor stays fixed — only height changes.
 
 /// Navigation state machine for the popover’s view hierarchy.
 private enum NavState {
-    /// Root level: PopoverMainView.
     case main
-    /// Jobs path level 2: step list for a job.
     case jobDetail(ActiveJob)
-    /// Jobs path level 3: log output for a step.
     case stepLog(ActiveJob, JobStep)
-    /// Actions path level 2a: job list for a commit/PR group.
     case actionDetail(ActionGroup)
-    /// Actions path level 3a: step list for a job reached via an action group.
     case actionJobDetail(ActiveJob, ActionGroup)
-    /// Actions path level 4a: log output for a step reached via an action group.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
-    /// Settings view.
     case settings
 }
 
 // MARK: - AppDelegate
 
-/// Application delegate. Owns the status-bar item, NSPopover, and navigation state.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
@@ -47,12 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popoverIsOpen = false
 
     /// Fixed popover width — MUST match PopoverMainView’s .frame(idealWidth: 420).
-    /// ❌ NEVER set this to a value other than 420 without also updating idealWidth in PopoverMainView.
+    /// ❌ NEVER change without also updating idealWidth in PopoverMainView.
     private static let fixedWidth: CGFloat = 420
 
     // MARK: - App lifecycle
 
-    /// Bootstraps the status-bar item, hosting controller, and popover at launch.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -83,7 +80,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - NSPopoverDelegate
 
-    /// Resets navigation state after the popover closes.
     /// ❌ NEVER call reload() here.
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
@@ -95,7 +91,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - View factories
 
-    /// Re-fetches step data for `job` if steps are missing or stale.
     private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
@@ -107,7 +102,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    /// Navigation level 1: runner status + jobs + actions.
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -134,7 +128,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 2a: flat job list for a commit/PR group.
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
         return AnyView(ActionDetailView(
@@ -156,7 +149,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 3a: JobDetailView reached via an ActionGroup.
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
         return AnyView(JobDetailView(
@@ -172,7 +164,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 4a: StepLogView reached via an ActionGroup.
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -185,7 +176,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 2: step list for a job (Jobs path).
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         return AnyView(JobDetailView(
@@ -201,7 +191,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Settings view.
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
@@ -213,7 +202,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Navigation level 3: log output for a step (Jobs path).
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -226,7 +214,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ))
     }
 
-    /// Returns a refreshed view for `state` using live RunnerStore data, or `nil` if stale.
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -257,14 +244,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller’s root view. ZERO size changes. Forever.
+    /// Swaps the root view and re-measures the popover to fit the new content height.
+    ///
+    /// After `rootView` is swapped SwiftUI invalidates layout but has not yet
+    /// performed a layout pass. `layoutSubtreeIfNeeded()` forces that pass so
+    /// `fittingSize` reflects the NEW view before we resize. Width is held
+    /// constant at `fixedWidth` to prevent the popover from jumping horizontally.
+    ///
+    /// ⚠️ Safe because:
+    ///   - Width never changes (no horizontal anchor shift).
+    ///   - `animates = false` so there is no in-flight animation to corrupt.
+    ///   - We are NOT using `.preferredContentSize` (the source of the old regression).
     private func navigate(to view: AnyView) {
-        hostingController?.rootView = view
+        guard let hc = hostingController, let popover else {
+            hostingController?.rootView = view
+            return
+        }
+        hc.rootView = view
+        // Force a layout pass so fittingSize reflects the incoming view.
+        hc.view.layoutSubtreeIfNeeded()
+        let newHeight = hc.view.fittingSize.height
+        guard newHeight > 0, popover.isShown else { return }
+        let newSize = NSSize(width: Self.fixedWidth, height: newHeight)
+        hc.view.setFrameSize(newSize)
+        popover.contentSize = newSize
     }
 
     // MARK: - Popover show/hide
 
-    /// Toggles the popover open or closed.
     @objc private func togglePopover() {
         guard let popover else { return }
         if popover.isShown {
@@ -274,7 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover. The ONE safe site for sizing.
+    /// Opens the popover. The ONE safe site for initial sizing.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
