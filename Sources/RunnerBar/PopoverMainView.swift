@@ -16,6 +16,12 @@ import SwiftUI
 // RULE 6: ❌ NEVER add .frame(maxHeight:) to the ScrollView — height is driven
 //         entirely by fittingSize in AppDelegate.openPopover(). Capping the
 //         ScrollView height here clips content and causes popover mis-sizing.
+//
+// RULE 7 (#19): runnerRefreshTimer fires every 5 s on the main thread and calls
+//         LocalRunnerStore.shared.refresh() + store.reload() to keep CPU/MEM
+//         metrics live. The timer is started in .onAppear and invalidated in
+//         .onDisappear. ❌ NEVER remove this timer or the runner rows will show
+//         stale metrics while the system-stats header updates normally.
 
 /// Root popover view — unified scrollable Actions list per issue #294.
 /// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
@@ -34,6 +40,11 @@ struct PopoverMainView: View {
     @StateObject private var systemStats = SystemStatsViewModel()
     /// Number of action groups currently visible in the paginated list.
     @State private var visibleCount: Int = 10
+    /// #19: Timer that refreshes runner metrics (CPU/MEM) every 5 s.
+    /// Kept as @State so it is tied to this view instance, not a global.
+    /// ❌ NEVER remove — without this, runner rows show stale CPU/MEM values
+    /// even though the system-stats header updates via SystemStatsViewModel.
+    @State private var runnerRefreshTimer: Timer?
 
     /// Root layout: header → divider → optional rate-limit banner → runners → scrollable actions.
     var body: some View {
@@ -47,7 +58,7 @@ struct PopoverMainView: View {
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
-                // refresh() is @MainActor, not async — no await needed.
+                // Initial refresh on appear; the 5 s timer (below) drives subsequent updates.
                 .onAppear { Task { LocalRunnerStore.shared.refresh() } }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -60,10 +71,47 @@ struct PopoverMainView: View {
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
+            // #19: Start the 5 s runner-metrics refresh timer.
+            // This keeps CPU/MEM values in PopoverLocalRunnerRow live while the
+            // popover is open. The timer fires on the main run loop (default) so
+            // UI updates are safe without DispatchQueue.main.async wrappers.
+            // ❌ Do NOT increase the interval beyond 10 s — runner metrics become
+            //    noticeably stale and users reported confusion (issue #19).
+            startRunnerRefreshTimer()
         }
-        .onDisappear { systemStats.stop() }
+        .onDisappear {
+            systemStats.stop()
+            // #19: Invalidate when the popover closes to avoid a timer leak.
+            // AppDelegate calls navigate() which swaps rootView; the old
+            // PopoverMainView fires onDisappear and we MUST stop the timer here
+            // or it will keep firing against a deallocated store reference.
+            stopRunnerRefreshTimer()
+        }
         // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
         .onChange(of: store.actions) { _ in visibleCount = 10 }
+    }
+
+    // MARK: - Runner refresh timer (#19)
+
+    private func startRunnerRefreshTimer() {
+        stopRunnerRefreshTimer() // guard against double-start
+        runnerRefreshTimer = Timer.scheduledTimer(
+            withTimeInterval: 5,
+            repeats: true
+        ) { [self] _ in
+            // Refresh local runner process state (CPU/MEM via RunnerMetrics).
+            // This is a @MainActor call on LocalRunnerStore — safe here because
+            // Timer fires on the main run loop.
+            LocalRunnerStore.shared.refresh()
+            // Pull updated runners into the SwiftUI observable so the row redraws.
+            // reload() uses withAnimation(nil) — see REGRESSION GUARD RULE 5.
+            store.reload()
+        }
+    }
+
+    private func stopRunnerRefreshTimer() {
+        runnerRefreshTimer?.invalidate()
+        runnerRefreshTimer = nil
     }
 
     // MARK: - Rate limit banner
