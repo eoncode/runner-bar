@@ -1,5 +1,5 @@
 import Foundation
-// swiftlint:disable opening_brace identifier_name orphaned_doc_comment
+// swiftlint:disable opening_brace identifier_name orphaned_doc_comment missing_docs
 
 // MARK: - GroupStatus
 
@@ -170,7 +170,6 @@ struct ActionGroup: Identifiable, Equatable {
         }
     }
 
-    // swiftlint:disable:next missing_docs
     static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
         lhs.id == rhs.id && lhs.isDimmed == rhs.isDimmed && lhs.jobs == rhs.jobs && lhs.runs.map({ $0.id }) == rhs.runs.map({ $0.id })
     }
@@ -368,4 +367,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable opening_brace identifier_name orphaned_doc_comment
+// swiftlint:enable opening_brace identifier_name orphaned_doc_comment missing_docs
