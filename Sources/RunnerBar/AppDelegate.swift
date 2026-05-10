@@ -7,13 +7,15 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
 // SIZING CONTRACT:
-//   openPopover() sets size from fittingSize ONCE, deferred one async tick so SwiftUI
-//   has completed a full layout pass. navigate() = rootView swap ONLY. ZERO size changes.
+//   openPopover() reads fittingSize SYNCHRONOUSLY, sets setFrameSize + contentSize,
+//   then calls pop.show(). ALL of this happens in one synchronous block.
+//   navigate() = rootView swap ONLY. ZERO size changes. Forever.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER call setFrameSize or set contentSize while popover.isShown == true
+// ❌ NEVER wrap openPopover() sizing in DispatchQueue.main.async — pop.show() must
+//      fire AFTER contentSize is set or the popover anchors at the wrong position.
+// ❌ NEVER call setFrameSize or contentSize while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ❌ NEVER move the fittingSize read back to the same tick as reload()
 // ❌ NEVER add size changes to navigate() — it is a rootView swap ONLY, forever.
 
 private enum NavState {
@@ -256,8 +258,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps rootView. ZERO size changes — ever. This is the safe contract (ref #52 #54 #57 #296).
-    /// ❌ NEVER add setFrameSize or contentSize here. The popover is sized ONCE in openPopover().
+    /// Swaps rootView. ZERO size changes — ever. (ref #52 #54 #57 #296)
+    /// ❌ NEVER add setFrameSize or contentSize here.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
@@ -273,35 +275,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover. Size is set from fittingSize deferred one async tick so SwiftUI
-    /// completes a full layout pass before we read it. NEVER move this read to the same tick
-    /// as reload() — fittingSize will be stale and the popover will be the wrong size.
+    /// Opens the popover. Sizing is SYNCHRONOUS — read fittingSize, setFrameSize,
+    /// contentSize, then pop.show() all in one block.
+    /// ❌ NEVER wrap this in DispatchQueue.main.async — pop.show() must be called
+    ///    AFTER contentSize is set or the popover anchors at the wrong screen position.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
-              button.window != nil
+              button.window != nil,
+              let hc = hostingController,
+              let pop = popover
         else { return }
         popoverIsOpen = true
         observable.reload()
-        DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  let hc = self.hostingController,
-                  let pop = self.popover,
-                  let btn = self.statusItem?.button,
-                  btn.window != nil
-            else { return }
-            let fitting = hc.view.fittingSize
-            let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
-            let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
-            let size = NSSize(width: width, height: height)
-            hc.view.setFrameSize(size)
-            pop.contentSize = size
-            pop.show(relativeTo: btn.bounds, of: btn, preferredEdge: .maxY)
-            pop.contentViewController?.view.window?.makeKey()
-            if let saved = self.savedNavState,
-               let restored = self.validatedView(for: saved) {
-                self.navigate(to: restored)
-            }
+        let fitting = hc.view.fittingSize
+        let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
+        let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
+        let size = NSSize(width: width, height: height)
+        hc.view.setFrameSize(size)
+        pop.contentSize = size
+        pop.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        pop.contentViewController?.view.window?.makeKey()
+        if let saved = savedNavState,
+           let restored = validatedView(for: saved) {
+            navigate(to: restored)
         }
     }
 }
