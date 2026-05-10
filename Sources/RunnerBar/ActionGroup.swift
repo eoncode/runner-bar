@@ -175,7 +175,6 @@ struct ActionGroup: Identifiable {
 
 extension ActionGroup: Equatable {
     /// Returns `true` when two groups have the same ID, dimmed state, job list, and run IDs.
-    // swiftlint:disable:next missing_docs
     static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
         lhs.id == rhs.id
             && lhs.isDimmed == rhs.isDimmed
