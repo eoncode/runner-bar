@@ -2,7 +2,8 @@ import SwiftUI
 
 // MARK: - PopoverHeaderView
 
-/// Header row: system stats left, auth indicator + settings + close right.
+/// Header row: system stats left, settings + close right.
+/// ⚠️ Auth green dot intentionally removed — auth status lives in Settings only (#10).
 struct PopoverHeaderView: View {
     let stats: SystemStats
     let isAuthenticated: Bool
@@ -13,7 +14,22 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
-            authIndicator
+            // #10: no auth dot here — represented in Settings > Account.
+            if !isAuthenticated {
+                Button(
+                    action: onSignIn,
+                    label: {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.orange).frame(width: 7, height: 7)
+                            Text("Sign in")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                )
+                .buttonStyle(.plain)
+                .help("Sign in with GitHub")
+            }
             Button(
                 action: onSelectSettings,
                 label: {
@@ -32,27 +48,6 @@ struct PopoverHeaderView: View {
             .buttonStyle(.plain).help("Close")
         }
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private var authIndicator: some View {
-        if isAuthenticated {
-            Circle().fill(Color.green).frame(width: 7, height: 7)
-        } else {
-            Button(
-                action: onSignIn,
-                label: {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.orange).frame(width: 7, height: 7)
-                        Text("Sign in")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            )
-            .buttonStyle(.plain)
-            .help("Sign in with GitHub")
-        }
     }
 
     /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
@@ -106,7 +101,7 @@ struct PopoverHeaderView: View {
     private func blockBar(pct: Double, width: Int = 3) -> String {
         let raw = Int((pct / 100.0 * Double(width)).rounded())
         let filledCount = max(0, min(width, raw))
-        return String(repeating: "█", count: filledCount) + String(repeating: "░", count: width - filledCount)
+        return String(repeating: "\u{2588}", count: filledCount) + String(repeating: "\u{2591}", count: width - filledCount)
     }
 
     private func usageColor(pct: Double) -> Color {
@@ -143,7 +138,7 @@ struct PopoverLocalRunnerRow: View {
             .padding(.horizontal, 12).padding(.vertical, 3)
         }
         if active.count > 3 {
-            Text("+ \(active.count - 3) more…")
+            Text("+ \(active.count - 3) more\u{2026}")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 2)
         }
@@ -188,19 +183,25 @@ struct ActionRowView: View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 .frame(width: 44, alignment: .trailing)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
+                // #7 #8: fixedSize prevents currentJobName wrapping to 2 lines.
+                // maxWidth keeps it bounded so it cannot push other chips off-screen.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: 72, alignment: .trailing)
         }
         Text(group.jobProgress)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
             .frame(width: 30, alignment: .trailing)
         Text(group.elapsed)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
             .frame(width: 40, alignment: .trailing)
         statusChip
     }
@@ -262,7 +263,7 @@ struct InlineJobRowsView: View {
             Button(
                 action: { cap += 4 },
                 label: {
-                    Text("+ \(activeJobs.count - cap) more jobs…")
+                    Text("+ \(activeJobs.count - cap) more jobs\u{2026}")
                         .font(.caption2).foregroundColor(.accentColor)
                         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
                 }
@@ -277,11 +278,11 @@ struct InlineJobRowsView: View {
         let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
-            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
+            Text("\u{21B3}").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Group {
                 if let name = stepName {
-                    Text(job.name + " · " + name)
+                    Text(job.name + " \u{00B7} " + name)
                 } else {
                     Text(job.name)
                 }
@@ -292,10 +293,12 @@ struct InlineJobRowsView: View {
             if total > 0 {
                 Text("\(done)/\(total)")
                     .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     .frame(width: 28, alignment: .trailing)
             }
             Text(job.elapsed)
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 .frame(width: 36, alignment: .trailing)
         }
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)

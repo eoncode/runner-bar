@@ -5,58 +5,32 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - SettingsView
 
-/// Settings view — complete implementation for all phases 1-6.
-///
-/// Sections: Runner Management, Notifications, General, Account, Legal, About.
-/// All persistent state is backed by dedicated ObservableObject stores.
-///
-/// Phase 1 (issue #252): Local Runners section auto-populates at launch via
-/// `LocalRunnerStore`, which calls `LocalRunnerScanner` on a background thread.
-/// No GitHub token is required for this section.
-///
-/// Phase 2 (issue #253): Each runner row gains Resume/Stop, ⚙ Config, and
-/// ✕ Remove controls backed by `RunnerLifecycleService`.
-///
-/// Phase 3 (issue #254): A `+` button in the Local Runners header opens
-/// `AddRunnerSheet` to onboard new runners via the GitHub API.
-///
-/// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
-/// live GitHub API status (online/offline/busy) after each local scan.
 struct SettingsView: View {
-    /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
-    /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
 
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
     @ObservedObject private var legal = LegalPrefsStore.shared
-    /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
-    /// Becomes `true` after the first scan completes.
     @State private var hasLoadedOnce = false
-    /// Phase 2: runner pending removal confirmation.
     @State private var runnerPendingRemoval: RunnerModel?
-    /// Phase 2: runner whose config sheet is open.
     @State private var runnerBeingConfigured: RunnerModel?
-    /// Phase 3: controls whether the Add Runner sheet is presented.
     @State private var showAddRunnerSheet = false
-    /// Surfaced when remove() returns false — cleared on next refresh.
     @State private var removeErrorMessage: String?
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "\u{2014}"
     }
 
     private var appBuild: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "\u{2014}"
     }
 
-    /// Alert title for the runner-removal confirmation dialog.
     private var removalAlertTitle: String {
         let name = runnerPendingRemoval?.runnerName ?? "this runner"
         return "Remove runner \"\(name)\""
@@ -94,8 +68,6 @@ struct SettingsView: View {
             }
             localRunnerStore.refresh()
         }
-        // Single-parameter form: compatible with macOS 13+.
-        // The two-parameter { _, newValue in } form requires macOS 14+.
         .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
         }
@@ -119,9 +91,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
-                // Gate on token: de-registration requires GitHub auth.
-                // Without a token svc.sh uninstall succeeds but config.sh remove
-                // fails, leaving a ghost registration on the GitHub side.
                 guard isAuthenticated else {
                     runnerPendingRemoval = nil
                     return
@@ -129,13 +98,10 @@ struct SettingsView: View {
                 runnerPendingRemoval = nil
                 removeErrorMessage = nil
                 DispatchQueue.global(qos: .userInitiated).async {
-                    // Capture result: @discardableResult on remove() must not be
-                    // silently dropped. A false return means config.sh remove
-                    // failed and the GitHub registration was NOT cleaned up.
                     let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
                     DispatchQueue.main.async {
                         if !succeeded {
-                            removeErrorMessage = "De-registration failed — the runner may " +
+                            removeErrorMessage = "De-registration failed \u{2014} the runner may " +
                                 "still appear in GitHub. Check your token and try again."
                         }
                         localRunnerStore.refresh()
@@ -344,21 +310,30 @@ struct SettingsView: View {
         }
     }
 
+    // #11: Toggles use HStack so label stays leading and toggle stays trailing.
+    // SwiftUI Toggle on macOS renders label+control inline; wrapping in HStack
+    // with Spacer() is the only reliable way to pin the control to the right edge.
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $notifications.notifyOnSuccess) {
+            HStack {
                 Text("Notify on success").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $notifications.notifyOnSuccess)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            Toggle(isOn: $notifications.notifyOnFailure) {
+            HStack {
                 Text("Notify on failure").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $notifications.notifyOnFailure)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
     }
@@ -368,20 +343,32 @@ struct SettingsView: View {
             Text("General")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle("Launch at login", isOn: $launchAtLogin)
-                .toggleStyle(.switch)
-                .font(.system(size: 12))
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
-            Divider().padding(.leading, 12)
-            Toggle(isOn: $settings.showDimmedRunners) {
-                Text("Show offline runners").font(.system(size: 12))
+            HStack {
+                Text("Launch at login").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $launchAtLogin)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
             HStack {
-                Text("Polling interval").font(.system(size: 12))
+                Text("Show offline runners").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $settings.showDimmedRunners)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            Divider().padding(.leading, 12)
+            // #12: Polling row with label + subtitle, stepper right-aligned.
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Polling interval").font(.system(size: 12))
+                    Text("How often to refresh runner and action status")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
                 Spacer()
                 Text("\(settings.pollingInterval)s")
                     .font(.system(size: 12)).foregroundColor(.secondary)
@@ -425,10 +412,13 @@ struct SettingsView: View {
             Text("Legal")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $legal.analyticsEnabled) {
+            HStack {
                 Text("Share analytics").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $legal.analyticsEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
             Divider().padding(.leading, 12)

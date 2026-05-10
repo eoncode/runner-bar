@@ -12,21 +12,17 @@ import SwiftUI
 ///
 /// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
 struct JobDetailView: View {
-    /// The job whose steps are displayed.
     let job: ActiveJob
-    /// Called when the user taps the back button.
     let onBack: () -> Void
-    /// Called when the user taps a step row.
     let onSelectStep: (JobStep) -> Void
 
-    /// Drives the live elapsed timer in the header.
     @State private var tick = 0
-    /// Retained so it can be invalidated on disappear to prevent a timer leak.
     @State private var tickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Header: OUTSIDE ScrollView — always visible at top
+            // #9: Spacer() after back button pushes all action buttons to trailing edge.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -81,6 +77,7 @@ struct JobDetailView: View {
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
+                    .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -150,10 +147,8 @@ struct JobDetailView: View {
         }
     }
 
-    /// Returns job.elapsed, re-evaluated every tick so the header updates live.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
-    /// Color-codes the step icon based on conclusion/status.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .green
