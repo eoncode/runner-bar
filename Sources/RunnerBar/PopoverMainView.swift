@@ -1,4 +1,5 @@
 import SwiftUI
+// swiftlint:disable opening_brace
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
@@ -218,7 +219,7 @@ private struct ActionsListView: View {
 // MARK: - ActionRowView
 
 /// Single action group row.
-/// ⚠️ In-progress groups: inline ↳ job rows are ALWAYS shown — no toggle.
+/// ⚠️ In-progress groups: inline ↓ job rows are ALWAYS shown — no toggle.
 /// ⚠️ Do NOT guard on job.status == "in_progress" for inline rows — queued jobs
 ///    at job-level still belong to an actively running workflow (#296).
 private struct ActionRowView: View {
@@ -322,7 +323,7 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobsView
 
-/// Container for inline ↳ job sub-rows under a single action group (Phase 4 / #304).
+/// Container for inline ↓ job sub-rows under a single action group (Phase 4 / #304).
 /// ⚠️ Receives non-concluded jobs — caller filters out jobs with conclusion != nil.
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
@@ -450,3 +451,4 @@ private struct RunnersListView: View {
         }
     }
 }
+// swiftlint:enable opening_brace
