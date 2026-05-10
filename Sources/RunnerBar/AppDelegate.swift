@@ -4,53 +4,16 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - NavState
 
-// ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║  ☠️  POPOVER SIZING — REGRESSION GRAVEYARD  ☠️                              ║
-// ║  Every rule below was learned by breaking the app. Do NOT remove any of     ║
-// ║  them. Do NOT "just try" touching contentSize. Read all of this first.      ║
-// ╠══════════════════════════════════════════════════════════════════════════════╣
-// ║                                                                              ║
-// ║  HOW SIZING WORKS (the ONLY correct model):                                 ║
-// ║    1. openPopover() fires once. It calls fittingSize on the hosting view,   ║
-// ║       sets hostingController.view.frame + popover.contentSize, then shows.  ║
-// ║    2. After that: NOTHING touches the size. Ever. For any reason.           ║
-// ║    3. navigate() = ONE LINE: hostingController?.rootView = view             ║
-// ║       That is the complete function. Nothing else belongs there.            ║
-// ║                                                                              ║
-// ║  ISSUE #13 — SIDE-JUMP REGRESSION (introduced and fixed 2026-05-10):       ║
-// ║    WHAT BROKE: A "remeasurePopover()" function was added that called        ║
-// ║      hc.view.setFrameSize(newSize) and pop.contentSize = newSize while      ║
-// ║      popover.isShown == true. It was wired to TWO call sites:               ║
-// ║        (a) navigate() via DispatchQueue.main.async — fired on EVERY         ║
-// ║            navigation (main→detail, detail→log, back, settings, etc.)       ║
-// ║        (b) StepLogView.onLogLoaded — fired after the async log fetch        ║
-// ║            completed and isLoading flipped to false.                        ║
-// ║    WHY IT BROKE: AppKit recomputes the popover's screen anchor position     ║
-// ║      whenever contentSize changes while the popover is visible. This        ║
-// ║      caused the popover window to jump sideways on screen every single      ║
-// ║      navigation tap and every log load. The status-bar button anchor was    ║
-// ║      correct but the popover repositioned itself against the new size.      ║
-// ║    THE FIX: Delete remeasurePopover() entirely. Remove onLogLoaded from     ║
-// ║      every StepLogView instantiation. Revert navigate() to one line.       ║
-// ║    WHY onLogLoaded IS NOT NEEDED: StepLogView already uses                  ║
-// ║      .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top) and    ║
-// ║      wraps log content in a ScrollView. The popover height set at open      ║
-// ║      time is sufficient; the ScrollView absorbs log content of any length.  ║
-// ║                                                                              ║
-// ║  ABSOLUTE RULES — violation = side-jump or broken sizing:                  ║
-// ║    ❌ NEVER call setFrameSize while popover.isShown == true                 ║
-// ║    ❌ NEVER set popover.contentSize while popover.isShown == true           ║
-// ║    ❌ NEVER add DispatchQueue.main.async (or any async) inside navigate()   ║
-// ║    ❌ NEVER add a remeasurePopover() function or equivalent                 ║
-// ║    ❌ NEVER wire onLogLoaded (or any post-load callback) to a resize        ║
-// ║    ❌ NEVER set sizingOptions = .preferredContentSize                       ║
-// ║    ❌ NEVER add objectWillChange.send() in reload()                         ║
-// ║    ❌ NEVER remove .frame(idealWidth: 480) from PopoverMainView             ║
-// ║    ❌ NEVER change fixedWidth without also changing idealWidth in           ║
-// ║       PopoverMainView AND SettingsView (fittingSize height is computed      ║
-// ║       at fixedWidth; mismatch wraps text and produces wrong height)         ║
-// ║                                                                              ║
-// ╚══════════════════════════════════════════════════════════════════════════════╝
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59)
+// sizingOptions: default. Height read via fittingSize ONCE per open.
+// navigate() = rootView swap ONLY. Zero size changes. Ever.
+// ❌ NEVER set sizingOptions = .preferredContentSize
+// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
+// ❌ NEVER add objectWillChange.send() in reload()
+// ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
+// ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 420).
+//     Mismatching these causes fittingSize.height to be calculated at the
+//     wrong width, wrapping content and producing an incorrect popover height.
 
 /// Navigation state machine for the popover's view hierarchy.
 private enum NavState {
@@ -83,12 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
     private var popoverIsOpen = false
 
-    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 480).
-    /// #22: Widened from 420 → 480 to give action-row titles more horizontal space
-    /// and prevent truncation of multi-word workflow/job names.
-    /// ❌ NEVER change this value without also updating idealWidth in
-    ///    PopoverMainView AND SettingsView — see REGRESSION GRAVEYARD above.
-    private static let fixedWidth: CGFloat = 480
+    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 420).
+    /// ❌ NEVER set this to a value other than 420 without also updating idealWidth in PopoverMainView.
+    private static let fixedWidth: CGFloat = 420
 
     // MARK: - App lifecycle
 
@@ -124,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - NSPopoverDelegate
 
     /// Resets navigation state after the popover closes.
-    /// ❌ NEVER call reload() here — it triggers objectWillChange on a closed popover.
+    /// ❌ NEVER call reload() here.
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
@@ -213,14 +173,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Navigation level 4a: StepLogView reached via an ActionGroup.
-    ///
-    /// ☠️ REGRESSION TOUCHPOINT (issue #13):
-    ///   An `onLogLoaded` closure was previously passed here that called
-    ///   `remeasurePopover()` → `setFrameSize` + `contentSize = newSize` while
-    ///   the popover was shown. This caused the popover to jump sideways on screen
-    ///   every time a log finished loading. It is gone. Do NOT bring it back.
-    ///   StepLogView's ScrollView handles variable-length log content internally.
-    ///   No popover resize is needed, safe, or permitted after open.
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -230,7 +182,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
             }
-            // ☠️ NO onLogLoaded — see docstring above and REGRESSION GRAVEYARD at top of file.
         ))
     }
 
@@ -263,10 +214,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Navigation level 3: log output for a step (Jobs path).
-    ///
-    /// ☠️ REGRESSION TOUCHPOINT (issue #13):
-    ///   Same as logViewFromAction — an `onLogLoaded` resize closure was wired here
-    ///   and caused the popover to jump on every log load. Removed. Do NOT add it back.
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -276,7 +223,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
             }
-            // ☠️ NO onLogLoaded — see docstring above and REGRESSION GRAVEYARD at top of file.
         ))
     }
 
@@ -311,25 +257,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    // ╔══════════════════════════════════════════════════════════════════════════╗
-    // ║  ☠️  navigate() — THIS IS THE COMPLETE FUNCTION. ONE LINE. FOREVER.  ☠️  ║
-    // ╠══════════════════════════════════════════════════════════════════════════╣
-    // ║  REGRESSION TOUCHPOINT (issue #13):                                     ║
-    // ║    Previously this function contained:                                  ║
-    // ║      hostingController?.rootView = view          ← correct              ║
-    // ║      guard ..., popover.isShown else { return }  ← wrong, led to:       ║
-    // ║      DispatchQueue.main.async {                  ← ☠️ CAUSED SIDE-JUMP   ║
-    // ║          self?.remeasurePopover()                ← ☠️ CAUSED SIDE-JUMP   ║
-    // ║      }                                           ← ☠️ CAUSED SIDE-JUMP   ║
-    // ║    The async block ran after every single navigation tap and called      ║
-    // ║    setFrameSize + contentSize while the popover was visible, which       ║
-    // ║    caused AppKit to recompute the anchor → popover jumped sideways.     ║
-    // ║                                                                          ║
-    // ║  ❌ NEVER add DispatchQueue.main.async here                              ║
-    // ║  ❌ NEVER call remeasurePopover() or any equivalent                      ║
-    // ║  ❌ NEVER touch setFrameSize or contentSize here                         ║
-    // ║  ❌ NEVER add a guard + isShown branch that leads to a resize            ║
-    // ╚══════════════════════════════════════════════════════════════════════════╝
+    /// Swaps the hosting controller's root view. ZERO size changes. Forever.
+    /// ❌ NEVER touch contentSize or setFrameSize here — causes popover positioning regression.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
@@ -346,11 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover. The ONE and ONLY safe site for setFrameSize and contentSize.
-    /// These calls are safe here because the popover is not yet shown when they fire.
-    /// ❌ NEVER replicate this sizing logic anywhere else in this file.
-    /// ❌ NEVER call setFrameSize or contentSize from navigate(), onLogLoaded,
-    ///    or any callback that fires while popover.isShown == true.
+    /// Opens the popover. The ONE safe site for sizing.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
