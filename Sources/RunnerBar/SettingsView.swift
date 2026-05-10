@@ -5,6 +5,10 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - SettingsView
 
+/// Settings view — complete implementation for all phases 1-6.
+///
+/// Sections: Runner Management, Notifications, General, Account, Legal, About.
+/// All persistent state is backed by dedicated ObservableObject stores.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -310,9 +314,7 @@ struct SettingsView: View {
         }
     }
 
-    // #11: Toggles use HStack so label stays leading and toggle stays trailing.
-    // SwiftUI Toggle on macOS renders label+control inline; wrapping in HStack
-    // with Spacer() is the only reliable way to pin the control to the right edge.
+    // #11: Each toggle row uses HStack so label stays leading and toggle stays trailing.
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications")
@@ -322,8 +324,7 @@ struct SettingsView: View {
                 Text("Notify on success").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $notifications.notifyOnSuccess)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
@@ -331,8 +332,7 @@ struct SettingsView: View {
                 Text("Notify on failure").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $notifications.notifyOnFailure)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
@@ -347,8 +347,7 @@ struct SettingsView: View {
                 Text("Launch at login").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $launchAtLogin)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
                     .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
@@ -357,12 +356,11 @@ struct SettingsView: View {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $settings.showDimmedRunners)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // #12: Polling row with label + subtitle, stepper right-aligned.
+            // #12: Polling row with subtitle under the label.
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Polling interval").font(.system(size: 12))
@@ -416,8 +414,7 @@ struct SettingsView: View {
                 Text("Share analytics").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $legal.analyticsEnabled)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG

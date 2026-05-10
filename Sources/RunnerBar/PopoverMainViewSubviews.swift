@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - PopoverHeaderView
 
 /// Header row: system stats left, settings + close right.
-/// ⚠️ Auth green dot intentionally removed — auth status lives in Settings only (#10).
+/// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
     let stats: SystemStats
     let isAuthenticated: Bool
@@ -14,7 +14,7 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
-            // #10: no auth dot here — represented in Settings > Account.
+            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -181,27 +181,27 @@ struct ActionRowView: View {
     @ViewBuilder
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
+            // #7: lineLimit(1) prevents timestamp from wrapping (load-bearing, ref #52 #54)
             Text(RelativeTimeFormatter.string(from: start))
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                .lineLimit(1)
                 .frame(width: 44, alignment: .trailing)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
+            // #8: lineLimit(1) + fixed frame prevents currentJobName from wrapping (load-bearing)
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
-                // #7 #8: fixedSize prevents currentJobName wrapping to 2 lines.
-                // maxWidth keeps it bounded so it cannot push other chips off-screen.
-                .fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 0, maxWidth: 72, alignment: .trailing)
         }
+        // #7: lineLimit(1) prevents jobProgress/elapsed from wrapping (load-bearing)
         Text(group.jobProgress)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            .lineLimit(1)
             .frame(width: 30, alignment: .trailing)
         Text(group.elapsed)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            .lineLimit(1)
             .frame(width: 40, alignment: .trailing)
         statusChip
     }
@@ -242,7 +242,7 @@ struct ActionRowView: View {
 
 // MARK: - InlineJobRowsView
 
-/// Passive read-only ↳ job rows shown beneath every in-progress action group.
+/// Passive read-only \u21b3 job rows shown beneath every in-progress action group.
 /// Only shows jobs that are currently `in_progress` — queued and completed jobs
 /// are intentionally excluded (per spec: inline rows communicate active work only).
 /// Rows have no tap action per spec #324 Gap 2.
@@ -250,7 +250,7 @@ struct InlineJobRowsView: View {
     let group: ActionGroup
     @State private var cap: Int = 4
 
-    /// Only in-progress jobs — ❌ never include queued or completed jobs here.
+    /// Only in-progress jobs — \u274c never include queued or completed jobs here.
     private var activeJobs: [ActiveJob] {
         group.jobs.filter { $0.status == "in_progress" }
     }
@@ -293,12 +293,12 @@ struct InlineJobRowsView: View {
             if total > 0 {
                 Text("\(done)/\(total)")
                     .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                    .lineLimit(1)
                     .frame(width: 28, alignment: .trailing)
             }
             Text(job.elapsed)
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                .lineLimit(1)
                 .frame(width: 36, alignment: .trailing)
         }
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
