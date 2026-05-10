@@ -5,24 +5,31 @@ import SwiftUI
 // navigate() = rootView swap ONLY inside the fixed popover frame.
 // ScrollView absorbs overflow — NEVER fight the frame.
 // ❌ NEVER put header inside ScrollView
-// ❌ NEVER add .frame(height:) or .fixedSize() to root
+// ❌ NEVER add .frame(height:) or .fixedSize(horizontal:false,vertical:true) to root
+// ❌ NEVER use maxHeight:.infinity on root — it corrupts fittingSize and causes side-jump
 // ❌ NEVER call navigate() directly — use onBack/onSelectStep callbacks
+// ✔ Root frame MUST be .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//   This matches AppDelegate.fixedWidth and lets fittingSize.height be correct.
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 ///
 /// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
 struct JobDetailView: View {
+    /// The job whose steps are displayed.
     let job: ActiveJob
+    /// Called when the user taps the back button.
     let onBack: () -> Void
+    /// Called when the user taps a step row.
     let onSelectStep: (JobStep) -> Void
 
+    /// Drives the live elapsed timer in the header.
     @State private var tick = 0
+    /// Retained so it can be invalidated on disappear to prevent a timer leak.
     @State private var tickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Header: OUTSIDE ScrollView — always visible at top
-            // #9: Spacer() after back button pushes all action buttons to trailing edge.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -39,7 +46,7 @@ struct JobDetailView: View {
                         let jobID = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         if scopeStr.isEmpty {
-                            log("ReRunButton › could not derive scope from htmlUrl: \(String(describing: job.htmlUrl))")
+                            log("ReRunButton \u203a could not derive scope from htmlUrl: \(String(describing: job.htmlUrl))")
                         }
                         DispatchQueue.global(qos: .userInitiated).async {
                             let isOk = scopeStr.contains("/")
@@ -54,7 +61,7 @@ struct JobDetailView: View {
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         let runID = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
-                            log("CancelButton › could not derive scope/runID from htmlUrl: \(String(describing: job.htmlUrl))")
+                            log("CancelButton \u203a could not derive scope/runID from htmlUrl: \(String(describing: job.htmlUrl))")
                             completion(false)
                             return
                         }
@@ -77,7 +84,6 @@ struct JobDetailView: View {
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
-                    .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -86,6 +92,8 @@ struct JobDetailView: View {
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
+                // ⚠️ fixedSize(horizontal:false,vertical:true) intentionally retained here:
+                // job.name is a short single-line label in practice; lineLimit(2) caps growth.
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
@@ -133,7 +141,10 @@ struct JobDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ REGRESSION GUARD: idealWidth:420 MUST match AppDelegate.fixedWidth.
+        // maxHeight:.infinity is BANNED here — it expands the view beyond fittingSize and
+        // causes the popover to jump sideways on navigate() (ref #52 #54 #57).
+        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,
@@ -147,8 +158,10 @@ struct JobDetailView: View {
         }
     }
 
+    /// Returns job.elapsed, re-evaluated every tick so the header updates live.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
+    /// Color-codes the step icon based on conclusion/status.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .green

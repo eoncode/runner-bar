@@ -6,17 +6,19 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
-//   Receives the same FIXED frame from AppDelegate as JobDetailView.
-//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
+// ── FRAME CONTRACT ────────────────────────────────────────────────────────────────────────
+//   Root: .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//   idealWidth MUST match AppDelegate.fixedWidth (420).
+//   maxHeight:.infinity is BANNED — it corrupts fittingSize and causes side-jump on navigate().
 //   ScrollView absorbs overflow — do NOT fight the frame.
 //
-// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────
+//   ✔ Root: .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ❌ NEVER put header inside ScrollView
-//   ❌ NEVER add .idealWidth or .frame(height:) to root
+//   ❌ NEVER add maxHeight:.infinity or .frame(height:) to root
+//   ❌ NEVER add .fixedSize(horizontal:false,vertical:true) to multi-line title texts in header
 //   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -102,10 +104,13 @@ struct ActionDetailView: View {
                     Text(group.label)
                         .font(.caption.monospacedDigit())
                         .foregroundColor(.secondary)
+                    // ⚠️ lineLimit(2) + NO fixedSize(horizontal:false,vertical:true).
+                    // fixedSize(h:false,v:true) is BANNED on title texts — it lets the label grow
+                    // vertically and corrupts fittingSize.height (ref #52 #54 #57).
                     Text(group.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .truncationMode(.tail)
                 }
                 if let branch = group.headBranch {
                     Text(branch)
@@ -175,7 +180,9 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ REGRESSION GUARD: idealWidth:420 MUST match AppDelegate.fixedWidth.
+        // maxHeight:.infinity is BANNED here — it corrupts fittingSize and causes side-jump on navigate() (ref #52 #54 #57).
+        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -209,10 +216,10 @@ struct ActionDetailView: View {
 
     private func conclusionLabel(_ c: String) -> String {
         switch c {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "cancelled": return "⊗ cancelled"
-        case "skipped":   return "− skipped"
+        case "success":   return "\u{2713} success"
+        case "failure":   return "\u{2717} failure"
+        case "cancelled": return "\u{2297} cancelled"
+        case "skipped":   return "\u{2212} skipped"
         default:          return c
         }
     }
