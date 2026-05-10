@@ -355,7 +355,8 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
 }
 
 private func stripAnsi(_ input: String) -> String {
-    guard let regex = try? NSRegularExpression(pattern: "\u001B\\[[0-9;]*[A-Za-z]") else {
+    // \u{001B} is the ESC character (U+001B). Swift requires the braced form \u{XXXX}.
+    guard let regex = try? NSRegularExpression(pattern: "\u{001B}\\[[0-9;]*[A-Za-z]") else {
         return input
     }
     return regex.stringByReplacingMatches(
