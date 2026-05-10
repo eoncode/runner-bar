@@ -36,7 +36,7 @@ struct WorkflowRunRef: Identifiable {
 /// Hierarchy: ActionGroup → jobs (flat across all sibling runs) → JobStep → log.
 /// `ActionDetailView` drills into the flat job list; `JobDetailView`/`StepLogView`
 /// are reused unchanged below that.
-struct ActionGroup: Identifiable {
+struct ActionGroup: Identifiable, Equatable {
     let headSha: String         // head_sha — kept as the underlying group identity
     let label: String           // "#1270" if PR, else "d6281b" (sha[:7])
     let title: String           // commit/PR message first line (≤40 chars)
@@ -65,6 +65,14 @@ struct ActionGroup: Identifiable {
 
     /// Set to `true` when frozen into `actionGroupCache` after completion.
     var isDimmed: Bool = false
+
+    // MARK: Equatable
+    // Identity-based equality: two groups are equal when their stable `id` matches.
+    // This satisfies the `onChange(of: store.actions)` requirement in PopoverMainView
+    // without deep-comparing mutable job arrays on every poll.
+    static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
+        lhs.id == rhs.id
+    }
 
     /// Returns a copy of this group with a replacement jobs array.
     /// Used in `RunnerStore` to enrich job data without reconstructing the

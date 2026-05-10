@@ -7,7 +7,11 @@ import SwiftUI
 /// Observable bridge between the singleton `RunnerStore` and SwiftUI views.
 /// `PopoverMainView`, `SettingsView`, and `AppDelegate` hold one shared instance.
 /// Call `reload()` to pull the latest state from `RunnerStore.shared` onto the main thread.
-@MainActor
+///
+/// ⚠️ NOT @MainActor: AppDelegate creates this as a stored property (`private let observable`)
+/// in a synchronous nonisolated context. @MainActor would make init() and reload() async
+/// from outside the actor and break AppDelegate.swift:40 and AppDelegate.swift:281.
+/// RunnerStore.onChange always fires on DispatchQueue.main so thread safety is preserved.
 final class RunnerStoreObservable: ObservableObject {
     /// Mirrors `RunnerStore.shared.runners`.
     @Published private(set) var runners: [Runner] = []
