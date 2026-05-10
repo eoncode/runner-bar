@@ -7,6 +7,12 @@ import SwiftUI
 ///
 /// - `progress`: 0.0–1.0 fill fraction for a filled wedge. Pass `nil` for an indeterminate ring.
 /// - `color`: fill colour — matches existing green/yellow/blue/red/gray semantics.
+///
+/// #24: The wedge animates live. `displayProgress` is a @State that shadows `progress`.
+/// When `progress` changes (polled every 5 s or on RunnerStore reload), `.onChange`
+/// drives `displayProgress` inside `withAnimation(.easeInOut(duration: 0.4))` so the
+/// wedge sweeps smoothly rather than jumping. The initial value is set in `.onAppear`
+/// with no animation so the first render is instant.
 struct PieProgressDot: View {
     /// Radial fill fraction (0.0–1.0). Nil renders a thin unfilled ring (indeterminate).
     let progress: Double?
@@ -15,7 +21,14 @@ struct PieProgressDot: View {
     /// Dot diameter; defaults to 8 to match existing action-row dots.
     var size: CGFloat = 8
 
-    /// Renders a filled pie-wedge, indeterminate ring, or empty ring depending on `progress`.
+    /// #24: Animated shadow of `progress`. Drives the actual Path so SwiftUI
+    /// interpolates the wedge angle on every frame of the easeInOut curve.
+    /// Starts as `nil` (matches the indeterminate / not-yet-loaded state) and
+    /// is set to `progress` on `.onAppear` (instant) and on every subsequent
+    /// `.onChange` of `progress` (animated).
+    @State private var displayProgress: Double? = nil
+
+    /// Renders a filled pie-wedge, indeterminate ring, or empty ring depending on `displayProgress`.
     var body: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
@@ -26,7 +39,7 @@ struct PieProgressDot: View {
                 Circle()
                     .stroke(color.opacity(0.25), lineWidth: 1)
                     .frame(width: side, height: side)
-                if let fraction = progress {
+                if let fraction = displayProgress {
                     if fraction >= 1 {
                         // Full fill
                         Circle().fill(color).frame(width: side, height: side)
@@ -56,6 +69,17 @@ struct PieProgressDot: View {
             }
         }
         .frame(width: size, height: size)
+        // #24: Seed displayProgress instantly on first appear (no animation).
+        .onAppear {
+            displayProgress = progress
+        }
+        // #24: Animate wedge sweep when progress updates.
+        // macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
+        .onChange(of: progress) { newValue in
+            withAnimation(.easeInOut(duration: 0.4)) {
+                displayProgress = newValue
+            }
+        }
     }
 }
 
