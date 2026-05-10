@@ -32,6 +32,12 @@ import SwiftUI
 // ║    Result: every view used the same initial height of 300pt.                ║
 // ║    Fix: openPopover() MUST call fittingSize before popover.show().          ║
 // ║                                                                              ║
+// ║  WHAT BROKE BEFORE (fixedWidth mismatch regression, 2026-05-10):           ║
+// ║    fixedWidth was 420 but PopoverMainView.idealWidth and SettingsView        ║
+// ║    .idealWidth were both 480. fittingSize.height was computed at 420pt      ║
+// ║    width → text wrapped → popover too tall / wrong height for all views.   ║
+// ║    Fix: fixedWidth MUST equal idealWidth in every root view (currently 480).║
+// ║                                                                              ║
 // ║  ABSOLUTE RULES — each one was learned by breaking production:              ║
 // ║    ❌ NEVER call setFrameSize while popover.isShown == true                 ║
 // ║    ❌ NEVER set popover.contentSize while popover.isShown == true           ║
@@ -40,11 +46,13 @@ import SwiftUI
 // ║    ❌ NEVER wire onLogLoaded or any post-load callback to a resize          ║
 // ║    ❌ NEVER set sizingOptions = .preferredContentSize                       ║
 // ║    ❌ NEVER add objectWillChange.send() in reload()                         ║
-// ║    ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView             ║
+// ║    ❌ NEVER remove .frame(idealWidth: 480) from PopoverMainView             ║
 // ║    ❌ NEVER change fixedWidth without also changing idealWidth in           ║
-// ║       PopoverMainView (mismatch wraps text → wrong fittingSize height)      ║
+// ║       PopoverMainView AND SettingsView (mismatch wraps text → wrong height) ║
 // ║    ❌ NEVER call reload() from popoverDidClose()                            ║
 // ║    ❌ NEVER add a second call to setFrameSize or contentSize anywhere       ║
+// ║    ❌ NEVER remove layoutSubtreeIfNeeded() before fittingSize read          ║
+// ║       (without it fittingSize returns stale pre-reload dimensions)          ║
 // ║                                                                              ║
 // ║  THE ONLY SAFE SITE FOR setFrameSize + contentSize IS openPopover().        ║
 // ║  These two calls are safe there because the popover is NOT yet shown.       ║
@@ -89,12 +97,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     private var popoverIsOpen = false
 
-    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 420).
-    /// ❌ NEVER change this value without also updating idealWidth in PopoverMainView.
+    /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth:) AND
+    /// SettingsView's .frame(idealWidth:). Currently all three are 480.
+    /// ❌ NEVER change this value without also updating idealWidth in BOTH
+    /// PopoverMainView AND SettingsView.
     /// Mismatch causes fittingSize.height to be computed at the wrong width,
     /// wrapping text and producing an incorrect popover height.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
-    private static let fixedWidth: CGFloat = 420
+    private static let fixedWidth: CGFloat = 480
 
     // MARK: - App lifecycle
 
@@ -365,9 +375,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // ║  ❌ NEVER call setFrameSize after popover.show() returns                ║
     // ║  ❌ NEVER set contentSize after popover.show() returns                  ║
     // ║  ❌ NEVER move this sizing logic into navigate() or any callback        ║
+    // ║  ❌ NEVER remove layoutSubtreeIfNeeded() — it forces AppKit to flush    ║
+    // ║     the SwiftUI layout pass so fittingSize reflects the just-reloaded   ║
+    // ║     data. Without it fittingSize returns the stale pre-reload height.   ║
     // ║                                                                          ║
-    // ║  fittingSize is read here so the popover height fits the CURRENT        ║
-    // ║  rootView content (main = short, detail = taller, log = tallest).       ║
+    // ║  fittingSize is read AFTER reload() + layoutSubtreeIfNeeded() so the   ║
+    // ║  popover height fits the CURRENT rootView content (main = short,        ║
+    // ║  detail = taller, log = tallest).                                        ║
     // ║  Removing the fittingSize read causes all views to render at 300pt.     ║
     // ║                                                                          ║
     // ║  If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT    ║
@@ -382,9 +396,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let fittingWidth = hostingController.view.fittingSize.width
+        // Force AppKit to flush the SwiftUI layout pass so fittingSize below
+        // reflects the freshly-reloaded data, not the stale pre-open state.
+        // ❌ NEVER remove this call — without it fittingSize returns stale dims.
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
+        hostingController.view.layoutSubtreeIfNeeded()
         let size = NSSize(
-            width: fittingWidth > 0 ? fittingWidth : Self.fixedWidth,
+            width: Self.fixedWidth,
             height: hostingController.view.fittingSize.height
         )
         hostingController.view.setFrameSize(size)
