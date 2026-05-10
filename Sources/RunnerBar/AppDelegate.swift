@@ -7,11 +7,11 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
 //
 // SIZING CONTRACT:
-//   openPopover() sets size once from PopoverMainView fittingSize (deferred one tick).
-//   navigate() resizes the popover to the incoming view's fittingSize so detail
-//   views shrink/grow to fit their content rather than inheriting main-view height.
+//   openPopover() sets size from PopoverMainView fittingSize (deferred one tick).
+//   navigate() resizes the popover to the incoming view's fittingSize (deferred one tick).
+//   Both width and height are content-driven, capped at maxWidth/maxHeight.
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER call setFrameSize while popover.isShown == true from outside navigate()
+// ❌ NEVER call setFrameSize while popover.isShown == true from outside navigate()/openPopover()
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
 // ❌ NEVER remove the !popoverIsOpen guard on reload() in onChange
@@ -37,7 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
-    private static let fixedWidth: CGFloat = 420
+    /// Ideal/fallback width when fittingSize returns 0.
+    private static let idealWidth: CGFloat = 420
+    /// Hard cap on popover width — content drives width up to this.
+    private static let maxWidth: CGFloat = 540
+    /// Hard cap on popover height.
     private static let maxHeight: CGFloat = 620
     private static let minHeight: CGFloat = 120
 
@@ -51,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             button.target = self
         }
         let controller = NSHostingController(rootView: mainView())
-        let initialSize = NSSize(width: Self.fixedWidth, height: 300)
+        let initialSize = NSSize(width: Self.idealWidth, height: 300)
         controller.view.frame = NSRect(origin: .zero, size: initialSize)
         hostingController = controller
         let pop = NSPopover()
@@ -254,15 +258,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     // MARK: - Navigation
 
     /// Swaps rootView and resizes popover to fit the new view's content.
-    /// This allows detail views to be shorter than the main view.
+    /// Width is content-driven up to maxWidth; height is content-driven up to maxHeight.
     private func navigate(to view: AnyView) {
         guard let hc = hostingController, let pop = popover else { return }
         hc.rootView = view
-        // Defer one tick so SwiftUI lays out the new rootView before we measure.
         DispatchQueue.main.async { [weak self] in
             guard let self, self.popoverIsOpen else { return }
             let fitting = hc.view.fittingSize
-            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+            let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
             let height = min(max(fitting.height > 0 ? fitting.height : 300, Self.minHeight), Self.maxHeight)
             let size = NSSize(width: width, height: height)
             hc.view.setFrameSize(size)
@@ -281,8 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover. Size is set once from PopoverMainView fittingSize,
-    /// deferred one async tick so SwiftUI layout from reload() is current.
+    /// Opens the popover. Size is set from fittingSize deferred one async tick.
     /// ❌ NEVER move fittingSize read back to same tick as reload().
     @MainActor
     private func openPopover() {
@@ -299,7 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                   btn.window != nil
             else { return }
             let fitting = hc.view.fittingSize
-            let width = fitting.width > 0 ? fitting.width : Self.fixedWidth
+            let width  = min(max(fitting.width  > 0 ? fitting.width  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
             let height = min(fitting.height > 0 ? fitting.height : 300, Self.maxHeight)
             let size = NSSize(width: width, height: height)
             hc.view.setFrameSize(size)
