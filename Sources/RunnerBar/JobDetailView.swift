@@ -1,11 +1,14 @@
 import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57)
-// navigate() = rootView swap ONLY inside the fixed popover frame.
-// ScrollView absorbs overflow — NEVER fight the frame.
+// ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57 #370)
+// Architecture 1: sizingOptions = .preferredContentSize.
+// ScrollView MUST have .frame(maxHeight:) — without it, ScrollView reports
+// full content height as ideal height → preferredContentSize.height spikes
+// → NSPopover re-anchors → side-jump on every navigation (#370).
 // ❌ NEVER put header inside ScrollView
 // ❌ NEVER add .frame(height:) or .fixedSize() to root
+// ❌ NEVER remove .frame(maxHeight:) from the ScrollView
 // ❌ NEVER call navigate() directly — use onBack/onSelectStep callbacks
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -95,6 +98,9 @@ struct JobDetailView: View {
             Divider()
 
             // ── Steps list: INSIDE ScrollView
+            // ⚠️ .frame(maxHeight:) is REQUIRED — do NOT remove.
+            // Without it, ScrollView reports full content height as ideal height,
+            // causing preferredContentSize.height to spike → NSPopover side-jump (#370).
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
@@ -135,8 +141,12 @@ struct JobDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // ⚠️ REQUIRED — caps preferredContentSize.height under Architecture 1.
+            // Prevents NSPopover side-jump on navigation (#370).
+            // ❌ NEVER remove this modifier.
+            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,

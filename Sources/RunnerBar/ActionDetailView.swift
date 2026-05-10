@@ -7,15 +7,24 @@ import SwiftUI
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
-//   Popover is resized by AppDelegate.navigate() to this view's fittingSize.
-//   ScrollView absorbs overflow — do NOT fight the frame.
+//   Architecture 1: sizingOptions = .preferredContentSize.
+//   Root: .frame(maxWidth: .infinity, alignment: .top) — NO maxHeight: .infinity
+//   ScrollView: .frame(maxHeight: 75% of visible screen) — REQUIRED to prevent side-jump (#370)
+//
+// ── WHY THE ScrollView CAP IS REQUIRED ──────────────────────────────────────────────────────────────────
+//   Without .frame(maxHeight:), ScrollView reports its full content height as ideal height.
+//   NSHostingController publishes this as preferredContentSize.height.
+//   NSPopover re-anchors on any contentSize change → side-jump on every navigation.
+//   The cap makes preferredContentSize.height predictable and stable.
 //
 // ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
 //   ✔ Root: .frame(maxWidth: .infinity, alignment: .top) — NO maxHeight: .infinity
+//   ✔ ScrollView: .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
 //   ✔ Job list MUST be inside ScrollView
 //   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
 //   ❌ NEVER put header inside ScrollView
 //   ❌ NEVER add .idealWidth or .frame(height:) to root
+//   ❌ NEVER remove the .frame(maxHeight:) from ScrollView — side-jump regression #370
 //   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -123,6 +132,9 @@ struct ActionDetailView: View {
             Divider()
 
             // ── Jobs list: INSIDE ScrollView
+            // ⚠️ .frame(maxHeight:) is REQUIRED — do NOT remove.
+            // Without it, ScrollView reports full content height as ideal height,
+            // causing preferredContentSize.height to spike → NSPopover side-jump (#370).
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
@@ -176,8 +188,12 @@ struct ActionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // ⚠️ REQUIRED — caps preferredContentSize.height under Architecture 1.
+            // Prevents NSPopover side-jump on navigation (#370).
+            // ❌ NEVER remove this modifier.
+            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ⚠️ NO maxHeight: .infinity — height is driven by fittingSize via AppDelegate.navigate()
+        // ⚠️ NO maxHeight: .infinity — height is driven by preferredContentSize via sizingOptions
         .frame(maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
