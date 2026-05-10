@@ -64,7 +64,9 @@ struct PopoverMainView: View {
         .onDisappear { systemStats.stop() }
         // Reset pagination when the action list changes (e.g. after token refresh)
         // so the user never lands on an empty page.
-        .onChange(of: store.actions) { _, _ in visibleCount = 10 }
+        // ⚠️ Use the macOS 13-compatible single-value form — project targets macOS 13.0.
+        // ❌ NEVER use { _, _ in } (two-argument closure) — that requires macOS 14+.
+        .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
     // MARK: - Rate limit banner
