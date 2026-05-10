@@ -3,9 +3,11 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
-// RULE 1: Root VStack MUST use .frame(maxWidth: .infinity, alignment: .top)
-//   The header block is sticky/pinned. The actions list is in a ScrollView
-//   capped at PopoverLayout.maxBodyHeight so it never overflows the window.
+// RULE 1: Root VStack MUST use .frame(idealWidth: 420, alignment: .top)
+//   ❌ NEVER add maxWidth: .infinity to the root frame — it makes fittingSize.width
+//      return the window width instead of content width, causing navigate() to
+//      resize the popover and shift it sideways on every navigation. (#296 side-jump)
+//   ✔ idealWidth: 420 lets fittingSize return ~420 so navigate() keeps the popover stable.
 // ❌ NEVER use .frame(width:) fixed width on root
 // ❌ NEVER add .frame(height:) or .frame(maxHeight:) on the root VStack
 // ❌ NEVER remove the ScrollView from the actions body — it prevents the
@@ -20,6 +22,12 @@ import SwiftUI
 // INLINE JOBS SPEC (#178 active mode):
 //   Only jobs with status == "in_progress" appear as inline ↳ child rows.
 //   Queued jobs are NOT shown inline — they haven't started and have no step data.
+//   ActionRowView receives the full ActionGroup value from ForEach and re-evaluates
+//   inlineJobs reactively — no extra @State or id() trick needed.
+//
+// onChange(of: store.actions):
+//   Only reset visibleCount when it has been paged beyond 10. Resetting on every
+//   poll update would wipe inline jobs during the empty→populated enrichment cycle.
 
 // MARK: - Layout constants
 
@@ -73,13 +81,19 @@ struct PopoverMainView: View {
             }
             .frame(maxHeight: PopoverLayout.maxBodyHeight)
         }
-        .frame(idealWidth: PopoverLayout.idealWidth, maxWidth: .infinity, alignment: .top)
+        // ⚠️ NO maxWidth: .infinity — idealWidth drives fittingSize so navigate() stays stable.
+        .frame(idealWidth: PopoverLayout.idealWidth, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        .onChange(of: store.actions) { _ in visibleCount = 10 }
+        // ⚠️ Only reset visibleCount when user has paged beyond default.
+        //    Do NOT reset on every poll update — that would wipe inline job rows
+        //    during the empty→populated enrichment cycle each poll tick.
+        .onChange(of: store.actions) { _ in
+            if visibleCount > 10 { visibleCount = 10 }
+        }
     }
 }
 
@@ -234,6 +248,8 @@ private struct ActionsListView: View {
 
 /// Single action group row.
 /// ⚠️ SPEC #178 active mode: ONLY jobs with status == "in_progress" appear inline.
+/// ActionRowView receives the full ActionGroup value — inlineJobs re-evaluates
+/// automatically when store.actions is updated by the poll enrichment cycle.
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
