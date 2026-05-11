@@ -166,11 +166,17 @@ private struct PopoverHeaderView: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            // ⚠️ Each statChip is fixed-size so it never expands into the Spacer's territory
+            // or gets squeezed by longer value strings (e.g. "10.2/16GB").
+            // .layoutPriority(1) keeps chips at their natural size; Spacer absorbs slack.
             statChip(
                 label: "CPU",
                 fraction: systemStats.stats.cpuPct / 100,
                 value: String(format: "%.1f%%", systemStats.stats.cpuPct)
             )
+            .fixedSize()
+            .layoutPriority(1)
+
             statChip(
                 label: "MEM",
                 fraction: systemStats.stats.memTotalGB > 0
@@ -178,6 +184,9 @@ private struct PopoverHeaderView: View {
                 value: String(format: "%.1f/%.0fGB",
                               systemStats.stats.memUsedGB, systemStats.stats.memTotalGB)
             )
+            .fixedSize()
+            .layoutPriority(1)
+
             statChip(
                 label: "DISK",
                 fraction: systemStats.stats.diskTotalGB > 0
@@ -185,7 +194,11 @@ private struct PopoverHeaderView: View {
                 value: String(format: "%.0f/%.0fGB",
                               systemStats.stats.diskUsedGB, systemStats.stats.diskTotalGB)
             )
-            Spacer()
+            .fixedSize()
+            .layoutPriority(1)
+
+            Spacer(minLength: 0)
+
             if !isAuthenticated {
                 Button(
                     action: onSelectSettings,
