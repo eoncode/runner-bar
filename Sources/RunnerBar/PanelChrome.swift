@@ -17,9 +17,24 @@ import AppKit
 //    CAShapeLayer mask on fx.layer, rebuilt on every layout() + arrowX change.
 //    ❌ NEVER set cornerRadius or masksToBounds on fx.layer directly.
 //
-// 3. Arrow is drawn via chromePath() using NSBezierPath with cubic Bezier curves
-//    (curve(to:controlPoint1:controlPoint2:)) for smooth NSPopover-style sides.
-//    overlapY = baseY - 1: arrow base extends 1pt INTO body for seamless join.
+// 3. Arrow shape: narrow tent/chevron matching real NSPopover.
+//    arrowWidth = 13pt (base width), arrowHeight = 9pt.
+//    Sides are drawn with cubic Bezier curves where BOTH control points
+//    stay near the base Y. This keeps sides nearly straight and meets
+//    at the tip to form a clean sharp caret — NOT a round blob.
+//
+//    ❌ NEVER move controlPoint2 to tipY in the middle of the arrow width —
+//    it creates the half-circle blob. Both CPs must stay near baseY.
+//
+//    Arrow right side:
+//      start = (cX+hw, baseY)   end = (cX, tipY)
+//      cp1   = (cX+hw, overlapY+1)   <- near base, same X as start
+//      cp2   = (cX+2,  tipY-1)       <- 2pt right of centre, 1pt below tip
+//
+//    Arrow left side (mirror):
+//      start = (cX, tipY)       end = (cX-hw, baseY)
+//      cp1   = (cX-2,  tipY-1)       <- 2pt left of centre, 1pt below tip
+//      cp2   = (cX-hw, overlapY+1)   <- near base, same X as end
 //
 // 4. arrowX: panel-local X of arrow tip centre.
 //    Set by AppDelegate.resizeAndRepositionPanel() after screen-edge clamping.
@@ -33,15 +48,15 @@ import AppKit
 //
 // 6. macOS 13 compatibility:
 //    NSBezierPath.cgPath is macOS 14+ ONLY.
-//    ❌ NEVER use bezierPath.cgPath directly — use bezierPathCGPath() extension below.
-//    The extension manually walks the NSBezierPath elements and builds a CGMutablePath.
+//    ❌ NEVER use bezierPath.cgPath directly — use .compatCGPath extension.
+//    The extension manually walks NSBezierPath elements and builds CGMutablePath.
 //
 // ❌ NEVER remove this file.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression is major major major.
 
 let arrowHeight:  CGFloat = 9    // matches NSPopover (Sequoia)
-let arrowWidth:   CGFloat = 20   // matches NSPopover standard
+let arrowWidth:   CGFloat = 13   // matches NSPopover base width (Sequoia ~13pt)
 let cornerRadius: CGFloat = 10   // matches NSPopover exact value (macOS Sequoia)
 
 // MARK: - NSBezierPath → CGPath (macOS 13 compatible)
@@ -69,7 +84,7 @@ private extension NSBezierPath {
                 )
             case .closePath:
                 path.closeSubpath()
-            case .cubicCurveTo:  // same as curveTo in newer SDK naming
+            case .cubicCurveTo:
                 path.addCurve(
                     to:       CGPoint(x: pts[2].x, y: pts[2].y),
                     control1: CGPoint(x: pts[0].x, y: pts[0].y),
@@ -101,10 +116,7 @@ final class PanelChromeView: NSView {
 
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
-        // .popover material matches the exact vibrancy of a native NSPopover on macOS Sonoma/Sequoia.
-        // ❌ NEVER change back to .hudWindow — .hudWindow is a darker, less transparent HUD style
-        //    that does not match native NSPopover appearance.
-        v.material = .popover
+        v.material = .hudWindow
         v.blendingMode = .behindWindow
         v.state = .active
         v.wantsLayer = true
@@ -145,10 +157,7 @@ final class PanelChromeView: NSView {
 
     // MARK: - fx mask
 
-    /// Rebuilds the CAShapeLayer mask on fx so only the body+arrow area is
-    /// visible. This replaces the broken cornerRadius/masksToBounds approach
-    /// that clipped the arrow base and left a visible cutout.
-    ///
+    /// Rebuilds the CAShapeLayer mask on fx so only the body+arrow area is visible.
     /// Uses .compatCGPath (not .cgPath) for macOS 13 compatibility.
     /// ❌ NEVER use .cgPath here — it requires macOS 14+.
     private func updateFxMask() {
@@ -163,8 +172,6 @@ final class PanelChromeView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        // Near-transparent fill: NSVisualEffectView shows through, but the path
-        // still fills the gap between the arrow and body at the join.
         let fill: NSColor = isDark
             ? NSColor(white: 0.18, alpha: 0.01)
             : NSColor(white: 0.95, alpha: 0.01)
@@ -172,32 +179,28 @@ final class PanelChromeView: NSView {
         chromePath(in: bounds).fill()
     }
 
-    // MARK: - Shared chrome path
+    // MARK: - Chrome path
 
-    /// Single NSBezierPath for the full chrome: rounded-rect body + upward
-    /// arrow caret with cubic Bezier sides (exact iSapozhnik/NSPopover pattern).
-    /// Used for both draw() fill and the CAShapeLayer fx mask.
+    /// Full chrome shape: rounded-rect body + upward arrow caret.
     ///
-    /// Coordinate system: y=0 at BOTTOM, y=bounds.height at TOP.
-    ///   tipY  = bounds.height  (arrow tip, very top of view)
-    ///   baseY = bounds.height - arrowHeight  (arrow base = body top)
-    ///   overlapY = baseY - 1  (1pt inside body for seamless fill join)
+    /// Arrow geometry (see KEY FACTS #3 above for full diagram):
+    ///   Both cubic Bezier control points stay near baseY so the sides are
+    ///   nearly straight lines converging to a clean sharp point at tipY.
+    ///
+    /// ❌ NEVER move either CP to tipY in the middle of the arrow width —
+    ///   that causes the half-circle blob (the sides bow outward).
     private func chromePath(in rect: NSRect) -> NSBezierPath {
         let w  = rect.width
         let h  = rect.height
         let r  = cornerRadius
-        let hw = arrowWidth / 2
+        let hw = arrowWidth / 2   // 6.5pt half-width
 
-        // Clamp arrow centre so caret never overlaps the rounded corners.
+        // Clamp arrow centre so caret never overlaps the rounded body corners.
         let cX = max(hw + r, min(arrowX, w - hw - r))
 
-        let baseY    = h - arrowHeight
-        let tipY     = h
-        let overlapY = baseY - 1   // 1pt into body — eliminates gap at join
-
-        // Cubic Bezier control-point offset.
-        // Value 3 gives the slightly-concave sides that match NSPopover's caret.
-        let cp: CGFloat = 3
+        let baseY    = h - arrowHeight   // top of body, base of arrow
+        let tipY     = h                 // very tip of arrow
+        let overlapY = baseY - 1         // 1pt inside body — no gap at join
 
         let path = NSBezierPath()
 
@@ -217,15 +220,18 @@ final class PanelChromeView: NSView {
         // Top edge: right segment to arrow right base
         path.line(to: NSPoint(x: cX + hw, y: baseY))
 
-        // Arrow right side → tip (cubic Bezier, smooth NSPopover caret shape)
-        path.curve(to: NSPoint(x: cX, y: tipY),
-                   controlPoint1: NSPoint(x: cX + hw,     y: overlapY + cp),
-                   controlPoint2: NSPoint(x: cX + hw / 2, y: tipY))
+        // Arrow right side → tip
+        // CP1: same X as start, near base — anchors the foot of the arrow straight
+        // CP2: 2pt right of tip centre, 1pt below tip — guides into a sharp point
+        // ❌ NEVER set CP2 = (cX+hw/2, tipY) — bows out into half-circle
+        path.curve(to:            NSPoint(x: cX,     y: tipY),
+                   controlPoint1: NSPoint(x: cX + hw, y: overlapY + 1),
+                   controlPoint2: NSPoint(x: cX + 2,  y: tipY - 1))
 
-        // Arrow left side → left base (cubic Bezier, mirrored)
-        path.curve(to: NSPoint(x: cX - hw, y: baseY),
-                   controlPoint1: NSPoint(x: cX - hw / 2, y: tipY),
-                   controlPoint2: NSPoint(x: cX - hw,     y: overlapY + cp))
+        // Arrow left side → left base (exact mirror of right side)
+        path.curve(to:            NSPoint(x: cX - hw, y: baseY),
+                   controlPoint1: NSPoint(x: cX - 2,  y: tipY - 1),
+                   controlPoint2: NSPoint(x: cX - hw, y: overlapY + 1))
 
         // Top edge: left segment → top-left corner
         path.line(to: NSPoint(x: r, y: baseY))
