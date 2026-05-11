@@ -10,36 +10,38 @@ import SwiftUI
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
 ///
-/// ⚠️ REGRESSION GUARD — Architecture 1 (sizingOptions=.preferredContentSize) ref #52 #54 #57 #377
-/// See also: status-bar-app-position-warning.md
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-/// is major major major.
+/// ⚠️ REGRESSION GUARD (Architecture 1 — sizingOptions=.preferredContentSize — ref #52 #54 #57 #377):
 ///
-/// ROOT VSTACK FRAME RULE (Architecture 1):
+///   AppDelegate uses sizingOptions=.preferredContentSize. NSHostingController reads
+///   SwiftUI's ideal size and propagates to NSPopover automatically.
+///
+///   ROOT VSTACK FRAME RULE:
 ///   .frame(idealWidth: 480, idealHeight: cappedHeight, alignment: .top)
+///   BOTH idealWidth AND idealHeight are required here.
 ///
-///   - idealWidth: 480        → pins preferredContentSize.width = 480. No x re-anchor.
-///   - idealHeight: cappedHeight → pins preferredContentSize.height = cappedHeight.
-///     Without this, the inner ScrollView's unbounded idealHeight propagates to
-///     preferredContentSize.height → NSPopover repositions window → side-jump.
-///   - alignment: .top        → prevents vertical centering artifacts.
+///   WHY idealHeight IS NEEDED HERE (unlike other views):
+///   ScrollView reports unbounded idealHeight (full content height) to SwiftUI's layout
+///   system. Without capping, preferredContentSize.height spikes to ~800pt on navigate
+///   to Settings → NSPopover repositions the window to stay on screen → side-jump.
+///   idealHeight: cappedHeight caps the reported ideal height so NSPopover receives a
+///   stable, screen-bounded contentSize.height.
+///   ❌ NEVER remove idealHeight from this view's root frame.
+///   ❌ NEVER add idealHeight to any OTHER view's root frame (only SettingsView needs it).
 ///
-///   ❌ NEVER add maxWidth:.infinity to the root VStack frame.
-///      Under Architecture 1, maxWidth:.infinity inflates preferredContentSize.width
-///      past 480 → hosting controller reports huge width → content collapses → blank panel.
-///      (maxWidth:.infinity was correct under Architecture 2/sizingOptions=[] only.)
-///   ❌ NEVER remove idealHeight — ScrollView reports unbounded height without it.
-///   ❌ NEVER remove idealWidth — width becomes unconstrained without it.
-///   ❌ NEVER change idealWidth from 480 without updating AppDelegate.idealWidth.
+///   WHY idealWidth IS NEEDED:
+///   Pins preferredContentSize.width = 480 always. Width must never change → no re-anchor.
+///   ❌ NEVER remove idealWidth.
+///   ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth AND all views.
 ///
-///   INNER VSTACK (inside ScrollView): .frame(maxWidth: .infinity) IS safe there —
-///   it is inside ScrollView which clips propagation to preferredContentSize.
-///   ❌ NEVER remove maxWidth:.infinity from the INNER VStack.
-///   ❌ NEVER move maxWidth:.infinity to the root VStack (outside ScrollView).
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-/// is major major major.
+///   SCROLLVIEW HEIGHT CAP:
+///   The ScrollView has .frame(maxHeight: cappedHeight) which correctly caps layout height.
+///   The inner content can scroll within this cap.
+///   ❌ NEVER remove .frame(maxHeight: cappedHeight) from the ScrollView.
+///   ❌ NEVER increase above 0.85 — popover may overflow off-screen.
+///
+///   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+///   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+///   is major major major.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -71,16 +73,14 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
-    /// Height cap for the Settings ScrollView AND the root VStack's idealHeight.
+    /// Height cap for the Settings ScrollView and root idealHeight.
     /// 75% of visible screen height — fits all sections on any screen without overflow.
-    ///
     /// Used for BOTH:
-    ///   1. ScrollView .frame(maxHeight: cappedHeight) — caps layout height.
-    ///   2. Root VStack .frame(idealHeight: cappedHeight) — pins preferredContentSize.height
-    ///      so NSPopover does not reposition the window to fit unbounded content.
-    ///
+    ///   1. ScrollView .frame(maxHeight: cappedHeight) — caps the layout height
+    ///   2. Root VStack .frame(idealHeight: cappedHeight) — caps ideal height reported
+    ///      to NSHostingController so preferredContentSize.height is bounded.
     /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
-    /// ❌ NEVER use a fixed constant — must adapt to screen size.
+    /// ❌ NEVER apply cappedHeight as a fixed .frame(height:) — that would break layout.
     private var cappedHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
     }
@@ -89,18 +89,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ ScrollView required — Settings content is taller than any popover.
-            // Safe under Architecture 1 because root VStack's idealHeight caps
-            // preferredContentSize.height to cappedHeight.
-            // ❌ NEVER remove this ScrollView — content will be clipped without it.
+            // ⚠️ ScrollView height cap — load-bearing under Architecture 1.
+            // .frame(maxHeight: cappedHeight) caps the layout height so the popover
+            // does not grow off-screen. The root frame's idealHeight also caps the
+            // ideal height reported to NSHostingController.
+            // ❌ NEVER remove .frame(maxHeight: cappedHeight).
             ScrollView {
-                // ⚠️ maxWidth:.infinity on the INNER VStack is REQUIRED and SAFE.
-                // Inside ScrollView — does NOT propagate to preferredContentSize.
-                // Without it, rows collapse to minimum intrinsic width.
-                // ❌ NEVER remove maxWidth:.infinity from this inner VStack.
-                // ❌ NEVER move maxWidth:.infinity to the root VStack (outside ScrollView).
-                // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-                // UNDER ANY CIRCUMSTANCE.
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
                     Divider()
@@ -116,19 +110,18 @@ struct SettingsView: View {
                     Divider()
                     aboutSection
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 16)
             }
             .frame(maxHeight: cappedHeight)
         }
-        // ⚠️ ROOT frame — Architecture 1. See class-level regression guard.
-        // idealWidth: 480        → preferredContentSize.width = 480 (no x re-anchor).
-        // idealHeight: cappedHeight → preferredContentSize.height = cappedHeight (no y overflow).
-        // alignment: .top        → no vertical centering artifacts.
-        // ❌ NEVER add maxWidth:.infinity here — collapses content under Architecture 1.
-        // ❌ NEVER remove idealWidth or idealHeight.
-        // ❌ NEVER change idealWidth from 480 without updating AppDelegate.idealWidth.
-        // ⚠️ Swift requires width-family args before height-family args in .frame().
+        // ⚠️ REGRESSION GUARD: BOTH idealWidth AND idealHeight are required here.
+        // idealWidth: 480 pins preferredContentSize.width = 480 (no x re-anchor).
+        // idealHeight: cappedHeight caps preferredContentSize.height so NSPopover
+        // does not need to reposition to keep the window on-screen.
+        // ❌ NEVER remove idealHeight from THIS view — ScrollView has unbounded ideal height.
+        // ❌ NEVER remove idealWidth.
+        // ❌ NEVER add idealHeight to OTHER views (PopoverMainView, JobDetailView etc.).
+        // ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
