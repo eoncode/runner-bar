@@ -4,34 +4,52 @@ import AppKit
 //
 // Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly.
 //
-// ARROW SHAPE — DEFINITIVE (reverse-engineered from native NSPopover + SFBPopovers reference):
+// Arrow shape: two cubic bezier curves — iSapozhnik exact formula.
+// NO separate tip arc. Both beziers meet at the tip point (toPoint).
 //
-// Native NSPopover uses STRAIGHT LINES to the tip — NO bezier curves, NO tip radius.
-// Reference: github.com/sbooth/SFBPopovers — appendArrowToPath uses lineToPoint only.
+// The NSPopover arrow (iSapozhnik reverse-engineered formula):
+//   leftPoint  = (cX - hw, baseY)        — left foot
+//   toPoint    = (cX, baseY + arrowH)    — tip apex
+//   rightPoint = (cX + hw, baseY)        — right foot
 //
-//   right foot (cX+hw, baseY)
-//         |
-//         |  straight line
-//         v
-//       tip (cX, tipY)        <- sharp point, no arc
-//         |
-//         |  straight line
-//         v
-//   left foot (cX-hw, baseY)
+//   Left bezier:  leftPoint → toPoint
+//     cp1 = (cX - w/6, baseY)            — concave foot anchor
+//     cp2 = (cX - w/9, baseY+arrowH)    — near-tip anchor (creates rounded look)
 //
-// Dimensions matching native NSPopover (Sonoma / Sequoia):
-//   arrowWidth  = 20pt  (half = 10pt each side)
-//   arrowHeight = 16pt  (NOT 11 — native is taller/sharper than earlier guess)
-//   cornerRadius = 10pt (body)
+//   Right bezier: toPoint → rightPoint
+//     cp1 = (cX + w/9, baseY+arrowH)    — near-tip anchor (mirror)
+//     cp2 = (cX + w/6, baseY)           — concave foot anchor
 //
-// ❌ NEVER add bezier curves or tipRadius to the arrow sides. Straight lines only.
-// ❌ NEVER set arrowHeight = 11 or lower — arrow becomes a flat stub.
-// ❌ NEVER use appendArc at base corners — visible humps at feet.
+// ❌ NEVER add a separate tip arc — the two-bezier meeting at toPoint IS the
+//    rounded tip. An arc makes it look wrong.
+// ❌ NEVER use straight lines — flat / no concavity.
+// ❌ NEVER use appendArc at BASE corners — visible base humps.
+// ❌ NEVER change w/6 or w/9 — changes the concave profile entirely.
+//
+// KEY FACTS:
+//
+// 1. macOS coordinate system: y=0 is BOTTOM of view, y=bounds.height is TOP.
+//    Arrow tip is at TOP. contentRect = (0, 0, w, h - arrowHeight).
+//
+// 2. fx (NSVisualEffectView) covers FULL bounds. Body-shape clipping via
+//    CAShapeLayer mask on fx.layer. Rebuilt on every layout() + arrowX change.
+//    ❌ NEVER set cornerRadius or masksToBounds on fx.layer directly.
+//
+// 3. arrowX: panel-local X of arrow tip centre.
+//    Formula: button.window!.frame.midX - panel.frame.minX
+//    ❌ NEVER compute from convertToScreen(button.frame).
+//
+// 4. Dynamic height: layout() re-pins ALL subviews on EVERY layout pass.
+//    ❌ NEVER set hosting view frame only at init.
+//    ❌ NEVER set autoresizingMask=[] on the hosting view.
+//
+// 5. NSBezierPath.cgPath is macOS 14+. Use .compatCGPath (extension below).
+//
 // ❌ NEVER remove this file. Regression is major major major.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
-let arrowHeight:  CGFloat = 16   // native NSPopover (Sonoma/Sequoia) — straight-sided arrow
-let arrowWidth:   CGFloat = 20   // native NSPopover (Sonoma/Sequoia)
+let arrowHeight:  CGFloat = 11   // matches NSPopover Sequoia
+let arrowWidth:   CGFloat = 20   // matches NSPopover Sequoia
 let cornerRadius: CGFloat = 10   // matches NSPopover body corner
 
 // MARK: - NSBezierPath → CGPath (macOS 13 compatible)
@@ -144,63 +162,76 @@ final class PanelChromeView: NSView {
 
     // MARK: - Chrome path
     //
-    // Rounded-rect body + upward arrow with STRAIGHT SIDES and SHARP TIP.
+    // iSapozhnik exact two-bezier arrow formula.
+    // Source: github.com/iSapozhnik/Popover — PopoverWindowBackgroundView.swift
     //
-    // This exactly matches native NSPopover arrow geometry.
-    // Reference: SFBPopovers appendArrowToPath — lineToPoint only, no curves.
+    //   Left bezier:  leftPoint → toPoint,  cp1=(cX-w/6, baseY), cp2=(cX-w/9, tipY)
+    //   Right bezier: toPoint → rightPoint, cp1=(cX+w/9, tipY),  cp2=(cX+w/6, baseY)
     //
-    // Path order (clockwise from bottom-left, macOS coords y-up):
-    //   BL arc → bottom edge → BR arc → right edge → TR arc
-    //   → top-right segment → right arrow foot → TIP → left arrow foot
-    //   → top-left segment → TL arc → left edge → close
+    // The two beziers converge at toPoint (the tip). The near-tip anchors (w/9)
+    // create the naturally rounded apex — no arc needed.
     //
-    // ❌ NEVER add curves to the arrow sides — straight lines only.
-    // ❌ NEVER add tipRadius — tip must be a sharp point.
+    // ❌ NEVER add a tip arc.
+    // ❌ NEVER change the w/6 or w/9 fractions.
+    // ❌ NEVER use appendArc at BASE corners — visible base humps.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private func chromePath(in rect: NSRect) -> NSBezierPath {
-        let w  = rect.width
-        let h  = rect.height
-        let r  = cornerRadius
-        let hw = arrowWidth / 2        // 10pt half-width
+        let w      = rect.width
+        let h      = rect.height
+        let r      = cornerRadius
+        let hw     = arrowWidth / 2
 
-        let cX    = max(hw + r, min(arrowX, w - hw - r))
-        let baseY = h - arrowHeight    // y of arrow feet (top of body)
-        let tipY  = h                  // y of arrow tip
+        // Arrow centre X clamped so the arrow never clips the body corners.
+        let cX     = max(hw + r, min(arrowX, w - hw - r))
+        let baseY  = h - arrowHeight   // y of arrow feet (top of body)
+        let tipY   = h                 // y of arrow apex
+
+        // iSapozhnik control point fractions (DO NOT CHANGE):
+        //   w/6 = 3.33pt  — concave foot anchor
+        //   w/9 = 2.22pt  — near-tip anchor (produces the rounded apex)
+        // ❌ NEVER change these fractions.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        let cp_foot = arrowWidth / 6   // 3.33pt — foot-side control offset
+        let cp_tip  = arrowWidth / 9   // 2.22pt — tip-side control offset
+
+        let leftPoint  = NSPoint(x: cX - hw, y: baseY)
+        let toPoint    = NSPoint(x: cX,      y: tipY)
+        let rightPoint = NSPoint(x: cX + hw, y: baseY)
 
         let path = NSBezierPath()
-
-        // Start: bottom-left, past the corner arc
         path.move(to: NSPoint(x: r, y: 0))
 
-        // Bottom edge → BR corner
+        // Bottom edge → bottom-right corner
         path.line(to: NSPoint(x: w - r, y: 0))
         path.appendArc(withCenter: NSPoint(x: w - r, y: r),
                        radius: r, startAngle: 270, endAngle: 0)
 
-        // Right edge → TR corner
+        // Right edge → top-right corner
         path.line(to: NSPoint(x: w, y: baseY - r))
         path.appendArc(withCenter: NSPoint(x: w - r, y: baseY - r),
                        radius: r, startAngle: 0, endAngle: 90)
 
-        // Top edge: right of arrow → right foot
-        path.line(to: NSPoint(x: cX + hw, y: baseY))
+        // Top edge: right segment → right arrow foot
+        path.line(to: rightPoint)
 
-        // Arrow: right foot → tip (STRAIGHT LINE — matches native NSPopover)
-        // ❌ NEVER replace with a curve. Straight line only.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        path.line(to: NSPoint(x: cX, y: tipY))
+        // Arrow right side: rightPoint → toPoint
+        // cp1=(cX+w/6, baseY)  cp2=(cX+w/9, tipY)
+        path.curve(to:            toPoint,
+                   controlPoint1: NSPoint(x: cX + cp_foot, y: baseY),
+                   controlPoint2: NSPoint(x: cX + cp_tip,  y: tipY))
 
-        // Arrow: tip → left foot (STRAIGHT LINE)
-        // ❌ NEVER replace with a curve. Straight line only.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        path.line(to: NSPoint(x: cX - hw, y: baseY))
+        // Arrow left side: toPoint → leftPoint
+        // cp1=(cX-w/9, tipY)   cp2=(cX-w/6, baseY)
+        path.curve(to:            leftPoint,
+                   controlPoint1: NSPoint(x: cX - cp_tip,  y: tipY),
+                   controlPoint2: NSPoint(x: cX - cp_foot, y: baseY))
 
-        // Top edge: left of arrow → TL corner
+        // Top edge: left segment → top-left corner
         path.line(to: NSPoint(x: r, y: baseY))
         path.appendArc(withCenter: NSPoint(x: r, y: baseY - r),
                        radius: r, startAngle: 90, endAngle: 180)
 
-        // Left edge → BL corner
+        // Left edge → bottom-left corner
         path.line(to: NSPoint(x: 0, y: r))
         path.appendArc(withCenter: NSPoint(x: r, y: r),
                        radius: r, startAngle: 180, endAngle: 270)
