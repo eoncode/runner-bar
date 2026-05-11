@@ -19,7 +19,7 @@ struct SystemStats {
     var diskUsedGB: Double
     /// Raw partition capacity from `volumeTotalCapacity`, in GB.
     var diskTotalGB: Double
-    /// True available space from `volumeAvailableCapacityForImportantUsage`, in GB.
+    /// Available disk space from `volumeAvailableCapacityKey`, in GB.
     var diskFreeGB: Double
     /// Free disk space as a percentage of total: (diskFreeGB / diskTotalGB) × 100.
     var diskFreePct: Double
@@ -33,31 +33,22 @@ struct SystemStats {
 
 /// CPU tick counters captured from `host_processor_info()`.
 private struct CPUTicks {
-    /// User + nice ticks accumulated across all cores.
     var user: Double
-    /// System ticks accumulated across all cores.
     var system: Double
-    /// Total ticks accumulated across all cores.
     var total: Double
 }
 
 /// Memory usage snapshot in GB.
 private struct MemoryStats {
-    /// Active + wired memory in use, in GB.
     var used: Double
-    /// Total installed RAM, in GB.
     var total: Double
 }
 
 /// Disk usage snapshot in GB and percent free.
 private struct DiskStats {
-    /// Used disk capacity, in GB.
     var used: Double
-    /// Total disk capacity, in GB.
     var total: Double
-    /// Free disk capacity, in GB.
     var free: Double
-    /// Free disk capacity as a percentage of total.
     var freePct: Double
 }
 
@@ -73,30 +64,19 @@ private struct DiskStats {
 /// calls `start()` in `.onAppear` and `stop()` in `.onDisappear` so the timer
 /// only runs while the popover is visible.
 final class SystemStatsViewModel: ObservableObject {
-    /// The latest system snapshot. SwiftUI views observe this via `@Published`.
     @Published var stats: SystemStats = .zero
 
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
-    /// Private serial queue for all `sample()` dispatches.
-    /// Serial prevents concurrent `prevTicks` mutations that would skew CPU %.
     private let samplingQueue = DispatchQueue(
         label: "RunnerBar.SystemStatsViewModel.sampling",
         qos: .utility
     )
 
-    /// Intentionally empty — lifecycle is controlled via `start()` / `stop()`.
-    init() {
-        // no-op: timer starts only when the popover appears
-    }
-
+    init() {}
     deinit { timer?.invalidate() }
 
-    // MARK: - Lifecycle
-
-    /// Starts the 2-second sampling loop. Safe to call multiple times — invalidates
-    /// any existing timer before creating a new one. Performs an eager first sample.
     func start() {
         timer?.invalidate()
         samplingQueue.async { [weak self] in self?.sample() }
@@ -105,7 +85,6 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
-    /// Stops the sampling loop. Called in `.onDisappear` to avoid background polling.
     func stop() {
         timer?.invalidate()
         timer = nil
@@ -113,10 +92,6 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - CPU
 
-    /// Computes CPU utilisation as a percentage over the last polling interval.
-    ///
-    /// Uses `host_processor_info()` to read per-core tick counters and diffs
-    /// against the previous sample. Returns 0 on the first call.
     private func cpuPercent() -> Double {
         var cpuInfo: processor_info_array_t?
         var msgType = natural_t(0)
@@ -155,9 +130,6 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Memory
 
-    /// Returns memory usage in GB using `host_statistics64()` and `sysctl hw.memsize`.
-    ///
-    /// Reports active + wired pages only, matching `ci-dash.py` measurement.
     private func memStats() -> MemoryStats {
         var vmStats = vm_statistics64()
         var count = mach_msg_type_number_t(
@@ -181,19 +153,24 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Disk
 
-    /// Returns disk usage in GB and free percentage using URL resource values.
-    ///
-    /// Uses `volumeAvailableCapacityForImportantUsage` (the value Finder shows).
-    /// Falls back to a safe all-free default on error.
+    /// Uses `volumeAvailableCapacityKey` (NOT `volumeAvailableCapacityForImportantUsageKey`).
+    /// ⚠️ PERMISSION GUARD: `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC
+    /// dialogs ("access data from other apps", Apple Music) on every popover open.
+    /// `volumeAvailableCapacityKey` is TCC-free and returns a slightly more conservative
+    /// free-space estimate, which is fine for display purposes.
+    /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         guard let values = try? url.resourceValues(forKeys: [
             .volumeTotalCapacityKey,
-            .volumeAvailableCapacityForImportantUsageKey
+            .volumeAvailableCapacityKey
         ]),
         let totalBytes = values.volumeTotalCapacity,
-        let freeBytes = values.volumeAvailableCapacityForImportantUsage
+        let freeBytes = values.volumeAvailableCapacity
         else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
         let total = Double(totalBytes) / gigabytes
         let free = Double(freeBytes) / gigabytes
@@ -204,8 +181,6 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Sample
 
-    /// Assembles a new `SystemStats` snapshot and publishes it on the main thread.
-    /// Must be called on `samplingQueue` to avoid `prevTicks` data races.
     private func sample() {
         let cpu = cpuPercent()
         let mem = memStats()

@@ -10,20 +10,24 @@ import SwiftUI
 // Confirmed correct by issue #377, Just10/MEMORY.md, status-bar-app-position-warning.md
 //
 // Rules (ALL must hold simultaneously):
-//   sizingOptions = []        — set ONCE at init. NEVER .preferredContentSize.
-//                               .preferredContentSize pushes on every SwiftUI layout
-//                               pass while popover is shown → re-anchor → left jump.
+//   sizingOptions = []        — NEVER .preferredContentSize.
+//                               .preferredContentSize auto-pushes on every SwiftUI
+//                               layout pass while shown → re-anchor → left jump.
 //   openPopover()             — the ONE place contentSize is set.
-//                               Restore nav state first, then fittingSize, then
-//                               contentSize, then show(). That order is mandatory.
+//                               Order: restore nav state → layoutSubtreeIfNeeded()
+//                               → read fittingSize → set contentSize → show().
 //   navigate()                — rootView swap ONLY. ZERO size changes. Forever.
-//   onChange / polling        — NEVER touches sizing. Icon update only.
+//   .frame(width: 420)        — MUST wrap every non-main nav-state view.
+//                               With sizingOptions=[] SwiftUI does not auto-push
+//                               width, so each view must declare its own width or
+//                               it collapses to zero → layout crash in Settings.
+//   onChange / polling        — NEVER touches sizing. Status icon update only.
 //
 // ❌ NEVER set popover.contentSize anywhere except openPopover() before show()
 // ❌ NEVER call hc.view.setFrameSize() anywhere except openPopover() before show()
 // ❌ NEVER change sizingOptions away from []
-// ❌ NEVER use sizingOptions = .preferredContentSize — causes jump on every poll
-// ❌ NEVER add KVO / observers that write back to contentSize
+// ❌ NEVER use sizingOptions = .preferredContentSize
+// ❌ NEVER remove .frame(width: 420) from nav-state view factories
 // ❌ NEVER add sizing calls to navigate()
 // ❌ NEVER remove @MainActor from the AppDelegate class declaration.
 // ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded.
@@ -52,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
+    /// Canonical popover width. Must match .frame(width:) on every nav-state view.
+    /// ❌ NEVER change without updating ALL view factories simultaneously.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
     private static let minHeight: CGFloat = 120
@@ -68,9 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let controller = NSHostingController(rootView: mainView())
         // ⚠️ sizingOptions = [] is mandatory.
-        // .preferredContentSize causes NSPopover to re-anchor on every SwiftUI
-        // layout pass while shown → left jump on every data poll.
-        // Confirmed by issue #377 and Just10/MEMORY.md.
+        // .preferredContentSize causes re-anchor on every SwiftUI layout pass → left jump.
         // ❌ NEVER change to .preferredContentSize.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -88,8 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
-            // ❌ NOTHING ELSE here — no contentSize, no setFrameSize, no navigate().
-            // Fires while popover is shown → any sizing call here → left jump.
+            // ❌ NOTHING ELSE here. No sizing. No navigate(). Fires while shown → jump.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
             // comment is removed is major major major.
@@ -171,6 +176,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
+        // ⚠️ .frame(width: canonicalWidth) is REQUIRED with sizingOptions=[].
+        // Without it, SwiftUI has no width constraint and the view collapses → crash.
+        // ❌ NEVER remove this .frame(width:) call.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+        // is major major major.
         return AnyView(ActionDetailView(
             group: group,
             onBack: { [weak self] in
@@ -187,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                     }
                 }
             }
-        ))
+        ).frame(width: Self.canonicalWidth))
     }
 
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
@@ -202,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
             }
-        ))
+        ).frame(width: Self.canonicalWidth))
     }
 
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
@@ -214,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
             }
-        ))
+        ).frame(width: Self.canonicalWidth))
     }
 
     private func detailView(job: ActiveJob) -> AnyView {
@@ -229,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.logView(job: job, step: step))
             }
-        ))
+        ).frame(width: Self.canonicalWidth))
     }
 
     private func settingsView() -> AnyView {
@@ -240,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.navigate(to: self.mainView())
             },
             store: observable
-        ))
+        ).frame(width: Self.canonicalWidth))
     }
 
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
@@ -252,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
             }
-        ))
+        ).frame(width: Self.canonicalWidth))
     }
 
     private func validatedView(for state: NavState) -> AnyView? {
@@ -286,7 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - Navigation
 
     /// Pure rootView swap. ZERO size changes. Forever.
-    /// ❌ NEVER add contentSize or setFrameSize here — fires while shown → jump.
+    /// ❌ NEVER add contentSize or setFrameSize here.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -305,12 +316,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// The ONE place contentSize is set.
-    /// Order is mandatory — do not reorder:
-    ///   1. Restore saved nav state into rootView
-    ///   2. Force layout so fittingSize reflects the restored view
+    /// The ONE place contentSize is set. Order is mandatory:
+    ///   1. Restore saved nav state
+    ///   2. layoutSubtreeIfNeeded() so fittingSize reflects restored view
     ///   3. Read fittingSize, clamp, set contentSize + setFrameSize
-    ///   4. show() — no sizing after this line, ever
+    ///   4. show() — nothing touches sizing after this line
     ///
     /// ❌ NEVER set contentSize or setFrameSize after show()
     /// ❌ NEVER move sizing into navigate() or onChange
@@ -332,17 +342,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             hostingController.rootView = restored
         }
 
-        // Step 2: force layout.
+        // Step 2: force layout pass before measuring.
         hostingController.view.layoutSubtreeIfNeeded()
 
-        // Step 3: measure, clamp, apply — before show().
+        // Step 3: measure and clamp height. Width is always canonicalWidth.
         let h = hostingController.view.fittingSize.height
         let height = min(max(h > 0 ? h : 300, Self.minHeight), Self.maxHeight)
         let size = NSSize(width: Self.canonicalWidth, height: height)
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
 
-        // Step 4: show — nothing touches sizing after this.
+        // Step 4: show. Nothing touches sizing after this.
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
     }
