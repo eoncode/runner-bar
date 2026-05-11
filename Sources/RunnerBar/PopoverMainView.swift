@@ -34,7 +34,9 @@ import SwiftUI
 //                   .groupStatus (GroupStatus), .conclusion (String?), .title, .repo, .jobs
 //   PieProgressView: init(progress: Double?, color: Color, size: CGFloat = 8)
 //                   ❌ NO status: parameter — it does not exist
-//   ActiveJob:      .name, .status, .conclusion, .elapsedLabel — NO .progress property
+//   ActiveJob:      .name, .status, .conclusion, .elapsed (String computed var)
+//                   ❌ NO .elapsedLabel — the property is .elapsed
+//                   ❌ NO .progress — use .progressFraction
 //   Runner:         .status is String ("online"/"offline"), .busy (Bool), .displayStatus (String)
 //                   ❌ NO .statusLabel, NO enum cases .online/.offline/.busy
 
@@ -363,9 +365,9 @@ private struct InlineJobRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // ActiveJob has NO .progress property.
-            // Use nil (indeterminate dot) — the spinner indicates the job is running.
-            PieProgressView(progress: nil, color: .blue)
+            // ActiveJob has NO .progress property — use .progressFraction for the pie.
+            // For inline running jobs, nil (indeterminate) is intentional.
+            PieProgressView(progress: job.progressFraction, color: .blue)
                 .frame(width: 10, height: 10)
                 .padding(.leading, 28)
             Text(job.name)
@@ -373,11 +375,10 @@ private struct InlineJobRowView: View {
                 .foregroundColor(.secondary)
                 .lineLimit(1)
             Spacer()
-            if let elapsed = job.elapsedLabel {
-                Text(elapsed)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundColor(.secondary)
-            }
+            // ✅ ActiveJob.elapsed is the correct property — NOT .elapsedLabel
+            Text(job.elapsed)
+                .font(.caption2.monospacedDigit())
+                .foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 3)
     }
