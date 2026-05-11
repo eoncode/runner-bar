@@ -3,8 +3,11 @@ import AppKit
 // MARK: - PanelChrome
 //
 // Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly.
-// Pattern adapted from iSapozhnik/Popover (MIT):
-//   https://github.com/iSapozhnik/Popover/blob/master/Sources/Popover/PopoverWindowBackgroundView.swift
+// Source research:
+//   - INPopoverController (Indragie Karunaratne): uses appendBezierPathWithPoints:count:3
+//     which is STRAIGHT LINES. arrowSize = {23.0, 12.0}. This is the canonical clone.
+//   - iSapozhnik/Popover: uses Bezier curves with arrowWidth=62 — decorative, NOT NSPopover.
+//   - Real NSPopover arrow = clean isoceles triangle with STRAIGHT sides.
 //
 // KEY FACTS (do not change without understanding all of them):
 //
@@ -17,24 +20,16 @@ import AppKit
 //    CAShapeLayer mask on fx.layer, rebuilt on every layout() + arrowX change.
 //    ❌ NEVER set cornerRadius or masksToBounds on fx.layer directly.
 //
-// 3. Arrow shape: narrow tent/chevron matching real NSPopover.
-//    arrowWidth = 13pt (base width), arrowHeight = 9pt.
-//    Sides are drawn with cubic Bezier curves where BOTH control points
-//    stay near the base Y. This keeps sides nearly straight and meets
-//    at the tip to form a clean sharp caret — NOT a round blob.
+// 3. Arrow shape: STRAIGHT-SIDED isoceles triangle, matching real NSPopover.
+//    arrowWidth = 20pt, arrowHeight = 11pt (calibrated to macOS Sequoia).
+//    Draw with .line(to:) — NO Bezier curves on the arrow sides.
 //
-//    ❌ NEVER move controlPoint2 to tipY in the middle of the arrow width —
-//    it creates the half-circle blob. Both CPs must stay near baseY.
-//
-//    Arrow right side:
-//      start = (cX+hw, baseY)   end = (cX, tipY)
-//      cp1   = (cX+hw, overlapY+1)   <- near base, same X as start
-//      cp2   = (cX+2,  tipY-1)       <- 2pt right of centre, 1pt below tip
-//
-//    Arrow left side (mirror):
-//      start = (cX, tipY)       end = (cX-hw, baseY)
-//      cp1   = (cX-2,  tipY-1)       <- 2pt left of centre, 1pt below tip
-//      cp2   = (cX-hw, overlapY+1)   <- near base, same X as end
+//    ❌ NEVER use .curve(to:controlPoint1:controlPoint2:) for arrow sides.
+//      Any cubic Bezier on the sides causes bowing (half-circle or convex bulge).
+//    ✅ Use .line(to:) only:
+//      path.line(to: NSPoint(x: cX + hw, y: baseY))   // right base
+//      path.line(to: NSPoint(x: cX,      y: tipY))    // tip
+//      path.line(to: NSPoint(x: cX - hw, y: baseY))   // left base
 //
 // 4. arrowX: panel-local X of arrow tip centre.
 //    Set by AppDelegate.resizeAndRepositionPanel() after screen-edge clamping.
@@ -55,8 +50,8 @@ import AppKit
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression is major major major.
 
-let arrowHeight:  CGFloat = 9    // matches NSPopover (Sequoia)
-let arrowWidth:   CGFloat = 13   // matches NSPopover base width (Sequoia ~13pt)
+let arrowHeight:  CGFloat = 11   // matches NSPopover Sequoia (~INPopoverController 12pt)
+let arrowWidth:   CGFloat = 20   // matches NSPopover Sequoia (~INPopoverController 23pt)
 let cornerRadius: CGFloat = 10   // matches NSPopover exact value (macOS Sequoia)
 
 // MARK: - NSBezierPath → CGPath (macOS 13 compatible)
@@ -183,24 +178,22 @@ final class PanelChromeView: NSView {
 
     /// Full chrome shape: rounded-rect body + upward arrow caret.
     ///
-    /// Arrow geometry (see KEY FACTS #3 above for full diagram):
-    ///   Both cubic Bezier control points stay near baseY so the sides are
-    ///   nearly straight lines converging to a clean sharp point at tipY.
+    /// Arrow = straight-sided isoceles triangle (3 line segments, no curves).
+    /// This matches the real NSPopover and INPopoverController's implementation.
     ///
-    /// ❌ NEVER move either CP to tipY in the middle of the arrow width —
-    ///   that causes the half-circle blob (the sides bow outward).
+    /// ❌ NEVER add .curve() to the arrow sides — any Bezier causes bowing.
     private func chromePath(in rect: NSRect) -> NSBezierPath {
         let w  = rect.width
         let h  = rect.height
         let r  = cornerRadius
-        let hw = arrowWidth / 2   // 6.5pt half-width
+        let hw = arrowWidth / 2   // 10pt half-width
 
         // Clamp arrow centre so caret never overlaps the rounded body corners.
         let cX = max(hw + r, min(arrowX, w - hw - r))
 
-        let baseY    = h - arrowHeight   // top of body, base of arrow
+        let baseY    = h - arrowHeight   // top of body / base of arrow
         let tipY     = h                 // very tip of arrow
-        let overlapY = baseY - 1         // 1pt inside body — no gap at join
+        let overlapY = baseY - 1         // 1pt into body — no visible gap at join
 
         let path = NSBezierPath()
 
@@ -217,21 +210,16 @@ final class PanelChromeView: NSView {
         path.appendArc(withCenter: NSPoint(x: w - r, y: baseY - r),
                        radius: r, startAngle: 0, endAngle: 90)
 
-        // Top edge: right segment to arrow right base
+        // Top edge: right segment up to arrow right base
         path.line(to: NSPoint(x: cX + hw, y: baseY))
 
-        // Arrow right side → tip
-        // CP1: same X as start, near base — anchors the foot of the arrow straight
-        // CP2: 2pt right of tip centre, 1pt below tip — guides into a sharp point
-        // ❌ NEVER set CP2 = (cX+hw/2, tipY) — bows out into half-circle
-        path.curve(to:            NSPoint(x: cX,     y: tipY),
-                   controlPoint1: NSPoint(x: cX + hw, y: overlapY + 1),
-                   controlPoint2: NSPoint(x: cX + 2,  y: tipY - 1))
-
-        // Arrow left side → left base (exact mirror of right side)
-        path.curve(to:            NSPoint(x: cX - hw, y: baseY),
-                   controlPoint1: NSPoint(x: cX - 2,  y: tipY - 1),
-                   controlPoint2: NSPoint(x: cX - hw, y: overlapY + 1))
+        // Arrow: three straight lines — right base → tip → left base
+        // overlapY (1pt inside body) ensures no gap between arrow and body fill.
+        // ❌ NEVER replace these with .curve() — curves cause bowing/half-circle.
+        path.line(to: NSPoint(x: cX + hw, y: overlapY))  // step into body
+        path.line(to: NSPoint(x: cX,      y: tipY))      // up to tip
+        path.line(to: NSPoint(x: cX - hw, y: overlapY))  // back to body
+        path.line(to: NSPoint(x: cX - hw, y: baseY))     // step out to base
 
         // Top edge: left segment → top-left corner
         path.line(to: NSPoint(x: r, y: baseY))
