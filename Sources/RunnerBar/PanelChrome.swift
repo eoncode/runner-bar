@@ -7,7 +7,11 @@ import AppKit
 //   2. Rounded corners (cornerRadius = 10  ← NSPopover exact value, macOS Sequoia)
 //   3. Arrow caret drawn at top, pointing up toward the status bar icon
 //      arrowHeight=9, arrowWidth=20, tipRadius=3  ← NSPopover exact values
-//      Arrow base is seamlessly merged into the rounded-rect path — no seam.
+//
+// Drawing approach: two CGPaths filled with the same colour in draw():
+//   • Path 1: CGPath(roundedRect:) for the body (bullet-proof corners)
+//   • Path 2: arrow triangle with addArc for the rounded tip
+// Filling both in one draw() call makes them appear seamless.
 //
 // Layout contract:
 //   chrome IS the panel contentView. AppKit owns chrome.frame.
@@ -24,8 +28,7 @@ import AppKit
 //
 // arrowX: panel-local X of arrow tip centre.
 //   Set by AppDelegate.resizeAndRepositionPanel() on every reposition.
-//   Formula: buttonScreenFrame.midX - panelFrame.minX
-//   (panelFrame is the CLAMPED frame after screen-edge correction)
+//   Formula: buttonScreenFrame.midX - panelFrame.minX  (after screen-clamp)
 //
 // ❌ NEVER remove this file.
 // ❌ NEVER add hosting-view frame overrides back to layout().
@@ -33,10 +36,10 @@ import AppKit
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression is major major major.
 
-let arrowHeight:  CGFloat = 9
-let arrowWidth:   CGFloat = 20
-let cornerRadius: CGFloat = 10   // NSPopover exact value (macOS Sequoia)
-let arrowTipRadius: CGFloat = 3  // NSPopover exact value
+let arrowHeight:    CGFloat = 9
+let arrowWidth:     CGFloat = 20
+let cornerRadius:   CGFloat = 10   // NSPopover exact value (macOS Sequoia)
+let arrowTipRadius: CGFloat = 3    // NSPopover exact value
 
 final class PanelChromeView: NSView {
 
@@ -86,72 +89,49 @@ final class PanelChromeView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
-        // ── Arrow + rounded-rect body merged into ONE seamless path ──────────
-        //
-        // We draw a single CGPath that is the rounded rectangle for the content
-        // area PLUS the upward-pointing arrow caret at the top, seamlessly joined.
-        // This eliminates any visible seam between the arrow base and the body.
-        //
-        // Coordinate system (macOS): y=0 at bottom, y=bounds.height at top.
-        // The arrow tip is at bounds.height (very top). The base of the arrow
-        // sits at baseY = bounds.height - arrowHeight = contentRect.maxY.
-        // The rounded-rect occupies (0,0) → (bounds.width, baseY).
-        //
-        // Clamp arrowX so the caret stays within the rounded corners.
-        let clampedX = max(arrowWidth / 2 + cornerRadius + arrowTipRadius,
-                           min(arrowX, bounds.width - arrowWidth / 2 - cornerRadius - arrowTipRadius))
-        let baseY = bounds.height - arrowHeight  // = contentRect.maxY
-        let tipY  = bounds.height                // top edge
-
-        // Half-width of arrow at its base.
-        let hw = arrowWidth / 2
-
-        // Build the path starting at the bottom-left arc of the rounded rect
-        // and working clockwise. At the top edge we insert the arrow caret
-        // seamlessly between the two top-corner arcs.
-        let r = cornerRadius
-        let w = bounds.width
-
-        let path = CGMutablePath()
-
-        // Bottom-left corner
-        path.move(to: CGPoint(x: r, y: 0))
-        path.addArc(center: CGPoint(x: r, y: r), radius: r,
-                    startAngle: .pi * 1.5, endAngle: .pi, clockwise: true)
-        // Left edge (bottom→top)
-        path.addLine(to: CGPoint(x: 0, y: baseY - r))
-        // Top-left corner
-        path.addArc(center: CGPoint(x: r, y: baseY - r), radius: r,
-                    startAngle: .pi, endAngle: .pi * 0.5, clockwise: true)
-
-        // Top edge left segment → arrow left base
-        path.addLine(to: CGPoint(x: clampedX - hw, y: baseY))
-
-        // Arrow: left base → tip (rounded) → right base
-        path.addArc(tangent1End: CGPoint(x: clampedX, y: tipY),
-                    tangent2End: CGPoint(x: clampedX + hw, y: baseY),
-                    radius: arrowTipRadius)
-
-        // Arrow right base → top-right corner
-        path.addLine(to: CGPoint(x: w - r, y: baseY))
-        // Top-right corner
-        path.addArc(center: CGPoint(x: w - r, y: baseY - r), radius: r,
-                    startAngle: .pi * 0.5, endAngle: 0, clockwise: true)
-        // Right edge (top→bottom)
-        path.addLine(to: CGPoint(x: w, y: r))
-        // Bottom-right corner
-        path.addArc(center: CGPoint(x: w - r, y: r), radius: r,
-                    startAngle: 0, endAngle: .pi * 1.5, clockwise: true)
-        // Bottom edge back to start
-        path.addLine(to: CGPoint(x: r, y: 0))
-        path.closeSubpath()
-
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let fill: NSColor = isDark
             ? NSColor(white: 0.18, alpha: 0.97)
             : NSColor(white: 0.95, alpha: 0.97)
         ctx.setFillColor(fill.cgColor)
-        ctx.addPath(path)
+
+        // ── Path 1: rounded-rect body ──────────────────────────────────
+        // CGPath(roundedRect:) is bulletproof — no manual arc winding needed.
+        let bodyRect = CGRect(x: 0, y: 0,
+                              width: bounds.width, height: bounds.height - arrowHeight)
+        let bodyPath = CGPath(roundedRect: bodyRect,
+                              cornerWidth: cornerRadius,
+                              cornerHeight: cornerRadius,
+                              transform: nil)
+        ctx.addPath(bodyPath)
+        ctx.fillPath()
+
+        // ── Path 2: arrow caret ────────────────────────────────────────
+        // Upward-pointing triangle with a rounded tip via addArc(tangent:).
+        // baseY = top of body = bottom of arrow zone.
+        // tipY  = bounds.height (very top of view in macOS coords).
+        //
+        // Clamp so the caret never bleeds into the rounded body corners.
+        let hw = arrowWidth / 2
+        let clampedX = max(hw + cornerRadius,
+                           min(arrowX, bounds.width - hw - cornerRadius))
+        let baseY = bounds.height - arrowHeight
+        let tipY  = bounds.height
+
+        // The arrow fills the gap between the two corner caps of the body at
+        // that X position, so it appears flush against the body top edge.
+        // A small overlap of 1pt covers any sub-pixel gap between body & arrow.
+        let overlapY = baseY + 1
+
+        let arrowPath = CGMutablePath()
+        arrowPath.move(to: CGPoint(x: clampedX - hw, y: overlapY))
+        arrowPath.addArc(tangent1End: CGPoint(x: clampedX,       y: tipY),
+                         tangent2End: CGPoint(x: clampedX + hw,  y: overlapY),
+                         radius: arrowTipRadius)
+        arrowPath.addLine(to: CGPoint(x: clampedX + hw, y: overlapY))
+        arrowPath.closeSubpath()
+
+        ctx.addPath(arrowPath)
         ctx.fillPath()
     }
 }
