@@ -21,15 +21,26 @@ import SwiftUI
 //         ❌ NEVER remove this cap — causes height explosion with many action groups.
 //         ❌ NEVER use a fixed constant — adapts to screen size.
 //
-// RULE 7 (#19): runnerRefreshTimer fires every 5 s on the main thread and calls
-//         LocalRunnerStore.shared.refresh() + store.reload() to keep CPU/MEM
-//         metrics live. The timer is started in .onAppear and invalidated in
-//         .onDisappear. ❌ NEVER remove this timer or the runner rows will show
-//         stale metrics while the system-stats header updates via SystemStatsViewModel.
+// RULE 7 (#19): runnerRefreshTimer fires every 5 s on the main thread.
+//         It calls LocalRunnerStore.shared.refresh() unconditionally (local
+//         runner CPU/MEM metrics — does NOT touch the SwiftUI @ObservedObject
+//         store, so it cannot trigger a hosting-controller layout pass or change
+//         intrinsicContentSize).
+//         store.reload() is ONLY called when !popoverIsOpen.
+//         ❌ NEVER call store.reload() while popoverIsOpen == true.
+//         ❌ Calling store.reload() while the popover is shown triggers a SwiftUI
+//            layout pass → hosting controller updates intrinsicContentSize →
+//            NSPopover re-anchors → side-jump every 5 s (confirmed by #377,
+//            Just10/MEMORY.md, and issues #375 #376).
+//         ❌ NEVER remove this timer or the runner rows will show stale CPU/MEM
+//            metrics while the system-stats header updates via SystemStatsViewModel.
 //
 // RULE 8 (#22): idealWidth is 480 (was 420). AppDelegate.fixedWidth is also 480.
 //         ❌ NEVER change one without changing the other or fittingSize height
 //         will be computed at the wrong width, wrapping text and mis-sizing the popover.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
 
 /// Root popover view — unified scrollable Actions list per issue #294.
 /// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
@@ -43,6 +54,13 @@ struct PopoverMainView: View {
     let onSelectAction: (ActionGroup) -> Void
     /// Called when the user taps the settings button.
     let onSelectSettings: () -> Void
+    /// Set by AppDelegate. When true, store.reload() is suppressed in the timer
+    /// to prevent SwiftUI layout passes while the popover is shown.
+    /// ❌ NEVER remove this property — it is the guard that prevents the 5s side-jump.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
+    var isPopoverOpen: Bool = false
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
@@ -110,9 +128,24 @@ struct PopoverMainView: View {
         runnerRefreshTimer = Timer.scheduledTimer(
             withTimeInterval: 5,
             repeats: true
-        ) { [self] _ in
+        ) { _ in
+            // ✅ LocalRunnerStore.shared.refresh() is SAFE unconditionally:
+            //    it updates LocalRunnerStore (CPU/MEM metrics for local runners)
+            //    but does NOT mutate the @ObservedObject `store` bound to this
+            //    view. No SwiftUI layout pass is triggered on the hosting controller.
             LocalRunnerStore.shared.refresh()
-            store.reload()
+            // ✅ store.reload() is gated behind !isPopoverOpen.
+            //    store.reload() mutates @ObservedObject store → SwiftUI layout pass
+            //    while popover is shown → hosting controller updates intrinsicContentSize
+            //    → NSPopover re-anchors → side-jump every 5 s.
+            //    ❌ NEVER call store.reload() while isPopoverOpen == true.
+            //    ❌ NEVER remove this guard. See RULE 7 in the regression guard above.
+            //    If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            //    ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+            //    comment is removed is major major major.
+            if !isPopoverOpen {
+                store.reload()
+            }
         }
     }
 
