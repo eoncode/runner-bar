@@ -10,25 +10,29 @@ import SwiftUI
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
 ///
-/// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.fixedWidth (480).
-/// ❌ NEVER change idealWidth without updating fixedWidth in AppDelegate.
+/// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.idealWidth (480).
+/// ❌ NEVER change idealWidth without updating idealWidth in AppDelegate.
 ///
-/// ⚠️ WIDTH RULES for Architecture 2 (sizingOptions=[] + remeasurePopover/fittingSize):
-///   Root VStack: .frame(idealWidth: 480, maxWidth: .infinity)
-///   This is REQUIRED in Architecture 2 so the VStack fills the fixed-width container
-///   that AppDelegate sets via setFrameSize(NSSize(width:480, ...)). Without maxWidth:.infinity
-///   the VStack collapses to minimum intrinsic width inside the 480pt frame → blank panel.
-///   The inner ScrollView content VStack also needs .frame(maxWidth: .infinity).
-///
-///   In Architecture 2, maxWidth:.infinity on the root frame is SAFE because sizingOptions=[]
-///   prevents auto-propagation to NSPopover. Width is controlled exclusively by
-///   AppDelegate.contentSize.width = fixedWidth (480). No re-anchor. No side-jump.
+/// ⚠️ WIDTH RULES (ref #377):
+///   Root VStack: .frame(idealWidth: 480)  — NO maxWidth — sets preferredContentSize.width = 480.
+///   ScrollView inner VStack: .frame(maxWidth: .infinity) — stretches content to fill 480pt.
+///   These are TWO DIFFERENT THINGS:
+///   - idealWidth on the root = what NSHostingController reports as preferredContentSize.width.
+///   - maxWidth:.infinity on the inner VStack = fills whatever space the ScrollView gives it.
+///   ❌ NEVER add maxWidth:.infinity to the ROOT VStack frame — with sizingOptions=.preferredContentSize
+///      this expands preferredContentSize.width to screen width → NSPopover re-anchors → side-jump.
+///   ❌ NEVER remove maxWidth:.infinity from the INNER ScrollView VStack — content collapses to zero.
 ///
 /// ⚠️ SCROLLVIEW HEIGHT RULE (ref #370):
-///   ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap.
-///   AppDelegate.remeasurePopover() reads fittingSize.height after setFrameSize(screenHeight).
-///   Without the cap, ScrollView reports full unbounded content height → oversized popover.
+///    ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap.
+///    Without it, full unbounded content height reports as preferredContentSize.height.
 /// ❌ NEVER remove the .frame(maxHeight:) from the ScrollView.
+///
+/// ⚠️ FIXEDSIZE RULE (ref #394):
+///    The inner content VStack MUST have .fixedSize(horizontal: false, vertical: true).
+///    Without it, SwiftUI cannot infer the natural height of the VStack when the outer
+///    frame has no explicit height → ScrollView renders with zero content height → blank panel.
+/// ❌ NEVER remove .fixedSize(horizontal: false, vertical: true) from the inner VStack.
 /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
 struct SettingsView: View {
     let onBack: () -> Void
@@ -65,15 +69,18 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ .frame(maxHeight:) on ScrollView is REQUIRED — do NOT remove.
-            // remeasurePopover() calls setFrameSize(screenHeight) then reads fittingSize.height.
-            // Without the cap, ScrollView reports full unbounded content height → oversized popover.
-            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-            // UNDER ANY CIRCUMSTANCE.
             ScrollView {
-                // ⚠️ maxWidth:.infinity on this inner VStack is REQUIRED.
-                // Fills the 480pt width that AppDelegate sets via setFrameSize.
-                // ❌ NEVER remove.
+                // ⚠️ maxWidth:.infinity + fixedSize(horizontal:false,vertical:true) are BOTH REQUIRED.
+                // maxWidth:.infinity  — stretches content to fill the 480pt ScrollView width.
+                // fixedSize(…,vertical:true) — forces the VStack to report its natural height
+                //   to the ScrollView. Without it, SwiftUI collapses height to zero when the
+                //   outer frame has no explicit height → blank Settings panel (ref #394).
+                // ❌ NEVER remove maxWidth:.infinity from THIS inner VStack.
+                // ❌ NEVER remove .fixedSize(horizontal: false, vertical: true) from THIS inner VStack.
+                // ❌ NEVER add maxWidth:.infinity to the OUTER root VStack frame.
+                // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+                // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+                // is major major major.
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
                     Divider()
@@ -90,19 +97,18 @@ struct SettingsView: View {
                     aboutSection
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 16)
             }
+            // ⚠️ REQUIRED height cap — prevents unbounded scroll content height.
+            // ❌ NEVER remove.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ⚠️ idealWidth:480 + maxWidth:.infinity — BOTH required for Architecture 2.
-        // idealWidth:480 = matches fixedWidth in AppDelegate, anchors fittingSize width measurement.
-        // maxWidth:.infinity = fills the setFrameSize(480) container so VStack isn’t blank.
-        // In Architecture 2 (sizingOptions=[]) maxWidth:.infinity is safe — it does NOT
-        // propagate to NSPopover.contentSize. Width is always controlled by AppDelegate.
-        // ❌ NEVER remove maxWidth:.infinity from this frame.
-        // ❌ NEVER change idealWidth without updating AppDelegate.fixedWidth.
+        // ⚠️ ROOT frame: idealWidth:480 ONLY. No maxWidth. No alignment.
+        // ❌ NEVER add maxWidth:.infinity here.
+        // ❌ NEVER change idealWidth without updating AppDelegate.idealWidth.
         // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
-        .frame(idealWidth: 480, maxWidth: .infinity)
+        .frame(idealWidth: 480)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
