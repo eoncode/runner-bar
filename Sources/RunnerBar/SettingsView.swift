@@ -15,6 +15,15 @@ import SwiftUI
 ///    preferredContentSize.height -> popover grows taller than screen or jumps.
 /// ❌ NEVER remove idealWidth:420 from root frame.
 /// ❌ NEVER remove maxHeight:.infinity — must fill existing popover frame after navigate().
+///
+/// LOCAL RUNNERS JUMP FIX (ref #377):
+///   localRunnerStore.refresh() completes AFTER first render. If rows appear/disappear
+///   after show(), preferredContentSize.height changes -> NSPopover re-anchors -> jump.
+///   Fix: the local runners section always renders at the SAME height regardless of
+///   loading state. A fixed-height placeholder (minHeight: 28) is shown while scanning
+///   so the section height is identical before and after refresh() completes.
+///   ❌ NEVER gate row display on hasLoadedOnce — that causes the height-change jump.
+///   ❌ NEVER hide the section or replace it with content of a different height after show().
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -27,7 +36,6 @@ struct SettingsView: View {
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
-    @State private var hasLoadedOnce = false
     @State private var runnerPendingRemoval: RunnerModel?
     @State private var runnerBeingConfigured: RunnerModel?
     @State private var showAddRunnerSheet = false
@@ -76,9 +84,6 @@ struct SettingsView: View {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
             localRunnerStore.refresh()
-        }
-        .onChange(of: localRunnerStore.isScanning) { scanning in
-            if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
             ScopeStore.shared.onMutate = nil
@@ -172,10 +177,20 @@ struct SettingsView: View {
                     .padding(.horizontal, 12).padding(.vertical, 4)
                     .background(Color.red.opacity(0.07))
             }
-            if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
+
+            // ⚠️ LOCAL RUNNERS JUMP FIX:
+            // Always render a container of the same minimum height (28pt = one row).
+            // While scanning: show a fixed-height placeholder so preferredContentSize
+            // does NOT change when rows appear. Height is stable before and after refresh().
+            // ❌ NEVER gate this on hasLoadedOnce — that causes the jump.
+            if localRunnerStore.isScanning && localRunnerStore.runners.isEmpty {
+                // Placeholder: same height as one runner row so popover height is stable.
+                Color.clear.frame(height: 28)
+            } else if localRunnerStore.runners.isEmpty {
                 Text("No local runners found")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
+                    .frame(minHeight: 28, alignment: .leading)
             } else {
                 ForEach(localRunnerStore.runners) { runner in localRunnerRow(runner) }
             }
