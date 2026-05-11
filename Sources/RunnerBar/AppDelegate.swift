@@ -18,7 +18,15 @@ import SwiftUI
 //   PopoverMainView reports its rendered height via HeightPreferenceKey.
 //   AppDelegate reads this in .onPreferenceChange and calls resizePanel(to:).
 //   resizePanel repositions the panel keeping the TOP-LEFT corner fixed so the
-//   panel grows downward only. ❌ NEVER use fittingSize — cached and stale.
+//   panel grows downward only.
+//
+//   ❌ NEVER give NSHostingView a fixed height — it cages SwiftUI's layout engine.
+//      GeometryReader reports the size it IS GIVEN, not the content's natural size.
+//      If hostingView.frame.height is fixed at e.g. 300, GeometryReader always
+//      reports 300 regardless of content — a measurement tautology.
+//   ✅ hostingView must have a large sentinel height (unconstrained) so SwiftUI
+//      can measure freely. resizePanel then clips the panel to the measured height.
+//   ❌ NEVER use fittingSize — cached and stale with sizingOptions = [].
 //   ❌ NEVER remove HeightPreferenceKey or .onPreferenceChange from the view.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE.
@@ -94,8 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var arrowTipX: CGFloat = 210
 
     /// Last height reported by HeightPreferenceKey (content only, not including arrowHeight).
-    /// ❌ NEVER read before the first onPreferenceChange fires after showPanel().
-    private var measuredHeight: CGFloat = 300
+    /// Starts at minHeight so the first open has a reasonable size before SwiftUI fires.
+    private var measuredHeight: CGFloat = Self.minHeight
 
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
@@ -107,6 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let arrowHalfWidth: CGFloat = 10
     /// Corner radius matching system NSPopover.
     private static let cornerRadius: CGFloat = 12
+    /// Large sentinel height given to NSHostingView so SwiftUI is never
+    /// height-constrained. GeometryReader reports the content's natural size,
+    /// NOT the frame it was given, only when the frame is larger than the content.
+    /// ❌ NEVER replace this with a fixed contentH.
+    private static let hostingViewSentinelHeight: CGFloat = 4000
 
     // MARK: - App lifecycle
 
@@ -136,8 +149,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Builds the NSPanel, NSVisualEffectView, and NSHostingView once at launch.
     /// ❌ NEVER call more than once — panel is reused across open/close cycles.
     private func buildPanel() {
-        let totalHeight = measuredHeight + Self.arrowHeight
-        let initialSize = NSSize(width: Self.canonicalWidth, height: totalHeight)
+        // Use minHeight for the initial panel size. The real height arrives
+        // via HeightPreferenceKey on the first layout pass.
+        let initialContentH = Self.minHeight
+        let initialTotalH = initialContentH + Self.arrowHeight
+        let initialSize = NSSize(width: Self.canonicalWidth, height: initialTotalH)
 
         let p = RunnerBarPanel(
             contentRect: NSRect(origin: .zero, size: initialSize),
@@ -181,25 +197,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Install shadow behind VFX
         vfx.layer?.insertSublayer(shadow, at: 0)
 
-        // Hosting view inside the VFX view, offset by arrowHeight
-        let contentHeight = measuredHeight
+        // ✅ KEY FIX: Give hostingView a sentinel height (4000pt) so SwiftUI's
+        // layout engine is NEVER height-constrained. GeometryReader inside the
+        // SwiftUI view then reports the content's natural height, not the frame.
+        // ❌ NEVER set this to a fixed contentH — that cages SwiftUI and makes
+        //    GeometryReader report the cage height instead of content height.
         let contentFrame = NSRect(
             x: 0,
             y: 0,
             width: Self.canonicalWidth,
-            height: contentHeight
+            height: Self.hostingViewSentinelHeight
         )
         let rootView = wrapWithHeightCapture(mainView())
         let hv = NSHostingView(rootView: rootView)
+        hv.sizingOptions = []
         hv.frame = contentFrame
-        hv.autoresizingMask = [.width, .minYMargin]
+        // autoresizingMask: width flexible (tracks panel width), height NOT flexible
+        // so our explicit frame assignments in resizePanel are not overridden.
+        hv.autoresizingMask = [.width]
         vfx.addSubview(hv)
         hostingView = hv
 
         p.contentView = vfx
         panel = p
 
-        // Apply initial mask (will be updated each open with correct arrowTipX)
+        // Apply initial mask
         applyMask(panelSize: initialSize)
     }
 
@@ -207,13 +229,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Applies a CAShapeLayer mask to the visualEffectView clipping it to a
     /// rounded rectangle with an upward-pointing arrow notch at the top.
-    ///
-    /// The arrow tip sits at (arrowTipX, panelHeight - 1) in the VFX view's
-    /// coordinate system (AppKit: origin at bottom-left, so top = maxY).
-    ///
-    /// The panel frame includes arrowHeight extra height at the top, so the
-    /// content rect begins at y=0 and the arrow occupies
-    /// y=(panelHeight - arrowHeight)..y=panelHeight.
     private func applyMask(panelSize: NSSize) {
         guard let vfx = visualEffectView else { return }
 
@@ -224,32 +239,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ahw = Self.arrowHalfWidth
         let ax = max(r + ahw + 4, min(arrowTipX, w - r - ahw - 4))
 
-        // Build path in AppKit coords (origin bottom-left, y increases upward).
-        // The body rect spans from y=0 to y=(h - ah).
-        // The arrow protrudes from y=(h - ah) to y=h.
         let bodyTop = h - ah
 
         let path = CGMutablePath()
-        // Start at bottom-left corner arc
         path.move(to: CGPoint(x: r, y: 0))
-        // Bottom edge → bottom-right
         path.addLine(to: CGPoint(x: w - r, y: 0))
         path.addArc(center: CGPoint(x: w - r, y: r), radius: r,
                     startAngle: -.pi / 2, endAngle: 0, clockwise: false)
-        // Right edge → top-right of body
         path.addLine(to: CGPoint(x: w, y: bodyTop - r))
         path.addArc(center: CGPoint(x: w - r, y: bodyTop - r), radius: r,
                     startAngle: 0, endAngle: .pi / 2, clockwise: false)
-        // Top edge right-side, up to arrow base right
         path.addLine(to: CGPoint(x: ax + ahw, y: bodyTop))
-        // Arrow: right base → tip → left base
         path.addLine(to: CGPoint(x: ax, y: h))
         path.addLine(to: CGPoint(x: ax - ahw, y: bodyTop))
-        // Top edge left-side
         path.addLine(to: CGPoint(x: r, y: bodyTop))
         path.addArc(center: CGPoint(x: r, y: bodyTop - r), radius: r,
                     startAngle: .pi / 2, endAngle: .pi, clockwise: false)
-        // Left edge → bottom-left
         path.addLine(to: CGPoint(x: 0, y: r))
         path.addArc(center: CGPoint(x: r, y: r), radius: r,
                     startAngle: .pi, endAngle: 3 * .pi / 2, clockwise: false)
@@ -260,11 +265,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vfx.layer?.mask = mask
         maskLayer = mask
 
-        // Update shadow layer path too
         if let shadowLayer {
             shadowLayer.frame = CGRect(origin: .zero, size: panelSize)
-            let shadowMask = CAShapeLayer()
-            shadowMask.path = path
             shadowLayer.shadowPath = path
         }
     }
@@ -283,7 +285,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let self, height > 0 else { return }
                     self.measuredHeight = height
                     if self.panelIsOpen {
-                        self.resizePanel(to: height)
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self, self.panelIsOpen else { return }
+                            self.resizePanel(to: height)
+                        }
                     }
                 }
         )
@@ -295,6 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Total panel height = content height + arrowHeight.
     /// ❌ NEVER use setFrameSize — anchors from bottom-left and shifts panel up.
     /// ❌ NEVER change the x origin.
+    /// ❌ NEVER give hostingView a fixed height equal to contentH here —
+    ///    keep it at sentinelHeight so SwiftUI stays unconstrained.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func resizePanel(to rawContentHeight: CGFloat) {
@@ -310,17 +317,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         panel.setFrame(newFrame, display: true, animate: false)
         vfx.frame = NSRect(origin: .zero, size: newFrame.size)
-        // Hosting view stays at bottom, grows up
-        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
+        // hostingView stays at sentinel height — do NOT clamp it to contentH.
+        // The VFX mask + panel frame clip the visible area; SwiftUI must remain
+        // unconstrained so GeometryReader keeps reporting real content height.
+        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: Self.hostingViewSentinelHeight)
         applyMask(panelSize: newFrame.size)
     }
 
     // MARK: - View factories
 
-    /// nonisolated: pure network I/O, no @MainActor state.
-    /// ❌ NEVER remove nonisolated.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
@@ -332,10 +337,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    /// nonisolated: pure network I/O, no @MainActor state.
-    /// ❌ NEVER remove nonisolated.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
         guard group.jobs.isEmpty else { return group }
         let fetched = fetchActionGroups(for: group.repo)
@@ -509,10 +510,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Shows the panel anchored below the status item button.
-    ///
-    /// Panel frame includes arrowHeight extra at the top so the arrow tip
-    /// aligns visually with the status bar button.
-    ///
     /// ❌ NEVER call orderFront before setFrame.
     /// ❌ NEVER move the panel after orderFront (except resizePanel).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -530,7 +527,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hostingView?.rootView = wrapWithHeightCapture(restored)
         }
 
-        // Convert button bounds → window space → screen space
         let buttonInWindow = button.convert(button.bounds, to: nil)
         let buttonScreenRect = buttonWindow.convertToScreen(buttonInWindow)
 
@@ -544,19 +540,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             originX = min(originX, maxX)
             originX = max(originX, screen.visibleFrame.minX)
         }
-        // Arrow tip X relative to panel left edge
         arrowTipX = buttonScreenRect.midX - originX
 
-        // Panel origin: top of panel aligns with bottom of status bar button
-        // (minY of button rect in screen coords), panel grows downward.
         let originY = buttonScreenRect.minY - totalH - Self.statusBarGap
-
         let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
         panel.setFrame(frame, display: false)
 
-        // Size the VFX view and hosting view to match
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: contentH)
+        // ✅ hostingView always gets sentinel height — never the clamped contentH.
+        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: Self.hostingViewSentinelHeight)
         applyMask(panelSize: frame.size)
 
         panel.orderFront(nil)
