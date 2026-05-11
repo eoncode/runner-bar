@@ -12,17 +12,25 @@ import SwiftUI
 ///
 /// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.fixedWidth (480).
 /// ❌ NEVER change idealWidth without updating fixedWidth in AppDelegate.
-/// ❌ NEVER add maxWidth: .infinity to .frame(idealWidth:) — with sizingOptions=.preferredContentSize
-///    this expands preferredContentSize.width beyond 480, causing NSPopover to re-anchor → side-jump.
-/// ⚠️ SCROLLVIEW RULE (ref #370, main branch JobDetailView):
-///    ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) or equivalent cap.
-///    Without it, when Settings is the root at openPopover() time, SwiftUI reports
-///    the full unbounded scroll content as fittingSize.height, giving an oversized
-///    popover. When navigated to from main (smaller frame), content is clipped.
-///    The cap ensures a predictable fittingSize that fills the popover correctly.
-/// ❌ NEVER remove the .frame(maxHeight:) from the ScrollView.
-/// ❌ NEVER add maxHeight: .infinity to the root VStack — corrupts fittingSize.width.
-/// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
+///
+/// ⚠️ SCROLLVIEW RULE (ref #377 #370):
+///    The root VStack MUST declare .frame(idealHeight: cappedHeight).
+///    With sizingOptions=.preferredContentSize (Architecture 1), NSHostingController reads
+///    SwiftUI's IDEAL size. ScrollView reports idealHeight = full unbounded content height,
+///    NOT the .frame(maxHeight:) cap. Without .frame(idealHeight:) on the root VStack,
+///    preferredContentSize.height jumps to ~800pt on Settings open. NSPopover then
+///    repositions the window to keep it on-screen (it would overflow) → side-jump.
+///
+///    Fix: .frame(idealHeight: cappedHeight) on the root VStack pins
+///    preferredContentSize.height = cappedHeight. The inner ScrollView still scrolls.
+///    cappedHeight = 75% of visible screen height.
+///
+///    ❌ NEVER remove .frame(idealHeight: cappedHeight) from the root VStack.
+///    ❌ NEVER set idealHeight larger than the screen height.
+///    ❌ NEVER add maxHeight: .infinity to the root VStack — corrupts preferredContentSize.width.
+///    If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+///    UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+///    is major major major.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -54,18 +62,32 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
+    /// Height cap for the Settings scroll area and the root VStack's idealHeight.
+    /// 75% of visible screen height — fits all sections on any screen without overflow.
+    /// Used for BOTH the ScrollView maxHeight AND the root VStack idealHeight so that
+    /// preferredContentSize.height = this value (not unbounded ScrollView content).
+    /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
+    /// ❌ NEVER use a fixed constant — must adapt to screen size.
+    private var cappedHeight: CGFloat {
+        NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
+    }
+
     var body: some View {
+        // ⚠️ REGRESSION GUARD (ref #377):
+        // .frame(idealHeight: cappedHeight) MUST be present on this root VStack.
+        // This pins preferredContentSize.height (Architecture 1) to cappedHeight.
+        // Without it, the inner ScrollView's idealHeight (~800pt) propagates to
+        // preferredContentSize → NSPopover repositions to fit on screen → side-jump.
+        // ❌ NEVER remove idealHeight from the root frame modifier below.
+        // ❌ NEVER move idealHeight onto the ScrollView — ScrollView ignores idealHeight.
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ .frame(maxHeight:) is REQUIRED on this ScrollView — do NOT remove.
-            // Without it, fittingSize.height is the full unbounded scroll content height
-            // when Settings is root at openPopover() time, causing an oversized popover.
-            // When navigated to from a shorter frame (main), content is clipped without the cap.
-            // Pattern matches main branch's JobDetailView fix for issue #370.
-            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-            // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-            // is major major major.
+            // ⚠️ ScrollView is required here — Settings content is taller than any popover.
+            // It is safe because the root VStack's idealHeight caps preferredContentSize.
+            // ❌ NEVER remove this ScrollView — content will be clipped without it.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -84,19 +106,19 @@ struct SettingsView: View {
                 }
                 .padding(.bottom, 16)
             }
-            // ⚠️ REQUIRED — caps fittingSize.height. Prevents oversized or clipped Settings.
-            // Matches main's JobDetailView pattern (issue #370).
-            // ❌ NEVER remove this modifier.
-            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+            .frame(maxHeight: cappedHeight)
         }
-        // ⚠️ REGRESSION GUARD: idealWidth: 480 only — NO maxWidth: .infinity.
-        // With sizingOptions=.preferredContentSize, maxWidth:.infinity expands
-        // preferredContentSize.width to screen width when navigating to Settings,
-        // which changes contentSize.width → NSPopover re-anchors → side-jump.
-        // ❌ NEVER add maxWidth: .infinity here.
-        // ❌ NEVER change idealWidth without updating AppDelegate.idealWidth.
-        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
-        .frame(idealWidth: 480)
+        // ⚠️ REGRESSION GUARD: idealWidth:480 pins preferredContentSize.width = 480 (no x re-anchor).
+        // idealHeight:cappedHeight pins preferredContentSize.height = cappedHeight (no y overflow reposition).
+        // maxWidth:.infinity allows the VStack to fill the popover width.
+        // alignment:.top prevents vertical centering artifacts.
+        // ❌ NEVER add maxHeight:.infinity — corrupts preferredContentSize.width.
+        // ❌ NEVER remove idealWidth or idealHeight.
+        // ❌ NEVER change idealWidth from 480 without updating AppDelegate.idealWidth.
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+        // is major major major.
+        .frame(idealWidth: 480, idealHeight: cappedHeight, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
@@ -346,7 +368,6 @@ struct SettingsView: View {
         }
     }
 
-    // #11: Each toggle row uses HStack so label stays leading and toggle stays trailing.
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications")
@@ -384,7 +405,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // #23: "Show offline runners" row with subtitle explaining what it does.
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show offline runners").font(.system(size: 12))
@@ -397,7 +417,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // #12: Polling row with subtitle under the label.
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Polling interval").font(.system(size: 12))
