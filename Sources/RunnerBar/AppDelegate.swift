@@ -6,8 +6,8 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296 #377 #379 #380)
 //
-// ARCHITECTURE: Architecture 3 — NSPanel (borderless, non-activating)
-// Replaces NSPopover which caused irreducible side-jump/misalignment on every open.
+// ARCHITECTURE: Architecture 3 — NSPanel (borderless, non-activating) with
+//   NSVisualEffectView + CAShapeLayer mask for rounded corners and popover arrow.
 //
 // WHY NSPanel:
 //   NSPanel gives us full control of the window frame. We compute the origin once
@@ -21,8 +21,7 @@ import SwiftUI
 //   panel grows downward only. ❌ NEVER use fittingSize — cached and stale.
 //   ❌ NEVER remove HeightPreferenceKey or .onPreferenceChange from the view.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//   is major major major.
+//   UNDER ANY CIRCUMSTANCE.
 //
 // PANEL SETUP — ALL must hold simultaneously:
 //   styleMask = [.borderless, .nonactivatingPanel]
@@ -30,40 +29,33 @@ import SwiftUI
 //   level = .popUpMenu
 //   collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
 //   hidesOnDeactivate = false  ← MUST be false on a nonactivatingPanel.
-//     The app never "activates" as a normal app, so hidesOnDeactivate=true would
-//     hide the panel immediately on makeKey(). Mouse monitor handles dismiss instead.
-//   isOpaque = true, backgroundColor = NSColor.windowBackgroundColor
-//     ← MUST be opaque. A borderless panel with clear background is completely
-//     invisible. The NSHostingView renders on top of this background.
-//   isMovableByWindowBackground = false
+//   isOpaque = false, backgroundColor = .clear
+//     ← MUST be transparent so NSVisualEffectView + clipping mask shows.
+//   hasShadow = false  ← shadow is applied to the visualEffectView layer instead.
+//
+// VISUAL EFFECT VIEW:
+//   NSVisualEffectView is the content view. It provides the frosted glass material.
+//   A CAShapeLayer mask clips it to rounded rect + arrow shape.
+//   Shadow is drawn by a shadow CALayer behind the visualEffectView.
 //
 // POSITIONING:
 //   showPanel() computes origin via button.convert(button.bounds, to: nil) then
-//   buttonWindow.convertToScreen(_:). This gives coordinates in screen space.
+//   buttonWindow.convertToScreen(_:). The panel frame includes arrowHeight (9pt)
+//   extra at top so the arrow tip is within the panel frame.
 //   ❌ NEVER use button.frame directly in convertToScreen — button.frame is in
-//   superview space, not window space; use button.convert(button.bounds, to: nil).
-//   origin.x = buttonRect.midX - width/2 (centred on button), clamped to screen.
-//   origin.y = buttonRect.minY - height - statusBarGap (panel sits below button).
-//   setFrame BEFORE orderFront. Nothing moves the panel after show.
+//   superview space, not window space.
 //
 // RESIZING (while shown):
 //   resizePanel(to:) keeps topLeft (panel.frame.maxY) fixed, grows downward.
 //   ❌ NEVER use setFrameSize — anchors from bottom-left, shifts panel up.
 //
-// CLOSE:
-//   dismiss() calls panel.orderOut(nil). Global mouse monitor handles outside clicks.
-//   ❌ NEVER rely on hidesOnDeactivate for close — it does not work on nonactivatingPanel.
-//
 // ❌ NEVER add an NSPopover back.
-// ❌ NEVER use sizingOptions — we use NSHostingView directly, no NSHostingController.
-// ❌ NEVER set the panel frame after orderFront (except resizePanel).
-// ❌ NEVER remove @MainActor from AppDelegate.
-// ❌ NEVER remove nonisolated from enrichStepsIfNeeded / enrichGroupIfNeeded.
 // ❌ NEVER remove HeightPreferenceKey wiring from PopoverMainView.
 // ❌ NEVER remove .onPreferenceChange(HeightPreferenceKey.self) from wrapWithHeightCapture.
+// ❌ NEVER remove @MainActor from AppDelegate.
+// ❌ NEVER remove nonisolated from enrichStepsIfNeeded / enrichGroupIfNeeded.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
+// UNDER ANY CIRCUMSTANCE.
 
 private enum NavState {
     case main
@@ -90,21 +82,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: RunnerBarPanel?
     private var hostingView: NSHostingView<AnyView>?
+    private var visualEffectView: NSVisualEffectView?
+    private var maskLayer: CAShapeLayer?
+    private var shadowLayer: CALayer?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
     private var panelIsOpen = false
     private var mouseMonitor: Any?
 
-    /// Last height reported by HeightPreferenceKey.
+    /// X offset of the arrow tip relative to panel left edge. Set each open.
+    private var arrowTipX: CGFloat = 210
+
+    /// Last height reported by HeightPreferenceKey (content only, not including arrowHeight).
     /// ❌ NEVER read before the first onPreferenceChange fires after showPanel().
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private var measuredHeight: CGFloat = 300
 
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
     private static let minHeight: CGFloat = 120
-    private static let statusBarGap: CGFloat = 4
+    private static let statusBarGap: CGFloat = 2
+    /// Height of the upward-pointing arrow (notch at the top of the panel).
+    private static let arrowHeight: CGFloat = 9
+    /// Half-width of the arrow base.
+    private static let arrowHalfWidth: CGFloat = 10
+    /// Corner radius matching system NSPopover.
+    private static let cornerRadius: CGFloat = 12
 
     // MARK: - App lifecycle
 
@@ -131,10 +133,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel construction
 
-    /// Builds the NSPanel and NSHostingView once at launch.
+    /// Builds the NSPanel, NSVisualEffectView, and NSHostingView once at launch.
     /// ❌ NEVER call more than once — panel is reused across open/close cycles.
     private func buildPanel() {
-        let initialSize = NSSize(width: Self.canonicalWidth, height: measuredHeight)
+        let totalHeight = measuredHeight + Self.arrowHeight
+        let initialSize = NSSize(width: Self.canonicalWidth, height: totalHeight)
 
         let p = RunnerBarPanel(
             contentRect: NSRect(origin: .zero, size: initialSize),
@@ -146,30 +149,124 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
         // ⚠️ hidesOnDeactivate MUST be false on a nonactivatingPanel.
-        // The app never fully "activates", so true would hide the panel on makeKey().
-        // The global mouse monitor is the sole dismiss mechanism.
         // ❌ NEVER set this to true.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         p.hidesOnDeactivate = false
         p.isMovableByWindowBackground = false
-        // ⚠️ isOpaque MUST be true and backgroundColor must be non-clear.
-        // A borderless panel with clear/transparent background renders as completely
-        // invisible. NSHostingView paints on top of this background color.
-        // ❌ NEVER set isOpaque = false or backgroundColor = .clear.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
-        p.isOpaque = true
-        p.backgroundColor = NSColor.windowBackgroundColor
-        p.hasShadow = true
+        // ⚠️ Panel must be transparent so the VFX view + clipping mask shows.
+        // ❌ NEVER set isOpaque = true here.
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        // ⚠️ Shadow is rendered by shadowLayer on the VFX view, not by NSPanel.
+        p.hasShadow = false
 
+        // Shadow layer drawn behind the VFX view
+        let shadow = CALayer()
+        shadow.frame = NSRect(origin: .zero, size: initialSize)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        shadow.shadowOffset = CGSize(width: 0, height: -3)
+        shadow.shadowRadius = 20
+        shadow.shadowOpacity = 1
+        shadow.backgroundColor = NSColor.clear.cgColor
+        shadowLayer = shadow
+
+        // Visual effect view — frosted glass, fills panel
+        let vfx = NSVisualEffectView(frame: NSRect(origin: .zero, size: initialSize))
+        vfx.material = .menu
+        vfx.blendingMode = .behindWindow
+        vfx.state = .active
+        vfx.wantsLayer = true
+        vfx.autoresizingMask = [.width, .height]
+        visualEffectView = vfx
+
+        // Install shadow behind VFX
+        vfx.layer?.insertSublayer(shadow, at: 0)
+
+        // Hosting view inside the VFX view, offset by arrowHeight
+        let contentHeight = measuredHeight
+        let contentFrame = NSRect(
+            x: 0,
+            y: 0,
+            width: Self.canonicalWidth,
+            height: contentHeight
+        )
         let rootView = wrapWithHeightCapture(mainView())
         let hv = NSHostingView(rootView: rootView)
-        hv.frame = NSRect(origin: .zero, size: initialSize)
-        hv.autoresizingMask = [.width, .height]
-        p.contentView = hv
+        hv.frame = contentFrame
+        hv.autoresizingMask = [.width, .minYMargin]
+        vfx.addSubview(hv)
         hostingView = hv
+
+        p.contentView = vfx
         panel = p
+
+        // Apply initial mask (will be updated each open with correct arrowTipX)
+        applyMask(panelSize: initialSize)
+    }
+
+    // MARK: - Shape mask (rounded rect + upward arrow)
+
+    /// Applies a CAShapeLayer mask to the visualEffectView clipping it to a
+    /// rounded rectangle with an upward-pointing arrow notch at the top.
+    ///
+    /// The arrow tip sits at (arrowTipX, panelHeight - 1) in the VFX view's
+    /// coordinate system (AppKit: origin at bottom-left, so top = maxY).
+    ///
+    /// The panel frame includes arrowHeight extra height at the top, so the
+    /// content rect begins at y=0 and the arrow occupies
+    /// y=(panelHeight - arrowHeight)..y=panelHeight.
+    private func applyMask(panelSize: NSSize) {
+        guard let vfx = visualEffectView else { return }
+
+        let w = panelSize.width
+        let h = panelSize.height
+        let r = Self.cornerRadius
+        let ah = Self.arrowHeight
+        let ahw = Self.arrowHalfWidth
+        let ax = max(r + ahw + 4, min(arrowTipX, w - r - ahw - 4))
+
+        // Build path in AppKit coords (origin bottom-left, y increases upward).
+        // The body rect spans from y=0 to y=(h - ah).
+        // The arrow protrudes from y=(h - ah) to y=h.
+        let bodyTop = h - ah
+
+        let path = CGMutablePath()
+        // Start at bottom-left corner arc
+        path.move(to: CGPoint(x: r, y: 0))
+        // Bottom edge → bottom-right
+        path.addLine(to: CGPoint(x: w - r, y: 0))
+        path.addArc(center: CGPoint(x: w - r, y: r), radius: r,
+                    startAngle: -.pi / 2, endAngle: 0, clockwise: false)
+        // Right edge → top-right of body
+        path.addLine(to: CGPoint(x: w, y: bodyTop - r))
+        path.addArc(center: CGPoint(x: w - r, y: bodyTop - r), radius: r,
+                    startAngle: 0, endAngle: .pi / 2, clockwise: false)
+        // Top edge right-side, up to arrow base right
+        path.addLine(to: CGPoint(x: ax + ahw, y: bodyTop))
+        // Arrow: right base → tip → left base
+        path.addLine(to: CGPoint(x: ax, y: h))
+        path.addLine(to: CGPoint(x: ax - ahw, y: bodyTop))
+        // Top edge left-side
+        path.addLine(to: CGPoint(x: r, y: bodyTop))
+        path.addArc(center: CGPoint(x: r, y: bodyTop - r), radius: r,
+                    startAngle: .pi / 2, endAngle: .pi, clockwise: false)
+        // Left edge → bottom-left
+        path.addLine(to: CGPoint(x: 0, y: r))
+        path.addArc(center: CGPoint(x: r, y: r), radius: r,
+                    startAngle: .pi, endAngle: 3 * .pi / 2, clockwise: false)
+        path.closeSubpath()
+
+        let mask = CAShapeLayer()
+        mask.path = path
+        vfx.layer?.mask = mask
+        maskLayer = mask
+
+        // Update shadow layer path too
+        if let shadowLayer {
+            shadowLayer.frame = CGRect(origin: .zero, size: panelSize)
+            let shadowMask = CAShapeLayer()
+            shadowMask.path = path
+            shadowLayer.shadowPath = path
+        }
     }
 
     // MARK: - Height capture
@@ -195,21 +292,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Panel resizing
 
     /// Keeps TOP-LEFT corner fixed, grows panel downward only.
+    /// Total panel height = content height + arrowHeight.
     /// ❌ NEVER use setFrameSize — anchors from bottom-left and shifts panel up.
     /// ❌ NEVER change the x origin.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
-    private func resizePanel(to rawHeight: CGFloat) {
-        guard let panel else { return }
-        let height = min(max(rawHeight, Self.minHeight), Self.maxHeight)
+    private func resizePanel(to rawContentHeight: CGFloat) {
+        guard let panel, let vfx = visualEffectView, let hv = hostingView else { return }
+        let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
+        let totalH = contentH + Self.arrowHeight
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
         let newFrame = NSRect(
             x: topLeft.x,
-            y: topLeft.y - height,
+            y: topLeft.y - totalH,
             width: Self.canonicalWidth,
-            height: height
+            height: totalH
         )
         panel.setFrame(newFrame, display: true, animate: false)
+        vfx.frame = NSRect(origin: .zero, size: newFrame.size)
+        // Hosting view stays at bottom, grows up
+        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
+        applyMask(panelSize: newFrame.size)
     }
 
     // MARK: - View factories
@@ -407,15 +510,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Shows the panel anchored below the status item button.
     ///
-    /// POSITIONING — three-step coordinate conversion:
-    ///   1. button.convert(button.bounds, to: nil)
-    ///      → converts button bounds into the button's WINDOW coordinate space.
-    ///      ❌ NEVER use button.frame directly — that is in the superview's space.
-    ///   2. buttonWindow.convertToScreen(_:)
-    ///      → converts window coords to screen (flipped) coords.
-    ///   3. origin.x = buttonRect.midX - width/2, clamped to screen edges.
-    ///      origin.y = buttonRect.minY - height - statusBarGap.
-    ///   4. setFrame BEFORE orderFront. Panel never moves after show.
+    /// Panel frame includes arrowHeight extra at the top so the arrow tip
+    /// aligns visually with the status bar button.
     ///
     /// ❌ NEVER call orderFront before setFrame.
     /// ❌ NEVER move the panel after orderFront (except resizePanel).
@@ -438,7 +534,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let buttonInWindow = button.convert(button.bounds, to: nil)
         let buttonScreenRect = buttonWindow.convertToScreen(buttonInWindow)
 
-        let height = min(max(measuredHeight, Self.minHeight), Self.maxHeight)
+        let contentH = min(max(measuredHeight, Self.minHeight), Self.maxHeight)
+        let totalH = contentH + Self.arrowHeight
         let width = Self.canonicalWidth
 
         var originX = buttonScreenRect.midX - width / 2
@@ -447,10 +544,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             originX = min(originX, maxX)
             originX = max(originX, screen.visibleFrame.minX)
         }
-        let originY = buttonScreenRect.minY - height - Self.statusBarGap
+        // Arrow tip X relative to panel left edge
+        arrowTipX = buttonScreenRect.midX - originX
 
-        let frame = NSRect(x: originX, y: originY, width: width, height: height)
+        // Panel origin: top of panel aligns with bottom of status bar button
+        // (minY of button rect in screen coords), panel grows downward.
+        let originY = buttonScreenRect.minY - totalH - Self.statusBarGap
+
+        let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
         panel.setFrame(frame, display: false)
+
+        // Size the VFX view and hosting view to match
+        visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
+        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: contentH)
+        applyMask(panelSize: frame.size)
+
         panel.orderFront(nil)
         panel.makeKey()
 

@@ -74,36 +74,50 @@ struct LocalRunnerScanner {
     }
 
     private func scanRunnerJSONFiles() -> [RunnerModel] {
-        // ⚠️ PERMISSION GUARD: search only ~ (home directory).
-        // ❌ NEVER add /opt or /usr/local — those paths trigger macOS TCC
-        //    automation permission dialogs every time Settings opens.
-        //    Runners installed outside ~ are uncommon and not worth the UX cost.
+        // ⚠️ PERMISSION GUARD: ONLY scan explicit known-safe directories.
+        // ❌ NEVER use `find ~` — traversing ~ hits ~/Desktop, ~/Documents, ~/Pictures
+        //    which triggers macOS TCC permission dialogs (Desktop access, Photos Library,
+        //    Apple Music etc.) on EVERY scan. This causes the spam permission popups.
+        // ❌ NEVER scan /opt or /usr/local either — those trigger automation TCC dialogs.
+        // Safe paths: ~/actions-runner* globs and ~/.runner (bare install).
+        // Runners almost universally install to ~/actions-runner or ~/actions-runner-<name>.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
-        let raw = shell(
-            "find ~ -maxdepth 6 -name '.runner' 2>/dev/null",
-            timeout: 15
-        )
-        guard !raw.isEmpty else { return [] }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
 
-        return raw.components(separatedBy: "\n")
-            .filter { !$0.isEmpty }
-            .compactMap { path -> RunnerModel? in
-                let url = URL(fileURLWithPath: path)
-                guard let data = try? Data(contentsOf: url),
-                      let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
-                else { return nil }
-                let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
-                return RunnerModel(
-                    runnerName: name,
-                    gitHubUrl: json.gitHubUrl,
-                    agentId: json.agentId,
-                    workFolder: json.workFolder,
-                    installPath: url.deletingLastPathComponent().path,
-                    isRunning: false
-                )
+        // Build candidate dirs: all ~/actions-runner* directories + bare ~/
+        var candidateDirs: [String] = []
+
+        // enumerate only the home directory's immediate children (depth 1)
+        if let top = try? FileManager.default.contentsOfDirectory(atPath: home) {
+            for entry in top {
+                if entry.hasPrefix("actions-runner") {
+                    candidateDirs.append((home as NSString).appendingPathComponent(entry))
+                }
             }
+        }
+        // Also check bare home (some installs put .runner directly in ~/)
+        candidateDirs.append(home)
+
+        var results: [RunnerModel] = []
+        for dir in candidateDirs {
+            let runnerFile = (dir as NSString).appendingPathComponent(".runner")
+            guard FileManager.default.fileExists(atPath: runnerFile),
+                  let data = try? Data(contentsOf: URL(fileURLWithPath: runnerFile)),
+                  let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
+            else { continue }
+            let name = json.runnerName ?? (dir as NSString).lastPathComponent
+            results.append(RunnerModel(
+                runnerName: name,
+                gitHubUrl: json.gitHubUrl,
+                agentId: json.agentId,
+                workFolder: json.workFolder,
+                installPath: dir,
+                isRunning: false
+            ))
+        }
+        return results
     }
 
     private func scanLiveServices() -> Set<String> {
