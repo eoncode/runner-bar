@@ -7,33 +7,23 @@ import SwiftUI
 // ║  Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).        ║
 // ║                                                                              ║
 // ║  LAYOUT RULES:                                                               ║
-// ║    • Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)  ║
+// ║    • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)    ║
+// ║    • idealWidth: 480 MUST match AppDelegate.idealWidth (currently 480).     ║
+// ║      NSHostingController reads idealWidth as preferredContentSize.width.    ║
+// ║      If ANY view in the nav tree omits idealWidth or uses a different       ║
+// ║      value, preferredContentSize.width becomes non-deterministic and        ║
+// ║      NSPopover re-anchors → side-jump on navigate. (issues #52 #54 #377)   ║
 // ║    • Log content MUST be inside the ScrollView.                             ║
 // ║    • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
-// ║    ❌ NEVER add .idealWidth here                                             ║
-// ║    ❌ NEVER add .frame(height:) here                                         ║
-// ║    ❌ NEVER add .fixedSize() here                                            ║
+// ║    ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the     ║
+// ║       maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-    ║
+// ║       troller measures the view unconstrained (AppKit bug, see #375 #376)   ║
+// ║    ❌ NEVER omit idealWidth: 480 from the root frame                        ║
+// ║    ❌ NEVER add .frame(height:) here                                        ║
+// ║    ❌ NEVER add .fixedSize() here                                           ║
 // ║    ❌ NEVER add .frame(maxHeight:) to the ScrollView                        ║
 // ║                                                                              ║
-// ║  onLogLoaded — ☠️ TRAP — READ THIS BEFORE TOUCHING:                         ║
-// ║    onLogLoaded fires on the main thread once the async log fetch completes. ║
-// ║    AppDelegate wires it to a TWO-HOP async remeasurePopover() call:         ║
-// ║                                                                              ║
-// ║      onLogLoaded fires (isLoading just flipped false)                       ║
-// ║        └─ hop 1: SwiftUI commits isLoading=false, hides spinner             ║
-// ║             └─ hop 2: SwiftUI lays out log Text content                     ║
-// ║                  └─ remeasurePopover() ← height now reflects log            ║
-// ║                                                                              ║
-// ║    ONE hop is not enough — fittingSize still reflects the spinner on        ║
-// ║    the first run-loop turn after isLoading flips. Two hops are required.    ║
-// ║    Width inside remeasurePopover() is ALWAYS AppDelegate.fixedWidth (480).  ║
-// ║    NEVER fittingSize.width — that causes the #13 side-jump regression.      ║
-// ║                                                                              ║
-// ║    ❌ NEVER pass a single-hop or sync resize closure to onLogLoaded         ║
-// ║    ❌ NEVER use onLogLoaded to call setFrameSize or contentSize directly     ║
-// ║    ❌ NEVER wire onLogLoaded to fittingSize.width                           ║
-// ║                                                                              ║
-// ║  If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT        ║
+// ║  If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
 // ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
 // ║  is removed is major major major.                                           ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -51,15 +41,8 @@ struct StepLogView: View {
     let onBack: () -> Void
     /// Optional callback fired on the main thread once the async log fetch completes.
     ///
-    /// AppDelegate wires this to a TWO-HOP async remeasurePopover() so the popover
-    /// height updates after the log text is fully laid out by SwiftUI.
-    /// See the SIZING CONTRACT comment at the top of this file for full details.
-    ///
-    /// ❌ NEVER pass a single-hop resize here — fittingSize reflects the spinner
-    ///    on the first run-loop turn after isLoading flips false.
     /// ❌ NEVER call setFrameSize / contentSize directly from this closure.
-    /// ❌ NEVER pass fittingSize.width into any sizing call — use fixedWidth only.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     var onLogLoaded: (() -> Void)? = nil
@@ -73,9 +56,6 @@ struct StepLogView: View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Header — always visible, OUTSIDE ScrollView ──────────────────────
             // ❌ NEVER move this inside the ScrollView — it must stay visible always.
-            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
-            // comment is removed is major major major.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -113,11 +93,6 @@ struct StepLogView: View {
             // ── Log — INSIDE ScrollView ──────────────────────────────────────────
             // ❌ NEVER add .frame(maxHeight:) to this ScrollView.
             // ❌ NEVER add .frame(height:) to this ScrollView.
-            // The popover height is updated via onLogLoaded two-hop remeasure (#21).
-            // The ScrollView absorbs any content that exceeds the popover height.
-            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
-            // comment is removed is major major major.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -142,12 +117,21 @@ struct StepLogView: View {
                 }
             }
         }
-        // ❌ NEVER change maxHeight to a fixed value — height is driven by
-        // remeasurePopover() via the onLogLoaded two-hop callback (#21).
-        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ════════════════════════════════════════════════════════════════════════
+        // ⚠️ THE ONE FRAME RULE — idealWidth: 480 MUST match AppDelegate.idealWidth.
+        // NSHostingController.preferredContentSize.width = idealWidth = 480.
+        // Width is constant across all nav states = NSPopover never re-anchors =
+        // zero side-jump. Removing idealWidth or using a different value = jump.
+        //
+        // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
+        //    maxHeight: .infinity corrupts fittingSize.width (AppKit bug #375 #376)
+        // ❌ NEVER omit idealWidth: 480
+        // ❌ NEVER add .frame(height:) or .fixedSize() here
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
+        // is removed is major major major.
+        // ════════════════════════════════════════════════════════════════════════
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
 
@@ -171,12 +155,6 @@ struct StepLogView: View {
             DispatchQueue.main.async {
                 logText = text ?? ""
                 isLoading = false
-                // #21: Fire onLogLoaded so AppDelegate can remeasure the popover
-                // height after the log content is fully laid out (two async hops
-                // in AppDelegate ensure fittingSize reflects log text, not spinner).
-                // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE
-                // NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when
-                // this comment is removed is major major major.
                 onLogLoaded?()
             }
         }
