@@ -21,6 +21,14 @@ import SwiftUI
 //   and every onChange) — each propagation while isShown==true = side-jump.
 //   This is the root cause confirmed by Just10/MEMORY.md and issue #377.
 //
+//   CRITICAL: store.reload() MUST NOT be called while popoverIsOpen == true.
+//   Even with sizingOptions = [], store.reload() mutates @ObservedObject store
+//   → SwiftUI layout pass → hosting controller updates intrinsicContentSize
+//   → NSPopover re-anchors → side-jump. This was the remaining jump source after
+//   the sizingOptions fix, caused by the 5s runnerRefreshTimer in PopoverMainView.
+//   PopoverMainView receives isPopoverOpen from mainView() and gates reload()
+//   behind !isPopoverOpen. NEVER pass isPopoverOpen: false when popover is shown.
+//
 // OPEN SEQUENCE — must match this order exactly (❌ do NOT reorder steps):
 //   1. popoverIsOpen = true
 //   2. observable.reload()          ← loads live data into mainView()
@@ -59,6 +67,9 @@ import SwiftUI
 // ❌ NEVER move navigate(to: restored) before show() — it belongs AFTER show().
 // ❌ NEVER restore stepLog or actionStepLog via savedNavState.
 //    StepLogView: maxHeight:.infinity → fittingSize = 0 before log loads.
+// ❌ NEVER pass isPopoverOpen: false to mainView() when popover is shown.
+//    PopoverMainView gates store.reload() behind !isPopoverOpen. Passing false
+//    disables the guard and restores the 5s side-jump regression.
 // ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 480).
 // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -93,6 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var savedNavState: NavState?
 
     // ⚠️ MUST be set to true BEFORE reload() on open. NEVER remove.
+    // Also passed into PopoverMainView as isPopoverOpen to gate store.reload()
+    // in the 5s runnerRefreshTimer. NEVER pass a stale value.
     // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     // is major major major.
@@ -173,6 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // Reconstruct mainView() with isPopoverOpen: false so the timer
+            // resumes store.reload() calls after the popover has closed.
             self.hostingController?.rootView = self.mainView()
         }
     }
@@ -192,6 +207,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Navigation level 1: runner status + jobs + actions.
+    /// ⚠️ isPopoverOpen: popoverIsOpen MUST be passed here.
+    /// PopoverMainView gates store.reload() in its 5s timer behind !isPopoverOpen.
+    /// Passing the wrong value re-introduces the 5s side-jump regression.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -214,7 +235,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onSelectSettings: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
-            }
+            },
+            isPopoverOpen: popoverIsOpen
         ))
     }
 
@@ -458,6 +480,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let rawHeight = hostingController.view.fittingSize.height
 
         // Step 4: reset root to mainView() BEFORE show() — proven stable anchor pattern.
+        // mainView() is constructed with isPopoverOpen: true so the timer guard
+        // is active from the moment the popover opens.
         // If we measured from a restored view above, this resets back so show()
         // anchors from the standard mainView() root.
         hostingController.rootView = mainView()
