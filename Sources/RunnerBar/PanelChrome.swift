@@ -4,22 +4,22 @@ import AppKit
 //
 // Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly.
 //
-// Arrow shape: concave sides (iSapozhnik w/6 fractions) + 2pt rounded tip arc.
+// Arrow shape: concave sides (iSapozhnik w/4 fractions) + 4pt rounded tip arc.
 //
 // The NSPopover arrow has:
 //   - Slightly concave sides (curving inward) — iSapozhnik cubic Bezier formula.
-//   - A small rounded tip (~2pt radius arc) — NOT a sharp point.
+//   - A small rounded tip (~4pt radius arc) — NOT a sharp point.
 //
 // Right side bezier: start=(cX+hw, baseY)  end=(cX+tipR, tipY)
-//   cp1 = (cX + arrowWidth/6, baseY)  <- concave foot anchor
+//   cp1 = (cX + arrowWidth/4, baseY)  <- concave foot anchor
 //   cp2 = (cX + tipR,         tipY)   <- arrives horizontally into arc (no kink)
 //
-// Tip arc: appendArc(center=(cX, tipY-tipR), radius=tipR, 0°→1800°)
+// Tip arc: appendArc(center=(cX, tipY-tipR), radius=tipR, 0°→180°)
 //   Sweeps the rounded apex counter-clockwise.
 //
 // Left side bezier (mirror): start=(cX-tipR, tipY)  end=(cX-hw, baseY)
 //   cp1 = (cX - tipR,         tipY)   <- leaves horizontally from arc
-//   cp2 = (cX - arrowWidth/6, baseY)  <- concave foot anchor
+//   cp2 = (cX - arrowWidth/4, baseY)  <- concave foot anchor
 //
 // ❌ NEVER remove the tip arc — causes sharp spike.
 // ❌ NEVER widen CP offsets to hw/2 (=10pt) — causes half-circle blob.
@@ -164,7 +164,7 @@ final class PanelChromeView: NSView {
     //
     // Full chrome: rounded-rect body + upward arrow with concave sides + rounded tip.
     //
-    // The tip uses appendArc(radius: tipR=2) at the apex.
+    // The tip uses appendArc(radius: tipR=4) at the apex.
     // Both bezier side curves arrive/depart horizontally at the arc tangent
     // points (cX ± tipR, tipY) so there is no kink where curve meets arc.
     //
@@ -178,15 +178,18 @@ final class PanelChromeView: NSView {
         let hw   = arrowWidth / 2
 
         // tipR: radius of the rounded apex arc.
-        // 2pt closely matches the native NSPopover rounded tip on Sonoma/Sequoia.
+        // 4pt closely matches the native NSPopover rounded tip on Sonoma/Sequoia.
         // ❌ NEVER remove or set to 0 — causes sharp spike.
+        // ❌ NEVER increase above hw (10pt) — arc would exceed arrow half-width.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let tipR: CGFloat = 2
+        let tipR: CGFloat = 4
 
-        // cpBase: iSapozhnik w/6 fraction anchors concave inward slope at foot.
-        // ❌ NEVER change to hw/2 — half-circle blob.
+        // cpBase: iSapozhnik w/4 fraction anchors concave inward slope at foot.
+        // w/4 = 5pt gives a softer, wider concave curve matching NSPopover.
+        // ❌ NEVER change to hw/2 (=10pt) — half-circle blob.
+        // ❌ NEVER change to w/6 (=3.33pt) — too narrow/pointy.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let cpBase = arrowWidth / 6      // 3.33pt
+        let cpBase = arrowWidth / 4      // 5pt
 
         let cX    = max(hw + r, min(arrowX, w - hw - r))
         let baseY = h - arrowHeight
