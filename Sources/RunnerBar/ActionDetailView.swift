@@ -43,6 +43,16 @@ import SwiftUI
 //   ✔ .lineLimit(N) on Text — fine
 //   ✔ .frame(maxWidth: .infinity, alignment: .leading) inside ScrollView — fine
 //
+// SCROLLVIEW maxHeight CAP — REQUIRED (ref #370):
+//   The ScrollView wrapping the jobs list MUST have a .frame(maxHeight:) cap.
+//   Without it, with sizingOptions=.preferredContentSize, SwiftUI reports the
+//   full unbounded content height as preferredContentSize.height on navigate().
+//   NSPopover re-anchors on any preferredContentSize change → side-jump.
+//   The cap is computed from NSScreen.main so it adapts to any screen size.
+//   ✅ ALWAYS keep .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+//   ❌ NEVER remove the maxHeight cap from the ScrollView.
+//   ❌ NEVER use a fixed constant — must adapt to screen size.
+//
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
 //   Broken by: adding .frame(maxHeight: .infinity) to root (multiple times)
@@ -50,6 +60,7 @@ import SwiftUI
 //   Bug ref:   issue #294, commits 318da0b, fd1c960
 //   #22 note:  idealWidth was 420, bumped to 480 to match AppDelegate.fixedWidth after
 //              fixedWidth was widened in commit #22. NEVER let these diverge again.
+//   #370 fix:  ScrollView maxHeight cap added to prevent side-jump on navigate.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -171,6 +182,10 @@ struct ActionDetailView: View {
 
             // ── Jobs list: MUST be inside ScrollView ─────────────────────────────
             // NEVER move the header above outside into here.
+            // ⚠️ maxHeight cap is REQUIRED — see regression guard above (ref #370).
+            // Without it, preferredContentSize.height = full content height on navigate
+            // → NSPopover re-anchors → side-jump.
+            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
@@ -222,6 +237,10 @@ struct ActionDetailView: View {
                 // ✔ .frame(maxWidth: .infinity) inside ScrollView is SAFE.
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents side-jump on navigate.
+            // Matches SettingsView and PopoverMainView pattern (issue #370).
+            // ❌ NEVER remove this modifier.
+            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         // ════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.

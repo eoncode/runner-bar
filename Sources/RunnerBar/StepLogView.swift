@@ -21,7 +21,11 @@ import SwiftUI
 // ║    ❌ NEVER omit idealWidth: 480 from the root frame                        ║
 // ║    ❌ NEVER add .frame(height:) here                                        ║
 // ║    ❌ NEVER add .fixedSize() here                                           ║
-// ║    ❌ NEVER add .frame(maxHeight:) to the ScrollView                        ║
+// ║    ✅ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap       ║
+// ║       Without it, with sizingOptions=.preferredContentSize, SwiftUI         ║
+// ║       reports the full log text height as preferredContentSize.height on    ║
+// ║       navigate → NSPopover re-anchors → side-jump. (ref #370)              ║
+// ║    ❌ NEVER remove the .frame(maxHeight:) from the ScrollView               ║
 // ║                                                                              ║
 // ║  If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
 // ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
@@ -91,8 +95,12 @@ struct StepLogView: View {
             Divider()
 
             // ── Log — INSIDE ScrollView ──────────────────────────────────────────
-            // ❌ NEVER add .frame(maxHeight:) to this ScrollView.
-            // ❌ NEVER add .frame(height:) to this ScrollView.
+            // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
+            // Without it, with sizingOptions=.preferredContentSize, SwiftUI reports
+            // the full log text height as preferredContentSize.height on navigate()
+            // → NSPopover re-anchors → side-jump.
+            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
+            // ❌ NEVER use a fixed constant — must adapt to screen size.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -116,6 +124,10 @@ struct StepLogView: View {
                         .padding(.vertical, 8)
                 }
             }
+            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents side-jump on navigate.
+            // Matches SettingsView and PopoverMainView pattern (issue #370).
+            // ❌ NEVER remove this modifier.
+            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         // ════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — idealWidth: 480 MUST match AppDelegate.idealWidth.
