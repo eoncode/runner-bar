@@ -7,20 +7,23 @@ import SwiftUI
 // ║  Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).        ║
 // ║                                                                              ║
 // ║  LAYOUT RULES:                                                               ║
-// ║    • Root: .frame(maxWidth:.infinity,                                       ║
-// ║                   maxHeight: maxViewHeight,   ← screen-height cap           ║
-// ║                   alignment:.top)                                           ║
-// ║      maxViewHeight = NSScreen.main.visibleFrame.height - 24                 ║
-// ║      The 24 pt offset is the macOS menu-bar height. This ensures the        ║
-// ║      popover never overflows the visible screen while still showing as      ║
-// ║      much log as possible.                                                  ║
+// ║    • Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)  ║
+// ║      ❌ NEVER add a finite maxHeight to the ROOT frame — any finite          ║
+// ║         maxHeight on a maxWidth:.infinity root makes fittingSize.width      ║
+// ║         non-deterministic, which causes AppKit to recompute the anchor X    ║
+// ║         and produce the #13 horizontal side-jump.                           ║
 // ║    • Log content MUST be inside the ScrollView.                             ║
+// ║    • ScrollView MUST have .frame(maxHeight: maxLogHeight) to bound          ║
+// ║         fittingSize.height. Without a cap, fittingSize returns the full     ║
+// ║         unbounded log height (1000pt+), the popover overflows the screen,   ║
+// ║         and the log appears cut off. The cap is on the ScrollView only —    ║
+// ║         NOT the root — so it does not affect fittingSize.width.             ║
 // ║    • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
 // ║    ❌ NEVER add .idealWidth here                                             ║
-// ║    ❌ NEVER add .frame(height:) to the root (clips to fixed size)           ║
+// ║    ❌ NEVER add .frame(height:) to the root or ScrollView                   ║
 // ║    ❌ NEVER add .fixedSize() here                                            ║
-// ║    ❌ NEVER change maxHeight to .infinity — fittingSize will return the      ║
-// ║       full unbounded log height, making the popover grow off-screen.        ║
+// ║    ❌ NEVER add a finite maxHeight to the ROOT .frame()                      ║
+// ║         (causes #13 side-jump via non-deterministic fittingSize.width)      ║
 // ║                                                                              ║
 // ║  onLogLoaded — ☠️ TRAP — READ THIS BEFORE TOUCHING:                         ║
 // ║    onLogLoaded fires on the main thread once the async log fetch completes. ║
@@ -47,9 +50,10 @@ import SwiftUI
 
 /// Shows the raw log text for a single `JobStep`.
 ///
-/// Placed by `AppDelegate.navigate()` (rootView swap). Fits the visible screen
-/// height; `ScrollView` absorbs overflow so all log lines are reachable.
-/// Fetches log on `onAppear` via a background thread.
+/// Placed by `AppDelegate.navigate()` (rootView swap). The ScrollView is capped
+/// to the visible screen height so the popover never overflows while all log
+/// lines remain reachable by scrolling. Fetches log on `onAppear` via a
+/// background thread.
 struct StepLogView: View {
     /// The job that owns this step.
     let job: ActiveJob
@@ -77,28 +81,30 @@ struct StepLogView: View {
     /// True while the background fetch is in-flight.
     @State private var isLoading = true
 
-    // ⚠️ SIZING CONTRACT — maxViewHeight
-    // This is the maximum height this view (and therefore the popover) will grow to.
-    // It equals the visible screen height minus the menu-bar (24 pt), so the popover
-    // always fits on screen without being clipped by macOS.
+    // ⚠️ SIZING CONTRACT — maxLogHeight (applied to ScrollView ONLY, never root)
     //
-    // WHY NOT .infinity:
-    //   With maxHeight:.infinity, fittingSize.height returns the full layout height
-    //   of the log Text — potentially thousands of points for a long log. AppKit
-    //   then sets the popover to that height, which overflows the screen and gets
-    //   silently clipped, making the log appear cut off.
+    // Caps the ScrollView height so fittingSize.height is bounded and the popover
+    // never overflows the visible screen area. The header (outside the ScrollView)
+    // adds ~60 pt on top, so subtracting 84 pt total gives comfortable clearance.
+    //
+    // WHY ON ScrollView, NOT THE ROOT:
+    //   A finite maxHeight on the ROOT frame (which has maxWidth:.infinity) makes
+    //   fittingSize.width non-deterministic — AppKit recomputes the anchor X and
+    //   produces the #13 horizontal side-jump. Capping only the ScrollView leaves
+    //   the root unconstrained on width, so fittingSize.width stays stable at
+    //   AppDelegate.fixedWidth (480) and no side-jump occurs.
     //
     // WHY NOT a fixed constant:
-    //   A fixed constant breaks on external monitors or menu-bar-hidden setups.
-    //   NSScreen.main.visibleFrame adapts to the actual visible area.
+    //   Adapts to external monitors and non-standard screen heights automatically.
     //
-    // ❌ NEVER change maxHeight to .infinity — causes log cut-off via popover overflow.
-    // ❌ NEVER replace with a fixed constant — breaks on non-standard screen heights.
+    // ❌ NEVER move this cap to the root .frame() — causes #13 side-jump.
+    // ❌ NEVER replace with a fixed constant — adapts to actual visible screen height.
+    // ❌ NEVER remove entirely — causes popover height explosion with long logs.
     // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     // is major major major.
-    private var maxViewHeight: CGFloat {
-        (NSScreen.main?.visibleFrame.height ?? 800) - 24
+    private var maxLogHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 800) - 84
     }
 
     var body: some View {
@@ -143,13 +149,14 @@ struct StepLogView: View {
             Divider()
 
             // ── Log — INSIDE ScrollView ──────────────────────────────────────────
-            // The ScrollView fills the remaining height (bounded by maxViewHeight
-            // on the root VStack). For short logs the popover shrinks to fit;
-            // for long logs the popover grows to maxViewHeight and the text
-            // is scrollable within that space — no content is ever clipped.
+            // maxLogHeight cap is on the ScrollView — NOT the root — so
+            // fittingSize.width remains deterministic (no #13 side-jump).
+            // For short logs the ScrollView shrinks to content height;
+            // for long logs it caps at maxLogHeight and text is scrollable.
             //
             // ❌ NEVER add .frame(height:) here — clips to a fixed size.
-            // ❌ NEVER remove the ScrollView — long logs must be scrollable.
+            // ❌ NEVER remove .frame(maxHeight:) here — causes height explosion.
+            // ❌ NEVER move the cap to the root frame — causes #13 side-jump.
             // The popover height is updated via onLogLoaded two-hop remeasure (#21).
             // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
@@ -177,14 +184,15 @@ struct StepLogView: View {
                         .padding(.vertical, 8)
                 }
             }
+            .frame(maxHeight: maxLogHeight)
         }
-        // ⚠️ maxHeight is LOAD-BEARING — see maxViewHeight comment above.
-        // ❌ NEVER change to .infinity — causes log cut-off (popover overflows screen).
-        // ❌ NEVER use a fixed constant — adapts to actual visible screen height.
+        // ❌ NEVER add a finite maxHeight to this root frame — causes #13 side-jump
+        // via non-deterministic fittingSize.width. The ScrollView cap above handles
+        // bounding without affecting the width calculation.
         // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
-        .frame(maxWidth: .infinity, maxHeight: maxViewHeight, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
 
