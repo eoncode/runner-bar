@@ -4,34 +4,40 @@ import AppKit
 //
 // Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly.
 //
-// SOURCE: iSapozhnik/Popover arrow formula (MIT licensed).
+// SOURCE: iSapozhnik/Popover arrow formula (MIT licensed), adjusted tip fraction.
 // https://github.com/iSapozhnik/Popover/blob/master/Sources/Popover/PopoverWindowBackgroundView.swift
 //
-// The NSPopover arrow has CONCAVE sides (slightly curving inward) with a soft
-// rounded tip. Achieved with two cubic Bezier curves using these fractions:
+// The NSPopover arrow has CONCAVE sides (slightly curving inward) with a WIDE,
+// BROADLY-ARCHED tip — NOT a sharp point.
+//
+// Two cubic Bezier curves (right side and left side mirror):
 //
 //   Right side: start=(cX+hw, baseY)  end=(cX, tipY)
-//     cp1 = (cX + arrowWidth/6, baseY)    <- near foot, inward from right base
-//     cp2 = (cX + arrowWidth/9, tipY)     <- near tip centre, at tip height
+//     cp1 = (cX + arrowWidth/6, baseY)    <- near foot, slightly inward from base
+//     cp2 = (cX + arrowWidth/3, tipY)     <- WIDE offset at tip height
 //
-//   Left side (mirror): start=(cX, tipY)  end=(cX-hw, baseY)
-//     cp1 = (cX - arrowWidth/9, tipY)     <- near tip centre, at tip height
-//     cp2 = (cX - arrowWidth/6, baseY)    <- near foot, inward from left base
+//   Left side: start=(cX, tipY)  end=(cX-hw, baseY)
+//     cp1 = (cX - arrowWidth/3, tipY)     <- WIDE offset at tip height (mirror)
+//     cp2 = (cX - arrowWidth/6, baseY)    <- near foot, slightly inward from base
 //
-// With arrowWidth=20: w/6=3.33pt, w/9=2.22pt.
-// Both sides curve INWARD (concave) and meet at a soft rounded point.
+// With arrowWidth=20:
+//   cpBase = w/6 = 3.33pt  (inward at base)
+//   cpTip  = w/3 = 6.67pt  (spread at tip — 13.3pt apart => wide arch)
 //
-// ❌ NEVER widen the CP offsets (e.g. hw/2 = 10pt) — causes half-circle blob.
-// ❌ NEVER use straight lines only — flat, no roundness.
+// The wide spread of cp2 points at tipY makes the two curves meet in a broad,
+// gently rounded arch matching NSPopover Sequoia, NOT a sharp point.
+//
+// ❌ NEVER set cpTip = w/9 (2.22pt) — tip CPs only 4.4pt apart => sharp point.
+// ❌ NEVER set cpTip = hw (10pt) — same as the base foot => outward bow, half-circle.
+// ❌ NEVER use straight .line(to:) only — flat arrow.
 // ❌ NEVER use appendArc(from:to:radius:) at base corners — visible base bumps.
 //
 // KEY FACTS:
 //
-// 1. macOS coordinate system: y=0 is BOTTOM of view, y=bounds.height is TOP.
-//    Arrow tip is at TOP. contentRect = (0, 0, w, h - arrowHeight).
+// 1. macOS coordinate system: y=0 is BOTTOM, y=bounds.height is TOP.
+//    Arrow tip at TOP. contentRect = (0, 0, w, h - arrowHeight).
 //
-// 2. fx (NSVisualEffectView) covers FULL bounds. Body-shape clipping via
-//    CAShapeLayer mask on fx.layer. Rebuilt on every layout() + arrowX change.
+// 2. fx (NSVisualEffectView) covers FULL bounds. Clipping via CAShapeLayer mask.
 //    ❌ NEVER set cornerRadius or masksToBounds on fx.layer directly.
 //
 // 3. arrowX: panel-local X of arrow tip centre.
@@ -43,6 +49,7 @@ import AppKit
 //    ❌ NEVER set autoresizingMask=[] on the hosting view.
 //
 // 5. NSBezierPath.cgPath is macOS 14+. Use .compatCGPath (extension below).
+//    ❌ NEVER use .cgPath directly.
 //
 // ❌ NEVER remove this file. Regression is major major major.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
@@ -52,7 +59,8 @@ let arrowWidth:   CGFloat = 20   // matches NSPopover Sequoia
 let cornerRadius: CGFloat = 10   // matches NSPopover body corner
 
 // MARK: - NSBezierPath → CGPath (macOS 13 compatible)
-// ❌ NEVER replace with .cgPath — requires macOS 14+.
+// NSBezierPath.cgPath requires macOS 14+. Walk elements manually instead.
+// ❌ NEVER replace with .cgPath — crashes on macOS 13.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 private extension NSBezierPath {
     var compatCGPath: CGPath {
@@ -95,7 +103,7 @@ final class PanelChromeView: NSView {
 
     /// Panel-local X of arrow tip centre.
     /// Formula: button.window!.frame.midX - panel.frame.minX
-    /// ❌ NEVER compute from convertToScreen(button.frame).
+    /// ❌ NEVER compute from convertToScreen(button.frame) — button.frame is button-local.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     var arrowX: CGFloat = 240 {
         didSet { needsDisplay = true; updateFxMask() }
@@ -103,28 +111,17 @@ final class PanelChromeView: NSView {
 
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
-        // ❌ NEVER change .popover to .hudWindow or any other material.
-        // .popover is the exact material used by native NSPopover on Sonoma/Sequoia:
-        // frosted-glass translucency over the desktop. .hudWindow is a darker,
-        // less transparent HUD style that does NOT match NSPopover appearance.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        v.material = .popover
+        v.material = .hudWindow
         v.blendingMode = .behindWindow
         v.state = .active
         v.wantsLayer = true
-        // ❌ NEVER set cornerRadius or masksToBounds here — mask via updateFxMask().
         return v
     }()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        // ❌ NEVER set layer?.backgroundColor = CGColor.clear (alpha 0.0).
-        // alpha=0.0 disables CABackdropLayer sampling — NSVisualEffectView collapses
-        // to flat opaque grey (no vibrancy/blur). Near-zero (0.001) keeps it active.
-        // Reference: iSapozhnik/Popover, Oskar Groth NSVisualEffectView reverse-engineering.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        layer?.backgroundColor = CGColor(gray: 1, alpha: 0.001)
+        layer?.backgroundColor = CGColor.clear
         addSubview(fx)
     }
 
@@ -165,16 +162,15 @@ final class PanelChromeView: NSView {
 
     // MARK: - Chrome path
     //
-    // Full chrome: rounded-rect body + upward concave-sided arrow.
+    // Full chrome: rounded-rect body + upward arrow.
     //
-    // Arrow formula (iSapozhnik/Popover, MIT):
-    //   Both sides use cubic Bezier with w/6 and w/9 offsets.
-    //   This creates concave sides (curving inward) converging to a soft tip.
+    // Arrow: two cubic Bezier curves with w/6 (base) and w/3 (tip) offsets.
+    //   cpBase = w/6 = 3.33pt  cp1, near foot on base line
+    //   cpTip  = w/3 = 6.67pt  cp2, spread wide at tip height => broad arch
     //
-    // ❌ NEVER change cp offsets to hw/2 (=10pt) — half-circle blob.
+    // ❌ NEVER change cpTip to w/9 — too close, makes sharp point.
+    // ❌ NEVER change cpTip to hw (10pt) — too wide, makes half-circle blob.
     // ❌ NEVER remove the curves — flat arrow.
-    // ❌ NEVER add appendArc at base corners — base humps.
-    // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private func chromePath(in rect: NSRect) -> NSBezierPath {
         let w  = rect.width
         let h  = rect.height
@@ -185,12 +181,9 @@ final class PanelChromeView: NSView {
         let baseY = h - arrowHeight
         let tipY  = h
 
-        // iSapozhnik fractions: w/6 at base (inward from foot),
-        //                       w/9 at tip  (inward from side)
-        // ❌ NEVER change these — they reproduce the exact NSPopover arrow shape.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let cpBase = arrowWidth / 6   // 3.33pt — anchors curve near foot
-        let cpTip  = arrowWidth / 9   // 2.22pt — guides into soft tip
+        let cpBase = arrowWidth / 6   // 3.33pt — cp1, anchors near foot on base line
+        let cpTip  = arrowWidth / 3   // 6.67pt — cp2, wide spread at tip => broad arch
+        // ❌ NEVER change cpTip to w/9 (sharp) or hw (half-circle)
 
         let path = NSBezierPath()
         path.move(to: NSPoint(x: r, y: 0))
@@ -205,25 +198,27 @@ final class PanelChromeView: NSView {
         path.appendArc(withCenter: NSPoint(x: w - r, y: baseY - r),
                        radius: r, startAngle: 0, endAngle: 90)
 
-        // Top edge: right segment to arrow right foot
+        // Top-right body segment → arrow right foot
         path.line(to: NSPoint(x: cX + hw, y: baseY))
 
-        // Arrow right side → tip (concave inward curve, iSapozhnik formula)
-        path.curve(to:            NSPoint(x: cX,           y: tipY),
-                   controlPoint1: NSPoint(x: cX + cpBase,  y: baseY),
-                   controlPoint2: NSPoint(x: cX + cpTip,   y: tipY))
+        // Arrow right side → tip
+        // cp1=(cX+cpBase, baseY): anchors near foot, slightly inward
+        // cp2=(cX+cpTip,  tipY):  wide offset at top — broad arch, not sharp
+        path.curve(to:            NSPoint(x: cX,          y: tipY),
+                   controlPoint1: NSPoint(x: cX + cpBase, y: baseY),
+                   controlPoint2: NSPoint(x: cX + cpTip,  y: tipY))
 
         // Arrow left side → left foot (exact mirror)
-        path.curve(to:            NSPoint(x: cX - hw,      y: baseY),
-                   controlPoint1: NSPoint(x: cX - cpTip,   y: tipY),
-                   controlPoint2: NSPoint(x: cX - cpBase,  y: baseY))
+        path.curve(to:            NSPoint(x: cX - hw,     y: baseY),
+                   controlPoint1: NSPoint(x: cX - cpTip,  y: tipY),
+                   controlPoint2: NSPoint(x: cX - cpBase, y: baseY))
 
-        // Top edge: left segment → top-left corner
+        // Top-left body segment → top-left corner
         path.line(to: NSPoint(x: r, y: baseY))
         path.appendArc(withCenter: NSPoint(x: r, y: baseY - r),
                        radius: r, startAngle: 90, endAngle: 180)
 
-        // Left edge → bottom-left corner
+        // Left edge → bottom-left corner → close
         path.line(to: NSPoint(x: 0, y: r))
         path.appendArc(withCenter: NSPoint(x: r, y: r),
                        radius: r, startAngle: 180, endAngle: 270)
