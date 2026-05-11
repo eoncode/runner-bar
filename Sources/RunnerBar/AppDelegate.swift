@@ -30,6 +30,19 @@ import SwiftUI
 //   ❌ NEVER change HeightPreferenceKey.reduce to max() — breaks dynamic height.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 //
+// FIXEDSIZE RULE (ref #381):
+//   ALL view factories (mainView, settingsView, detailView, logView, actionDetailView,
+//   detailViewFromAction, logViewFromAction) MUST wrap their root view with:
+//       .frame(width: Self.canonicalWidth)
+//       .fixedSize(horizontal: false, vertical: true)
+//   This tells SwiftUI "lay out at exactly 420pt wide, but hug natural height".
+//   Without it, SwiftUI fills the entire 2000pt unconstrained host and centres
+//   content vertically — making the topbar and other views invisible.
+//   ❌ NEVER remove .fixedSize from ANY view factory.
+//   ❌ NEVER remove .frame(width:) from ANY view factory.
+//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+//   UNDER ANY CIRCUMSTANCE.
+//
 // PANEL SETUP:
 //   styleMask = [.borderless, .nonactivatingPanel]
 //   isFloatingPanel = true, level = .popUpMenu
@@ -247,6 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - View factories
+    //
+    // ⚠️ ALL factories MUST use .frame(width: Self.canonicalWidth).fixedSize(horizontal: false, vertical: true)
+    // so SwiftUI hugs the natural content height instead of filling the 2000pt host.
+    // Without this the topbar and other content are vertically centred and invisible.
+    // ❌ NEVER remove these modifiers from any factory. (ref #381)
 
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
@@ -266,34 +284,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func mainView() -> AnyView {
         savedNavState = nil
-        return AnyView(PopoverMainView(
-            store: observable,
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailView(job: enriched))
+        return AnyView(
+            PopoverMainView(
+                store: observable,
+                onSelectJob: { [weak self] job in
+                    guard let self else { return }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let enriched = self.enrichStepsIfNeeded(job)
+                        DispatchQueue.main.async {
+                            guard self.panelIsOpen else { return }
+                            self.navigate(to: self.detailView(job: enriched))
+                        }
                     }
-                }
-            },
-            onSelectAction: { [weak self] group in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                    let enriched = self.enrichGroupIfNeeded(latest)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.actionDetailView(group: enriched))
+                },
+                onSelectAction: { [weak self] group in
+                    guard let self else { return }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                        let enriched = self.enrichGroupIfNeeded(latest)
+                        DispatchQueue.main.async {
+                            guard self.panelIsOpen else { return }
+                            self.navigate(to: self.actionDetailView(group: enriched))
+                        }
                     }
+                },
+                onSelectSettings: { [weak self] in
+                    guard let self else { return }
+                    self.navigate(to: self.settingsView())
                 }
-            },
-            onSelectSettings: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
-        ))
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
