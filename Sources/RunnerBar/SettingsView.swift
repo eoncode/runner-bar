@@ -23,13 +23,29 @@ import SwiftUI
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
 ///
-/// ⚠️ REGRESSION GUARD (Architecture 1 — ref status-bar-app-position-warning.md):
-/// The root VStack uses .frame(idealWidth: 420, maxWidth: .infinity).
-/// The OUTER .frame(width: 420) is applied in AppDelegate.settingsView() —
-/// that is what pins preferredContentSize.width = 420 for NSPopover.
-/// The inner idealWidth here ensures the VStack fills the 420pt container.
-/// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the root VStack.
-/// ❌ NEVER remove the ScrollView — it is what makes height dynamic.
+/// ⚠️ REGRESSION GUARD (Architecture 2b — ref #52 #54 #57 #296 #377
+///                       status-bar-app-position-warning.md):
+///
+/// AppDelegate wraps every navigated-to view in wrapWithHeightCapture(), which
+/// places a GeometryReader around it to report the rendered height via
+/// HeightPreferenceKey. openPopover() Phase 2 reads this height and calls
+/// setFrameSize + contentSize exactly once before show().
+///
+/// SCROLLVIEW HEIGHT CAP IS MANDATORY:
+///   An uncapped ScrollView reports its full content height to the GeometryReader
+///   (e.g. 900-1200pt with many runner rows). HeightPreferenceKey propagates that
+///   giant value → openPopover() clamps to maxHeight (620pt) and sets that size →
+///   NSPopover re-anchors because the size changed relative to the button anchor
+///   → side jump every time Settings is opened.
+///
+///   Fix: .frame(maxHeight: maxScrollHeight) on the ScrollView caps the measured
+///   height to a sane value (≤560pt) that fits within the popover's minHeight/maxHeight
+///   window (120-620pt) without triggering a re-anchor.
+///
+/// ❌ NEVER remove the .frame(maxHeight: maxScrollHeight) from the ScrollView.
+/// ❌ NEVER use an uncapped ScrollView under Architecture 2b — it reports unbounded
+///    height to HeightPreferenceKey → popover re-anchor → side jump on navigate.
+/// ❌ NEVER add .frame(height:) to the root VStack (the ScrollView cap is sufficient).
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -56,6 +72,16 @@ struct SettingsView: View {
     /// Surfaced when remove() returns false — cleared on next refresh.
     @State private var removeErrorMessage: String?
 
+    /// Maximum height for the settings ScrollView.
+    /// Capped at screen height - 120pt (header + anchor clearance) or 560pt, whichever is smaller.
+    /// This prevents GeometryReader / HeightPreferenceKey from reporting an unbounded height
+    /// that would cause NSPopover to re-anchor (side jump) when navigating to Settings.
+    /// ❌ NEVER remove this — it is load-bearing under Architecture 2b.
+    private var maxScrollHeight: CGFloat {
+        let screenH = NSScreen.main?.visibleFrame.height ?? 700
+        return min(screenH - 120, 560)
+    }
+
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
@@ -74,6 +100,14 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
+            // ⚠️ SCROLLVIEW HEIGHT CAP — load-bearing under Architecture 2b.
+            // wrapWithHeightCapture() in AppDelegate places a GeometryReader around
+            // this entire view. An uncapped ScrollView reports its full content height
+            // (can be 900pt+) to HeightPreferenceKey → openPopover() sets that giant
+            // contentSize → NSPopover re-anchors → side jump on every Settings navigate.
+            // The .frame(maxHeight: maxScrollHeight) cap keeps the measured height ≤560pt.
+            // ❌ NEVER remove this frame modifier.
+            // ❌ NEVER revert to an uncapped ScrollView.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -92,24 +126,20 @@ struct SettingsView: View {
                 }
                 .padding(.bottom, 16)
             }
+            .frame(maxHeight: maxScrollHeight)
         }
-        // ⚠️ Architecture 1: idealWidth drives preferredContentSize.width inside the container.
+        // Architecture 2b: idealWidth drives preferredContentSize.width inside the container.
         // The .frame(width: 420) wrapper in AppDelegate.settingsView() pins the outer width.
-        // ❌ NEVER add .frame(height:) — ScrollView provides dynamic height.
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
-            // ⚠️ PERMISSION GUARD: only trigger a fresh scan when not already scanning.
-            // LocalRunnerStore.refresh() dispatches to a background queue — safe to
-            // call from onAppear. The guard inside refresh() prevents double-scans.
             if !localRunnerStore.isScanning {
                 localRunnerStore.refresh()
             }
         }
-        // Single-parameter form: compatible with macOS 13+.
         .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
         }
