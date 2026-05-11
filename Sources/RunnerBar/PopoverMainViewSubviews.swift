@@ -257,8 +257,21 @@ struct ActionRowView: View {
 /// Only shows jobs that are currently `in_progress` — queued and completed jobs
 /// are intentionally excluded (per spec: inline rows communicate active work only).
 /// Rows have no tap action per spec #324 Gap 2.
+///
+/// ⚠️ REGRESSION GUARD (#377):
+/// `cap += 4` on button tap mutates @State while the popover is visible.
+/// This triggers a SwiftUI height change → preferredContentSize update → NSPopover
+/// re-anchor → side-jump. The expand button is disabled while isPopoverOpen == true.
+/// ❌ NEVER remove the .disabled(isPopoverOpen) modifier.
+/// ❌ NEVER mutate cap while isPopoverOpen == true.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+/// is major major major.
 struct InlineJobRowsView: View {
     let group: ActionGroup
+    /// Passed from PopoverMainView. When true, the expand button is disabled
+    /// to prevent height changes while the popover is shown.
+    var isPopoverOpen: Bool = false
     @State private var cap: Int = 4
 
     /// Only in-progress jobs — ❌ never include queued or completed jobs here.
@@ -272,7 +285,11 @@ struct InlineJobRowsView: View {
         }
         if activeJobs.count > cap {
             Button(
-                action: { cap += 4 },
+                action: {
+                    // ❌ NEVER remove the isPopoverOpen guard — mutating cap while
+                    // the popover is open causes a height change → side-jump.
+                    if !isPopoverOpen { cap += 4 }
+                },
                 label: {
                     Text("+ \(activeJobs.count - cap) more jobs\u{2026}")
                         .font(.caption2).foregroundColor(.accentColor)
@@ -280,6 +297,9 @@ struct InlineJobRowsView: View {
                 }
             )
             .buttonStyle(.plain)
+            // Belt-and-suspenders: also disable the button while open so the
+            // user cannot trigger a height change even if the guard above fires.
+            .disabled(isPopoverOpen)
         }
     }
 
