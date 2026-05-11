@@ -14,7 +14,7 @@ import SwiftUI
 //   sizingOptions = .preferredContentSize
 //     NSHostingController publishes preferredContentSize from SwiftUI ideal size.
 //     NSPopover reads this automatically. Height is dynamic. Width is always
-//     idealWidth (420) declared on the root Group in every view — never changes.
+//     idealWidth (420) declared on the root VStack in PopoverMainView — never changes.
 //
 //   ❌ NEVER set popover.contentSize anywhere — not in openPopover, navigate, or anywhere else.
 //   ❌ NEVER set hc.view.setFrameSize — let SwiftUI drive sizing entirely.
@@ -30,9 +30,22 @@ import SwiftUI
 //   navigate() = rootView swap ONLY. Zero sizing calls. Ever.
 //
 // WHY idealWidth WORKS:
-//   .frame(idealWidth: 420) on the root Group of every view pins preferredContentSize.width
-//   to exactly 420 regardless of which nav state is active. Width never changes →
-//   no re-anchor → no side jump. Height varies freely with content → no empty space.
+//   .frame(idealWidth: 420) on the root VStack of PopoverMainView pins
+//   preferredContentSize.width to exactly 420 regardless of nav state.
+//   Width never changes → no re-anchor → no side jump.
+//   Height varies freely with content → no empty space.
+//
+// WHY systemStats MUST BE STOPPED WHILE POPOVER IS OPEN (ref #375 #376 #377 — THE KEY FIX):
+//   SystemStatsViewModel fires @Published updates every ~1s.
+//   Each update → SwiftUI layout pass → new preferredContentSize.height
+//   → NSPopover re-anchors the window → visible position jump.
+//   FIX: AppDelegate passes `isPopoverOpen: popoverIsOpen` to PopoverMainView.
+//        PopoverMainView's .onChange(of: isPopoverOpen) stops systemStats when
+//        the popover opens and restarts it when the popover closes.
+// ❌ NEVER remove the isPopoverOpen parameter from the PopoverMainView constructor call.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
 
 private enum NavState {
     case main
@@ -67,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         // ⚠️ Architecture 1: sizingOptions = .preferredContentSize
         //   NSHostingController publishes SwiftUI ideal size as preferredContentSize.
         //   NSPopover reads it automatically — dynamic height, stable width.
-        //   The root view in every nav state uses .frame(idealWidth: 420) which
+        //   The root VStack in PopoverMainView uses .frame(idealWidth: 420) which
         //   pins preferredContentSize.width = 420 always. Height varies freely.
         // ❌ NEVER change to [] — reverts to fixed size → empty space or clipping.
         controller.sizingOptions = .preferredContentSize
@@ -137,7 +150,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             onSelectSettings: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
-            }
+            },
+            // ⚠️ FIX: Pass current popover open state so PopoverMainView can gate
+            // SystemStatsViewModel. Without this, systemStats fires @Published updates
+            // every ~1s while the popover is shown → SwiftUI layout passes →
+            // preferredContentSize changes → NSPopover re-anchors → position jump.
+            // ❌ NEVER remove this parameter.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+            // comment is removed is major major major.
+            isPopoverOpen: popoverIsOpen
         ))
     }
 
@@ -295,14 +317,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
               let popover
         else { return }
         popoverIsOpen = true
+        // Rebuild mainView with isPopoverOpen = true so PopoverMainView receives
+        // the correct state and .onChange(of: isPopoverOpen) fires to stop systemStats.
+        // ⚠️ This must happen BEFORE show() so the view is staged with the correct
+        // isPopoverOpen value before NSPopover reads preferredContentSize.
+        hostingController?.rootView = mainView()
         observable.reload()
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-        popover.contentViewController?.view.window?.makeKey()
-        // Restore nav state AFTER show() to avoid racing with reload().
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        popover.contentViewController?.view.window?.makeKey()
     }
 }
 // swiftlint:enable type_body_length

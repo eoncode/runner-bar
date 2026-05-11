@@ -30,6 +30,21 @@ import SwiftUI
 // INLINE JOBS SPEC (#178):
 //   Show ↳ job rows ONLY for jobs with status == "in_progress".
 // ❌ NEVER show queued jobs inline.
+//
+// SYSTEMSTATSVIEWMODEL RULE (ref #375 #376 #377 — THE FIX FOR POSITION JUMPS):
+//   SystemStatsViewModel fires @Published updates every ~1s via a Timer.
+//   Each update triggers a SwiftUI layout pass → new preferredContentSize.height
+//   → NSPopover re-anchors the window → visible left/position jump.
+//   The popoverIsOpen guard in AppDelegate only blocks store.reload().
+//   It does NOT block systemStats from pushing layout passes while the popover is shown.
+//   FIX: PopoverMainView receives isPopoverOpen: Bool from AppDelegate.
+//        .onChange(of: isPopoverOpen) stops systemStats when the popover opens
+//        and restarts it when the popover closes.
+// ❌ NEVER remove the .onChange(of: isPopoverOpen) block.
+// ❌ NEVER call systemStats.start() inside .onAppear without the isPopoverOpen guard.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
 
 /// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
@@ -37,6 +52,13 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
+
+    // ⚠️ FIX: Receive popover open state from AppDelegate so we can gate systemStats.
+    // AppDelegate passes `isPopoverOpen: popoverIsOpen` when constructing this view.
+    // ❌ NEVER remove this property — it is the gate for systemStats.
+    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    // UNDER ANY CIRCUMSTANCE.
+    var isPopoverOpen: Bool = false
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
@@ -82,9 +104,39 @@ struct PopoverMainView: View {
         .frame(idealWidth: 420)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            systemStats.start()
+            // ⚠️ FIX: Do NOT start systemStats here unconditionally.
+            // .onAppear fires when popover opens (isPopoverOpen already true at that point).
+            // The .onChange(of: isPopoverOpen) block below handles start/stop correctly.
+            // Starting here would immediately undo the stop from onChange.
+            // systemStats is started when isPopoverOpen becomes false (popover closes)
+            // so it is already running before the next open.
         }
-        .onDisappear { systemStats.stop() }
+        .onDisappear {
+            // Always stop on disappear as a safety net (covers app quit / nav away).
+            systemStats.stop()
+        }
+        // ⚠️ FIX: Gate systemStats on popover open state.
+        //   When popover opens (isPopoverOpen = true): STOP the timer.
+        //     → No @Published updates → no SwiftUI layout passes → no preferredContentSize
+        //       changes → no NSPopover re-anchor → no position jump.
+        //   When popover closes (isPopoverOpen = false): START the timer.
+        //     → Stats update in the background while popover is hidden.
+        //     → On next open, one fresh render is done before show() is called (in openPopover).
+        // ❌ NEVER remove this .onChange block.
+        // ❌ NEVER call systemStats.start() unconditionally in .onAppear.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+        // is major major major.
+        .onChange(of: isPopoverOpen) { open in
+            if open {
+                systemStats.stop()
+            } else {
+                systemStats.start()
+            }
+        }
+        .onChange(of: store.actions) { _ in
+            if visibleCount > 10 { visibleCount = 10 }
+        }
     }
 }
 
@@ -218,7 +270,7 @@ private struct ActionsListView: View {
                     Button(
                         action: { visibleCount += 10 },
                         label: {
-                            Text("Load 10 more actions…")
+                            Text("Load 10 more actions\u{2026}")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                     )
@@ -385,7 +437,7 @@ private struct InlineJobRowView: View {
     private func currentStepTitle(for job: ActiveJob) -> String {
         if let active = job.steps.first(where: { $0.status == "in_progress" }) { return active.name }
         if let last = job.steps.last(where: { $0.conclusion != nil }) { return last.name }
-        return "Starting…"
+        return "Starting\u{2026}"
     }
 }
 
@@ -411,7 +463,7 @@ private struct RunnersListView: View {
                         Text(String(format: "MEM: %.1f%%", metrics.mem))
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                     } else {
-                        Text("CPU: — MEM: —").font(.caption).foregroundColor(.secondary)
+                        Text("CPU: \u{2014} MEM: \u{2014}").font(.caption).foregroundColor(.secondary)
                     }
                     Image(systemName: "chevron.right")
                         .font(.caption2).foregroundColor(.secondary.opacity(0.4))
