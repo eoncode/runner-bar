@@ -12,6 +12,8 @@ import SwiftUI
 ///
 /// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.fixedWidth (480).
 /// ❌ NEVER change idealWidth without updating fixedWidth in AppDelegate.
+/// ❌ NEVER add maxWidth: .infinity to .frame(idealWidth:) — with sizingOptions=.preferredContentSize
+///    this expands preferredContentSize.width beyond 480, causing NSPopover to re-anchor → side-jump.
 /// ⚠️ SCROLLVIEW RULE (ref #370, main branch JobDetailView):
 ///    ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) or equivalent cap.
 ///    Without it, when Settings is the root at openPopover() time, SwiftUI reports
@@ -87,11 +89,14 @@ struct SettingsView: View {
             // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ⚠️ REGRESSION GUARD: keep idealWidth: 480 — matches PopoverMainView and AppDelegate.fixedWidth.
-        // ❌ NEVER add maxHeight: .infinity here — corrupts fittingSize.width and causes popover side-jump.
-        // ❌ NEVER change idealWidth without updating AppDelegate.fixedWidth.
+        // ⚠️ REGRESSION GUARD: idealWidth: 480 only — NO maxWidth: .infinity.
+        // With sizingOptions=.preferredContentSize, maxWidth:.infinity expands
+        // preferredContentSize.width to screen width when navigating to Settings,
+        // which changes contentSize.width → NSPopover re-anchors → side-jump.
+        // ❌ NEVER add maxWidth: .infinity here.
+        // ❌ NEVER change idealWidth without updating AppDelegate.idealWidth.
         // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 480)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
