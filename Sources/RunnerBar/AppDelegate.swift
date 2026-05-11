@@ -13,15 +13,33 @@ import SwiftUI
 //
 //   navigate() = pure rootView swap. ZERO sizing. ZERO contentSize writes. EVER.
 //   openPopover() = the ONE site where contentSize is set, BEFORE show().
-//                   Reads fittingSize from mainView() ALWAYS. Never from restored views.
+//                   Reads fittingSize.HEIGHT ONLY from mainView() with live content.
+//                   WIDTH is ALWAYS Self.idealWidth — NEVER fittingSize.width.
 //                   Safe because popover.isShown == false at that point.
 //
 //   CRITICAL: controller.sizingOptions = [] MUST be set.
 //   Default .preferredContentSize auto-propagates contentSize on every SwiftUI
 //   layout pass (poll timer, onChange, @State ticks) → each write while shown
 //   = NSPopover re-anchor = side-jump. sizingOptions=[] silences that.
-//   Dynamic height is preserved: fittingSize is read fresh every open from
+//   Dynamic height is preserved: fittingSize.height is read fresh every open from
 //   mainView() with live content, so height varies with content count.
+//
+//   WHY fittingSize.width IS BANNED:
+//   When maxWidth:.infinity is in the SwiftUI tree, fittingSize.width is
+//   non-deterministic — it can return 0, idealWidth, screen width, or anything
+//   in between depending on the layout pass. Using it as contentSize.width means
+//   contentSize.width varies between opens → NSPopover re-anchors → side-jump.
+//   The fix is to ALWAYS use Self.idealWidth for width. No exceptions.
+//
+//   HOW DYNAMIC HEIGHT WORKS (no empty space, no clipping):
+//   1. Set hc.view frame to idealWidth × screenHeight (gives SwiftUI enough room)
+//   2. hc.view.layoutSubtreeIfNeeded() — force one layout pass at that width
+//   3. Read hc.view.fittingSize.height — this is now the natural content height
+//   4. Clamp to [minHeight, maxHeight]
+//   5. Set hc.view.setFrameSize(idealWidth × clampedHeight)
+//   6. popover.contentSize = that size
+//   7. show()
+//   Result: popover height exactly fits content. Width never changes. No jump.
 //
 //   CRITICAL: store.reload() MUST NOT be called while popoverIsOpen == true.
 //   reload() while shown → SwiftUI layout pass → if sizingOptions != [] → side-jump.
@@ -36,15 +54,18 @@ import SwiftUI
 // OPEN SEQUENCE (do NOT reorder):
 //   1. popoverIsOpen = true
 //   2. observable.reload()          ← loads live data into mainView()
-//   3. fittingSize.height           ← read from mainView() with live data. ALWAYS.
-//                                      NEVER from a restored view. NEVER from StepLogView.
-//   4. setFrameSize + contentSize   ← safe: popover.isShown == false
-//   5. show()
-//   6. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
+//   3. hc.view frame → idealWidth × screenHeight (measurement frame)
+//   4. layoutSubtreeIfNeeded()      ← force layout at correct width
+//   5. fittingSize.height           ← read AFTER layout. Height only. Never width.
+//   6. setFrameSize + contentSize   ← safe: popover.isShown == false
+//   7. show()
+//   8. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
 //
 // ❌ NEVER add @MainActor to AppDelegate class — breaks main.swift on Swift 6
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER remove sizingOptions = []
+// ❌ NEVER use fittingSize.width — ALWAYS use Self.idealWidth for width
+//    fittingSize.width is non-deterministic when maxWidth:.infinity is in tree
 // ❌ NEVER read fittingSize from a restored/Settings/Detail view in openPopover()
 //    Previous commits did this: measured Settings height, locked contentSize to it,
 //    then showed mainView → wrong height every other open.
@@ -52,8 +73,6 @@ import SwiftUI
 // ❌ NEVER wire onLogLoaded to any contentSize write
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 480) from PopoverMainView
-// ❌ NEVER use fittingSize.width — always use Self.idealWidth
-//    fittingSize.width is non-deterministic when maxHeight:.infinity is in tree
 // ❌ NEVER restore stepLog or actionStepLog via savedNavState
 //    StepLogView: maxHeight:.infinity → fittingSize = 0 before log loads
 // ❌ NEVER pass isPopoverOpen: false to mainView() when popover is shown
@@ -83,13 +102,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
-    /// Ideal/fallback width matching PopoverMainView's .frame(idealWidth: 480).
+    /// Canonical popover width. ALL sizing uses this constant. NEVER fittingSize.width.
     /// ❌ NEVER change without updating idealWidth in PopoverMainView, SettingsView,
     ///    JobDetailView, ActionDetailView, AND StepLogView.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private static let idealWidth: CGFloat = 480
-    private static let maxWidth:   CGFloat = 540
     private static let maxHeight:  CGFloat = 620
     private static let minHeight:  CGFloat = 120
 
@@ -330,12 +348,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Reads fittingSize from mainView() with live data. ALWAYS. Never from restored views.
     ///
+    /// WIDTH: always Self.idealWidth. Never fittingSize.width.
+    ///   fittingSize.width is non-deterministic when maxWidth:.infinity is in tree.
+    ///   Any variation in contentSize.width → NSPopover re-anchor → side-jump.
+    ///
+    /// HEIGHT: fittingSize.height, clamped to [minHeight, maxHeight].
+    ///   Measured at idealWidth so text wrapping is computed at the correct width.
+    ///   Measured BEFORE show() so popover.isShown == false — safe to write contentSize.
+    ///
+    /// ❌ NEVER use fittingSize.width for anything.
     /// ❌ NEVER read fittingSize from Settings or a detail view here.
     ///    Previous commits did this and broke height on every other open.
-    /// ❌ NEVER use fittingSize.width — always Self.idealWidth.
     /// ❌ NEVER call setFrameSize or set contentSize after show().
+    /// ❌ NEVER add sizingOptions = .preferredContentSize — kills the fix.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -345,17 +371,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
               let popover,
               let hostingController
         else { return }
+
         popoverIsOpen = true
         observable.reload()
-        let fittingWidth  = hostingController.view.fittingSize.width
-        let fittingHeight = hostingController.view.fittingSize.height
-        let width  = min(max(fittingWidth  > 0 ? fittingWidth  : Self.idealWidth, Self.idealWidth), Self.maxWidth)
-        let height = min(max(fittingHeight > 0 ? fittingHeight : 300, Self.minHeight), Self.maxHeight)
-        let size = NSSize(width: width, height: height)
-        hostingController.view.setFrameSize(size)
-        popover.contentSize = size
+
+        // Step 1: ensure the hosting view is showing mainView with live data.
+        // navigate() to mainView was already called by popoverDidClose() or this is first open.
+        // Do NOT call mainView() again here — it resets savedNavState prematurely.
+
+        // Step 2: measure natural content height at the canonical width.
+        // Set frame to idealWidth × tall screen so SwiftUI lays out at full height.
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
+        let measureFrame = NSSize(width: Self.idealWidth, height: screenHeight)
+        hostingController.view.setFrameSize(measureFrame)
+        hostingController.view.layoutSubtreeIfNeeded()
+
+        // Step 3: read height. NEVER read width.
+        let naturalHeight = hostingController.view.fittingSize.height
+        let height = min(max(naturalHeight > 0 ? naturalHeight : 300, Self.minHeight), Self.maxHeight)
+
+        // Step 4: snap to final size — width is ALWAYS idealWidth.
+        let finalSize = NSSize(width: Self.idealWidth, height: height)
+        hostingController.view.setFrameSize(finalSize)
+        popover.contentSize = finalSize
+
+        // Step 5: show — popover anchors once to the button. contentSize never changes again.
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
+
+        // Step 6: restore nav state if needed — pure rootView swap, zero sizing.
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
             navigate(to: restored)
