@@ -11,9 +11,15 @@ import SwiftUI
 // ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
-// ❌ NEVER add @MainActor to openPopover() or any view factory — it breaks the
-//      synchronous sizing contract by hopping the main actor asynchronously.
+// ❌ NEVER remove @MainActor from the AppDelegate class declaration.
+//    RunnerStoreObservable is @MainActor-isolated. The stored property init()
+//    and reload() calls require the class itself to be on @MainActor.
+//    Moving @MainActor to individual methods only does NOT fix the stored
+//    property isolation error.
 // ❌ NEVER add @unchecked Sendable or @MainActor lazy var observable.
+// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
 
 private enum NavState {
     case main
@@ -27,6 +33,7 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
@@ -35,7 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
-    /// Ideal/fallback width matching PopoverMainView’s .frame(idealWidth: 420).
+    /// Ideal/fallback width matching PopoverMainView's .frame(idealWidth: 420).
+    /// ❌ NEVER change without updating idealWidth in PopoverMainView AND SettingsView.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     private static let idealWidth: CGFloat = 420
     /// Hard cap on popover width.
     private static let maxWidth: CGFloat = 540
@@ -66,6 +77,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
+            // ❌ NEVER touch contentSize / setFrameSize here — fires while popover
+            // is shown → re-anchor → left jump (Regression A).
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+            // comment is removed is major major major.
             if !self.popoverIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
@@ -73,6 +89,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - NSPopoverDelegate
 
+    /// ❌ NEVER call reload() here — causes double-reload on next open.
+    /// ❌ NEVER set contentSize here — re-anchor regression.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
@@ -248,7 +269,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller’s root view. ZERO size changes. Forever.
+    /// Swaps the hosting controller's root view. ZERO size changes. Forever.
+    /// ❌ NEVER add contentSize or setFrameSize here — re-anchor → left jump.
+    /// ❌ NEVER call this from a background thread.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
@@ -265,7 +291,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Reads fittingSize synchronously, sets size, then calls show — all in one block.
+    /// Reads fittingSize synchronously, sets size, then calls show — all before shown.
+    /// ❌ NEVER call setFrameSize or set contentSize after show() — popover is shown,
+    ///    re-anchor triggers → left jump (Regression A).
+    /// ❌ NEVER use fittingSize.width — always Self.idealWidth.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
