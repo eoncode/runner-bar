@@ -65,8 +65,8 @@ import SwiftUI
 //   Height auto-corrects after SwiftUI renders. No manual measurement needed.
 //
 // ❌ NEVER set sizingOptions = [] — breaks height (see above)
-// ❌ NEVER manually set contentSize anywhere except the initial placeholder in
-//    applicationDidFinishLaunching (before popover is ever shown)
+// ❌ NEVER manually set contentSize anywhere (the initial placeholder was REMOVED
+//    in commit #377 — it caused the fixed-300pt-height regression)
 // ❌ NEVER call setFrameSize in openPopover()
 // ❌ NEVER use fittingSize.width — non-deterministic with maxWidth:.infinity
 // ❌ NEVER add contentSize or setFrameSize to navigate()
@@ -121,19 +121,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.target = self
         }
         let controller = NSHostingController(rootView: mainView())
-        // Initial placeholder size. This is the ONLY place contentSize is set manually.
-        // All subsequent sizing is driven by NSHostingController.preferredContentSize
-        // via sizingOptions = .preferredContentSize (the default — not overridden).
-        // ❌ NEVER add sizingOptions = [] — breaks height propagation. See guard above.
+        // Set the view frame width to idealWidth so the first SwiftUI layout pass
+        // measures content at the correct width. Height is left at 0 so the first
+        // preferredContentSize propagation (driven by sizingOptions = .preferredContentSize,
+        // the NSHostingController default) immediately wins without fighting a hardcoded
+        // placeholder.
+        //
+        // ❌ NEVER set a fixed height here (e.g. height: 300) — it locks the popover
+        //    at that height until the first preferredContentSize update fires, which is
+        //    the "fixed height" regression (issue #377).
+        // ❌ NEVER set popover.contentSize manually here — same regression.
+        // ❌ NEVER add sizingOptions = [] here — breaks height propagation.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
-        let initialSize = NSSize(width: Self.idealWidth, height: 300)
-        controller.view.frame = NSRect(origin: .zero, size: initialSize)
+        controller.view.frame = NSRect(origin: .zero, size: NSSize(width: Self.idealWidth, height: 0))
         hostingController = controller
         let pop = NSPopover()
         pop.behavior = .transient
         pop.animates = false
-        pop.contentSize = initialSize
         pop.contentViewController = controller
         pop.delegate = self
         popover = pop
@@ -356,7 +361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// No re-anchor because contentSize.WIDTH never changes.
     ///
     /// ❌ NEVER add setFrameSize here.
-    /// ❌ NEVER add contentSize = here (other than the initial placeholder in didFinishLaunching).
+    /// ❌ NEVER add contentSize = here.
     /// ❌ NEVER add sizingOptions = [] before show() — breaks height propagation.
     /// ❌ NEVER call store.reload() or observable.reload() after show() — layout pass = re-anchor.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
