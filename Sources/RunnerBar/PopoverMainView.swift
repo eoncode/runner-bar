@@ -38,6 +38,18 @@ import SwiftUI
 // RULE 8 (#22): idealWidth is 480 (was 420). AppDelegate.fixedWidth is also 480.
 //         ❌ NEVER change one without changing the other or fittingSize height
 //         will be computed at the wrong width, wrapping text and mis-sizing the popover.
+//
+// RULE 9 (#377): SystemStatsViewModel MUST be stopped while the popover is open.
+//         systemStats fires every 2 s unconditionally. Its @Published var stats
+//         update mutates @StateObject systemStats inside PopoverMainView, triggering
+//         a SwiftUI layout pass. With sizingOptions = .preferredContentSize, that
+//         layout pass propagates a new preferredContentSize to NSPopover, which
+//         re-anchors the window — side-jump every 2 s.
+//         ❌ NEVER remove the systemStats.stop()/start() calls in onChange(isPopoverOpen).
+//         ❌ NEVER call systemStats.start() while popoverIsOpen == true.
+//         If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+//         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+//         is major major major.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -56,7 +68,8 @@ struct PopoverMainView: View {
     let onSelectSettings: () -> Void
     /// Set by AppDelegate. When true, store.reload() is suppressed in the timer
     /// to prevent SwiftUI layout passes while the popover is shown.
-    /// ❌ NEVER remove this property — it is the guard that prevents the 5s side-jump.
+    /// Also used to stop/start SystemStatsViewModel (RULE 9).
+    /// ❌ NEVER remove this property — it is the guard that prevents the 5s and 2s side-jump.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -116,6 +129,21 @@ struct PopoverMainView: View {
             systemStats.stop()
             // #19: Invalidate when the popover closes to avoid a timer leak.
             stopRunnerRefreshTimer()
+        }
+        // RULE 9: Stop systemStats while popover is open to prevent 2s layout passes.
+        // systemStats publishes @Published var stats every 2 s unconditionally.
+        // While open, that triggers a SwiftUI layout pass → preferredContentSize update
+        // → NSPopover re-anchor → side-jump. Stop it on open, restart on close.
+        // ❌ NEVER remove this onChange block.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+        // is major major major.
+        .onChange(of: isPopoverOpen) { open in
+            if open {
+                systemStats.stop()
+            } else {
+                systemStats.start()
+            }
         }
         // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
         .onChange(of: store.actions) { _ in visibleCount = 10 }
@@ -182,7 +210,8 @@ struct PopoverMainView: View {
                         onSelect: { onSelectAction(group) }
                     )
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(group: group)
+                        // Pass isPopoverOpen so cap expansion is blocked while open
+                        InlineJobRowsView(group: group, isPopoverOpen: isPopoverOpen)
                     }
                 }
                 loadMoreButton
