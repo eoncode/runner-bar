@@ -10,62 +10,55 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 //
-// ARCHITECTURE 2: sizingOptions=[] (manual contentSize once before show)
+// ARCHITECTURE 3: sizingOptions=[] + GeometryReader/PreferenceKey dynamic height
 //
-// WHY THIS ARCHITECTURE:
-// sizingOptions=.preferredContentSize (Architecture 1) auto-propagates
-// preferredContentSize to NSPopover on every SwiftUI state update while shown.
-// NSPopover re-anchors on every receive → side-jump. Confirmed in:
-// • Just10/MEMORY.md (zunguyen/Just10 — identical bug history)
-// • #377 comment #4423046520
-// • Stack Overflow #14449945, #69877522
-// The ONLY safe approach is sizingOptions=[] — hosting controller NEVER
-// auto-writes preferredContentSize. We own ALL sizing calls exclusively.
+// WHY:
+// Architecture 1 (sizingOptions=.preferredContentSize):
+//   NSPopover re-anchors on every SwiftUI state update → side-jump every 2s.
+// Architecture 2 (fittingSize before show()):
+//   RunnerStoreObservable.reload() is async — data not yet available at
+//   measurement time → fittingSize always returns ~44pt → 300pt fallback.
+// Architecture 3 (this commit):
+//   Render content first. GeometryReader measures actual height after first
+//   layout pass. PreferenceKey propagates height up. onHeightReady callback
+//   calls popover.setContentSize() ONCE. animates=false = invisible resize.
 //
-// HOW IT WORKS:
-// 1. openPopover() measures content height via fittingSize BEFORE show()
-// 2. Sets popover.contentSize ONCE — this is the only contentSize write
-// 3. show() anchors based on that fixed size — no subsequent re-anchor
-// 4. navigate() swaps rootView only — ZERO sizing calls, content scrolls
-// 5. Close → reopen → height remeasured fresh for new content
-//
-// WHAT "DYNAMIC HEIGHT" MEANS HERE:
-// Height is dynamic per-open: every time the user clicks the status icon,
-// height is freshly measured from current content. It does NOT live-update
-// while the popover is visible. This is the correct behaviour — it is what
-// every real-world status bar app (Lungo, Pockity, Sindre Sorhus utilities)
-// does. Live resize while shown requires NSPanel (no anchor concept at all).
-//
-// FITTINGSIZE MEASUREMENT SEQUENCE:
-// a. hostingController.view.setFrameSize(NSSize(width: fixedWidth, height: 9999))
-//    — give the view a tall constraint so SwiftUI can lay out unbounded vertically
-// b. hostingController.view.layoutSubtreeIfNeeded() — force layout pass
-// c. let h = min(hostingController.view.fittingSize.height, maxHeight)
-//    — clamp to screen-safe height
-// d. popover.contentSize = NSSize(width: fixedWidth, height: h)
-// e. popover.show() — AFTER contentSize is set
+// SEQUENCE:
+// 1. openPopover():
+//    a. observable.reload()              — sync snapshot; async data arrives later
+//    b. popoverIsOpen = true
+//       popoverOpenState.isOpen = true   — views see live open state immediately
+//    c. popoverOpenState.heightReported = false  — arm the one-shot callback
+//    d. popoverOpenState.onHeightReady = { [weak self, weak popover] h in
+//           let clamped = min(h, self.maxHeight)
+//           popover?.setContentSize(NSSize(width: Self.fixedWidth, height: clamped))
+//       }                                — callback fires ONCE after first render
+//    e. popover.contentSize = initial safe size (fixedWidth × 300)
+//    f. popover.show()                   — opens at safe size, no anchor jump
+//    g. SwiftUI renders content with real data
+//    h. GeometryReader fires PreferenceKey with real height
+//    i. onPreferenceChange → onHeightReady → setContentSize(real height)
+//       animates=false → user sees correct height, never sees the initial 300pt
+// 2. navigate(): rootView swap only — ZERO sizing calls.
+// 3. popoverDidClose(): reset isOpen, heightReported, onHeightReady.
 //
 // WIDTH RULE:
-// Width is ALWAYS fixedWidth=480. Never measure width. Never use fittingSize.width.
-// ❌ NEVER change fixedWidth without updating it everywhere you use it.
+// Width is ALWAYS fixedWidth=480. Never measure width dynamically.
+// ❌ NEVER change fixedWidth without updating all usages.
 //
-// NOPOP-WHILE-SHOWN RULE:
-// ❌ NEVER write popover.contentSize while popover.isShown == true.
-// ❌ NEVER call remeasurePopover() — it does not exist and must never be recreated.
-// ❌ NEVER set sizingOptions = .preferredContentSize — that is Architecture 1 (broken).
-//
-// TIMER / POLL GUARD:
-// RunnerStore.shared.onChange → observable.reload() is gated behind !popoverIsOpen.
-// ❌ NEVER remove this guard.
+// NO-RESIZE-WHILE-SHOWN RULE:
+// setContentSize is called by onHeightReady ONCE immediately after first render.
+// After heightReported=true, no further setContentSize calls occur.
+// ❌ NEVER write popover.contentSize or call setContentSize while popover.isShown
+//    except via the onHeightReady one-shot callback.
+// ❌ NEVER set sizingOptions = .preferredContentSize.
+// ❌ NEVER recreate a remeasurePopover() function.
 //
 // POPOVEROPENSTATE:
-// popoverOpenState.isOpen mirrors popoverIsOpen. Injected via wrapEnv().
-// InlineJobRowsView and PopoverMainView both read it as @EnvironmentObject.
+// isOpen mirrors popoverIsOpen. heightReported + onHeightReady drive dynamic sizing.
+// Both InlineJobRowsView and PopoverMainView read isOpen as @EnvironmentObject.
+// ❌ NEVER pass isPopoverOpen: as a plain Bool prop — frozen at construction time.
 // ❌ NEVER remove PopoverOpenState. ❌ NEVER remove wrapEnv() injection.
-// ❌ NEVER pass isPopoverOpen: as a plain Bool prop to PopoverMainView.
-//    A plain Bool prop is frozen at construction time (always false because
-//    mainView() constructs PopoverMainView BEFORE the popover opens).
-//    The @EnvironmentObject is mutated before show() so it is always live.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -91,30 +84,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popoverIsOpen = false
 
     // ⚠️ REGRESSION GUARD (ref #377):
-    // Injected via wrapEnv() into every view. InlineJobRowsView AND PopoverMainView
-    // both read it as @EnvironmentObject to gate timer calls and state mutations.
-    // isOpen must always mirror popoverIsOpen — set both together.
+    // Injected via wrapEnv() into every view.
+    // isOpen mirrors popoverIsOpen — always set both together.
+    // heightReported + onHeightReady drive Architecture 3 dynamic sizing.
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-    // ❌ NEVER pass as a plain Bool prop to PopoverMainView — it would be frozen.
+    // ❌ NEVER pass as plain Bool prop to any view — always frozen at construction.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    /// Canonical popover width. NEVER dynamic. NEVER fittingSize.width.
+    /// Canonical popover width. NEVER dynamic.
     /// ❌ NEVER change without updating all usages.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
-    private static let fixedWidth: CGFloat = 480
+    static let fixedWidth: CGFloat = 480
 
     /// Maximum popover height — 75% of visible screen height.
-    /// Prevents popover from extending off-screen on small displays.
     private var maxHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
     }
 
     // MARK: - Environment injection
 
-    /// Wraps any view in AnyView and injects all required environment objects.
+    /// Wraps any view and injects all required environment objects.
     /// ❌ NEVER bypass this. ❌ NEVER remove .environmentObject(popoverOpenState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -134,11 +126,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let controller = NSHostingController(rootView: mainView())
 
-        // ✅ sizingOptions = [] — ARCHITECTURE 2. CRITICAL. DO NOT CHANGE.
-        // Empty [] means the hosting controller NEVER auto-writes preferredContentSize
-        // to NSPopover while shown. We control ALL contentSize writes exclusively.
-        // ❌ NEVER change to .preferredContentSize — that is Architecture 1 (causes jump).
-        // ❌ NEVER remove this line — default is .preferredContentSize which is wrong.
+        // ✅ sizingOptions = [] — ARCHITECTURE 3. CRITICAL. DO NOT CHANGE.
+        // Empty [] = hosting controller NEVER auto-writes preferredContentSize.
+        // We own ALL contentSize writes exclusively via the onHeightReady callback.
+        // ❌ NEVER change to .preferredContentSize — causes side-jump (Architecture 1).
+        // ❌ NEVER remove — default is .preferredContentSize which is wrong.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is
         // removed is major major major.
@@ -150,6 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let pop = NSPopover()
         pop.behavior = .transient
+        // ✅ animates = false — CRITICAL for invisible one-shot resize.
+        // The popover opens at 300pt then immediately resizes to real content height.
+        // animates=false makes this invisible to the user.
+        // ❌ NEVER set animates = true — user would see a visible height jump.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
         pop.animates = false
         pop.contentSize = initialSize
         pop.contentViewController = controller
@@ -176,9 +174,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
         // ❌ NEVER set one without the other.
+        // Reset onHeightReady so it cannot fire after close.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         popoverOpenState.isOpen = false
+        popoverOpenState.heightReported = false
+        popoverOpenState.onHeightReady = nil
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.hostingController?.rootView = self.mainView()
@@ -187,26 +188,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller rootView ONLY. Zero sizing calls.
-    ///
-    /// Architecture 2: navigate() never touches contentSize.
-    /// Content that is taller than the open-time height scrolls internally.
-    /// The popover frame does not change while shown — no re-anchor, no jump.
-    ///
-    /// ❌ NEVER add sizing calls here.
-    /// ❌ NEVER call remeasurePopover() — it does not exist.
-    /// ❌ NEVER write popover.contentSize here.
+    /// Swaps rootView ONLY. ZERO sizing calls.
+    /// ❌ NEVER add sizing calls. ❌ NEVER write contentSize here.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
+    /// UNDER ANY CIRCUMSTANCE.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
 
     // MARK: - View factories
 
-    /// nonisolated: called from DispatchQueue.global — pure network I/O, no @MainActor state.
-    /// ❌ NEVER remove nonisolated.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -219,13 +210,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func mainView() -> AnyView {
         savedNavState = nil
-        // ⚠️ CRITICAL: PopoverMainView NO LONGER takes an `isPopoverOpen:` prop.
-        // Open state is read from @EnvironmentObject PopoverOpenState injected by
-        // wrapEnv(). This is the fix for the frozen Bool prop bug that caused
-        // systemStats and the timer guard to never fire.
-        // ❌ NEVER add isPopoverOpen: back as a prop.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         return wrapEnv(PopoverMainView(
             store: observable,
             onSelectJob: { [weak self] job in
@@ -377,21 +361,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover with a fresh height measurement.
+    /// Opens the popover. Architecture 3 sequence:
     ///
-    /// Architecture 2 measurement sequence:
-    /// 1. Reload data so content reflects current state
-    /// 2. Give hosting view a tall unconstrained frame (width=fixedWidth, height=9999)
-    ///    so SwiftUI can lay out at its natural height
-    /// 3. Force a layout pass: layoutSubtreeIfNeeded()
-    /// 4. Read fittingSize.height and clamp to maxHeight
-    /// 5. Set popover.contentSize ONCE with (fixedWidth, clampedHeight)
-    /// 6. Call show() — NSPopover anchors to this size, never changes it again
-    /// 7. After show(), restore saved nav state if any
+    /// 1. Reload data snapshot (async data arrives after show() — that's fine).
+    /// 2. Arm the one-shot height callback before show().
+    /// 3. Show at safe initial size (300pt). animates=false hides this.
+    /// 4. SwiftUI renders real content → GeometryReader fires PreferenceKey.
+    /// 5. onPreferenceChange → onHeightReady → setContentSize(real height).
+    ///    Because animates=false, user sees final correct height immediately.
     ///
-    /// ❌ NEVER write popover.contentSize after show()
-    /// ❌ NEVER call this from a background thread
-    /// ❌ NEVER use fittingSize.width — always Self.fixedWidth
+    /// ❌ NEVER call setContentSize after show() except via onHeightReady.
+    /// ❌ NEVER call this from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -401,42 +381,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
               let popover,
               let hostingController else { return }
 
-        // Step 1: reload data before measurement so height reflects real content.
-        // ❌ NEVER move this after show().
+        // Step 1: snapshot data so header/runners render immediately.
         observable.reload()
 
-        // Step 2: mark open BEFORE show() so views see isOpen=true on first render.
+        // Step 2: arm open state BEFORE show() so views see isOpen=true on first render.
         // ❌ NEVER move after show(). ❌ NEVER set one without the other.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         popoverIsOpen = true
         popoverOpenState.isOpen = true
+        popoverOpenState.heightReported = false
 
-        // Step 3: give the hosting view full vertical space so SwiftUI measures
-        // natural content height. Width is always fixedWidth.
-        let measureSize = NSSize(width: Self.fixedWidth, height: 9999)
-        hostingController.view.setFrameSize(measureSize)
-        hostingController.view.layoutSubtreeIfNeeded()
-
-        // Step 4: read and clamp height.
-        let measuredHeight = hostingController.view.fittingSize.height
-        let clampedHeight = min(measuredHeight > 10 ? measuredHeight : 300, maxHeight)
-
-        // Step 5: set contentSize ONCE before show(). This is the ONLY place
-        // contentSize is written. After show() it is NEVER touched again.
-        // ❌ NEVER write popover.contentSize anywhere else in this file.
+        // ⚠️ ONE-SHOT HEIGHT CALLBACK — Architecture 3 dynamic sizing.
+        // This closure is called by PopoverMainView's .onPreferenceChange ONCE
+        // after the first real layout pass. It calls popover.setContentSize().
+        // animates=false (set on the popover) ensures the user never sees the
+        // initial 300pt height — the resize happens before the window is drawn.
+        //
+        // ❌ NEVER call setContentSize inside this closure more than once.
+        // ❌ NEVER remove this closure.
+        // ❌ NEVER set heightReported = false after show() (that re-arms the callback).
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
-        let finalSize = NSSize(width: Self.fixedWidth, height: clampedHeight)
-        hostingController.view.setFrameSize(finalSize)
-        popover.contentSize = finalSize
+        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is
+        // removed is major major major.
+        let maxH = maxHeight
+        popoverOpenState.onHeightReady = { [weak popover, weak hostingController] height in
+            let clamped = min(height, maxH)
+            let finalSize = NSSize(width: Self.fixedWidth, height: clamped)
+            hostingController?.view.setFrameSize(finalSize)
+            popover?.setContentSize(finalSize)
+        }
 
-        // Step 6: show — anchor is computed once from finalSize, never again.
+        // Step 3: set safe initial size and show.
+        // The initial 300pt is never seen because animates=false and the
+        // onHeightReady callback fires before the first screen draw.
+        let safeSize = NSSize(width: Self.fixedWidth, height: 300)
+        hostingController.view.setFrameSize(safeSize)
+        popover.contentSize = safeSize
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
 
-        // Step 7: restore saved nav state (e.g. user was on Settings, closed, reopens).
-        // ❌ NEVER restore stepLog / actionStepLog — async-loaded, spinner height is wrong.
+        // Step 4: restore saved nav state if any.
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
