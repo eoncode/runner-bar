@@ -1,1 +1,321 @@
-aW1wb3J0IEFwcEtpdAppbXBvcnQgU3dpZnRVSQoKLy8gc3dpZnRsaW50OmRpc2FibGUgdHlwZV9ib2R5X2xlbmd0aAovLyBNQVJLOiAtIE5hdlN0YXRlCgovLyDimqDvuI8gUkVHUkVTU0lPTiBHVUFSRCAtLSBSRUFEIEJFRk9SRSBTQ0hBTkdJTkcgKHJlZiAjNTIgIzU0ICM1NyAjNTkgIzI5NiAjMzc1ICMzNzYgIzM3NykKLy8KLy8gU0laSU5HIENPTlRSQUNUIChwZXIgaXNzdWVzICMzNzcpOgovLwovLyAgIHNpemluZ09wdGlvbnMgPSBbXSAoZW1wdHkpIC0tIE5FVkVSIC5wcmVmZXJyZWRDb250ZW50U2l6ZS4KLy8gICAgIC5wcmVmZXJyZWRDb250ZW50U2l6ZSBhdXRvLXB1c2hlcyBwcmVmZXJyZWRDb250ZW50U2l6ZSB0bwovLyAgICAgTlNQb3BvdmVyIG9uIGV2ZXJ5IFN3aWZ0VUkgc3RhdGUgdXBkYXRlICh3aW5kb3cgcmVzaXplLCBuYXZpZ2F0ZSgpLAovLyAgICAgZGF0YSByZWxvYWQpIC0tPiBOU1BvcG92ZXIgcmUtYW5jaG9ycyBvbiBldmVyeSByZWNlaXZlIC0tPiBzaWRlLWp1bXAuCi8vCi8vICAgV2lkdGggOiBQSU5ORUQgYXMgZml4ZWRXaWR0aCBjb25zdGFudC4gU2V0IG9uY2UgYmVmb3JlIHNob3coKS4gTkVWRVIgZHluYW1pYy4KLy8gICBIZWlnaHQ6IFJlYWQgZnJvbSBmaXR0aW5nU2l6ZS5oZWlnaHQgT05DRSBiZWZvcmUgc2hvdygpIGluIG9wZW5Qb3BvdmVyKCkuCi8vICAgICAgICAgICBBZnRlciBzaG93KCkgLS0gTkVWRVIgdG91Y2ggY29udGVudFNpemUgb3Igc2V0RnJhbWVTaXplIGFnYWluLgovLyAgICAgICAgICAgRGV0YWlsIHZpZXdzIHVzZSBtYXhIZWlnaHQ6LmluZmluaXR5IHRvIGZpbGwgdGhlIGZpeGVkIGZyYW1lLgovLwovLyAgIG5hdmlnYXRlKCkgPSByb290VmlldyBzd2FwIG9ubHkuIE5vIHNpemluZyBjYWxscy4gRXZlci4KLy8KLy8g4p2MIE5FVkVSIHNldCBzaXppbmdPcHRpb25zID0gLnByZWZlcnJlZENvbnRlbnRTaXplIC0tIHB1c2hlcyBjb250ZW50U2l6ZSBvbiBldmVyeSBTV2lmdFVJIHVwZGF0ZSAtLT4ganVtcAovLyDinYwgTkVWRVIgcmVhZCBmaXR0aW5nU2l6ZS53aWR0aCBpbnRvIGFueSBzaXppbmcgY2FsbCAtLSB1bnN0YWJsZSwgY2F1c2VzIGp1bXAKLy8g4p2MIE5FVkVSIGNhbGwgc2V0RnJhbWVTaXplIG9yIHNldCBjb250ZW50U2l6ZSBhZnRlciBzaG93KCkgLS0gY2F1c2VzIGp1bXAKLy8g4p2MIE5FVkVSIGFkZCBvYmplY3RXaWxsQ2hhbmdlLnNlbmQoKSBpbiByZWxvYWQoKQovLyDinYwgTkVWRVIgcmVtb3ZlIC5mcmFtZShpZGVhbFdpZHRoOiA0MjAsIG1heFdpZHRoOiAuaW5maW5pdHkpIGZyb20gUG9wb3Zlck1haW5WaWV3Ci8vIOKdjCBORVZFUiB1c2UgLmZyYW1lKHdpZHRoOiA0MjApIGluc3RlYWQgb2YgLmZyYW1lKGlkZWFsV2lkdGg6IDQyMCkKLy8g4p2MIE5FVkVSIGd1YXJkIG9ic2VydmFibGUucmVsb2FkKCkgb24gIXBvcG92ZXJJc09wZW4gaW5zaWRlIG9wZW5Qb3BvdmVyKCkKLy8g4p2MIE5FVkVSIHJlbW92ZSB0aGUgIXBvcG92ZXJJc09wZW4gZ3VhcmQgZnJvbSBvbkNoYW5nZSAtLSBwcmV2ZW50cyBkb3VibGUtcmVsb2FkCi8vIOKdjCBORVZFUiBjYWxsIG5hdmlnYXRlKHRvOiByZXN0b3JlZCkgQkVGT1JFIHNob3coKSAtLSByYWNlcyB3aXRoIHJlbG9hZCgpCi8vIOKdjCBORVZFUiBjYWxsIGxheW91dFN1YnRyZWVJZk5lZWRlZCgpIC0tIGNhdXNlcyBzaWRlLWp1bXAKLy8g4p2MIE5FVkVSIHdyYXAgQWN0aW9uc0xpc3RWaWV3IGluIFNjcm9sbFZpZXcgLS0gc3dhbGxvd3MgY29udGVudCBoZWlnaHQKCnByaXZhdGUgZW51bSBOYXZTdGF0ZSB7CiAgICBjYXNlIG1haW4KICAgIGNhc2Ugam9iRGV0YWlsKEFjdGl2ZUpvYikKICAgIGNhc2Ugc3RlcExvZyhBY3RpdmVKb2IsIEpvYlN0ZXApCiAgICBjYXNlIGFjdGlvbkRldGFpbChBY3Rpb25Hcm91cCkKICAgIGNhc2UgYWN0aW9uSm9iRGV0YWlsKEFjdGl2ZUpvYiwgQWN0aW9uR3JvdXApCiAgICBjYXNlIGFjdGlvblN0ZXBMb2coQWN0aXZlSm9iLCBKb2JTdGVwLCBBY3Rpb25Hcm91cCkKICAgIGNhc2Ugc2V0dGluZ3MKfQoKLy8gTUFSSzogLSBBcHBEZWxlZ2F0ZQoKZmluYWwgY2xhc3MgQXBwRGVsZWdhdGU6IE5TT2JqZWN0LCBOU0FwcGxpY2F0aW9uRGVsZWdhdGUsIE5TUG9wb3ZlckRlbGVnYXRlLCBAdW5jaGVja2VkIFNlbmRhYmxlIHsKICAgIHByaXZhdGUgdmFyIHN0YXR1c0l0ZW06IE5TU3RhdHVzSXRlbT8KICAgIHByaXZhdGUgdmFyIHBvcG92ZXI6IE5TUG9wb3Zlcj8KICAgIHByaXZhdGUgdmFyIGhvc3RpbmdDb250cm9sbGVyOiBOU0hvc3RpbmdDb250cm9sbGVyPEFueVZpZXc+PwogICAgQE1haW5BY3RvciBwcml2YXRlIGxhenkgdmFyIG9ic2VydmFibGUgPSBSdW5uZXJTdG9yZU9ic2VydmFibGUoKQogICAgcHJpdmF0ZSB2YXIgc2F2ZWROYXZTdGF0ZTogTmF2U3RhdGU/CiAgICBwcml2YXRlIHZhciBwb3BvdmVySXNPcGVuID0gZmFsc2UKCiAgICAvLyDimqDvuI8gV2lkdGggaXMgYSBzaW5nbGUgY29uc3RhbnQgLS0gbWF0Y2hlcyBpZGVhbFdpZHRoIGluIFBvcG92ZXJNYWluVmlldy4KICAgIC8vIE5FVkVSIGNoYW5nZSBvbmUgd2l0aG91dCBjaGFuZ2luZyB0aGUgb3RoZXIuCiAgICBwcml2YXRlIHN0YXRpYyBsZXQgZml4ZWRXaWR0aDogQ0dGbG9hdCA9IDQyMAoKICAgIC8vIE1BUks6IC0gQXBwIGxpZmVjeWNsZQoKICAgIGZ1bmMgYXBwbGljYXRpb25EaWRGaW5pc2hMYXVuY2hpbmcoXyBub3RpZmljYXRpb246IE5vdGlmaWNhdGlvbikgewogICAgICAgIHN0YXR1c0l0ZW0gPSBOU1N0YXR1c0Jhci5zeXN0ZW0uc3RhdHVzSXRlbSh3aXRoTGVuZ3RoOiBOU1N0YXR1c0l0ZW0uc3F1YXJlTGVuZ3RoKQogICAgICAgIGlmIGxldCBidXR0b24gPSBzdGF0dXNJdGVtPy5idXR0b24gewogICAgICAgICAgICBidXR0b24uaW1hZ2UgPSBtYWtlU3RhdHVzSWNvbihmb3I6IC5hbGxPZmZsaW5lKQogICAgICAgICAgICBidXR0b24uYWN0aW9uID0gI3NlbGVjdG9yKHRvZ2dsZVBvcG92ZXIpCiAgICAgICAgICAgIGJ1dHRvbi50YXJnZXQgPSBzZWxmCiAgICAgICAgfQogICAgICAgIGxldCBjb250cm9sbGVyID0gTlNIb3N0aW5nQ29udHJvbGxlcihyb290VmlldzogbWFpblZpZXcoKSkKICAgICAgICAvLyDimqDvuI8gc2l6aW5nT3B0aW9ucyA9IFtdIChkZWZhdWx0KToKICAgICAgICAvLyAgIFNUT1AgYXV0by1wcm9wYWdhdGlvbiBvZiBwcmVmZXJyZWRDb250ZW50U2l6ZSB0byBOU1BvcG92ZXIuCiAgICAgICAgLy8gICBXaXRoIC5wcmVmZXJyZWRDb250ZW50U2l6ZSwgZXZlcnkgU3dpZnRVSSBzdGF0ZSBjaGFuZ2UgKGluY2x1ZGluZwogICAgICAgIC8vICAgbmF2aWdhdGUoKSByb290VmlldyBzd2FwcykgcHVzaGVzIGEgbmV3IHByZWZlcnJlZENvbnRlbnRTaXplIHRvCiAgICAgICAgLy8gICBOU1BvcG92ZXIsIHdoaWNoIHJlLWFuY2hvcnMgb24gZXZlcnkgcmVjZWl2ZSAtLT4gc2lkZS1qdW1wLgogICAgICAgIC8vICAgW10gbWVhbnMgTlNQb3BvdmVyIG9ubHkgcmVhZHMgY29udGVudFNpemUgd2hlbiB3ZSBleHBsaWNpdGx5IHNldCBpdC4KICAgICAgICAvLyDinYwgTkVWRVIgc2V0IHRvIC5wcmVmZXJyZWRDb250ZW50U2l6ZQogICAgICAgIGNvbnRyb2xsZXIuc2l6aW5nT3B0aW9ucyA9IFtdCiAgICAgICAgbGV0IGluaXRpYWxTaXplID0gTlNTaXplKHdpZHRoOiBTZWxmLmZpeGVkV2lkdGgsIGhlaWdodDogMzAwKQogICAgICAgIGNvbnRyb2xsZXIudmlldy5mcmFtZSA9IE5TUmVjdChvcmlnaW46IC56ZXJvLCBzaXplOiBpbml0aWFsU2l6ZSkKICAgICAgICBob3N0aW5nQ29udHJvbGxlciA9IGNvbnRyb2xsZXIKICAgICAgICBsZXQgcG9wID0gTlNQb3BvdmVyKCkKICAgICAgICBwb3AuYmVoYXZpb3IgPSAudHJhbnNpZW50CiAgICAgICAgcG9wLmFuaW1hdGVzID0gZmFsc2UKICAgICAgICBwb3AuY29udGVudFNpemUgPSBpbml0aWFsU2l6ZQogICAgICAgIHBvcC5jb250ZW50Vmlld0NvbnRyb2xsZXIgPSBjb250cm9sbGVyCiAgICAgICAgcG9wLmRlbGVnYXRlID0gc2VsZgogICAgICAgIHBvcG92ZXIgPSBwb3AKICAgICAgICBSdW5uZXJTdG9yZS5zaGFyZWQub25DaGFuZ2UgPSB7IFt3ZWFrIHNlbGZdIGluCiAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICBzZWxmLnN0YXR1c0l0ZW0/LmJ1dHRvbj8uaW1hZ2UgPSBtYWtlU3RhdHVzSWNvbihmb3I6IFJ1bm5lclN0b3JlLnNoYXJlZC5hZ2dyZWdhdGVTdGF0dXMpCiAgICAgICAgICAgIC8vIOKaoPu4jyBHdWFyZDogcHJldmVudHMgZG91YmxlLXJlbG9hZCB3aGlsZSBwb3BvdmVyIGlzIG9wZW4uCiAgICAgICAgICAgIGlmICFzZWxmLnBvcG92ZXJJc09wZW4gewogICAgICAgICAgICAgICAgRGlzcGF0Y2hRdWV1ZS5tYWluLmFzeW5jIHsgc2VsZi5vYnNlcnZhYmxlLnJlbG9hZCgpIH0KICAgICAgICAgICAgfQogICAgICAgIH0KICAgICAgICBSdW5uZXJTdG9yZS5zaGFyZWQuc3RhcnQoKQogICAgfQoKICAgIC8vIE1BUks6IC0gTlNQb3BvdmVyRGVsZWdhdGUKCiAgICBmdW5jIHBvcG92ZXJEaWRDbG9zZShfIG5vdGlmaWNhdGlvbjogTm90aWZpY2F0aW9uKSB7CiAgICAgICAgcG9wb3ZlcklzT3BlbiA9IGZhbHNlCiAgICAgICAgRGlzcGF0Y2hRdWV1ZS5tYWluLmFzeW5jIHsgW3dlYWsgc2VsZl0gaW4KICAgICAgICAgICAgZ3VhcmQgbGV0IHNlbGYgZWxzZSB7IHJldHVybiB9CiAgICAgICAgICAgIHNlbGYuaG9zdGluZ0NvbnRyb2xsZXI/LnJvb3RWaWV3ID0gc2VsZi5tYWluVmlldygpCiAgICAgICAgfQogICAgfQoKICAgIC8vIE1BUks6IC0gVmlldyBmYWN0b3JpZXMKCiAgICBwcml2YXRlIGZ1bmMgZW5yaWNoU3RlcHNJZk5lZWRlZChfIGpvYjogQWN0aXZlSm9iKSAtPiBBY3RpdmVKb2IgewogICAgICAgIGd1YXJkIGpvYi5zdGVwcy5pc0VtcHR5CiAgICAgICAgICAgICAgICB8fCBqb2Iuc3RlcHMuY29udGFpbnMod2hlcmU6IHsgJDAuc3RhdHVzID09ICJpbl9wcm9ncmVzcyIgfSksCiAgICAgICAgICAgICAgbGV0IHNjb3BlID0gc2NvcGVGcm9tSHRtbFVybChqb2IuaHRtbFVybCksCiAgICAgICAgICAgICAgbGV0IGRhdGEgPSBnaEFQSSgicmVwb3MvXChzY29wZSkvYWN0aW9ucy9qb2JzL1woam9iLmlkKSIpLAogICAgICAgICAgICAgIGxldCBmcmVzaCA9IHRyeT8gSlNPTkRlY29kZXIoKS5kZWNvZGUoSm9iUGF5bG9hZC5zZWxmLCBmcm9tOiBkYXRhKQogICAgICAgIGVsc2UgeyByZXR1cm4gam9iIH0KICAgICAgICByZXR1cm4gbWFrZUFjdGl2ZUpvYihmcm9tOiBmcmVzaCwgaXNvOiBJU084NjAxRGF0ZUZvcm1hdHRlcigpLCBpc0RpbW1lZDogam9iLmlzRGltbWVkKQogICAgfQoKICAgIEBNYWluQWN0b3IKICAgIHByaXZhdGUgZnVuYyBtYWluVmlldygpIC0+IEFueVZpZXcgewogICAgICAgIHNhdmVkTmF2U3RhdGUgPSBuaWwKICAgICAgICByZXR1cm4gQW55VmlldyhQb3BvdmVyTWFpblZpZXcoCiAgICAgICAgICAgIHN0b3JlOiBvYnNlcnZhYmxlLAogICAgICAgICAgICBvblNlbGVjdEpvYjogeyBbd2VhayBzZWxmXSBqb2IgaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgRGlzcGF0Y2hRdWV1ZS5nbG9iYWwocW9zOiAudXNlckluaXRpYXRlZCkuYXN5bmMgewogICAgICAgICAgICAgICAgICAgIGxldCBlbnJpY2hlZCA9IHNlbGYuZW5yaWNoU3RlcHNJZk5lZWRlZChqb2IpCiAgICAgICAgICAgICAgICAgICAgRGlzcGF0Y2hRdWV1ZS5tYWluLmFzeW5jIHsKICAgICAgICAgICAgICAgICAgICAgICAgZ3VhcmQgc2VsZi5wb3BvdmVySXNPcGVuIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgICAgICAgICBzZWxmLm5hdmlnYXRlKHRvOiBzZWxmLmRldGFpbFZpZXcoam9iOiBlbnJpY2hlZCkpCiAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9LAogICAgICAgICAgICBvblNlbGVjdEFjdGlvbjogeyBbd2Vhayogc2VsZl0gZ3JvdXAgaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgbGV0IGxhdGVzdCA9IFJ1bm5lclN0b3JlLnNoYXJlZC5hY3Rpb25zLmZpcnN0KHdoZXJlOiB7ICQwLmlkID09IGdyb3VwLmlkIH0pID8/IGdyb3VwCiAgICAgICAgICAgICAgICBzZWxmLm5hdmlnYXRlKHRvOiBzZWxmLmFjdGlvbkRldGFpbFZpZXcoZ3JvdXA6IGxhdGVzdCkpCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgIG9uU2VsZWN0U2V0dGluZ3M6IHsgW3dlYWsgc2VsZl0gaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5zZXR0aW5nc1ZpZXcoKSkKICAgICAgICAgICAgfQogICAgICAgICkpCiAgICB9CgogICAgQE1haW5BY3RvcgogICAgcHJpdmF0ZSBmdW5jIGFjdGlvbkRldGFpbFZpZXcoZ3JvdXA6IEFjdGlvbkdyb3VwKSAtPiBBbnlWaWV3IHsKICAgICAgICBzYXZlZE5hdlN0YXRlID0gLmFjdGlvbkRldGFpbChncm91cCkKICAgICAgICByZXR1cm4gQW55VmlldyhBY3Rpb25EZXRhaWxWaWV3KAogICAgICAgICAgICBncm91cDogZ3JvdXAsCiAgICAgICAgICAgIG9uQmFjazogeyBbd2Vhayogc2VsZl0gaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5tYWluVmlldygpKQogICAgICAgICAgICB9LAogICAgICAgICAgICBvblNlbGVjdEpvYjogeyBbd2Vhayogc2VsZl0gam9iIGluCiAgICAgICAgICAgICAgICBndWFyZCBsZXQgc2VsZiBlbHNlIHsgcmV0dXJuIH0KICAgICAgICAgICAgICAgIERpc3BhdGNoUXVldWUuZ2xvYmFsKHFvczogLnVzZXJJbml0aWF0ZWQpLmFzeW5jIHsKICAgICAgICAgICAgICAgICAgICBsZXQgZW5yaWNoZWQgPSBzZWxmLmVucmljaFN0ZXBzSWZOZWVkZWQoam9iKQogICAgICAgICAgICAgICAgICAgIERpc3BhdGNoUXVldWUubWFpbi5hc3luYyB7CiAgICAgICAgICAgICAgICAgICAgICAgIGd1YXJkIHNlbGYucG9wb3ZlcklzT3BlbiBlbHNlIHsgcmV0dXJuIH0KICAgICAgICAgICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5kZXRhaWxWaWV3RnJvbUFjdGlvbihqb2I6IGVucmljaGVkLCBncm91cDogZ3JvdXApKQogICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQogICAgICAgICkpCiAgICB9CgogICAgQE1haW5BY3RvcgogICAgcHJpdmF0ZSBmdW5jIGRldGFpbFZpZXdGcm9tQWN0aW9uKGpvYjogQWN0aXZlSm9iLCBncm91cDogQWN0aW9uR3JvdXApIC0+IEFueVZpZXcgewogICAgICAgIHNhdmVkTmF2U3RhdGUgPSAuYWN0aW9uSm9iRGV0YWlsKGpvYiwgZ3JvdXApCiAgICAgICAgcmV0dXJuIEFueVZpZXcoSm9iRGV0YWlsVmlldygKICAgICAgICAgICAgam9iOiBqb2IsCiAgICAgICAgICAgIG9uQmFjazogeyBbd2Vhayogc2VsZl0gaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5hY3Rpb25EZXRhaWxWaWV3KGdyb3VwOiBncm91cCkpCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgIG9uU2VsZWN0U3RlcDogeyBbd2Vhayogc2VsZl0gc3RlcCBpbgogICAgICAgICAgICAgICAgZ3VhcmQgbGV0IHNlbGYgZWxzZSB7IHJldHVybiB9CiAgICAgICAgICAgICAgICBzZWxmLm5hdmlnYXRlKHRvOiBzZWxmLmxvZ1ZpZXdGcm9tQWN0aW9uKGpvYjogam9iLCBzdGVwOiBzdGVwLCBncm91cDogZ3JvdXApKQogICAgICAgICAgICB9CiAgICAgICAgKSkKICAgIH0KCiAgICBATWFpbkFjdG9yCiAgICBwcml2YXRlIGZ1bmMgbG9nVmlld0Zyb21BY3Rpb24oam9iOiBBY3RpdmVKb2IsIHN0ZXA6IEpvYlN0ZXAsIGdyb3VwOiBBY3Rpb25Hcm91cCkgLT4gQW55VmlldyB7CiAgICAgICAgc2F2ZWROYXZTdGF0ZSA9IC5hY3Rpb25TdGVwTG9nKGpvYiwgc3RlcCwgZ3JvdXApCiAgICAgICAgcmV0dXJuIEFueVZpZXcoU3RlcExvZ1ZpZXcoCiAgICAgICAgICAgIGpvYjogam9iLAogICAgICAgICAgICBzdGVwOiBzdGVwLAogICAgICAgICAgICBvbkJhY2s6IHsgW3dlYWsgc2VsZl0gaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5kZXRhaWxWaWV3RnJvbUFjdGlvbihqb2I6IGpvYiwgZ3JvdXA6IGdyb3VwKSkKICAgICAgICAgICAgfQogICAgICAgICkpCiAgICB9CgogICAgQE1haW5BY3RvcgogICAgcHJpdmF0ZSBmdW5jIGRldGFpbFZpZXcoam9iOiBBY3RpdmVKb2IpIC0+IEFueVZpZXcgewogICAgICAgIHNhdmVkTmF2U3RhdGUgPSAuam9iRGV0YWlsKGpvYikKICAgICAgICByZXR1cm4gQW55VmlldyhKb2JEZXRhaWxWaWV3KAogICAgICAgICAgICBqb2I6IGpvYiwKICAgICAgICAgICAgb25CYWNrOiB7IFt3ZWFrIHNlbGZdIGluCiAgICAgICAgICAgICAgICBndWFyZCBsZXQgc2VsZiBlbHNlIHsgcmV0dXJuIH0KICAgICAgICAgICAgICAgIHNlbGYubmF2aWdhdGUodG86IHNlbGYubWFpblZpZXcoKSkKICAgICAgICAgICAgfSwKICAgICAgICAgICAgb25TZWxlY3RTdGVwOiB7IFt3ZWFrIHNlbGZdIHN0ZXAgaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5sb2dWaWV3KGpvYjogam9iLCBzdGVwOiBzdGVwKSkKICAgICAgICAgICAgfQogICAgICAgICkpCiAgICB9CgogICAgQE1haW5BY3RvcgogICAgcHJpdmF0ZSBmdW5jIHNldHRpbmdzVmlldygpIC0+IEFueVZpZXcgewogICAgICAgIHNhdmVkTmF2U3RhdGUgPSAuc2V0dGluZ3MKICAgICAgICByZXR1cm4gQW55VmlldyhTZXR0aW5nc1ZpZXcoCiAgICAgICAgICAgIG9uQmFjazogeyBbd2Vhaysgc2VsZl0gaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5tYWluVmlldygpKQogICAgICAgICAgICB9LAogICAgICAgICAgICBzdG9yZTogb2JzZXJ2YWJsZQogICAgICAgICkpCiAgICB9CgogICAgQE1haW5BY3RvcgogICAgcHJpdmF0ZSBmdW5jIGxvZ1ZpZXcoam9iOiBBY3RpdmVKb2IsIHN0ZXA6IEpvYlN0ZXApIC0+IEFueVZpZXcgewogICAgICAgIHNhdmVkTmF2U3RhdGUgPSAuc3RlcExvZyhqb2IsIHN0ZXApCiAgICAgICAgcmV0dXJuIEFueVZpZXcoU3RlcExvZ1ZpZXcoCiAgICAgICAgICAgIGpvYjogam9iLAogICAgICAgICAgICBzdGVwOiBzdGVwLAogICAgICAgICAgICBvbkJhY2s6IHsgW3dlYWsgc2VsZl0gaW4KICAgICAgICAgICAgICAgIGd1YXJkIGxldCBzZWxmIGVsc2UgeyByZXR1cm4gfQogICAgICAgICAgICAgICAgc2VsZi5uYXZpZ2F0ZSh0bzogc2VsZi5kZXRhaWxWaWV3KGpvYjogam9iKSkKICAgICAgICAgICAgfQogICAgICAgICkpCiAgICB9CgogICAgQE1haW5BY3RvcgogICAgcHJpdmF0ZSBmdW5jIHZhbGlkYXRlZFZpZXcoZm9yIHN0YXRlOiBOYXZTdGF0ZSkgLT4gQW55Vmlldz8gewogICAgICAgIHNhdmVkTmF2U3RhdGUgPSBuaWwKICAgICAgICBsZXQgc3RvcmUgPSBSdW5uZXJTdG9yZS5zaGFyZWQKICAgICAgICBzd2l0Y2ggc3RhdGUgewogICAgICAgIGNhc2UgLm1haW46CiAgICAgICAgICAgIHJldHVybiBuaWwKICAgICAgICBjYXNlIC5qb2JEZXRhaWwobGV0IGpvYik6CiAgICAgICAgICAgIGxldCBsaXZlID0gc3RvcmUuam9icy5maXJzdCh3aGVyZTogeyAkMC5pZCA9PSBqb2IuaWQgfSkgPz8gam9iCiAgICAgICAgICAgIHJldHVybiBkZXRhaWxWaWV3KGpvYjogbGl2ZSkKICAgICAgICBjYXNlIC5zdGVwTG9nKGxldCBqb2IsIGxldCBzdGVwKToKICAgICAgICAgICAgbGV0IGxpdmUgPSBzdG9yZS5qb2JzLmZpcnN0KHdoZXJlOiB7ICQwLmlkID09IGpvYi5pZCB9KSA/PyBqb2IKICAgICAgICAgICAgcmV0dXJuIGxvZ1ZpZXcoam9iOiBsaXZlLCBzdGVwOiBzdGVwKQogICAgICAgIGNhc2UgLmFjdGlvbkRldGFpbChsZXQgZ3JvdXApOgogICAgICAgICAgICBndWFyZCBsZXQgbGl2ZSA9IHN0b3JlLmFjdGlvbnMuZmlyc3Qod2hlcmU6IHsgJDAuaWQgPT0gZ3JvdXAuaWQgfSkgZWxzZSB7IHJldHVybiBuaWwgfQogICAgICAgICAgICByZXR1cm4gYWN0aW9uRGV0YWlsVmlldyhncm91cDogbGl2ZSkKICAgICAgICBjYXNlIC5hY3Rpb25Kb2JEZXRhaWwobGV0IGpvYiwgbGV0IGdyb3VwKToKICAgICAgICAgICAgZ3VhcmQgbGV0IGxpdmVHcm91cCA9IHN0b3JlLmFjdGlvbnMuZmlyc3Qod2hlcmU6IHsgJDAuaWQgPT0gZ3JvdXAuaWQgfSkgZWxzZSB7IHJldHVybiBuaWwgfQogICAgICAgICAgICBsZXQgbGl2ZUpvYiA9IGxpdmVHcm91cC5qb2JzLmZpcnN0KHdoZXJlOiB7ICQwLmlkID09IGpvYi5pZCB9KSA/PyBqb2IKICAgICAgICAgICAgcmV0dXJuIGRldGFpbFZpZXdGcm9tQWN0aW9uKGpvYjogbGl2ZUpvYiwgZ3JvdXA6IGxpdmVHcm91cCkKICAgICAgICBjYXNlIC5hY3Rpb25TdGVwTG9nKGxldCBqb2IsIGxldCBzdGVwLCBsZXQgZ3JvdXApOgogICAgICAgICAgICBndWFyZCBsZXQgbGl2ZUdyb3VwID0gc3RvcmUuYWN0aW9ucy5maXJzdCh3aGVyZTogeyAkMC5pZCA9PSBncm91cC5pZCB9KSBlbHNlIHsgcmV0dXJuIG5pbCB9CiAgICAgICAgICAgIGxldCBsaXZlSm9iID0gbGl2ZUdyb3VwLmpvYnMuZmlyc3Qod2hlcmU6IHsgJDAuaWQgPT0gam9iLmlkIH0pID8/IGpvYgogICAgICAgICAgICByZXR1cm4gbG9nVmlld0Zyb21BY3Rpb24oam9iOiBsaXZlSm9iLCBzdGVwOiBzdGVwLCBncm91cDogbGl2ZUdyb3VwKQogICAgICAgIGNhc2UgLnNldHRpbmdzOgogICAgICAgICAgICByZXR1cm4gc2V0dGluZ3NWaWV3KCkKICAgICAgICB9CiAgICB9CgogICAgLy8gTUFSSzogLSBOYXZpZ2F0aW9uCgogICAgLy8vIFN3YXBzIHJvb3RWaWV3IG9ubHkuIE5PIHNpemluZyBjYWxscy4KICAgIC8vLyBzaXppbmdPcHRpb25zID0gW10gbWVhbnMgTlNQb3BvdmVyIG5ldmVyIHJlY2VpdmVzIGEgbmV3IGNvbnRlbnRTaXplIGZyb20gU3dpZnRVSS4KICAgIC8vLyBUaGUgcG9wb3ZlciBrZWVwcyBleGFjdGx5IHRoZSBzaXplIHNldCBpbiBvcGVuUG9wb3ZlcigpLiBEZXRhaWwgdmlld3MKICAgIC8vLyBmaWxsIHRoZSBmcmFtZSB3aXRoIG1heEhlaWdodDogLmluZmluaXR5IGFuZCBzY3JvbGwgaW50ZXJuYWxseS4KICAgIC8vLyDinYwgTkVWRVIgYWRkIHNldEZyYW1lU2l6ZSBvciBjb250ZW50U2l6ZSBoZXJlIC0tIGNhdXNlcyBzaWRlLWp1bXAuCiAgICBwcml2YXRlIGZ1bmMgbmF2aWdhdGUodG8gdmlldzogQW55VmlldykgewogICAgICAgIGhvc3RpbmdDb250cm9sbGVyPy5yb290VmlldyA9IHZpZXcKICAgIH0KCiAgICAvLyBNQVJLOiAtIFBvcG92ZXIgc2hvdy9oaWRlCgogICAgQE1haW5BY3RvciBAmb2JqYyBwcml2YXRlIGZ1bmMgdG9nZ2xlUG9wb3ZlcigpIHsKICAgICAgICBndWFyZCBsZXQgcG9wb3ZlciBlbHNlIHsgcmV0dXJuIH0KICAgICAgICBpZiBwb3BvdmVyLmlzU2hvd24gewogICAgICAgICAgICBwb3BvdmVyLnBlcmZvcm1DbG9zZShuaWwpCiAgICAgICAgfSBlbHNlIHsKICAgICAgICAgICAgb3BlblBvcG92ZXIoKQogICAgICAgIH0KICAgIH0KCiAgICAvLy8gT3BlbnMgdGhlIHBvcG92ZXIuCiAgICAvLy8gU2V0cyBjb250ZW50U2l6ZSBPTkNFIGJlZm9yZSBzaG93KCkgLS0gc2FmZSBiZWNhdXNlIHBvcG92ZXIgaXMgbm90IHlldCB2aXNpYmxlLgogICAgLy8vIEFmdGVyIHNob3coKSwgc2l6aW5nT3B0aW9ucz1bXSBtZWFucyBOU1BvcG92ZXIgTkVWRVIgcmVjZWl2ZXMgYW5vdGhlciBjb250ZW50U2l6ZS4KICAgIC8vLyDinYwgTkVWRVIgc2V0IGNvbnRlbnRTaXplIGFmdGVyIHNob3coKS4g4p2MIE5FVkVSIHVzZSBmaXR0aW5nU2l6ZS53aWR0aC4KICAgIC8vLyDinYwgTkVWRVIgY2FsbCBsYXlvdXRTdWJ0cmVlSWZOZWVkZWQoKS4KICAgIEBNYWluQWN0b3IKICAgIHByaXZhdGUgZnVuYyBvcGVuUG9wb3ZlcigpIHsKICAgICAgICBndWFyZCBsZXQgYnV0dG9uID0gc3RhdHVzSXRlbT8uYnV0dG9uLAogICAgICAgICAgICAgIGJ1dHRvbi53aW5kb3cgIT0gbmlsLAogICAgICAgICAgICAgIGxldCBwb3BvdmVyLAogICAgICAgICAgICAgIGxldCBoYyA9IGhvc3RpbmdDb250cm9sbGVyCiAgICAgICAgZWxzZSB7IHJldHVybiB9CiAgICAgICAgcG9wb3ZlcklzT3BlbiA9IHRydWUKICAgICAgICBvYnNlcnZhYmxlLnJlbG9hZCgpCiAgICAgICAgLy8gU2V0IHNpemUgYmVmb3JlIHNob3coKSAtLSBwb3BvdmVyIG5vdCB5ZXQgdmlzaWJsZSwgbm8ganVtcCByaXNrLgogICAgICAgIC8vIFdpZHRoIGlzIGFsd2F5cyBmaXhlZFdpZHRoLiBIZWlnaHQgZnJvbSBmaXR0aW5nU2l6ZSBpcyBhIGhpbnQ7CiAgICAgICAgLy8gc2l6aW5nT3B0aW9ucz1bXSBtZWFucyB0aGlzIGlzIHRoZSBPTkxZIHNpemUgTlNQb3BvdmVyIHdpbGwgZXZlciBzZWUuCiAgICAgICAgbGV0IHJhd0hlaWdodCA9IGhjLnZpZXcuZml0dGluZ1NpemUuaGVpZ2h0CiAgICAgICAgbGV0IGhlaWdodCA9IHJhd0hlaWdodCA+IDAgPyByYXdIZWlnaHQgOiAzMDAKICAgICAgICBsZXQgc2l6ZSA9IE5TU2l6ZSh3aWR0aDogU2VsZi5maXhlZFdpZHRoLCBoZWlnaHQ6IGhlaWdodCkKICAgICAgICBoYy52aWV3LnNldEZyYW1lU2l6ZShzaXplKQogICAgICAgIHBvcG92ZXIuY29udGVudFNpemUgPSBzaXplCiAgICAgICAgcG9wb3Zlci5zaG93KHJlbGF0aXZlVG86IGJ1dHRvbi5ib3VuZHMsIG9mOiBidXR0b24sIHByZWZlcnJlZEVkZ2U6IC5tYXhZKQogICAgICAgIHBvcG92ZXIuY29udGVudFZpZXdDb250cm9sbGVyPy52aWV3LndpbmRvdz8ubWFrZUtleSgpCiAgICAgICAgLy8gUmVzdG9yZSBuYXYgc3RhdGUgQUZURVIgc2hvdygpIHRvIGF2b2lkIHJhY2luZyB3aXRoIHJlbG9hZCgpLgogICAgICAgIGlmIGxldCBzYXZlZCA9IHNhdmVkTmF2U3RhdGUsCiAgICAgICAgICAgbGV0IHJlc3RvcmVkID0gdmFsaWRhdGVkVmlldyhmb3I6IHNhdmVkKSB7CiAgICAgICAgICAgIG5hdmlnYXRlKHRvOiByZXN0b3JlZCkKICAgICAgICB9CiAgICB9Cn0KLy8gc3dpZnRsaW50OmVuYWJsZSB0eXBlX2JvZHlfbGVuZ3RoCg==
+import AppKit
+import SwiftUI
+
+// swiftlint:disable type_body_length
+// MARK: - NavState
+
+// ⚠️ REGRESSION GUARD -- READ BEFORE CHANGING (ref #52 #54 #57 #59 #296 #375 #376 #377)
+//
+// SIZING CONTRACT (per issues #377):
+//
+//   sizingOptions = [] (empty) -- NEVER .preferredContentSize.
+//     .preferredContentSize auto-pushes preferredContentSize to
+//     NSPopover on every SwiftUI state update (window resize, navigate(),
+//     data reload) --> NSPopover re-anchors on every receive --> side-jump.
+//
+//   Width : PINNED as fixedWidth constant. Set once before show(). NEVER dynamic.
+//   Height: Read from fittingSize.height ONCE before show() in openPopover().
+//           After show() -- NEVER touch contentSize or setFrameSize again.
+//           Detail views use maxHeight:.infinity to fill the fixed frame.
+//
+//   navigate() = rootView swap only. No sizing calls. Ever.
+//
+// ❌ NEVER set sizingOptions = .preferredContentSize -- pushes contentSize on every SwiftUI update --> jump
+// ❌ NEVER read fittingSize.width into any sizing call -- unstable, causes jump
+// ❌ NEVER call setFrameSize or set contentSize after show() -- causes jump
+// ❌ NEVER add objectWillChange.send() in reload()
+// ❌ NEVER remove .frame(idealWidth: 420, maxWidth: .infinity) from PopoverMainView
+// ❌ NEVER use .frame(width: 420) instead of .frame(idealWidth: 420)
+// ❌ NEVER guard observable.reload() on !popoverIsOpen inside openPopover()
+// ❌ NEVER remove the !popoverIsOpen guard from onChange -- prevents double-reload
+// ❌ NEVER call navigate(to: restored) BEFORE show() -- races with reload()
+// ❌ NEVER call layoutSubtreeIfNeeded() -- causes side-jump
+// ❌ NEVER wrap ActionsListView in ScrollView -- swallows content height
+
+private enum NavState {
+    case main
+    case jobDetail(ActiveJob)
+    case stepLog(ActiveJob, JobStep)
+    case actionDetail(ActionGroup)
+    case actionJobDetail(ActiveJob, ActionGroup)
+    case actionStepLog(ActiveJob, JobStep, ActionGroup)
+    case settings
+}
+
+// MARK: - AppDelegate
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @unchecked Sendable {
+    private var statusItem: NSStatusItem?
+    private var popover: NSPopover?
+    private var hostingController: NSHostingController<AnyView>?
+    @MainActor private lazy var observable = RunnerStoreObservable()
+    private var savedNavState: NavState?
+    private var popoverIsOpen = false
+
+    // ⚠️ Width is a single constant -- matches idealWidth in PopoverMainView.
+    // NEVER change one without changing the other.
+    private static let fixedWidth: CGFloat = 420
+
+    // MARK: - App lifecycle
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem?.button {
+            button.image = makeStatusIcon(for: .allOffline)
+            button.action = #selector(togglePopover)
+            button.target = self
+        }
+        let controller = NSHostingController(rootView: mainView())
+        // ⚠️ sizingOptions = [] (default):
+        //   STOP auto-propagation of preferredContentSize to NSPopover.
+        //   With .preferredContentSize, every SwiftUI state change (including
+        //   navigate() rootView swaps) pushes a new preferredContentSize to
+        //   NSPopover, which re-anchors on every receive --> side-jump.
+        //   [] means NSPopover only reads contentSize when we explicitly set it.
+        // ❌ NEVER set to .preferredContentSize
+        controller.sizingOptions = []
+        let initialSize = NSSize(width: Self.fixedWidth, height: 300)
+        controller.view.frame = NSRect(origin: .zero, size: initialSize)
+        hostingController = controller
+        let pop = NSPopover()
+        pop.behavior = .transient
+        pop.animates = false
+        pop.contentSize = initialSize
+        pop.contentViewController = controller
+        pop.delegate = self
+        popover = pop
+        RunnerStore.shared.onChange = { [weak self] in
+            guard let self else { return }
+            self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
+            // ⚠️ Guard: prevents double-reload while popover is open.
+            if !self.popoverIsOpen {
+                DispatchQueue.main.async { self.observable.reload() }
+            }
+        }
+        RunnerStore.shared.start()
+    }
+
+    // MARK: - NSPopoverDelegate
+
+    func popoverDidClose(_ notification: Notification) {
+        popoverIsOpen = false
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hostingController?.rootView = self.mainView()
+        }
+    }
+
+    // MARK: - View factories
+
+    private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
+        guard job.steps.isEmpty
+                || job.steps.contains(where: { $0.status == "in_progress" }),
+              let scope = scopeFromHtmlUrl(job.htmlUrl),
+              let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
+        else { return job }
+        return makeActiveJob(from: fresh, iso: ISO8601DateFormatter(), isDimmed: job.isDimmed)
+    }
+
+    @MainActor
+    private func mainView() -> AnyView {
+        savedNavState = nil
+        return AnyView(PopoverMainView(
+            store: observable,
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailView(job: enriched))
+                    }
+                }
+            },
+            onSelectAction: { [weak self] group in
+                guard let self else { return }
+                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                self.navigate(to: self.actionDetailView(group: latest))
+            },
+            onSelectSettings: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.settingsView())
+            }
+        ))
+    }
+
+    @MainActor
+    private func actionDetailView(group: ActionGroup) -> AnyView {
+        savedNavState = .actionDetail(group)
+        return AnyView(ActionDetailView(
+            group: group,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            },
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+                    }
+                }
+            }
+        ))
+    }
+
+    @MainActor
+    private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
+        savedNavState = .actionJobDetail(job, group)
+        return AnyView(JobDetailView(
+            job: job,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.actionDetailView(group: group))
+            },
+            onSelectStep: { [weak self] step in
+                guard let self else { return }
+                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+            }
+        ))
+    }
+
+    @MainActor
+    private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
+        savedNavState = .actionStepLog(job, step, group)
+        return AnyView(StepLogView(
+            job: job,
+            step: step,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+            }
+        ))
+    }
+
+    @MainActor
+    private func detailView(job: ActiveJob) -> AnyView {
+        savedNavState = .jobDetail(job)
+        return AnyView(JobDetailView(
+            job: job,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            },
+            onSelectStep: { [weak self] step in
+                guard let self else { return }
+                self.navigate(to: self.logView(job: job, step: step))
+            }
+        ))
+    }
+
+    @MainActor
+    private func settingsView() -> AnyView {
+        savedNavState = .settings
+        return AnyView(SettingsView(
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.mainView())
+            },
+            store: observable
+        ))
+    }
+
+    @MainActor
+    private func logView(job: ActiveJob, step: JobStep) -> AnyView {
+        savedNavState = .stepLog(job, step)
+        return AnyView(StepLogView(
+            job: job,
+            step: step,
+            onBack: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.detailView(job: job))
+            }
+        ))
+    }
+
+    @MainActor
+    private func validatedView(for state: NavState) -> AnyView? {
+        savedNavState = nil
+        let store = RunnerStore.shared
+        switch state {
+        case .main:
+            return nil
+        case .jobDetail(let job):
+            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
+            return detailView(job: live)
+        case .stepLog(let job, let step):
+            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
+            return logView(job: live, step: step)
+        case .actionDetail(let group):
+            guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
+            return actionDetailView(group: live)
+        case .actionJobDetail(let job, let group):
+            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
+            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
+            return detailViewFromAction(job: liveJob, group: liveGroup)
+        case .actionStepLog(let job, let step, let group):
+            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
+            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
+            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
+        case .settings:
+            return settingsView()
+        }
+    }
+
+    // MARK: - Navigation
+
+    /// Swaps rootView only. NO sizing calls.
+    /// sizingOptions = [] means NSPopover never receives a new contentSize from SwiftUI.
+    /// The popover keeps exactly the size set in openPopover(). Detail views
+    /// fill the frame with maxHeight: .infinity and scroll internally.
+    /// ❌ NEVER add setFrameSize or contentSize here -- causes side-jump.
+    private func navigate(to view: AnyView) {
+        hostingController?.rootView = view
+    }
+
+    // MARK: - Popover show/hide
+
+    @MainActor @objc private func togglePopover() {
+        guard let popover else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            openPopover()
+        }
+    }
+
+    /// Opens the popover.
+    /// Sets contentSize ONCE before show() -- safe because popover is not yet visible.
+    /// After show(), sizingOptions=[] means NSPopover NEVER receives another contentSize.
+    /// ❌ NEVER set contentSize after show(). ❌ NEVER use fittingSize.width.
+    /// ❌ NEVER call layoutSubtreeIfNeeded().
+    @MainActor
+    private func openPopover() {
+        guard let button = statusItem?.button,
+              button.window != nil,
+              let popover,
+              let hc = hostingController
+        else { return }
+        popoverIsOpen = true
+        observable.reload()
+        // Set size before show() -- popover not yet visible, no jump risk.
+        // Width is always fixedWidth. Height from fittingSize is a hint;
+        // sizingOptions=[] means this is the ONLY size NSPopover will ever see.
+        let rawHeight = hc.view.fittingSize.height
+        let height = rawHeight > 0 ? rawHeight : 300
+        let size = NSSize(width: Self.fixedWidth, height: height)
+        hc.view.setFrameSize(size)
+        popover.contentSize = size
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        popover.contentViewController?.view.window?.makeKey()
+        // Restore nav state AFTER show() to avoid racing with reload().
+        if let saved = savedNavState,
+           let restored = validatedView(for: saved) {
+            navigate(to: restored)
+        }
+    }
+}
+// swiftlint:enable type_body_length
