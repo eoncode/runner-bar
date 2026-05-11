@@ -8,41 +8,37 @@ import SwiftUI
 /// Settings view — complete implementation for all phases 1-6.
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
-/// All persistent state is backed by dedicated ObservableObject stores.
 ///
-/// ⚠️ REGRESSION GUARD (Architecture 1 — sizingOptions=.preferredContentSize — ref #52 #54 #57 #377):
+/// ⚠️ REGRESSION GUARD — Architecture 2 (sizingOptions=[]) ref #52 #54 #57 #377
+/// See also: status-bar-app-position-warning.md
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+/// is major major major.
 ///
-///   AppDelegate uses sizingOptions=.preferredContentSize. NSHostingController reads
-///   SwiftUI's ideal size and propagates to NSPopover automatically.
+/// LAYOUT RULE (Architecture 2 / sizingOptions=[]):
+///   AppDelegate measures fittingSize ONCE before show(). SettingsView must
+///   report a finite, scrollable height so fittingSize.height is deterministic.
 ///
-///   ROOT VSTACK FRAME RULE:
-///   .frame(idealWidth: 480) — idealWidth ONLY. NO idealHeight here.
+///   ScrollView with .frame(maxHeight: cappedHeight) is REQUIRED:
+///     - Without maxHeight cap, the ScrollView reports infinite idealHeight
+///       → fittingSize.height = 0 or screen height → wrong measurement.
+///     - cappedHeight = visibleFrame.height * 0.75 adapts to any screen.
 ///
-///   WHY NO ScrollView AT TOP LEVEL (CRITICAL):
-///   ScrollView reports idealHeight = full unbounded content height to SwiftUI.
-///   With sizingOptions=.preferredContentSize, this makes NSHostingController
-///   report preferredContentSize.height = ~800pt regardless of actual content.
-///   NSPopover then repositions to stay on screen → side-jump on Settings open.
+///   Root VStack has NO frame constraint:
+///     - Under Architecture 2 (sizingOptions=[]), the hosting controller
+///       does not use idealWidth/idealHeight at all. No frame needed on root.
+///     - ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) to the root VStack.
+///       Those are Architecture 1 workarounds. Under Architecture 2 they are
+///       ignored by the hosting controller and only add confusion.
 ///
-///   THE CORRECT PATTERN (dynamic height, no jump):
-///   Inner content VStack gets:
-///     .fixedSize(horizontal: false, vertical: true)   // measure at natural height
-///     .frame(maxHeight: cappedHeight, alignment: .top) // screen-safe cap
-///   This makes idealHeight = min(naturalContentHeight, cappedHeight) — truly dynamic.
-///   3 runner rows → small height. All sections expanded → up to cappedHeight.
-///   ❌ NEVER wrap the content VStack in ScrollView
-///   ❌ NEVER add idealHeight to root frame (that is a fixed height, not dynamic)
-///   ❌ NEVER remove .fixedSize(horizontal: false, vertical: true)
-///   ❌ NEVER remove .frame(maxHeight: cappedHeight) from the content VStack
+///   Inner VStack (inside ScrollView) keeps .frame(maxWidth: .infinity):
+///     - Required so rows expand to full width inside the ScrollView.
+///     - Safe: inside ScrollView, does not affect fittingSize measurement.
+///     - ❌ NEVER remove maxWidth:.infinity from the inner VStack.
 ///
-///   WHY idealWidth IS NEEDED:
-///   Pins preferredContentSize.width = 480 always. Width must never change → no re-anchor.
-///   ❌ NEVER remove idealWidth.
-///   ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth AND all views.
-///
-///   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-///   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-///   is major major major.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+/// is major major major.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -74,62 +70,56 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
-    /// Screen-safe height cap for the content VStack.
-    /// Used ONLY for .frame(maxHeight:) on the content VStack — NOT on root idealHeight.
-    /// .fixedSize(v:true) + .frame(maxHeight:) = dynamic height capped at this value.
-    /// idealHeight is NOT set on the root frame — height is dynamic, not fixed.
-    /// ❌ NEVER apply this as .frame(height:) — that is a fixed height.
-    /// ❌ NEVER apply this as idealHeight on the root frame.
-    /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
+    /// 75% of visible screen height — caps ScrollView so fittingSize is finite.
+    /// Used ONLY as ScrollView maxHeight. Root VStack has no frame constraint.
+    /// ❌ NEVER increase above 0.85 (popover may overflow off-screen).
+    /// ❌ NEVER use a fixed constant (must adapt to screen size).
+    /// ❌ NEVER move this to the root VStack frame (Architecture 2 doesn't need it there).
     private var cappedHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
     }
 
     var body: some View {
+        // Root VStack — NO frame constraint.
+        // Architecture 2: hosting controller ignores idealWidth/idealHeight.
+        // Width comes from the fixedWidth constraint set by AppDelegate.
+        // Height comes from fittingSize measurement before show().
+        // ❌ NEVER add .frame(idealWidth:) here.
+        // ❌ NEVER add .frame(idealHeight:) here.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ REGRESSION GUARD: NO ScrollView here.
-            // .fixedSize(horizontal: false, vertical: true) instructs SwiftUI to measure
-            // the content VStack at its natural height → this IS idealHeight.
-            // .frame(maxHeight: cappedHeight) caps layout rendering for screen safety.
-            // Combined: idealHeight = min(naturalContentHeight, cappedHeight) → dynamic.
-            // NSHostingController.preferredContentSize.height = this dynamic value.
-            // ❌ NEVER wrap this in ScrollView — destroys dynamic idealHeight measurement.
-            // ❌ NEVER remove fixedSize — without it idealHeight is unconstrained/zero.
-            // ❌ NEVER replace maxHeight with height — that is a fixed size.
+            // ScrollView with maxHeight cap — REQUIRED for finite fittingSize.
+            // ❌ NEVER remove maxHeight from ScrollView.
+            // ❌ NEVER remove this ScrollView entirely.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
-            VStack(alignment: .leading, spacing: 0) {
-                localRunnersSection
-                Divider()
-                runnerSection
-                Divider()
-                notificationsSection
-                Divider()
-                generalSection
-                Divider()
-                accountSection
-                Divider()
-                legalSection
-                Divider()
-                aboutSection
+            ScrollView {
+                // Inner VStack: maxWidth:.infinity is REQUIRED and SAFE here.
+                // Inside ScrollView — does not propagate to fittingSize.
+                // ❌ NEVER remove maxWidth:.infinity from this inner VStack.
+                VStack(alignment: .leading, spacing: 0) {
+                    localRunnersSection
+                    Divider()
+                    runnerSection
+                    Divider()
+                    notificationsSection
+                    Divider()
+                    generalSection
+                    Divider()
+                    accountSection
+                    Divider()
+                    legalSection
+                    Divider()
+                    aboutSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 16)
             }
-            .padding(.bottom, 16)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxHeight: cappedHeight, alignment: .top)
+            .frame(maxHeight: cappedHeight)
         }
-        // ⚠️ REGRESSION GUARD: idealWidth ONLY — no idealHeight.
-        // idealWidth: 480 pins preferredContentSize.width = 480 (no x re-anchor).
-        // Height is driven dynamically by fixedSize+maxHeight on the content VStack above.
-        // Adding idealHeight here would make height FIXED — defeats the purpose.
-        // ❌ NEVER add idealHeight here.
-        // ❌ NEVER remove idealWidth.
-        // ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
-        .frame(idealWidth: 480)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
