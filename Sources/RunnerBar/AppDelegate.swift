@@ -9,59 +9,33 @@ import SwiftUI
 // ARCHITECTURE: Architecture 3 — NSPanel (borderless, non-activating) with
 //   NSVisualEffectView + CAShapeLayer mask for rounded corners and popover arrow.
 //
-// WHY NSPanel:
-//   NSPanel gives us full control of the window frame. We compute the origin once
-//   from the status item button's screen rect, set it before show, never touch it again.
-//   No re-anchoring. No preferredEdge weirdness. No contentSize fighting SwiftUI.
-//
 // HEIGHT MECHANISM:
 //   PopoverMainView reports its rendered height via HeightPreferenceKey.
 //   AppDelegate reads this in .onPreferenceChange and calls resizePanel(to:).
-//   resizePanel repositions the panel keeping the TOP-LEFT corner fixed so the
-//   panel grows downward only.
+//   resizePanel repositions the panel keeping the TOP-LEFT corner fixed.
 //
-//   ❌ NEVER give NSHostingView a fixed height — it cages SwiftUI's layout engine.
-//      GeometryReader reports the size it IS GIVEN, not the content's natural size.
-//      If hostingView.frame.height is fixed at e.g. 300, GeometryReader always
-//      reports 300 regardless of content — a measurement tautology.
-//   ✅ hostingView must have a large sentinel height (unconstrained) so SwiftUI
-//      can measure freely. resizePanel then clips the panel to the measured height.
-//   ❌ NEVER use fittingSize — cached and stale with sizingOptions = [].
-//   ❌ NEVER remove HeightPreferenceKey or .onPreferenceChange from the view.
-//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//   UNDER ANY CIRCUMSTANCE.
+//   KEY INVARIANT: hostingView has a large sentinel height (4000pt) so SwiftUI
+//   is never height-constrained and GeometryReader reports real content height.
+//   hostingView.frame.origin.y = visibleHeight - sentinelHeight  (large negative)
+//   This aligns the hostingView's TOP edge with the VFX view's TOP edge so
+//   SwiftUI content is visible at the top of the panel.
 //
-// PANEL SETUP — ALL must hold simultaneously:
+//   ❌ NEVER give NSHostingView a fixed height equal to contentH.
+//   ❌ NEVER set hostingView origin.y = 0 when using sentinel height.
+//   ❌ NEVER use fittingSize.
+//   ❌ NEVER remove HeightPreferenceKey machinery.
+//   If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+//
+// PANEL SETUP:
 //   styleMask = [.borderless, .nonactivatingPanel]
-//   isFloatingPanel = true
-//   level = .popUpMenu
+//   isFloatingPanel = true, level = .popUpMenu
 //   collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
-//   hidesOnDeactivate = false  ← MUST be false on a nonactivatingPanel.
-//   isOpaque = false, backgroundColor = .clear
-//     ← MUST be transparent so NSVisualEffectView + clipping mask shows.
-//   hasShadow = false  ← shadow is applied to the visualEffectView layer instead.
+//   hidesOnDeactivate = false
+//   isOpaque = false, backgroundColor = .clear, hasShadow = false
 //
-// VISUAL EFFECT VIEW:
-//   NSVisualEffectView is the content view. It provides the frosted glass material.
-//   A CAShapeLayer mask clips it to rounded rect + arrow shape.
-//   Shadow is drawn by a shadow CALayer behind the visualEffectView.
-//
-// POSITIONING:
-//   showPanel() computes origin via button.convert(button.bounds, to: nil) then
-//   buttonWindow.convertToScreen(_:). The panel frame includes arrowHeight (9pt)
-//   extra at top so the arrow tip is within the panel frame.
-//   ❌ NEVER use button.frame directly in convertToScreen — button.frame is in
-//   superview space, not window space.
-//
-// RESIZING (while shown):
-//   resizePanel(to:) keeps topLeft (panel.frame.maxY) fixed, grows downward.
-//   ❌ NEVER use setFrameSize — anchors from bottom-left, shifts panel up.
-//
-// ❌ NEVER add an NSPopover back.
-// ❌ NEVER remove HeightPreferenceKey wiring from PopoverMainView.
-// ❌ NEVER remove .onPreferenceChange(HeightPreferenceKey.self) from wrapWithHeightCapture.
+// ❌ NEVER add NSPopover back.
 // ❌ NEVER remove @MainActor from AppDelegate.
-// ❌ NEVER remove nonisolated from enrichStepsIfNeeded / enrichGroupIfNeeded.
+// ❌ NEVER remove nonisolated from enrich* methods.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE.
 
@@ -75,15 +49,10 @@ private enum NavState {
     case settings
 }
 
-// MARK: - RunnerBarPanel
-
-/// Borderless, non-activating NSPanel used as the popover replacement.
 final class RunnerBarPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
-
-// MARK: - AppDelegate
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -97,32 +66,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var savedNavState: NavState?
     private var panelIsOpen = false
     private var mouseMonitor: Any?
-
-    /// X offset of the arrow tip relative to panel left edge. Set each open.
     private var arrowTipX: CGFloat = 210
-
-    /// Last height reported by HeightPreferenceKey (content only, not including arrowHeight).
-    /// Starts at 120 (minHeight) so the first open has a reasonable size before SwiftUI fires.
-    /// ❌ NEVER initialise with Self.minHeight — Swift forbids Self in stored property initialisers.
+    /// Last measured content height from HeightPreferenceKey.
     private var measuredHeight: CGFloat = 120
 
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
     private static let minHeight: CGFloat = 120
     private static let statusBarGap: CGFloat = 2
-    /// Height of the upward-pointing arrow (notch at the top of the panel).
     private static let arrowHeight: CGFloat = 9
-    /// Half-width of the arrow base.
     private static let arrowHalfWidth: CGFloat = 10
-    /// Corner radius matching system NSPopover.
     private static let cornerRadius: CGFloat = 12
-    /// Large sentinel height given to NSHostingView so SwiftUI is never
-    /// height-constrained. GeometryReader reports the content's natural size,
-    /// NOT the frame it was given, only when the frame is larger than the content.
-    /// ❌ NEVER replace this with a fixed contentH.
-    private static let hostingViewSentinelHeight: CGFloat = 4000
+    /// Sentinel: large enough that SwiftUI never hits a height constraint.
+    /// hostingView.origin.y = visibleHeight - sentinel  (keeps top edges aligned).
+    private static let sentinelHeight: CGFloat = 4000
 
-    // MARK: - App lifecycle
+    // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -131,27 +90,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePanel)
             button.target = self
         }
-
         buildPanel()
-
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
-            // ❌ NOTHING ELSE here. No sizing. No navigate(). Fires while shown → jump.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
             if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
     }
 
-    // MARK: - Panel construction
+    // MARK: - Build
 
-    /// Builds the NSPanel, NSVisualEffectView, and NSHostingView once at launch.
-    /// ❌ NEVER call more than once — panel is reused across open/close cycles.
     private func buildPanel() {
-        let initialContentH = Self.minHeight
-        let initialTotalH = initialContentH + Self.arrowHeight
+        let initialTotalH = Self.minHeight + Self.arrowHeight
         let initialSize = NSSize(width: Self.canonicalWidth, height: initialTotalH)
 
         let p = RunnerBarPanel(
@@ -163,18 +114,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.isFloatingPanel = true
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
-        // ⚠️ hidesOnDeactivate MUST be false on a nonactivatingPanel.
-        // ❌ NEVER set this to true.
         p.hidesOnDeactivate = false
         p.isMovableByWindowBackground = false
-        // ⚠️ Panel must be transparent so the VFX view + clipping mask shows.
-        // ❌ NEVER set isOpaque = true here.
         p.isOpaque = false
         p.backgroundColor = .clear
-        // ⚠️ Shadow is rendered by shadowLayer on the VFX view, not by NSPanel.
         p.hasShadow = false
 
-        // Shadow layer drawn behind the VFX view
         let shadow = CALayer()
         shadow.frame = NSRect(origin: .zero, size: initialSize)
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.35).cgColor
@@ -184,7 +129,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shadow.backgroundColor = NSColor.clear.cgColor
         shadowLayer = shadow
 
-        // Visual effect view — frosted glass, fills panel
         let vfx = NSVisualEffectView(frame: NSRect(origin: .zero, size: initialSize))
         vfx.material = .menu
         vfx.blendingMode = .behindWindow
@@ -192,45 +136,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vfx.wantsLayer = true
         vfx.autoresizingMask = [.width, .height]
         visualEffectView = vfx
-
         vfx.layer?.insertSublayer(shadow, at: 0)
 
-        // ✅ KEY FIX: Give hostingView sentinel height so SwiftUI is never
-        // height-constrained. GeometryReader reports real content height.
-        // ❌ NEVER set this to a fixed contentH.
-        let contentFrame = NSRect(
-            x: 0,
-            y: 0,
-            width: Self.canonicalWidth,
-            height: Self.hostingViewSentinelHeight
-        )
-        let rootView = wrapWithHeightCapture(mainView())
-        let hv = NSHostingView(rootView: rootView)
+        // Sentinel height: SwiftUI is unconstrained vertically.
+        // Origin Y is set so the hosting view's TOP aligns with the VFX view's TOP.
+        // In AppKit coords (y=0 at bottom): originY = totalH - sentinelHeight.
+        let originY = initialTotalH - Self.sentinelHeight
+        let hv = NSHostingView(rootView: wrapWithHeightCapture(mainView()))
         hv.sizingOptions = []
-        hv.frame = contentFrame
-        // width flexible, height NOT flexible — we own height via resizePanel
         hv.autoresizingMask = [.width]
+        hv.frame = NSRect(x: 0, y: originY, width: Self.canonicalWidth, height: Self.sentinelHeight)
         vfx.addSubview(hv)
         hostingView = hv
 
         p.contentView = vfx
         panel = p
-
         applyMask(panelSize: initialSize)
     }
 
-    // MARK: - Shape mask (rounded rect + upward arrow)
+    // MARK: - Mask
 
     private func applyMask(panelSize: NSSize) {
         guard let vfx = visualEffectView else { return }
-
         let w = panelSize.width
         let h = panelSize.height
         let r = Self.cornerRadius
         let ah = Self.arrowHeight
         let ahw = Self.arrowHalfWidth
         let ax = max(r + ahw + 4, min(arrowTipX, w - r - ahw - 4))
-
         let bodyTop = h - ah
 
         let path = CGMutablePath()
@@ -265,49 +198,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Height capture
 
-    /// Wraps any view with HeightPreferenceKey capture.
-    /// When panelIsOpen, also calls resizePanel(to:) live.
-    /// ❌ NEVER remove this wrapper.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private func wrapWithHeightCapture(_ view: AnyView) -> AnyView {
         AnyView(
-            view
-                .onPreferenceChange(HeightPreferenceKey.self) { [weak self] height in
-                    guard let self, height > 0 else { return }
-                    self.measuredHeight = height
-                    if self.panelIsOpen {
-                        DispatchQueue.main.async { [weak self] in
-                            guard let self, self.panelIsOpen else { return }
-                            self.resizePanel(to: height)
-                        }
+            view.onPreferenceChange(HeightPreferenceKey.self) { [weak self] height in
+                guard let self, height > 0 else { return }
+                self.measuredHeight = height
+                if self.panelIsOpen {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.panelIsOpen else { return }
+                        self.resizePanel(to: height)
                     }
                 }
+            }
         )
     }
 
-    // MARK: - Panel resizing
+    // MARK: - Resize
 
-    /// Keeps TOP-LEFT corner fixed, grows panel downward only.
-    /// ❌ NEVER use setFrameSize — anchors from bottom-left and shifts panel up.
-    /// ❌ NEVER clamp hostingView to contentH — keep it at sentinelHeight.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private func resizePanel(to rawContentHeight: CGFloat) {
         guard let panel, let vfx = visualEffectView, let hv = hostingView else { return }
         let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
         let totalH = contentH + Self.arrowHeight
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
-        let newFrame = NSRect(
-            x: topLeft.x,
-            y: topLeft.y - totalH,
-            width: Self.canonicalWidth,
-            height: totalH
-        )
+        let newFrame = NSRect(x: topLeft.x, y: topLeft.y - totalH,
+                              width: Self.canonicalWidth, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
         vfx.frame = NSRect(origin: .zero, size: newFrame.size)
-        // Keep hostingView at sentinel — never clamp to contentH.
-        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: Self.hostingViewSentinelHeight)
+        // Keep top edges aligned: originY = totalH - sentinelHeight
+        hv.frame = NSRect(x: 0, y: totalH - Self.sentinelHeight,
+                          width: Self.canonicalWidth, height: Self.sentinelHeight)
         applyMask(panelSize: newFrame.size)
     }
 
@@ -320,8 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
               let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
         else { return job }
-        let iso = ISO8601DateFormatter()
-        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
+        return makeActiveJob(from: fresh, iso: ISO8601DateFormatter(), isDimmed: job.isDimmed)
     }
 
     nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
@@ -366,10 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionDetail(group)
         return AnyView(ActionDetailView(
             group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
+            onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
             onSelectJob: { [weak self] job in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
@@ -387,13 +302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionJobDetail(job, group)
         return AnyView(JobDetailView(
             job: job,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
-            },
+            onBack: { [weak self] in self?.navigate(to: self?.actionDetailView(group: group) ?? AnyView(EmptyView())) },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+                self?.navigate(to: self?.logViewFromAction(job: job, step: step, group: group) ?? AnyView(EmptyView()))
             }
         ).frame(width: Self.canonicalWidth))
     }
@@ -401,12 +312,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            }
+            job: job, step: step,
+            onBack: { [weak self] in self?.navigate(to: self?.detailViewFromAction(job: job, group: group) ?? AnyView(EmptyView())) }
         ).frame(width: Self.canonicalWidth))
     }
 
@@ -414,13 +321,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .jobDetail(job)
         return AnyView(JobDetailView(
             job: job,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
+            onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
+                self?.navigate(to: self?.logView(job: job, step: step) ?? AnyView(EmptyView()))
             }
         ).frame(width: Self.canonicalWidth))
     }
@@ -428,10 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
+            onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
             store: observable
         ).frame(width: Self.canonicalWidth))
     }
@@ -439,12 +339,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
-            }
+            job: job, step: step,
+            onBack: { [weak self] in self?.navigate(to: self?.detailView(job: job) ?? AnyView(EmptyView())) }
         ).frame(width: Self.canonicalWidth))
     }
 
@@ -452,36 +348,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = nil
         let store = RunnerStore.shared
         switch state {
-        case .main:
-            return nil
+        case .main: return nil
         case .jobDetail(let job):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailView(job: live)
+            return detailView(job: store.jobs.first(where: { $0.id == job.id }) ?? job)
         case .stepLog(let job, let step):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return logView(job: live, step: step)
+            return logView(job: store.jobs.first(where: { $0.id == job.id }) ?? job, step: step)
         case .actionDetail(let group):
             guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
             return actionDetailView(group: live)
         case .actionJobDetail(let job, let group):
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailViewFromAction(job: liveJob, group: liveGroup)
+            return detailViewFromAction(job: liveGroup.jobs.first(where: { $0.id == job.id }) ?? job, group: liveGroup)
         case .actionStepLog(let job, let step, let group):
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
-        case .settings:
-            return settingsView()
+            return logViewFromAction(job: liveGroup.jobs.first(where: { $0.id == job.id }) ?? job, step: step, group: liveGroup)
+        case .settings: return settingsView()
         }
     }
 
     // MARK: - Navigation
 
-    /// Pure rootView swap. ZERO position/size changes. Forever.
-    /// ❌ NEVER add frame changes here.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private func navigate(to view: AnyView) {
         hostingView?.rootView = wrapWithHeightCapture(view)
     }
@@ -489,23 +375,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Show / Hide
 
     @objc private func togglePanel() {
-        if panelIsOpen {
-            dismiss()
-        } else {
-            showPanel()
-        }
+        panelIsOpen ? dismiss() : showPanel()
     }
 
-    /// Shows the panel anchored below the status item button.
-    /// ❌ NEVER call orderFront before setFrame.
-    /// ❌ NEVER move the panel after orderFront (except resizePanel).
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private func showPanel() {
         guard let button = statusItem?.button,
               let buttonWindow = button.window,
-              let panel
-        else { return }
+              let panel else { return }
 
         panelIsOpen = true
         observable.reload()
@@ -523,8 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         var originX = buttonScreenRect.midX - width / 2
         if let screen = NSScreen.main {
-            let maxX = screen.visibleFrame.maxX - width
-            originX = min(originX, maxX)
+            originX = min(originX, screen.visibleFrame.maxX - width)
             originX = max(originX, screen.visibleFrame.minX)
         }
         arrowTipX = buttonScreenRect.midX - originX
@@ -532,20 +407,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originY = buttonScreenRect.minY - totalH - Self.statusBarGap
         let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
         panel.setFrame(frame, display: false)
-
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        // ✅ Always sentinel height — never clamped contentH.
-        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: Self.hostingViewSentinelHeight)
+        // Align hosting view top with VFX top
+        hostingView?.frame = NSRect(x: 0, y: totalH - Self.sentinelHeight,
+                                    width: width, height: Self.sentinelHeight)
         applyMask(panelSize: frame.size)
 
         panel.orderFront(nil)
         panel.makeKey()
 
-        // Global mouse-down monitor: dismiss on click outside panel.
-        // ❌ NEVER remove this — it is the sole dismiss mechanism.
-        // ❌ NEVER rely on hidesOnDeactivate instead.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] _ in
             guard let self else { return }
@@ -555,16 +425,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Hides the panel and resets to main view for next open.
     func dismiss() {
         panelIsOpen = false
         panel?.orderOut(nil)
-
         if let monitor = mouseMonitor {
             NSEvent.removeMonitor(monitor)
             mouseMonitor = nil
         }
-
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.hostingView?.rootView = self.wrapWithHeightCapture(self.mainView())
