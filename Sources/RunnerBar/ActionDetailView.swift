@@ -3,17 +3,13 @@ import SwiftUI
 // swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️ REGRESSION GUARD
+// ⚠️ REGRESSION GUARD (ref #52 #54 #57 #375 #376)
 // ═══════════════════════════════════════════════════════════════════════════════
-//
-// Height is driven by AppDelegate.openPopover() fittingSize — read once per open.
-// fittingSize works correctly because the VStack inside ScrollView uses
-// .fixedSize(horizontal: false, vertical: true) — tells SwiftUI the content
-// wants its ideal (content-driven) height. DO NOT remove that modifier.
-// Header is OUTSIDE ScrollView. Job list is INSIDE ScrollView.
-// ❌ NEVER remove .maxHeight:.infinity from root — detail views are shown via
-//    navigate() AFTER show(), so they must fill the existing popover frame.
-//    Removing it causes a frame mismatch that makes AppKit jump the popover sideways.
+// sizingOptions=.preferredContentSize drives all sizing via idealWidth:420.
+// idealWidth:420 on root pins preferredContentSize.width -> no jump on navigate().
+// ❌ NEVER remove idealWidth:420 — without it preferredContentSize.width is unbounded
+//    and NSPopover jumps sideways on every navigate() call.
+// ❌ NEVER remove .maxHeight:.infinity from root — detail views must fill existing frame.
 // ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack.
 // ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks.
 // ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump.
@@ -112,9 +108,6 @@ struct ActionDetailView: View {
             Divider()
 
             // ── Jobs list: INSIDE ScrollView
-            // ⚠️ .fixedSize(horizontal:false,vertical:true) on the VStack is LOAD-BEARING.
-            // It tells SwiftUI this content wants its ideal height, so AppDelegate's
-            // fittingSize read returns the correct content height. DO NOT remove.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
@@ -169,9 +162,9 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ REGRESSION GUARD: maxHeight:.infinity is REQUIRED — detail views are shown
-        // via navigate() AFTER show(), so they must fill the existing popover frame.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ idealWidth:420 is REQUIRED — pins preferredContentSize.width so NSPopover
+        // does not jump sideways when navigate() swaps this view in.
+        .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }

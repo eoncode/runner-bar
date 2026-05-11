@@ -3,9 +3,11 @@ import SwiftUI
 
 // MARK: - Layout contract
 // Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).
-// Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
+// Root: .frame(idealWidth:420, maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
+// idealWidth:420 pins preferredContentSize.width -> no jump on navigate().
 // Log MUST be inside ScrollView. Header MUST be outside ScrollView.
-// ❌ NEVER add .idealWidth, .frame(height:), .fixedSize(), or resize here.
+// ❌ NEVER remove idealWidth:420 — causes NSPopover side-jump on navigate().
+// ❌ NEVER add .frame(height:) or .fixedSize() to root.
 
 struct StepLogView: View {
     let job: ActiveJob
@@ -75,7 +77,8 @@ struct StepLogView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ idealWidth:420 REQUIRED — pins preferredContentSize.width -> no jump.
+        .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
 

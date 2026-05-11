@@ -1,16 +1,16 @@
 import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57)
-// navigate() = rootView swap ONLY inside the fixed popover frame.
+// ⚠️ REGRESSION GUARD — READ BEFORE TOUCHING (ref #52 #54 #57 #375 #376)
+// navigate() = rootView swap ONLY. sizingOptions=.preferredContentSize drives sizing.
+// idealWidth:420 pins preferredContentSize.width -> no horizontal jump on navigate().
 // ScrollView absorbs overflow — NEVER fight the frame.
 // ❌ NEVER put header inside ScrollView
 // ❌ NEVER add .frame(height:) to root
-// ❌ NEVER remove .maxHeight:.infinity from root — detail views are shown via
-//    navigate() AFTER show(), so they must fill the existing popover frame.
-//    Removing it causes a frame mismatch that makes AppKit jump the popover sideways.
+// ❌ NEVER remove idealWidth:420 — without it preferredContentSize.width is unbounded
+//    and NSPopover jumps sideways on every navigate() call.
+// ❌ NEVER remove .maxHeight:.infinity from root — detail views must fill existing frame.
 // ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack
-//    — it is LOAD-BEARING for correct fittingSize in AppDelegate.openPopover()
 // ❌ NEVER call navigate() directly — use onBack/onSelectStep callbacks
 // ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump
 
@@ -102,8 +102,6 @@ struct JobDetailView: View {
 
             // ── Steps list: INSIDE ScrollView
             // ⚠️ .fixedSize(horizontal:false,vertical:true) on the VStack is LOAD-BEARING.
-            // It tells SwiftUI this content wants its ideal height, so AppDelegate's
-            // fittingSize read returns the correct content height. DO NOT remove.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
@@ -146,9 +144,10 @@ struct JobDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ REGRESSION GUARD: maxHeight:.infinity is REQUIRED — detail views are shown
-        // via navigate() AFTER show(), so they must fill the existing popover frame.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ idealWidth:420 is REQUIRED — pins preferredContentSize.width so NSPopover
+        // does not jump sideways when navigate() swaps this view in. Must match
+        // AppDelegate.fixedWidth and PopoverMainView's idealWidth.
+        .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,
