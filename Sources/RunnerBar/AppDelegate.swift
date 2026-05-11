@@ -14,11 +14,16 @@ import SwiftUI
 //                               .preferredContentSize auto-pushes on every SwiftUI
 //                               layout pass while shown → re-anchor → left jump.
 //   openPopover()             — the ONE place contentSize is set.
-//                               Two-phase open: phase 1 stages the view and data;
-//                               phase 2 runs on the next runloop tick AFTER SwiftUI
-//                               has settled layout, reads fittingSize, sets contentSize,
-//                               then calls show(). This gives TRUE dynamic height without
-//                               any sizing call after show() — no side-jump possible.
+//                               Two-phase open:
+//                                 Phase 1 (sync): stage view + reload data.
+//                                 Phase 2 (next runloop tick):
+//                                   invalidateIntrinsicContentSize()  ← CRITICAL
+//                                   layoutSubtreeIfNeeded()
+//                                   read fittingSize → set contentSize → show()
+//                               invalidateIntrinsicContentSize() MUST precede
+//                               layoutSubtreeIfNeeded(). Without it, NSHostingController
+//                               returns its CACHED fittingSize from the previous render,
+//                               not the current content → fixed/stale height every open.
 //   navigate()                — rootView swap ONLY. ZERO size changes. Forever.
 //   .frame(width: 420)        — MUST wrap every non-main nav-state view.
 //                               With sizingOptions=[] SwiftUI does not auto-push
@@ -34,6 +39,7 @@ import SwiftUI
 // ❌ NEVER add sizing calls to navigate()
 // ❌ NEVER remove @MainActor from the AppDelegate class declaration.
 // ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded.
+// ❌ NEVER remove invalidateIntrinsicContentSize() from Phase 2 of openPopover().
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -321,22 +327,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Two-phase open for true dynamic height without side-jump.
     ///
-    /// WHY TWO PHASES:
-    ///   Phase 1 (sync): Stage the correct view and reload observable data.
-    ///     SwiftUI schedules a layout pass but has NOT run it yet.
-    ///   Phase 2 (next runloop tick via DispatchQueue.main.async):
-    ///     By this point SwiftUI has completed its layout pass.
-    ///     layoutSubtreeIfNeeded() finalises the AppKit layer.
-    ///     fittingSize now reflects the ACTUAL rendered content → dynamic height.
-    ///     contentSize is set once, show() is called. Nothing touches sizing after.
+    /// WHY TWO PHASES + invalidateIntrinsicContentSize:
+    ///   NSHostingController with sizingOptions=[] caches its fittingSize.
+    ///   Without invalidateIntrinsicContentSize(), layoutSubtreeIfNeeded() returns
+    ///   the PREVIOUS render's cached size — not the current content — producing
+    ///   a fixed/stale height on every open.
     ///
-    /// This is the standard solution for dynamic-height NSPopover described in:
-    ///   - Just10/MEMORY.md (sizingOptions=[], measure before show)
-    ///   - issue #377 architecture table
-    ///   - status-bar-app-position-warning.md
+    ///   Phase 1 (sync): Stage view + reload data. SwiftUI schedules layout.
+    ///   Phase 2 (next runloop tick, after SwiftUI has settled):
+    ///     1. invalidateIntrinsicContentSize() — bust the fittingSize cache
+    ///     2. layoutSubtreeIfNeeded()          — force AppKit sync
+    ///     3. read fittingSize                 — now reflects actual content
+    ///     4. clamp + setFrameSize + contentSize
+    ///     5. show() — sizing frozen from here
     ///
+    /// ❌ NEVER remove invalidateIntrinsicContentSize() — reverts to stale height
     /// ❌ NEVER set contentSize or setFrameSize after show()
-    /// ❌ NEVER collapse phases back into one synchronous block (race → stale height)
+    /// ❌ NEVER collapse phases into one synchronous block
     /// ❌ NEVER move sizing into navigate() or onChange
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -348,39 +355,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
               let hostingController
         else { return }
 
-        // ── Phase 1 (sync): stage view and data ───────────────────────────────
+        // ── Phase 1 (sync): stage view and data ──────────────────────────────
         popoverIsOpen = true
         observable.reload()
 
-        // Restore saved nav state so the correct view is staged for measurement.
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
             hostingController.rootView = restored
         }
 
-        // ── Phase 2 (next runloop tick): SwiftUI has now settled its layout ───
-        // Capture what we need; avoid capturing self strongly in the closure.
+        // ── Phase 2 (next runloop tick: SwiftUI layout has now settled) ──────
         DispatchQueue.main.async { [weak self, weak button, weak popover, weak hostingController] in
             guard let self,
                   let button,
                   let popover,
                   let hostingController,
-                  self.popoverIsOpen   // guard against rapid open/close
+                  self.popoverIsOpen
             else { return }
 
-            // Force AppKit to sync with the now-settled SwiftUI layout.
+            // Step 1: bust the NSHostingController fittingSize cache.
+            // Without this, layoutSubtreeIfNeeded() returns the previous
+            // render's cached size regardless of content changes.
+            // ❌ NEVER remove this line.
+            hostingController.view.invalidateIntrinsicContentSize()
+
+            // Step 2: force AppKit to sync with SwiftUI's settled layout.
             hostingController.view.layoutSubtreeIfNeeded()
 
-            // Measure real content height and clamp to sane bounds.
+            // Step 3: read the now-correct content height and clamp.
             let rawHeight = hostingController.view.fittingSize.height
             let height = min(max(rawHeight > 0 ? rawHeight : 300, Self.minHeight), Self.maxHeight)
             let size = NSSize(width: Self.canonicalWidth, height: height)
 
-            // Set size ONCE, BEFORE show(). Nothing touches sizing after this.
+            // Step 4: set size ONCE, BEFORE show(). Nothing touches sizing after this.
             hostingController.view.setFrameSize(size)
             popover.contentSize = size
 
-            // Show. From this point on, sizing is frozen until next open.
+            // Step 5: show. Sizing is frozen from this point until next open.
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
             popover.contentViewController?.view.window?.makeKey()
         }
