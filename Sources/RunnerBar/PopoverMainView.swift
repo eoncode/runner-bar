@@ -44,13 +44,19 @@ import SwiftUI
 
 /// SwiftUI preference key used to report the popover's rendered height to AppDelegate.
 /// AppDelegate reads this via .onPreferenceChange on the root hosting view.
+///
+/// ⚠️ REDUCER MUST BE REPLACE, NOT MAX (ref #379):
+///   Using max() causes the first measurement (during off-screen layout at
+///   unconstrainedHeight=2000) to lock the value at 2000 permanently.
+///   A replace reducer always reflects the latest layout pass height.
+/// ❌ NEVER change reduce to max(value, nextValue()) — it breaks dynamic height.
 /// ❌ NEVER remove — this is the height-measurement mechanism (replaces fittingSize).
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE.
 struct HeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+        value = nextValue()
     }
 }
 
@@ -96,7 +102,7 @@ struct PopoverMainView: View {
                 onSelectAction: onSelectAction
             )
         }
-        .frame(idealWidth: PopoverLayout.idealWidth, maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         // ⚠️ HEIGHT REPORTING: measure rendered height and publish via HeightPreferenceKey.
         // AppDelegate reads this to size the popover — replaces unreliable fittingSize.
         // ❌ NEVER remove this .background modifier.

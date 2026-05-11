@@ -11,13 +11,15 @@ import SwiftUI
 //
 // HEIGHT MECHANISM (ref #377):
 //   1. hostingView.sizingOptions = []  — we own the frame; SwiftUI does not resize it.
-//   2. On first build hostingView.frame.height = 2000 (unconstrained) so the
-//      GeometryReader inside SwiftUI can measure and fire HeightPreferenceKey
-//      with the real content height.
-//   3. onPreferenceChange stores measuredHeight and calls resizePanel(to:).
-//   4. resizePanel sets hostingView.frame.height = contentH (exact fit) and,
+//   2. On first build AND on each navigate(), hostingView.frame.height = 2000
+//      (unconstrainedHeight) so SwiftUI lays out in unlimited vertical space and
+//      GeometryReader fires HeightPreferenceKey with the real content height.
+//   3. HeightPreferenceKey.reduce is a REPLACE reducer (not max) — this is critical.
+//      max() would lock the value at 2000 from the first off-screen pass forever.
+//   4. onPreferenceChange stores measuredHeight and calls resizePanel(to:).
+//   5. resizePanel sets hostingView.frame.height = contentH (exact fit) and,
 //      if the panel is visible, repositions it keeping the top-left corner fixed.
-//   5. showPanel always uses the current measuredHeight for the first frame.
+//   6. showPanel always uses the current measuredHeight for the first frame.
 //
 //   ❌ NEVER use sizingOptions = [.preferredContentSize] — it fights manual frame sets.
 //   ❌ NEVER start hostingView at height=minHeight — GeometryReader reads that and
@@ -25,6 +27,7 @@ import SwiftUI
 //   ❌ NEVER use fittingSize.
 //   ❌ NEVER animate the resize (causes side-jump, ref #379).
 //   ❌ NEVER remove HeightPreferenceKey machinery.
+//   ❌ NEVER change HeightPreferenceKey.reduce to max() — breaks dynamic height.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 //
 // PANEL SETUP:
@@ -79,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let arrowHalfWidth: CGFloat = 10
     private static let cornerRadius: CGFloat = 12
     /// Initial unconstrained height so GeometryReader can measure freely.
+    /// MUST be large enough that no content is ever clipped during measurement.
     private static let unconstrainedHeight: CGFloat = 2000
 
     // MARK: - Lifecycle
@@ -140,8 +144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visualEffectView = vfx
         vfx.layer?.insertSublayer(shadow, at: 0)
 
-        // sizingOptions = [] means WE control the frame. SwiftUI never resizes it.
+        // sizingOptions = [] — WE control the frame; SwiftUI never auto-resizes.
         // Start at unconstrainedHeight so GeometryReader reports real content height.
+        // HeightPreferenceKey.reduce is a replace reducer so subsequent passes
+        // correctly shrink from 2000 down to the actual content height.
         let hv = NSHostingView(rootView: wrapWithHeightCapture(mainView()))
         hv.sizingOptions = []
         hv.autoresizingMask = [.width]
@@ -153,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         p.contentView = vfx
         panel = p
-        // Trigger SwiftUI layout while off-screen so measurement fires
+        // Trigger SwiftUI layout while off-screen so measurement fires before first open
         p.orderFront(nil)
         p.orderOut(nil)
     }
@@ -292,66 +298,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
-        return AnyView(ActionDetailView(
-            group: group,
-            onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+        return AnyView(
+            ActionDetailView(
+                group: group,
+                onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
+                onSelectJob: { [weak self] job in
+                    guard let self else { return }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let enriched = self.enrichStepsIfNeeded(job)
+                        DispatchQueue.main.async {
+                            guard self.panelIsOpen else { return }
+                            self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+                        }
                     }
                 }
-            }
-        ).frame(width: Self.canonicalWidth))
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
-        return AnyView(JobDetailView(
-            job: job,
-            onBack: { [weak self] in self?.navigate(to: self?.actionDetailView(group: group) ?? AnyView(EmptyView())) },
-            onSelectStep: { [weak self] step in
-                self?.navigate(to: self?.logViewFromAction(job: job, step: step, group: group) ?? AnyView(EmptyView()))
-            }
-        ).frame(width: Self.canonicalWidth))
+        return AnyView(
+            JobDetailView(
+                job: job,
+                onBack: { [weak self] in self?.navigate(to: self?.actionDetailView(group: group) ?? AnyView(EmptyView())) },
+                onSelectStep: { [weak self] step in
+                    self?.navigate(to: self?.logViewFromAction(job: job, step: step, group: group) ?? AnyView(EmptyView()))
+                }
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
-        return AnyView(StepLogView(
-            job: job, step: step,
-            onBack: { [weak self] in self?.navigate(to: self?.detailViewFromAction(job: job, group: group) ?? AnyView(EmptyView())) }
-        ).frame(width: Self.canonicalWidth))
+        return AnyView(
+            StepLogView(
+                job: job, step: step,
+                onBack: { [weak self] in self?.navigate(to: self?.detailViewFromAction(job: job, group: group) ?? AnyView(EmptyView())) }
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
-        return AnyView(JobDetailView(
-            job: job,
-            onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
-            onSelectStep: { [weak self] step in
-                self?.navigate(to: self?.logView(job: job, step: step) ?? AnyView(EmptyView()))
-            }
-        ).frame(width: Self.canonicalWidth))
+        return AnyView(
+            JobDetailView(
+                job: job,
+                onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
+                onSelectStep: { [weak self] step in
+                    self?.navigate(to: self?.logView(job: job, step: step) ?? AnyView(EmptyView()))
+                }
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func settingsView() -> AnyView {
         savedNavState = .settings
-        return AnyView(SettingsView(
-            onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
-            store: observable
-        ).frame(width: Self.canonicalWidth))
+        return AnyView(
+            SettingsView(
+                onBack: { [weak self] in self?.navigate(to: self?.mainView() ?? AnyView(EmptyView())) },
+                store: observable
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
-        return AnyView(StepLogView(
-            job: job, step: step,
-            onBack: { [weak self] in self?.navigate(to: self?.detailView(job: job) ?? AnyView(EmptyView())) }
-        ).frame(width: Self.canonicalWidth))
+        return AnyView(
+            StepLogView(
+                job: job, step: step,
+                onBack: { [weak self] in self?.navigate(to: self?.detailView(job: job) ?? AnyView(EmptyView())) }
+            )
+            .frame(width: Self.canonicalWidth)
+            .fixedSize(horizontal: false, vertical: true)
+        )
     }
 
     private func validatedView(for state: NavState) -> AnyView? {
