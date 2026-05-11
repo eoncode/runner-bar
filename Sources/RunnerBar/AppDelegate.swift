@@ -17,7 +17,12 @@ import SwiftUI
 //    Moving @MainActor to individual methods only does NOT fix the stored
 //    property isolation error.
 // ❌ NEVER add @unchecked Sendable or @MainActor lazy var observable.
-// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded.
+//    These methods are called from DispatchQueue.global background closures.
+//    They do pure network I/O — no @MainActor state access — so nonisolated
+//    is safe and required. Removing nonisolated re-introduces the call-from-
+//    background concurrency error that breaks the build.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
@@ -44,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Ideal/fallback width matching PopoverMainView's .frame(idealWidth: 420).
     /// ❌ NEVER change without updating idealWidth in PopoverMainView AND SettingsView.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     private static let idealWidth: CGFloat = 420
@@ -79,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
             // ❌ NEVER touch contentSize / setFrameSize here — fires while popover
             // is shown → re-anchor → left jump (Regression A).
-            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
             // comment is removed is major major major.
             if !self.popoverIsOpen { self.observable.reload() }
@@ -91,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// ❌ NEVER call reload() here — causes double-reload on next open.
     /// ❌ NEVER set contentSize here — re-anchor regression.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     func popoverDidClose(_ notification: Notification) {
@@ -104,7 +109,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - View factories
 
-    private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
+    /// nonisolated: called from DispatchQueue.global — pure network I/O, no @MainActor state.
+    /// ❌ NEVER remove nonisolated — see regression guard at top of file.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
+    nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -115,7 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
+    /// nonisolated: called from DispatchQueue.global — pure network I/O, no @MainActor state.
+    /// ❌ NEVER remove nonisolated — see regression guard at top of file.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
+    nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
         guard group.jobs.isEmpty else { return group }
         let fetched = fetchActionGroups(for: group.repo)
         return fetched.first(where: { $0.id == group.id }) ?? group
@@ -272,7 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Swaps the hosting controller's root view. ZERO size changes. Forever.
     /// ❌ NEVER add contentSize or setFrameSize here — re-anchor → left jump.
     /// ❌ NEVER call this from a background thread.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     private func navigate(to view: AnyView) {
@@ -295,7 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// ❌ NEVER call setFrameSize or set contentSize after show() — popover is shown,
     ///    re-anchor triggers → left jump (Regression A).
     /// ❌ NEVER use fittingSize.width — always Self.idealWidth.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     private func openPopover() {
