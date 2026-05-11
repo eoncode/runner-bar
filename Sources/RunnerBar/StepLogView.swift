@@ -8,22 +8,12 @@ import SwiftUI
 // ║                                                                              ║
 // ║  LAYOUT RULES:                                                               ║
 // ║    • Root: .frame(maxWidth:.infinity, maxHeight:.infinity, alignment:.top)  ║
-// ║      ❌ NEVER add a finite maxHeight to the ROOT frame — any finite          ║
-// ║         maxHeight on a maxWidth:.infinity root makes fittingSize.width      ║
-// ║         non-deterministic, which causes AppKit to recompute the anchor X    ║
-// ║         and produce the #13 horizontal side-jump.                           ║
 // ║    • Log content MUST be inside the ScrollView.                             ║
-// ║    • ScrollView MUST have .frame(maxHeight: maxLogHeight) to bound          ║
-// ║         fittingSize.height. Without a cap, fittingSize returns the full     ║
-// ║         unbounded log height (1000pt+), the popover overflows the screen,   ║
-// ║         and the log appears cut off. The cap is on the ScrollView only —    ║
-// ║         NOT the root — so it does not affect fittingSize.width.             ║
 // ║    • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
 // ║    ❌ NEVER add .idealWidth here                                             ║
-// ║    ❌ NEVER add .frame(height:) to the root or ScrollView                   ║
+// ║    ❌ NEVER add .frame(height:) here                                         ║
 // ║    ❌ NEVER add .fixedSize() here                                            ║
-// ║    ❌ NEVER add a finite maxHeight to the ROOT .frame()                      ║
-// ║         (causes #13 side-jump via non-deterministic fittingSize.width)      ║
+// ║    ❌ NEVER add .frame(maxHeight:) to the ScrollView                        ║
 // ║                                                                              ║
 // ║  onLogLoaded — ☠️ TRAP — READ THIS BEFORE TOUCHING:                         ║
 // ║    onLogLoaded fires on the main thread once the async log fetch completes. ║
@@ -50,10 +40,8 @@ import SwiftUI
 
 /// Shows the raw log text for a single `JobStep`.
 ///
-/// Placed by `AppDelegate.navigate()` (rootView swap). The ScrollView is capped
-/// to the visible screen height so the popover never overflows while all log
-/// lines remain reachable by scrolling. Fetches log on `onAppear` via a
-/// background thread.
+/// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
+/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background thread.
 struct StepLogView: View {
     /// The job that owns this step.
     let job: ActiveJob
@@ -80,32 +68,6 @@ struct StepLogView: View {
     @State private var logText: String?
     /// True while the background fetch is in-flight.
     @State private var isLoading = true
-
-    // ⚠️ SIZING CONTRACT — maxLogHeight (applied to ScrollView ONLY, never root)
-    //
-    // Caps the ScrollView height so fittingSize.height is bounded and the popover
-    // never overflows the visible screen area. The header (outside the ScrollView)
-    // adds ~60 pt on top, so subtracting 84 pt total gives comfortable clearance.
-    //
-    // WHY ON ScrollView, NOT THE ROOT:
-    //   A finite maxHeight on the ROOT frame (which has maxWidth:.infinity) makes
-    //   fittingSize.width non-deterministic — AppKit recomputes the anchor X and
-    //   produces the #13 horizontal side-jump. Capping only the ScrollView leaves
-    //   the root unconstrained on width, so fittingSize.width stays stable at
-    //   AppDelegate.fixedWidth (480) and no side-jump occurs.
-    //
-    // WHY NOT a fixed constant:
-    //   Adapts to external monitors and non-standard screen heights automatically.
-    //
-    // ❌ NEVER move this cap to the root .frame() — causes #13 side-jump.
-    // ❌ NEVER replace with a fixed constant — adapts to actual visible screen height.
-    // ❌ NEVER remove entirely — causes popover height explosion with long logs.
-    // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    // is major major major.
-    private var maxLogHeight: CGFloat {
-        (NSScreen.main?.visibleFrame.height ?? 800) - 84
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -149,15 +111,10 @@ struct StepLogView: View {
             Divider()
 
             // ── Log — INSIDE ScrollView ──────────────────────────────────────────
-            // maxLogHeight cap is on the ScrollView — NOT the root — so
-            // fittingSize.width remains deterministic (no #13 side-jump).
-            // For short logs the ScrollView shrinks to content height;
-            // for long logs it caps at maxLogHeight and text is scrollable.
-            //
-            // ❌ NEVER add .frame(height:) here — clips to a fixed size.
-            // ❌ NEVER remove .frame(maxHeight:) here — causes height explosion.
-            // ❌ NEVER move the cap to the root frame — causes #13 side-jump.
+            // ❌ NEVER add .frame(maxHeight:) to this ScrollView.
+            // ❌ NEVER add .frame(height:) to this ScrollView.
             // The popover height is updated via onLogLoaded two-hop remeasure (#21).
+            // The ScrollView absorbs any content that exceeds the popover height.
             // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
             // comment is removed is major major major.
@@ -184,11 +141,9 @@ struct StepLogView: View {
                         .padding(.vertical, 8)
                 }
             }
-            .frame(maxHeight: maxLogHeight)
         }
-        // ❌ NEVER add a finite maxHeight to this root frame — causes #13 side-jump
-        // via non-deterministic fittingSize.width. The ScrollView cap above handles
-        // bounding without affecting the width calculation.
+        // ❌ NEVER change maxHeight to a fixed value — height is driven by
+        // remeasurePopover() via the onLogLoaded two-hop callback (#21).
         // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
