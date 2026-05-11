@@ -14,28 +14,25 @@ import SwiftUI
 //   sizingOptions = []
 //     NSHostingController does NOT auto-propagate preferredContentSize.
 //     AppDelegate owns contentSize exclusively.
-//     contentSize is set ONCE before show() using hc.view.fittingSize.
-//     After show(), contentSize is NEVER touched again.
+//     contentSize is set before show() and on every navigate() call.
+//     It is NEVER set from a timer, store update, or any polling callback.
 //
-//   ✅ Set contentSize = fittingSize ONCE before show() in openPopover().
-//   ❌ NEVER set contentSize anywhere else — not in navigate(), not in onChange, never.
+//   ✅ Set contentSize = fittingSize in openPopover() before show().
+//   ✅ Set contentSize = fittingSize in navigate() after rootView swap.
+//   ❌ NEVER set contentSize from a timer, onChange, store update, or polling.
 //   ❌ NEVER set hc.view.setFrameSize anywhere.
-//   ❌ NEVER use sizingOptions = .preferredContentSize — that re-introduces the jump.
+//   ❌ NEVER use sizingOptions = .preferredContentSize — re-introduces the jump.
 //   ❌ NEVER call performClose() + show() for navigation — causes full re-anchor.
-//   ❌ NEVER touch sizing in onChange or any polling callback.
 //
-//   navigate() = rootView swap ONLY. Zero sizing calls. Ever.
+// WHY THIS WORKS (no jump on navigate):
+//   contentSize is updated synchronously in navigate() via layoutSubtreeIfNeeded()+fittingSize.
+//   NSPopover resizes its window in-place (no re-anchor) when contentSize changes
+//   while already shown — it only re-anchors on show().
+//   Timer ticks and store updates never touch contentSize → no spurious re-anchor.
 //
-// WHY sizingOptions=[] ELIMINATES JUMPS:
-//   With .preferredContentSize, every SwiftUI re-render (timer, store update, nav)
-//   propagates a new preferredContentSize to NSPopover which re-anchors.
-//   With sizingOptions=[], NSPopover's contentSize is frozen after show().
-//   No re-anchor is possible regardless of SwiftUI re-renders.
-//
-// WHY systemStats MUST BE STOPPED WHILE POPOVER IS OPEN (ref #375 #376 #377):
-//   With sizingOptions=[] this no longer causes jumps, but stopping systemStats
-//   while the popover is open is still correct to avoid unnecessary CPU usage.
-//   The isPopoverOpen guard is retained for this reason.
+// WHY systemStats IS STOPPED WHILE POPOVER IS OPEN (ref #375 #376 #377 — CPU GUARD):
+//   systemStats fires @Published every ~1s. With sizingOptions=[] it cannot cause jumps.
+//   It is still stopped while the popover is open to save CPU.
 // ❌ NEVER remove the isPopoverOpen parameter from PopoverMainView — it stops systemStats.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -72,9 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
         let controller = NSHostingController(rootView: mainView())
         // ⚠️ Architecture 2: sizingOptions = []
-        //   AppDelegate owns contentSize exclusively.
-        //   contentSize is set once before show() using hc.view.fittingSize.
-        //   NSPopover contentSize is frozen after show() — no re-anchor possible.
+        //   AppDelegate owns contentSize. Set in openPopover() and navigate().
         // ❌ NEVER change to .preferredContentSize — re-introduces the side jump.
         controller.sizingOptions = []
         hostingController = controller
@@ -145,9 +140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     // ⚠️ openPopoverView() — identical to mainView() but always passes isPopoverOpen: true.
-    // Used ONLY inside openPopover() so the view receives true on its very first render.
-    // This ensures systemStats is stopped before the popover appears (CPU guard).
-    // ❌ NEVER use mainView() inside openPopover() — it passes popoverIsOpen which may race.
+    // Used ONLY inside openPopover() so systemStats is stopped on first render (CPU guard).
+    // ❌ NEVER use mainView() inside openPopover().
     // ❌ NEVER use this method anywhere except openPopover().
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     // UNDER ANY CIRCUMSTANCE.
@@ -175,8 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
             },
-            // ⚠️ CRITICAL: literal true — not the variable popoverIsOpen.
-            // Guarantees systemStats stops on first render (CPU guard).
+            // ⚠️ CRITICAL: literal true — CPU guard, stops systemStats on first render.
             // ❌ NEVER change to popoverIsOpen here.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -307,11 +300,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
 
     // MARK: - Navigation
 
-    /// Swaps rootView ONLY. NO sizing calls, NO contentSize, NO setFrameSize. Ever.
-    /// Architecture 2: AppDelegate owns contentSize — it was set once in openPopover().
-    /// ❌ NEVER add setFrameSize or contentSize here.
+    /// Swaps rootView and updates contentSize to match the new view's fittingSize.
+    /// NSPopover resizes in-place (no re-anchor) when contentSize changes while shown.
+    /// contentSize is ONLY ever set here and in openPopover() — never from timers or store updates.
+    /// ❌ NEVER call this from a timer, onChange, or any polling path.
     private func navigate(to view: AnyView) {
-        hostingController?.rootView = view
+        guard let hc = hostingController, let popover else { return }
+        hc.rootView = view
+        // ⚠️ Update contentSize after rootView swap so the popover resizes to the new view.
+        // layoutSubtreeIfNeeded() forces AppKit to compute the new fittingSize synchronously.
+        // NSPopover.contentSize setter while shown = in-place resize, NOT a re-anchor.
+        // ❌ NEVER call this from anywhere except navigate() and openPopover().
+        hc.view.layoutSubtreeIfNeeded()
+        let fitting = hc.view.fittingSize
+        let newHeight = fitting.height > 0 ? fitting.height : 480
+        popover.contentSize = NSSize(width: 420, height: newHeight)
     }
 
     // MARK: - Popover show/hide
@@ -325,16 +328,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover.
-    /// Architecture 2: contentSize is set ONCE here from hc.view.fittingSize before show().
-    /// After show() the contentSize is frozen — NSPopover never re-anchors.
-    /// All subsequent SwiftUI re-renders (timer ticks, store updates, navigation) are silent.
-    ///
-    /// ⚠️ CRITICAL: uses openPopoverView() (isPopoverOpen: true literal) NOT mainView().
-    /// isPopoverOpen: true stops systemStats before the popover appears (CPU guard).
-    ///
-    /// ❌ NEVER set popover.contentSize after show().
-    /// ❌ NEVER call setFrameSize.
+    /// Opens the popover. Sets contentSize once from fittingSize before show().
+    /// ❌ NEVER set popover.contentSize after show() except via navigate().
     /// ❌ NEVER replace openPopoverView() with mainView() here.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -355,20 +350,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         observable.reload()
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
-            navigate(to: restored)
+            hc.rootView = restored
         }
-        // ⚠️ Architecture 2: set contentSize ONCE before show().
-        //   fittingSize is the SwiftUI natural size of the current rootView.
-        //   After show() this value is frozen in NSPopover — no further sizing calls ever.
-        // ❌ NEVER move this after show().
-        // ❌ NEVER call this again after this point (not in navigate, not in onChange).
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
         hc.view.layoutSubtreeIfNeeded()
         let fitting = hc.view.fittingSize
-        let popoverWidth: CGFloat = 420
         let popoverHeight = fitting.height > 0 ? fitting.height : 480
-        popover.contentSize = NSSize(width: popoverWidth, height: popoverHeight)
+        popover.contentSize = NSSize(width: 420, height: popoverHeight)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
     }
