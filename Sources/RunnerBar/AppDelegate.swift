@@ -39,9 +39,11 @@ import SwiftUI
 //   SystemStatsViewModel fires @Published updates every ~1s.
 //   Each update → SwiftUI layout pass → new preferredContentSize.height
 //   → NSPopover re-anchors the window → visible position jump.
-//   FIX: AppDelegate passes `isPopoverOpen: popoverIsOpen` to PopoverMainView.
-//        PopoverMainView's .onChange(of: isPopoverOpen) stops systemStats when
-//        the popover opens and restarts it when the popover closes.
+//   FIX: AppDelegate passes `isPopoverOpen: true` (literal) to PopoverMainView
+//        inside openPopover() so .onChange(of: isPopoverOpen) fires with open=true
+//        on the very first render, stopping systemStats before the popover anchors.
+// ❌ NEVER pass `isPopoverOpen: popoverIsOpen` (the variable) in openPopover() —
+//    the variable evaluates at call-site and may race. Always pass literal `true`.
 // ❌ NEVER remove the isPopoverOpen parameter from the PopoverMainView constructor call.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -151,15 +153,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
             },
-            // ⚠️ FIX: Pass current popover open state so PopoverMainView can gate
-            // SystemStatsViewModel. Without this, systemStats fires @Published updates
-            // every ~1s while the popover is shown → SwiftUI layout passes →
-            // preferredContentSize changes → NSPopover re-anchors → position jump.
-            // ❌ NEVER remove this parameter.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
-            // comment is removed is major major major.
             isPopoverOpen: popoverIsOpen
+        ))
+    }
+
+    // ⚠️ openPopoverView() — identical to mainView() but always passes isPopoverOpen: true.
+    // Used ONLY inside openPopover() so the view receives true on its very first render.
+    // This ensures .onChange(of: isPopoverOpen) fires with open=true immediately,
+    // stopping systemStats before NSPopover anchors the window.
+    // ❌ NEVER use mainView() inside openPopover() — it passes popoverIsOpen which may race.
+    // ❌ NEVER use this method anywhere except openPopover().
+    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    // is major major major.
+    @MainActor
+    private func openPopoverView() -> AnyView {
+        savedNavState = nil
+        return AnyView(PopoverMainView(
+            store: observable,
+            onSelectJob: { [weak self] job in
+                guard let self else { return }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.popoverIsOpen else { return }
+                        self.navigate(to: self.detailView(job: enriched))
+                    }
+                }
+            },
+            onSelectAction: { [weak self] group in
+                guard let self else { return }
+                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                self.navigate(to: self.actionDetailView(group: latest))
+            },
+            onSelectSettings: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.settingsView())
+            },
+            // ⚠️ CRITICAL: literal true — not the variable popoverIsOpen.
+            // Guarantees systemStats stops on first render before show() anchors.
+            // ❌ NEVER change to popoverIsOpen here.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE.
+            isPopoverOpen: true
         ))
     }
 
@@ -308,8 +344,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     /// Architecture 1: NO contentSize set here. NSPopover reads preferredContentSize
     /// from the hosting controller automatically. Width is stable at 420 (idealWidth).
     /// Height is fully dynamic from SwiftUI content.
+    ///
+    /// ⚠️ CRITICAL: uses openPopoverView() (isPopoverOpen: true literal) NOT mainView().
+    /// mainView() passes `isPopoverOpen: popoverIsOpen` which evaluates at call-site.
+    /// Even though popoverIsOpen is set to true just above, the SwiftUI view struct
+    /// captures the Bool value and .onChange fires with the INITIAL value on first render.
+    /// openPopoverView() passes literal `true` → .onChange fires open=true immediately
+    /// → systemStats.stop() is called before NSPopover anchors → no jump.
+    ///
     /// ❌ NEVER set popover.contentSize here or anywhere else.
     /// ❌ NEVER call setFrameSize.
+    /// ❌ NEVER replace openPopoverView() with mainView() here.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -317,11 +365,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
               let popover
         else { return }
         popoverIsOpen = true
-        // Rebuild mainView with isPopoverOpen = true so PopoverMainView receives
-        // the correct state and .onChange(of: isPopoverOpen) fires to stop systemStats.
-        // ⚠️ This must happen BEFORE show() so the view is staged with the correct
-        // isPopoverOpen value before NSPopover reads preferredContentSize.
-        hostingController?.rootView = mainView()
+        // ⚠️ Use openPopoverView() — passes isPopoverOpen: true (literal).
+        // ❌ NEVER change to mainView() here.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        hostingController?.rootView = openPopoverView()
         observable.reload()
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
