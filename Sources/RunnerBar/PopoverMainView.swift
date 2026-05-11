@@ -35,9 +35,13 @@ import SwiftUI
 //
 // RULE 7: The 5 s timer calls LocalRunnerStore.shared.refresh() + store.reload().
 //         BOTH are gated behind !isPopoverOpen.
+//         LocalRunnerStore.shared.refresh() is @MainActor-isolated and MUST be called
+//         via Task { @MainActor in ... } from the nonisolated Timer closure.
 //         ❌ NEVER call store.reload() while isPopoverOpen == true.
 //         ❌ NEVER call LocalRunnerStore.shared.refresh() while isPopoverOpen == true.
 //         ❌ NEVER remove the !isPopoverOpen guard from the timer.
+//         ❌ NEVER call LocalRunnerStore.shared.refresh() directly from the Timer closure
+//            — it is @MainActor isolated and requires Task { @MainActor in }.
 //         If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //         is major major major.
@@ -96,7 +100,7 @@ struct PopoverMainView: View {
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
-                .onAppear { Task { LocalRunnerStore.shared.refresh() } }
+                .onAppear { Task { await MainActor.run { LocalRunnerStore.shared.refresh() } } }
             // ⚠️ RULE 6: NO ScrollView, NO .fixedSize, NO .frame(maxHeight:) here.
             // Height is fully dynamic — remeasurePopover() in AppDelegate handles capping.
             // ❌ NEVER wrap in ScrollView.
@@ -134,11 +138,13 @@ struct PopoverMainView: View {
         stopRunnerRefreshTimer()
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             // ❌ NEVER remove this guard (RULE 7).
+            // ❌ LocalRunnerStore.shared.refresh() is @MainActor-isolated — MUST use
+            //   Task { @MainActor in } from this nonisolated Timer closure.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
             // comment is removed is major major major.
             if !isPopoverOpen {
-                LocalRunnerStore.shared.refresh()
+                Task { @MainActor in LocalRunnerStore.shared.refresh() }
                 store.reload()
             }
         }
@@ -174,7 +180,10 @@ struct PopoverMainView: View {
                 ForEach(visible) { group in
                     ActionRowView(group: group, onSelect: { onSelectAction(group) })
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(group: group, isPopoverOpen: isPopoverOpen)
+                        // ✅ InlineJobRowsView reads isPopoverOpen via @EnvironmentObject PopoverOpenState
+                        // ❌ NEVER pass isPopoverOpen: as a plain Bool prop — it was frozen at
+                        //   construction time (always false). The environment object is live.
+                        InlineJobRowsView(group: group)
                     }
                 }
                 loadMoreButton
