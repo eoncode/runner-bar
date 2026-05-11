@@ -9,21 +9,19 @@ import SwiftUI
 // ARCHITECTURE: Architecture 3 — NSPanel (borderless, non-activating) with
 //   NSVisualEffectView + CAShapeLayer mask for rounded corners and popover arrow.
 //
-// HEIGHT MECHANISM:
+// HEIGHT MECHANISM (ref #377):
 //   PopoverMainView reports its rendered height via HeightPreferenceKey.
 //   AppDelegate reads this in .onPreferenceChange and calls resizePanel(to:).
-//   resizePanel repositions the panel keeping the TOP-LEFT corner fixed.
+//   resizePanel:
+//     1. Clamps height to [minHeight, maxHeight]
+//     2. Sets hostingView.frame.size.height = contentH  (exact fit, no sentinel)
+//     3. Sets panel frame keeping TOP-LEFT corner fixed
 //
-//   KEY INVARIANT: hostingView has a large sentinel height (4000pt) so SwiftUI
-//   is never height-constrained and GeometryReader reports real content height.
-//   hostingView.frame.origin.y = visibleHeight - sentinelHeight  (large negative)
-//   This aligns the hostingView's TOP edge with the VFX view's TOP edge so
-//   SwiftUI content is visible at the top of the panel.
-//
-//   ❌ NEVER give NSHostingView a fixed height equal to contentH.
-//   ❌ NEVER set hostingView origin.y = 0 when using sentinel height.
-//   ❌ NEVER use fittingSize.
+//   ❌ NEVER use a sentinel/oversized hostingView — content renders outside the
+//      visible panel frame in AppKit's bottom-up coordinate system.
+//   ❌ NEVER use fittingSize — it returns cached/stale values with sizingOptions=[].
 //   ❌ NEVER remove HeightPreferenceKey machinery.
+//   ❌ NEVER animate the resize — causes side-jump (#379).
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 //
 // PANEL SETUP:
@@ -67,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelIsOpen = false
     private var mouseMonitor: Any?
     private var arrowTipX: CGFloat = 210
-    /// Last measured content height from HeightPreferenceKey.
+    /// Last measured content height reported by HeightPreferenceKey.
     private var measuredHeight: CGFloat = 120
 
     private static let canonicalWidth: CGFloat = 420
@@ -77,9 +75,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let arrowHeight: CGFloat = 9
     private static let arrowHalfWidth: CGFloat = 10
     private static let cornerRadius: CGFloat = 12
-    /// Sentinel: large enough that SwiftUI never hits a height constraint.
-    /// hostingView.origin.y = visibleHeight - sentinel  (keeps top edges aligned).
-    private static let sentinelHeight: CGFloat = 4000
 
     // MARK: - Lifecycle
 
@@ -102,7 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Build
 
     private func buildPanel() {
-        let initialTotalH = Self.minHeight + Self.arrowHeight
+        let initialContentH: CGFloat = Self.minHeight
+        let initialTotalH = initialContentH + Self.arrowHeight
         let initialSize = NSSize(width: Self.canonicalWidth, height: initialTotalH)
 
         let p = RunnerBarPanel(
@@ -138,14 +134,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visualEffectView = vfx
         vfx.layer?.insertSublayer(shadow, at: 0)
 
-        // Sentinel height: SwiftUI is unconstrained vertically.
-        // Origin Y is set so the hosting view's TOP aligns with the VFX view's TOP.
-        // In AppKit coords (y=0 at bottom): originY = totalH - sentinelHeight.
-        let originY = initialTotalH - Self.sentinelHeight
+        // hostingView sits at y=0 (bottom of VFX), height = contentH.
+        // resizePanel updates this height whenever HeightPreferenceKey fires.
         let hv = NSHostingView(rootView: wrapWithHeightCapture(mainView()))
-        hv.sizingOptions = []
+        hv.sizingOptions = [.preferredContentSize]
         hv.autoresizingMask = [.width]
-        hv.frame = NSRect(x: 0, y: originY, width: Self.canonicalWidth, height: Self.sentinelHeight)
+        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: initialContentH)
         vfx.addSubview(hv)
         hostingView = hv
 
@@ -166,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ax = max(r + ahw + 4, min(arrowTipX, w - r - ahw - 4))
         let bodyTop = h - ah
 
+        // AppKit: y=0 at bottom. Arrow points up (toward menu bar) at the top.
         let path = CGMutablePath()
         path.move(to: CGPoint(x: r, y: 0))
         path.addLine(to: CGPoint(x: w - r, y: 0))
@@ -175,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         path.addArc(center: CGPoint(x: w - r, y: bodyTop - r), radius: r,
                     startAngle: 0, endAngle: .pi / 2, clockwise: false)
         path.addLine(to: CGPoint(x: ax + ahw, y: bodyTop))
-        path.addLine(to: CGPoint(x: ax, y: h))
+        path.addLine(to: CGPoint(x: ax, y: h))      // arrow tip (top)
         path.addLine(to: CGPoint(x: ax - ahw, y: bodyTop))
         path.addLine(to: CGPoint(x: r, y: bodyTop))
         path.addArc(center: CGPoint(x: r, y: bodyTop - r), radius: r,
@@ -214,19 +209,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Resize
+    //
+    // Keeps the TOP-LEFT corner of the panel fixed while changing height.
+    // hostingView.frame.size.height is updated to contentH so SwiftUI
+    // content fills the body area exactly (y=0 to y=contentH).
+    // Arrow area is the top arrowHeight points of the panel.
 
     private func resizePanel(to rawContentHeight: CGFloat) {
         guard let panel, let vfx = visualEffectView, let hv = hostingView else { return }
         let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
         let totalH = contentH + Self.arrowHeight
+        // Keep top-left fixed
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
         let newFrame = NSRect(x: topLeft.x, y: topLeft.y - totalH,
                               width: Self.canonicalWidth, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
         vfx.frame = NSRect(origin: .zero, size: newFrame.size)
-        // Keep top edges aligned: originY = totalH - sentinelHeight
-        hv.frame = NSRect(x: 0, y: totalH - Self.sentinelHeight,
-                          width: Self.canonicalWidth, height: Self.sentinelHeight)
+        // hostingView fills body area: y=0, height=contentH
+        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
         applyMask(panelSize: newFrame.size)
     }
 
@@ -408,9 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
         panel.setFrame(frame, display: false)
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        // Align hosting view top with VFX top
-        hostingView?.frame = NSRect(x: 0, y: totalH - Self.sentinelHeight,
-                                    width: width, height: Self.sentinelHeight)
+        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: contentH)
         applyMask(panelSize: frame.size)
 
         panel.orderFront(nil)
