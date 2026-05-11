@@ -31,6 +31,11 @@ import AppKit
 //    ❌ NEVER set hosting view frame only at init.
 //    ❌ NEVER set autoresizingMask=[] on the hosting view.
 //
+// 6. macOS 13 compatibility:
+//    NSBezierPath.cgPath is macOS 14+ ONLY.
+//    ❌ NEVER use bezierPath.cgPath directly — use bezierPathCGPath() extension below.
+//    The extension manually walks the NSBezierPath elements and builds a CGMutablePath.
+//
 // ❌ NEVER remove this file.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression is major major major.
@@ -38,6 +43,50 @@ import AppKit
 let arrowHeight:  CGFloat = 9    // matches NSPopover (Sequoia)
 let arrowWidth:   CGFloat = 20   // matches NSPopover standard
 let cornerRadius: CGFloat = 10   // matches NSPopover exact value (macOS Sequoia)
+
+// MARK: - NSBezierPath → CGPath (macOS 13 compatible)
+//
+// NSBezierPath.cgPath requires macOS 14+. This extension is the standard
+// pre-macOS-14 workaround: walk elements manually and build a CGMutablePath.
+// ❌ NEVER replace with .cgPath directly — the project targets macOS 13.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE.
+private extension NSBezierPath {
+    var compatCGPath: CGPath {
+        let path = CGMutablePath()
+        var pts = [NSPoint](repeating: .zero, count: 3)
+        for i in 0 ..< elementCount {
+            switch element(at: i, associatedPoints: &pts) {
+            case .moveTo:
+                path.move(to: CGPoint(x: pts[0].x, y: pts[0].y))
+            case .lineTo:
+                path.addLine(to: CGPoint(x: pts[0].x, y: pts[0].y))
+            case .curveTo:
+                path.addCurve(
+                    to:       CGPoint(x: pts[2].x, y: pts[2].y),
+                    control1: CGPoint(x: pts[0].x, y: pts[0].y),
+                    control2: CGPoint(x: pts[1].x, y: pts[1].y)
+                )
+            case .closePath:
+                path.closeSubpath()
+            case .cubicCurveTo:  // same as curveTo in newer SDK naming
+                path.addCurve(
+                    to:       CGPoint(x: pts[2].x, y: pts[2].y),
+                    control1: CGPoint(x: pts[0].x, y: pts[0].y),
+                    control2: CGPoint(x: pts[1].x, y: pts[1].y)
+                )
+            case .quadraticCurveTo:
+                path.addQuadCurve(
+                    to:      CGPoint(x: pts[1].x, y: pts[1].y),
+                    control: CGPoint(x: pts[0].x, y: pts[0].y)
+                )
+            @unknown default:
+                break
+            }
+        }
+        return path
+    }
+}
 
 final class PanelChromeView: NSView {
 
@@ -96,10 +145,13 @@ final class PanelChromeView: NSView {
     /// Rebuilds the CAShapeLayer mask on fx so only the body+arrow area is
     /// visible. This replaces the broken cornerRadius/masksToBounds approach
     /// that clipped the arrow base and left a visible cutout.
+    ///
+    /// Uses .compatCGPath (not .cgPath) for macOS 13 compatibility.
+    /// ❌ NEVER use .cgPath here — it requires macOS 14+.
     private func updateFxMask() {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let maskLayer = CAShapeLayer()
-        maskLayer.path = chromePath(in: bounds).cgPath
+        maskLayer.path = chromePath(in: bounds).compatCGPath
         fx.layer?.mask = maskLayer
     }
 
