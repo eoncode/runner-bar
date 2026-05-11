@@ -13,15 +13,19 @@ import SwiftUI
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
-// RULE 6: ❌ NEVER add .frame(maxHeight:) to the ScrollView — height is driven
-//         entirely by fittingSize in AppDelegate.openPopover(). Capping the
-//         ScrollView height here clips content and causes popover mis-sizing.
+// RULE 6: ScrollView MUST have a .frame(maxHeight:) cap = visibleScreenHeight - 120.
+//         Without this cap, fittingSize.height reports the full unbounded content
+//         height (can be 1000pt+ with 30 cached groups), making the popover
+//         grow off-screen. The cap is computed dynamically from NSScreen.main so
+//         it adapts to different screen sizes and menu-bar positions.
+//         ❌ NEVER remove this cap — causes height explosion with many action groups.
+//         ❌ NEVER use a fixed constant — adapts to screen size.
 //
 // RULE 7 (#19): runnerRefreshTimer fires every 5 s on the main thread and calls
 //         LocalRunnerStore.shared.refresh() + store.reload() to keep CPU/MEM
 //         metrics live. The timer is started in .onAppear and invalidated in
 //         .onDisappear. ❌ NEVER remove this timer or the runner rows will show
-//         stale metrics while the system-stats header updates normally.
+//         stale metrics while the system-stats header updates via SystemStatsViewModel.
 //
 // RULE 8 (#22): idealWidth is 480 (was 420). AppDelegate.fixedWidth is also 480.
 //         ❌ NEVER change one without changing the other or fittingSize height
@@ -50,6 +54,15 @@ struct PopoverMainView: View {
     /// even though the system-stats header updates via SystemStatsViewModel.
     @State private var runnerRefreshTimer: Timer?
 
+    /// Maximum height for the scrollable actions list.
+    /// Derived from the visible screen area so the popover never overflows off-screen.
+    /// The 120 pt offset accounts for the header + divider + runner rows above the ScrollView
+    /// plus a comfortable gap between the popover bottom and the Dock/screen edge.
+    /// ❌ NEVER replace with a fixed constant — must adapt to screen height.
+    private var maxScrollHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 700) - 120
+    }
+
     /// Root layout: header → divider → optional rate-limit banner → runners → scrollable actions.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -64,12 +77,15 @@ struct PopoverMainView: View {
             PopoverLocalRunnerRow(runners: store.runners)
                 // Initial refresh on appear; the 5 s timer (below) drives subsequent updates.
                 .onAppear { Task { LocalRunnerStore.shared.refresh() } }
+            // ⚠️ RULE 6: maxHeight cap is LOAD-BEARING — see regression guard above.
+            // ❌ NEVER remove .frame(maxHeight: maxScrollHeight)
+            // ❌ NEVER change to .frame(height:) — that clips content to a fixed value
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     actionsSection
                 }
             }
-            // ❌ DO NOT add .frame(maxHeight:) here — see RULE 6 above.
+            .frame(maxHeight: maxScrollHeight)
         }
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
@@ -149,7 +165,7 @@ struct PopoverMainView: View {
             Button(
                 action: { visibleCount += nextBatch },
                 label: {
-                    Text("Load \(nextBatch) more actions…")
+                    Text("Load \(nextBatch) more actions\u{2026}")
                         .font(.caption).foregroundColor(.secondary)
                 }
             )

@@ -10,7 +10,7 @@ import SwiftUI
 // is major major major.
 //
 // sizingOptions: default. Height read via fittingSize ONCE per open.
-// navigate() = rootView swap + ONE async remeasurePopover() hop ONLY.
+// navigate() = rootView swap + TWO async hops to remeasurePopover().
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER touch contentSize or setFrameSize synchronously while popover.isShown == true
 // ❌ NEVER add objectWillChange.send() in reload()
@@ -21,8 +21,11 @@ import SwiftUI
 //     horizontally — the side-jump regression (issue #13).
 // ✅ fittingSize.HEIGHT is safe to read synchronously before or after show().
 //     Only fittingSize.WIDTH is forbidden. Height does not affect the anchor X.
-// ❌ NEVER use a cached/stale height constant (e.g. lastKnownHeight) instead of
-//     fittingSize.height — this breaks dynamic height sizing.
+// ❌ NEVER collapse navigate()'s two async hops to one — on the first run-loop
+//     turn after rootView is swapped, SwiftUI has only committed the new root;
+//     the full layout pass (including PopoverLocalRunnerRow, ScrollView content,
+//     and any inner ForEach) runs on the second turn. Sampling fittingSize.height
+//     after only one hop gives a stale/partial height → wrong popover size.
 // ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 480).
 //     Mismatching these causes fittingSize.height to be calculated at the
 //     wrong width, wrapping content and producing an incorrect popover height.
@@ -340,8 +343,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - Navigation
 
     /// Swaps the hosting controller's root view, then remeasures the popover height
-    /// on the next run-loop turn so SwiftUI has laid out the new content.
+    /// after TWO async hops so SwiftUI has fully laid out the new content tree.
     ///
+    /// WHY TWO HOPS:
+    ///   Hop 1 — SwiftUI commits the new rootView (replaces the view tree).
+    ///   Hop 2 — SwiftUI completes the full layout pass for the new tree,
+    ///            including inner ForEach, ScrollView content, PopoverLocalRunnerRow,
+    ///            etc. fittingSize.height is stable only after this second pass.
+    ///   Sampling on hop 1 returns a partial/stale height → wrong popover size.
+    ///
+    /// ❌ NEVER collapse to one hop — causes wrong height on back-navigation to main.
     /// ❌ NEVER move the resize into the synchronous part of this function.
     /// ❌ NEVER call this from a background thread.
     /// ❌ NEVER read fittingSize.width here — remeasurePopover always uses Self.fixedWidth.
@@ -350,9 +361,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// is major major major.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
-        guard let hostingController, let popover, popover.isShown else { return }
+        guard let _ = hostingController, let popover, popover.isShown else { return }
         DispatchQueue.main.async { [weak self] in
-            self?.remeasurePopover()
+            DispatchQueue.main.async { [weak self] in
+                self?.remeasurePopover()
+            }
         }
     }
 
