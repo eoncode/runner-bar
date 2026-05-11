@@ -102,8 +102,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var arrowTipX: CGFloat = 210
 
     /// Last height reported by HeightPreferenceKey (content only, not including arrowHeight).
-    /// Starts at minHeight so the first open has a reasonable size before SwiftUI fires.
-    private var measuredHeight: CGFloat = Self.minHeight
+    /// Starts at 120 (minHeight) so the first open has a reasonable size before SwiftUI fires.
+    /// ❌ NEVER initialise with Self.minHeight — Swift forbids Self in stored property initialisers.
+    private var measuredHeight: CGFloat = 120
 
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
@@ -149,8 +150,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Builds the NSPanel, NSVisualEffectView, and NSHostingView once at launch.
     /// ❌ NEVER call more than once — panel is reused across open/close cycles.
     private func buildPanel() {
-        // Use minHeight for the initial panel size. The real height arrives
-        // via HeightPreferenceKey on the first layout pass.
         let initialContentH = Self.minHeight
         let initialTotalH = initialContentH + Self.arrowHeight
         let initialSize = NSSize(width: Self.canonicalWidth, height: initialTotalH)
@@ -194,14 +193,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vfx.autoresizingMask = [.width, .height]
         visualEffectView = vfx
 
-        // Install shadow behind VFX
         vfx.layer?.insertSublayer(shadow, at: 0)
 
-        // ✅ KEY FIX: Give hostingView a sentinel height (4000pt) so SwiftUI's
-        // layout engine is NEVER height-constrained. GeometryReader inside the
-        // SwiftUI view then reports the content's natural height, not the frame.
-        // ❌ NEVER set this to a fixed contentH — that cages SwiftUI and makes
-        //    GeometryReader report the cage height instead of content height.
+        // ✅ KEY FIX: Give hostingView sentinel height so SwiftUI is never
+        // height-constrained. GeometryReader reports real content height.
+        // ❌ NEVER set this to a fixed contentH.
         let contentFrame = NSRect(
             x: 0,
             y: 0,
@@ -212,8 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hv = NSHostingView(rootView: rootView)
         hv.sizingOptions = []
         hv.frame = contentFrame
-        // autoresizingMask: width flexible (tracks panel width), height NOT flexible
-        // so our explicit frame assignments in resizePanel are not overridden.
+        // width flexible, height NOT flexible — we own height via resizePanel
         hv.autoresizingMask = [.width]
         vfx.addSubview(hv)
         hostingView = hv
@@ -221,14 +216,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.contentView = vfx
         panel = p
 
-        // Apply initial mask
         applyMask(panelSize: initialSize)
     }
 
     // MARK: - Shape mask (rounded rect + upward arrow)
 
-    /// Applies a CAShapeLayer mask to the visualEffectView clipping it to a
-    /// rounded rectangle with an upward-pointing arrow notch at the top.
     private func applyMask(panelSize: NSSize) {
         guard let vfx = visualEffectView else { return }
 
@@ -297,11 +289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Panel resizing
 
     /// Keeps TOP-LEFT corner fixed, grows panel downward only.
-    /// Total panel height = content height + arrowHeight.
     /// ❌ NEVER use setFrameSize — anchors from bottom-left and shifts panel up.
-    /// ❌ NEVER change the x origin.
-    /// ❌ NEVER give hostingView a fixed height equal to contentH here —
-    ///    keep it at sentinelHeight so SwiftUI stays unconstrained.
+    /// ❌ NEVER clamp hostingView to contentH — keep it at sentinelHeight.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func resizePanel(to rawContentHeight: CGFloat) {
@@ -317,9 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         panel.setFrame(newFrame, display: true, animate: false)
         vfx.frame = NSRect(origin: .zero, size: newFrame.size)
-        // hostingView stays at sentinel height — do NOT clamp it to contentH.
-        // The VFX mask + panel frame clip the visible area; SwiftUI must remain
-        // unconstrained so GeometryReader keeps reporting real content height.
+        // Keep hostingView at sentinel — never clamp to contentH.
         hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: Self.hostingViewSentinelHeight)
         applyMask(panelSize: newFrame.size)
     }
@@ -547,7 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrame(frame, display: false)
 
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        // ✅ hostingView always gets sentinel height — never the clamped contentH.
+        // ✅ Always sentinel height — never clamped contentH.
         hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: Self.hostingViewSentinelHeight)
         applyMask(panelSize: frame.size)
 
