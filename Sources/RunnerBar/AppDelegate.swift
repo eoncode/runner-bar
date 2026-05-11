@@ -21,7 +21,7 @@ import SwiftUI
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from status button's window frame (screen coords):
+// 2. Position is computed from status button’s window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - fixedWidth/2
 //      panelY = statusItemRect.minY - clampedContentH - arrowHeight - gap
@@ -152,7 +152,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         p.contentView = chromeView
         p.isOpaque = false
-        p.backgroundColor = .clear
+        // ❌ NEVER set backgroundColor = .clear (alpha 0.0).
+        // alpha=0.0 disables CABackdropLayer entirely — NSVisualEffectView renders as flat
+        // opaque grey with no vibrancy/blur instead of the frosted-glass NSPopover look.
+        // Must be near-zero (0.001) so the backdrop layer stays active and samples
+        // the content behind the window. Reference: iSapozhnik/Popover, Oskar Groth
+        // reverse-engineering of NSVisualEffectView (oskargroth.com/blog/reverse-engineering-nsvisualeffectview).
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        p.backgroundColor = NSColor(white: 1, alpha: 0.001)
         p.hasShadow = true
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
