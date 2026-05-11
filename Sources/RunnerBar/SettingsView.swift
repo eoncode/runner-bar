@@ -117,6 +117,16 @@ struct SettingsView: View {
             isAuthenticated = (githubToken() != nil)
             hasLoadedOnce = true
         }
+        .sheet(isPresented: $showAddRunnerSheet) {
+            AddRunnerSheet(isPresented: $showAddRunnerSheet) {
+                LocalRunnerStore.shared.refresh()
+            }
+        }
+        .sheet(item: $runnerBeingConfigured) { runner in
+            RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
+                LocalRunnerStore.shared.refresh()
+            }
+        }
         .alert(removalAlertTitle, isPresented: Binding(
             get: { runnerPendingRemoval != nil },
             set: { if !$0 { runnerPendingRemoval = nil } }
@@ -190,29 +200,79 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
             } else {
                 ForEach(localRunnerStore.runners) { runner in
-                    LocalRunnerSettingsRow(
-                        runner: runner,
-                        onConfigure: { runnerBeingConfigured = runner },
-                        onRemove: { runnerPendingRemoval = RunnerModel(
-                            id: runner.id,
-                            runnerName: runner.name,
-                            os: "local",
-                            status: "offline",
-                            busy: false,
-                            scope: runner.repoScope ?? ""
-                        )}
-                    )
+                    localRunnerRow(runner)
                 }
             }
         }
-        .sheet(isPresented: $showAddRunnerSheet) {
-            AddLocalRunnerSheet(isPresented: $showAddRunnerSheet)
+    }
+
+    private func localRunnerRow(_ runner: RunnerModel) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(localRunnerDotColor(for: runner))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(runner.runnerName)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                if let url = runner.gitHubUrl {
+                    Text(url)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Text(runner.displayStatus)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+            if runner.isRunning {
+                Button("Stop") {
+                    lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) }
+                }
+                .buttonStyle(.bordered)
+                .font(.caption2)
+                .help("Stop runner service")
+            } else {
+                Button("Resume") {
+                    lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) }
+                }
+                .buttonStyle(.bordered)
+                .font(.caption2)
+                .help("Start runner service")
+            }
+            Button(action: { runnerBeingConfigured = runner }) {
+                Image(systemName: "gearshape").font(.caption2)
+            }
+            .buttonStyle(.plain)
+            .help("Configure runner")
+            Button(action: { runnerPendingRemoval = runner }) {
+                Image(systemName: "minus.circle")
+                    .font(.caption2)
+                    .foregroundColor(.red)
+            }
+            .buttonStyle(.plain)
+            .help("Remove runner")
         }
-        .sheet(item: $runnerBeingConfigured) { runner in
-            ConfigureLocalRunnerSheet(runner: runner, isPresented: Binding(
-                get: { runnerBeingConfigured != nil },
-                set: { if !$0 { runnerBeingConfigured = nil } }
-            ))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+    }
+
+    private func localRunnerDotColor(for runner: RunnerModel) -> Color {
+        switch runner.statusColor {
+        case .running: return .green
+        case .busy: return .yellow
+        case .idle: return .gray
+        case .offline: return .red
+        }
+    }
+
+    private func lifecycleAction(_ action: @escaping () -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            action()
+            DispatchQueue.main.async { LocalRunnerStore.shared.refresh() }
         }
     }
 
@@ -226,10 +286,36 @@ struct SettingsView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             ForEach(store.runners) { runner in
-                RunnerSettingsRow(
-                    runner: runner,
-                    onRemove: { runnerPendingRemoval = runner }
-                )
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(runner.status != "online" ? Color.gray : (runner.busy ? Color.yellow : Color.green))
+                        .frame(width: 8, height: 8)
+                    Text(runner.name)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Spacer()
+                    Text(runner.busy ? "busy" : (runner.status == "online" ? "online" : "offline"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Button(action: { runnerPendingRemoval = RunnerModel(
+                        runnerName: runner.name,
+                        gitHubUrl: nil,
+                        agentId: nil,
+                        workFolder: nil,
+                        installPath: nil,
+                        isRunning: false
+                    )}) {
+                        Image(systemName: "minus.circle")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove runner")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
             }
             if store.runners.isEmpty {
                 Text("No runners configured")
@@ -243,17 +329,37 @@ struct SettingsView: View {
     }
 
     private var scopeRow: some View {
-        HStack(spacing: 6) {
-            TextField("owner/repo or org", text: $newScope)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            if !newScope.isEmpty {
-                Button("Add") { addScope() }
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
+                HStack {
+                    Text(scope)
+                        .font(.system(size: 12))
+                    Spacer()
+                    Button(action: {
+                        ScopeStore.shared.remove(scope)
+                        store.reload()
+                    }) {
+                        Image(systemName: "minus.circle")
+                            .foregroundColor(.red)
+                    }
                     .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 2)
+            }
+            HStack(spacing: 6) {
+                TextField("owner/repo or org", text: $newScope)
+                    .textFieldStyle(.plain)
                     .font(.system(size: 12))
-                    .padding(.trailing, 12)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .onSubmit { addScope() }
+                if !newScope.isEmpty {
+                    Button("Add") { addScope() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .padding(.trailing, 12)
+                }
             }
         }
     }
@@ -297,18 +403,12 @@ struct SettingsView: View {
                 .onChange(of: launchAtLogin) { val in
                     LoginItem.setEnabled(val)
                 }
-            Toggle("Show offline runners", isOn: $settings.showOfflineRunners) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Show offline runners")
-                        .font(.system(size: 13))
-                    Text("Include runners that are offline or unreachable in the runner list")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            // showDimmedRunners is the actual property — showOfflineRunners does not exist.
+            Toggle("Show offline runners", isOn: $settings.showDimmedRunners)
+                .toggleStyle(.switch)
+                .font(.system(size: 13))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
             pollingIntervalRow
         }
     }
@@ -337,24 +437,25 @@ struct SettingsView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-            if let token = githubToken() {
+            if isAuthenticated {
                 HStack {
-                    Text("GitHub token")
+                    Text("GitHub")
                         .font(.system(size: 13))
                     Spacer()
-                    Text("\u{2022}\u{2022}\u{2022}\u{2022} " + String(token.suffix(4)))
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                    Button("Remove") {
-                        removeGithubToken()
-                        isAuthenticated = false
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 8, height: 8)
+                        Text("Authenticated")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundColor(.red)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                Text("`gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 2)
             } else {
                 Button("Connect GitHub account") {
                     let url = URL(string: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens")!
@@ -365,11 +466,17 @@ struct SettingsView: View {
                 .foregroundColor(.accentColor)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
+                Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 2)
             }
         }
     }
 
     // MARK: - Legal section
+    // LegalPrefsStore exposes only `analyticsEnabled` — acceptedTerms/acceptedPrivacy do not exist.
 
     private var legalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -378,12 +485,7 @@ struct SettingsView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-            Toggle("I accept the Terms of Service", isOn: $legal.acceptedTerms)
-                .toggleStyle(.switch)
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            Toggle("I accept the Privacy Policy", isOn: $legal.acceptedPrivacy)
+            Toggle("Share analytics", isOn: $legal.analyticsEnabled)
                 .toggleStyle(.switch)
                 .font(.system(size: 13))
                 .padding(.horizontal, 12)
@@ -410,6 +512,16 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
+            HStack {
+                Text("RunnerBar")
+                    .font(.system(size: 13))
+                Spacer()
+                Text(Bundle.main.bundleIdentifier ?? "dev.eonist.runnerbar")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
             Button("View on GitHub") {
                 let url = URL(string: "https://github.com/eoncode/runner-bar")!
                 NSWorkspace.shared.open(url)
@@ -427,10 +539,7 @@ struct SettingsView: View {
     private func addScope() {
         let trimmed = newScope.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        var scopes = loadScopes()
-        guard !scopes.contains(trimmed) else { newScope = ""; return }
-        scopes.append(trimmed)
-        saveScopes(scopes)
+        ScopeStore.shared.add(trimmed)
         newScope = ""
         store.reload()
     }
@@ -439,12 +548,13 @@ struct SettingsView: View {
         guard let runner = runnerPendingRemoval else { return }
         removeErrorMessage = nil
         DispatchQueue.global(qos: .userInitiated).async {
-            let err = removeRunner(runner)
+            let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
             DispatchQueue.main.async {
-                if let err {
-                    removeErrorMessage = err
+                if !succeeded {
+                    removeErrorMessage = "De-registration failed — the runner may still appear in GitHub. Check your token and try again."
                 } else {
                     store.reload()
+                    LocalRunnerStore.shared.refresh()
                 }
                 runnerPendingRemoval = nil
             }
