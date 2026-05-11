@@ -26,7 +26,17 @@ import SwiftUI
 //   The empty-state path ("No recent actions") MUST have a minHeight: 120
 //   on its container so GeometryReader reports a realistic height and Phase 2
 //   does not clamp to minHeight while leaving content tiny + centred.
-//   ❌ NEVER remove the .frame(minHeight: 120, alignment: .top) from ActionsListView empty branch.
+//   ❌ NEVER remove the .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+//   from ActionsListView empty branch.
+//
+// MODEL API — verified against source files, DO NOT hallucinate properties:
+//   ActionGroup:    .progressFraction (Double?), .headBranch (String?), .elapsed (String),
+//                   .groupStatus (GroupStatus), .conclusion (String?), .title, .repo, .jobs
+//   PieProgressView: init(progress: Double?, color: Color, size: CGFloat = 8)
+//                   ❌ NO status: parameter — it does not exist
+//   ActiveJob:      .name, .status, .conclusion, .elapsedLabel — NO .progress property
+//   Runner:         .status is String ("online"/"offline"), .busy (Bool), .displayStatus (String)
+//                   ❌ NO .statusLabel, NO enum cases .online/.offline/.busy
 
 // MARK: - HeightPreferenceKey
 
@@ -224,11 +234,12 @@ private struct ActionsListView: View {
             // popover clamps to minHeight (120) but content is still tiny and centred.
             // minHeight: 120 ensures the GeometryReader fires ≥120pt so contentSize
             // matches what the user actually sees (header ~44 + divider + this ≥120).
-            // ❌ NEVER remove .frame(minHeight: 120, alignment: .top) from this branch.
+            // ❌ NEVER remove .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+            // ❌ maxWidth MUST come before minHeight — Swift requires declaration order.
             Text("No recent actions")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .frame(minHeight: 120, maxWidth: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
         } else {
             VStack(spacing: 0) {
                 ForEach(actions.prefix(visibleCount)) { actionGroup in
@@ -270,19 +281,38 @@ private struct ActionRowView: View {
         return actionGroup.jobs.filter { $0.status == "in_progress" }
     }
 
+    // Maps GroupStatus + conclusion → Color for PieProgressView.
+    // PieProgressView.init is: (progress: Double?, color: Color, size: CGFloat = 8)
+    // ❌ There is NO status: parameter on PieProgressView.
+    private var pieColor: Color {
+        switch actionGroup.groupStatus {
+        case .inProgress: return .blue
+        case .queued:     return .yellow
+        case .completed:
+            switch actionGroup.conclusion {
+            case "success":   return .green
+            case "failure":   return .red
+            case "cancelled": return Color(nsColor: .systemOrange)
+            default:          return .secondary
+            }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Button(
                 action: onSelect,
                 label: {
                     HStack(spacing: 6) {
+                        // ✅ Correct init: progress: Double?, color: Color
+                        // actionGroup.progressFraction is the correct property (not .progress)
                         PieProgressView(
-                            status: actionGroup.groupStatus,
-                            progress: actionGroup.progress
+                            progress: actionGroup.progressFraction,
+                            color: pieColor
                         )
                         .frame(width: 14, height: 14)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(actionGroup.workflowName)
+                            Text(actionGroup.title)
                                 .font(.caption.weight(.medium))
                                 .foregroundColor(.primary)
                                 .lineLimit(1)
@@ -291,7 +321,8 @@ private struct ActionRowView: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
-                                if let branch = actionGroup.branch {
+                                // actionGroup.headBranch is the correct property (not .branch)
+                                if let branch = actionGroup.headBranch {
                                     Text("·").font(.caption2).foregroundColor(.secondary)
                                     Text(branch)
                                         .font(.caption2)
@@ -301,11 +332,10 @@ private struct ActionRowView: View {
                             }
                         }
                         Spacer()
-                        if let elapsed = actionGroup.elapsedLabel {
-                            Text(elapsed)
-                                .font(.caption2.monospacedDigit())
-                                .foregroundColor(.secondary)
-                        }
+                        // actionGroup.elapsed is the correct property (not .elapsedLabel)
+                        Text(actionGroup.elapsed)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundColor(.secondary)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(.secondary.opacity(0.5))
@@ -333,7 +363,9 @@ private struct InlineJobRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            PieProgressView(status: .inProgress, progress: job.progress)
+            // ActiveJob has NO .progress property.
+            // Use nil (indeterminate dot) — the spinner indicates the job is running.
+            PieProgressView(progress: nil, color: .blue)
                 .frame(width: 10, height: 10)
                 .padding(.leading, 28)
             Text(job.name)
@@ -383,7 +415,8 @@ private struct RunnerRowView: View {
                 .foregroundColor(.primary)
                 .lineLimit(1)
             Spacer()
-            Text(runner.statusLabel)
+            // ✅ runner.displayStatus is the correct property (not .statusLabel)
+            Text(runner.displayStatus)
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
@@ -391,10 +424,12 @@ private struct RunnerRowView: View {
     }
 
     private var statusColor: Color {
+        // runner.status is a raw String from the GitHub API — NOT an enum.
+        // ❌ NEVER use case .online / .offline / .busy — those do not exist.
         switch runner.status {
-        case .online: return .green
-        case .offline: return .red
-        case .busy: return .orange
+        case "online":  return runner.busy ? .orange : .green
+        case "offline": return .red
+        default:        return .secondary
         }
     }
 }
