@@ -1,26 +1,35 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296 #376)
+// ⚠️ REGRESSION GUARD — frame + layout rules (ref #52 #54 #57 #296 #376 #377)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-//   AppDelegate reads hc.view.fittingSize.height in openPopover() and remeasurePopover()
-//   to size the popover. Width is ALWAYS Self.fixedWidth — never fittingSize.width.
-// ❌ NEVER remove .frame(idealWidth: 420)
-// ❌ NEVER use .frame(width: 420)
-// ❌ NEVER remove maxWidth: .infinity
-// ❌ NEVER wrap ActionsListView in ScrollView — ScrollView swallows content height,
-//    making fittingSize.height return near-zero. Height cap is in AppDelegate.
-// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to ActionsListView or root VStack.
+// ARCHITECTURE IN USE: Architecture 1 — Fully Dynamic Height (SwiftUI-driven)
+// (per status-bar-app-position-warning.md §4 Architecture 1)
 //
-// RULE 2: ALL rows use .padding(.horizontal, 12)
-// RULE 3: Job row HStack Spacer() is LOAD-BEARING.
-// RULE 4: NEVER use .fixedSize() on any container.
+// RULE 1: Root Group/VStack MUST use .frame(idealWidth: 420)
+//   NSHostingController.sizingOptions = .preferredContentSize reads SwiftUI ideal size.
+//   .frame(idealWidth: 420) pins preferredContentSize.width = 420 always, regardless
+//   of which nav state is active. Width never changes → no NSPopover re-anchor → no jump.
+//   Height varies freely with content → no empty space or clipping.
+// ❌ NEVER use .frame(width: 420) — layout width ≠ ideal width, causes unstable width.
+// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the root VStack.
+// ❌ NEVER remove .frame(idealWidth: 420).
+//
+// RULE 2: ActionsListView uses plain VStack (NO ScrollView).
+//   ScrollView reports infinite preferred height to SwiftUI → kills dynamic height.
+//   Height cap via .frame(maxHeight: 480, alignment: .top) on ActionsListView is correct.
+//   fixedSize(horizontal: false, vertical: true) lets it measure natural content height.
+// ❌ NEVER wrap ActionsListView in ScrollView.
+// ❌ NEVER remove fixedSize from ActionsListView.
+//
+// RULE 3: ALL rows use .padding(.horizontal, 12)
+// RULE 4: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
-// RULE 6: ActionsListView uses plain VStack — NO ScrollView.
+// RULE 6: Detail views use .frame(idealWidth: 420, minHeight: X) — fixed height is
+//   acceptable there because they have their own internal ScrollView.
 //
 // INLINE JOBS SPEC (#178):
 //   Show ↳ job rows ONLY for jobs with status == "in_progress".
-// ❌ NEVER show queued jobs inline — spec says only actively running jobs expand.
+// ❌ NEVER show queued jobs inline.
 
 /// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
@@ -34,6 +43,11 @@ struct PopoverMainView: View {
     @State private var visibleCount: Int = 10
 
     var body: some View {
+        // ⚠️ Architecture 1 root container:
+        //   .frame(idealWidth: 420) pins preferredContentSize.width = 420 always.
+        //   No height modifier here — height is fully driven by content.
+        // ❌ NEVER use .frame(width: 420) here.
+        // ❌ NEVER add .frame(height:) or .frame(maxHeight:) here.
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
                 systemStats: systemStats,
@@ -52,16 +66,20 @@ struct PopoverMainView: View {
                 Divider()
             }
             RunnersListView(runners: store.runners)
+            // ⚠️ fixedSize(horizontal: false, vertical: true) lets SwiftUI measure
+            //   the natural content height of the list so preferredContentSize.height
+            //   is correct. maxHeight caps growth. alignment: .top prevents centering.
+            // ❌ NEVER wrap in ScrollView.
+            // ❌ NEVER remove fixedSize.
             ActionsListView(
                 actions: store.actions,
                 visibleCount: $visibleCount,
                 onSelectAction: onSelectAction
             )
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: 480, alignment: .top)
         }
-        // ⚠️ idealWidth is REQUIRED for stable fittingSize.width (ref #376).
-        // maxWidth: .infinity ensures the view fills the fixed-width frame.
-        // ❌ NEVER use .frame(width: 420) — prevents dynamic height measurement.
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 420)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
@@ -176,8 +194,8 @@ private struct PopoverHeaderView: View {
 // MARK: - ActionsListView
 
 // ⚠️ NO ScrollView here — ScrollView swallows content height, preventing
-// AppDelegate.remeasurePopover() from reading correct fittingSize.height.
-// Height cap is handled by AppDelegate.maxContentHeight. (ref #376)
+// SwiftUI from reporting correct preferredContentSize.height to NSPopover.
+// Height cap and fixedSize are applied by the caller (PopoverMainView). (ref #376 #377)
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
