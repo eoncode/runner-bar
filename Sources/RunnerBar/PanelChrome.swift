@@ -11,10 +11,11 @@ import AppKit
 //   chrome IS the panel contentView. AppKit owns chrome.frame.
 //   ❌ NEVER set chrome.frame manually from AppDelegate.
 //   chrome.layout() is called by AppKit after every panel.setFrame().
-//   It repositions fx (NSVisualEffectView) to contentRect.
-//   It does NOT clamp the hosting view — let SwiftUI render at full height
-//   so preferredContentSize KVO fires correctly. Panel height is driven
-//   by KVO → resizeAndRepositionPanel() → panel.setFrame(), not by clamping here.
+//   It repositions fx (NSVisualEffectView) to contentRect ONLY.
+//   The hosting view has autoresizingMask=[.width,.height] and is NOT touched
+//   in layout() — AppKit fills it automatically as the panel resizes.
+//   This lets SwiftUI render at full preferredContentSize so KVO fires correctly.
+//   Panel height is driven by KVO → resizeAndRepositionPanel() → panel.setFrame().
 //
 //   contentRect = full bounds minus arrowHeight at top (macOS coords: y=0 at bottom):
 //     NSRect(x:0, y:0, width:bounds.width, height:bounds.height - arrowHeight)
@@ -24,6 +25,8 @@ import AppKit
 //   Formula: buttonScreenFrame.midX - panelFrame.minX
 //
 // ❌ NEVER remove this file.
+// ❌ NEVER add hosting-view frame overrides back to layout().
+// ❌ NEVER set autoresizingMask=[] on the hosting view.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression is major major major.
 
@@ -64,16 +67,16 @@ final class PanelChromeView: NSView {
 
     override func layout() {
         super.layout()
-        // Pin the visual effect background to contentRect.
+        // Pin ONLY the visual effect background to contentRect.
+        // ❌ NEVER override the hosting view frame here — the hosting view uses
+        //    autoresizingMask=[.width,.height] so AppKit fills it automatically.
+        //    Overriding it here breaks the chicken-and-egg: SwiftUI could never
+        //    grow past the init height → preferredContentSize KVO never fired.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
         fx.frame = contentRect
         fx.layer?.cornerRadius = cornerRadius
         fx.layer?.masksToBounds = true
-        // Hosting view (non-fx subviews) fills contentRect.
-        // We do NOT clamp its size here — SwiftUI must render at its natural
-        // preferredContentSize so KVO fires. The panel height is driven by KVO.
-        for sub in subviews where sub !== fx {
-            sub.frame = contentRect
-        }
     }
 
     override func draw(_ dirtyRect: NSRect) {

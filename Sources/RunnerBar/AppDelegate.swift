@@ -36,9 +36,10 @@ import SwiftUI
 // CHROME (PanelChromeView):
 //   contentView = PanelChromeView.
 //   ❌ NEVER set chrome.frame manually — AppKit owns contentView.frame.
-//   chrome.layout() re-pins fx to contentRect. Hosting view fills contentRect.
-//   DO NOT set autoresizingMask=[] on hosting view — SwiftUI must render at
-//   its natural height so preferredContentSize KVO fires correctly.
+//   chrome.layout() pins fx to contentRect ONLY.
+//   Hosting view has autoresizingMask=[.width,.height] — AppKit fills it.
+//   ❌ NEVER set autoresizingMask=[] on the hosting view.
+//   ❌ NEVER override the hosting view frame in layout() — breaks KVO.
 //
 // WIDTH RULE:
 // Width is ALWAYS fixedWidth=480. Never dynamic. Never fittingSize.width.
@@ -124,11 +125,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ✅ sizingOptions = .preferredContentSize — KVO fires on every SwiftUI size change.
         // Safe with NSPanel: setFrame() has no anchor, zero jump.
         // ❌ NEVER change to [].
-        // ❌ NEVER set controller.view.autoresizingMask = [] — doing so prevents SwiftUI
-        //   from rendering at its natural height, breaking preferredContentSize KVO.
+        // ❌ NEVER set autoresizingMask=[] on controller.view — doing so prevents SwiftUI
+        //    from rendering at its natural height, breaking preferredContentSize KVO.
+        //    autoresizingMask=[.width,.height] lets AppKit fill the hosting view as the
+        //    panel grows, so SwiftUI can report the real preferredContentSize.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE. The regression is major major major.
         controller.sizingOptions = .preferredContentSize
+        // ✅ autoresizingMask=[.width,.height]: hosting view fills chrome as panel grows.
+        // This breaks the chicken-and-egg where SwiftUI was stuck at init height (300pt)
+        // because layout() kept resetting the frame before KVO could fire.
+        // ❌ NEVER set to [] — see architecture comment above.
+        controller.view.autoresizingMask = [.width, .height]
         hostingController = controller
 
         let chromeView = PanelChromeView(
@@ -213,9 +221,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel.setFrame(NSRect(x: x, y: y, width: w, height: totalH), display: true, animate: false)
 
-        // arrowX: distance from panel left edge to button centre = button midX - panel left edge X.
-        // This is recomputed here (not in openPanel) so it uses the final settled panel X.
-        // ❌ NEVER compute arrowX before panel.setFrame() — x must be the final panel origin.
+        // arrowX: distance from panel left edge to button centre.
+        // Computed AFTER panel.setFrame() so x is the final settled panel origin.
+        // ❌ NEVER compute arrowX before panel.setFrame().
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
         chrome.arrowX = buttonScreenFrame.midX - x
