@@ -19,6 +19,7 @@ import SwiftUI
 //
 //   ✅ Set contentSize = measuredHeight in openPopover() before show().
 //   ✅ Set contentSize = measuredHeight in navigate() after rootView swap + deferred layout.
+//   ✅ Set contentSize = renderedHeight in didUpdateHeight() — live updates from HeightReporter.
 //   ❌ NEVER set contentSize from a timer, onChange, store update, or polling.
 //   ❌ NEVER set hc.view.setFrameSize anywhere.
 //   ❌ NEVER use sizingOptions = .preferredContentSize — re-introduces the jump.
@@ -56,13 +57,23 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @unchecked Sendable {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, HeightReceiver, @unchecked Sendable {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var hostingController: NSHostingController<AnyView>?
     @MainActor private lazy var observable = RunnerStoreObservable()
     private var savedNavState: NavState?
     private var popoverIsOpen = false
+
+    // MARK: - HeightReceiver
+    // Called on main thread by HeightReporter whenever rendered content height changes.
+    // Updates popover.contentSize in-place — NSPopover does NOT re-anchor on contentSize
+    // changes while shown (only on show() / performClose()+show()).
+    // ❌ NEVER call this from a timer or store update.
+    func didUpdateHeight(_ height: CGFloat) {
+        guard popoverIsOpen, let popover, height > 0 else { return }
+        popover.contentSize = NSSize(width: 420, height: height)
+    }
 
     // MARK: - App lifecycle
 
@@ -118,6 +129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     }
 
     // MARK: - View factories
+    // Each factory appends .reportHeight(to: self) so didUpdateHeight() fires whenever
+    // the rendered content height changes — e.g. jobs list grows/shrinks.
 
     private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
@@ -154,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 self.navigate(to: self.settingsView())
             },
             isPopoverOpen: popoverIsOpen
-        ))
+        ).reportHeight(to: self))
     }
 
     // ⚠️ openPopoverView() — identical to mainView() but always passes isPopoverOpen: true.
@@ -192,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
             isPopoverOpen: true
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
@@ -214,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                     }
                 }
             }
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
@@ -230,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 guard let self else { return }
                 self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
             }
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
@@ -243,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
             }
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
@@ -259,7 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 guard let self else { return }
                 self.navigate(to: self.logView(job: job, step: step))
             }
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
@@ -271,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 self.navigate(to: self.mainView())
             },
             store: observable
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
@@ -284,7 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
             }
-        ))
+        ).reportHeight(to: self))
     }
 
     @MainActor
