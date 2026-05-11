@@ -7,37 +7,39 @@ import SwiftUI
 
 /// Settings view — complete implementation for all phases 1-6.
 ///
-/// ⚠️ REGRESSION GUARD — Architecture 1 + fixed-height shell (ref #375 #376 #377)
+/// ⚠️ REGRESSION GUARD (Architecture 1 — sizingOptions=.preferredContentSize — ref #375 #376 #377):
 ///
-/// SettingsView uses a FIXED frame height (560pt). This is intentional and correct.
+///   ROOT FRAME RULE:
+///   .frame(idealWidth: 420, idealHeight: cappedHeight)
+///   BOTH are required.
 ///
-/// WHY FIXED HEIGHT HERE:
-///   With sizingOptions = .preferredContentSize, any async state change that alters
-///   the SwiftUI ideal height (e.g. localRunnerStore.refresh() completing, toggle state,
-///   runner rows appearing) causes NSPopover to re-anchor → side jump.
-///   SettingsView contains a ScrollView which reports unbounded ideal height to SwiftUI
-///   → preferredContentSize.height is unstable and changes on every state update.
-///   Fix: pin the root frame to a fixed height. preferredContentSize.height = 560 always.
-///   ScrollView scrolls content internally. No jump is possible.
+///   WHY idealHeight IS NEEDED HERE (unlike non-scroll views):
+///   ScrollView reports unbounded idealHeight (full content height) to SwiftUI.
+///   Without capping, preferredContentSize.height spikes on state changes
+///   → NSPopover repositions to keep window on screen → side-jump.
+///   idealHeight: cappedHeight caps reported ideal height — NSPopover gets a stable value.
+///   ❌ NEVER remove idealHeight from this view’s root frame.
+///   ❌ NEVER add fixed minHeight/maxHeight to the root frame — use idealHeight only.
+///   ❌ NEVER add idealHeight to views without a ScrollView (PopoverMainView, JobDetailView etc.).
 ///
-/// WHY 560pt (not 440pt):
-///   All sections (Local runners, Runner management, Scopes, Notifications, General,
-///   Account, Legal, About) require ~520-540pt at minimum content. 560pt covers
-///   worst-case content (3 local runners + 2 remote runners + 2 scopes) with
-///   a small comfortable margin, without needing to scroll for typical usage.
+///   WHY idealWidth IS NEEDED:
+///   Pins preferredContentSize.width = 420 always. Width must never change.
+///   ❌ NEVER remove idealWidth.
+///   ❌ NEVER change idealWidth from 420.
 ///
-/// WHY refresh() IS DEFERRED:
-///   localRunnerStore.refresh() publishes @Published changes that trigger a SwiftUI
-///   layout pass. If this fires synchronously in .onAppear (which runs during the first
-///   layout pass), a second layout pass hits before NSPopover has finished anchoring
-///   → side jump even with a fixed frame. Deferring via DispatchQueue.main.asyncAfter
-///   ensures the popover is fully anchored before any state update arrives.
+///   SCROLLVIEW HEIGHT CAP:
+///   .frame(maxHeight: cappedHeight) on the ScrollView prevents it growing off-screen.
+///   ❌ NEVER remove .frame(maxHeight: cappedHeight) from the ScrollView.
 ///
-/// ❌ NEVER remove .frame(minWidth:420, idealWidth:420, ...) from the root VStack.
-/// ❌ NEVER replace maxHeight: 560 with .infinity — that re-introduces the jump.
-/// ❌ NEVER use .fixedSize on the ScrollView inner VStack — unbounded ideal height → jump.
-/// ❌ NEVER remove idealWidth: 420 — width must be stable.
-/// ❌ NEVER call localRunnerStore.refresh() synchronously in .onAppear — side jump.
+///   DEFERRED REFRESH:
+///   localRunnerStore.refresh() is deferred 150ms so the popover finishes anchoring
+///   before any @Published update arrives. Synchronous call → second layout pass
+///   before anchor completes → jump.
+///   ❌ NEVER call localRunnerStore.refresh() synchronously in .onAppear.
+///
+///   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+///   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+///   is major major major.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -66,14 +68,17 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
+    /// 75% of visible screen height. Caps both ScrollView layout height and root idealHeight.
+    /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
+    /// ❌ NEVER apply as fixed frame height (min/max) — use only for idealHeight and maxHeight.
+    private var cappedHeight: CGFloat {
+        NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ ScrollView + fixed-height container.
-            // The outer VStack is pinned to exactly 560pt (see .frame below).
-            // ScrollView clips and scrolls content that exceeds this height.
-            // preferredContentSize.height = 560 always — NSPopover never re-anchors.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -93,22 +98,28 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 16)
             }
+            // ⚠️ maxHeight cap — prevents ScrollView growing off-screen.
+            // ❌ NEVER remove.
+            .frame(maxHeight: cappedHeight)
         }
-        // ⚠️ minWidth MUST precede idealWidth in Swift .frame() call.
-        // Fixed height 560pt pins preferredContentSize.height = 560 always — no jump.
-        // ❌ NEVER reorder or remove these constraints.
-        // ❌ NEVER change maxHeight to .infinity — NSPopover re-anchors on every state update.
-        .frame(minWidth: 420, idealWidth: 420, maxWidth: 420,
-               minHeight: 560, idealHeight: 560, maxHeight: 560)
+        // ⚠️ REGRESSION GUARD: idealWidth AND idealHeight both required here.
+        // idealWidth:420 — stable width, no re-anchor.
+        // idealHeight:cappedHeight — caps the unbounded ScrollView ideal height.
+        // NO minHeight/maxHeight on the root — layout is not pinned, only ideal size is reported.
+        // ❌ NEVER add minHeight or maxHeight to this frame.
+        // ❌ NEVER remove idealHeight.
+        // ❌ NEVER remove idealWidth.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+        // is major major major.
+        .frame(idealWidth: 420, idealHeight: cappedHeight)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
             // ⚠️ DEFERRED: do NOT call refresh() synchronously here.
-            // .onAppear fires during the first SwiftUI layout pass. A synchronous
-            // refresh() publishes @Published changes → second layout pass before
-            // NSPopover finishes anchoring → side jump.
-            // Deferring 150ms ensures the popover is fully anchored first.
-            // ❌ NEVER move this back to a synchronous call.
+            // Fires during first SwiftUI layout pass — synchronous call → second layout pass
+            // before NSPopover finishes anchoring → side jump.
+            // ❌ NEVER move back to synchronous call.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 localRunnerStore.refresh()
             }
