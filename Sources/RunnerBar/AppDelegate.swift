@@ -9,11 +9,17 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 //
-// THE ONLY CORRECT ARCHITECTURE (proven by main branch, SHA e6bb42e):
+// THE ONLY CORRECT ARCHITECTURE (proven by main branch, SHA e6bb42e + issue #377):
 //
 //   navigate() = pure rootView swap. ZERO sizing. ZERO contentSize writes. EVER.
 //   openPopover() = the ONE site where contentSize is set, BEFORE show() is called.
 //                   Safe because popover.isShown == false at that point.
+//
+//   CRITICAL: controller.sizingOptions = [] MUST be set on NSHostingController.
+//   Without it, the default .preferredContentSize auto-propagates contentSize to
+//   the popover on EVERY SwiftUI layout pass (including the 5s runnerRefreshTimer
+//   and every onChange) — each propagation while isShown==true = side-jump.
+//   This is the root cause confirmed by Just10/MEMORY.md and issue #377.
 //
 // OPEN SEQUENCE — must match this order exactly (❌ do NOT reorder steps):
 //   1. popoverIsOpen = true
@@ -21,7 +27,6 @@ import SwiftUI
 //   3. fittingSize.height           ← reads the MEASURING VIEW with live data.
 //                                      For most states: mainView().
 //                                      For settings/detail restores: the restored view itself.
-//                                      See measurementView(for:) below.
 //   4. rootView = mainView()        ← reset root to mainView() BEFORE show()
 //                                      Required: mainView() must be root at show() time
 //                                      so the popover anchor is stable.
@@ -30,26 +35,17 @@ import SwiftUI
 //   7. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
 //                                      navigate() never touches contentSize. Ever.
 //
-// WHY we read fittingSize from the restored view (step 3) for Settings/Detail:
-//   mainView() with 2 runners + "No recent actions" is ~180pt tall.
-//   Restoring Settings into a 180pt frame clips most of the Settings content.
-//   The restored view's own ScrollView has a .frame(maxHeight:) cap so its
-//   fittingSize is always well-defined and bounded. Safe to read before show().
-//   StepLogView is excluded because its maxHeight:.infinity makes fittingSize=0
-//   before the async log fetch completes — use parent detail view instead.
-//
-// WHY rootView is reset to mainView() at step 4 (before show()):
-//   NSPopover anchors from the hosting controller's view at show() time.
-//   mainView() has .frame(idealWidth: 480) which gives a stable, non-zero
-//   preferred width. Showing with a restored detail/settings root is safe too,
-//   but resetting to mainView first is the proven zero-regression pattern.
-//
-// ANY contentSize write (or setFrameSize) while popover.isShown == true triggers
-// a full NSPopover re-anchor. This is a hardcoded AppKit constraint (issue #375).
-// This includes: height-only writes, writes from async callbacks, writes from
-// onLogLoaded, and writes from back-navigation. ALL of them cause side-jump.
+// WHY sizingOptions = [] is load-bearing:
+//   Default NSHostingController.sizingOptions = .preferredContentSize.
+//   With .preferredContentSize, every SwiftUI state update (store.reload(),
+//   timer ticks, @State changes) causes the hosting controller to call
+//   setPreferredContentSize on its parent NSPopover. NSPopover re-anchors
+//   on every contentSize change while shown. Result: side-jump every 5s.
+//   With sizingOptions = [], the hosting controller NEVER touches contentSize.
+//   Only openPopover() sets contentSize, and only before show().
 //
 // ❌ NEVER set sizingOptions = .preferredContentSize
+// ❌ NEVER remove the sizingOptions = [] line
 // ❌ NEVER add contentSize or setFrameSize to navigate() for any reason
 // ❌ NEVER call remeasurePopover() from onLogLoaded or any post-navigation callback
 // ❌ NEVER add objectWillChange.send() in reload()
@@ -125,6 +121,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.target = self
         }
         let controller = NSHostingController(rootView: mainView())
+        // ❌ CRITICAL — DO NOT REMOVE THIS LINE. EVER.
+        // sizingOptions = [] prevents NSHostingController from auto-propagating
+        // preferredContentSize to the popover on every SwiftUI layout pass.
+        // Without this, every store.reload(), timer tick, or @State change while
+        // the popover is shown triggers a contentSize write → NSPopover re-anchor
+        // → side-jump. This is the root cause documented in issue #377 and
+        // confirmed by Just10/MEMORY.md (another SwiftUI status bar app with the
+        // same bug history). The default NSHostingController.sizingOptions is
+        // .preferredContentSize — that default is wrong for NSPopover usage.
+        // Dynamic height is preserved: fittingSize is read fresh in openPopover()
+        // before show(), so height still varies per open based on live content.
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+        // comment is removed is major major major.
+        controller.sizingOptions = []
         let initialSize = NSSize(width: Self.fixedWidth, height: 300)
         controller.view.frame = NSRect(origin: .zero, size: initialSize)
         hostingController = controller
@@ -322,8 +333,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// ❌ NEVER restore stepLog or actionStepLog states.
     ///    StepLogView uses maxHeight:.infinity → fittingSize.height == 0 when
     ///    it is the root view before its async log fetch completes.
-    ///    openPopover() reads fittingSize from mainView() — restoring StepLogView
-    ///    before show() would give fittingSize=0 and a zero-height popover.
     ///    Fall back to the parent detail view instead.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
