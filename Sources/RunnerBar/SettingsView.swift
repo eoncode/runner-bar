@@ -16,25 +16,17 @@ import SwiftUI
 /// is major major major.
 ///
 /// LAYOUT RULE (Architecture 2 / sizingOptions=[]):
-///   AppDelegate measures fittingSize ONCE before show(). SettingsView must
-///   report a finite, scrollable height so fittingSize.height is deterministic.
+///   Root VStack has NO frame constraint and NO ScrollView.
+///   Height is fully dynamic — AppDelegate.remeasurePopover() reads fittingSize.height
+///   which reflects the true content height. AppDelegate.maxHeight (680pt) is the
+///   only cap, applied in remeasurePopover() before writing contentSize.
 ///
-///   ScrollView with .frame(maxHeight: cappedHeight) is REQUIRED:
-///     - Without maxHeight cap, the ScrollView reports infinite idealHeight
-///       → fittingSize.height = 0 or screen height → wrong measurement.
-///     - cappedHeight = visibleFrame.height * 0.75 adapts to any screen.
+///   ❌ NEVER add .frame(maxHeight:) to the root VStack or any direct child.
+///   ❌ NEVER wrap content in a ScrollView — fittingSize.height becomes infinite.
+///   ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) to the root VStack.
 ///
-///   Root VStack has NO frame constraint:
-///     - Under Architecture 2 (sizingOptions=[]), the hosting controller
-///       does not use idealWidth/idealHeight at all. No frame needed on root.
-///     - ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) to the root VStack.
-///       Those are Architecture 1 workarounds. Under Architecture 2 they are
-///       ignored by the hosting controller and only add confusion.
-///
-///   Inner VStack (inside ScrollView) keeps .frame(maxWidth: .infinity):
-///     - Required so rows expand to full width inside the ScrollView.
-///     - Safe: inside ScrollView, does not affect fittingSize measurement.
-///     - ❌ NEVER remove maxWidth:.infinity from the inner VStack.
+///   Inner VStack keeps .frame(maxWidth: .infinity) for row expansion.
+///   ❌ NEVER remove maxWidth:.infinity from the inner VStack.
 ///
 /// SIDE-JUMP PROOF BECAUSE:
 ///   - AppDelegate.sizingOptions = [] → NO auto-propagation of preferredContentSize.
@@ -76,55 +68,37 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
-    /// 75% of visible screen height — caps ScrollView so fittingSize is finite.
-    /// Used ONLY as ScrollView maxHeight. Root VStack has no frame constraint.
-    /// ❌ NEVER increase above 0.85 (popover may overflow off-screen).
-    /// ❌ NEVER use a fixed constant (must adapt to screen size).
-    /// ❌ NEVER move this to the root VStack frame (Architecture 2 doesn't need it there).
-    private var cappedHeight: CGFloat {
-        NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
-    }
-
     var body: some View {
-        // Root VStack — NO frame constraint.
-        // Architecture 2: hosting controller ignores idealWidth/idealHeight.
-        // Width comes from the fixedWidth constraint set by AppDelegate.
-        // Height comes from fittingSize measurement before show().
-        // ❌ NEVER add .frame(idealWidth:) here.
-        // ❌ NEVER add .frame(idealHeight:) here.
+        // Root VStack — NO frame constraint, NO ScrollView.
+        // Height is fully dynamic via AppDelegate.remeasurePopover().
+        // AppDelegate.maxHeight (680pt) is the only cap.
+        // ❌ NEVER add .frame(maxHeight:) here.
+        // ❌ NEVER wrap in ScrollView — fittingSize.height becomes infinite.
+        // ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) here.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ScrollView with maxHeight cap — REQUIRED for finite fittingSize.
-            // ❌ NEVER remove maxHeight from ScrollView.
-            // ❌ NEVER remove this ScrollView entirely.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
-            ScrollView {
-                // Inner VStack: maxWidth:.infinity is REQUIRED and SAFE here.
-                // Inside ScrollView — does not propagate to fittingSize.
-                // ❌ NEVER remove maxWidth:.infinity from this inner VStack.
-                VStack(alignment: .leading, spacing: 0) {
-                    localRunnersSection
-                    Divider()
-                    runnerSection
-                    Divider()
-                    notificationsSection
-                    Divider()
-                    generalSection
-                    Divider()
-                    accountSection
-                    Divider()
-                    legalSection
-                    Divider()
-                    aboutSection
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 16)
+            // ⚠️ Inner VStack: maxWidth:.infinity is REQUIRED and SAFE here.
+            // ❌ NEVER remove maxWidth:.infinity from this inner VStack.
+            VStack(alignment: .leading, spacing: 0) {
+                localRunnersSection
+                Divider()
+                runnerSection
+                Divider()
+                notificationsSection
+                Divider()
+                generalSection
+                Divider()
+                accountSection
+                Divider()
+                legalSection
+                Divider()
+                aboutSection
             }
-            .frame(maxHeight: cappedHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 16)
         }
         .onAppear {
             isAuthenticated = (githubToken() != nil)
