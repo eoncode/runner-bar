@@ -1,28 +1,19 @@
 import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — Architecture 1 (ref #49 #51 #52 #53 #54 #57 #321 #370 #375 #376 #377)
+// ⚠️ REGRESSION GUARD — Architecture 2 (ref #49 #51 #52 #53 #54 #57 #321 #370 #375 #376 #377)
 //
-// sizingOptions = .preferredContentSize + .frame(idealWidth:420) on root drives ALL sizing.
+// FIXED FRAME 420×480 on root.
+//   AppDelegate uses sizeThatFits — but sizeThatFits on a dynamic detail view fires
+//   before SwiftUI has laid out async content (steps fetched on background thread).
+//   Result: wrong measured height → NSPopover resizes → re-anchors → side jump.
 //
-// ROOT FRAME RULE:
-//   .frame(idealWidth: 420) ONLY. No height constraints.
-//   preferredContentSize.width = 420 always — stable width — no re-anchor — no jump.
-//   Height = natural content height of header + steps list.
+// FIX: fixed frame 420×480. contentSize = 420×480 always for this view.
+//   ScrollView clips and scrolls steps internally. No jump possible.
 //
-// ❌ NEVER add minHeight/idealHeight/maxHeight to the root frame.
-// ❌ NEVER use .frame(width: 420) — must be idealWidth.
-// ❌ NEVER use .fixedSize on the inner ScrollView content.
-// ❌ NEVER remove idealWidth:420.
-//
-// TICK TIMER RULE:
-//   tick fires every 1s — triggers SwiftUI re-render — updates elapsed label.
-//   With dynamic height, each re-render re-reports preferredContentSize.height.
-//   Timer must ONLY run while the view is the active nav state (controlled by caller).
-//   It is started in .onAppear and stopped in .onDisappear.
-//   This is safe because navigate() swaps rootView immediately — onDisappear fires
-//   synchronously before the new view appears — no timer fires after navigate().
-// ❌ NEVER run the timer while a child view (StepLogView) is shown over this view.
+// ❌ NEVER use .frame(idealWidth:420) alone — height must also be fixed.
+// ❌ NEVER use maxHeight:.infinity — re-introduces the jump.
+// ❌ NEVER remove the fixed height.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -100,9 +91,8 @@ struct JobDetailView: View {
             Divider()
 
             // ── Steps list: INSIDE ScrollView
-            // ⚠️ NO .fixedSize inside this ScrollView — kills dynamic height.
-            // ScrollView clips and scrolls content that exceeds available height.
-            // preferredContentSize.height = header height + this ScrollView's natural height.
+            // ⚠️ NO .fixedSize inside this ScrollView.
+            // ScrollView clips and scrolls content within the 480pt fixed height.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
@@ -143,20 +133,16 @@ struct JobDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // ⚠️ Cap ScrollView height so detail view doesn’t grow off-screen.
-            // 75% of screen height is the same cap used by SettingsView.
-            // preferredContentSize.height = header + min(steps content, cappedScrollHeight).
-            // ❌ NEVER remove this — unbounded ScrollView ideal height → spike → jump.
-            .frame(maxHeight: (NSScreen.main?.visibleFrame.height ?? 800) * 0.75)
         }
-        // ⚠️ REGRESSION GUARD: idealWidth:420 ONLY — no height constraints.
-        // Width is stable at 420 always. Height is natural content height.
-        // ❌ NEVER add minHeight/idealHeight/maxHeight here.
-        // ❌ NEVER use .frame(width:420) — must be idealWidth.
+        // ⚠️ FIXED frame 420×480 — matches ActionDetailView and SettingsView.
+        // sizeThatFits returns 480 synchronously — no async layout race — no side jump.
+        // ❌ NEVER revert to idealWidth:420 alone.
+        // ❌ NEVER use maxHeight:.infinity.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
-        .frame(idealWidth: 420)
+        .frame(minWidth: 420, idealWidth: 420, maxWidth: 420,
+               minHeight: 480, idealHeight: 480, maxHeight: 480)
         .onAppear {
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 tick += 1
