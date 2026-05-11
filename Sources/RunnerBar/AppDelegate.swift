@@ -41,6 +41,15 @@ import SwiftUI
 //   this does NOT reach NSPopover but wastes CPU and can flicker.
 //   ❌ NEVER call store.reload() while popoverIsOpen == true.
 //
+//   SAVED NAV STATE — close→reopen restoration (ref #378):
+//   savedNavState persists across close→reopen so the user lands back on the same view.
+//   ❌ NEVER call mainView() from popoverDidClose — mainView() sets savedNavState = nil,
+//      which races with openPopover() reading it, and the nav state is lost.
+//   ✅ popoverDidClose resets hostingController.rootView directly (without mainView())
+//      so savedNavState survives until openPopover() captures and clears it.
+//   ✅ openPopover() captures savedNavState into a local var FIRST, then sets it to nil,
+//      so the async-hop rootView reset in popoverDidClose cannot race with it.
+//
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER use fittingSize.width — non-deterministic
 // ❌ NEVER write contentSize while popover is not shown
@@ -51,6 +60,7 @@ import SwiftUI
 //    StepLogView loads async — fittingSize.height is spinner-height before load
 // ❌ NEVER remove nonisolated from enrichStepsIfNeeded
 //    Called from DispatchQueue.global — pure network I/O, no @MainActor state
+// ❌ NEVER call mainView() from popoverDidClose — races with savedNavState (ref #378)
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -128,9 +138,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
+        // ⚠️ FIX #378 — do NOT call mainView() here.
+        // mainView() sets savedNavState = nil, which races with openPopover() reading
+        // savedNavState to restore the previous nav state (e.g. Settings).
+        // Instead, reset the hosting controller root view directly using mainView()'s
+        // content but without the savedNavState = nil side-effect of calling mainView().
+        // savedNavState is intentionally preserved here — openPopover() captures it
+        // into a local var and then clears it atomically before any async work.
+        // ❌ NEVER replace this with a call to mainView() — that causes the race.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.hostingController?.rootView = self.mainView()
+            self.hostingController?.rootView = self.freshMainView()
         }
     }
 
@@ -204,9 +224,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    private func mainView() -> AnyView {
-        savedNavState = nil
-        return AnyView(PopoverMainView(
+    /// Returns a fresh PopoverMainView wired with all callbacks.
+    /// Does NOT touch savedNavState — callers that need to clear it must do so explicitly.
+    ///
+    /// ⚠️ FIX #378: This replaces the pattern of calling mainView() from popoverDidClose.
+    /// mainView() sets savedNavState = nil as a side-effect, which races with openPopover()
+    /// reading savedNavState. freshMainView() produces the same view without the side-effect.
+    /// ✅ Call freshMainView() from popoverDidClose (no savedNavState mutation).
+    /// ✅ Call mainView() only from openPopover() and navigate() paths where clearing
+    ///    savedNavState is intentional.
+    /// ❌ NEVER call mainView() from popoverDidClose.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
+    private func freshMainView() -> AnyView {
+        AnyView(PopoverMainView(
             store: observable,
             onSelectJob: { [weak self] job in
                 guard let self else { return }
@@ -228,13 +260,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.navigate(to: self.settingsView())
             },
             onContentChanged: { [weak self] in
-                // "Load more" tapped — list expanded, remeasure height via 1 async hop.
                 DispatchQueue.main.async { [weak self] in
                     self?.remeasurePopover()
                 }
             },
             isPopoverOpen: popoverIsOpen
         ))
+    }
+
+    private func mainView() -> AnyView {
+        savedNavState = nil
+        return freshMainView()
     }
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
@@ -389,9 +425,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Opens the popover, measuring content height once before show().
     /// After show(), height is kept dynamic via remeasurePopover() called from navigate().
     ///
+    /// ⚠️ FIX #378 — savedNavState capture pattern:
+    /// savedNavState is captured into a local `pendingRestore` FIRST, then cleared to nil
+    /// BEFORE any async work. This prevents the race where popoverDidClose's async hop
+    /// (resetting hostingController.rootView via freshMainView) could overlap with a
+    /// concurrent openPopover() call and find savedNavState already nil.
+    ///
     /// ❌ NEVER use fittingSize.width — always Self.fixedWidth.
     /// ❌ NEVER remove CATransaction.flush() — needed to flush SwiftUI layout before fittingSize.
     /// ❌ NEVER call observable.reload() after show().
+    /// ❌ NEVER read savedNavState after the point where pendingRestore is assigned —
+    ///    by that point it is already nil and the value lives in pendingRestore.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -401,6 +445,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
               let popover,
               let hostingController
         else { return }
+
+        // ⚠️ FIX #378: Capture savedNavState BEFORE anything clears it, then nil it out
+        // immediately. This is the only safe read point — popoverDidClose's async hop may
+        // still be in flight (resetting hostingController.rootView), and mainView() called
+        // anywhere below would also set savedNavState = nil.
+        let pendingRestore = savedNavState
+        savedNavState = nil
 
         popoverIsOpen = true
         observable.reload()
@@ -424,8 +475,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
 
-        if let saved = savedNavState,
-           let restored = validatedView(for: saved) {
+        if let pending = pendingRestore,
+           let restored = validatedView(for: pending) {
             navigate(to: restored)
         }
     }
