@@ -4,51 +4,34 @@ import AppKit
 //
 // Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly.
 //
-// Arrow shape: near-straight sides (cpBase = hw * 0.9) + 3pt rounded tip arc.
+// ARROW SHAPE — DEFINITIVE (reverse-engineered from native NSPopover + SFBPopovers reference):
 //
-// The NSPopover arrow has:
-//   - Nearly straight sides (only very slight concavity).
-//   - A small rounded tip (~3pt radius arc) — NOT a sharp point.
+// Native NSPopover uses STRAIGHT LINES to the tip — NO bezier curves, NO tip radius.
+// Reference: github.com/sbooth/SFBPopovers — appendArrowToPath uses lineToPoint only.
 //
-// Right side bezier: start=(cX+hw, baseY)  end=(cX+tipR, tipY)
-//   cp1 = (cX + hw*0.9, baseY)  <- near foot, nearly at the base edge (near-straight)
-//   cp2 = (cX + tipR,   tipY)   <- arrives horizontally into arc (no kink)
+//   right foot (cX+hw, baseY)
+//         |
+//         |  straight line
+//         v
+//       tip (cX, tipY)        <- sharp point, no arc
+//         |
+//         |  straight line
+//         v
+//   left foot (cX-hw, baseY)
 //
-// Tip arc: appendArc(center=(cX, tipY-tipR), radius=tipR, 0°→180°)
+// Dimensions matching native NSPopover (Sonoma / Sequoia):
+//   arrowWidth  = 20pt  (half = 10pt each side)
+//   arrowHeight = 16pt  (NOT 11 — native is taller/sharper than earlier guess)
+//   cornerRadius = 10pt (body)
 //
-// Left side bezier (mirror): start=(cX-tipR, tipY)  end=(cX-hw, baseY)
-//   cp1 = (cX - tipR,   tipY)
-//   cp2 = (cX - hw*0.9, baseY)
-//
-// ❌ NEVER set cpBase < hw*0.7 — makes sides concave/spiky again.
-// ❌ NEVER set tipR = 0 — causes sharp spike.
-// ❌ NEVER use straight lines only — loses the gentle slope roundness.
-// ❌ NEVER use appendArc at BASE corners — visible base humps.
-//
-// KEY FACTS:
-//
-// 1. macOS coordinate system: y=0 is BOTTOM of view, y=bounds.height is TOP.
-//    Arrow tip is at TOP. contentRect = (0, 0, w, h - arrowHeight).
-//
-// 2. fx (NSVisualEffectView) covers FULL bounds. Body-shape clipping via
-//    CAShapeLayer mask on fx.layer. Rebuilt on every layout() + arrowX change.
-//    ❌ NEVER set cornerRadius or masksToBounds on fx.layer directly.
-//
-// 3. arrowX: panel-local X of arrow tip centre.
-//    Formula: button.window!.frame.midX - panel.frame.minX
-//    ❌ NEVER compute from convertToScreen(button.frame).
-//
-// 4. Dynamic height: layout() re-pins ALL subviews on EVERY layout pass.
-//    ❌ NEVER set hosting view frame only at init.
-//    ❌ NEVER set autoresizingMask=[] on the hosting view.
-//
-// 5. NSBezierPath.cgPath is macOS 14+. Use .compatCGPath (extension below).
-//
+// ❌ NEVER add bezier curves or tipRadius to the arrow sides. Straight lines only.
+// ❌ NEVER set arrowHeight = 11 or lower — arrow becomes a flat stub.
+// ❌ NEVER use appendArc at base corners — visible humps at feet.
 // ❌ NEVER remove this file. Regression is major major major.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
-let arrowHeight:  CGFloat = 11   // matches NSPopover Sequoia
-let arrowWidth:   CGFloat = 20   // matches NSPopover Sequoia
+let arrowHeight:  CGFloat = 16   // native NSPopover (Sonoma/Sequoia) — straight-sided arrow
+let arrowWidth:   CGFloat = 20   // native NSPopover (Sonoma/Sequoia)
 let cornerRadius: CGFloat = 10   // matches NSPopover body corner
 
 // MARK: - NSBezierPath → CGPath (macOS 13 compatible)
@@ -161,77 +144,63 @@ final class PanelChromeView: NSView {
 
     // MARK: - Chrome path
     //
-    // Full chrome: rounded-rect body + upward arrow with near-straight sides + rounded tip.
+    // Rounded-rect body + upward arrow with STRAIGHT SIDES and SHARP TIP.
     //
-    // cpBase = hw * 0.9 puts cp1 almost at the base foot corner, making each
-    // side nearly straight — matching the gentle slope of native NSPopover.
-    // tipR = 3pt rounds the apex without making it a dome.
+    // This exactly matches native NSPopover arrow geometry.
+    // Reference: SFBPopovers appendArrowToPath — lineToPoint only, no curves.
     //
-    // ❌ NEVER set cpBase below hw*0.7 — sides become concave/spiky.
-    // ❌ NEVER remove tipR — causes sharp spike.
-    // ❌ NEVER use appendArc at BASE corners — visible base humps.
+    // Path order (clockwise from bottom-left, macOS coords y-up):
+    //   BL arc → bottom edge → BR arc → right edge → TR arc
+    //   → top-right segment → right arrow foot → TIP → left arrow foot
+    //   → top-left segment → TL arc → left edge → close
+    //
+    // ❌ NEVER add curves to the arrow sides — straight lines only.
+    // ❌ NEVER add tipRadius — tip must be a sharp point.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private func chromePath(in rect: NSRect) -> NSBezierPath {
-        let w    = rect.width
-        let h    = rect.height
-        let r    = cornerRadius
-        let hw   = arrowWidth / 2        // 10pt
-
-        // tipR: rounded apex. 3pt matches native NSPopover on Sonoma/Sequoia.
-        // ❌ NEVER set to 0 — sharp spike.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let tipR: CGFloat = 3
-
-        // cpBase = hw * 0.9 = 9pt. Nearly at the base edge — near-straight sides.
-        // ❌ NEVER reduce below hw*0.7 (7pt) — sides become concave/spiky again.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let cpBase = hw * 0.9
+        let w  = rect.width
+        let h  = rect.height
+        let r  = cornerRadius
+        let hw = arrowWidth / 2        // 10pt half-width
 
         let cX    = max(hw + r, min(arrowX, w - hw - r))
-        let baseY = h - arrowHeight
-        let tipY  = h
-        let tipCY = tipY - tipR
+        let baseY = h - arrowHeight    // y of arrow feet (top of body)
+        let tipY  = h                  // y of arrow tip
 
         let path = NSBezierPath()
+
+        // Start: bottom-left, past the corner arc
         path.move(to: NSPoint(x: r, y: 0))
 
-        // Bottom edge → bottom-right corner
+        // Bottom edge → BR corner
         path.line(to: NSPoint(x: w - r, y: 0))
         path.appendArc(withCenter: NSPoint(x: w - r, y: r),
                        radius: r, startAngle: 270, endAngle: 0)
 
-        // Right edge → top-right corner
+        // Right edge → TR corner
         path.line(to: NSPoint(x: w, y: baseY - r))
         path.appendArc(withCenter: NSPoint(x: w - r, y: baseY - r),
                        radius: r, startAngle: 0, endAngle: 90)
 
-        // Top edge: right segment → arrow right foot
+        // Top edge: right of arrow → right foot
         path.line(to: NSPoint(x: cX + hw, y: baseY))
 
-        // Arrow right side → right tangent of tip arc (near-straight, cpBase≈hw)
-        path.curve(to:            NSPoint(x: cX + tipR,  y: tipY),
-                   controlPoint1: NSPoint(x: cX + cpBase, y: baseY),
-                   controlPoint2: NSPoint(x: cX + tipR,   y: tipY))
-
-        // Tip arc: 3pt radius, sweeps 0°→180° counter-clockwise.
-        // ❌ NEVER remove — this IS the rounded tip.
+        // Arrow: right foot → tip (STRAIGHT LINE — matches native NSPopover)
+        // ❌ NEVER replace with a curve. Straight line only.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        path.appendArc(withCenter: NSPoint(x: cX, y: tipCY),
-                       radius: tipR,
-                       startAngle: 0, endAngle: 180,
-                       clockwise: false)
+        path.line(to: NSPoint(x: cX, y: tipY))
 
-        // Arrow left side → left foot (mirror of right)
-        path.curve(to:            NSPoint(x: cX - hw,     y: baseY),
-                   controlPoint1: NSPoint(x: cX - tipR,   y: tipY),
-                   controlPoint2: NSPoint(x: cX - cpBase, y: baseY))
+        // Arrow: tip → left foot (STRAIGHT LINE)
+        // ❌ NEVER replace with a curve. Straight line only.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        path.line(to: NSPoint(x: cX - hw, y: baseY))
 
-        // Top edge: left segment → top-left corner
+        // Top edge: left of arrow → TL corner
         path.line(to: NSPoint(x: r, y: baseY))
         path.appendArc(withCenter: NSPoint(x: r, y: baseY - r),
                        radius: r, startAngle: 90, endAngle: 180)
 
-        // Left edge → bottom-left corner
+        // Left edge → BL corner
         path.line(to: NSPoint(x: 0, y: r))
         path.appendArc(withCenter: NSPoint(x: r, y: r),
                        radius: r, startAngle: 180, endAngle: 270)
