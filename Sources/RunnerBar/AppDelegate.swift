@@ -7,61 +7,55 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296 #377 #379 #380)
 //
 // ARCHITECTURE: Architecture 3 — NSPanel (borderless, non-activating)
-// Replaces NSPopover which caused irreducible side-jump/misalignment on every open
-// because NSPopover re-anchors itself on every SwiftUI layout pass when using
-// .preferredContentSize, and with sizingOptions=[] it mis-positions on first show.
+// Replaces NSPopover which caused irreducible side-jump/misalignment on every open.
 //
 // WHY NSPanel:
 //   NSPanel gives us full control of the window frame. We compute the origin once
-//   from the status item button’s screen rect, set it before show, never touch it again.
+//   from the status item button's screen rect, set it before show, never touch it again.
 //   No re-anchoring. No preferredEdge weirdness. No contentSize fighting SwiftUI.
-//   Used by: Bartender, iStatMenus, Fantastical, Tot, and every other pro macOS menu-bar app.
 //
 // HEIGHT MECHANISM:
-//   PopoverMainView reports its rendered height via HeightPreferenceKey
-//   (a SwiftUI PreferenceKey backed by a background { GeometryReader }).
+//   PopoverMainView reports its rendered height via HeightPreferenceKey.
 //   AppDelegate reads this in .onPreferenceChange and calls resizePanel(to:).
-//   resizePanel repositions the panel frame keeping the TOP-LEFT corner fixed
-//   (aligned to the bottom of the status item), so the panel grows downward only.
+//   resizePanel repositions the panel keeping the TOP-LEFT corner fixed so the
+//   panel grows downward only. ❌ NEVER use fittingSize — cached and stale.
 //   ❌ NEVER remove HeightPreferenceKey or .onPreferenceChange from the view.
-//   ❌ NEVER use fittingSize — cached and stale with NSHostingView.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
 //
-// PANEL SETUP (ALL must hold simultaneously):
+// PANEL SETUP — ALL must hold simultaneously:
 //   styleMask = [.borderless, .nonactivatingPanel]
-//     — borderless removes all chrome.
-//     — nonactivatingPanel keeps the menu-bar app active (no Dock icon bounce).
-//   isFloatingPanel = true  — stays above normal windows.
-//   level = .popUpMenu      — same level as NSPopover, above status bar.
+//   isFloatingPanel = true
+//   level = .popUpMenu
 //   collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
-//     — transient: auto-hides on Space switch like a popover.
-//     — ignoresCycle: Cmd+Tab never focuses it.
-//   hidesOnDeactivate = true — closes when user clicks elsewhere.
-//   isMovableByWindowBackground = false — not draggable.
+//   hidesOnDeactivate = false  ← MUST be false on a nonactivatingPanel.
+//     The app never "activates" as a normal app, so hidesOnDeactivate=true would
+//     hide the panel immediately on makeKey(). Mouse monitor handles dismiss instead.
+//   isOpaque = true, backgroundColor = NSColor.windowBackgroundColor
+//     ← MUST be opaque. A borderless panel with clear background is completely
+//     invisible. The NSHostingView renders on top of this background.
+//   isMovableByWindowBackground = false
 //
 // POSITIONING:
-//   showPanel() computes origin from button.window.convertToScreen(button.bounds).
-//   origin.x = buttonMidX - panelWidth/2 (horizontally centred on button).
-//   origin.y = buttonScreenRect.minY - panelHeight (panel sits below the button).
-//   Frame is set ONCE before orderFront. Nothing moves it after.
+//   showPanel() computes origin via button.convert(button.bounds, to: nil) then
+//   buttonWindow.convertToScreen(_:). This gives coordinates in screen space.
+//   ❌ NEVER use button.frame directly in convertToScreen — button.frame is in
+//   superview space, not window space; use button.convert(button.bounds, to: nil).
+//   origin.x = buttonRect.midX - width/2 (centred on button), clamped to screen.
+//   origin.y = buttonRect.minY - height - statusBarGap (panel sits below button).
+//   setFrame BEFORE orderFront. Nothing moves the panel after show.
 //
 // RESIZING (while shown):
-//   resizePanel(to height:) keeps topLeft fixed, changes only the height.
-//   topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
-//   newFrame = NSRect(x: topLeft.x, y: topLeft.y - height, width: ..., height: height)
-//   This grows the panel downward without moving the top-left anchor.
-//   ❌ NEVER use setFrameSize — it resizes from bottom-left, shifts the panel up.
+//   resizePanel(to:) keeps topLeft (panel.frame.maxY) fixed, grows downward.
+//   ❌ NEVER use setFrameSize — anchors from bottom-left, shifts panel up.
 //
 // CLOSE:
-//   dismiss() calls panel.orderOut(nil). Global mouse monitor handles clicks outside.
-//
-// navigate():
-//   rootView swap ONLY. ZERO size/position changes. Forever.
+//   dismiss() calls panel.orderOut(nil). Global mouse monitor handles outside clicks.
+//   ❌ NEVER rely on hidesOnDeactivate for close — it does not work on nonactivatingPanel.
 //
 // ❌ NEVER add an NSPopover back.
-// ❌ NEVER use sizingOptions on NSHostingController — we use NSHostingView directly.
+// ❌ NEVER use sizingOptions — we use NSHostingView directly, no NSHostingController.
 // ❌ NEVER set the panel frame after orderFront (except resizePanel).
 // ❌ NEVER remove @MainActor from AppDelegate.
 // ❌ NEVER remove nonisolated from enrichStepsIfNeeded / enrichGroupIfNeeded.
@@ -84,7 +78,6 @@ private enum NavState {
 // MARK: - RunnerBarPanel
 
 /// Borderless, non-activating NSPanel used as the popover replacement.
-/// Closes itself when it loses key status (click outside).
 final class RunnerBarPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -111,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
     private static let minHeight: CGFloat = 120
-    private static let statusBarGap: CGFloat = 4   // gap between status button and panel top
+    private static let statusBarGap: CGFloat = 4
 
     // MARK: - App lifecycle
 
@@ -123,7 +116,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        // Build the panel once.
         buildPanel()
 
         RunnerStore.shared.onChange = { [weak self] in
@@ -139,8 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel construction
 
-    /// Builds the NSPanel and NSHostingView. Called once at launch.
-    /// ❌ NEVER call this more than once — panel is reused across open/close cycles.
+    /// Builds the NSPanel and NSHostingView once at launch.
+    /// ❌ NEVER call more than once — panel is reused across open/close cycles.
     private func buildPanel() {
         let initialSize = NSSize(width: Self.canonicalWidth, height: measuredHeight)
 
@@ -153,10 +145,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.isFloatingPanel = true
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
-        p.hidesOnDeactivate = true
+        // ⚠️ hidesOnDeactivate MUST be false on a nonactivatingPanel.
+        // The app never fully "activates", so true would hide the panel on makeKey().
+        // The global mouse monitor is the sole dismiss mechanism.
+        // ❌ NEVER set this to true.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        p.hidesOnDeactivate = false
         p.isMovableByWindowBackground = false
-        p.isOpaque = false
-        p.backgroundColor = .clear
+        // ⚠️ isOpaque MUST be true and backgroundColor must be non-clear.
+        // A borderless panel with clear/transparent background renders as completely
+        // invisible. NSHostingView paints on top of this background color.
+        // ❌ NEVER set isOpaque = false or backgroundColor = .clear.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        p.isOpaque = true
+        p.backgroundColor = NSColor.windowBackgroundColor
         p.hasShadow = true
 
         let rootView = wrapWithHeightCapture(mainView())
@@ -171,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Height capture
 
     /// Wraps any view with HeightPreferenceKey capture.
-    /// When panelIsOpen, also calls resizePanel(to:) so the panel grows/shrinks live.
+    /// When panelIsOpen, also calls resizePanel(to:) live.
     /// ❌ NEVER remove this wrapper.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
@@ -190,10 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel resizing
 
-    /// Resizes the panel keeping the TOP-LEFT corner fixed (anchored to the status button).
-    /// Panel grows/shrinks DOWNWARD only. X position never changes.
-    ///
-    /// ❌ NEVER use setFrameSize — it anchors from bottom-left and shifts the panel up.
+    /// Keeps TOP-LEFT corner fixed, grows panel downward only.
+    /// ❌ NEVER use setFrameSize — anchors from bottom-left and shifts panel up.
     /// ❌ NEVER change the x origin.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
@@ -405,15 +407,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Shows the panel anchored below the status item button.
     ///
-    /// POSITIONING:
-    ///   1. Get the button’s screen rect via button.window.convertToScreen(button.bounds).
-    ///   2. origin.x = buttonRect.midX - canonicalWidth/2  (centred on button).
-    ///   3. origin.y = buttonRect.minY - height - statusBarGap  (below button).
-    ///   4. Clamp x so the panel never goes off-screen right edge.
-    ///   5. setFrame BEFORE orderFront — no movement after show.
+    /// POSITIONING — three-step coordinate conversion:
+    ///   1. button.convert(button.bounds, to: nil)
+    ///      → converts button bounds into the button's WINDOW coordinate space.
+    ///      ❌ NEVER use button.frame directly — that is in the superview's space.
+    ///   2. buttonWindow.convertToScreen(_:)
+    ///      → converts window coords to screen (flipped) coords.
+    ///   3. origin.x = buttonRect.midX - width/2, clamped to screen edges.
+    ///      origin.y = buttonRect.minY - height - statusBarGap.
+    ///   4. setFrame BEFORE orderFront. Panel never moves after show.
     ///
     /// ❌ NEVER call orderFront before setFrame.
-    /// ❌ NEVER move the panel after orderFront.
+    /// ❌ NEVER move the panel after orderFront (except resizePanel).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func showPanel() {
@@ -422,7 +427,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let panel
         else { return }
 
-        // Reload data and restore nav state
         panelIsOpen = true
         observable.reload()
 
@@ -430,13 +434,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hostingView?.rootView = wrapWithHeightCapture(restored)
         }
 
-        // Compute position from button screen rect
-        let buttonScreenRect = buttonWindow.convertToScreen(button.frame)
+        // Convert button bounds → window space → screen space
+        let buttonInWindow = button.convert(button.bounds, to: nil)
+        let buttonScreenRect = buttonWindow.convertToScreen(buttonInWindow)
+
         let height = min(max(measuredHeight, Self.minHeight), Self.maxHeight)
         let width = Self.canonicalWidth
 
         var originX = buttonScreenRect.midX - width / 2
-        // Clamp to screen right edge
         if let screen = NSScreen.main {
             let maxX = screen.visibleFrame.maxX - width
             originX = min(originX, maxX)
@@ -449,22 +454,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderFront(nil)
         panel.makeKey()
 
-        // Global mouse-down monitor: dismiss when click is outside the panel
-        // ❌ NEVER remove this monitor — without it the panel stays open forever.
+        // Global mouse-down monitor: dismiss on click outside panel.
+        // ❌ NEVER remove this — it is the sole dismiss mechanism.
+        // ❌ NEVER rely on hidesOnDeactivate instead.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
-            [weak self] event in
+            [weak self] _ in
             guard let self else { return }
-            if let panel = self.panel {
-                let loc = event.locationInWindow
-                let screenLoc = NSEvent.mouseLocation
-                if !panel.frame.contains(screenLoc) {
-                    self.dismiss()
-                }
+            if let panel = self.panel, !panel.frame.contains(NSEvent.mouseLocation) {
+                self.dismiss()
             }
         }
     }
 
-    /// Hides the panel and resets state.
+    /// Hides the panel and resets to main view for next open.
     func dismiss() {
         panelIsOpen = false
         panel?.orderOut(nil)
@@ -474,7 +478,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mouseMonitor = nil
         }
 
-        // Reset to main view for next open
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.hostingView?.rootView = self.wrapWithHeightCapture(self.mainView())
