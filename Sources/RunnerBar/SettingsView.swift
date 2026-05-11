@@ -15,20 +15,20 @@ import SwiftUI
 ///
 /// ⚠️ SCROLLVIEW RULE (ref #377 #370):
 ///    The root VStack MUST declare .frame(idealHeight: cappedHeight).
-///    With sizingOptions=[] + fittingSize measurement, NSHostingController reads
-///    fittingSize.height before show(). ScrollView reports fittingSize.height = full
-///    unbounded content height, NOT the .frame(maxHeight:) cap. Without .frame(idealHeight:)
-///    on the root VStack, fittingSize.height is enormous → popover opens too tall →
-///    NSPopover repositions to fit on screen → side-jump.
+///    With sizingOptions=.preferredContentSize (Architecture 1), NSHostingController reads
+///    SwiftUI's IDEAL size. ScrollView reports idealHeight = full unbounded content height,
+///    NOT the .frame(maxHeight:) cap. Without .frame(idealHeight:) on the root VStack,
+///    preferredContentSize.height jumps to ~800pt on Settings open. NSPopover then
+///    repositions the window to keep it on-screen (it would overflow) → side-jump.
 ///
 ///    Fix: .frame(idealHeight: cappedHeight) on the root VStack pins
-///    fittingSize.height = cappedHeight. The inner ScrollView still scrolls.
+///    preferredContentSize.height = cappedHeight. The inner ScrollView still scrolls.
 ///    cappedHeight = 75% of visible screen height.
 ///
 ///    ❌ NEVER remove .frame(idealHeight: cappedHeight) from the root VStack.
 ///    ❌ NEVER set idealHeight larger than the screen height.
-///    ❌ NEVER use maxHeight: .infinity on the root VStack — corrupts fittingSize.
-///    If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+///    ❌ NEVER add maxHeight: .infinity to the root VStack — corrupts preferredContentSize.width.
+///    If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 ///    UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 ///    is major major major.
 struct SettingsView: View {
@@ -65,7 +65,7 @@ struct SettingsView: View {
     /// Height cap for the Settings scroll area and the root VStack's idealHeight.
     /// 75% of visible screen height — fits all sections on any screen without overflow.
     /// Used for BOTH the ScrollView maxHeight AND the root VStack idealHeight so that
-    /// fittingSize.height = this value (not unbounded ScrollView content).
+    /// preferredContentSize.height = this value (not unbounded ScrollView content).
     /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
     /// ❌ NEVER use a fixed constant — must adapt to screen size.
     private var cappedHeight: CGFloat {
@@ -75,18 +75,18 @@ struct SettingsView: View {
     var body: some View {
         // ⚠️ REGRESSION GUARD (ref #377):
         // .frame(idealHeight: cappedHeight) MUST be present on this root VStack.
-        // This pins fittingSize.height (measured in openPopover/remeasurePopover)
-        // to cappedHeight. Without it, the inner ScrollView's fittingSize grows to
-        // full content height → popover opens too tall → NSPopover repositions → side-jump.
+        // This pins preferredContentSize.height (Architecture 1) to cappedHeight.
+        // Without it, the inner ScrollView's idealHeight (~800pt) propagates to
+        // preferredContentSize → NSPopover repositions to fit on screen → side-jump.
         // ❌ NEVER remove idealHeight from the root frame modifier below.
         // ❌ NEVER move idealHeight onto the ScrollView — ScrollView ignores idealHeight.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
             // ⚠️ ScrollView is required here — Settings content is taller than any popover.
-            // It is safe because the root VStack's idealHeight caps fittingSize.
+            // It is safe because the root VStack's idealHeight caps preferredContentSize.
             // ❌ NEVER remove this ScrollView — content will be clipped without it.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -108,16 +108,16 @@ struct SettingsView: View {
             }
             .frame(maxHeight: cappedHeight)
         }
-        // ⚠️ REGRESSION GUARD: argument order matters for Swift overload resolution.
-        // idealWidth:480 pins fittingSize.width = 480 (no x re-anchor).
+        // ⚠️ REGRESSION GUARD: idealWidth:480 pins preferredContentSize.width = 480 (no x re-anchor).
+        // idealHeight:cappedHeight pins preferredContentSize.height = cappedHeight (no y overflow reposition).
         // maxWidth:.infinity allows the VStack to fill the popover width.
-        // idealHeight:cappedHeight pins fittingSize.height (no y overflow reposition).
         // alignment:.top prevents vertical centering artifacts.
-        // ❌ NEVER reorder these arguments — maxWidth MUST precede idealHeight.
-        // ❌ NEVER add maxHeight:.infinity — corrupts fittingSize.
+        // ❌ NEVER add maxHeight:.infinity — corrupts preferredContentSize.width.
         // ❌ NEVER remove idealWidth or idealHeight.
-        // ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // ❌ NEVER change idealWidth from 480 without updating AppDelegate.idealWidth.
+        // ⚠️ Swift requires argument order: idealWidth, maxWidth, idealHeight, alignment.
+        //   (width-family args before height-family args in .frame())
+        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
         .frame(idealWidth: 480, maxWidth: .infinity, idealHeight: cappedHeight, alignment: .top)
@@ -126,7 +126,7 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
-            Task { @MainActor in localRunnerStore.refresh() }
+            localRunnerStore.refresh()
         }
         .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
@@ -136,12 +136,12 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showAddRunnerSheet) {
             AddRunnerSheet(isPresented: $showAddRunnerSheet) {
-                Task { @MainActor in localRunnerStore.refresh() }
+                localRunnerStore.refresh()
             }
         }
         .sheet(item: $runnerBeingConfigured) { runner in
             RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
-                Task { @MainActor in localRunnerStore.refresh() }
+                localRunnerStore.refresh()
             }
         }
         .alert(removalAlertTitle, isPresented: Binding(
@@ -164,7 +164,7 @@ struct SettingsView: View {
                             removeErrorMessage = "De-registration failed \u{2014} the runner may " +
                                 "still appear in GitHub. Check your token and try again."
                         }
-                        Task { @MainActor in localRunnerStore.refresh() }
+                        localRunnerStore.refresh()
                     }
                 }
             }
@@ -221,7 +221,7 @@ struct SettingsView: View {
                 } else {
                     Button(action: {
                         removeErrorMessage = nil
-                        Task { @MainActor in localRunnerStore.refresh() }
+                        localRunnerStore.refresh()
                     }, label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.caption)
@@ -305,7 +305,7 @@ struct SettingsView: View {
     private func lifecycleAction(_ action: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             action()
-            DispatchQueue.main.async { Task { @MainActor in localRunnerStore.refresh() } }
+            DispatchQueue.main.async { localRunnerStore.refresh() }
         }
     }
 
@@ -407,6 +407,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
+            // #23: "Show offline runners" row with subtitle explaining what it does.
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show offline runners").font(.system(size: 12))
@@ -419,6 +420,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
+            // #12: Polling row with subtitle under the label.
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Polling interval").font(.system(size: 12))
