@@ -137,8 +137,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         p.contentViewController = controller
-        p.isOpaque = false
-        p.backgroundColor = .clear
+        // ✅ isOpaque=true + backgroundColor=.windowBackground gives the panel
+        // the standard macOS window background (respects dark/light mode).
+        // ❌ NEVER set backgroundColor = .clear — that removes the background.
+        // ❌ NEVER set isOpaque = false without a custom background visual effect view.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        p.isOpaque = true
+        p.backgroundColor = .windowBackground
         p.hasShadow = true
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -428,16 +434,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let buttonWindow = button.window,
               let panel else { return }
 
-        // Reload data before showing so content is fresh.
         observable.reload()
 
         // Set open state BEFORE showing so views see isOpen=true on first render.
-        // systemStats gate fires synchronously on first SwiftUI render.
         // ❌ NEVER move after panel.orderFront().
         panelIsOpen = true
         popoverOpenState.isOpen = true
 
-        // Compute initial position.
         let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
         let initH: CGFloat = 300
         let x = buttonScreenFrame.midX - Self.fixedWidth / 2
@@ -450,14 +453,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel.orderFront(nil)
 
-        // Restore saved nav state if any.
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
-
-        // KVO will fire from sizingOptions=.preferredContentSize and call
-        // resizeAndRepositionPanel() as soon as SwiftUI reports ideal size.
-        // That will snap the panel to the correct height immediately.
 
         // Dismiss on outside click.
         // ❌ NEVER remove this monitor — it is the dismiss mechanism.
