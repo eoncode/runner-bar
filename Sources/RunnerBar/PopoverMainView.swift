@@ -21,6 +21,12 @@ import SwiftUI
 //
 // SCROLLVIEW RULE (#296):
 //   ❌ NEVER wrap ActionsListView in a ScrollView with a fixed maxHeight.
+//
+// EMPTY STATE RULE (#377):
+//   The empty-state path ("No recent actions") MUST have a minHeight: 120
+//   on its container so GeometryReader reports a realistic height and Phase 2
+//   does not clamp to minHeight while leaving content tiny + centred.
+//   ❌ NEVER remove the .frame(minHeight: 120, alignment: .top) from ActionsListView empty branch.
 
 // MARK: - HeightPreferenceKey
 
@@ -212,9 +218,17 @@ private struct ActionsListView: View {
 
     var body: some View {
         if actions.isEmpty {
+            // ⚠️ EMPTY STATE MIN HEIGHT (ref #377):
+            // GeometryReader must report a realistic height even when there are no actions.
+            // Without this frame, it reports ~30pt → Phase 2 reads stale/tiny height →
+            // popover clamps to minHeight (120) but content is still tiny and centred.
+            // minHeight: 120 ensures the GeometryReader fires ≥120pt so contentSize
+            // matches what the user actually sees (header ~44 + divider + this ≥120).
+            // ❌ NEVER remove .frame(minHeight: 120, alignment: .top) from this branch.
             Text("No recent actions")
                 .font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 4)
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .frame(minHeight: 120, maxWidth: .infinity, alignment: .topLeading)
         } else {
             VStack(spacing: 0) {
                 ForEach(actions.prefix(visibleCount)) { actionGroup in
@@ -263,102 +277,51 @@ private struct ActionRowView: View {
                 label: {
                     HStack(spacing: 6) {
                         PieProgressView(
-                            progress: actionGroup.progressFraction,
-                            color: actionDotColor(for: actionGroup)
+                            status: actionGroup.groupStatus,
+                            progress: actionGroup.progress
                         )
-                        Text(actionGroup.label)
-                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                            .lineLimit(1).frame(width: 46, alignment: .leading)
-                        Text(actionGroup.title)
-                            .font(.system(size: 12))
-                            .foregroundColor(actionGroup.isDimmed ? .secondary : .primary)
-                            .lineLimit(1).truncationMode(.tail)
+                        .frame(width: 14, height: 14)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(actionGroup.workflowName)
+                                .font(.caption.weight(.medium))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                            HStack(spacing: 4) {
+                                Text(actionGroup.repo)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                if let branch = actionGroup.branch {
+                                    Text("·").font(.caption2).foregroundColor(.secondary)
+                                    Text(branch)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
                         Spacer()
-                        Text(actionGroup.startedAgo)
-                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                            .frame(width: 44, alignment: .trailing)
-                        Text(actionGroup.elapsed)
-                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                            .frame(width: 36, alignment: .trailing)
-                        Text(actionGroup.jobProgress)
-                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                            .frame(width: 28, alignment: .trailing)
-                        Text(actionStatusLabel(for: actionGroup))
-                            .font(.caption)
-                            .foregroundColor(actionStatusColor(for: actionGroup))
-                            .frame(width: 80, alignment: .trailing)
-                            .lineLimit(1)
+                        if let elapsed = actionGroup.elapsedLabel {
+                            Text(elapsed)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundColor(.secondary)
+                        }
                         Image(systemName: "chevron.right")
-                            .font(.caption2).foregroundColor(.secondary)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.secondary.opacity(0.5))
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 3)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .contentShape(Rectangle())
                 }
             )
             .buttonStyle(.plain)
-
             if !inlineJobs.isEmpty {
-                InlineJobsView(jobs: inlineJobs)
-            }
-        }
-    }
-
-    private func actionStatusLabel(for group: ActionGroup) -> String {
-        switch group.groupStatus {
-        case .inProgress: return "IN PROGRESS"
-        case .queued:     return "QUEUED"
-        case .completed:
-            switch group.conclusion {
-            case "success":   return "SUCCESS"
-            case "failure":   return "FAILED"
-            case "cancelled": return "CANCELED"
-            case "skipped":   return "SKIPPED"
-            default:          return "DONE"
-            }
-        }
-    }
-
-    private func actionStatusColor(for group: ActionGroup) -> Color {
-        switch group.groupStatus {
-        case .inProgress: return .yellow
-        case .queued:     return .blue
-        case .completed:
-            if group.isDimmed { return .secondary }
-            return group.conclusion == "success" ? .green : .red
-        }
-    }
-
-    private func actionDotColor(for group: ActionGroup) -> Color {
-        switch group.groupStatus {
-        case .inProgress: return .yellow
-        case .queued:     return .blue
-        case .completed:
-            if group.isDimmed { return .gray }
-            return group.conclusion == "success" ? .green : .red
-        }
-    }
-}
-
-// MARK: - InlineJobsView
-
-private struct InlineJobsView: View {
-    let jobs: [ActiveJob]
-    @State private var cap: Int = 4
-
-    var body: some View {
-        ForEach(jobs.prefix(cap)) { job in
-            InlineJobRowView(job: job)
-        }
-        if jobs.count > cap {
-            Button(
-                action: { cap += 4 },
-                label: {
-                    Text("+ \(jobs.count - cap) more job\(jobs.count - cap == 1 ? "" : "s")\u{2026}")
-                        .font(.caption2).foregroundColor(.accentColor)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 26).padding(.trailing, 12).padding(.vertical, 2)
+                VStack(spacing: 0) {
+                    ForEach(inlineJobs) { job in
+                        InlineJobRowView(job: job)
+                    }
                 }
-            )
-            .buttonStyle(.plain)
+            }
         }
     }
 }
@@ -370,81 +333,68 @@ private struct InlineJobRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("\u{21B3}")
-                .font(.caption2).foregroundColor(.secondary)
-                .padding(.leading, 14)
-            PieProgressView(
-                progress: job.progressFraction,
-                color: .yellow,
-                size: 7
-            )
+            PieProgressView(status: .inProgress, progress: job.progress)
+                .frame(width: 10, height: 10)
+                .padding(.leading, 28)
             Text(job.name)
-                .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).truncationMode(.tail)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
             Spacer()
-            Text(currentStepTitle(for: job))
-                .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).truncationMode(.tail)
-            let frac = stepFraction(for: job)
-            if !frac.isEmpty {
-                Text(frac)
-                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                    .frame(width: 30, alignment: .trailing)
-            } else {
-                Spacer().frame(width: 30)
+            if let elapsed = job.elapsedLabel {
+                Text(elapsed)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
             }
-            Text(job.elapsed)
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .frame(width: 36, alignment: .trailing)
         }
-        .padding(.horizontal, 12).padding(.vertical, 2)
-    }
-
-    private func stepFraction(for job: ActiveJob) -> String {
-        let total = job.steps.count
-        guard total > 0 else { return "" }
-        let done = job.steps.filter { $0.conclusion != nil }.count
-        return "\(done)/\(total)"
-    }
-
-    private func currentStepTitle(for job: ActiveJob) -> String {
-        if let active = job.steps.first(where: { $0.status == "in_progress" }) { return active.name }
-        if let last = job.steps.last(where: { $0.conclusion != nil }) { return last.name }
-        return "In Progress"
+        .padding(.horizontal, 12).padding(.vertical, 3)
     }
 }
 
 // MARK: - RunnersListView
 
-private struct RunnersListView: View {
+struct RunnersListView: View {
     let runners: [Runner]
 
-    private var activeRunners: [Runner] { runners.filter { $0.busy } }
-
     var body: some View {
-        if !activeRunners.isEmpty {
-            ForEach(activeRunners, id: \.id) { runner in
-                HStack(spacing: 6) {
-                    Circle().fill(Color.yellow).frame(width: 7, height: 7)
-                    Text(runner.name)
-                        .font(.system(size: 12)).foregroundColor(.primary)
-                        .lineLimit(1).truncationMode(.tail)
-                    Spacer()
-                    if let metrics = runner.metrics {
-                        Text(String(format: "CPU: %.1f%%", metrics.cpu))
-                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                        Text(String(format: "MEM: %.1f%%", metrics.mem))
-                            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                    } else {
-                        Text("CPU: \u{2014} MEM: \u{2014}").font(.caption).foregroundColor(.secondary)
-                    }
-                    Image(systemName: "chevron.right")
-                        .font(.caption2).foregroundColor(.secondary.opacity(0.4))
+        if !runners.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(runners) { runner in
+                    RunnerRowView(runner: runner)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 3)
             }
             Divider()
         }
     }
 }
-// swiftlint:enable opening_brace
+
+// MARK: - RunnerRowView
+
+private struct RunnerRowView: View {
+    let runner: Runner
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+            Text(runner.name)
+                .font(.caption)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+            Spacer()
+            Text(runner.statusLabel)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+    }
+
+    private var statusColor: Color {
+        switch runner.status {
+        case .online: return .green
+        case .offline: return .red
+        case .busy: return .orange
+        }
+    }
+}

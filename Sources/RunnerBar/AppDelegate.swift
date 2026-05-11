@@ -25,6 +25,18 @@ import SwiftUI
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
 //
+// PHASE 2 TIMING (ref #377):
+//   HeightPreferenceKey fires AFTER SwiftUI layout — which is 2+ runloop ticks
+//   after rootView is assigned. A single DispatchQueue.main.async (one tick) fires
+//   BEFORE SwiftUI has laid out the new view, reading a stale measuredHeight.
+//   Fix: openPopover() Phase 2 uses Task { await Task.yield(); await Task.yield() }
+//   to give SwiftUI two layout passes before reading measuredHeight.
+//   ❌ NEVER collapse back to a single DispatchQueue.main.async in openPopover().
+//   ❌ NEVER remove the double Task.yield() — side-jump / wrong height regression.
+//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+//   is major major major.
+//
 // Rules (ALL must hold simultaneously):
 //   sizingOptions = []        — NEVER .preferredContentSize.
 //                               .preferredContentSize auto-pushes on every SwiftUI
@@ -32,7 +44,7 @@ import SwiftUI
 //   openPopover()             — the ONE place contentSize is set.
 //                               Two-phase open:
 //                                 Phase 1 (sync): stage view + reload data.
-//                                 Phase 2 (next runloop tick):
+//                                 Phase 2 (Task, after 2x yield):
 //                                   read measuredHeight (from HeightPreferenceKey)
 //                                   clamp → setFrameSize → contentSize → show()
 //   navigate()                — rootView swap ONLY. ZERO size changes. Forever.
@@ -360,14 +372,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     ///   every layout pass and reports the true rendered height.
     ///
     ///   Phase 1 (sync): Stage view + reload data. SwiftUI schedules layout.
-    ///   Phase 2 (next runloop tick, HeightPreferenceKey has fired):
+    ///   Phase 2 (Task with 2x yield — waits for HeightPreferenceKey to fire):
     ///     1. Read measuredHeight — SwiftUI-reported, never stale
     ///     2. Clamp + setFrameSize + contentSize
     ///     3. show() — sizing frozen from here
     ///
+    /// WHY TASK + 2x YIELD INSTEAD OF SINGLE DispatchQueue.main.async:
+    ///   HeightPreferenceKey fires AFTER SwiftUI layout, which is 2+ runloop
+    ///   ticks after rootView is set. A single async tick fires before SwiftUI
+    ///   has completed layout — measuredHeight is still the PREVIOUS view's value.
+    ///   Task.yield() suspends and resumes on the next runloop turn. Two yields
+    ///   guarantee SwiftUI has completed its layout pass and fired the preference.
+    ///
     /// ❌ NEVER use fittingSize here — reverts to stale/cached height
     /// ❌ NEVER set contentSize or setFrameSize after show()
-    /// ❌ NEVER collapse phases into one synchronous block
+    /// ❌ NEVER collapse back to a single DispatchQueue.main.async — stale height
+    /// ❌ NEVER remove the double Task.yield() — wrong height / side-jump regression
     /// ❌ NEVER move sizing into navigate() or onChange
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -388,8 +408,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             hostingController.rootView = wrapWithHeightCapture(restored)
         }
 
-        // ── Phase 2 (next runloop tick: HeightPreferenceKey has fired) ────────
-        DispatchQueue.main.async { [weak self, weak button, weak popover, weak hostingController] in
+        // ── Phase 2 (Task: wait for HeightPreferenceKey to fire after layout) ─
+        // Two Task.yield() calls give SwiftUI two runloop turns to complete layout
+        // and fire HeightPreferenceKey before we read measuredHeight.
+        // ❌ NEVER collapse to DispatchQueue.main.async — fires before layout.
+        Task { @MainActor [weak self, weak button, weak popover, weak hostingController] in
+            await Task.yield()
+            await Task.yield()
+
             guard let self,
                   let button,
                   let popover,
