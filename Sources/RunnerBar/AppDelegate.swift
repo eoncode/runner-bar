@@ -9,37 +9,33 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 //
-// THE ONE RULE THAT PREVENTS SIDE-JUMP:
-//   contentSize must NEVER be written while popover.isShown == true,
-//   EXCEPT when navigating back to mainView() (variable-height view).
-//   ANY contentSize write while visible — even height-only — triggers a full
-//   NSPopover re-anchor. This is a hardcoded AppKit constraint (issue #375).
+// THE ONLY CORRECT ARCHITECTURE (proven by main branch):
 //
-// Architecture: AppKit-driven fixed-width, variable-height-on-main-only.
-//   • openPopover() — reads fittingSize.height BEFORE show(), sets contentSize. Safe.
-//   • navigate(to:shouldRemeasure:) — swaps rootView.
-//       shouldRemeasure:true  → only for mainView() (back navigation). Remeasures after
-//                               two async hops so SwiftUI finishes layout.
-//       shouldRemeasure:false → for ALL detail/log/settings views. NO contentSize write.
-//                               These views fill the fixed frame with ScrollView.
-//   • remeasurePopover() — called ONLY from navigate(shouldRemeasure:true) and openPopover().
+//   navigate() = pure rootView swap. ZERO sizing. ZERO contentSize writes. EVER.
+//   openPopover() = the ONE site where contentSize is set, BEFORE show() is called.
+//                   Safe because popover.isShown == false at that point.
+//
+// ANY contentSize write (or setFrameSize) while popover.isShown == true triggers
+// a full NSPopover re-anchor. This is a hardcoded AppKit constraint (issue #375).
+// This includes: height-only writes, writes from async callbacks, writes from
+// onLogLoaded, and writes from back-navigation. ALL of them cause side-jump.
 //
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize anywhere except openPopover() and
-//    remeasurePopover() (which is only called when shouldRemeasure == true).
+// ❌ NEVER add contentSize or setFrameSize to navigate() for any reason
+// ❌ NEVER call remeasurePopover() from onLogLoaded or any post-navigation callback
 // ❌ NEVER add objectWillChange.send() in reload()
 // ❌ NEVER remove .frame(idealWidth: 480) from PopoverMainView
 // ❌ NEVER use fittingSize.width anywhere — always use Self.fixedWidth.
-//    fittingSize.width is non-deterministic when views with maxHeight:.infinity
-//    are in the tree (e.g. StepLogView). Using it causes the side-jump (#13).
-// ❌ NEVER wire onLogLoaded to remeasurePopover() — StepLogView uses
-//    maxHeight:.infinity; fittingSize is non-deterministic there and calling
-//    remeasurePopover() while the log view is shown causes a side-jump.
-// ❌ NEVER collapse navigate(shouldRemeasure:true)'s two async hops to one —
-//    SwiftUI needs two run-loop turns to fully commit and lay out mainView.
+//    fittingSize.width is non-deterministic when maxHeight:.infinity is in tree
+//    (e.g. StepLogView). Using it causes the side-jump (#13).
+// ❌ NEVER wire onLogLoaded to remeasurePopover().
+//    StepLogView uses maxHeight:.infinity. fittingSize is non-deterministic there.
+//    Calling contentSize while log view is shown = re-anchor = side-jump (#375).
+//    The log content scrolls inside the fixed frame set by openPopover(). Safe.
 // ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 480).
-//    Mismatching these causes fittingSize.height to be calculated at the
-//    wrong width, wrapping content and producing an incorrect popover height.
+// ❌ NEVER restore stepLog or actionStepLog via savedNavState on open.
+//    StepLogView uses maxHeight:.infinity -> fittingSize.height == 0 when
+//    loaded as root before content is fetched -> popover opens with zero height.
 // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -79,16 +75,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popoverIsOpen = false
 
     /// Fixed popover width — MUST match PopoverMainView's .frame(idealWidth: 480).
-    /// #22: Widened from 420 → 480 to give action-row titles more horizontal space
-    /// and prevent truncation of multi-word workflow/job names.
+    /// #22: Widened from 420 → 480 to give action-row titles more horizontal space.
     /// ❌ NEVER set this to a value other than 480 without also updating idealWidth
     ///    in PopoverMainView, SettingsView, JobDetailView, AND ActionDetailView.
-    /// ❌ NEVER substitute Self.fixedWidth with fittingSize.width anywhere — see
-    ///    regression guard above (#13 side-jump).
+    /// ❌ NEVER substitute Self.fixedWidth with fittingSize.width anywhere.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     private static let fixedWidth: CGFloat = 480
+    private static let minHeight:  CGFloat = 120
+    private static let maxHeight:  CGFloat = 620
 
     // MARK: - App lifecycle
 
@@ -116,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             self.statusItem?.button?.image = makeStatusIcon(
                 for: RunnerStore.shared.aggregateStatus
             )
+            // ❌ NEVER touch contentSize / setFrameSize here — fires while popover
+            // is shown → re-anchor → side-jump (Regression A, issue #375).
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+            // comment is removed is major major major.
             if !self.popoverIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
@@ -125,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Resets navigation state after the popover closes.
     /// ❌ NEVER call reload() here.
+    /// ❌ NEVER set contentSize here.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -151,12 +153,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Navigation level 1: runner status + jobs + actions.
-    ///
-    /// ⚠️ mainView() is the ONLY destination that passes shouldRemeasure:true
-    /// to navigate(). All other view factories pass shouldRemeasure:false (default).
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -167,22 +163,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
                         guard self.popoverIsOpen else { return }
-                        // ⚠️ shouldRemeasure:false — forward nav into detail view.
-                        // detail view fills the frame with ScrollView; no resize needed.
-                        self.navigate(to: self.detailView(job: enriched), shouldRemeasure: false)
+                        self.navigate(to: self.detailView(job: enriched))
                     }
                 }
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                // ⚠️ shouldRemeasure:false — forward nav into action detail view.
-                self.navigate(to: self.actionDetailView(group: latest), shouldRemeasure: false)
+                self.navigate(to: self.actionDetailView(group: latest))
             },
             onSelectSettings: { [weak self] in
                 guard let self else { return }
-                // ⚠️ shouldRemeasure:false — settings fills the frame with ScrollView.
-                self.navigate(to: self.settingsView(), shouldRemeasure: false)
+                self.navigate(to: self.settingsView())
             }
         ))
     }
@@ -194,8 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             group: group,
             onBack: { [weak self] in
                 guard let self else { return }
-                // ✅ shouldRemeasure:true — back to main, which has variable height.
-                self.navigate(to: self.mainView(), shouldRemeasure: true)
+                self.navigate(to: self.mainView())
             },
             onSelectJob: { [weak self] job in
                 guard let self else { return }
@@ -203,11 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
                         guard self.popoverIsOpen else { return }
-                        // ⚠️ shouldRemeasure:false — forward nav into detail view.
-                        self.navigate(
-                            to: self.detailViewFromAction(job: enriched, group: group),
-                            shouldRemeasure: false
-                        )
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
                     }
                 }
             }
@@ -221,27 +208,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             job: job,
             onBack: { [weak self] in
                 guard let self else { return }
-                // ⚠️ shouldRemeasure:false — back to actionDetail, which also fills frame.
-                self.navigate(to: self.actionDetailView(group: group), shouldRemeasure: false)
+                self.navigate(to: self.actionDetailView(group: group))
             },
             onSelectStep: { [weak self] step in
                 guard let self else { return }
-                // ⚠️ shouldRemeasure:false — forward nav into log view.
-                self.navigate(
-                    to: self.logViewFromAction(job: job, step: step, group: group),
-                    shouldRemeasure: false
-                )
+                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
             }
         ))
     }
 
     /// Navigation level 4a: StepLogView reached via an ActionGroup.
     ///
-    /// ❌ NEVER pass onLogLoaded a remeasurePopover() call.
-    ///    StepLogView uses .frame(maxWidth:.infinity, maxHeight:.infinity).
-    ///    fittingSize is non-deterministic there — calling remeasurePopover()
-    ///    while the log view is shown causes a side-jump (issue #375).
-    ///    The log content scrolls inside the fixed popover frame; no resize needed.
+    /// ❌ NEVER wire onLogLoaded to remeasurePopover() or any contentSize write.
+    ///    StepLogView uses maxHeight:.infinity. fittingSize is non-deterministic
+    ///    there. Any contentSize write while the log view is visible triggers a
+    ///    full NSPopover re-anchor — the side-jump regression (issue #375).
+    ///    The log content scrolls inside the fixed frame set by openPopover().
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -252,13 +234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             step: step,
             onBack: { [weak self] in
                 guard let self else { return }
-                // ⚠️ shouldRemeasure:false — back to detailFromAction, fills frame.
-                self.navigate(
-                    to: self.detailViewFromAction(job: job, group: group),
-                    shouldRemeasure: false
-                )
+                self.navigate(to: self.detailViewFromAction(job: job, group: group))
             },
-            onLogLoaded: nil  // ❌ NO remeasure — see comment above
+            onLogLoaded: nil  // ❌ NEVER wire to remeasurePopover() — see above
         ))
     }
 
@@ -269,13 +247,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             job: job,
             onBack: { [weak self] in
                 guard let self else { return }
-                // ✅ shouldRemeasure:true — back to main, which has variable height.
-                self.navigate(to: self.mainView(), shouldRemeasure: true)
+                self.navigate(to: self.mainView())
             },
             onSelectStep: { [weak self] step in
                 guard let self else { return }
-                // ⚠️ shouldRemeasure:false — forward nav into log view.
-                self.navigate(to: self.logView(job: job, step: step), shouldRemeasure: false)
+                self.navigate(to: self.logView(job: job, step: step))
             }
         ))
     }
@@ -286,8 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return AnyView(SettingsView(
             onBack: { [weak self] in
                 guard let self else { return }
-                // ✅ shouldRemeasure:true — back to main, which has variable height.
-                self.navigate(to: self.mainView(), shouldRemeasure: true)
+                self.navigate(to: self.mainView())
             },
             store: observable
         ))
@@ -295,11 +270,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Navigation level 3: log output for a step (Jobs path).
     ///
-    /// ❌ NEVER pass onLogLoaded a remeasurePopover() call.
-    ///    StepLogView uses .frame(maxWidth:.infinity, maxHeight:.infinity).
-    ///    fittingSize is non-deterministic there — calling remeasurePopover()
-    ///    while the log view is shown causes a side-jump (issue #375).
-    ///    The log content scrolls inside the fixed popover frame; no resize needed.
+    /// ❌ NEVER wire onLogLoaded to remeasurePopover() or any contentSize write.
+    ///    StepLogView uses maxHeight:.infinity. Any contentSize write while the
+    ///    log view is visible = re-anchor = side-jump (issue #375).
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -310,14 +283,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             step: step,
             onBack: { [weak self] in
                 guard let self else { return }
-                // ⚠️ shouldRemeasure:false — back to jobDetail, fills frame.
-                self.navigate(to: self.detailView(job: job), shouldRemeasure: false)
+                self.navigate(to: self.detailView(job: job))
             },
-            onLogLoaded: nil  // ❌ NO remeasure — see comment above
+            onLogLoaded: nil  // ❌ NEVER wire to remeasurePopover() — see above
         ))
     }
 
     /// Returns a refreshed view for `state` using live RunnerStore data, or `nil` if stale.
+    ///
+    /// ❌ NEVER restore stepLog or actionStepLog states.
+    ///    StepLogView uses maxHeight:.infinity → fittingSize.height == 0 when
+    ///    it is the root view before its async log fetch completes.
+    ///    openPopover() would then set contentSize.height = 0 → zero-height popover.
+    ///    Force the user back to the parent detail view instead.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -327,9 +308,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case .jobDetail(let job):
             let live = store.jobs.first(where: { $0.id == job.id }) ?? job
             return detailView(job: live)
-        case .stepLog(let job, let step):
+        case .stepLog(let job, _):
+            // ❌ Do NOT restore to StepLogView — fittingSize == 0, zero-height popover.
+            // Fall back to the parent JobDetailView instead.
             let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return logView(job: live, step: step)
+            return detailView(job: live)
         case .actionDetail(let group):
             guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
             return actionDetailView(group: live)
@@ -337,10 +320,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
             let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
             return detailViewFromAction(job: liveJob, group: liveGroup)
-        case .actionStepLog(let job, let step, let group):
+        case .actionStepLog(let job, _, let group):
+            // ❌ Do NOT restore to StepLogView — fittingSize == 0, zero-height popover.
+            // Fall back to the parent ActionJobDetailView instead.
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
             let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
+            return detailViewFromAction(job: liveJob, group: liveGroup)
         case .settings:
             return settingsView()
         }
@@ -348,61 +333,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller's root view.
+    /// Swaps the hosting controller's root view. ZERO size changes. Forever.
     ///
-    /// shouldRemeasure:true  — ONLY for navigate-to-main (back button from any detail/log/settings).
-    ///   Triggers remeasurePopover() after TWO async hops so SwiftUI finishes laying out
-    ///   the variable-height main view before contentSize is updated.
-    ///   WHY TWO HOPS:
-    ///     Hop 1 — SwiftUI commits the new rootView (replaces the view tree).
-    ///     Hop 2 — SwiftUI completes the full layout pass for the new tree,
-    ///              including inner ForEach, ScrollView content, PopoverLocalRunnerRow, etc.
-    ///     Sampling on hop 1 returns a partial/stale height → wrong popover size.
-    ///
-    /// shouldRemeasure:false — for ALL forward navigation (main→detail, detail→log, etc.)
-    ///   and back navigation between fixed-height views (detail↔actionDetail).
-    ///   NO contentSize write. These views fill the fixed frame with their ScrollView.
-    ///   Writing contentSize while they are visible triggers NSPopover re-anchor = jump.
-    ///
-    /// ❌ NEVER pass shouldRemeasure:true for any destination other than mainView().
-    /// ❌ NEVER collapse shouldRemeasure:true's two async hops to one.
+    /// ❌ NEVER add contentSize or setFrameSize here for any reason.
+    /// ❌ NEVER add a shouldRemeasure parameter — any remeasure while popover.isShown
+    ///    triggers NSPopover re-anchor → side-jump (issue #375).
     /// ❌ NEVER call this from a background thread.
-    /// ❌ NEVER read fittingSize.width — remeasurePopover always uses Self.fixedWidth.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
-    private func navigate(to view: AnyView, shouldRemeasure: Bool = false) {
+    private func navigate(to view: AnyView) {
         hostingController?.rootView = view
-        guard shouldRemeasure,
-              let _ = hostingController,
-              let popover,
-              popover.isShown else { return }
-        DispatchQueue.main.async { [weak self] in
-            DispatchQueue.main.async { [weak self] in
-                self?.remeasurePopover()
-            }
-        }
-    }
-
-    /// Re-measures height via fittingSize and resizes the popover.
-    /// Called ONLY when navigating back to mainView() and from openPopover().
-    /// Width is ALWAYS Self.fixedWidth — never fittingSize.width.
-    ///
-    /// ❌ NEVER call from any navigate() call with shouldRemeasure:false.
-    /// ❌ NEVER substitute Self.fixedWidth with fittingSize.width — causes #13 side-jump.
-    /// ❌ NEVER call from a background thread.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
-    private func remeasurePopover() {
-        guard let hc = hostingController,
-              let pop = popover,
-              pop.isShown else { return }
-        let newHeight = hc.view.fittingSize.height
-        guard newHeight > 0 else { return }
-        let newSize = NSSize(width: Self.fixedWidth, height: newHeight)
-        hc.view.setFrameSize(newSize)
-        pop.contentSize = newSize
     }
 
     // MARK: - Popover show/hide
@@ -417,14 +358,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover. Sets contentSize BEFORE show() — the only safe moment.
+    /// Opens the popover. The ONE site where contentSize is written.
     ///
-    /// fittingSize.HEIGHT is read synchronously here before show() is called.
-    /// This is safe because popover.isShown is still false at this point —
-    /// writing contentSize before show() does NOT trigger a re-anchor (issue #375 Option 3).
-    /// Width is always Self.fixedWidth — never fittingSize.width.
+    /// Reads fittingSize BEFORE show() — safe because popover.isShown == false.
+    /// Writing contentSize before show() does NOT trigger a re-anchor (issue #375).
+    /// Width is ALWAYS Self.fixedWidth — never fittingSize.width.
+    /// Height is clamped to [minHeight, maxHeight] to handle edge cases
+    /// where fittingSize.height is 0 (e.g. stale savedNavState with empty root).
     ///
     /// ❌ NEVER use fittingSize.width here — always Self.fixedWidth.
+    /// ❌ NEVER call setFrameSize or set contentSize after show() is called.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -436,17 +379,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let size = NSSize(
-            width: Self.fixedWidth,                            // ❌ NEVER fittingSize.width
-            height: hostingController.view.fittingSize.height  // ✅ safe — popover not yet shown
-        )
+        let rawHeight = hostingController.view.fittingSize.height
+        let height = min(max(rawHeight > 0 ? rawHeight : 300, Self.minHeight), Self.maxHeight)
+        let size = NSSize(width: Self.fixedWidth, height: height)
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
-            navigate(to: restored, shouldRemeasure: false)
+            navigate(to: restored)
         }
     }
 }
