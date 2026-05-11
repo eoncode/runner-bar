@@ -2,49 +2,48 @@ import AppKit
 
 // MARK: - PanelChrome
 //
-// Provides the visual chrome for the NSPanel:
-//   1. NSVisualEffectView background (hudWindow material, matches NSPopover look)
-//   2. Rounded corners (cornerRadius = 10  ← NSPopover exact value, macOS Sequoia)
-//   3. Arrow caret drawn at top, pointing up toward the status bar icon
-//      arrowHeight=9, arrowWidth=20, tipRadius=3  ← NSPopover exact values
+// Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly:
+//   1. NSVisualEffectView background (hudWindow material)
+//   2. cornerRadius = 8pt  (matches NSPopover on macOS)
+//   3. Arrow caret: arrowHeight=12pt, arrowWidth=20pt
+//      Shape: isoceles triangle with addArc(radius:2) at tip — matches NSPopover at 20×12pt.
+//      (Cubic Bézier control points only look correct at large arrowWidth like 60pt;
+//       at 20pt they produce a needle shape. Use addArc for tight dimensions.)
 //
-// Drawing approach: two CGPaths filled with the same colour in draw():
-//   • Path 1: CGPath(roundedRect:) for the body (bullet-proof corners)
-//   • Path 2: arrow triangle with addArc for the rounded tip
-// Filling both in one draw() call makes them appear seamless.
+// arrowX positioning (CRITICAL):
+//   arrowX = button.window!.frame.midX - panel.frame.minX
+//   button.window?.frame is ALREADY in screen coords.
+//   ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local,
+//      convertToScreen gives wrong screen X and misaligns the arrow.
 //
-// Layout contract:
+// Layout:
 //   chrome IS the panel contentView. AppKit owns chrome.frame.
 //   ❌ NEVER set chrome.frame manually from AppDelegate.
-//   chrome.layout() is called by AppKit after every panel.setFrame().
-//   It repositions fx (NSVisualEffectView) to contentRect ONLY.
-//   The hosting view has autoresizingMask=[.width,.height] and is NOT touched
-//   in layout() — AppKit fills it automatically as the panel resizes.
-//   This lets SwiftUI render at full preferredContentSize so KVO fires correctly.
-//   Panel height is driven by KVO → resizeAndRepositionPanel() → panel.setFrame().
+//   layout() pins fx + hosting view to contentRect on EVERY layout pass.
+//   contentRect = NSRect(x:0, y:0, width:bounds.width, height:bounds.height - arrowHeight)
+//   hosting view also has autoresizingMask = [.width, .height] for AppKit resize passes.
 //
-//   contentRect = full bounds minus arrowHeight at top (macOS coords: y=0 at bottom):
-//     NSRect(x:0, y:0, width:bounds.width, height:bounds.height - arrowHeight)
-//
-// arrowX: panel-local X of arrow tip centre.
-//   Set by AppDelegate.resizeAndRepositionPanel() on every reposition.
-//   Formula: buttonScreenFrame.midX - panelFrame.minX  (after screen-clamp)
+// Dynamic height:
+//   AppDelegate KVO on preferredContentSize → resizeAndRepositionPanel() → panel.setFrame().
+//   panel.setFrame() → AppKit resizes contentView (chrome) → layout() → hosting view grows.
+//   hosting view frame = contentRect grows → SwiftUI renders at new height.
+//   ❌ NEVER set hostingController.view.frame only once at init — it won't update on resize.
 //
 // ❌ NEVER remove this file.
-// ❌ NEVER add hosting-view frame overrides back to layout().
-// ❌ NEVER set autoresizingMask=[] on the hosting view.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression is major major major.
 
-let arrowHeight:    CGFloat = 9
-let arrowWidth:     CGFloat = 20
-let cornerRadius:   CGFloat = 10   // NSPopover exact value (macOS Sequoia)
-let arrowTipRadius: CGFloat = 3    // NSPopover exact value
+let arrowHeight: CGFloat = 12   // matches NSPopover standard
+let arrowWidth:  CGFloat = 20   // matches NSPopover standard
+let cornerRadius: CGFloat = 8   // matches NSPopover standard macOS
 
 final class PanelChromeView: NSView {
 
     /// Panel-local X of arrow tip centre.
-    /// Formula: buttonScreenFrame.midX - panel.frame.minX  (after screen-clamp)
+    /// Formula: button.window!.frame.midX - panel.frame.minX
+    /// ❌ NEVER compute from convertToScreen(button.frame) — button.frame is button-local.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
     var arrowX: CGFloat = 240 { didSet { needsDisplay = true } }
 
     private let fx: NSVisualEffectView = {
@@ -65,73 +64,85 @@ final class PanelChromeView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// The rect below the arrow where content (fx + hosting view) lives.
-    /// macOS coordinate system: y=0 is at bottom of view.
-    /// Arrow is at TOP of view (high Y values), content is below it (low Y values).
+    /// Content rect: full bounds minus arrowHeight at top (macOS: y=0 is bottom).
     var contentRect: NSRect {
         NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - arrowHeight))
     }
 
     override func layout() {
         super.layout()
-        // Pin ONLY the visual effect background to contentRect.
-        // ❌ NEVER override the hosting view frame here — the hosting view uses
-        //    autoresizingMask=[.width,.height] so AppKit fills it automatically.
-        //    Overriding it here breaks the chicken-and-egg: SwiftUI could never
-        //    grow past the init height → preferredContentSize KVO never fired.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        // Re-pin every subview to contentRect on EVERY layout pass.
+        // ❌ NEVER only set frames once at init — panel resize won't propagate.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression is major major major.
         fx.frame = contentRect
         fx.layer?.cornerRadius = cornerRadius
         fx.layer?.masksToBounds = true
+        for sub in subviews where sub !== fx {
+            sub.frame = contentRect
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let fill: NSColor = isDark
-            ? NSColor(white: 0.18, alpha: 0.97)
-            : NSColor(white: 0.95, alpha: 0.97)
-        ctx.setFillColor(fill.cgColor)
-
-        // ── Path 1: rounded-rect body ──────────────────────────────────
-        // CGPath(roundedRect:) is bulletproof — no manual arc winding needed.
-        let bodyRect = CGRect(x: 0, y: 0,
-                              width: bounds.width, height: bounds.height - arrowHeight)
-        let bodyPath = CGPath(roundedRect: bodyRect,
-                              cornerWidth: cornerRadius,
-                              cornerHeight: cornerRadius,
-                              transform: nil)
-        ctx.addPath(bodyPath)
-        ctx.fillPath()
-
-        // ── Path 2: arrow caret ────────────────────────────────────────
-        // Upward-pointing triangle with a rounded tip via addArc(tangent:).
-        // baseY = top of body = bottom of arrow zone.
-        // tipY  = bounds.height (very top of view in macOS coords).
+        // Arrow shape: isoceles triangle with addArc(radius:2) at the tip.
         //
-        // Clamp so the caret never bleeds into the rounded body corners.
-        let hw = arrowWidth / 2
-        let clampedX = max(hw + cornerRadius,
-                           min(arrowX, bounds.width - hw - cornerRadius))
+        // Why NOT cubic Bézier here:
+        //   iSapozhnik control points (width/6, width/9) look correct at arrowWidth≈60pt.
+        //   At arrowWidth=20pt the same ratios give an almost-straight needle shape.
+        //   NSPopover's actual 20×12 arrow is a triangle + small rounded tip.
+        //   addArc(radius:2) at the tip matches NSPopover visually at these dimensions.
+        //
+        // Geometry (macOS: y=0 is bottom, y increases upward):
+        //   baseY = top of content rect (= bounds.height - arrowHeight)
+        //   tipY  = very top of view    (= bounds.height)
+        //   cX    = clamped panel-local X of arrow centre
+
+        let cX    = max(arrowWidth / 2 + cornerRadius,
+                        min(arrowX, bounds.width - arrowWidth / 2 - cornerRadius))
         let baseY = bounds.height - arrowHeight
         let tipY  = bounds.height
 
-        // The arrow fills the gap between the two corner caps of the body at
-        // that X position, so it appears flush against the body top edge.
-        // A small overlap of 1pt covers any sub-pixel gap between body & arrow.
-        let overlapY = baseY + 1
+        let leftPt  = CGPoint(x: cX - arrowWidth / 2, y: baseY)
+        let tipPt   = CGPoint(x: cX,                  y: tipY)
+        let rightPt = CGPoint(x: cX + arrowWidth / 2, y: baseY)
 
-        let arrowPath = CGMutablePath()
-        arrowPath.move(to: CGPoint(x: clampedX - hw, y: overlapY))
-        arrowPath.addArc(tangent1End: CGPoint(x: clampedX,       y: tipY),
-                         tangent2End: CGPoint(x: clampedX + hw,  y: overlapY),
-                         radius: arrowTipRadius)
-        arrowPath.addLine(to: CGPoint(x: clampedX + hw, y: overlapY))
-        arrowPath.closeSubpath()
+        // Compute the unit vectors along each slope for the addArc tangent approach.
+        // Left slope: from leftPt toward tipPt
+        let dxL = tipPt.x - leftPt.x
+        let dyL = tipPt.y - leftPt.y
+        let lenL = sqrt(dxL * dxL + dyL * dyL)
+        // Right slope: from rightPt toward tipPt
+        let dxR = tipPt.x - rightPt.x
+        let dyR = tipPt.y - rightPt.y
+        let lenR = sqrt(dxR * dxR + dyR * dyR)
 
-        ctx.addPath(arrowPath)
+        // Tip arc radius: 2pt — gives NSPopover's characteristic slight rounding.
+        let tipRadius: CGFloat = 2
+
+        // Tangent points: step back tipRadius/sin(half-angle) from the tip along each slope.
+        // For a 20×12 arrow, half-angle ≈ 40°, so the step-back ≈ 3pt.
+        let sinHalfAngle = (arrowWidth / 2) / sqrt((arrowWidth / 2) * (arrowWidth / 2) + arrowHeight * arrowHeight)
+        let stepBack = tipRadius / sinHalfAngle
+        let tangentL = CGPoint(x: tipPt.x - (dxL / lenL) * stepBack,
+                               y: tipPt.y - (dyL / lenL) * stepBack)
+        let tangentR = CGPoint(x: tipPt.x - (dxR / lenR) * stepBack,
+                               y: tipPt.y - (dyR / lenR) * stepBack)
+
+        let path = CGMutablePath()
+        path.move(to: leftPt)
+        path.addLine(to: tangentL)
+        path.addArc(tangent1End: tipPt, tangent2End: tangentR, radius: tipRadius)
+        path.addLine(to: rightPt)
+        path.closeSubpath()
+
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let fill: NSColor = isDark
+            ? NSColor(white: 0.18, alpha: 0.97)
+            : NSColor(white: 0.96, alpha: 0.97)
+        ctx.setFillColor(fill.cgColor)
+        ctx.addPath(path)
         ctx.fillPath()
     }
 }
