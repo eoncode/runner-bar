@@ -48,8 +48,8 @@ import AppKit
 // ❌ NEVER remove this file. Regression is major major major.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
-let arrowHeight:  CGFloat = 11   // matches NSPopover Sequoia
-let arrowWidth:   CGFloat = 20   // matches NSPopover Sequoia
+let arrowHeight:  CGFloat = 9    // shallower to match original NSPopover look
+let arrowWidth:   CGFloat = 30   // wider to match original NSPopover look
 let cornerRadius: CGFloat = 10   // matches NSPopover body corner
 
 // MARK: - NSBezierPath → CGPath (macOS 13 compatible)
@@ -187,12 +187,12 @@ final class PanelChromeView: NSView {
         let tipY   = h                 // y of arrow apex
 
         // iSapozhnik control point fractions (DO NOT CHANGE):
-        //   w/6 = 3.33pt  — concave foot anchor
-        //   w/9 = 2.22pt  — near-tip anchor (produces the rounded apex)
+        //   w/6 = 5pt   — concave foot anchor
+        //   w/9 = 3.33pt — near-tip anchor (produces the rounded apex)
         // ❌ NEVER change these fractions.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let cp_foot = arrowWidth / 6   // 3.33pt — foot-side control offset
-        let cp_tip  = arrowWidth / 9   // 2.22pt — tip-side control offset
+        let cp_foot = arrowWidth / 6   // 5pt — foot-side control offset
+        let cp_tip  = arrowWidth / 9   // 3.33pt — tip-side control offset
 
         let leftPoint  = NSPoint(x: cX - hw, y: baseY)
         let toPoint    = NSPoint(x: cX,      y: tipY)
