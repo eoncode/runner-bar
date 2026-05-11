@@ -4,26 +4,25 @@ import AppKit
 //
 // Provides the visual chrome for the NSPanel, matching NSPopover appearance exactly.
 //
-// Arrow shape: concave sides (iSapozhnik w/4 fractions) + 4pt rounded tip arc.
+// Arrow shape: near-straight sides (cpBase = hw * 0.9) + 3pt rounded tip arc.
 //
 // The NSPopover arrow has:
-//   - Slightly concave sides (curving inward) — iSapozhnik cubic Bezier formula.
-//   - A small rounded tip (~4pt radius arc) — NOT a sharp point.
+//   - Nearly straight sides (only very slight concavity).
+//   - A small rounded tip (~3pt radius arc) — NOT a sharp point.
 //
 // Right side bezier: start=(cX+hw, baseY)  end=(cX+tipR, tipY)
-//   cp1 = (cX + arrowWidth/4, baseY)  <- concave foot anchor
-//   cp2 = (cX + tipR,         tipY)   <- arrives horizontally into arc (no kink)
+//   cp1 = (cX + hw*0.9, baseY)  <- near foot, nearly at the base edge (near-straight)
+//   cp2 = (cX + tipR,   tipY)   <- arrives horizontally into arc (no kink)
 //
 // Tip arc: appendArc(center=(cX, tipY-tipR), radius=tipR, 0°→180°)
-//   Sweeps the rounded apex counter-clockwise.
 //
 // Left side bezier (mirror): start=(cX-tipR, tipY)  end=(cX-hw, baseY)
-//   cp1 = (cX - tipR,         tipY)   <- leaves horizontally from arc
-//   cp2 = (cX - arrowWidth/4, baseY)  <- concave foot anchor
+//   cp1 = (cX - tipR,   tipY)
+//   cp2 = (cX - hw*0.9, baseY)
 //
-// ❌ NEVER remove the tip arc — causes sharp spike.
-// ❌ NEVER widen CP offsets to hw/2 (=10pt) — causes half-circle blob.
-// ❌ NEVER use straight lines only — flat arrow.
+// ❌ NEVER set cpBase < hw*0.7 — makes sides concave/spiky again.
+// ❌ NEVER set tipR = 0 — causes sharp spike.
+// ❌ NEVER use straight lines only — loses the gentle slope roundness.
 // ❌ NEVER use appendArc at BASE corners — visible base humps.
 //
 // KEY FACTS:
@@ -162,39 +161,36 @@ final class PanelChromeView: NSView {
 
     // MARK: - Chrome path
     //
-    // Full chrome: rounded-rect body + upward arrow with concave sides + rounded tip.
+    // Full chrome: rounded-rect body + upward arrow with near-straight sides + rounded tip.
     //
-    // The tip uses appendArc(radius: tipR=4) at the apex.
-    // Both bezier side curves arrive/depart horizontally at the arc tangent
-    // points (cX ± tipR, tipY) so there is no kink where curve meets arc.
+    // cpBase = hw * 0.9 puts cp1 almost at the base foot corner, making each
+    // side nearly straight — matching the gentle slope of native NSPopover.
+    // tipR = 3pt rounds the apex without making it a dome.
     //
-    // ❌ NEVER remove the tip arc — causes sharp spike.
+    // ❌ NEVER set cpBase below hw*0.7 — sides become concave/spiky.
+    // ❌ NEVER remove tipR — causes sharp spike.
     // ❌ NEVER use appendArc at BASE corners — visible base humps.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private func chromePath(in rect: NSRect) -> NSBezierPath {
         let w    = rect.width
         let h    = rect.height
         let r    = cornerRadius
-        let hw   = arrowWidth / 2
+        let hw   = arrowWidth / 2        // 10pt
 
-        // tipR: radius of the rounded apex arc.
-        // 4pt closely matches the native NSPopover rounded tip on Sonoma/Sequoia.
-        // ❌ NEVER remove or set to 0 — causes sharp spike.
-        // ❌ NEVER increase above hw (10pt) — arc would exceed arrow half-width.
+        // tipR: rounded apex. 3pt matches native NSPopover on Sonoma/Sequoia.
+        // ❌ NEVER set to 0 — sharp spike.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let tipR: CGFloat = 4
+        let tipR: CGFloat = 3
 
-        // cpBase: iSapozhnik w/4 fraction anchors concave inward slope at foot.
-        // w/4 = 5pt gives a softer, wider concave curve matching NSPopover.
-        // ❌ NEVER change to hw/2 (=10pt) — half-circle blob.
-        // ❌ NEVER change to w/6 (=3.33pt) — too narrow/pointy.
+        // cpBase = hw * 0.9 = 9pt. Nearly at the base edge — near-straight sides.
+        // ❌ NEVER reduce below hw*0.7 (7pt) — sides become concave/spiky again.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        let cpBase = arrowWidth / 4      // 5pt
+        let cpBase = hw * 0.9
 
         let cX    = max(hw + r, min(arrowX, w - hw - r))
         let baseY = h - arrowHeight
-        let tipY  = h                    // outermost y of tip arc
-        let tipCY = tipY - tipR          // centre y of tip arc circle
+        let tipY  = h
+        let tipCY = tipY - tipR
 
         let path = NSBezierPath()
         path.move(to: NSPoint(x: r, y: 0))
@@ -212,26 +208,20 @@ final class PanelChromeView: NSView {
         // Top edge: right segment → arrow right foot
         path.line(to: NSPoint(x: cX + hw, y: baseY))
 
-        // Arrow right side → right tangent of tip arc.
-        // cp2 = (cX + tipR, tipY) so the bezier arrives perfectly horizontal,
-        // tangent to the arc circle at its rightmost point. No kink.
-        path.curve(to:            NSPoint(x: cX + tipR,   y: tipY),
-                   controlPoint1: NSPoint(x: cX + cpBase,  y: baseY),
-                   controlPoint2: NSPoint(x: cX + tipR,    y: tipY))
+        // Arrow right side → right tangent of tip arc (near-straight, cpBase≈hw)
+        path.curve(to:            NSPoint(x: cX + tipR,  y: tipY),
+                   controlPoint1: NSPoint(x: cX + cpBase, y: baseY),
+                   controlPoint2: NSPoint(x: cX + tipR,   y: tipY))
 
-        // Tip arc: centre=(cX, tipCY), sweeps 0° → 180° (counter-clockwise).
-        // 0° = right tangent, 180° = left tangent.
-        // clockwise:false in NSBezierPath = counter-clockwise in screen coords
-        // (AppKit flips the sense). This draws the rounded peak left-to-right.
-        // ❌ NEVER remove this arc — it IS the rounded tip.
+        // Tip arc: 3pt radius, sweeps 0°→180° counter-clockwise.
+        // ❌ NEVER remove — this IS the rounded tip.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        path.appendArc(withCenter: NSPoint(x: cX,   y: tipCY),
+        path.appendArc(withCenter: NSPoint(x: cX, y: tipCY),
                        radius: tipR,
                        startAngle: 0, endAngle: 180,
                        clockwise: false)
 
-        // Arrow left side → left foot (exact mirror of right side).
-        // Starts from (cX - tipR, tipY), the left tangent point of the arc.
+        // Arrow left side → left foot (mirror of right)
         path.curve(to:            NSPoint(x: cX - hw,     y: baseY),
                    controlPoint1: NSPoint(x: cX - tipR,   y: tipY),
                    controlPoint2: NSPoint(x: cX - cpBase, y: baseY))
