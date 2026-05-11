@@ -16,28 +16,29 @@ import SwiftUI
 ///   SwiftUI's ideal size and propagates to NSPopover automatically.
 ///
 ///   ROOT VSTACK FRAME RULE:
-///   .frame(idealWidth: 480, idealHeight: cappedHeight, alignment: .top)
-///   BOTH idealWidth AND idealHeight are required here.
+///   .frame(idealWidth: 480) — idealWidth ONLY. NO idealHeight here.
 ///
-///   WHY idealHeight IS NEEDED HERE (unlike other views):
-///   ScrollView reports unbounded idealHeight (full content height) to SwiftUI's layout
-///   system. Without capping, preferredContentSize.height spikes to ~800pt on navigate
-///   to Settings → NSPopover repositions the window to stay on screen → side-jump.
-///   idealHeight: cappedHeight caps the reported ideal height so NSPopover receives a
-///   stable, screen-bounded contentSize.height.
-///   ❌ NEVER remove idealHeight from this view's root frame.
-///   ❌ NEVER add idealHeight to any OTHER view's root frame (only SettingsView needs it).
+///   WHY NO ScrollView AT TOP LEVEL (CRITICAL):
+///   ScrollView reports idealHeight = full unbounded content height to SwiftUI.
+///   With sizingOptions=.preferredContentSize, this makes NSHostingController
+///   report preferredContentSize.height = ~800pt regardless of actual content.
+///   NSPopover then repositions to stay on screen → side-jump on Settings open.
+///
+///   THE CORRECT PATTERN (dynamic height, no jump):
+///   Inner content VStack gets:
+///     .fixedSize(horizontal: false, vertical: true)   // measure at natural height
+///     .frame(maxHeight: cappedHeight, alignment: .top) // screen-safe cap
+///   This makes idealHeight = min(naturalContentHeight, cappedHeight) — truly dynamic.
+///   3 runner rows → small height. All sections expanded → up to cappedHeight.
+///   ❌ NEVER wrap the content VStack in ScrollView
+///   ❌ NEVER add idealHeight to root frame (that is a fixed height, not dynamic)
+///   ❌ NEVER remove .fixedSize(horizontal: false, vertical: true)
+///   ❌ NEVER remove .frame(maxHeight: cappedHeight) from the content VStack
 ///
 ///   WHY idealWidth IS NEEDED:
 ///   Pins preferredContentSize.width = 480 always. Width must never change → no re-anchor.
 ///   ❌ NEVER remove idealWidth.
 ///   ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth AND all views.
-///
-///   SCROLLVIEW HEIGHT CAP:
-///   The ScrollView has .frame(maxHeight: cappedHeight) which correctly caps layout height.
-///   The inner content can scroll within this cap.
-///   ❌ NEVER remove .frame(maxHeight: cappedHeight) from the ScrollView.
-///   ❌ NEVER increase above 0.85 — popover may overflow off-screen.
 ///
 ///   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 ///   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -73,14 +74,13 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
-    /// Height cap for the Settings ScrollView and root idealHeight.
-    /// 75% of visible screen height — fits all sections on any screen without overflow.
-    /// Used for BOTH:
-    ///   1. ScrollView .frame(maxHeight: cappedHeight) — caps the layout height
-    ///   2. Root VStack .frame(idealHeight: cappedHeight) — caps ideal height reported
-    ///      to NSHostingController so preferredContentSize.height is bounded.
+    /// Screen-safe height cap for the content VStack.
+    /// Used ONLY for .frame(maxHeight:) on the content VStack — NOT on root idealHeight.
+    /// .fixedSize(v:true) + .frame(maxHeight:) = dynamic height capped at this value.
+    /// idealHeight is NOT set on the root frame — height is dynamic, not fixed.
+    /// ❌ NEVER apply this as .frame(height:) — that is a fixed height.
+    /// ❌ NEVER apply this as idealHeight on the root frame.
     /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
-    /// ❌ NEVER apply cappedHeight as a fixed .frame(height:) — that would break layout.
     private var cappedHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
     }
@@ -89,43 +89,47 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ ScrollView height cap — load-bearing under Architecture 1.
-            // .frame(maxHeight: cappedHeight) caps the layout height so the popover
-            // does not grow off-screen. The root frame's idealHeight also caps the
-            // ideal height reported to NSHostingController.
-            // ❌ NEVER remove .frame(maxHeight: cappedHeight).
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    localRunnersSection
-                    Divider()
-                    runnerSection
-                    Divider()
-                    notificationsSection
-                    Divider()
-                    generalSection
-                    Divider()
-                    accountSection
-                    Divider()
-                    legalSection
-                    Divider()
-                    aboutSection
-                }
-                .padding(.bottom, 16)
+            // ⚠️ REGRESSION GUARD: NO ScrollView here.
+            // .fixedSize(horizontal: false, vertical: true) instructs SwiftUI to measure
+            // the content VStack at its natural height → this IS idealHeight.
+            // .frame(maxHeight: cappedHeight) caps layout rendering for screen safety.
+            // Combined: idealHeight = min(naturalContentHeight, cappedHeight) → dynamic.
+            // NSHostingController.preferredContentSize.height = this dynamic value.
+            // ❌ NEVER wrap this in ScrollView — destroys dynamic idealHeight measurement.
+            // ❌ NEVER remove fixedSize — without it idealHeight is unconstrained/zero.
+            // ❌ NEVER replace maxHeight with height — that is a fixed size.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE.
+            VStack(alignment: .leading, spacing: 0) {
+                localRunnersSection
+                Divider()
+                runnerSection
+                Divider()
+                notificationsSection
+                Divider()
+                generalSection
+                Divider()
+                accountSection
+                Divider()
+                legalSection
+                Divider()
+                aboutSection
             }
-            .frame(maxHeight: cappedHeight)
+            .padding(.bottom, 16)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: cappedHeight, alignment: .top)
         }
-        // ⚠️ REGRESSION GUARD: BOTH idealWidth AND idealHeight are required here.
+        // ⚠️ REGRESSION GUARD: idealWidth ONLY — no idealHeight.
         // idealWidth: 480 pins preferredContentSize.width = 480 (no x re-anchor).
-        // idealHeight: cappedHeight caps preferredContentSize.height so NSPopover
-        // does not need to reposition to keep the window on-screen.
-        // ❌ NEVER remove idealHeight from THIS view — ScrollView has unbounded ideal height.
+        // Height is driven dynamically by fixedSize+maxHeight on the content VStack above.
+        // Adding idealHeight here would make height FIXED — defeats the purpose.
+        // ❌ NEVER add idealHeight here.
         // ❌ NEVER remove idealWidth.
-        // ❌ NEVER add idealHeight to OTHER views (PopoverMainView, JobDetailView etc.).
         // ❌ NEVER change idealWidth from 480 without updating AppDelegate.fixedWidth.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
         // is major major major.
-        .frame(idealWidth: 480, idealHeight: cappedHeight, alignment: .top)
+        .frame(idealWidth: 480)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
