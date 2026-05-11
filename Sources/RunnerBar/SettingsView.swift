@@ -22,6 +22,14 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// ⚠️ REGRESSION GUARD (Architecture 1 — ref status-bar-app-position-warning.md):
+/// The root VStack uses .frame(idealWidth: 420, maxWidth: .infinity).
+/// The OUTER .frame(width: 420) is applied in AppDelegate.settingsView() —
+/// that is what pins preferredContentSize.width = 420 for NSPopover.
+/// The inner idealWidth here ensures the VStack fills the 420pt container.
+/// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the root VStack.
+/// ❌ NEVER remove the ScrollView — it is what makes height dynamic.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -85,7 +93,9 @@ struct SettingsView: View {
                 .padding(.bottom, 16)
             }
         }
-        // ⚠️ REGRESSION GUARD: keep idealWidth: 420 — matches PopoverMainView (ref #52 #54 #57)
+        // ⚠️ Architecture 1: idealWidth drives preferredContentSize.width inside the container.
+        // The .frame(width: 420) wrapper in AppDelegate.settingsView() pins the outer width.
+        // ❌ NEVER add .frame(height:) — ScrollView provides dynamic height.
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
@@ -95,15 +105,11 @@ struct SettingsView: View {
             // ⚠️ PERMISSION GUARD: only trigger a fresh scan when not already scanning.
             // LocalRunnerStore.refresh() dispatches to a background queue — safe to
             // call from onAppear. The guard inside refresh() prevents double-scans.
-            // ❌ NEVER call localRunnerStore.refresh() unconditionally here without
-            //    checking isScanning — doing so while a scan is in-flight crashes
-            //    because the background queue gets a second overlapping scan.
             if !localRunnerStore.isScanning {
                 localRunnerStore.refresh()
             }
         }
         // Single-parameter form: compatible with macOS 13+.
-        // The two-parameter { _, newValue in } form requires macOS 14+.
         .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
         }
@@ -127,9 +133,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
-                // Gate on token: de-registration requires GitHub auth.
-                // Without a token svc.sh uninstall succeeds but config.sh remove
-                // fails, leaving a ghost registration on the GitHub side.
                 guard isAuthenticated else {
                     runnerPendingRemoval = nil
                     return
@@ -137,9 +140,6 @@ struct SettingsView: View {
                 runnerPendingRemoval = nil
                 removeErrorMessage = nil
                 DispatchQueue.global(qos: .userInitiated).async {
-                    // Capture result: @discardableResult on remove() must not be
-                    // silently dropped. A false return means config.sh remove
-                    // failed and the GitHub registration was NOT cleaned up.
                     let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
                     DispatchQueue.main.async {
                         if !succeeded {

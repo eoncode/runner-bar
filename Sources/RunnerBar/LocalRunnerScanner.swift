@@ -77,7 +77,10 @@ struct LocalRunnerScanner {
         // ⚠️ PERMISSION GUARD: search only ~ (home directory).
         // ❌ NEVER add /opt or /usr/local — those paths trigger macOS TCC
         //    automation permission dialogs every time Settings opens.
-        //    Runners installed outside ~ are rare and not worth the UX cost.
+        //    Runners installed outside ~ are uncommon and not worth the UX cost.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+        // is major major major.
         let raw = shell(
             "find ~ -maxdepth 6 -name '.runner' 2>/dev/null",
             timeout: 15
