@@ -4,25 +4,26 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - NavState
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296 #376)
 //
-// SIZING CONTRACT (mirrors main branch exactly):
-//   openPopover() reads fittingSize ONCE before .show(). No cap. No maxHeight.
-//   navigate() = rootView swap ONLY. ZERO size changes. Ever.
+// SIZING CONTRACT (per issue #376):
+//   Width  : ALWAYS Self.fixedWidth. NEVER fittingSize.width. Changing width shifts
+//             NSPopover's anchor and causes the side-jump.
+//   Height : fittingSize.height, read in openPopover() and remeasurePopover().
+//             remeasurePopover() is called from navigate() via DispatchQueue.main.async.
+//   Cap    : maxContentHeight clamps the popover so it never exceeds the screen.
+//
+// navigate() = rootView swap + async remeasure. NEVER sync contentSize change.
+//
 // ❌ NEVER set sizingOptions = .preferredContentSize
-// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
-// ❌ NEVER touch contentSize or setFrameSize inside navigate()
+// ❌ NEVER read fittingSize.width into any sizing call — causes side-jump
+// ❌ NEVER set contentSize or setFrameSize synchronously inside navigate()
 // ❌ NEVER add objectWillChange.send() in reload()
-// ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
+// ❌ NEVER remove .frame(idealWidth: 420, maxWidth: .infinity) from PopoverMainView
 // ❌ NEVER guard observable.reload() on !popoverIsOpen inside openPopover()
-// ❌ NEVER remove the !popoverIsOpen guard from onChange — it prevents
-//    double-reload and layout thrash while the popover is open.
-// ❌ NEVER call navigate(to: restored) BEFORE show() — races with reload().
-//    Nav restore MUST happen after show().
-// ❌ NEVER call layoutSubtreeIfNeeded() in openPopover() — forces AppKit layout
-//    at old frame size and causes popover to jump sideways on reopen.
-//    Dynamic height is solved in the views via .fixedSize(horizontal:false,vertical:true)
-//    on VStack content inside ScrollView — NOT in AppDelegate.
+// ❌ NEVER remove the !popoverIsOpen guard from onChange — prevents double-reload
+// ❌ NEVER call navigate(to: restored) BEFORE show() — races with reload()
+// ❌ NEVER call layoutSubtreeIfNeeded() — causes side-jump
 
 private enum NavState {
     case main
@@ -44,7 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
+    // ⚠️ Width is a single constant — NEVER dynamic (ref #376).
     private static let fixedWidth: CGFloat = 420
+    // Max popover height — prevents the popover from exceeding the screen.
+    private static let maxContentHeight: CGFloat = 600
 
     // MARK: - App lifecycle
 
@@ -69,8 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
-            // ⚠️ Guard on !popoverIsOpen — prevents double-reload while popover is open.
-            // reload() is called explicitly in openPopover() instead.
+            // ⚠️ Guard: prevents double-reload while popover is open.
             if !self.popoverIsOpen {
                 DispatchQueue.main.async { self.observable.reload() }
             }
@@ -248,12 +251,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
+    // MARK: - Sizing
+
+    /// Remeasures height only. Width is always fixedWidth — never fittingSize.width.
+    /// Called asynchronously after navigate() so SwiftUI has committed the new view.
+    /// ❌ NEVER call synchronously. ❌ NEVER use fittingSize.width.
+    @MainActor
+    private func remeasurePopover() {
+        guard let popover, popover.isShown, let hc = hostingController else { return }
+        let rawHeight = hc.view.fittingSize.height
+        guard rawHeight > 0 else { return }
+        let height = min(rawHeight, Self.maxContentHeight)
+        let size = NSSize(width: Self.fixedWidth, height: height)
+        hc.view.setFrameSize(size)
+        popover.contentSize = size
+    }
+
     // MARK: - Navigation
 
-    /// Swaps the hosting controller's root view. ZERO size changes. Ever.
-    /// ❌ NEVER add setFrameSize or contentSize here — popover jumps if touched while isShown.
+    /// Swaps rootView then remeasures height asynchronously.
+    /// ❌ NEVER set contentSize synchronously here — causes side-jump while isShown.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
+        guard popover?.isShown == true else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.remeasurePopover()
+        }
     }
 
     // MARK: - Popover show/hide
@@ -267,12 +290,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         }
     }
 
-    /// Opens the popover. The ONE safe site for sizing.
-    /// Reads fittingSize ONCE before .show() — no cap, no maxHeight.
-    /// fittingSize returns correct height because views use
-    /// .fixedSize(horizontal:false,vertical:true) on ScrollView VStack content.
-    /// ❌ NEVER touch size after show(). ❌ NEVER call setFrameSize while isShown.
-    /// ❌ NEVER call layoutSubtreeIfNeeded() — causes sideways jump on reopen.
+    /// Opens the popover. Reads fittingSize.height ONCE before show().
+    /// Width is always Self.fixedWidth — never fittingSize.width (ref #376).
+    /// ❌ NEVER use fittingSize.width. ❌ NEVER call layoutSubtreeIfNeeded().
     @MainActor
     private func openPopover() {
         guard let button = statusItem?.button,
@@ -282,10 +302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, @un
         else { return }
         popoverIsOpen = true
         observable.reload()
-        let fitting = hc.view.fittingSize
-        let width  = fitting.width  > 0 ? fitting.width  : Self.fixedWidth
-        let height = fitting.height > 0 ? fitting.height : 300
-        let size = NSSize(width: width, height: height)
+        let rawHeight = hc.view.fittingSize.height
+        let height = rawHeight > 0 ? min(rawHeight, Self.maxContentHeight) : 300
+        let size = NSSize(width: Self.fixedWidth, height: height)
         hc.view.setFrameSize(size)
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)

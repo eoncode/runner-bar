@@ -1,27 +1,26 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
+// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296 #376)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-// AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
+//   AppDelegate reads hc.view.fittingSize.height in openPopover() and remeasurePopover()
+//   to size the popover. Width is ALWAYS Self.fixedWidth — never fittingSize.width.
 // ❌ NEVER remove .frame(idealWidth: 420)
 // ❌ NEVER use .frame(width: 420)
 // ❌ NEVER remove maxWidth: .infinity
-// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the ScrollView or any container
-//    The height is driven by fittingSize in AppDelegate, read once before show().
-// ❌ NEVER add .onChange(of: store.actions) { visibleCount = 10 } — this resets inline
-//    job rows on every poll cycle.
+// ❌ NEVER wrap ActionsListView in ScrollView — ScrollView swallows content height,
+//    making fittingSize.height return near-zero. Height cap is in AppDelegate.
+// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to ActionsListView or root VStack.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
-// RULE 6: ActionsListView uses ScrollView with NO .frame(maxHeight:).
+// RULE 6: ActionsListView uses plain VStack — NO ScrollView.
 //
 // INLINE JOBS SPEC (#178):
 //   Show ↳ job rows ONLY for jobs with status == "in_progress".
-//   ❌ NEVER show queued jobs inline — spec says only actively running jobs expand.
-//   Filter: $0.status == "in_progress" (NOT conclusion == nil).
+// ❌ NEVER show queued jobs inline — spec says only actively running jobs expand.
 
 /// Root popover view. Shows system stats, runners, action groups, inline jobs, and scope settings.
 struct PopoverMainView: View {
@@ -59,6 +58,9 @@ struct PopoverMainView: View {
                 onSelectAction: onSelectAction
             )
         }
+        // ⚠️ idealWidth is REQUIRED for stable fittingSize.width (ref #376).
+        // maxWidth: .infinity ensures the view fills the fixed-width frame.
+        // ❌ NEVER use .frame(width: 420) — prevents dynamic height measurement.
         .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
@@ -173,6 +175,9 @@ private struct PopoverHeaderView: View {
 
 // MARK: - ActionsListView
 
+// ⚠️ NO ScrollView here — ScrollView swallows content height, preventing
+// AppDelegate.remeasurePopover() from reading correct fittingSize.height.
+// Height cap is handled by AppDelegate.maxContentHeight. (ref #376)
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
@@ -184,30 +189,28 @@ private struct ActionsListView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 4)
         } else {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(actions.prefix(visibleCount)) { actionGroup in
-                        ActionRowView(
-                            actionGroup: actionGroup,
-                            onSelect: { onSelectAction(actionGroup) }
-                        )
-                    }
-                    if actions.count > visibleCount {
-                        Button(
-                            action: { visibleCount += 10 },
-                            label: {
-                                Text("Load 10 more actions…")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                    } else if visibleCount > 10 {
-                        Text("No more actions")
-                            .font(.caption2).foregroundColor(.secondary.opacity(0.5))
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 6)
-                    }
+            VStack(spacing: 0) {
+                ForEach(actions.prefix(visibleCount)) { actionGroup in
+                    ActionRowView(
+                        actionGroup: actionGroup,
+                        onSelect: { onSelectAction(actionGroup) }
+                    )
+                }
+                if actions.count > visibleCount {
+                    Button(
+                        action: { visibleCount += 10 },
+                        label: {
+                            Text("Load 10 more actions…")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    )
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                } else if visibleCount > 10 {
+                    Text("No more actions")
+                        .font(.caption2).foregroundColor(.secondary.opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 6)
                 }
             }
             .padding(.bottom, 6)
@@ -224,7 +227,6 @@ private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
 
-    /// In-progress jobs to show inline. Only jobs actively running per spec #178.
     private var inProgressJobs: [ActiveJob] {
         actionGroup.jobs.filter { $0.status == "in_progress" }
     }
@@ -256,7 +258,6 @@ private struct ActionRowView: View {
                         Text(actionGroup.jobProgress)
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                             .frame(width: 28, alignment: .trailing)
-                        // ⚠️ width 80 required — "IN PROGRESS" is 11 chars in .caption.
                         Text(actionStatusLabel(for: actionGroup))
                             .font(.caption)
                             .foregroundColor(actionStatusColor(for: actionGroup))
@@ -270,8 +271,6 @@ private struct ActionRowView: View {
             )
             .buttonStyle(.plain)
 
-            // ⚠️ Inline job rows: in_progress jobs ONLY per spec #178.
-            // ❌ NEVER change to conclusion==nil — that shows queued jobs too.
             if !inProgressJobs.isEmpty {
                 InlineJobsView(jobs: inProgressJobs)
             }
@@ -316,8 +315,6 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobsView
 
-/// Inline ↳ job rows under a running action group.
-/// ⚠️ Receives in_progress jobs only — caller filters to status=="in_progress".
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
 
