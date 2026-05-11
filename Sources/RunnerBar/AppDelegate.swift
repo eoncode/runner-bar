@@ -4,7 +4,7 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - NavState
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #21 #13 #375 #376)
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #21 #13 #375 #376 #377)
 // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -18,17 +18,31 @@ import SwiftUI
 // OPEN SEQUENCE — must match this order exactly (❌ do NOT reorder steps):
 //   1. popoverIsOpen = true
 //   2. observable.reload()          ← loads live data into mainView()
-//   3. fittingSize.height           ← reads mainView() with live data = dynamic height
-//   4. setFrameSize + contentSize   ← safe: popover.isShown == false
-//   5. show()                       ← popover becomes visible HERE
-//   6. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
+//   3. fittingSize.height           ← reads the MEASURING VIEW with live data.
+//                                      For most states: mainView().
+//                                      For settings/detail restores: the restored view itself.
+//                                      See measurementView(for:) below.
+//   4. rootView = mainView()        ← reset root to mainView() BEFORE show()
+//                                      Required: mainView() must be root at show() time
+//                                      so the popover anchor is stable.
+//   5. setFrameSize + contentSize   ← safe: popover.isShown == false
+//   6. show()                       ← popover becomes visible HERE
+//   7. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
 //                                      navigate() never touches contentSize. Ever.
 //
-// WHY fittingSize is read from mainView() (step 3), not from the restored view:
-//   Dynamic height comes from mainView() rendering live reload() data.
-//   The restored view (Settings, JobDetail) fills the resulting frame via ScrollView.
-//   Reading fittingSize from a StepLogView (maxHeight:.infinity) = 0 → zero-height open.
-//   Reading from mainView() is always safe and gives the correct dynamic height.
+// WHY we read fittingSize from the restored view (step 3) for Settings/Detail:
+//   mainView() with 2 runners + "No recent actions" is ~180pt tall.
+//   Restoring Settings into a 180pt frame clips most of the Settings content.
+//   The restored view's own ScrollView has a .frame(maxHeight:) cap so its
+//   fittingSize is always well-defined and bounded. Safe to read before show().
+//   StepLogView is excluded because its maxHeight:.infinity makes fittingSize=0
+//   before the async log fetch completes — use parent detail view instead.
+//
+// WHY rootView is reset to mainView() at step 4 (before show()):
+//   NSPopover anchors from the hosting controller's view at show() time.
+//   mainView() has .frame(idealWidth: 480) which gives a stable, non-zero
+//   preferred width. Showing with a restored detail/settings root is safe too,
+//   but resetting to mainView first is the proven zero-regression pattern.
 //
 // ANY contentSize write (or setFrameSize) while popover.isShown == true triggers
 // a full NSPopover re-anchor. This is a hardcoded AppKit constraint (issue #375).
@@ -373,21 +387,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Opens the popover. The ONE site where contentSize is written.
     ///
-    /// This sequence matches main branch (SHA e6bb42e) exactly.
     /// ❌ NEVER reorder these steps. Each ordering decision is load-bearing.
     ///
     ///   Step 1-2: reload() loads live data into mainView().
-    ///   Step 3:   fittingSize reads mainView() with live data → DYNAMIC HEIGHT.
-    ///             This is how height varies per-open: 2 actions = short,
-    ///             20 actions = tall. fittingSize from mainView() is always valid.
-    ///   Step 4:   setFrameSize + contentSize BEFORE show() — safe, isShown==false.
-    ///   Step 5:   show() — popover becomes visible.
-    ///   Step 6:   navigate(to: restored) AFTER show() — pure rootView swap,
-    ///             zero sizing. Restored view fills the mainView frame via ScrollView.
-    ///             This is safe: navigate() never touches contentSize. Ever.
+    ///   Step 3:   Determine the measuring view:
+    ///             - For Settings/Detail restores: temporarily swap rootView to the
+    ///               restored view and read its fittingSize.height. This gives the
+    ///               correct tall height for Settings/Detail instead of mainView()'s
+    ///               short height (which would clip Settings content).
+    ///             - For all other states (main, stepLog fallbacks): read from mainView().
+    ///             StepLog states are always excluded — fittingSize=0 before async load.
+    ///   Step 4:   rootView = mainView() — reset root BEFORE show(). Load-bearing:
+    ///             mainView() must be root at show() time (proven zero-regression pattern).
+    ///   Step 5:   setFrameSize + contentSize BEFORE show() — safe, isShown==false.
+    ///   Step 6:   show() — popover becomes visible.
+    ///   Step 7:   navigate(to: restored) AFTER show() — pure rootView swap, zero sizing.
     ///
-    /// ❌ NEVER move navigate(restored) before fittingSize read.
-    ///    StepLogView as root returns fittingSize=0 → zero-height popover.
     /// ❌ NEVER use fittingSize.width — always Self.fixedWidth.
     /// ❌ NEVER call setFrameSize or set contentSize after show().
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -404,25 +419,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popoverIsOpen = true
         observable.reload()
 
-        // Step 3: fittingSize from mainView() with live data = dynamic height.
-        // Width: always fixedWidth — fittingSize.width non-deterministic w/ maxHeight:.infinity.
-        // Height: clamped [minHeight, maxHeight]. Falls back to 300 if 0 (empty state).
+        // Step 3: choose the measuring view.
+        // For Settings and fittingSize-safe detail states, temporarily install the
+        // restored view as root and measure it. This gives the correct height for
+        // those views instead of mainView()'s short height.
+        // For all other states, mainView() (already installed) is measured directly.
+        //
+        // ❌ NEVER measure StepLog states — maxHeight:.infinity → fittingSize=0.
+        // ❌ NEVER move the rootView reset (step 4) before this measurement.
+        let measureFromRestored: Bool
+        switch savedNavState {
+        case .settings, .jobDetail, .actionDetail, .actionJobDetail:
+            measureFromRestored = true
+        default:
+            measureFromRestored = false
+        }
+
+        var restoredView: AnyView?
+        if measureFromRestored, let saved = savedNavState {
+            // Temporarily install restored view to read its fittingSize.
+            // validatedView() sets savedNavState = nil as a side effect,
+            // so we capture the restored view reference before show().
+            restoredView = validatedView(for: saved)
+            if let rv = restoredView {
+                hostingController.rootView = rv
+            }
+        }
+
         let rawHeight = hostingController.view.fittingSize.height
+
+        // Step 4: reset root to mainView() BEFORE show() — proven stable anchor pattern.
+        // If we measured from a restored view above, this resets back so show()
+        // anchors from the standard mainView() root.
+        hostingController.rootView = mainView()
+
+        // Height: clamped [minHeight, maxHeight]. Falls back to 300 if 0 (empty state).
+        // Width: always fixedWidth — fittingSize.width non-deterministic w/ maxHeight:.infinity.
         let height = min(max(rawHeight > 0 ? rawHeight : 300, Self.minHeight), Self.maxHeight)
         let size = NSSize(width: Self.fixedWidth, height: height)
 
-        // Step 4: size before show — safe.
+        // Step 5: size before show — safe.
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
 
-        // Step 5: show.
+        // Step 6: show.
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
 
-        // Step 6: restore nav state AFTER show — pure rootView swap, zero sizing.
-        // The restored view fills the mainView frame; ScrollView handles overflow.
-        if let saved = savedNavState,
-           let restored = validatedView(for: saved) {
+        // Step 7: restore nav state AFTER show — pure rootView swap, zero sizing.
+        // If we pre-built restoredView above, reuse it. Otherwise check savedNavState
+        // (covers the non-measured restore path: .stepLog falls back to detailView).
+        if let rv = restoredView {
+            navigate(to: rv)
+        } else if let saved = savedNavState, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
     }
