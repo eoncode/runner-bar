@@ -20,8 +20,8 @@ import SwiftUI
 ///   Fix: pin the root frame to a fixed height. preferredContentSize.height = 440 always.
 ///   ScrollView scrolls content internally. No jump is possible.
 ///
-/// ❌ NEVER remove .frame(height: 440) from the root VStack.
-/// ❌ NEVER replace it with maxHeight: .infinity — that re-introduces the jump.
+/// ❌ NEVER remove .frame(minWidth:420, idealWidth:420, ...) from the root VStack.
+/// ❌ NEVER replace maxHeight: 440 with .infinity — that re-introduces the jump.
 /// ❌ NEVER use .fixedSize on the ScrollView inner VStack — unbounded ideal height → jump.
 /// ❌ NEVER remove idealWidth: 420 — width must be stable.
 struct SettingsView: View {
@@ -80,11 +80,11 @@ struct SettingsView: View {
                 .padding(.bottom, 16)
             }
         }
-        // ⚠️ FIXED height = 440pt. idealWidth = 420pt.
-        // preferredContentSize is stable: (420, 440+headerHeight) always.
-        // ❌ NEVER change to maxHeight: .infinity — causes jump.
-        // ❌ NEVER remove idealWidth: 420.
-        .frame(idealWidth: 420, minWidth: 420, maxWidth: 420, minHeight: 440, idealHeight: 440, maxHeight: 440)
+        // ⚠️ minWidth MUST precede idealWidth in Swift .frame() call.
+        // Fixed height pins preferredContentSize.height = 440 always — no jump.
+        // ❌ NEVER reorder or remove these constraints.
+        .frame(minWidth: 420, idealWidth: 420, maxWidth: 420,
+               minHeight: 440, idealHeight: 440, maxHeight: 440)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
