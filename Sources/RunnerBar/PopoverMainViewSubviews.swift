@@ -261,17 +261,23 @@ struct ActionRowView: View {
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
 /// This triggers a SwiftUI height change → preferredContentSize update → NSPopover
-/// re-anchor → side-jump. The expand button is disabled while isPopoverOpen == true.
-/// ❌ NEVER remove the .disabled(isPopoverOpen) modifier.
-/// ❌ NEVER mutate cap while isPopoverOpen == true.
+/// re-anchor → side-jump. The expand button is disabled while popoverOpenState.isOpen.
+///
+/// isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NOT from a plain
+/// Bool prop. A Bool prop is frozen at construction time (always false because
+/// mainView() constructs it before the popover opens). The environment object is
+/// mutated by AppDelegate before show() so the value is always live.
+///
+/// ❌ NEVER add `var isPopoverOpen: Bool` prop back.
+/// ❌ NEVER mutate cap while popoverOpenState.isOpen == true.
+/// ❌ NEVER remove .disabled(popoverOpenState.isOpen) from the expand button.
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
 struct InlineJobRowsView: View {
     let group: ActionGroup
-    /// Passed from PopoverMainView. When true, the expand button is disabled
-    /// to prevent height changes while the popover is shown.
-    var isPopoverOpen: Bool = false
+    /// Live open-state signal. Read from environment — never a plain Bool prop.
+    @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
     /// Only in-progress jobs — ❌ never include queued or completed jobs here.
@@ -286,9 +292,9 @@ struct InlineJobRowsView: View {
         if activeJobs.count > cap {
             Button(
                 action: {
-                    // ❌ NEVER remove the isPopoverOpen guard — mutating cap while
+                    // ❌ NEVER remove the isOpen guard — mutating cap while
                     // the popover is open causes a height change → side-jump.
-                    if !isPopoverOpen { cap += 4 }
+                    if !popoverOpenState.isOpen { cap += 4 }
                 },
                 label: {
                     Text("+ \(activeJobs.count - cap) more jobs\u{2026}")
@@ -297,9 +303,8 @@ struct InlineJobRowsView: View {
                 }
             )
             .buttonStyle(.plain)
-            // Belt-and-suspenders: also disable the button while open so the
-            // user cannot trigger a height change even if the guard above fires.
-            .disabled(isPopoverOpen)
+            // Belt-and-suspenders: also disable the button while open.
+            .disabled(popoverOpenState.isOpen)
         }
     }
 

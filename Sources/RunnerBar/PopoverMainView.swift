@@ -1,126 +1,88 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #375 #376 #377)
+// ⚠️ REGRESSION GUARD — frame + layout rules (ref #52 #54 #57 #375 #376 #377)
+// See also: status-bar-app-position-warning.md — Architecture 1 spec.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-//         AppDelegate reads hc.view.fittingSize in openPopover() to size the popover.
+// ARCHITECTURE IN USE: Architecture 1 — Fully Dynamic Height (SwiftUI-driven)
+//
+// RULE 1: Root VStack MUST use .frame(idealWidth: 480)
 //         ❌ NEVER remove .frame(idealWidth: 480)
-//         ❌ NEVER use .frame(width: 480)
-//         ❌ NEVER remove maxWidth: .infinity
-//         ❌ NEVER add .frame(height:) to root VStack
+//         ❌ NEVER use .frame(width: 480) — layout constraint ≠ ideal size
+//         ❌ NEVER use .frame(maxWidth: .infinity) as root modifier
+//         ❌ NEVER add .frame(height:) to root VStack — kills dynamic height
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
-// RULE 4: NEVER use .fixedSize() on the root VStack or any scroll container.
+// RULE 4: NEVER use .fixedSize() on the root VStack or any container that
+//         wraps ALL content — only use it on the action list itself.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
-// RULE 6: actionsSection MUST use .fixedSize(horizontal: false, vertical: true)
-//         + .frame(maxHeight: maxScrollHeight, alignment: .top).
+// RULE 6: Action list MUST use .fixedSize(horizontal: false, vertical: true)
+//         + .frame(maxHeight: maxListHeight, alignment: .top)
+//         ❌ NEVER wrap the action list in ScrollView — ScrollView reports
+//            infinite preferred height to SwiftUI → breaks preferredContentSize
+//            → popover grows to full screen or collapses.
+//         ❌ NEVER remove .fixedSize(horizontal: false, vertical: true) —
+//            without it, the list doesn't report its natural height.
+//         ❌ NEVER use .frame(height:) on the list — that is fixed, not dynamic.
+//         The cap (maxListHeight) prevents the popover growing off-screen.
+//         It is computed from NSScreen.main so it adapts to different screens.
 //
-//         ❌ NEVER wrap actionsSection in a ScrollView.
-//         WHY: ScrollView reports INFINITE fittingSize.height regardless of any
-//         .frame(maxHeight:) cap applied to it. AppDelegate.openPopover() calls
-//         CATransaction.flush() then reads hc.view.fittingSize.height to size the
-//         popover BEFORE show(). With a ScrollView present, fittingSize.height equals
-//         the full screen height (~900 pt) even with 2 rows, so the popover opens
-//         massively oversized on every click.
+// RULE 7: The 5 s timer calls store.reload().
+//         The timer is PAUSED while the popover is open (popoverOpenState.isOpen == true)
+//         and RESUMED when it closes. This prevents spurious SwiftUI layout passes
+//         that change preferredContentSize.height while shown → visual jump.
+//         SystemStatsViewModel is also paused/resumed the same way.
+//         ❌ NEVER remove the pause/resume logic in onChange(of: popoverOpenState.isOpen).
 //
-//         .fixedSize(horizontal: false, vertical: true) tells SwiftUI to measure the
-//         view at its natural (ideal) height. Combined with .frame(maxHeight:), the
-//         layout height is capped but fittingSize.height correctly reflects the smaller
-//         of natural-content-height and maxScrollHeight.
+// RULE 8: idealWidth is 480 (was 420). AppDelegate.idealWidth is also 480.
+//         ❌ NEVER change one without changing the other.
 //
-//         The pagination loadMoreButton limits visible rows to 10 at a time so the
-//         natural content height stays bounded without needing a ScrollView for overflow.
-//
-//         ❌ NEVER remove .fixedSize — fittingSize will return 0 or screenHeight.
-//         ❌ NEVER remove .frame(maxHeight: maxScrollHeight) — height explosion with
-//            30+ cached action groups.
-//         ❌ NEVER use a fixed constant for maxScrollHeight — must adapt to screen size.
-//         If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//         is major major major.
-//
-// RULE 7: The 5 s timer calls LocalRunnerStore.shared.refresh() + store.reload().
-//         BOTH are gated behind !isPopoverOpen.
-//
-//         LocalRunnerStore.shared.refresh() updates CPU/MEM metrics for local runners.
-//         It can indirectly trigger a SwiftUI layout pass through PopoverLocalRunnerRow
-//         which observes LocalRunnerStore. With sizingOptions=[], this does NOT propagate
-//         to NSPopover — BUT as a belt-and-suspenders safety measure, BOTH calls are
-//         gated behind !isPopoverOpen.
-//
-//         store.reload() mutates @ObservedObject store → SwiftUI layout pass →
-//         hosting controller updates intrinsicContentSize. With sizingOptions=[]
-//         this does NOT reach NSPopover. But it is still wasteful while shown.
-//
-//         ❌ NEVER call store.reload() while isPopoverOpen == true.
-//         ❌ NEVER call LocalRunnerStore.shared.refresh() while isPopoverOpen == true.
-//         ❌ NEVER remove the !isPopoverOpen guard from the timer.
-//         If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//         is major major major.
-//
-// RULE 8: idealWidth is 480. AppDelegate.idealWidth is also 480.
-//         ❌ NEVER change one without changing the other or fittingSize height
-//         will be computed at the wrong width, wrapping text and mis-sizing the popover.
-//
-// RULE 9: systemStats MUST be paused while the popover is open.
-//         SystemStatsViewModel fires a 2-second timer that publishes @Published var stats
-//         via DispatchQueue.main.async. Even with sizingOptions=[], this mutates @StateObject
-//         → SwiftUI re-render → NSHostingController.view updates intrinsicContentSize →
-//         NSPopover re-reads the content view frame and RE-ANCHORS → side-jump every 2s.
-//         sizingOptions=[] prevents preferredContentSize propagation but does NOT prevent
-//         NSPopover from observing its contentViewController.view's intrinsicContentSize
-//         directly via AppKit's window resize machinery.
-//
-//         Fix: .onChange(of: isPopoverOpen) gates systemStats.start()/stop().
-//         When isPopoverOpen becomes true → systemStats.stop().
-//         When isPopoverOpen becomes false → systemStats.start().
-//         The header shows last-known stats while open (stale by at most 2s — imperceptible).
-//
-//         ❌ NEVER remove the .onChange(of: isPopoverOpen) systemStats gate.
-//         ❌ NEVER call systemStats.start() while isPopoverOpen == true.
-//         If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//         is major major major.
+// RULE 9: isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NEVER
+//         from a plain Bool prop. A Bool prop is frozen at construction time (always
+//         false). The environment object is mutated by AppDelegate before show() so
+//         the view always sees the live value.
+//         ❌ NEVER add `var isPopoverOpen: Bool` prop back to this view.
+//         ❌ NEVER pass isPopoverOpen as a plain Bool from AppDelegate.mainView().
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
+/// Root popover view — unified scrollable Actions list per issue #294.
+/// Subviews are in PopoverMainViewSubviews.swift to satisfy SwiftLint
+/// file_length (<400) and type_body_length (<200) limits.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
-    /// Set by AppDelegate. When true, store.reload() and
-    /// LocalRunnerStore.shared.refresh() are suppressed in the timer,
-    /// AND systemStats is paused (RULE 9).
-    /// ❌ NEVER remove this property — it is the guard that prevents layout passes
-    /// while the popover is shown. See RULE 7 and RULE 9 above.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
-    var isPopoverOpen: Bool = false
+
+    /// Live open-state signal injected by AppDelegate via .environmentObject(popoverOpenState).
+    /// ⚠️ RULE 9: NEVER replace with a plain Bool prop — see regression guard above.
+    @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
-    /// Number of action groups currently visible in the paginated list.
     @State private var visibleCount: Int = 10
     /// Timer that refreshes runner metrics (CPU/MEM) every 5 s.
-    /// Kept as @State so it is tied to this view instance, not a global.
+    /// Paused while popover is open. Resumed on close.
     /// ❌ NEVER remove — without this, runner rows show stale CPU/MEM values.
     @State private var runnerRefreshTimer: Timer?
 
-    /// Maximum height for the actions list.
-    /// Derived from the visible screen area so the popover never overflows off-screen.
-    /// The 120 pt offset accounts for header + divider + runner rows + comfortable gap.
-    /// ❌ NEVER replace with a fixed constant — must adapt to screen height.
-    private var maxScrollHeight: CGFloat {
-        (NSScreen.main?.visibleFrame.height ?? 700) - 120
+    /// Maximum height cap for the action list.
+    /// Derived from visible screen area minus header/divider/runner-row space.
+    /// ❌ NEVER replace with a fixed constant — adapts to screen height.
+    private var maxListHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 700) - 160
     }
 
-    /// Root layout: header → divider → optional rate-limit banner → runners → actions list.
+    /// Root layout: header → divider → optional rate-limit banner → runners → action list.
+    /// ⚠️ .frame(idealWidth: 480) on the VStack is ARCHITECTURE 1's key constraint.
+    /// It pins preferredContentSize.width = 480 regardless of content or nav state.
+    /// Height is unconstrained here — the action list's .frame(maxHeight:) provides the cap.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
@@ -132,46 +94,48 @@ struct PopoverMainView: View {
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
-                .onAppear { Task { LocalRunnerStore.shared.refresh() } }
-            // ⚠️ RULE 6: fixedSize + maxHeight cap is LOAD-BEARING — see regression guard above.
-            // ❌ NEVER wrap in ScrollView — ScrollView reports infinite fittingSize.height.
-            // ❌ NEVER remove .fixedSize — fittingSize returns 0 or screenHeight without it.
-            // ❌ NEVER remove .frame(maxHeight:) — height explosion with many action groups.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
+                .onAppear { Task { @MainActor in LocalRunnerStore.shared.refresh() } }
+            // ⚠️ RULE 6: .fixedSize + .frame(maxHeight:) is LOAD-BEARING.
+            // .fixedSize(horizontal:false, vertical:true) — lets list report natural height.
+            // .frame(maxHeight: maxListHeight) — caps growth to avoid off-screen overflow.
+            // ❌ NEVER replace with ScrollView — breaks preferredContentSize.
+            // ❌ NEVER remove .fixedSize — list collapses to zero height.
+            // ❌ NEVER use .frame(height:) — that is fixed, not dynamic.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+            // UNDER ANY CIRCUMSTANCE.
             actionsSection
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxHeight: maxScrollHeight, alignment: .top)
+                .frame(maxHeight: maxListHeight, alignment: .top)
         }
-        // RULE 1: idealWidth:480 pins fittingSize.width = 480 always.
-        // ❌ NEVER add maxHeight here. ❌ NEVER change idealWidth.
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        // ⚠️ RULE 1: idealWidth:480 is ARCHITECTURE 1's anti-jump constraint.
+        // ❌ NEVER remove or change to .frame(width:480) or .frame(maxWidth:.infinity).
+        .frame(idealWidth: 480)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            // Start systemStats only when popover is not open.
-            // isPopoverOpen is always false on first appear — this is always safe.
-            // RULE 9: systemStats must not run while popover is open.
-            if !isPopoverOpen { systemStats.start() }
+            systemStats.start()
             startRunnerRefreshTimer()
         }
         .onDisappear {
             systemStats.stop()
             stopRunnerRefreshTimer()
         }
-        // ⚠️ RULE 9: Gate systemStats on isPopoverOpen.
-        // When popover opens → systemStats.stop() — no @Published mutations while shown.
-        // When popover closes → systemStats.start() — header stats resume updating.
-        // ❌ NEVER remove this .onChange block.
-        // ❌ NEVER move systemStats.start() outside the else branch (must never start while open).
-        // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
+        // ⚠️ RULE 7 & RULE 9: Pause timers while open, resume when closed.
+        // SystemStatsViewModel fires @Published every 2 s — each publish triggers
+        // a SwiftUI layout pass → preferredContentSize.height recalculated → potential
+        // 1-pt rounding change → NSPopover resize → visible jump.
+        // Stopping both timers while open eliminates all spurious layout passes.
+        // ❌ NEVER remove this onChange block.
+        // ❌ NEVER gate only one of the two timers — both must be stopped.
+        // ⚠️ macOS 13-compatible single-value onChange.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
-        .onChange(of: isPopoverOpen) { open in
+        // UNDER ANY CIRCUMSTANCE.
+        .onChange(of: popoverOpenState.isOpen) { open in
             if open {
-                systemStats.stop()   // ✅ pause: no @Published mutation → no intrinsicContentSize change → no re-anchor
+                systemStats.stop()
+                stopRunnerRefreshTimer()
             } else {
-                systemStats.start()  // ✅ resume: header stats live again when popover is closed
+                systemStats.start()
+                startRunnerRefreshTimer()
             }
         }
         // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
@@ -181,26 +145,16 @@ struct PopoverMainView: View {
     // MARK: - Runner refresh timer (RULE 7)
 
     private func startRunnerRefreshTimer() {
-        stopRunnerRefreshTimer() // guard against double-start
+        stopRunnerRefreshTimer()
         runnerRefreshTimer = Timer.scheduledTimer(
             withTimeInterval: 5,
             repeats: true
-        ) { _ in
-            // ✅ BOTH calls gated behind !isPopoverOpen (RULE 7).
-            // LocalRunnerStore.shared.refresh() — updates local runner CPU/MEM metrics.
-            // store.reload()                   — mutates @ObservedObject store.
-            // Neither must fire while the popover is open:
-            //   - store.reload() → layout pass → intrinsicContentSize change.
-            //   - LocalRunnerStore.shared.refresh() → can trigger layout pass through
-            //     PopoverLocalRunnerRow which observes LocalRunnerStore.
-            // Belt-and-suspenders: gate both. Zero cost when popover is closed.
-            // ❌ NEVER remove this guard. See RULE 7 in the regression guard above.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
-            // comment is removed is major major major.
-            if !isPopoverOpen {
+        ) { [self] _ in
+            // Only fires while popover is closed (timer is stopped on open).
+            // store.reload() is safe here — popover is not shown.
+            store.reload()
+            Task { @MainActor in
                 LocalRunnerStore.shared.refresh()
-                store.reload()
             }
         }
     }
@@ -233,9 +187,12 @@ struct PopoverMainView: View {
             } else {
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, onSelect: { onSelectAction(group) })
+                    ActionRowView(
+                        group: group,
+                        onSelect: { onSelectAction(group) }
+                    )
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(group: group, isPopoverOpen: isPopoverOpen)
+                        InlineJobRowsView(group: group)
                     }
                 }
                 loadMoreButton

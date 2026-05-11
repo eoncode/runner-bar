@@ -16,7 +16,7 @@ import SwiftUI
 // THE CORRECT ARCHITECTURE (zero-jump, true dynamic height):
 //
 //   sizingOptions = .preferredContentSize  ← REQUIRED for dynamic height.
-//   NSHostingController reads SwiftUI’s idealSize (set via .frame(idealWidth:480))
+//   NSHostingController reads SwiftUI's idealSize (set via .frame(idealWidth:480))
 //   and publishes it as preferredContentSize. NSPopover auto-tracks this.
 //   preferredContentSize.width = always 480 (all views declare idealWidth:480).
 //   preferredContentSize.height = varies freely with content = dynamic height.
@@ -48,19 +48,25 @@ import SwiftUI
 //   contentSize.WIDTH changes. Height changes are side-jump-free.
 //   This is Architecture 1 from status-bar-app-position-warning.md.
 //
-//   WHY NO DATA POLL GUARD IS NEEDED (Architecture 1 difference from Arch 2):
-//   In Architecture 1, store.reload() triggering a SwiftUI layout pass is SAFE.
-//   The layout pass updates preferredContentSize.height (content-driven dynamic height).
-//   That is exactly what we want. Width stays at 480. No jump.
-//   The only thing to avoid is mutating @State that causes HEIGHT changes while shown
-//   AND where those height changes are unwanted (e.g. InlineJobRowsView cap expansion).
+//   WHY WE STOP TIMERS WHILE THE POPOVER IS OPEN:
+//   SystemStatsViewModel fires a @Published update every 2 s. Each publish
+//   triggers a SwiftUI layout pass. Under Architecture 1 that re-evaluates
+//   preferredContentSize.height. If the recalculated height differs even by
+//   1 pt (rounding, font metrics) NSPopover animates a resize → visible jump.
+//   Stopping the timer while open prevents spurious layout passes.
+//   The runner-refresh timer (5 s) is also stopped for the same reason.
+//   Both are restarted in popoverDidClose so background state stays fresh.
+//
+//   PopoverOpenState is an ObservableObject injected as an @EnvironmentObject
+//   so PopoverMainView always reads the live value — never a stale Bool copy
+//   from the time mainView() was called (which was always false).
 //
 //   OPEN SEQUENCE (correct order, do NOT reorder):
-//   1. popoverIsOpen = true
-//   2. observable.reload()       ← loads live data
-//   3. show()                    ← NSHostingController renders with live data
-//                                   preferredContentSize propagates automatically
-//   4. navigate(to: restored)    ← rootView swap AFTER show. Zero sizing. Safe.
+//   1. popoverOpenState.isOpen = true  ← environment sees live value immediately
+//   2. observable.reload()             ← loads live data
+//   3. show()                          ← NSHostingController renders with live data
+//                                         preferredContentSize propagates automatically
+//   4. navigate(to: restored)          ← rootView swap AFTER show. Zero sizing. Safe.
 //
 // ❌ NEVER set sizingOptions = [] — breaks height
 // ❌ NEVER manually set contentSize anywhere (not even in applicationDidFinishLaunching)
@@ -76,9 +82,30 @@ import SwiftUI
 //    StepLogView has maxHeight:.infinity — may collapse popover if restored
 // ❌ NEVER remove nonisolated from enrichStepsIfNeeded
 //    Called from DispatchQueue.global — pure network I/O, no @MainActor state
+// ❌ NEVER pass isPopoverOpen as a plain Bool prop to PopoverMainView.
+//    A Bool prop is a value copy captured at mainView() call time (always false).
+//    Use PopoverOpenState @EnvironmentObject instead — always live.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
+
+// MARK: - PopoverOpenState
+
+/// Shared live signal for popover open/closed state.
+///
+/// Injected as @EnvironmentObject so ALL views always read the current value —
+/// never a stale Bool captured when mainView() was called.
+///
+/// ⚠️ REGRESSION GUARD: Do NOT replace this with a plain `var isPopoverOpen: Bool`
+/// prop on PopoverMainView. A prop is a value copy frozen at construction time;
+/// it is always `false` because mainView() / popoverDidClose() both construct
+/// the view before the popover is shown. The environment object is mutated by
+/// AppDelegate *before* show() is called, so the view sees the correct value.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE.
+final class PopoverOpenState: ObservableObject {
+    @Published var isOpen: Bool = false
+}
 
 private enum NavState {
     case main
@@ -98,7 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
-    private var popoverIsOpen = false
+
+    /// Shared live open-state signal. Injected into SwiftUI environment.
+    /// ⚠️ NEVER replace with a plain Bool prop — see PopoverOpenState doc above.
+    private let popoverOpenState = PopoverOpenState()
 
     /// Canonical popover width. Must match idealWidth in ALL views in the nav tree.
     /// ❌ NEVER change without updating idealWidth in PopoverMainView, SettingsView,
@@ -143,22 +173,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             self.statusItem?.button?.image = makeStatusIcon(
                 for: RunnerStore.shared.aggregateStatus
             )
-            // In Architecture 1, store.reload() while popover is open is SAFE.
-            // It triggers a SwiftUI layout pass → preferredContentSize.height updates →
-            // dynamic height. Width stays at 480. No jump.
-            // However, we still gate it to avoid double-updates during the open sequence.
-            if !self.popoverIsOpen { self.observable.reload() }
+            // Only reload while popover is closed to avoid double-updates during open sequence.
+            if !self.popoverOpenState.isOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
     }
 
     // MARK: - NSPopoverDelegate
 
-    /// Resets navigation state after the popover closes.
+    /// Called just before the popover becomes visible.
+    /// Mark open BEFORE show() so the environment value is live when SwiftUI renders.
+    /// ❌ NEVER move popoverOpenState.isOpen = true to after show().
+    func popoverWillShow(_ notification: Notification) {
+        // Intentionally empty — open state is set in openPopover() before show().
+        // This delegate method exists as a hook for future use.
+    }
+
+    /// Resets navigation state and open flag after the popover closes.
     /// ❌ NEVER call reload() here — causes double-reload on next open.
     /// ❌ NEVER set contentSize here — not needed in Architecture 1.
     func popoverDidClose(_ notification: Notification) {
-        popoverIsOpen = false
+        popoverOpenState.isOpen = false
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.hostingController?.rootView = self.mainView()
@@ -182,29 +217,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func mainView() -> AnyView {
         savedNavState = nil
-        return AnyView(PopoverMainView(
-            store: observable,
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.popoverIsOpen else { return }
-                        self.navigate(to: self.detailView(job: enriched))
+        return AnyView(
+            PopoverMainView(
+                store: observable,
+                onSelectJob: { [weak self] job in
+                    guard let self else { return }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let enriched = self.enrichStepsIfNeeded(job)
+                        DispatchQueue.main.async {
+                            guard self.popoverOpenState.isOpen else { return }
+                            self.navigate(to: self.detailView(job: enriched))
+                        }
                     }
+                },
+                onSelectAction: { [weak self] group in
+                    guard let self else { return }
+                    let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                    self.navigate(to: self.actionDetailView(group: latest))
+                },
+                onSelectSettings: { [weak self] in
+                    guard let self else { return }
+                    self.navigate(to: self.settingsView())
                 }
-            },
-            onSelectAction: { [weak self] group in
-                guard let self else { return }
-                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
-            },
-            onSelectSettings: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            },
-            isPopoverOpen: popoverIsOpen
-        ))
+            )
+            .environmentObject(popoverOpenState)
+        )
     }
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
@@ -220,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
-                        guard self.popoverIsOpen else { return }
+                        guard self.popoverOpenState.isOpen else { return }
                         self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
                     }
                 }
@@ -355,10 +392,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Width is stable at Self.idealWidth (480) because all views declare .frame(idealWidth:480).
     /// No contentSize.WIDTH change = no re-anchor = no side-jump. Ever.
     ///
+    /// popoverOpenState.isOpen is set to true BEFORE show() so that by the time
+    /// SwiftUI renders the first frame, the environment already reflects open state.
+    /// This ensures SystemStatsViewModel and the runner-refresh timer are paused
+    /// before any layout pass occurs.
+    ///
     /// ❌ NEVER add setFrameSize here.
     /// ❌ NEVER add contentSize = here.
     /// ❌ NEVER add sizingOptions = [] here.
     /// ❌ NEVER measure fittingSize here (not needed in Architecture 1).
+    /// ❌ NEVER move popoverOpenState.isOpen = true to after show().
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -367,7 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
               button.window != nil,
               let popover
         else { return }
-        popoverIsOpen = true
+        popoverOpenState.isOpen = true
         observable.reload()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
