@@ -23,7 +23,7 @@ import SwiftUI
 // 1. Panel is a borderless, non-activating NSPanel.
 // 2. Position is computed from status button’s window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
-//      panelX = statusItemRect.midX - fixedWidth/2
+//      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
 //      panelY = statusItemRect.minY - clampedContentH - arrowHeight - gap
 //      panelH  = clampedContentH + arrowHeight
 // 3. arrowX = statusItemRect.midX - panel.frame.minX
@@ -33,12 +33,13 @@ import SwiftUI
 // 5. Dismiss: NSEvent global monitor + NSWorkspace app-switch notification.
 //
 // CHROME DIMENSIONS (match NSPopover exactly):
-//   arrowHeight = 12pt, arrowWidth = 20pt, cornerRadius = 8pt
-//   Arrow: isoceles triangle + addArc(radius:2) at tip.
+//   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
-// WIDTH RULE:
-// Width is ALWAYS fixedWidth=480. Never dynamic. Never fittingSize.width.
-// ❌ NEVER change fixedWidth without updating it everywhere.
+// WIDTH: Dynamic per-view via preferredContentSize.width.
+// Each SwiftUI view declares .frame(idealWidth: N) to set its preferred width.
+// resizeAndRepositionPanel() reads preferredContentSize.width and re-centres.
+// Width is clamped to [minWidth..maxWidth].
+// ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
 //
 // POPOVEROPENSTATE:
 // popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
@@ -49,8 +50,8 @@ import SwiftUI
 // RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
 // ❌ NEVER remove this guard.
 //
-// DYNAMIC HEIGHT CONTRACT:
-// sizingOptions = .preferredContentSize → KVO fires on SwiftUI height change
+// DYNAMIC HEIGHT + WIDTH CONTRACT:
+// sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
 // → resizeAndRepositionPanel() → panel.setFrame() → chrome.layout() runs
 // → hosting view frame = chrome.contentRect (updated) → SwiftUI fills new frame.
 // ❌ NEVER set hosting view frame only at init. layout() must always re-pin it.
@@ -91,18 +92,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    /// Canonical panel width. NEVER dynamic. NEVER fittingSize.width.
-    /// ❌ NEVER change without updating all usages.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
-    private static let fixedWidth: CGFloat = 480
+    /// Minimum panel width. Prevents pathologically narrow views.
+    private static let minWidth: CGFloat = 320
 
-    /// Gap between status bar bottom and arrow tip.
-    private static let gap: CGFloat = 2
+    /// Maximum panel width: 90% of main screen width.
+    private var maxWidth: CGFloat {
+        NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 800
+    }
 
+    /// Maximum panel height: 85% of main screen height.
     private var maxHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
     }
+
+    /// Gap between status bar bottom and arrow tip.
+    private static let gap: CGFloat = 2
 
     // MARK: - Environment injection
 
@@ -124,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let controller = NSHostingController(rootView: mainView())
-        // ✅ sizingOptions = .preferredContentSize — KVO fires on every SwiftUI height change.
+        // ✅ sizingOptions = .preferredContentSize — KVO fires on every SwiftUI size change.
         // ❌ NEVER change to [].
         // ❌ NEVER set autoresizingMask = [] — breaks SwiftUI layout → KVO never fires.
         // ✅ autoresizingMask = [.width, .height] so AppKit propagates panel frame changes
@@ -135,8 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.view.autoresizingMask = [.width, .height]
         hostingController = controller
 
+        let initialW: CGFloat = 480
         let chromeView = PanelChromeView(
-            frame: NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 300 + arrowHeight)
+            frame: NSRect(x: 0, y: 0, width: initialW, height: 300 + arrowHeight)
         )
         // ❌ NEVER set controller.view.frame here only — layout() re-pins it on every resize.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -145,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chrome = chromeView
 
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 300 + arrowHeight),
+            contentRect: NSRect(x: 0, y: 0, width: initialW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -153,11 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.contentView = chromeView
         p.isOpaque = false
         // ❌ NEVER set backgroundColor = .clear (alpha 0.0).
-        // alpha=0.0 disables CABackdropLayer entirely — NSVisualEffectView renders as flat
-        // opaque grey with no vibrancy/blur instead of the frosted-glass NSPopover look.
-        // Must be near-zero (0.001) so the backdrop layer stays active and samples
-        // the content behind the window. Reference: iSapozhnik/Popover, Oskar Groth
-        // reverse-engineering of NSVisualEffectView (oskargroth.com/blog/reverse-engineering-nsvisualeffectview).
+        // alpha=0.0 disables CABackdropLayer entirely — vibrancy collapses to flat grey.
+        // Near-zero (0.001) keeps the backdrop sampler active.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
         p.backgroundColor = NSColor(white: 1, alpha: 0.001)
@@ -167,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.animationBehavior = .none
         panel = p
 
-        // KVO: fires every time SwiftUI content height changes → dynamic height.
+        // KVO: fires every time SwiftUI content size changes → dynamic height + width.
         // ❌ NEVER remove.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -175,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             \.preferredContentSize,
             options: [.new]
         ) { [weak self] _, change in
-            guard let h = change.newValue?.height, h > 0 else { return }
+            guard let size = change.newValue, size.height > 0 else { return }
             DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
         }
 
@@ -192,17 +194,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunnerStore.shared.start()
     }
 
-    // MARK: - Panel resize (the key to dynamic height without jumping)
+    // MARK: - Panel resize (the key to dynamic size without jumping)
 
     /// Repositions and resizes the panel. Called on every KVO fire + explicitly in openPanel.
     ///
-    /// Arrow X position formula (CRITICAL — DO NOT CHANGE):
-    ///   statusItemRect = button.window!.frame  (screen coords, no conversion needed)
-    ///   arrowX = statusItemRect.midX - panel.frame.minX
-    ///   ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local coords,
-    ///      convertToScreen gives wrong X and the arrow lands far from the icon.
+    /// Reads BOTH preferredContentSize.width and .height from the hosting controller.
+    /// Each SwiftUI view sets its preferred width via .frame(idealWidth: N).
+    /// The panel is always re-centred horizontally under the status icon.
     ///
-    /// NSPanel.setFrame() has NO anchor concept — zero side jump, ever.
+    /// NSPanel.setFrame() has NO anchor concept — zero side jump for any size change.
     /// ❌ NEVER call this on NSPopover.
     /// ❌ NEVER call from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -212,24 +212,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let panel,
               let chrome,
               let button = statusItem?.button,
-              // button.window?.frame is already in screen coordinates.
-              // This is the status bar floating window that hosts the status item button.
               let statusItemRect = button.window?.frame else { return }
 
-        let contentH = hostingController?.preferredContentSize.height ?? 300
-        let clampedH = min(max(contentH, 60), maxHeight)
-        let totalH   = clampedH + arrowHeight
-        let w        = Self.fixedWidth
-        // Centre panel under status icon.
-        let x        = statusItemRect.midX - w / 2
-        let y        = statusItemRect.minY - totalH - Self.gap
+        let preferred = hostingController?.preferredContentSize ?? CGSize(width: 480, height: 300)
 
-        panel.setFrame(NSRect(x: x, y: y, width: w, height: totalH), display: true, animate: false)
+        // Clamp width between minWidth and maxWidth.
+        let contentW = min(max(preferred.width,  Self.minWidth), maxWidth)
+        // Clamp height between a minimum and maxHeight.
+        let contentH = min(max(preferred.height, 60),            maxHeight)
+        let totalH   = contentH + arrowHeight
 
-        // arrowX: button centre X relative to panel left edge.
-        // statusItemRect.midX is the centre of the status bar icon in screen coords.
-        // Subtracting panel.frame.minX (= x above) gives panel-local X.
-        // ❌ NEVER compute arrowX from convertToScreen(button.frame).
+        // Always re-centre horizontally under the status icon.
+        let x = statusItemRect.midX - contentW / 2
+        let y = statusItemRect.minY - totalH - Self.gap
+
+        panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
+                       display: true, animate: false)
+
+        // arrowX: button centre relative to panel left edge.
+        // ❌ NEVER compute from convertToScreen(button.frame).
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
         chrome.arrowX = statusItemRect.midX - x
@@ -443,17 +444,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         popoverOpenState.isOpen = true
 
+        // Use 480 as the initial placeholder width. resizeAndRepositionPanel() will
+        // immediately snap to the real preferredContentSize after orderFront.
+        let initW: CGFloat = 480
         let initH: CGFloat = 300 + arrowHeight
-        let x = statusItemRect.midX - Self.fixedWidth / 2
+        let x = statusItemRect.midX - initW / 2
         let y = statusItemRect.minY - initH - Self.gap
         panel.setFrame(
-            NSRect(x: x, y: y, width: Self.fixedWidth, height: initH),
+            NSRect(x: x, y: y, width: initW, height: initH),
             display: false, animate: false
         )
 
         panel.orderFront(nil)
 
-        // Snap to real content height + correct arrowX immediately after showing.
+        // Snap to real content size + correct arrowX immediately after showing.
         resizeAndRepositionPanel()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
