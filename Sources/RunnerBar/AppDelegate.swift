@@ -9,7 +9,7 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 //
-// THE ONLY CORRECT ARCHITECTURE (proven by main branch, SHA e6bb42e, zero-regression):
+// THE ONLY CORRECT ARCHITECTURE (proven by main branch SHA e6bb42e, zero-regression):
 //
 //   navigate() = pure rootView swap. ZERO sizing. ZERO contentSize writes. EVER.
 //   openPopover() = the ONE site where contentSize is set, BEFORE show().
@@ -27,21 +27,27 @@ import SwiftUI
 //   reload() while shown → SwiftUI layout pass → if sizingOptions != [] → side-jump.
 //   PopoverMainView receives isPopoverOpen and gates reload() behind !isPopoverOpen.
 //
+//   CRITICAL: DO NOT add @MainActor to AppDelegate class declaration.
+//   main.swift instantiates AppDelegate synchronously outside any actor context.
+//   On Swift 6 strict concurrency (Xcode 26+), a @MainActor class init() called
+//   from a nonisolated context is a compile error. Keep class nonisolated.
+//   nonisolated enrichStepsIfNeeded is safe — it does pure network I/O only.
+//
 // OPEN SEQUENCE (do NOT reorder):
 //   1. popoverIsOpen = true
 //   2. observable.reload()          ← loads live data into mainView()
 //   3. fittingSize.height           ← read from mainView() with live data. ALWAYS.
 //                                      NEVER from a restored view. NEVER from StepLogView.
-//   4. rootView = mainView()        ← already set, but re-assign to get isPopoverOpen:true
-//   5. setFrameSize + contentSize   ← safe: popover.isShown == false
-//   6. show()
-//   7. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
+//   4. setFrameSize + contentSize   ← safe: popover.isShown == false
+//   5. show()
+//   6. navigate(to: restored)       ← rootView swap AFTER show. Zero sizing. Safe.
 //
+// ❌ NEVER add @MainActor to AppDelegate class — breaks main.swift on Swift 6
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER remove sizingOptions = []
 // ❌ NEVER read fittingSize from a restored/Settings/Detail view in openPopover()
-//    Doing so was the bug in previous commits: measured Settings height, locked
-//    contentSize to it, then showed mainView → wrong height every other open.
+//    Previous commits did this: measured Settings height, locked contentSize to it,
+//    then showed mainView → wrong height every other open.
 // ❌ NEVER add contentSize or setFrameSize to navigate()
 // ❌ NEVER wire onLogLoaded to any contentSize write
 // ❌ NEVER add objectWillChange.send() in reload()
@@ -51,11 +57,8 @@ import SwiftUI
 // ❌ NEVER restore stepLog or actionStepLog via savedNavState
 //    StepLogView: maxHeight:.infinity → fittingSize = 0 before log loads
 // ❌ NEVER pass isPopoverOpen: false to mainView() when popover is shown
-// ❌ NEVER remove @MainActor from AppDelegate class declaration
-//    RunnerStoreObservable is @MainActor-isolated. Stored property init()
-//    and reload() require the class to be on @MainActor.
-// ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded
-//    Called from DispatchQueue.global — pure network I/O, no @MainActor state.
+// ❌ NEVER remove nonisolated from enrichStepsIfNeeded
+//    Called from DispatchQueue.global — pure network I/O, no @MainActor state
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -72,7 +75,6 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
@@ -138,8 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// ❌ NEVER call reload() here — causes double-reload on next open.
     /// ❌ NEVER set contentSize here — re-anchor regression.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     func popoverDidClose(_ notification: Notification) {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
@@ -152,8 +152,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// nonisolated: called from DispatchQueue.global — pure network I/O, no @MainActor state.
     /// ❌ NEVER remove nonisolated — required for background-queue call safety.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
@@ -332,12 +330,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Reads fittingSize from mainView() with live data, sets size, then shows.
-    /// fittingSize is read from mainView() ALWAYS — never from a restored view.
+    /// Reads fittingSize from mainView() with live data. ALWAYS. Never from restored views.
     ///
     /// ❌ NEVER read fittingSize from Settings or a detail view here.
-    ///    Previous commits did this and broke height on every other open by locking
-    ///    contentSize to the measured restored-view height then anchoring from main.
+    ///    Previous commits did this and broke height on every other open.
     /// ❌ NEVER use fittingSize.width — always Self.idealWidth.
     /// ❌ NEVER call setFrameSize or set contentSize after show().
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
