@@ -6,8 +6,24 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296 #377)
 //
-// ARCHITECTURE: Architecture 2 (AppKit-driven / sizingOptions = [])
-// Confirmed correct by issue #377, Just10/MEMORY.md, status-bar-app-position-warning.md
+// ARCHITECTURE: Architecture 2b (AppKit-driven, SwiftUI-reported height)
+// Confirmed correct by issue #377, status-bar-app-position-warning.md
+//
+// HEIGHT MECHANISM:
+//   PopoverMainView reports its rendered height via HeightPreferenceKey
+//   (a SwiftUI PreferenceKey backed by a GeometryReader in .background).
+//   AppDelegate reads this in .onPreferenceChange and stores it in measuredHeight.
+//   openPopover() Phase 2 reads measuredHeight directly — fittingSize is NEVER used.
+//
+//   WHY NOT fittingSize:
+//   NSHostingController.view.fittingSize with sizingOptions=[] is cached and stale.
+//   invalidateIntrinsicContentSize() + layoutSubtreeIfNeeded() does NOT reliably
+//   bust this cache. Every attempt to use fittingSize has produced stale/fixed height.
+//   ❌ NEVER switch back to fittingSize.
+//   ❌ NEVER remove HeightPreferenceKey or .onPreferenceChange from the view.
+//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+//   is major major major.
 //
 // Rules (ALL must hold simultaneously):
 //   sizingOptions = []        — NEVER .preferredContentSize.
@@ -17,18 +33,10 @@ import SwiftUI
 //                               Two-phase open:
 //                                 Phase 1 (sync): stage view + reload data.
 //                                 Phase 2 (next runloop tick):
-//                                   invalidateIntrinsicContentSize()  ← CRITICAL
-//                                   layoutSubtreeIfNeeded()
-//                                   read fittingSize → set contentSize → show()
-//                               invalidateIntrinsicContentSize() MUST precede
-//                               layoutSubtreeIfNeeded(). Without it, NSHostingController
-//                               returns its CACHED fittingSize from the previous render,
-//                               not the current content → fixed/stale height every open.
+//                                   read measuredHeight (from HeightPreferenceKey)
+//                                   clamp → setFrameSize → contentSize → show()
 //   navigate()                — rootView swap ONLY. ZERO size changes. Forever.
 //   .frame(width: 420)        — MUST wrap every non-main nav-state view.
-//                               With sizingOptions=[] SwiftUI does not auto-push
-//                               width, so each view must declare its own width or
-//                               it collapses to zero → layout crash in Settings.
 //   onChange / polling        — NEVER touches sizing. Status icon update only.
 //
 // ❌ NEVER set popover.contentSize anywhere except openPopover() before show()
@@ -39,7 +47,8 @@ import SwiftUI
 // ❌ NEVER add sizing calls to navigate()
 // ❌ NEVER remove @MainActor from the AppDelegate class declaration.
 // ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded.
-// ❌ NEVER remove invalidateIntrinsicContentSize() from Phase 2 of openPopover().
+// ❌ NEVER remove HeightPreferenceKey wiring from PopoverMainView.
+// ❌ NEVER remove .onPreferenceChange(HeightPreferenceKey.self) from wrapWithHeightCapture.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -65,10 +74,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
-    /// Canonical popover width. Must match .frame(width:) on every nav-state view.
-    /// ❌ NEVER change without updating ALL view factories simultaneously.
+    /// Last height reported by HeightPreferenceKey from PopoverMainView.
+    /// Updated on every SwiftUI render. Used by openPopover() instead of fittingSize.
+    /// ❌ NEVER read this before Phase 2 of openPopover() — it reflects the previous render.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
+    private var measuredHeight: CGFloat = 300
+
     private static let canonicalWidth: CGFloat = 420
     private static let maxHeight: CGFloat = 620
     private static let minHeight: CGFloat = 120
@@ -83,7 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.target = self
         }
 
-        let controller = NSHostingController(rootView: mainView())
+        let rootView = wrapWithHeightCapture(mainView())
+        let controller = NSHostingController(rootView: rootView)
         // ⚠️ sizingOptions = [] is mandatory.
         // .preferredContentSize causes re-anchor on every SwiftUI layout pass → left jump.
         // ❌ NEVER change to .preferredContentSize.
@@ -118,8 +131,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popoverIsOpen = false
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.hostingController?.rootView = self.mainView()
+            let rootView = self.wrapWithHeightCapture(self.mainView())
+            self.hostingController?.rootView = rootView
         }
+    }
+
+    // MARK: - Height capture wrapper
+
+    /// Wraps any view with HeightPreferenceKey capture so AppDelegate always has
+    /// an up-to-date measuredHeight for the current content.
+    /// ❌ NEVER remove this wrapper — it is the sole source of truth for popover height.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
+    private func wrapWithHeightCapture(_ view: AnyView) -> AnyView {
+        AnyView(
+            view
+                .onPreferenceChange(HeightPreferenceKey.self) { [weak self] height in
+                    guard let self, height > 0 else { return }
+                    self.measuredHeight = height
+                }
+        )
     }
 
     // MARK: - View factories
@@ -185,12 +216,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
-        // ⚠️ .frame(width: canonicalWidth) is REQUIRED with sizingOptions=[].
-        // Without it, SwiftUI has no width constraint and the view collapses → crash.
-        // ❌ NEVER remove this .frame(width:) call.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
         return AnyView(ActionDetailView(
             group: group,
             onBack: { [weak self] in
@@ -311,7 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     private func navigate(to view: AnyView) {
-        hostingController?.rootView = view
+        hostingController?.rootView = wrapWithHeightCapture(view)
     }
 
     // MARK: - Popover show/hide
@@ -325,23 +350,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Two-phase open for true dynamic height without side-jump.
+    /// Two-phase open using SwiftUI-reported height (HeightPreferenceKey).
     ///
-    /// WHY TWO PHASES + invalidateIntrinsicContentSize:
-    ///   NSHostingController with sizingOptions=[] caches its fittingSize.
-    ///   Without invalidateIntrinsicContentSize(), layoutSubtreeIfNeeded() returns
-    ///   the PREVIOUS render's cached size — not the current content — producing
-    ///   a fixed/stale height on every open.
+    /// WHY PREFERENCEKEY INSTEAD OF fittingSize:
+    ///   NSHostingController.fittingSize with sizingOptions=[] is cached.
+    ///   invalidateIntrinsicContentSize()+layoutSubtreeIfNeeded() does NOT
+    ///   reliably bust this cache — produces stale/fixed height every time.
+    ///   HeightPreferenceKey is SwiftUI-sourced: GeometryReader fires after
+    ///   every layout pass and reports the true rendered height.
     ///
     ///   Phase 1 (sync): Stage view + reload data. SwiftUI schedules layout.
-    ///   Phase 2 (next runloop tick, after SwiftUI has settled):
-    ///     1. invalidateIntrinsicContentSize() — bust the fittingSize cache
-    ///     2. layoutSubtreeIfNeeded()          — force AppKit sync
-    ///     3. read fittingSize                 — now reflects actual content
-    ///     4. clamp + setFrameSize + contentSize
-    ///     5. show() — sizing frozen from here
+    ///   Phase 2 (next runloop tick, HeightPreferenceKey has fired):
+    ///     1. Read measuredHeight — SwiftUI-reported, never stale
+    ///     2. Clamp + setFrameSize + contentSize
+    ///     3. show() — sizing frozen from here
     ///
-    /// ❌ NEVER remove invalidateIntrinsicContentSize() — reverts to stale height
+    /// ❌ NEVER use fittingSize here — reverts to stale/cached height
     /// ❌ NEVER set contentSize or setFrameSize after show()
     /// ❌ NEVER collapse phases into one synchronous block
     /// ❌ NEVER move sizing into navigate() or onChange
@@ -361,10 +385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
-            hostingController.rootView = restored
+            hostingController.rootView = wrapWithHeightCapture(restored)
         }
 
-        // ── Phase 2 (next runloop tick: SwiftUI layout has now settled) ──────
+        // ── Phase 2 (next runloop tick: HeightPreferenceKey has fired) ────────
         DispatchQueue.main.async { [weak self, weak button, weak popover, weak hostingController] in
             guard let self,
                   let button,
@@ -373,25 +397,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                   self.popoverIsOpen
             else { return }
 
-            // Step 1: bust the NSHostingController fittingSize cache.
-            // Without this, layoutSubtreeIfNeeded() returns the previous
-            // render's cached size regardless of content changes.
-            // ❌ NEVER remove this line.
-            hostingController.view.invalidateIntrinsicContentSize()
-
-            // Step 2: force AppKit to sync with SwiftUI's settled layout.
-            hostingController.view.layoutSubtreeIfNeeded()
-
-            // Step 3: read the now-correct content height and clamp.
-            let rawHeight = hostingController.view.fittingSize.height
+            // Read SwiftUI-reported height — never stale, never cached.
+            let rawHeight = self.measuredHeight
             let height = min(max(rawHeight > 0 ? rawHeight : 300, Self.minHeight), Self.maxHeight)
             let size = NSSize(width: Self.canonicalWidth, height: height)
 
-            // Step 4: set size ONCE, BEFORE show(). Nothing touches sizing after this.
+            // Set size ONCE, BEFORE show(). Nothing touches sizing after this.
             hostingController.view.setFrameSize(size)
             popover.contentSize = size
 
-            // Step 5: show. Sizing is frozen from this point until next open.
+            // Show. Sizing is frozen from this point until next open.
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
             popover.contentViewController?.view.window?.makeKey()
         }

@@ -4,44 +4,45 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
-//   maxWidth: .infinity lets the VStack fill the popover width (correct visual behaviour).
-//   idealWidth: 420 drives fittingSize.width so openPopover() sizes correctly.
-//   ❌ NEVER remove idealWidth: 420
-//   ❌ NEVER remove maxWidth: .infinity — without it rows won't fill the full width
-//   ❌ NEVER use .frame(width: 420) fixed — breaks fittingSize
-//   ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the root VStack
-//   This is safe because navigate() does ZERO sizing — maxWidth:.infinity only
-//   expands within the already-fixed popover frame set by openPopover().
-//
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on any container.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
+// HEIGHT REPORTING (ref #377 — Architecture 2b):
+//   PopoverMainView reports its own rendered height via HeightPreferenceKey.
+//   AppDelegate reads this via .onPreferenceChange and stores it in measuredHeight.
+//   openPopover() uses measuredHeight directly — fittingSize is NEVER used.
+//   ❌ NEVER switch back to fittingSize — it returns cached/stale values with sizingOptions=[].
+//   ❌ NEVER remove the .background(GeometryReader) + HeightPreferenceKey machinery.
+//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+//   is major major major.
+//
 // SCROLLVIEW RULE (#296):
 //   ❌ NEVER wrap ActionsListView in a ScrollView with a fixed maxHeight.
-//   A capped ScrollView clips inline job rows that haven't been laid out at fittingSize
-//   read time, causing them to be invisible. The popover height is capped by AppDelegate
-//   (maxHeight: 620) — let the VStack grow naturally and let fittingSize report it.
-//
-// INLINE JOBS SPEC (#178 active mode):
-//   Only jobs with status == "in_progress" appear as inline ↳ child rows.
-//   Queued jobs are NOT shown inline — they haven't started and have no step data.
-//   ActionRowView receives the full ActionGroup value from ForEach and re-evaluates
-//   inlineJobs reactively — no extra @State or id() trick needed.
-//
-// onChange(of: store.actions):
-//   Only reset visibleCount when paged beyond 10. Resetting on every poll update
-//   would wipe inline job rows during the empty→populated enrichment cycle.
+
+// MARK: - HeightPreferenceKey
+
+/// SwiftUI preference key used to report the popover's rendered height to AppDelegate.
+/// AppDelegate reads this via .onPreferenceChange on the root hosting view.
+/// ❌ NEVER remove — this is the height-measurement mechanism (replaces fittingSize).
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE.
+struct HeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
 
 // MARK: - Layout constants
 
 private enum PopoverLayout {
-    /// Ideal/minimum width — must match AppDelegate.idealWidth.
     static let idealWidth: CGFloat = 420
 }
 
-/// Root popover view. Sticky header (stats + runners) + actions list.
+/// Root popover view. Reports its own rendered height via HeightPreferenceKey.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -54,7 +55,6 @@ struct PopoverMainView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ⚠️ STICKY HEADER — always visible.
             PopoverHeaderView(
                 systemStats: systemStats,
                 isAuthenticated: isAuthenticated,
@@ -71,26 +71,29 @@ struct PopoverMainView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 Divider()
             }
-            // ⚠️ SPEC ORDER (#296): Runners ABOVE actions list.
             RunnersListView(runners: store.runners)
-
-            // ⚠️ NO ScrollView — let the VStack grow naturally so fittingSize captures
-            //    all inline job rows. AppDelegate caps height at 620pt.
             ActionsListView(
                 actions: store.actions,
                 visibleCount: $visibleCount,
                 onSelectAction: onSelectAction
             )
         }
-        // ⚠️ maxWidth: .infinity fills popover width. idealWidth drives fittingSize.
-        //    Safe because navigate() is a zero-size rootView swap — it never re-reads fittingSize.
         .frame(idealWidth: PopoverLayout.idealWidth, maxWidth: .infinity, alignment: .top)
+        // ⚠️ HEIGHT REPORTING: measure rendered height and publish via HeightPreferenceKey.
+        // AppDelegate reads this to size the popover — replaces unreliable fittingSize.
+        // ❌ NEVER remove this .background modifier.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: HeightPreferenceKey.self, value: geo.size.height)
+            }
+        )
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             systemStats.start()
         }
         .onDisappear { systemStats.stop() }
-        // ⚠️ Only reset when user has paged past default — do NOT reset on every poll tick.
         .onChange(of: store.actions) { _ in
             if visibleCount > 10 { visibleCount = 10 }
         }
@@ -202,7 +205,6 @@ private struct PopoverHeaderView: View {
 
 // MARK: - ActionsListView
 
-/// Actions list with pagination (Phase 3–5 / #302 #304 #305).
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
@@ -225,7 +227,7 @@ private struct ActionsListView: View {
                     Button(
                         action: { visibleCount += 10 },
                         label: {
-                            Text("Load 10 more actions…")
+                            Text("Load 10 more actions\u{2026}")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                     )
@@ -245,9 +247,6 @@ private struct ActionsListView: View {
 
 // MARK: - ActionRowView
 
-/// Single action group row.
-/// ⚠️ SPEC #178: ONLY jobs with status == "in_progress" appear inline.
-/// ActionRowView is a value type — inlineJobs re-evaluates reactively when store.actions updates.
 private struct ActionRowView: View {
     let actionGroup: ActionGroup
     let onSelect: () -> Void
@@ -341,7 +340,6 @@ private struct ActionRowView: View {
 
 // MARK: - InlineJobsView
 
-/// Container for inline ↳ job sub-rows. Receives ONLY in_progress jobs.
 private struct InlineJobsView: View {
     let jobs: [ActiveJob]
     @State private var cap: Int = 4
@@ -354,7 +352,7 @@ private struct InlineJobsView: View {
             Button(
                 action: { cap += 4 },
                 label: {
-                    Text("+ \(jobs.count - cap) more job\(jobs.count - cap == 1 ? "" : "s")…")
+                    Text("+ \(jobs.count - cap) more job\(jobs.count - cap == 1 ? "" : "s")\u{2026}")
                         .font(.caption2).foregroundColor(.accentColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.leading, 26).padding(.trailing, 12).padding(.vertical, 2)
@@ -372,7 +370,7 @@ private struct InlineJobRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("↳")
+            Text("\u{21B3}")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.leading, 14)
             PieProgressView(
@@ -418,7 +416,6 @@ private struct InlineJobRowView: View {
 
 // MARK: - RunnersListView
 
-/// Conditional runners sub-section — only shown when ≥1 Runner is busy (Phase 6 / #307).
 private struct RunnersListView: View {
     let runners: [Runner]
 
@@ -439,7 +436,7 @@ private struct RunnersListView: View {
                         Text(String(format: "MEM: %.1f%%", metrics.mem))
                             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                     } else {
-                        Text("CPU: — MEM: —").font(.caption).foregroundColor(.secondary)
+                        Text("CPU: \u{2014} MEM: \u{2014}").font(.caption).foregroundColor(.secondary)
                     }
                     Image(systemName: "chevron.right")
                         .font(.caption2).foregroundColor(.secondary.opacity(0.4))
