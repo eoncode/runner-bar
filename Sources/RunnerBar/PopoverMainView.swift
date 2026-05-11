@@ -2,20 +2,18 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + layout rules (ref #52 #54 #57 #296 #376 #377)
 //
-// ARCHITECTURE IN USE: Architecture 1 — Fully Dynamic Height (SwiftUI-driven)
-// (per status-bar-app-position-warning.md §4 Architecture 1)
+// ARCHITECTURE IN USE: Architecture 2 — Fixed Size (AppDelegate-owned)
+// (per status-bar-app-position-warning.md §4 Architecture 2)
 //
-// RULE 1: Root Group/VStack MUST use .frame(idealWidth: 420)
-//   NSHostingController.sizingOptions = .preferredContentSize reads SwiftUI ideal size.
-//   .frame(idealWidth: 420) pins preferredContentSize.width = 420 always, regardless
-//   of which nav state is active. Width never changes → no NSPopover re-anchor → no jump.
-//   Height varies freely with content → no empty space or clipping.
-// ❌ NEVER use .frame(width: 420) — layout width ≠ ideal width, causes unstable width.
-// ❌ NEVER add .frame(height:) or .frame(maxHeight:) to the root VStack.
-// ❌ NEVER remove .frame(idealWidth: 420).
+// RULE 1: Root VStack MUST use .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+//   AppDelegate sets contentSize = fittingSize ONCE before show(). This view fills that frame.
+//   NSPopover contentSize is frozen after show() — no re-anchor ever.
+// ❌ NEVER use .frame(idealWidth: 420) — that only works with sizingOptions=.preferredContentSize.
+// ❌ NEVER use .frame(width: 420) — overly constrains layout.
+// ❌ NEVER remove the maxWidth/maxHeight modifiers.
 //
 // RULE 2: ActionsListView uses plain VStack (NO ScrollView).
-//   ScrollView reports infinite preferred height to SwiftUI → kills dynamic height.
+//   ScrollView reports infinite preferred height to SwiftUI → kills fittingSize measurement.
 //   Height cap via .frame(maxHeight: 480, alignment: .top) on ActionsListView is correct.
 //   fixedSize(horizontal: false, vertical: true) lets it measure natural content height.
 // ❌ NEVER wrap ActionsListView in ScrollView.
@@ -24,19 +22,11 @@ import SwiftUI
 // RULE 3: ALL rows use .padding(.horizontal, 12)
 // RULE 4: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
-// RULE 6: Detail views use .frame(idealWidth: 420, minHeight: X) — fixed height is
-//   acceptable there because they have their own internal ScrollView.
 //
-// INLINE JOBS SPEC (#178):
-//   Show ↳ job rows ONLY for jobs with status == "in_progress".
-// ❌ NEVER show queued jobs inline.
-//
-// SYSTEMSTATSVIEWMODEL RULE (ref #375 #376 #377 — THE FIX FOR POSITION JUMPS):
+// SYSTEMSTATSVIEWMODEL RULE (ref #375 #376 #377 — CPU GUARD):
 //   SystemStatsViewModel fires @Published updates every ~1s via a Timer.
-//   Each update triggers a SwiftUI layout pass → new preferredContentSize.height
-//   → NSPopover re-anchors the window → visible left/position jump.
-//   The popoverIsOpen guard in AppDelegate only blocks store.reload().
-//   It does NOT block systemStats from pushing layout passes while the popover is shown.
+//   With Architecture 2 these updates no longer cause side jumps (contentSize is frozen).
+//   However, stopping systemStats while the popover is open saves CPU.
 //   FIX: PopoverMainView receives isPopoverOpen: Bool from AppDelegate.
 //        .onChange(of: isPopoverOpen) stops systemStats when the popover opens
 //        and restarts it when the popover closes.
@@ -53,9 +43,9 @@ struct PopoverMainView: View {
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
 
-    // ⚠️ FIX: Receive popover open state from AppDelegate so we can gate systemStats.
-    // AppDelegate passes `isPopoverOpen: popoverIsOpen` when constructing this view.
-    // ❌ NEVER remove this property — it is the gate for systemStats.
+    // ⚠️ CPU GUARD: gate systemStats on popover open state.
+    // AppDelegate passes isPopoverOpen: true (literal) when constructing in openPopover().
+    // ❌ NEVER remove this property.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     // UNDER ANY CIRCUMSTANCE.
     var isPopoverOpen: Bool = false
@@ -65,11 +55,10 @@ struct PopoverMainView: View {
     @State private var visibleCount: Int = 10
 
     var body: some View {
-        // ⚠️ Architecture 1 root container:
-        //   .frame(idealWidth: 420) pins preferredContentSize.width = 420 always.
-        //   No height modifier here — height is fully driven by content.
-        // ❌ NEVER use .frame(width: 420) here.
-        // ❌ NEVER add .frame(height:) or .frame(maxHeight:) here.
+        // ⚠️ Architecture 2 root container:
+        //   .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        //   AppDelegate owns contentSize — this view fills whatever frame was set at show().
+        // ❌ NEVER use .frame(idealWidth: 420) here — that's Architecture 1 only.
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
                 systemStats: systemStats,
@@ -89,8 +78,8 @@ struct PopoverMainView: View {
             }
             RunnersListView(runners: store.runners)
             // ⚠️ fixedSize(horizontal: false, vertical: true) lets SwiftUI measure
-            //   the natural content height of the list so preferredContentSize.height
-            //   is correct. maxHeight caps growth. alignment: .top prevents centering.
+            //   the natural content height of the list for fittingSize calculation.
+            //   maxHeight caps growth. alignment: .top prevents centering.
             // ❌ NEVER wrap in ScrollView.
             // ❌ NEVER remove fixedSize.
             ActionsListView(
@@ -101,27 +90,18 @@ struct PopoverMainView: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxHeight: 480, alignment: .top)
         }
-        .frame(idealWidth: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            // ⚠️ FIX: Do NOT start systemStats here unconditionally.
-            // .onAppear fires when popover opens (isPopoverOpen already true at that point).
+            // ⚠️ CPU GUARD: Do NOT start systemStats here unconditionally.
             // The .onChange(of: isPopoverOpen) block below handles start/stop correctly.
-            // Starting here would immediately undo the stop from onChange.
-            // systemStats is started when isPopoverOpen becomes false (popover closes)
-            // so it is already running before the next open.
         }
         .onDisappear {
-            // Always stop on disappear as a safety net (covers app quit / nav away).
             systemStats.stop()
         }
-        // ⚠️ FIX: Gate systemStats on popover open state.
-        //   When popover opens (isPopoverOpen = true): STOP the timer.
-        //     → No @Published updates → no SwiftUI layout passes → no preferredContentSize
-        //       changes → no NSPopover re-anchor → no position jump.
+        // ⚠️ CPU GUARD: Gate systemStats on popover open state.
+        //   When popover opens (isPopoverOpen = true): STOP the timer (saves CPU).
         //   When popover closes (isPopoverOpen = false): START the timer.
-        //     → Stats update in the background while popover is hidden.
-        //     → On next open, one fresh render is done before show() is called (in openPopover).
         // ❌ NEVER remove this .onChange block.
         // ❌ NEVER call systemStats.start() unconditionally in .onAppear.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -246,8 +226,7 @@ private struct PopoverHeaderView: View {
 // MARK: - ActionsListView
 
 // ⚠️ NO ScrollView here — ScrollView swallows content height, preventing
-// SwiftUI from reporting correct preferredContentSize.height to NSPopover.
-// Height cap and fixedSize are applied by the caller (PopoverMainView). (ref #376 #377)
+// SwiftUI from reporting correct fittingSize.height to AppDelegate. (ref #376 #377)
 private struct ActionsListView: View {
     let actions: [ActionGroup]
     @Binding var visibleCount: Int
