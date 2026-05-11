@@ -1,19 +1,22 @@
 import AppKit
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — Architecture 1 (ref #375 #376 #377 status-bar-app-position-warning.md)
+// ⚠️ REGRESSION GUARD — Architecture 1 (ref #49 #51 #52 #53 #54 #57 #321 #370 #375 #376 #377)
 //
 // sizingOptions = .preferredContentSize + idealWidth:420 on root drives ALL sizing.
-// preferredContentSize.width = always 420 (pinned by idealWidth) -> no horizontal re-anchor.
-// preferredContentSize.height = content height, capped by maxHeight:.infinity filling frame.
+// Root frame MUST be fixed width AND fixed height — never maxHeight:.infinity.
 //
-// ❌ NEVER use .fixedSize(horizontal:false,vertical:true) inside a ScrollView here.
-//    fixedSize reports unbounded ideal height -> preferredContentSize.height becomes
-//    taller than the screen -> popover overflows or jumps on navigate().
-// ❌ NEVER add .frame(height:) to root.
-// ❌ NEVER call setFrameSize or set contentSize here — AppDelegate owns sizing.
-// ❌ NEVER remove idealWidth:420 — without it preferredContentSize.width is unbounded -> jump.
-// ❌ NEVER remove maxHeight:.infinity — detail views must fill the existing popover frame.
+// WHY maxHeight:.infinity CAUSES SIDE JUMP:
+//   .infinity propagates the full uncapped ScrollView content height as
+//   preferredContentSize.height on every state change (tick timer, step status update).
+//   NSPopover sees a changed contentSize → re-anchors → side jump on every update.
+//
+// FIX: fixed frame 420×480 on root. preferredContentSize = 420×480 always.
+//   ScrollView clips and scrolls content internally. No jump possible.
+//
+// ❌ NEVER use .fixedSize inside a ScrollView here.
+// ❌ NEVER remove idealWidth:420.
+// ❌ NEVER revert maxHeight to .infinity — re-introduces the jump.
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 struct JobDetailView: View {
@@ -88,8 +91,7 @@ struct JobDetailView: View {
             Divider()
 
             // ── Steps list: INSIDE ScrollView
-            // ⚠️ NO .fixedSize inside this ScrollView — fixedSize reports unbounded
-            // ideal height to preferredContentSize, causing overflow/jump.
+            // ⚠️ NO .fixedSize inside this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
@@ -131,7 +133,11 @@ struct JobDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ FIXED frame — NOT maxHeight:.infinity.
+        // preferredContentSize = 420×480 always → NSPopover never re-anchors.
+        // ❌ NEVER revert to maxHeight:.infinity.
+        .frame(minWidth: 420, idealWidth: 420, maxWidth: 420,
+               minHeight: 480, idealHeight: 480, maxHeight: 480)
         .onAppear {
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }

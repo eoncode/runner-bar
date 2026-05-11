@@ -2,14 +2,22 @@ import AppKit
 import SwiftUI
 // swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-// ⚠️ REGRESSION GUARD — Architecture 1 (ref #375 #376 #377 status-bar-app-position-warning.md)
+// ⚠️ REGRESSION GUARD — Architecture 1 (ref #49 #51 #52 #53 #54 #57 #321 #370 #375 #376 #377)
 //
 // sizingOptions = .preferredContentSize + idealWidth:420 on root drives ALL sizing.
+// Root frame MUST be fixed width AND fixed height — never maxHeight:.infinity.
+//
+// WHY maxHeight:.infinity CAUSES SIDE JUMP:
+//   .infinity propagates the full uncapped ScrollView content height as
+//   preferredContentSize.height on every state change (tick timer, job status update).
+//   NSPopover sees a changed contentSize → re-anchors → side jump on every update.
+//
+// FIX: fixed frame 420×480 on root. preferredContentSize = 420×480 always.
+//   ScrollView clips and scrolls content internally. No jump possible.
+//
 // ❌ NEVER use .fixedSize(horizontal:false,vertical:true) inside a ScrollView here.
-//    fixedSize inside ScrollView reports unbounded ideal height upward to
-//    preferredContentSize.height -> popover overflows or jumps.
 // ❌ NEVER remove idealWidth:420 from root frame.
-// ❌ NEVER remove maxHeight:.infinity — must fill existing popover frame after navigate().
+// ❌ NEVER revert maxHeight to .infinity — re-introduces the jump.
 
 struct ActionDetailView: View {
     let group: ActionGroup
@@ -158,7 +166,11 @@ struct ActionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ FIXED frame — NOT maxHeight:.infinity.
+        // preferredContentSize = 420×480 always → NSPopover never re-anchors.
+        // ❌ NEVER revert to maxHeight:.infinity.
+        .frame(minWidth: 420, idealWidth: 420, maxWidth: 420,
+               minHeight: 480, idealHeight: 480, maxHeight: 480)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
