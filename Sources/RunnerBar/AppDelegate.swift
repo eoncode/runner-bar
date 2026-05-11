@@ -137,14 +137,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         p.contentViewController = controller
-        // ✅ isOpaque=true + backgroundColor=.windowBackground gives the panel
+        // ✅ isOpaque=true + backgroundColor=.windowBackgroundColor gives the panel
         // the standard macOS window background (respects dark/light mode).
         // ❌ NEVER set backgroundColor = .clear — that removes the background.
         // ❌ NEVER set isOpaque = false without a custom background visual effect view.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         p.isOpaque = true
-        p.backgroundColor = .windowBackground
+        p.backgroundColor = .windowBackgroundColor
         p.hasShadow = true
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
