@@ -19,7 +19,7 @@ struct SystemStats {
     var diskUsedGB: Double
     /// Raw partition capacity from `volumeTotalCapacity`, in GB.
     var diskTotalGB: Double
-    /// True available space from `volumeAvailableCapacityForImportantUsage`, in GB.
+    /// Available space from `volumeAvailableCapacityKey` (TCC-free), in GB.
     var diskFreeGB: Double
     /// Free disk space as a percentage of total: (diskFreeGB / diskTotalGB) × 100.
     var diskFreePct: Double
@@ -33,31 +33,22 @@ struct SystemStats {
 
 /// CPU tick counters captured from `host_processor_info()`.
 private struct CPUTicks {
-    /// User + nice ticks accumulated across all cores.
     var user: Double
-    /// System ticks accumulated across all cores.
     var system: Double
-    /// Total ticks accumulated across all cores.
     var total: Double
 }
 
 /// Memory usage snapshot in GB.
 private struct MemoryStats {
-    /// Active + wired memory in use, in GB.
     var used: Double
-    /// Total installed RAM, in GB.
     var total: Double
 }
 
 /// Disk usage snapshot in GB and percent free.
 private struct DiskStats {
-    /// Used disk capacity, in GB.
     var used: Double
-    /// Total disk capacity, in GB.
     var total: Double
-    /// Free disk capacity, in GB.
     var free: Double
-    /// Free disk capacity as a percentage of total.
     var freePct: Double
 }
 
@@ -72,22 +63,16 @@ private struct DiskStats {
 /// Threading model: Timer fires on main RunLoop, bounces work to a global
 /// utility queue, then publishes results back on the main thread.
 final class SystemStatsViewModel: ObservableObject {
-    /// The latest system snapshot. SwiftUI views observe this via `@Published`.
     @Published var stats: SystemStats = .zero
 
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
-    /// Initialises the view model without starting the polling timer.
-    /// Call `start()` once the owning view appears on screen.
     init() {}
-
     deinit { timer?.invalidate() }
 
     // MARK: - Lifecycle
 
-    /// Starts the 2-second polling loop and fires an eager sample immediately.
-    /// Idempotent: calling `start()` while already running restarts the timer cleanly.
     func start() {
         timer?.invalidate()
         sample()
@@ -96,8 +81,6 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
-    /// Stops the polling loop and releases the timer.
-    /// Safe to call from `.onDisappear` even if `start()` was never called.
     func stop() {
         timer?.invalidate()
         timer = nil
@@ -105,10 +88,6 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - CPU
 
-    /// Computes CPU utilisation as a percentage over the last polling interval.
-    ///
-    /// Uses `host_processor_info()` to read per-core tick counters and diffs
-    /// against the previous sample. Returns 0 on the first call.
     private func cpuPercent() -> Double {
         var cpuInfo: processor_info_array_t?
         var msgType = natural_t(0)
@@ -124,11 +103,11 @@ final class SystemStatsViewModel: ObservableObject {
         for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
             let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
-            let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
+            let sysLoad  = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
             let idleLoad = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
             let niceLoad = Double(info[Int(base) + Int(CPU_STATE_NICE)])
-            userTicks += userLoad + niceLoad
-            sysTicks += sysLoad
+            userTicks  += userLoad + niceLoad
+            sysTicks   += sysLoad
             totalTicks += userLoad + sysLoad + idleLoad + niceLoad
         }
         vm_deallocate(
@@ -136,20 +115,17 @@ final class SystemStatsViewModel: ObservableObject {
             vm_address_t(bitPattern: cpuInfo),
             vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<integer_t>.stride)
         )
-        let currentTicks = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
-        let dUser = currentTicks.user - prevTicks.user
-        let dSys = currentTicks.system - prevTicks.system
-        let dTotal = currentTicks.total - prevTicks.total
-        prevTicks = currentTicks
+        let cur = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
+        let dUser  = cur.user   - prevTicks.user
+        let dSys   = cur.system - prevTicks.system
+        let dTotal = cur.total  - prevTicks.total
+        prevTicks = cur
         guard dTotal > 0 else { return 0 }
         return min(100, ((dUser + dSys) / dTotal) * 100)
     }
 
     // MARK: - Memory
 
-    /// Returns memory usage in GB using `host_statistics64()` and `sysctl hw.memsize`.
-    ///
-    /// Reports active + wired pages only, matching `ci-dash.py` measurement.
     private func memStats() -> MemoryStats {
         var vmStats = vm_statistics64()
         var count = mach_msg_type_number_t(
@@ -161,7 +137,7 @@ final class SystemStatsViewModel: ObservableObject {
             }
         }
         guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
-        let pageSize = Double(vm_kernel_page_size)
+        let pageSize  = Double(vm_kernel_page_size)
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
         var memSize: UInt64 = 0
@@ -173,37 +149,50 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Disk
 
-    /// Returns disk usage in GB and free percentage using URL resource values.
+    /// ⚠️ PERMISSION GUARD: Uses `volumeAvailableCapacityKey` — NOT
+    /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
-    /// Uses `volumeAvailableCapacityForImportantUsage` (the value Finder shows).
-    /// Falls back to a safe all-free default on error.
+    /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
+    /// on every popover open ("access data from other apps", Apple Music,
+    /// Photo Library) because it internally queries Photos/Music databases to
+    /// calculate purgeable space. This app declares no media entitlements and
+    /// must never use that key.
+    ///
+    /// `volumeAvailableCapacityKey` is TCC-free and requires no entitlements.
+    /// It returns a slightly more conservative free-space value, which is fine
+    /// for display purposes.
+    ///
+    /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+    /// ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
+    /// is removed is major major major.
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
         let gigabytes = 1024.0 * 1024.0 * 1024.0
-        guard let values = try? url.resourceValues(forKeys: [
-            .volumeTotalCapacityKey,
-            .volumeAvailableCapacityForImportantUsageKey
-        ]),
-        let totalBytes = values.volumeTotalCapacity,
-        let freeBytes = values.volumeAvailableCapacityForImportantUsage
+        guard
+            let values = try? url.resourceValues(forKeys: [
+                .volumeTotalCapacityKey,
+                .volumeAvailableCapacityKey          // ✅ TCC-free
+            ]),
+            let totalBytes = values.volumeTotalCapacity,
+            let freeBytes  = values.volumeAvailableCapacity  // ✅ not ForImportantUsage
         else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
-        let total = Double(totalBytes) / gigabytes
-        let free = Double(freeBytes) / gigabytes
-        let used = total - free
+        let total   = Double(totalBytes) / gigabytes
+        let free    = Double(freeBytes)  / gigabytes
+        let used    = total - free
         let freePct = total > 0 ? (free / total) * 100 : 100
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
 
     // MARK: - Sample
 
-    /// Assembles a new `SystemStats` snapshot and publishes it on the main thread.
     private func sample() {
-        let cpu = cpuPercent()
-        let mem = memStats()
+        let cpu  = cpuPercent()
+        let mem  = memStats()
         let disk = diskStats()
         let snapshot = SystemStats(
             cpuPct: cpu,
-            memUsedGB: mem.used, memTotalGB: mem.total,
+            memUsedGB: mem.used,  memTotalGB: mem.total,
             diskUsedGB: disk.used, diskTotalGB: disk.total,
             diskFreeGB: disk.free, diskFreePct: disk.freePct
         )
