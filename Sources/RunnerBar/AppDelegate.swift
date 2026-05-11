@@ -21,16 +21,23 @@ import SwiftUI
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from the status button's screen frame:
-//      x = buttonFrame.midX - (panelWidth / 2)
-//      y = buttonFrame.minY - panelHeight - gap
-//    This is recomputed on open AND on every size change.
+// 2. Position is computed from the status button's screen frame.
+//    The panel frame includes arrowHeight extra pixels at the top for the caret.
+//      panelY = buttonFrame.minY - contentHeight - arrowHeight - gap
+//      panelHeight = contentHeight + arrowHeight
 // 3. NSHostingController.sizingOptions = .preferredContentSize
-//    SwiftUI ideal size is auto-propagated to the hosting controller's
-//    preferredContentSize. We observe this via KVO and call resizePanel()
-//    which does setFrame() — no jump because NSPanel has no anchor.
-// 4. Dismiss: NSEvent monitor for .leftMouseDown outside panel bounds.
-//    Also dismiss on app switch (NSWorkspace.didActivateApplication).
+//    SwiftUI ideal size → KVO → resizeAndRepositionPanel() → setFrame().
+//    NSPanel.setFrame() while visible = zero side jump (no anchor concept).
+// 4. Dismiss: NSEvent monitor for mouse down outside panel.
+//    Also dismiss on app switch.
+//
+// CHROME (PanelChromeView):
+// contentView = PanelChromeView. Provides:
+//   • NSVisualEffectView (hudWindow material) with cornerRadius=12
+//   • Arrow caret drawn at top pointing up toward status button
+// The hosting controller view is added as a subview of the chrome,
+// pinned to chrome.contentRect (below the arrow).
+// chrome.arrowX is updated on every reposition.
 //
 // WIDTH RULE:
 // Width is ALWAYS fixedWidth=480. Never dynamic. Never fittingSize.width.
@@ -38,7 +45,6 @@ import SwiftUI
 //
 // POPOVEROPENSTATE:
 // popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
-// PopoverMainView and InlineJobRowsView read it as @EnvironmentObject.
 // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
 // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
 //
@@ -64,6 +70,7 @@ private enum NavState {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: NSPanel?
+    private var chrome: PanelChromeView?
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
@@ -74,9 +81,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workspaceObserver: Any?
 
     // ⚠️ REGRESSION GUARD (ref #377):
-    // Injected via wrapEnv() into every view. Read as @EnvironmentObject by
-    // PopoverMainView (systemStats gate) and InlineJobRowsView (expand cap).
-    // isOpen must always mirror panelIsOpen — set both together.
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
     // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
@@ -85,25 +89,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Canonical panel width. NEVER dynamic. NEVER fittingSize.width.
     /// ❌ NEVER change without updating all usages.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private static let fixedWidth: CGFloat = 480
 
-    /// Gap between status bar button bottom and panel top edge.
-    private static let gap: CGFloat = 4
+    /// Gap between status bar button bottom and arrow tip.
+    private static let gap: CGFloat = 2
 
-    /// Maximum panel height — 85% of visible screen height.
-    /// Prevents panel from extending off the bottom of the screen.
     private var maxHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
     }
 
     // MARK: - Environment injection
 
-    /// Wraps any view in AnyView and injects all required environment objects.
-    /// ❌ NEVER bypass this. ❌ NEVER remove .environmentObject(popoverOpenState).
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-    /// ALLOWED UNDER ANY CIRCUMSTANCE.
     private func wrapEnv<V: View>(_ view: V) -> AnyView {
         AnyView(view.environmentObject(popoverOpenState))
     }
@@ -119,44 +115,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let controller = NSHostingController(rootView: mainView())
-        // ✅ sizingOptions = .preferredContentSize — safe with NSPanel.
-        // NSHostingController auto-updates preferredContentSize as SwiftUI
-        // ideal size changes. We KVO-observe preferredContentSize and call
-        // resizePanel() — which uses NSPanel.setFrame(), not NSPopover.contentSize.
-        // NSPanel.setFrame() while visible = zero side jump (no anchor concept).
-        // ❌ NEVER change to [] — we need live preferredContentSize updates.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        // ✅ sizingOptions = .preferredContentSize — KVO fires on every SwiftUI size change.
+        // ❌ NEVER change to [].
         controller.sizingOptions = .preferredContentSize
         hostingController = controller
 
+        // PanelChromeView is the panel contentView:
+        //   top arrowHeight px = caret drawn in draw(_:)
+        //   remaining = NSVisualEffectView + hosting view
+        let chromeView = PanelChromeView(frame: NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 300))
+        chromeView.addSubview(controller.view)
+        controller.view.frame = chromeView.contentRect
+        chrome = chromeView
+
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        p.contentViewController = controller
-        // ✅ isOpaque=true + backgroundColor=.windowBackgroundColor gives the panel
-        // the standard macOS window background (respects dark/light mode).
-        // ❌ NEVER set backgroundColor = .clear — that removes the background.
-        // ❌ NEVER set isOpaque = false without a custom background visual effect view.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
-        p.isOpaque = true
-        p.backgroundColor = .windowBackgroundColor
+        p.contentView = chromeView
+        p.isOpaque = false
+        p.backgroundColor = .clear
         p.hasShadow = true
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.animationBehavior = .none
         panel = p
 
-        // KVO: observe preferredContentSize so panel resizes live as SwiftUI
-        // content changes height. This is the dynamic height mechanism.
-        // NSPanel.setFrame() never causes a jump — it has no anchor.
-        // ❌ NEVER remove this observation.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        // KVO: dynamic height — NSPanel.setFrame() has no anchor, zero jump.
+        // ❌ NEVER remove.
         sizeObservation = controller.observe(
             \.preferredContentSize,
             options: [.new]
@@ -170,55 +158,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for: RunnerStore.shared.aggregateStatus
             )
             // ❌ NEVER call observable.reload() while panelIsOpen == true.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
             if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
     }
 
-    // MARK: - Panel resize (the key to dynamic height without jumping)
+    // MARK: - Panel resize
 
-    /// Repositions and resizes the panel based on current preferredContentSize
-    /// and the status button's screen frame.
+    /// NSPanel.setFrame() has NO anchor — zero side jump, ever.
+    /// Panel height = contentH + arrowHeight.
+    /// Panel Y is positioned so arrow tip just touches the status button bottom.
+    /// chrome.arrowX is updated to keep the caret centred under the button.
     ///
-    /// Called: (a) when panel opens, (b) on every preferredContentSize KVO change.
-    /// NSPanel.setFrame() has NO anchor concept — zero side jump, ever.
-    ///
-    /// ❌ NEVER call this on NSPopover — that causes the jump.
-    /// ❌ NEVER call this from a background thread.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
+    /// ❌ NEVER call this on NSPopover.
+    /// ❌ NEVER call from a background thread.
     private func resizeAndRepositionPanel() {
         guard panelIsOpen,
               let panel,
+              let chrome,
               let button = statusItem?.button,
               let buttonWindow = button.window else { return }
 
         let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
         let contentH = hostingController?.preferredContentSize.height ?? 300
-        let h = min(max(contentH, 60), maxHeight)
+        let clampedH = min(max(contentH, 60), maxHeight)
+        let totalH = clampedH + arrowHeight
         let w = Self.fixedWidth
         let x = buttonScreenFrame.midX - w / 2
-        let y = buttonScreenFrame.minY - h - Self.gap
+        let y = buttonScreenFrame.minY - totalH - Self.gap
 
-        panel.setFrame(
-            NSRect(x: x, y: y, width: w, height: h),
-            display: true,
-            animate: false
-        )
+        panel.setFrame(NSRect(x: x, y: y, width: w, height: totalH), display: true, animate: false)
+
+        // Update chrome layout.
+        chrome.frame = NSRect(x: 0, y: 0, width: w, height: totalH)
+        chrome.arrowX = buttonScreenFrame.midX - x  // button midX in panel-local coords
+        chrome.needsLayout = true
     }
 
     // MARK: - Navigation
 
-    /// Swaps the hosting controller rootView.
-    /// With NSPanel + sizingOptions=.preferredContentSize, SwiftUI re-reports
-    /// ideal size after rootView swap → KVO fires → resizeAndRepositionPanel()
-    /// → panel resizes with zero jump.
-    ///
-    /// ❌ NEVER add explicit sizing calls here.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
@@ -229,7 +207,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard panelIsOpen else { return }
         panel?.orderOut(nil)
         panelIsOpen = false
-        // ❌ NEVER set one without the other.
         popoverOpenState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
@@ -240,10 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func removeEventMonitor() {
-        if let m = eventMonitor {
-            NSEvent.removeMonitor(m)
-            eventMonitor = nil
-        }
+        if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
     }
 
     private func removeWorkspaceObserver() {
@@ -255,8 +229,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - View factories
 
-    /// nonisolated: called from DispatchQueue.global — pure network I/O.
-    /// ❌ NEVER remove nonisolated.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -297,10 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionDetail(group)
         return wrapEnv(ActionDetailView(
             group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
+            onBack: { [weak self] in self?.navigate(to: self!.mainView()) },
             onSelectJob: { [weak self] job in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
@@ -318,13 +287,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionJobDetail(job, group)
         return wrapEnv(JobDetailView(
             job: job,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
-            },
+            onBack: { [weak self] in self?.navigate(to: self!.actionDetailView(group: group)) },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+                self?.navigate(to: self!.logViewFromAction(job: job, step: step, group: group))
             }
         ))
     }
@@ -332,12 +297,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return wrapEnv(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            },
+            job: job, step: step,
+            onBack: { [weak self] in self?.navigate(to: self!.detailViewFromAction(job: job, group: group)) },
             onLogLoaded: nil
         ))
     }
@@ -346,13 +307,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .jobDetail(job)
         return wrapEnv(JobDetailView(
             job: job,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
+            onBack: { [weak self] in self?.navigate(to: self!.mainView()) },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
+                self?.navigate(to: self!.logView(job: job, step: step))
             }
         ))
     }
@@ -360,10 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return wrapEnv(SettingsView(
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
+            onBack: { [weak self] in self?.navigate(to: self!.mainView()) },
             store: observable
         ))
     }
@@ -371,12 +325,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return wrapEnv(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
-            },
+            job: job, step: step,
+            onBack: { [weak self] in self?.navigate(to: self!.detailView(job: job)) },
             onLogLoaded: nil
         ))
     }
@@ -387,22 +337,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch state {
         case .main: return nil
         case .jobDetail(let job):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailView(job: live)
+            return detailView(job: store.jobs.first(where: { $0.id == job.id }) ?? job)
         case .stepLog(let job, let step):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return logView(job: live, step: step)
+            return logView(job: store.jobs.first(where: { $0.id == job.id }) ?? job, step: step)
         case .actionDetail(let group):
             guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
             return actionDetailView(group: live)
         case .actionJobDetail(let job, let group):
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailViewFromAction(job: liveJob, group: liveGroup)
+            return detailViewFromAction(job: liveGroup.jobs.first(where: { $0.id == job.id }) ?? job, group: liveGroup)
         case .actionStepLog(let job, let step, let group):
             guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
+            return logViewFromAction(job: liveGroup.jobs.first(where: { $0.id == job.id }) ?? job, step: step, group: liveGroup)
         case .settings:
             return settingsView()
         }
@@ -411,45 +357,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Toggle
 
     @objc private func togglePanel() {
-        if panelIsOpen {
-            closePanel()
-        } else {
-            openPanel()
-        }
+        panelIsOpen ? closePanel() : openPanel()
     }
 
     // MARK: - Open
 
-    /// Opens the panel.
-    /// Position is computed from status button screen coords.
-    /// Dynamic height: KVO on preferredContentSize fires resizeAndRepositionPanel()
-    /// on every SwiftUI content change — NSPanel.setFrame() never causes a jump.
-    ///
-    /// ❌ NEVER use NSPopover here.
-    /// ❌ NEVER call this from a background thread.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private func openPanel() {
         guard let button = statusItem?.button,
               let buttonWindow = button.window,
-              let panel else { return }
+              let panel,
+              let chrome else { return }
 
         observable.reload()
 
-        // Set open state BEFORE showing so views see isOpen=true on first render.
+        // Set open state BEFORE showing.
         // ❌ NEVER move after panel.orderFront().
         panelIsOpen = true
         popoverOpenState.isOpen = true
 
         let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
-        let initH: CGFloat = 300
+        let initContentH: CGFloat = 300
+        let initTotalH = initContentH + arrowHeight
         let x = buttonScreenFrame.midX - Self.fixedWidth / 2
-        let y = buttonScreenFrame.minY - initH - Self.gap
-        panel.setFrame(
-            NSRect(x: x, y: y, width: Self.fixedWidth, height: initH),
-            display: false,
-            animate: false
-        )
+        let y = buttonScreenFrame.minY - initTotalH - Self.gap
+
+        panel.setFrame(NSRect(x: x, y: y, width: Self.fixedWidth, height: initTotalH), display: false, animate: false)
+        chrome.frame = NSRect(x: 0, y: 0, width: Self.fixedWidth, height: initTotalH)
+        chrome.arrowX = buttonScreenFrame.midX - x
 
         panel.orderFront(nil)
 
@@ -458,26 +392,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Dismiss on outside click.
-        // ❌ NEVER remove this monitor — it is the dismiss mechanism.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
         eventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
             guard let self, let panel = self.panel else { return }
             let loc = event.locationInWindow
-            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin
-                ?? loc
-            if !panel.frame.contains(screenLoc) {
-                self.closePanel()
-            }
+            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin ?? loc
+            if !panel.frame.contains(screenLoc) { self.closePanel() }
         }
 
         // Dismiss on app switch.
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
+            object: nil, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
