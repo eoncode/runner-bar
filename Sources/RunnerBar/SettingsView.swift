@@ -7,23 +7,23 @@ import SwiftUI
 
 /// Settings view — complete implementation for all phases 1-6.
 ///
-/// ⚠️ REGRESSION GUARD — Architecture 1 (ref #375 #376 #377 status-bar-app-position-warning.md)
+/// ⚠️ REGRESSION GUARD — Architecture 1 + fixed-height shell (ref #375 #376 #377)
 ///
-/// sizingOptions = .preferredContentSize + idealWidth:420 on root drives ALL sizing.
-/// ❌ NEVER use .fixedSize(horizontal:false,vertical:true) inside the ScrollView VStack.
-///    fixedSize inside ScrollView reports unbounded ideal height to
-///    preferredContentSize.height -> popover grows taller than screen or jumps.
-/// ❌ NEVER remove idealWidth:420 from root frame.
-/// ❌ NEVER remove maxHeight:.infinity — must fill existing popover frame after navigate().
+/// SettingsView uses a FIXED frame height (440pt). This is intentional and correct.
 ///
-/// LOCAL RUNNERS JUMP FIX (ref #377):
-///   localRunnerStore.refresh() completes AFTER first render. If rows appear/disappear
-///   after show(), preferredContentSize.height changes -> NSPopover re-anchors -> jump.
-///   Fix: the local runners section always renders at the SAME height regardless of
-///   loading state. A fixed-height placeholder (minHeight: 28) is shown while scanning
-///   so the section height is identical before and after refresh() completes.
-///   ❌ NEVER gate row display on hasLoadedOnce — that causes the height-change jump.
-///   ❌ NEVER hide the section or replace it with content of a different height after show().
+/// WHY FIXED HEIGHT HERE:
+///   With sizingOptions = .preferredContentSize, any async state change that alters
+///   the SwiftUI ideal height (e.g. localRunnerStore.refresh() completing, toggle state,
+///   runner rows appearing) causes NSPopover to re-anchor → side jump.
+///   SettingsView contains a ScrollView which reports unbounded ideal height to SwiftUI
+///   → preferredContentSize.height is unstable and changes on every state update.
+///   Fix: pin the root frame to a fixed height. preferredContentSize.height = 440 always.
+///   ScrollView scrolls content internally. No jump is possible.
+///
+/// ❌ NEVER remove .frame(height: 440) from the root VStack.
+/// ❌ NEVER replace it with maxHeight: .infinity — that re-introduces the jump.
+/// ❌ NEVER use .fixedSize on the ScrollView inner VStack — unbounded ideal height → jump.
+/// ❌ NEVER remove idealWidth: 420 — width must be stable.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -56,9 +56,10 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ NO .fixedSize on the inner VStack — fixedSize inside ScrollView
-            // reports unbounded ideal height -> preferredContentSize.height explodes.
-            // ScrollView handles overflow. maxHeight:.infinity on root fills the frame.
+            // ⚠️ ScrollView + fixed-height container.
+            // The outer VStack is pinned to exactly 440pt (see .frame below).
+            // ScrollView clips and scrolls content that exceeds this height.
+            // preferredContentSize.height = 440 always — NSPopover never re-anchors.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -79,7 +80,11 @@ struct SettingsView: View {
                 .padding(.bottom, 16)
             }
         }
-        .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // ⚠️ FIXED height = 440pt. idealWidth = 420pt.
+        // preferredContentSize is stable: (420, 440+headerHeight) always.
+        // ❌ NEVER change to maxHeight: .infinity — causes jump.
+        // ❌ NEVER remove idealWidth: 420.
+        .frame(idealWidth: 420, minWidth: 420, maxWidth: 420, minHeight: 440, idealHeight: 440, maxHeight: 440)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
@@ -177,20 +182,10 @@ struct SettingsView: View {
                     .padding(.horizontal, 12).padding(.vertical, 4)
                     .background(Color.red.opacity(0.07))
             }
-
-            // ⚠️ LOCAL RUNNERS JUMP FIX:
-            // Always render a container of the same minimum height (28pt = one row).
-            // While scanning: show a fixed-height placeholder so preferredContentSize
-            // does NOT change when rows appear. Height is stable before and after refresh().
-            // ❌ NEVER gate this on hasLoadedOnce — that causes the jump.
-            if localRunnerStore.isScanning && localRunnerStore.runners.isEmpty {
-                // Placeholder: same height as one runner row so popover height is stable.
-                Color.clear.frame(height: 28)
-            } else if localRunnerStore.runners.isEmpty {
-                Text("No local runners found")
+            if localRunnerStore.runners.isEmpty {
+                Text(localRunnerStore.isScanning ? "Scanning…" : "No local runners found")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
-                    .frame(minHeight: 28, alignment: .leading)
             } else {
                 ForEach(localRunnerStore.runners) { runner in localRunnerRow(runner) }
             }
