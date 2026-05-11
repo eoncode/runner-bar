@@ -101,7 +101,10 @@ final class PanelChromeView: NSView {
 
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
-        v.material = .hudWindow
+        // .popover material matches the exact vibrancy of a native NSPopover on macOS Sonoma/Sequoia.
+        // ❌ NEVER change back to .hudWindow — .hudWindow is a darker, less transparent HUD style
+        //    that does not match native NSPopover appearance.
+        v.material = .popover
         v.blendingMode = .behindWindow
         v.state = .active
         v.wantsLayer = true
