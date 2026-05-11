@@ -4,30 +4,24 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - NavState
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296 #375 #376)
-//
-// SIZING CONTRACT (Architecture 1 — sizingOptions = .preferredContentSize, ref #375):
-//
-//   Width  → pinned via .frame(idealWidth: 420) on PopoverMainView root.
-//             NSPopover reads this as preferredContentSize.width. NEVER varies.
-//             Width MUST NOT change while shown — that causes side-jump re-anchor.
-//
-//   Height → driven by SwiftUI fittingSize automatically via .preferredContentSize.
-//             NO manual setFrameSize / contentSize calls after show().
-//             navigate() only swaps rootView — zero sizing code.
-//             Height updates automatically as SwiftUI re-lays out.
-//
-//   Rules:
-//   ❌ NEVER set sizingOptions to anything other than .preferredContentSize
-//   ❌ NEVER call setFrameSize or set contentSize while popover.isShown == true
-//   ❌ NEVER read fittingSize.width — non-deterministic with maxWidth: .infinity children
-//   ❌ NEVER remove .frame(idealWidth: 420, maxWidth: .infinity) from PopoverMainView
-//   ❌ NEVER remove @MainActor from the AppDelegate class declaration.
-//      RunnerStoreObservable is @MainActor-isolated. The stored property init()
-//      and reload() calls require the class itself to be on @MainActor.
-//   ❌ NEVER add @unchecked Sendable or @MainActor lazy var observable.
-//   ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded.
-//      These methods are called from DispatchQueue.global background closures.
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #296)
+// sizingOptions: default. Height read via fittingSize ONCE per open.
+// navigate() = rootView swap ONLY. Zero size changes. Ever.
+// ❌ NEVER set sizingOptions = .preferredContentSize
+// ❌ NEVER touch contentSize or setFrameSize while popover.isShown == true
+// ❌ NEVER add objectWillChange.send() in reload()
+// ❌ NEVER remove .frame(idealWidth: 420) from PopoverMainView
+// ❌ NEVER remove @MainActor from the AppDelegate class declaration.
+//    RunnerStoreObservable is @MainActor-isolated. The stored property init()
+//    and reload() calls require the class itself to be on @MainActor.
+//    Moving @MainActor to individual methods only does NOT fix the stored
+//    property isolation error.
+// ❌ NEVER add @unchecked Sendable or @MainActor lazy var observable.
+// ❌ NEVER remove nonisolated from enrichStepsIfNeeded or enrichGroupIfNeeded.
+//    These methods are called from DispatchQueue.global background closures.
+//    They do pure network I/O — no @MainActor state access — so nonisolated
+//    is safe and required. Removing nonisolated re-introduces the call-from-
+//    background concurrency error that breaks the build.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -53,6 +47,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var savedNavState: NavState?
     private var popoverIsOpen = false
 
+    /// Ideal/fallback width matching PopoverMainView's .frame(idealWidth: 420).
+    /// ❌ NEVER change without updating idealWidth in PopoverMainView AND SettingsView.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    /// is major major major.
+    private static let idealWidth: CGFloat = 420
+    /// Hard cap on popover width.
+    private static let maxWidth: CGFloat = 540
+    /// Hard cap on popover height.
+    private static let maxHeight: CGFloat = 620
+    private static let minHeight: CGFloat = 120
+
     // MARK: - App lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -63,18 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.target = self
         }
         let controller = NSHostingController(rootView: mainView())
-        // ⚠️ sizingOptions = .preferredContentSize: lets AppKit read width from
-        //    idealWidth and height dynamically from SwiftUI layout. NO manual sizing.
-        //    This is the ONLY approach that avoids side-jump on height changes (ref #375).
-        // ❌ NEVER remove or change this line.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
-        controller.sizingOptions = .preferredContentSize
+        let initialSize = NSSize(width: Self.idealWidth, height: 300)
+        controller.view.frame = NSRect(origin: .zero, size: initialSize)
         hostingController = controller
         let pop = NSPopover()
         pop.behavior = .transient
         pop.animates = false
+        pop.contentSize = initialSize
         pop.contentViewController = controller
         pop.delegate = self
         popover = pop
@@ -283,12 +284,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Navigation
 
-    /// Swaps rootView only. NO sizing code here.
-    /// sizingOptions = .preferredContentSize handles height automatically.
-    /// Width is pinned by idealWidth on PopoverMainView — never changes.
-    ///
-    /// ❌ NEVER add setFrameSize or contentSize calls here.
-    /// ❌ NEVER add remeasurePopover() calls here.
+    /// Swaps the hosting controller's root view. ZERO size changes. Forever.
+    /// ❌ NEVER add contentSize or setFrameSize here — re-anchor → left jump.
+    /// ❌ NEVER call this from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -307,19 +305,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover. sizingOptions = .preferredContentSize handles all sizing.
-    /// ❌ NEVER set contentSize or call setFrameSize here or anywhere after show().
-    /// ❌ NEVER remove sizingOptions = .preferredContentSize from applicationDidFinishLaunching.
+    /// Opens the popover. The ONE safe site for sizing.
+    /// Reads fittingSize synchronously, sets size, then calls show — all before shown.
+    /// ❌ NEVER call setFrameSize or set contentSize after show() — popover is shown,
+    ///    re-anchor triggers → left jump (Regression A).
+    /// ❌ NEVER use fittingSize.width — always Self.idealWidth.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     private func openPopover() {
         guard let button = statusItem?.button,
               button.window != nil,
-              let popover
+              let popover,
+              let hostingController
         else { return }
         popoverIsOpen = true
         observable.reload()
+        let fittingHeight = hostingController.view.fittingSize.height
+        let width  = Self.idealWidth
+        let height = min(max(fittingHeight > 0 ? fittingHeight : 300, Self.minHeight), Self.maxHeight)
+        let size = NSSize(width: width, height: height)
+        hostingController.view.setFrameSize(size)
+        popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
         if let saved = savedNavState,
