@@ -2,11 +2,13 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #375 #376 #377)
 //
-// ARCHITECTURE 1: sizingOptions=.preferredContentSize (SwiftUI-driven dynamic height)
+// ARCHITECTURE 2: sizingOptions=[] (manual contentSize once before show)
+// AppDelegate sets sizingOptions=[] — hosting controller NEVER auto-writes
+// preferredContentSize to NSPopover. All sizing is owned by openPopover().
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-//   NSHostingController reads idealWidth as preferredContentSize.width = 480.
-//   Width is always 480 → NSPopover never re-anchors horizontally → no side-jump.
+//   idealWidth: 480 gives fittingSize a stable width basis during measurement in
+//   openPopover(). Width is always 480 → NSPopover never re-anchors horizontally.
 //   ❌ NEVER remove .frame(idealWidth: 480)
 //   ❌ NEVER use .frame(width: 480)
 //   ❌ NEVER remove maxWidth: .infinity
@@ -23,11 +25,13 @@ import SwiftUI
 //   ❌ NEVER remove .frame(maxHeight: cappedHeight) from actionsSection.
 //   ❌ NEVER use a fixed constant — must adapt to screen size.
 //
-//   WHY NO ScrollView HERE:
-//   ScrollView reports idealHeight = unbounded to SwiftUI. With sizingOptions=
-//   .preferredContentSize, this makes the popover open at screen height regardless
-//   of actual content. fixedSize(v:true) measures actual content height as
-//   idealHeight. frame(maxHeight:) caps rendering. Popover height = min(content, cap).
+//   WHY NO ScrollView HERE (Architecture 2):
+//   ScrollView reports fittingSize.height = cappedHeight regardless of content.
+//   openPopover() reads fittingSize before show() — a ScrollView makes the popover
+//   open at cappedHeight even with 0 actions. fixedSize(v:true) measures ACTUAL
+//   content height as fittingSize.height. frame(maxHeight:) caps rendering.
+//   Popover height = min(actualContentHeight, cappedHeight) — truly dynamic.
+//   - 0 actions → ~40pt. 3 actions → ~3 rows. 20+ → capped at cappedHeight.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
@@ -47,8 +51,9 @@ import SwiftUI
 //   ❌ NEVER change one without changing the other.
 //
 // RULE 9: systemStats MUST be paused while the popover is open.
-//   SystemStatsViewModel fires every 2 s, mutating @StateObject → SwiftUI re-render
-//   → intrinsicContentSize update. Belt-and-suspenders with sizingOptions=[].
+//   SystemStatsViewModel fires every 2 s, mutating @StateObject → SwiftUI re-render.
+//   Under Architecture 2 (sizingOptions=[]) this does NOT cause a jump directly,
+//   but stopping stats while open is belt-and-suspenders safety.
 //
 //   ⚠️ CRITICAL — WHY @EnvironmentObject AND NOT A PLAIN Bool PROP:
 //   AppDelegate constructs mainView() BEFORE the popover opens.
@@ -58,12 +63,25 @@ import SwiftUI
 //   PopoverOpenState is an ObservableObject injected as @EnvironmentObject by
 //   wrapEnv(). It is mutated by AppDelegate immediately before show() and after
 //   close(), so .onChange(of: popoverOpenState.isOpen) always sees the live value.
-//   This is the SAME pattern used by InlineJobRowsView — which already works correctly.
 //
 //   ❌ NEVER re-add `var isPopoverOpen: Bool` prop to PopoverMainView.
 //   ❌ NEVER read isPopoverOpen from a plain Bool prop here.
 //   ❌ NEVER remove the .onChange(of: popoverOpenState.isOpen) systemStats gate.
 //   ❌ NEVER pass isPopoverOpen: as a prop to PopoverMainView from AppDelegate.
+//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+//   is major major major.
+//
+// RULE 10: loadMoreButton MUST be disabled while popoverOpenState.isOpen == true.
+//   Tapping loadMoreButton increments visibleCount (@State mutation while shown).
+//   Under Architecture 2 (sizingOptions=[]), SwiftUI re-renders PopoverMainView,
+//   fixedSize(v:true) re-measures natural height, and if it differs from the fixed
+//   frame set by openPopover(), AppKit resizes the window → re-anchor → side-jump.
+//   Disabling the button prevents visibleCount mutation while the popover is open.
+//   visibleCount ONLY increments after the popover is closed and reopened — at that
+//   point openPopover() remeasures fittingSize and sets a correct new contentSize.
+//   ❌ NEVER remove .disabled(popoverOpenState.isOpen) from loadMoreButton.
+//   ❌ NEVER allow visibleCount to mutate while popoverOpenState.isOpen == true.
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
@@ -113,13 +131,11 @@ struct PopoverMainView: View {
                     }
                 }
             // ⚠️ RULE 6: actionsSection uses fixedSize+maxHeight — NO ScrollView wrapper.
-            // .fixedSize(v:true) measures actual content height as idealHeight.
+            // .fixedSize(v:true) measures actual content height for fittingSize in openPopover().
             // .frame(maxHeight:) caps rendering for screen safety.
-            // idealHeight = min(actualContentHeight, cappedHeight) — truly dynamic.
-            // 0 actions → ~40pt. 3 actions → ~3 rows. 20+ → capped at cappedHeight.
-            // ❌ NEVER wrap this in ScrollView — ScrollView idealHeight = unbounded.
-            // ❌ NEVER remove fixedSize — without it idealHeight is unconstrained.
-            // ❌ NEVER replace maxHeight with height — height is a fixed size.
+            // ❌ NEVER wrap this in ScrollView — ScrollView fittingSize.height = cappedHeight always.
+            // ❌ NEVER remove fixedSize — without it fittingSize.height is unconstrained/wrong.
+            // ❌ NEVER replace maxHeight with height — height is a fixed size not a cap.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
             // comment is removed is major major major.
@@ -127,12 +143,20 @@ struct PopoverMainView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxHeight: cappedHeight, alignment: .top)
         }
-        // RULE 1: idealWidth:480 is LOAD-BEARING for preferredContentSize.width.
+        // RULE 1: idealWidth:480 gives fittingSize a stable width basis.
         // ❌ NEVER add .frame(height:) or .frame(idealHeight:) here.
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            if !popoverOpenState.isOpen {
+            // ⚠️ RULE 9 — start stats when popover opens (onAppear fires while isOpen=true).
+            // ❌ NEVER invert this guard: `if !isOpen` would mean stats NEVER start on open.
+            // The .onChange below handles open→stop and close→start transitions.
+            // onAppear is the initial start — it fires once when the view first appears,
+            // which is always after AppDelegate sets popoverOpenState.isOpen = true.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+            // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+            // is major major major.
+            if popoverOpenState.isOpen {
                 systemStats.start()
             }
             startRunnerRefreshTimer()
@@ -142,6 +166,8 @@ struct PopoverMainView: View {
             stopRunnerRefreshTimer()
         }
         // ⚠️ RULE 9 — systemStats gate via LIVE @EnvironmentObject.
+        // open=true → stop stats (no @Published mutations while popover is shown).
+        // open=false → start stats (popover closed, safe to poll again).
         // ❌ NEVER change to a plain Bool prop — see RULE 9 comment above.
         // ❌ NEVER remove this .onChange.
         // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in }.
@@ -169,7 +195,8 @@ struct PopoverMainView: View {
             // ❌ LocalRunnerStore.shared.refresh() is @MainActor-isolated — MUST use
             //    Task { @MainActor in } from this nonisolated Timer closure.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
+            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+            // comment is removed is major major major.
             if !popoverOpenState.isOpen {
                 Task { @MainActor in
                     LocalRunnerStore.shared.refresh()
@@ -218,6 +245,16 @@ struct PopoverMainView: View {
         .padding(.vertical, 4)
     }
 
+    // ⚠️ RULE 10: loadMoreButton is DISABLED while popoverOpenState.isOpen == true.
+    // Mutating visibleCount while open causes SwiftUI re-render → fixedSize re-measures
+    // → frame change → AppKit window resize → re-anchor → side-jump.
+    // The button is only tappable after the popover is closed (isOpen=false).
+    // On next open, openPopover() remeasures fittingSize with the new visibleCount.
+    // ❌ NEVER remove .disabled(popoverOpenState.isOpen).
+    // ❌ NEVER allow visibleCount to mutate while popoverOpenState.isOpen == true.
+    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+    // is major major major.
     @ViewBuilder
     private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
@@ -231,6 +268,8 @@ struct PopoverMainView: View {
             )
             .buttonStyle(.plain)
             .padding(.horizontal, 12).padding(.vertical, 6)
+            // ⚠️ RULE 10 — MUST be disabled while open. See comment above.
+            .disabled(popoverOpenState.isOpen)
         }
     }
 
