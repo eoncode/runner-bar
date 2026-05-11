@@ -3,8 +3,8 @@ import SwiftUI
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #375 #376 #377)
 //
 // RULE 1: Root VStack MUST use .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-//         AppDelegate reads hc.view.fittingSize in openPopover() and remeasurePopover()
-//         to size the popover. idealWidth pins the measurement width to 480.
+//         NSHostingController reads idealWidth as preferredContentSize.width = 480.
+//         Width is always 480 → NSPopover never re-anchors horizontally → no side-jump.
 //         ❌ NEVER remove .frame(idealWidth: 480)
 //         ❌ NEVER use .frame(width: 480)
 //         ❌ NEVER remove maxWidth: .infinity
@@ -15,20 +15,19 @@ import SwiftUI
 // RULE 4: NEVER use .fixedSize() on the root VStack.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
-// RULE 6: actionsSection MUST NOT be wrapped in ScrollView and MUST NOT have
-//         .fixedSize or .frame(maxHeight:) applied to it.
+// RULE 6: actionsSection MUST be wrapped in a ScrollView with a .frame(maxHeight:) cap.
 //
-//         Height is fully dynamic — driven entirely by fittingSize.height in
-//         AppDelegate.remeasurePopover(), which is called via async hop after every
-//         navigate() and after "Load more" (onContentChanged callback).
+//         Architecture 1 (sizingOptions=.preferredContentSize): SwiftUI auto-reports
+//         the view’s ideal height to NSPopover. Without a height cap, adding/removing
+//         action groups changes idealHeight → NSPopover resizes/repositions → height jump.
 //
-//         ❌ NEVER wrap actionsSection in a ScrollView — ScrollView reports infinite
-//            fittingSize.height, breaking remeasurePopover().
-//         ❌ NEVER add .fixedSize to actionsSection.
-//         ❌ NEVER add .frame(maxHeight:) to actionsSection — clips content and
-//            mis-sizes the popover for the "Load more" dynamic height use case.
-//         ✅ AppDelegate.maxHeight (680pt) is the only height cap — applied in
-//            remeasurePopover() and openPopover() when clamping fittingSize.height.
+//         The ScrollView cap is computed as NSScreen.main?.visibleFrame.height * 0.75
+//         — same pattern as ActionDetailView, JobDetailView, StepLogView, SettingsView.
+//
+//         ❌ NEVER remove the ScrollView from actionsSection.
+//         ❌ NEVER remove .frame(maxHeight:) from the ScrollView.
+//         ❌ NEVER use a fixed constant — must adapt to screen size.
+//         ❌ NEVER use an uncapped ScrollView — causes preferredContentSize.height spike.
 //         If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //         is major major major.
@@ -57,10 +56,10 @@ import SwiftUI
 //         UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //         is major major major.
 //
-// RULE 10: onContentChanged is called by loadMoreButton after expanding the list.
-//          AppDelegate uses it to call remeasurePopover() via 1 async hop so the
-//          popover grows to fit the newly visible rows.
-//          ❌ NEVER remove onContentChanged from loadMoreButton action.
+// RULE 10: Load-more button increments visibleCount and is the only way to expand
+//          the actions list. No onContentChanged callback needed — Architecture 1
+//          auto-reports new height via preferredContentSize after SwiftUI re-renders.
+//          The ScrollView cap prevents the height from exceeding cappedHeight.
 //          If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //          UNDER ANY CIRCUMSTANCE.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -72,11 +71,6 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
-    /// Called after the "Load more" button expands the list so AppDelegate can
-    /// remeasure the popover height. ❌ NEVER remove from loadMoreButton action.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
-    var onContentChanged: (() -> Void)? = nil
     /// Set by AppDelegate. Gates timer calls and systemStats (RULE 7, RULE 9).
     /// ❌ NEVER remove this property.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -88,6 +82,14 @@ struct PopoverMainView: View {
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
     @State private var runnerRefreshTimer: Timer?
+
+    /// Height cap for the actionsSection ScrollView.
+    /// 75% of visible screen height — matches ActionDetailView, JobDetailView, StepLogView.
+    /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
+    /// ❌ NEVER use a fixed constant — must adapt to screen size.
+    private var cappedHeight: CGFloat {
+        NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -101,15 +103,18 @@ struct PopoverMainView: View {
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
                 .onAppear { Task { await MainActor.run { LocalRunnerStore.shared.refresh() } } }
-            // ⚠️ RULE 6: NO ScrollView, NO .fixedSize, NO .frame(maxHeight:) here.
-            // Height is fully dynamic — remeasurePopover() in AppDelegate handles capping.
-            // ❌ NEVER wrap in ScrollView.
-            // ❌ NEVER add .fixedSize or .frame(maxHeight:) to actionsSection.
+            // ⚠️ RULE 6: actionsSection MUST be inside a ScrollView with .frame(maxHeight: cappedHeight).
+            // The cap prevents preferredContentSize.height from spiking when actions change.
+            // ❌ NEVER remove the ScrollView.
+            // ❌ NEVER remove .frame(maxHeight: cappedHeight).
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
-            actionsSection
+            ScrollView(.vertical, showsIndicators: true) {
+                actionsSection
+            }
+            .frame(maxHeight: cappedHeight)
         }
-        // RULE 1: idealWidth:480 is LOAD-BEARING for fittingSize measurement.
+        // RULE 1: idealWidth:480 is LOAD-BEARING for preferredContentSize.width.
         // ❌ NEVER add .frame(height:) or .frame(maxHeight:) here.
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
@@ -196,15 +201,12 @@ struct PopoverMainView: View {
     private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
         if nextBatch > 0 {
+            // Architecture 1: no onContentChanged callback needed.
+            // After visibleCount increments, SwiftUI re-renders and auto-reports
+            // the new preferredContentSize to NSPopover. The ScrollView cap
+            // (cappedHeight) prevents the height from exceeding screen bounds.
             Button(
-                action: {
-                    visibleCount += nextBatch
-                    // ⚠️ RULE 10: notify AppDelegate so it can remeasure the popover
-                    // height after the list expands. ❌ NEVER remove this call.
-                    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE
-                    // NOT ALLOWED UNDER ANY CIRCUMSTANCE.
-                    onContentChanged?()
-                },
+                action: { visibleCount += nextBatch },
                 label: {
                     Text("Load \(nextBatch) more actions\u{2026}")
                         .font(.caption).foregroundColor(.secondary)
