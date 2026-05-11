@@ -10,6 +10,19 @@ import SwiftUI
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
 ///
+/// Phase 1 (issue #252): Local Runners section auto-populates at launch via
+/// `LocalRunnerStore`, which calls `LocalRunnerScanner` on a background thread.
+/// No GitHub token is required for this section.
+///
+/// Phase 2 (issue #253): Each runner row gains Resume/Stop, ⚙ Config, and
+/// ✕ Remove controls backed by `RunnerLifecycleService`.
+///
+/// Phase 3 (issue #254): A `+` button in the Local Runners header opens
+/// `AddRunnerSheet` to onboard new runners via the GitHub API.
+///
+/// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
+/// live GitHub API status (online/offline/busy) after each local scan.
+///
 /// ⚠️ REGRESSION GUARD (NSPanel architecture — ref #52 #54 #57 #377):
 ///
 ///   ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize.
@@ -40,31 +53,40 @@ import SwiftUI
 ///   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 ///   is major major major.
 struct SettingsView: View {
+    /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
+    /// The observable that bridges RunnerStore state into SwiftUI.
     @ObservedObject var store: RunnerStoreObservable
 
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var notifications = NotificationPrefsStore.shared
     @ObservedObject private var legal = LegalPrefsStore.shared
+    /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
+    /// Becomes `true` after the first scan completes.
     @State private var hasLoadedOnce = false
+    /// Phase 2: runner pending removal confirmation.
     @State private var runnerPendingRemoval: RunnerModel?
+    /// Phase 2: runner whose config sheet is open.
     @State private var runnerBeingConfigured: RunnerModel?
+    /// Phase 3: controls whether the Add Runner sheet is presented.
     @State private var showAddRunnerSheet = false
+    /// Surfaced when remove() returns false — cleared on next refresh.
     @State private var removeErrorMessage: String?
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "\u{2014}"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
 
     private var appBuild: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "\u{2014}"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
+    /// Alert title for the runner-removal confirmation dialog.
     private var removalAlertTitle: String {
         let name = runnerPendingRemoval?.runnerName ?? "this runner"
         return "Remove runner \"\(name)\""
@@ -115,89 +137,135 @@ struct SettingsView: View {
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            hasLoadedOnce = true
+            ScopeStore.shared.onMutate = { [weak store] in
+                store?.reload()
+            }
+            localRunnerStore.refresh()
+        }
+        // Single-parameter form: compatible with macOS 13+.
+        // The two-parameter { _, newValue in } form requires macOS 14+.
+        .onChange(of: localRunnerStore.isScanning) { scanning in
+            if !scanning { hasLoadedOnce = true }
+        }
+        .onDisappear {
+            ScopeStore.shared.onMutate = nil
         }
         .sheet(isPresented: $showAddRunnerSheet) {
             AddRunnerSheet(isPresented: $showAddRunnerSheet) {
-                LocalRunnerStore.shared.refresh()
+                localRunnerStore.refresh()
             }
         }
         .sheet(item: $runnerBeingConfigured) { runner in
             RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
-                LocalRunnerStore.shared.refresh()
+                localRunnerStore.refresh()
             }
         }
         .alert(removalAlertTitle, isPresented: Binding(
             get: { runnerPendingRemoval != nil },
             set: { if !$0 { runnerPendingRemoval = nil } }
         )) {
-            Button("Remove", role: .destructive) { confirmRemoveRunner() }
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
+            Button("Remove", role: .destructive) {
+                guard let runner = runnerPendingRemoval else { return }
+                // Gate on token: de-registration requires GitHub auth.
+                // Without a token svc.sh uninstall succeeds but config.sh remove
+                // fails, leaving a ghost registration on the GitHub side.
+                guard isAuthenticated else {
+                    runnerPendingRemoval = nil
+                    return
+                }
+                runnerPendingRemoval = nil
+                removeErrorMessage = nil
+                DispatchQueue.global(qos: .userInitiated).async {
+                    // Capture result: @discardableResult on remove() must not be
+                    // silently dropped. A false return means config.sh remove
+                    // failed and the GitHub registration was NOT cleaned up.
+                    let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
+                    DispatchQueue.main.async {
+                        if !succeeded {
+                            removeErrorMessage = "De-registration failed — the runner may " +
+                                "still appear in GitHub. Check your token and try again."
+                        }
+                        localRunnerStore.refresh()
+                    }
+                }
+            }
         } message: {
-            if let msg = removeErrorMessage {
-                Text(msg)
+            if isAuthenticated {
+                Text("This will run ./svc.sh uninstall and ./config.sh remove. " +
+                     "A GitHub token is required for de-registration.")
             } else {
-                Text("This will remove the runner from GitHub. This cannot be undone.")
+                Text("A GitHub token is required to de-register the runner from GitHub. " +
+                     "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
             }
         }
     }
 
-    // MARK: - Header
+    // MARK: - Sections
 
     private var headerBar: some View {
         HStack {
-            Button(action: onBack) {
+            Button(action: onBack, label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Back")
                         .font(.system(size: 12, weight: .medium))
+                    Text("Settings")
+                        .font(.headline)
                 }
-                .foregroundColor(.secondary)
-            }
+                .foregroundColor(.primary)
+            })
             .buttonStyle(.plain)
             Spacer()
-            Text("Settings")
-                .font(.system(size: 13, weight: .semibold))
-            Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
     }
 
-    // MARK: - Local runners section
+    // MARK: Phase 1 + 2 + 4 — Local Runners
 
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Local runners")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .font(.caption).foregroundColor(.secondary)
                 Spacer()
-                HStack(spacing: 4) {
-                    Button(action: { showAddRunnerSheet = true }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    Button(action: { Task { await MainActor.run { LocalRunnerStore.shared.refresh() } } }) {
+                Button(action: { showAddRunnerSheet = true }, label: {
+                    Image(systemName: "plus")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                })
+                .buttonStyle(.plain)
+                .help("Add a new runner")
+                .padding(.trailing, 4)
+                if localRunnerStore.isScanning {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Button(action: {
+                        removeErrorMessage = nil
+                        localRunnerStore.refresh()
+                    }, label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.caption)
                             .foregroundColor(.secondary)
-                    }
+                    })
                     .buttonStyle(.plain)
+                    .help("Refresh local runner list")
                 }
-                .padding(.trailing, 12)
             }
-            if localRunnerStore.runners.isEmpty {
-                Text("No local runners configured")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+
+            if let errMsg = removeErrorMessage {
+                Text(errMsg)
+                    .font(.caption).foregroundColor(.red)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+                    .background(Color.red.opacity(0.07))
+            }
+
+            if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
+                Text("No local runners found")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
                 ForEach(localRunnerStore.runners) { runner in
                     localRunnerRow(runner)
@@ -213,51 +281,54 @@ struct SettingsView: View {
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(runner.runnerName)
-                    .font(.system(size: 12))
-                    .lineLimit(1)
+                    .font(.system(size: 13)).lineLimit(1)
                 if let url = runner.gitHubUrl {
                     Text(url)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                        .font(.caption2).foregroundColor(.secondary).lineLimit(1)
                 }
             }
             Spacer()
             Text(runner.displayStatus)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .fixedSize()
+                .font(.caption).foregroundColor(.secondary)
+                .lineLimit(1).fixedSize()
             if runner.isRunning {
-                Button("Stop") {
-                    lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) }
-                }
+                Button(
+                    action: {
+                        lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) }
+                    },
+                    label: { Text("Stop").font(.caption2) }
+                )
                 .buttonStyle(.bordered)
-                .font(.caption2)
                 .help("Stop runner service")
             } else {
-                Button("Resume") {
-                    lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) }
-                }
+                Button(
+                    action: {
+                        lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) }
+                    },
+                    label: { Text("Resume").font(.caption2) }
+                )
                 .buttonStyle(.bordered)
-                .font(.caption2)
                 .help("Start runner service")
             }
-            Button(action: { runnerBeingConfigured = runner }) {
+            Button(action: { runnerBeingConfigured = runner }, label: {
                 Image(systemName: "gearshape").font(.caption2)
-            }
+            })
             .buttonStyle(.plain)
             .help("Configure runner")
-            Button(action: { runnerPendingRemoval = runner }) {
-                Image(systemName: "minus.circle")
-                    .font(.caption2)
-                    .foregroundColor(.red)
-            }
+            Button(action: { runnerPendingRemoval = runner }, label: {
+                Image(systemName: "minus.circle").font(.caption2).foregroundColor(.red)
+            })
             .buttonStyle(.plain)
             .help("Remove runner")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 12).padding(.vertical, 5)
+    }
+
+    private func lifecycleAction(_ action: @escaping () -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            action()
+            DispatchQueue.main.async { localRunnerStore.refresh() }
+        }
     }
 
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
@@ -269,296 +340,216 @@ struct SettingsView: View {
         }
     }
 
-    private func lifecycleAction(_ action: @escaping () -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            action()
-            DispatchQueue.main.async { LocalRunnerStore.shared.refresh() }
-        }
-    }
-
-    // MARK: - Runner management section
+    // MARK: - Section 2: API-registered runner scopes
 
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Runner management")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            ForEach(store.runners) { runner in
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(runner.status != "online" ? Color.gray : (runner.busy ? Color.yellow : Color.green))
-                        .frame(width: 8, height: 8)
-                    Text(runner.name)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                    Spacer()
-                    Text(runner.busy ? "busy" : (runner.status == "online" ? "online" : "offline"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                    Button(action: { runnerPendingRemoval = RunnerModel(
-                        runnerName: runner.name,
-                        gitHubUrl: nil,
-                        agentId: nil,
-                        workFolder: nil,
-                        installPath: nil,
-                        isRunning: false
-                    )}) {
-                        Image(systemName: "minus.circle")
-                            .font(.caption2)
-                            .foregroundColor(.red)
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+            if !store.runners.isEmpty {
+                ForEach(store.runners, id: \.id) { runner in
+                    HStack(spacing: 8) {
+                        Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
+                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
+                        Spacer()
+                        Text(runner.displayStatus)
+                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
                     }
-                    .buttonStyle(.plain)
-                    .help("Remove runner")
+                    .padding(.horizontal, 12).padding(.vertical, 5)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            }
-            if store.runners.isEmpty {
+            } else {
                 Text("No runners configured")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 4)
             }
-            scopeRow
-        }
-    }
-
-    private var scopeRow: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(ScopeStore.shared.scopes, id: \.self) { scope in
+            Text("Scopes").font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+            ForEach(ScopeStore.shared.scopes, id: \.self) { scopeStr in
                 HStack {
-                    Text(scope)
-                        .font(.system(size: 12))
+                    Text(scopeStr).font(.system(size: 12))
                     Spacer()
                     Button(action: {
-                        ScopeStore.shared.remove(scope)
-                        store.reload()
-                    }) {
-                        Image(systemName: "minus.circle")
-                            .foregroundColor(.red)
-                    }
-                    .buttonStyle(.plain)
+                        ScopeStore.shared.remove(scopeStr)
+                        RunnerStore.shared.start()
+                    }, label: {
+                        Image(systemName: "minus.circle").foregroundColor(.red)
+                    }).buttonStyle(.plain)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 2)
+                .padding(.horizontal, 12).padding(.vertical, 2)
             }
-            HStack(spacing: 6) {
+            HStack {
                 TextField("owner/repo or org", text: $newScope)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .onSubmit { addScope() }
-                if !newScope.isEmpty {
-                    Button("Add") { addScope() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .padding(.trailing, 12)
-                }
+                    .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    .onSubmit { submitScope() }
+                Button(action: submitScope, label: {
+                    Image(systemName: "plus.circle")
+                })
+                .buttonStyle(.plain)
+                .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+            .padding(.horizontal, 12).padding(.vertical, 4)
         }
     }
-
-    // MARK: - Notifications section
 
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            Toggle("Notify on success", isOn: $notifications.notifyOnSuccess)
-                .toggleStyle(.switch)
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            Toggle("Notify on failure", isOn: $notifications.notifyOnFailure)
-                .toggleStyle(.switch)
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+            Toggle(isOn: $notifications.notifyOnSuccess) {
+                Text("Notify on success").font(.system(size: 12))
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            Divider().padding(.leading, 12)
+            Toggle(isOn: $notifications.notifyOnFailure) {
+                Text("Notify on failure").font(.system(size: 12))
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
         }
     }
-
-    // MARK: - General section
 
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .toggleStyle(.switch)
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .onChange(of: launchAtLogin) { val in
-                    LoginItem.setEnabled(val)
-                }
-            // showDimmedRunners is the actual property — showOfflineRunners does not exist.
-            Toggle("Show offline runners", isOn: $settings.showDimmedRunners)
-                .toggleStyle(.switch)
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            pollingIntervalRow
-        }
-    }
-
-    private var pollingIntervalRow: some View {
-        HStack {
-            Text("Polling interval")
-                .font(.system(size: 13))
-            Spacer()
-            Text("\(settings.pollingInterval)s")
                 .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            Stepper("", value: $settings.pollingInterval, in: 10...300, step: 10)
-                .labelsHidden()
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
+            Divider().padding(.leading, 12)
+            Toggle(isOn: $settings.showDimmedRunners) {
+                Text("Show offline runners").font(.system(size: 12))
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            Divider().padding(.leading, 12)
+            HStack {
+                Text("Polling interval").font(.system(size: 12))
+                Spacer()
+                Text("\(settings.pollingInterval)s")
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .frame(minWidth: 36, alignment: .trailing)
+                Stepper("", value: $settings.pollingInterval, in: 10...300)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
     }
-
-    // MARK: - Account section
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            if isAuthenticated {
-                HStack {
-                    Text("GitHub")
-                        .font(.system(size: 13))
-                    Spacer()
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+            HStack {
+                Text("GitHub").font(.system(size: 12))
+                Spacer()
+                if isAuthenticated {
                     HStack(spacing: 4) {
                         Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                        Text("Authenticated").font(.caption).foregroundColor(.secondary)
                     }
+                } else {
+                    Button(action: signInWithGitHub, label: {
+                        Text("Sign in").font(.caption).foregroundColor(.orange)
+                    }).buttonStyle(.plain)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                Text("`gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 2)
-            } else {
-                Button("Connect GitHub account") {
-                    let url = URL(string: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens")!
-                    NSWorkspace.shared.open(url)
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundColor(.accentColor)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 2)
             }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            Divider().padding(.leading, 12)
+            Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.vertical, 4)
         }
     }
-
-    // MARK: - Legal section
-    // LegalPrefsStore exposes only `analyticsEnabled` — acceptedTerms/acceptedPrivacy do not exist.
 
     private var legalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Legal")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            Toggle("Share analytics", isOn: $legal.analyticsEnabled)
-                .toggleStyle(.switch)
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
+            Toggle(isOn: $legal.analyticsEnabled) {
+                Text("Share analytics").font(.system(size: 12))
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+#if DEBUG
+            Divider().padding(.leading, 12)
+            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
+            Divider().padding(.leading, 12)
+            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar")
+#endif
         }
     }
 
-    // MARK: - About section
-
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("About")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
             HStack {
-                Text("Version")
-                    .font(.system(size: 13))
+                Text("Version").font(.system(size: 12))
                 Spacer()
                 Text("\(appVersion) (\(appBuild))")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12)).foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 12).padding(.vertical, 2)
             HStack {
-                Text("RunnerBar")
-                    .font(.system(size: 13))
+                Text("RunnerBar").font(.system(size: 12))
                 Spacer()
                 Text(Bundle.main.bundleIdentifier ?? "dev.eonist.runnerbar")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12)).foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            Button("View on GitHub") {
-                let url = URL(string: "https://github.com/eoncode/runner-bar")!
-                NSWorkspace.shared.open(url)
-            }
-            .buttonStyle(.plain)
-            .font(.system(size: 13))
-            .foregroundColor(.accentColor)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 12).padding(.vertical, 2)
+            Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
+                .font(.system(size: 11)).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
         }
     }
 
     // MARK: - Helpers
 
-    private func addScope() {
-        let trimmed = newScope.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        ScopeStore.shared.add(trimmed)
-        newScope = ""
-        store.reload()
+    private func applyLaunchAtLogin(_ enabled: Bool) {
+        LoginItem.setEnabled(enabled)
     }
 
-    private func confirmRemoveRunner() {
-        guard let runner = runnerPendingRemoval else { return }
-        removeErrorMessage = nil
-        DispatchQueue.global(qos: .userInitiated).async {
-            let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
-            DispatchQueue.main.async {
-                if !succeeded {
-                    removeErrorMessage = "De-registration failed — the runner may still appear in GitHub. Check your token and try again."
-                } else {
-                    store.reload()
-                    LocalRunnerStore.shared.refresh()
+    private func submitScope() {
+        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        ScopeStore.shared.add(trimmed)
+        RunnerStore.shared.start()
+        store.reload()
+        newScope = ""
+    }
+
+    private func runnerDotColor(for runner: Runner) -> Color {
+        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+    }
+
+    private func linkRow(label: String, url: String) -> some View {
+        Button(
+            action: { if let dest = URL(string: url) { NSWorkspace.shared.open(dest) } },
+            label: {
+                HStack {
+                    Text(label).font(.system(size: 12)).foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
                 }
-                runnerPendingRemoval = nil
+                .padding(.horizontal, 12).padding(.vertical, 8)
             }
-        }
+        ).buttonStyle(.plain)
+    }
+
+    private func signInWithGitHub() {
+        let urlString = "https://docs.github.com/en/authentication/" +
+            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 // swiftlint:enable type_body_length
