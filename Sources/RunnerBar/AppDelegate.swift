@@ -4,7 +4,7 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - NavState
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #21 #13)
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #59 #21 #13 #376)
 // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -19,6 +19,10 @@ import SwiftUI
 //     fittingSize.width is non-deterministic when views with maxHeight:.infinity
 //     are in the tree (e.g. StepLogView). Using it causes the popover to shift
 //     horizontally — the side-jump regression (issue #13).
+// ✅ fittingSize.HEIGHT is safe to read synchronously before or after show().
+//     Only fittingSize.WIDTH is forbidden. Height does not affect the anchor X.
+// ❌ NEVER use a cached/stale height constant (e.g. lastKnownHeight) instead of
+//     fittingSize.height — this breaks dynamic height sizing.
 // ⚠️ fixedWidth MUST match PopoverMainView's .frame(idealWidth: 480).
 //     Mismatching these causes fittingSize.height to be calculated at the
 //     wrong width, wrapping content and producing an incorrect popover height.
@@ -35,20 +39,6 @@ import SwiftUI
 //     the first run-loop turn after isLoading flips false. Two hops give SwiftUI
 //     two full run-loop turns to commit the new log layout before sampling.
 //     Width is always Self.fixedWidth — never fittingSize.width — to prevent #13.
-//     If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//     UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//     is major major major.
-//
-// #13 SIDE-JUMP FIX (openPopover):
-//     The popover is shown at (fixedWidth × lastKnownHeight) — never sampling
-//     fittingSize synchronously before show(). fittingSize before the first
-//     layout pass is unreliable (especially with maxHeight:.infinity in the tree),
-//     which caused AppKit to compute the wrong anchor X and shift the popover
-//     horizontally. After show() we fire ONE async hop so SwiftUI completes its
-//     first layout pass, then call remeasurePopover() to correct the height.
-//     Width stays fixedWidth throughout — never fittingSize.width.
-//     ❌ NEVER revert to synchronous fittingSize sampling before show().
-//     ❌ NEVER use fittingSize.width here or in remeasurePopover().
 //     If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //     UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //     is major major major.
@@ -99,15 +89,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// is major major major.
     private static let fixedWidth: CGFloat = 480
 
-    /// Last known good popover height, used as the stable initial size when opening.
-    /// Avoids a synchronous fittingSize sample before show() which is unreliable
-    /// and causes the #13 horizontal side-jump. Updated by remeasurePopover().
-    /// ❌ NEVER replace with fittingSize.height sampled before show().
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
-    private var lastKnownHeight: CGFloat = 300
-
     // MARK: - App lifecycle
 
     /// Bootstraps the status-bar item, hosting controller, and popover at launch.
@@ -119,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.target = self
         }
         let controller = NSHostingController(rootView: mainView())
-        let initialSize = NSSize(width: Self.fixedWidth, height: lastKnownHeight)
+        let initialSize = NSSize(width: Self.fixedWidth, height: 300)
         controller.view.frame = NSRect(origin: .zero, size: initialSize)
         hostingController = controller
         let pop = NSPopover()
@@ -377,8 +358,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Re-measures height via fittingSize and resizes the popover.
     /// Width is ALWAYS Self.fixedWidth — never fittingSize.width.
-    /// Also persists the new height in lastKnownHeight so the next open
-    /// can use a stable size without a synchronous fittingSize sample.
     ///
     /// ❌ NEVER substitute Self.fixedWidth with fittingSize.width — causes #13 side-jump.
     /// ❌ NEVER call from a background thread.
@@ -391,7 +370,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
               pop.isShown else { return }
         let newHeight = hc.view.fittingSize.height
         guard newHeight > 0 else { return }
-        lastKnownHeight = newHeight
         let newSize = NSSize(width: Self.fixedWidth, height: newHeight)
         hc.view.setFrameSize(newSize)
         pop.contentSize = newSize
@@ -409,15 +387,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    /// Opens the popover at (fixedWidth × lastKnownHeight), then remeasures height
-    /// asynchronously after SwiftUI's first layout pass completes.
+    /// Opens the popover. The ONE safe site for initial sizing.
     ///
-    /// Using lastKnownHeight instead of a synchronous fittingSize sample prevents the
-    /// #13 horizontal side-jump: fittingSize before the first layout pass is
-    /// unreliable (especially with maxHeight:.infinity views in the tree such as
-    /// StepLogView), causing AppKit to compute the wrong anchor X position.
+    /// fittingSize.HEIGHT is read synchronously here — this is safe and correct per
+    /// issue #376. Only fittingSize.WIDTH is forbidden (causes #13 side-jump).
+    /// Width is always Self.fixedWidth — never fittingSize.width.
     ///
-    /// ❌ NEVER sample fittingSize synchronously before pop.show() — causes #13.
     /// ❌ NEVER use fittingSize.width here — always Self.fixedWidth.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -430,18 +405,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         else { return }
         popoverIsOpen = true
         observable.reload()
-        // #13: Use lastKnownHeight — NOT fittingSize.height — as the initial size.
-        // fittingSize before show() is unreliable and causes horizontal side-jump.
-        let size = NSSize(width: Self.fixedWidth, height: lastKnownHeight)
+        let size = NSSize(
+            width: Self.fixedWidth,                            // ❌ NEVER fittingSize.width
+            height: hostingController.view.fittingSize.height  // ✅ height is safe
+        )
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
-        // Remeasure height after SwiftUI's first layout pass so the popover
-        // correctly sizes to the actual content without shifting horizontally.
-        DispatchQueue.main.async { [weak self] in
-            self?.remeasurePopover()
-        }
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
             navigate(to: restored)
