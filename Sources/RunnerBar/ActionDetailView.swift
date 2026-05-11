@@ -2,18 +2,14 @@ import AppKit
 import SwiftUI
 // swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️ REGRESSION GUARD (ref #52 #54 #57 #375 #376)
-// ═══════════════════════════════════════════════════════════════════════════════
-// sizingOptions=.preferredContentSize drives all sizing via idealWidth:420.
-// idealWidth:420 on root pins preferredContentSize.width -> no jump on navigate().
-// ❌ NEVER remove idealWidth:420 — without it preferredContentSize.width is unbounded
-//    and NSPopover jumps sideways on every navigate() call.
-// ❌ NEVER remove .maxHeight:.infinity from root — detail views must fill existing frame.
-// ❌ NEVER remove .fixedSize(horizontal:false,vertical:true) from ScrollView VStack.
-// ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks.
-// ❌ NEVER call layoutSubtreeIfNeeded() anywhere — causes sideways jump.
-// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ REGRESSION GUARD — Architecture 1 (ref #375 #376 #377 status-bar-app-position-warning.md)
+//
+// sizingOptions = .preferredContentSize + idealWidth:420 on root drives ALL sizing.
+// ❌ NEVER use .fixedSize(horizontal:false,vertical:true) inside a ScrollView here.
+//    fixedSize inside ScrollView reports unbounded ideal height upward to
+//    preferredContentSize.height -> popover overflows or jumps.
+// ❌ NEVER remove idealWidth:420 from root frame.
+// ❌ NEVER remove maxHeight:.infinity — must fill existing popover frame after navigate().
 
 struct ActionDetailView: View {
     let group: ActionGroup
@@ -108,6 +104,7 @@ struct ActionDetailView: View {
             Divider()
 
             // ── Jobs list: INSIDE ScrollView
+            // ⚠️ NO .fixedSize inside this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
@@ -158,12 +155,9 @@ struct ActionDetailView: View {
                         }
                     }
                 }
-                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // ⚠️ idealWidth:420 is REQUIRED — pins preferredContentSize.width so NSPopover
-        // does not jump sideways when navigate() swaps this view in.
         .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()

@@ -1,13 +1,12 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Layout contract
-// Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).
-// Root: .frame(idealWidth:420, maxWidth:.infinity, maxHeight:.infinity, alignment:.top)
-// idealWidth:420 pins preferredContentSize.width -> no jump on navigate().
-// Log MUST be inside ScrollView. Header MUST be outside ScrollView.
-// ❌ NEVER remove idealWidth:420 — causes NSPopover side-jump on navigate().
-// ❌ NEVER add .frame(height:) or .fixedSize() to root.
+// ⚠️ REGRESSION GUARD — Architecture 1 (ref #375 #376 #377 status-bar-app-position-warning.md)
+//
+// sizingOptions = .preferredContentSize + idealWidth:420 on root drives ALL sizing.
+// ❌ NEVER use .fixedSize inside a ScrollView here — reports unbounded height -> overflow/jump.
+// ❌ NEVER remove idealWidth:420 from root frame.
+// ❌ NEVER remove maxHeight:.infinity — must fill existing popover frame after navigate().
 
 struct StepLogView: View {
     let job: ActiveJob
@@ -19,6 +18,7 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // ── Header: OUTSIDE ScrollView
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -53,6 +53,8 @@ struct StepLogView: View {
                 .padding(.bottom, 6)
             Divider()
 
+            // ── Log content: INSIDE ScrollView
+            // ⚠️ NO .fixedSize inside this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -77,7 +79,6 @@ struct StepLogView: View {
                 }
             }
         }
-        // ⚠️ idealWidth:420 REQUIRED — pins preferredContentSize.width -> no jump.
         .frame(idealWidth: 420, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
@@ -89,8 +90,7 @@ struct StepLogView: View {
         let scope: String = {
             let parts = job.htmlUrl?.components(separatedBy: "/") ?? []
             if parts.count >= 5 {
-                let owner = parts[3]
-                let repo = parts[4]
+                let owner = parts[3]; let repo = parts[4]
                 if !owner.isEmpty && !repo.isEmpty { return "\(owner)/\(repo)" }
             }
             return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
