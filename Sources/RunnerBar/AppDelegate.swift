@@ -48,7 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - App lifecycle
 
-    /// Bootstraps the status-bar item, hosting controller, and popover at launch.
+    /// Bootstraps the status-bar item, hosting controller, popover, and
+    /// background update checks at launch.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -75,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             if !self.popoverIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
+
+        // Kick off an eager update check at launch (ref #345).
+        // AppUpdaterService.shared also starts the 24h background scheduler.
+        AppUpdaterService.shared.checkForUpdates()
     }
 
     // MARK: - NSPopoverDelegate

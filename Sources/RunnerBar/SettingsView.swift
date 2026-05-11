@@ -1,4 +1,5 @@
 // swiftlint:disable file_length
+import AppUpdater
 import ServiceManagement
 import SwiftUI
 
@@ -22,6 +23,9 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// Phase 5 (issue #345): `aboutSection` gains an update row backed by
+/// `AppUpdaterService`. States: idle → checking → ready-to-install.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -33,6 +37,11 @@ struct SettingsView: View {
     @ObservedObject private var legal = LegalPrefsStore.shared
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
+    /// Drives isChecking / lastCheckError in updateRow (Phase 5 — ref #345).
+    @ObservedObject private var updaterService = AppUpdaterService.shared
+    /// Drives updater.state changes in updateRow — observed directly so SwiftUI
+    /// re-renders when state transitions (downloading → downloaded, etc.).
+    @ObservedObject private var updater = AppUpdaterService.shared.updater
 
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -439,6 +448,8 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: Phase 5 — About + update row (ref #345)
+
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("About")
@@ -458,10 +469,70 @@ struct SettingsView: View {
                     .font(.system(size: 12)).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 2)
+            updateRow
             Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
                 .font(.system(size: 11)).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
         }
+    }
+
+    /// Update status row driven by AppUpdater 0.1.9's `UpdateState` enum.
+    ///
+    /// Observes `updaterService` for `isChecking` / `lastCheckError`,
+    /// and `updater` directly for `state` so transitions trigger re-renders.
+    ///
+    /// States:
+    /// - `isChecking == true`          → spinner + "Checking…"
+    /// - `lastCheckError != nil`        → "Check failed" (red) + Retry button
+    /// - `.downloaded(_, _, bundle)`    → "Install & Relaunch" button
+    /// - idle / `.none` / downloading   → "Check now" button
+    @ViewBuilder
+    private var updateRow: some View {
+        HStack {
+            Text("Updates").font(.system(size: 12))
+            Spacer()
+            if updaterService.isChecking {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 14, height: 14)
+                    Text("Checking…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else if updaterService.lastCheckError != nil {
+                HStack(spacing: 6) {
+                    Text("Check failed")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Button("Retry") {
+                        updaterService.checkForUpdates()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+                }
+            } else if case .downloaded(_, _, let bundle) = updater.state {
+                Button("Install & Relaunch") {
+                    do {
+                        try updater.install(bundle)
+                    } catch {
+                        Logger.log("AppUpdater install failed: \(error)")
+                        updaterService.lastCheckError = error
+                    }
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            } else {
+                Button("Check now") {
+                    updaterService.checkForUpdates()
+                }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 2)
     }
 
     // MARK: - Helpers
