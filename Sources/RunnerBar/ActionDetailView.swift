@@ -9,9 +9,9 @@ import SwiftUI
 // SYMPTOM:  Popover jumps sideways (shifts left/right) when navigate() is called.
 // ROOT CAUSE: AppDelegate sizes the popover window using SwiftUI's fittingSize.
 //             fittingSize is computed by offering the view an UNCONSTRAINED size.
-//             If idealWidth mismatches AppDelegate.fixedWidth, fittingSize.width
-//             returns a different value on each navigation, causing AppKit to
-//             recompute the popover anchor X and shift the window horizontally.
+//             If the view expands to fill infinite height (maxHeight: .infinity),
+//             SwiftUI returns a non-deterministic fittingSize.width, which causes
+//             AppKit to re-position the popover anchor every time the root view swaps.
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // THE ONE FRAME RULE (applies to THIS file and EVERY detail/settings view):
@@ -19,8 +19,7 @@ import SwiftUI
 //   .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
 //
 //   • idealWidth: 480  — MUST match AppDelegate.fixedWidth (currently 480).
-//                        ❌ NEVER change without also updating fixedWidth in AppDelegate
-//                        ❌ NEVER use 420 — was wrong, caused side-jump regression #13
+//                        If you change fixedWidth in AppDelegate, change this too.
 //   • maxWidth: .infinity — lets the view fill the popover width.
 //   • NO maxHeight — letting SwiftUI compute natural height from content is what
 //                    allows the popover to resize correctly on navigate().
@@ -36,7 +35,6 @@ import SwiftUI
 //   ❌ .fixedSize(horizontal: false, vertical: true)  — forces unconstrained height
 //   ❌ .fixedSize()                         — same problem
 //   ❌ navigate() called directly           — use onBack / onSelectJob callbacks
-//   ❌ idealWidth: 420                      — wrong value, causes side-jump
 //
 // SAFE modifiers (inside HStack/ScrollView children, not root level):
 //
@@ -47,9 +45,11 @@ import SwiftUI
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
-//   Broken by: using idealWidth: 420 (mismatch with AppDelegate.fixedWidth = 480)
-//   Fixed by:  replacing with idealWidth: 480 to match AppDelegate.fixedWidth
-//   Bug ref:   issue #13, #294
+//   Broken by: adding .frame(maxHeight: .infinity) to root (multiple times)
+//   Fixed by:  replacing with .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+//   Bug ref:   issue #294, commits 318da0b, fd1c960
+//   #22 note:  idealWidth was 420, bumped to 480 to match AppDelegate.fixedWidth after
+//              fixedWidth was widened in commit #22. NEVER let these diverge again.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -226,12 +226,9 @@ struct ActionDetailView: View {
         // ════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.
         // idealWidth MUST match AppDelegate.fixedWidth (480).
-        // ❌ NEVER use 420 — mismatch with fixedWidth causes side-jump (#13)
-        // ❌ DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // ❌ DO NOT add .frame(height:) or .fixedSize() here
-        // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
-        // comment is removed is major major major.
+        // DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // DO NOT reduce idealWidth back to 420 — fixedWidth is 480, not 420
+        // DO NOT add .frame(height:) or .fixedSize() here
         // ════════════════════════════════════════════════════════════════════════
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {

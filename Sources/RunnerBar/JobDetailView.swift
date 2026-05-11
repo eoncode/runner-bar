@@ -15,9 +15,9 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // THE ONE FRAME RULE (applies to THIS file and EVERY detail/settings view):
 //
-//   .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//   .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
 //
-//   • idealWidth: 420  — MUST match AppDelegate.fixedWidth (currently 420).
+//   • idealWidth: 480  — MUST match AppDelegate.fixedWidth (currently 480).
 //                        If you change fixedWidth in AppDelegate, change this too.
 //   • maxWidth: .infinity — lets the view fill the popover width.
 //   • NO maxHeight — letting SwiftUI compute natural height from content is what
@@ -45,8 +45,10 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
 //   Broken by: adding .frame(maxHeight: .infinity) to root (multiple times)
-//   Fixed by:  replacing with .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+//   Fixed by:  replacing with .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
 //   Bug ref:   issue #294, commits 318da0b, fd1c960
+//   #22 note:  idealWidth was 420, bumped to 480 to match AppDelegate.fixedWidth after
+//              fixedWidth was widened in commit #22. NEVER let these diverge again.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -197,12 +199,12 @@ struct JobDetailView: View {
         }
         // ════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.
-        // idealWidth MUST match AppDelegate.fixedWidth (420).
+        // idealWidth MUST match AppDelegate.fixedWidth (480).
         // DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // DO NOT remove idealWidth: 420
+        // DO NOT reduce idealWidth back to 420 — fixedWidth is 480, not 420
         // DO NOT add .frame(height:) or .fixedSize() here
         // ════════════════════════════════════════════════════════════════════════
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
                 withTimeInterval: 1,
