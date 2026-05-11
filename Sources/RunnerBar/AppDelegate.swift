@@ -22,7 +22,8 @@ import SwiftUI
 //   3. log views call onLogLoaded which remeasures via 2 async hops (content is async)
 //   4. "Load more" calls onContentChanged which remeasures via 1 async hop
 //   remeasurePopover() reads fittingSize.height at fixedWidth, writes contentSize
-//   ONLY when popover is shown and height actually changed. Width is ALWAYS fixedWidth.
+//   only when height actually changed. Width is ALWAYS fixedWidth. Frame is ALWAYS
+//   collapsed back to finalSize — never left at screenHeight after measurement.
 //
 //   WHY WIDTH NEVER JUMPS:
 //   Width is always Self.fixedWidth (480). fittingSize.width is NEVER used —
@@ -51,6 +52,15 @@ import SwiftUI
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
+//
+//   BLANK VIEW BUG — why setFrameSize(finalSize) MUST precede the height-delta guard:
+//   remeasurePopover() expands the hosting view to screenHeight so SwiftUI can report
+//   its true fittingSize. After measuring, the frame MUST be collapsed back to finalSize
+//   regardless of whether contentSize changes. If the height-delta guard fires first and
+//   returns early, the hosting view stays at screenHeight while contentSize is e.g. 680pt —
+//   NSHostingController renders blank white (content outside the popover window bounds).
+//   ❌ NEVER move setFrameSize(finalSize) inside or after the height-delta guard.
+//   ❌ NEVER return before setFrameSize(finalSize).
 //
 // ❌ NEVER set sizingOptions = .preferredContentSize
 // ❌ NEVER use fittingSize.width — non-deterministic
@@ -110,8 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Wraps any view in AnyView and injects all required environment objects.
     ///
-    /// ALL view factories (mainView, settingsView, detailView, etc.) MUST go through
-    /// this helper so @EnvironmentObject consumers never crash with a missing object.
+    /// ALL view factories MUST go through this helper so @EnvironmentObject
+    /// consumers never crash with a missing object.
     ///
     /// ❌ NEVER bypass wrapEnv() and return AnyView(...) directly from a view factory.
     /// ❌ NEVER remove .environmentObject(popoverOpenState) from this method.
@@ -178,18 +188,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - Remeasure
 
-    /// Remeasures fittingSize.height and updates contentSize/frame if the popover is shown
-    /// and the height has actually changed. Width is ALWAYS fixedWidth — never fittingSize.width.
+    /// Remeasures fittingSize.height and updates contentSize/frame.
+    /// Width is ALWAYS fixedWidth — never fittingSize.width.
     ///
-    /// Called:
-    ///   - navigate(): 1 async hop after rootView swap
-    ///   - onLogLoaded: 2 async hops after async log content loads
-    ///   - onContentChanged ("Load more"): 1 async hop after list expands
+    /// Sequence:
+    ///   1. Expand hosting view frame to screenHeight (unconstrained room for fittingSize)
+    ///   2. layoutSubtreeIfNeeded() + CATransaction.flush() (flush layout pipeline)
+    ///   3. Read fittingSize.height, clamp to [minHeight, maxHeight]
+    ///   4. ALWAYS setFrameSize(finalSize) — collapse frame back from screenHeight.
+    ///      ❌ NEVER skip or defer this — hosting view left at screenHeight renders blank white.
+    ///   5. Write popover.contentSize ONLY when height changed (avoids spurious re-anchors)
     ///
-    /// ❌ NEVER call synchronously — fittingSize is not stable until the run-loop completes.
+    /// ❌ NEVER call synchronously — fittingSize is not stable until run-loop completes.
     /// ❌ NEVER use fittingSize.width — always Self.fixedWidth.
-    /// ❌ NEVER call while popover is not shown — contentSize write while hidden causes
-    ///    the next show() to re-anchor at the wrong size.
+    /// ❌ NEVER call while popover is not shown.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -197,18 +209,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let popover, popover.isShown,
               let hostingController else { return }
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
+        // Step 1: expand to full screen height so fittingSize is unconstrained.
         hostingController.view.setFrameSize(
             NSSize(width: Self.fixedWidth, height: screenHeight)
         )
+        // Step 2: flush layout pipeline.
         hostingController.view.layoutSubtreeIfNeeded()
+        // ❌ NEVER remove CATransaction.flush() — without it fittingSize.height = 0
+        // for views that contain a ScrollView.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
         CATransaction.flush()
+        // Step 3: read and clamp.
         let natural = hostingController.view.fittingSize.height
-        guard natural > 0 else { return }
+        guard natural > 0 else {
+            // Guard-out: restore frame to current contentSize — never leave at screenHeight.
+            // ❌ NEVER remove this setFrameSize call.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE.
+            hostingController.view.setFrameSize(
+                NSSize(width: Self.fixedWidth, height: popover.contentSize.height)
+            )
+            return
+        }
         let clamped = min(max(natural, Self.minHeight), Self.maxHeight)
-        let newSize = NSSize(width: Self.fixedWidth, height: clamped)
+        let finalSize = NSSize(width: Self.fixedWidth, height: clamped)
+        // Step 4: ALWAYS collapse frame back to finalSize.
+        // ❌ NEVER move this after the height-delta guard below.
+        // ❌ NEVER remove this call — blank white views result if the frame stays at screenHeight.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        hostingController.view.setFrameSize(finalSize)
+        // Step 5: only write contentSize if height actually changed.
+        // Writing contentSize unconditionally triggers NSPopover re-anchor on every
+        // async hop → side-jump. Only write when height truly changed.
         guard abs(popover.contentSize.height - clamped) > 1 else { return }
-        hostingController.view.setFrameSize(newSize)
-        popover.contentSize = newSize
+        popover.contentSize = finalSize
     }
 
     // MARK: - Navigation
