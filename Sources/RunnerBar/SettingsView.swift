@@ -26,10 +26,18 @@ import SwiftUI
 ///   worst-case content (3 local runners + 2 remote runners + 2 scopes) with
 ///   a small comfortable margin, without needing to scroll for typical usage.
 ///
+/// WHY refresh() IS DEFERRED:
+///   localRunnerStore.refresh() publishes @Published changes that trigger a SwiftUI
+///   layout pass. If this fires synchronously in .onAppear (which runs during the first
+///   layout pass), a second layout pass hits before NSPopover has finished anchoring
+///   → side jump even with a fixed frame. Deferring via DispatchQueue.main.asyncAfter
+///   ensures the popover is fully anchored before any state update arrives.
+///
 /// ❌ NEVER remove .frame(minWidth:420, idealWidth:420, ...) from the root VStack.
 /// ❌ NEVER replace maxHeight: 560 with .infinity — that re-introduces the jump.
 /// ❌ NEVER use .fixedSize on the ScrollView inner VStack — unbounded ideal height → jump.
 /// ❌ NEVER remove idealWidth: 420 — width must be stable.
+/// ❌ NEVER call localRunnerStore.refresh() synchronously in .onAppear — side jump.
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -95,7 +103,15 @@ struct SettingsView: View {
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
-            localRunnerStore.refresh()
+            // ⚠️ DEFERRED: do NOT call refresh() synchronously here.
+            // .onAppear fires during the first SwiftUI layout pass. A synchronous
+            // refresh() publishes @Published changes → second layout pass before
+            // NSPopover finishes anchoring → side jump.
+            // Deferring 150ms ensures the popover is fully anchored first.
+            // ❌ NEVER move this back to a synchronous call.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                localRunnerStore.refresh()
+            }
         }
         .onDisappear {
             ScopeStore.shared.onMutate = nil
