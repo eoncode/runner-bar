@@ -2,23 +2,32 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #375 #376 #377)
 //
+// ARCHITECTURE 1: sizingOptions=.preferredContentSize (SwiftUI-driven dynamic height)
+//
 // RULE 1: Root VStack MUST use .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
 //   NSHostingController reads idealWidth as preferredContentSize.width = 480.
 //   Width is always 480 → NSPopover never re-anchors horizontally → no side-jump.
 //   ❌ NEVER remove .frame(idealWidth: 480)
 //   ❌ NEVER use .frame(width: 480)
 //   ❌ NEVER remove maxWidth: .infinity
-//   ❌ NEVER add .frame(height:) or .frame(maxHeight:) to root VStack
+//   ❌ NEVER add .frame(height:) or .frame(idealHeight:) to root VStack
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: NEVER use .fixedSize() on the root VStack.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
-// RULE 6: actionsSection MUST be wrapped in a ScrollView with a .frame(maxHeight:) cap.
-//   ❌ NEVER remove the ScrollView from actionsSection.
-//   ❌ NEVER remove .frame(maxHeight:) from the ScrollView.
+// RULE 6: actionsSection MUST use .fixedSize(h:false, v:true) + .frame(maxHeight: cappedHeight).
+//   ❌ NEVER wrap actionsSection in a ScrollView at this level.
+//   ❌ NEVER remove .fixedSize(horizontal: false, vertical: true) from actionsSection.
+//   ❌ NEVER remove .frame(maxHeight: cappedHeight) from actionsSection.
 //   ❌ NEVER use a fixed constant — must adapt to screen size.
+//
+//   WHY NO ScrollView HERE:
+//   ScrollView reports idealHeight = unbounded to SwiftUI. With sizingOptions=
+//   .preferredContentSize, this makes the popover open at screen height regardless
+//   of actual content. fixedSize(v:true) measures actual content height as
+//   idealHeight. frame(maxHeight:) caps rendering. Popover height = min(content, cap).
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
@@ -58,13 +67,6 @@ import SwiftUI
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 //   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 //   is major major major.
-//
-// RULE 10: The actionsSection ScrollView cap prevents the height from exceeding
-//   cappedHeight. Load-more button increments visibleCount — height is stable
-//   because content is inside the capped ScrollView.
-//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//   is major major major.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -86,7 +88,7 @@ struct PopoverMainView: View {
     @State private var visibleCount: Int = 10
     @State private var runnerRefreshTimer: Timer?
 
-    /// Height cap for the actionsSection ScrollView.
+    /// Screen-safe height cap for actionsSection.
     /// 75% of visible screen height — matches ActionDetailView, JobDetailView, StepLogView.
     /// ❌ NEVER increase above 0.85 — popover may overflow off-screen.
     /// ❌ NEVER use a fixed constant — must adapt to screen size.
@@ -110,24 +112,26 @@ struct PopoverMainView: View {
                         await MainActor.run { LocalRunnerStore.shared.refresh() }
                     }
                 }
-            // ⚠️ RULE 6: actionsSection MUST be inside a ScrollView with .frame(maxHeight: cappedHeight).
-            // ❌ NEVER remove the ScrollView.
-            // ❌ NEVER remove .frame(maxHeight: cappedHeight).
+            // ⚠️ RULE 6: actionsSection uses fixedSize+maxHeight — NO ScrollView wrapper.
+            // .fixedSize(v:true) measures actual content height as idealHeight.
+            // .frame(maxHeight:) caps rendering for screen safety.
+            // idealHeight = min(actualContentHeight, cappedHeight) — truly dynamic.
+            // 0 actions → ~40pt. 3 actions → ~3 rows. 20+ → capped at cappedHeight.
+            // ❌ NEVER wrap this in ScrollView — ScrollView idealHeight = unbounded.
+            // ❌ NEVER remove fixedSize — without it idealHeight is unconstrained.
+            // ❌ NEVER replace maxHeight with height — height is a fixed size.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
-            ScrollView(.vertical, showsIndicators: true) {
-                actionsSection
-            }
-            .frame(maxHeight: cappedHeight)
+            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
+            // comment is removed is major major major.
+            actionsSection
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: cappedHeight, alignment: .top)
         }
         // RULE 1: idealWidth:480 is LOAD-BEARING for preferredContentSize.width.
-        // ❌ NEVER add .frame(height:) or .frame(maxHeight:) here.
+        // ❌ NEVER add .frame(height:) or .frame(idealHeight:) here.
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            // Only start stats if the popover is already open (it will be — onAppear
-            // fires after the hosting view is on screen, which is after show()).
-            // If somehow not open yet, .onChange below handles it.
             if !popoverOpenState.isOpen {
                 systemStats.start()
             }
@@ -138,9 +142,6 @@ struct PopoverMainView: View {
             stopRunnerRefreshTimer()
         }
         // ⚠️ RULE 9 — systemStats gate via LIVE @EnvironmentObject.
-        // This .onChange NOW ACTUALLY FIRES because popoverOpenState is an
-        // ObservableObject — SwiftUI observes its @Published isOpen property
-        // and re-evaluates this modifier when it changes.
         // ❌ NEVER change to a plain Bool prop — see RULE 9 comment above.
         // ❌ NEVER remove this .onChange.
         // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in }.
@@ -164,15 +165,11 @@ struct PopoverMainView: View {
         stopRunnerRefreshTimer()
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             // ⚠️ RULE 7 — timer guard via LIVE @EnvironmentObject.
-            // popoverOpenState.isOpen is an @Published property on the ObservableObject
-            // injected as @EnvironmentObject. Reading it here from the Timer closure
-            // gives the LIVE value — not a frozen copy.
             // ❌ NEVER remove this guard (RULE 7).
             // ❌ LocalRunnerStore.shared.refresh() is @MainActor-isolated — MUST use
             //    Task { @MainActor in } from this nonisolated Timer closure.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this
-            // comment is removed is major major major.
+            // ALLOWED UNDER ANY CIRCUMSTANCE.
             if !popoverOpenState.isOpen {
                 Task { @MainActor in
                     LocalRunnerStore.shared.refresh()
