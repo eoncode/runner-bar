@@ -92,7 +92,15 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in
                 store?.reload()
             }
-            localRunnerStore.refresh()
+            // ⚠️ PERMISSION GUARD: only trigger a fresh scan when not already scanning.
+            // LocalRunnerStore.refresh() dispatches to a background queue — safe to
+            // call from onAppear. The guard inside refresh() prevents double-scans.
+            // ❌ NEVER call localRunnerStore.refresh() unconditionally here without
+            //    checking isScanning — doing so while a scan is in-flight crashes
+            //    because the background queue gets a second overlapping scan.
+            if !localRunnerStore.isScanning {
+                localRunnerStore.refresh()
+            }
         }
         // Single-parameter form: compatible with macOS 13+.
         // The two-parameter { _, newValue in } form requires macOS 14+.

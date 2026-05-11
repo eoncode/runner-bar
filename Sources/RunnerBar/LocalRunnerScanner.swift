@@ -74,8 +74,12 @@ struct LocalRunnerScanner {
     }
 
     private func scanRunnerJSONFiles() -> [RunnerModel] {
+        // ⚠️ PERMISSION GUARD: search only ~ (home directory).
+        // ❌ NEVER add /opt or /usr/local — those paths trigger macOS TCC
+        //    automation permission dialogs every time Settings opens.
+        //    Runners installed outside ~ are rare and not worth the UX cost.
         let raw = shell(
-            "find ~ /opt /usr/local -maxdepth 6 -name '.runner' 2>/dev/null",
+            "find ~ -maxdepth 6 -name '.runner' 2>/dev/null",
             timeout: 15
         )
         guard !raw.isEmpty else { return [] }

@@ -306,10 +306,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// Opens the popover. The ONE safe site for sizing.
-    /// Reads fittingSize synchronously, sets size, then calls show — all before shown.
+    ///
+    /// Order of operations (critical — do not reorder):
+    ///   1. Restore saved nav state into rootView BEFORE any layout pass.
+    ///   2. Force a layout pass so fittingSize reflects the restored view.
+    ///   3. Read fittingSize, clamp, apply to frame + contentSize.
+    ///   4. Show popover.
+    ///
     /// ❌ NEVER call setFrameSize or set contentSize after show() — popover is shown,
     ///    re-anchor triggers → left jump (Regression A).
     /// ❌ NEVER use fittingSize.width — always Self.idealWidth.
+    /// ❌ NEVER move step 1 after step 3 — fittingSize would measure the wrong view.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -321,18 +328,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         else { return }
         popoverIsOpen = true
         observable.reload()
+
+        // Step 1: restore nav state FIRST so fittingSize measures the right view.
+        if let saved = savedNavState,
+           let restored = validatedView(for: saved) {
+            hostingController.rootView = restored
+        }
+
+        // Step 2: force layout so fittingSize is accurate for the restored view.
+        hostingController.view.layoutSubtreeIfNeeded()
+
+        // Step 3: read height from the now-correct view, clamp, and apply.
         let fittingHeight = hostingController.view.fittingSize.height
         let width  = Self.idealWidth
         let height = min(max(fittingHeight > 0 ? fittingHeight : 300, Self.minHeight), Self.maxHeight)
         let size = NSSize(width: width, height: height)
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
+
+        // Step 4: show — no sizing after this line.
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
-        if let saved = savedNavState,
-           let restored = validatedView(for: saved) {
-            navigate(to: restored)
-        }
     }
 }
 // swiftlint:enable type_body_length
