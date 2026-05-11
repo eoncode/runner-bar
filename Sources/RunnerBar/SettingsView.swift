@@ -9,34 +9,71 @@ import SwiftUI
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 ///
-/// ⚠️ REGRESSION GUARD — Architecture 2 (sizingOptions=[]) ref #52 #54 #57 #375 #376 #377
+/// ============================================================
+/// ⚠️ REGRESSION GUARD — Architecture 2 (sizingOptions=[])
+/// ref #52 #54 #57 #321 #370 #375 #376 #377 #379 #380
 /// See also: status-bar-app-position-warning.md
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-/// is major major major.
 ///
-/// LAYOUT RULE (Architecture 2 / sizingOptions=[]):
-///   Root VStack has NO frame constraint and NO ScrollView.
-///   Height is fully dynamic — AppDelegate.remeasurePopover() reads fittingSize.height
-///   which reflects the true content height. AppDelegate.maxHeight (680pt) is the
-///   only cap, applied in remeasurePopover() before writing contentSize.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+/// YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE.
+/// The regression we get when this comment is removed is
+/// major major major.
+/// ============================================================
 ///
-///   ❌ NEVER add .frame(maxHeight:) to the root VStack or any direct child.
-///   ❌ NEVER wrap content in a ScrollView — fittingSize.height becomes infinite.
-///   ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) to the root VStack.
+/// DYNAMIC HEIGHT CONTRACT
+/// ─────────────────────────────────────────────────────────────
+/// SettingsView is a plain VStack with NO frame constraint and
+/// NO ScrollView wrapper. This is intentional.
 ///
-///   Inner VStack keeps .frame(maxWidth: .infinity) for row expansion.
-///   ❌ NEVER remove maxWidth:.infinity from the inner VStack.
+/// How dynamic height works end-to-end:
 ///
-/// SIDE-JUMP PROOF BECAUSE:
-///   - AppDelegate.sizingOptions = [] → NO auto-propagation of preferredContentSize.
-///   - contentSize.width is ALWAYS AppDelegate.fixedWidth (480) → NSPopover never
-///     re-anchors horizontally regardless of any SwiftUI layout changes.
-///   - contentSize.height is only written in remeasurePopover() when height truly changed.
+///   1. AppDelegate sets hostingController.view.frame.size.width
+///      = fixedWidth (480) BEFORE measuring fittingSize. This
+///      ensures all text wrapping and row heights are calculated
+///      at the correct width.
 ///
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-/// is major major major.
+///   2. AppDelegate reads hostingController.view.fittingSize.height
+///      — this is the natural, unconstrained height SwiftUI
+///      reports for the content at fixedWidth. Because SettingsView
+///      has no maxHeight or ScrollView, this value equals the true
+///      sum of all section heights.
+///
+///   3. AppDelegate.remeasurePopover() applies the only height cap:
+///        let h = min(fittingSize.height, maxHeight)  // maxHeight = 680pt
+///      and writes NSSize(width: fixedWidth, height: h) to
+///      popover.contentSize.
+///
+///   4. Because contentSize.width is ALWAYS fixedWidth, NSPopover
+///      never changes where its arrow is anchored. The popover
+///      cannot jump horizontally. Only height changes.
+///
+/// WHY NO ScrollView:
+///   A ScrollView reports idealHeight = infinity to fittingSize.
+///   AppDelegate would read 0 or screen height as the height →
+///   wrong contentSize → popover either collapses or overflows.
+///   The AppDelegate maxHeight cap (step 3) is the correct place
+///   to limit height — not inside SettingsView itself.
+///
+/// WHY NO .frame(maxHeight:) on root VStack:
+///   Under Architecture 2 (sizingOptions=[]), the hosting controller
+///   ignores preferredContentSize. The only way to communicate size
+///   is via fittingSize. Adding maxHeight here would clip content
+///   without telling the popover, causing rendering artefacts.
+///
+/// SIDE-JUMP PROOF:
+///   - sizingOptions = [] → no auto-propagation of preferredContentSize
+///   - contentSize.width = fixedWidth always → NSPopover never
+///     re-anchors the arrow regardless of any SwiftUI layout change
+///   - contentSize.height only changes in remeasurePopover(), never
+///     driven by SwiftUI automatically
+///
+/// ❌ NEVER add .frame(maxHeight:) to root VStack or any direct child.
+/// ❌ NEVER wrap content in a ScrollView.
+/// ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) to root VStack.
+/// ❌ NEVER remove .frame(maxWidth: .infinity) from the inner VStack.
+/// ❌ NEVER set sizingOptions to anything other than [].
+/// ❌ NEVER write contentSize.width with anything other than fixedWidth.
+/// ============================================================
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -70,17 +107,17 @@ struct SettingsView: View {
 
     var body: some View {
         // Root VStack — NO frame constraint, NO ScrollView.
-        // Height is fully dynamic via AppDelegate.remeasurePopover().
-        // AppDelegate.maxHeight (680pt) is the only cap.
+        // Height is fully dynamic: AppDelegate measures fittingSize.height
+        // at fixedWidth, then caps at maxHeight (680pt) in remeasurePopover().
         // ❌ NEVER add .frame(maxHeight:) here.
-        // ❌ NEVER wrap in ScrollView — fittingSize.height becomes infinite.
+        // ❌ NEVER wrap in ScrollView — fittingSize.height becomes infinite/0.
         // ❌ NEVER add .frame(idealWidth:) or .frame(idealHeight:) here.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        // YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ Inner VStack: maxWidth:.infinity is REQUIRED and SAFE here.
+            // Inner VStack: maxWidth:.infinity is REQUIRED and SAFE here.
             // ❌ NEVER remove maxWidth:.infinity from this inner VStack.
             VStack(alignment: .leading, spacing: 0) {
                 localRunnersSection
