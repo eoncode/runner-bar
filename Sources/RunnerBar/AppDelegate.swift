@@ -5,60 +5,46 @@ import SwiftUI
 
 // MARK: - NavState
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #375 #376 #377)
+// ⚠️ ARCHITECTURE: NSPanel (Pattern 2 from #377) — READ BEFORE CHANGING.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 //
-// ARCHITECTURE 3: sizingOptions=[] + GeometryReader/PreferenceKey dynamic height
+// WHY NSPanel INSTEAD OF NSPopover:
+// NSPopover re-anchors by AppKit design on ANY contentSize change while shown.
+// This is not a bug — it is documented intentional behavior. Every attempt to
+// dynamically resize NSPopover while visible causes a side-jump. Confirmed across:
+//   • #377, #375, #376, #52, #53, #54, #57, #321, #370
+//   • Just10/MEMORY.md (identical bug history)
+//   • Stack Overflow #14449945, #69877522
+// NSPanel has no anchor concept. setFrame() while visible = zero jump, ever.
 //
-// WHY:
-// Architecture 1 (sizingOptions=.preferredContentSize):
-//   NSPopover re-anchors on every SwiftUI state update → side-jump every 2s.
-// Architecture 2 (fittingSize before show()):
-//   RunnerStoreObservable.reload() is async — data not yet available at
-//   measurement time → fittingSize always returns ~44pt → 300pt fallback.
-// Architecture 3 (this commit):
-//   Render content first. GeometryReader measures actual height after first
-//   layout pass. PreferenceKey propagates height up. onHeightReady callback
-//   calls popover.setContentSize() ONCE. animates=false = invisible resize.
-//
-// SEQUENCE:
-// 1. openPopover():
-//    a. observable.reload()              — sync snapshot; async data arrives later
-//    b. popoverIsOpen = true
-//       popoverOpenState.isOpen = true   — views see live open state immediately
-//    c. popoverOpenState.heightReported = false  — arm the one-shot callback
-//    d. popoverOpenState.onHeightReady = { [weak self, weak popover] h in
-//           let clamped = min(h, self.maxHeight)
-//           popover?.setContentSize(NSSize(width: Self.fixedWidth, height: clamped))
-//       }                                — callback fires ONCE after first render
-//    e. popover.contentSize = initial safe size (fixedWidth × 300)
-//    f. popover.show()                   — opens at safe size, no anchor jump
-//    g. SwiftUI renders content with real data
-//    h. GeometryReader fires PreferenceKey with real height
-//    i. onPreferenceChange → onHeightReady → setContentSize(real height)
-//       animates=false → user sees correct height, never sees the initial 300pt
-// 2. navigate(): rootView swap only — ZERO sizing calls.
-// 3. popoverDidClose(): reset isOpen, heightReported, onHeightReady.
+// HOW THE PANEL WORKS:
+// 1. Panel is a borderless, non-activating NSPanel.
+// 2. Position is computed from the status button's screen frame:
+//      x = buttonFrame.midX - (panelWidth / 2)
+//      y = buttonFrame.minY - panelHeight - gap
+//    This is recomputed on open AND on every size change.
+// 3. NSHostingController.sizingOptions = .preferredContentSize
+//    SwiftUI ideal size is auto-propagated to the hosting controller's
+//    preferredContentSize. We observe this via KVO and call resizePanel()
+//    which does setFrame() — no jump because NSPanel has no anchor.
+// 4. Dismiss: NSEvent monitor for .leftMouseDown outside panel bounds.
+//    Also dismiss on app switch (NSWorkspace.didActivateApplication).
 //
 // WIDTH RULE:
-// Width is ALWAYS fixedWidth=480. Never measure width dynamically.
-// ❌ NEVER change fixedWidth without updating all usages.
-//
-// NO-RESIZE-WHILE-SHOWN RULE:
-// setContentSize is called by onHeightReady ONCE immediately after first render.
-// After heightReported=true, no further setContentSize calls occur.
-// ❌ NEVER write popover.contentSize or call setContentSize while popover.isShown
-//    except via the onHeightReady one-shot callback.
-// ❌ NEVER set sizingOptions = .preferredContentSize.
-// ❌ NEVER recreate a remeasurePopover() function.
+// Width is ALWAYS fixedWidth=480. Never dynamic. Never fittingSize.width.
+// ❌ NEVER change fixedWidth without updating it everywhere.
 //
 // POPOVEROPENSTATE:
-// isOpen mirrors popoverIsOpen. heightReported + onHeightReady drive dynamic sizing.
-// Both InlineJobRowsView and PopoverMainView read isOpen as @EnvironmentObject.
-// ❌ NEVER pass isPopoverOpen: as a plain Bool prop — frozen at construction time.
-// ❌ NEVER remove PopoverOpenState. ❌ NEVER remove wrapEnv() injection.
+// popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
+// PopoverMainView and InlineJobRowsView read it as @EnvironmentObject.
+// ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
+// ❌ NEVER pass as a plain Bool prop to PopoverMainView.
+//
+// TIMER / POLL GUARD:
+// RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
+// ❌ NEVER remove this guard.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -75,38 +61,46 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var popover: NSPopover?
+    private var panel: NSPanel?
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
     private var savedNavState: NavState?
-    private var popoverIsOpen = false
+    private var panelIsOpen = false
+
+    private var eventMonitor: Any?
+    private var sizeObservation: NSKeyValueObservation?
+    private var workspaceObserver: Any?
 
     // ⚠️ REGRESSION GUARD (ref #377):
-    // Injected via wrapEnv() into every view.
-    // isOpen mirrors popoverIsOpen — always set both together.
-    // heightReported + onHeightReady drive Architecture 3 dynamic sizing.
+    // Injected via wrapEnv() into every view. Read as @EnvironmentObject by
+    // PopoverMainView (systemStats gate) and InlineJobRowsView (expand cap).
+    // isOpen must always mirror panelIsOpen — set both together.
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-    // ❌ NEVER pass as plain Bool prop to any view — always frozen at construction.
+    // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    /// Canonical popover width. NEVER dynamic.
+    /// Canonical panel width. NEVER dynamic. NEVER fittingSize.width.
     /// ❌ NEVER change without updating all usages.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
-    static let fixedWidth: CGFloat = 480
+    private static let fixedWidth: CGFloat = 480
 
-    /// Maximum popover height — 75% of visible screen height.
+    /// Gap between status bar button bottom and panel top edge.
+    private static let gap: CGFloat = 4
+
+    /// Maximum panel height — 85% of visible screen height.
+    /// Prevents panel from extending off the bottom of the screen.
     private var maxHeight: CGFloat {
-        NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
+        NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
     }
 
     // MARK: - Environment injection
 
-    /// Wraps any view and injects all required environment objects.
+    /// Wraps any view in AnyView and injects all required environment objects.
     /// ❌ NEVER bypass this. ❌ NEVER remove .environmentObject(popoverOpenState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -120,84 +114,143 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
             button.image = makeStatusIcon(for: .allOffline)
-            button.action = #selector(togglePopover)
+            button.action = #selector(togglePanel)
             button.target = self
         }
 
         let controller = NSHostingController(rootView: mainView())
-
-        // ✅ sizingOptions = [] — ARCHITECTURE 3. CRITICAL. DO NOT CHANGE.
-        // Empty [] = hosting controller NEVER auto-writes preferredContentSize.
-        // We own ALL contentSize writes exclusively via the onHeightReady callback.
-        // ❌ NEVER change to .preferredContentSize — causes side-jump (Architecture 1).
-        // ❌ NEVER remove — default is .preferredContentSize which is wrong.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is
-        // removed is major major major.
-        controller.sizingOptions = []
-
-        let initialSize = NSSize(width: Self.fixedWidth, height: 300)
-        controller.view.frame = NSRect(origin: .zero, size: initialSize)
-        hostingController = controller
-
-        let pop = NSPopover()
-        pop.behavior = .transient
-        // ✅ animates = false — CRITICAL for invisible one-shot resize.
-        // The popover opens at 300pt then immediately resizes to real content height.
-        // animates=false makes this invisible to the user.
-        // ❌ NEVER set animates = true — user would see a visible height jump.
+        // ✅ sizingOptions = .preferredContentSize — safe with NSPanel.
+        // NSHostingController auto-updates preferredContentSize as SwiftUI
+        // ideal size changes. We KVO-observe preferredContentSize and call
+        // resizePanel() — which uses NSPanel.setFrame(), not NSPopover.contentSize.
+        // NSPanel.setFrame() while visible = zero side jump (no anchor concept).
+        // ❌ NEVER change to [] — we need live preferredContentSize updates.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
-        pop.animates = false
-        pop.contentSize = initialSize
-        pop.contentViewController = controller
-        pop.delegate = self
-        popover = pop
+        controller.sizingOptions = .preferredContentSize
+        hostingController = controller
+
+        let p = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 300),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        p.contentViewController = controller
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = true
+        p.level = .popUpMenu
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.animationBehavior = .none
+        panel = p
+
+        // KVO: observe preferredContentSize so panel resizes live as SwiftUI
+        // content changes height. This is the dynamic height mechanism.
+        // NSPanel.setFrame() never causes a jump — it has no anchor.
+        // ❌ NEVER remove this observation.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        sizeObservation = controller.observe(
+            \.preferredContentSize,
+            options: [.new]
+        ) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
+        }
 
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem?.button?.image = makeStatusIcon(
                 for: RunnerStore.shared.aggregateStatus
             )
-            // ❌ NEVER call observable.reload() while popoverIsOpen == true.
+            // ❌ NEVER call observable.reload() while panelIsOpen == true.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
-            if !self.popoverIsOpen {
-                self.observable.reload()
-            }
+            if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
     }
 
-    // MARK: - NSPopoverDelegate
+    // MARK: - Panel resize (the key to dynamic height without jumping)
 
-    func popoverDidClose(_ notification: Notification) {
-        popoverIsOpen = false
-        // ❌ NEVER set one without the other.
-        // Reset onHeightReady so it cannot fire after close.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
-        popoverOpenState.isOpen = false
-        popoverOpenState.heightReported = false
-        popoverOpenState.onHeightReady = nil
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.hostingController?.rootView = self.mainView()
-        }
+    /// Repositions and resizes the panel based on current preferredContentSize
+    /// and the status button's screen frame.
+    ///
+    /// Called: (a) when panel opens, (b) on every preferredContentSize KVO change.
+    /// NSPanel.setFrame() has NO anchor concept — zero side jump, ever.
+    ///
+    /// ❌ NEVER call this on NSPopover — that causes the jump.
+    /// ❌ NEVER call this from a background thread.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
+    private func resizeAndRepositionPanel() {
+        guard panelIsOpen,
+              let panel,
+              let button = statusItem?.button,
+              let buttonWindow = button.window else { return }
+
+        let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
+        let contentH = hostingController?.preferredContentSize.height ?? 300
+        let h = min(max(contentH, 60), maxHeight)
+        let w = Self.fixedWidth
+        let x = buttonScreenFrame.midX - w / 2
+        let y = buttonScreenFrame.minY - h - Self.gap
+
+        panel.setFrame(
+            NSRect(x: x, y: y, width: w, height: h),
+            display: true,
+            animate: false
+        )
     }
 
     // MARK: - Navigation
 
-    /// Swaps rootView ONLY. ZERO sizing calls.
-    /// ❌ NEVER add sizing calls. ❌ NEVER write contentSize here.
+    /// Swaps the hosting controller rootView.
+    /// With NSPanel + sizingOptions=.preferredContentSize, SwiftUI re-reports
+    /// ideal size after rootView swap → KVO fires → resizeAndRepositionPanel()
+    /// → panel resizes with zero jump.
+    ///
+    /// ❌ NEVER add explicit sizing calls here.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
     }
 
+    // MARK: - Dismiss
+
+    private func closePanel() {
+        guard panelIsOpen else { return }
+        panel?.orderOut(nil)
+        panelIsOpen = false
+        // ❌ NEVER set one without the other.
+        popoverOpenState.isOpen = false
+        removeEventMonitor()
+        removeWorkspaceObserver()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hostingController?.rootView = self.mainView()
+        }
+    }
+
+    private func removeEventMonitor() {
+        if let m = eventMonitor {
+            NSEvent.removeMonitor(m)
+            eventMonitor = nil
+        }
+    }
+
+    private func removeWorkspaceObserver() {
+        if let o = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(o)
+            workspaceObserver = nil
+        }
+    }
+
     // MARK: - View factories
 
+    /// nonisolated: called from DispatchQueue.global — pure network I/O.
+    /// ❌ NEVER remove nonisolated.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -217,7 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
-                        guard self.popoverIsOpen else { return }
+                        guard self.panelIsOpen else { return }
                         self.navigate(to: self.detailView(job: enriched))
                     }
                 }
@@ -247,7 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
-                        guard self.popoverIsOpen else { return }
+                        guard self.panelIsOpen else { return }
                         self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
                     }
                 }
@@ -326,8 +379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         savedNavState = nil
         let store = RunnerStore.shared
         switch state {
-        case .main:
-            return nil
+        case .main: return nil
         case .jobDetail(let job):
             let live = store.jobs.first(where: { $0.id == job.id }) ?? job
             return detailView(job: live)
@@ -350,82 +402,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    // MARK: - Popover show/hide
+    // MARK: - Toggle
 
-    @objc private func togglePopover() {
-        guard let popover else { return }
-        if popover.isShown {
-            popover.performClose(nil)
+    @objc private func togglePanel() {
+        if panelIsOpen {
+            closePanel()
         } else {
-            openPopover()
+            openPanel()
         }
     }
 
-    /// Opens the popover. Architecture 3 sequence:
+    // MARK: - Open
+
+    /// Opens the panel.
+    /// Position is computed from status button screen coords.
+    /// Dynamic height: KVO on preferredContentSize fires resizeAndRepositionPanel()
+    /// on every SwiftUI content change — NSPanel.setFrame() never causes a jump.
     ///
-    /// 1. Reload data snapshot (async data arrives after show() — that's fine).
-    /// 2. Arm the one-shot height callback before show().
-    /// 3. Show at safe initial size (300pt). animates=false hides this.
-    /// 4. SwiftUI renders real content → GeometryReader fires PreferenceKey.
-    /// 5. onPreferenceChange → onHeightReady → setContentSize(real height).
-    ///    Because animates=false, user sees final correct height immediately.
-    ///
-    /// ❌ NEVER call setContentSize after show() except via onHeightReady.
+    /// ❌ NEVER use NSPopover here.
     /// ❌ NEVER call this from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
-    private func openPopover() {
+    /// UNDER ANY CIRCUMSTANCE.
+    private func openPanel() {
         guard let button = statusItem?.button,
-              button.window != nil,
-              let popover,
-              let hostingController else { return }
+              let buttonWindow = button.window,
+              let panel else { return }
 
-        // Step 1: snapshot data so header/runners render immediately.
+        // Reload data before showing so content is fresh.
         observable.reload()
 
-        // Step 2: arm open state BEFORE show() so views see isOpen=true on first render.
-        // ❌ NEVER move after show(). ❌ NEVER set one without the other.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
-        popoverIsOpen = true
+        // Set open state BEFORE showing so views see isOpen=true on first render.
+        // systemStats gate fires synchronously on first SwiftUI render.
+        // ❌ NEVER move after panel.orderFront().
+        panelIsOpen = true
         popoverOpenState.isOpen = true
-        popoverOpenState.heightReported = false
 
-        // ⚠️ ONE-SHOT HEIGHT CALLBACK — Architecture 3 dynamic sizing.
-        // This closure is called by PopoverMainView's .onPreferenceChange ONCE
-        // after the first real layout pass. It calls popover.setContentSize().
-        // animates=false (set on the popover) ensures the user never sees the
-        // initial 300pt height — the resize happens before the window is drawn.
-        //
-        // ❌ NEVER call setContentSize inside this closure more than once.
-        // ❌ NEVER remove this closure.
-        // ❌ NEVER set heightReported = false after show() (that re-arms the callback).
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is
-        // removed is major major major.
-        let maxH = maxHeight
-        popoverOpenState.onHeightReady = { [weak popover, weak hostingController] height in
-            let clamped = min(height, maxH)
-            let finalSize = NSSize(width: Self.fixedWidth, height: clamped)
-            hostingController?.view.setFrameSize(finalSize)
-            popover?.setContentSize(finalSize)
-        }
+        // Compute initial position.
+        let buttonScreenFrame = buttonWindow.convertToScreen(button.frame)
+        let initH: CGFloat = 300
+        let x = buttonScreenFrame.midX - Self.fixedWidth / 2
+        let y = buttonScreenFrame.minY - initH - Self.gap
+        panel.setFrame(
+            NSRect(x: x, y: y, width: Self.fixedWidth, height: initH),
+            display: false,
+            animate: false
+        )
 
-        // Step 3: set safe initial size and show.
-        // The initial 300pt is never seen because animates=false and the
-        // onHeightReady callback fires before the first screen draw.
-        let safeSize = NSSize(width: Self.fixedWidth, height: 300)
-        hostingController.view.setFrameSize(safeSize)
-        popover.contentSize = safeSize
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
-        popover.contentViewController?.view.window?.makeKey()
+        panel.orderFront(nil)
 
-        // Step 4: restore saved nav state if any.
+        // Restore saved nav state if any.
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
+
+        // KVO will fire from sizingOptions=.preferredContentSize and call
+        // resizeAndRepositionPanel() as soon as SwiftUI reports ideal size.
+        // That will snap the panel to the correct height immediately.
+
+        // Dismiss on outside click.
+        // ❌ NEVER remove this monitor — it is the dismiss mechanism.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            guard let self, let panel = self.panel else { return }
+            let loc = event.locationInWindow
+            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin
+                ?? loc
+            if !panel.frame.contains(screenLoc) {
+                self.closePanel()
+            }
+        }
+
+        // Dismiss on app switch.
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
+                self.closePanel()
+            }
+        }
     }
 }
-
 // swiftlint:enable type_body_length

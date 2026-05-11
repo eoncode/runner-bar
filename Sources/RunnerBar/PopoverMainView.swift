@@ -1,73 +1,65 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #375 #376 #377)
+// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #375 #376 #377)
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
 //
-// ARCHITECTURE 2: sizingOptions=[] (manual fittingSize measurement before show)
-// AppDelegate.openPopover() is the ONLY place contentSize is written.
+// ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize
+// Dynamic height is achieved via KVO on NSHostingController.preferredContentSize.
+// AppDelegate observes it and calls NSPanel.setFrame() — zero jump (no anchor).
+// SwiftUI views report their natural ideal size. No height caps needed here.
 //
-// VIEW RULES (Architecture 2):
-//
-// RULE 1: Root VStack has NO frame constraints other than maxWidth:.infinity.
-//   AppDelegate reads fittingSize.height after a full layout pass (height=9999).
-//   Any .frame(idealWidth:), .fixedSize(), or .frame(maxHeight:) on this view or
-//   its children would corrupt that measurement.
-//   ❌ NEVER add .frame(idealWidth:) — not read by sizingOptions=[]
-//   ❌ NEVER add .fixedSize() to root or actionsSection — corrupts fittingSize
-//   ❌ NEVER add .frame(maxHeight:) here — AppDelegate clamps via maxHeight
-//   ❌ NEVER add .frame(height:) here
-//   ✅ .frame(maxWidth: .infinity) is safe — width axis only
+// RULE 1: Root VStack uses .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+//   idealWidth: 480 pins preferredContentSize.width = 480 (panel width never changes).
+//   ❌ NEVER remove idealWidth: 480.
+//   ❌ NEVER add idealHeight or maxHeight to the root frame.
+//   ❌ NEVER use .frame(width: 480) — not equivalent.
+//   ❌ NEVER use .fixedSize() on the root VStack.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
-// RULE 5: The 5 s timer calls LocalRunnerStore.shared.refresh() + store.reload().
-//   BOTH are gated behind !popoverOpenState.isOpen.
-//   LocalRunnerStore.shared.refresh() is @MainActor-isolated and MUST be called
-//   via Task { @MainActor in ... } from the nonisolated Timer closure.
-//   ❌ NEVER call store.reload() while popoverOpenState.isOpen == true.
-//   ❌ NEVER call LocalRunnerStore.shared.refresh() while popoverOpenState.isOpen == true.
-//   ❌ NEVER remove the !popoverOpenState.isOpen guard from the timer.
-//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//   is major major major.
+// RULE 5: NO height caps on actionsSection.
+//   With NSPanel, height caps are not needed. Content grows naturally.
+//   AppDelegate.maxHeight (85% screen) prevents off-screen overflow at the panel level.
+//   ❌ NEVER add .frame(maxHeight:) to actionsSection.
+//   ❌ NEVER wrap actionsSection in ScrollView.
+//   ❌ NEVER add .fixedSize() to actionsSection.
 //
-// RULE 6: systemStats MUST be paused while the popover is open.
-//   SystemStatsViewModel fires every 2 s, mutating @StateObject → SwiftUI re-render
-//   → intrinsicContentSize update while popover is shown. Under sizingOptions=[]
-//   this is harmless (hosting controller never auto-writes contentSize). Still
-//   paused to avoid unnecessary CPU burn while popover is visible.
+// RULE 6: systemStats MUST be paused while the panel is open.
+//   SystemStatsViewModel fires every 2s, mutating @StateObject → SwiftUI re-render
+//   → new preferredContentSize → KVO fires → resizeAndRepositionPanel().
+//   While open: this is fine (panel just resizes smoothly, no jump).
+//   While closed: systemStats should run to keep status icon updated.
+//   Gate reads PopoverOpenState via @EnvironmentObject (live, never stale).
+//   ❌ NEVER re-add `var isPopoverOpen: Bool` prop — frozen at construction.
+//   ❌ NEVER remove .onChange(of: popoverOpenState.isOpen).
 //
-//   ⚠️ CRITICAL — WHY @EnvironmentObject AND NOT A PLAIN Bool PROP:
-//   AppDelegate constructs mainView() BEFORE the popover opens.
-//   A plain `var isPopoverOpen: Bool` prop is captured as `false` at construction
-//   time and NEVER updates inside the view (SwiftUI value-type props are copied,
-//   not referenced). .onChange(of: isPopoverOpen) therefore NEVER fires.
-//   PopoverOpenState is an ObservableObject injected as @EnvironmentObject by
-//   wrapEnv(). It is mutated by AppDelegate immediately before show() and after
-//   close(), so .onChange(of: popoverOpenState.isOpen) always sees the live value.
+// RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload().
+//   BOTH gated behind !popoverOpenState.isOpen.
+//   ❌ NEVER remove this guard.
+//   ❌ NEVER call LocalRunnerStore.shared.refresh() directly from Timer closure
+//      — it is @MainActor isolated, requires Task { @MainActor in }.
 //
-//   ❌ NEVER re-add `var isPopoverOpen: Bool` prop to PopoverMainView.
-//   ❌ NEVER read isPopoverOpen from a plain Bool prop here.
-//   ❌ NEVER remove the .onChange(of: popoverOpenState.isOpen) systemStats gate.
-//   ❌ NEVER pass isPopoverOpen: as a prop to PopoverMainView from AppDelegate.
-//   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-//   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-//   is major major major.
+// RULE 8: idealWidth is 480. AppDelegate.fixedWidth is also 480.
+//   ❌ NEVER change one without changing the other.
+//
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+// is major major major.
+
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
 
-    // ⚠️ RULE 6 — LIVE open-state signal from @EnvironmentObject.
-    // Injected by AppDelegate via wrapEnv() / .environmentObject(popoverOpenState).
-    // Mutated BEFORE show() and AFTER close() — always live.
-    // ❌ NEVER replace with a plain Bool prop — it would be frozen at construction.
-    // ❌ NEVER read from AppDelegate directly here.
+    // ⚠️ RULE 6: Live open-state via @EnvironmentObject — NEVER a frozen Bool prop.
+    // ❌ NEVER replace with var isPopoverOpen: Bool.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    // is major major major.
+    // UNDER ANY CIRCUMSTANCE.
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     @State private var isAuthenticated = (githubToken() != nil)
@@ -76,14 +68,6 @@ struct PopoverMainView: View {
     @State private var runnerRefreshTimer: Timer?
 
     var body: some View {
-        // ⚠️ RULE 1: NO frame constraints here other than maxWidth:.infinity.
-        // AppDelegate.openPopover() sets frame to (fixedWidth, 9999), forces layout,
-        // reads fittingSize.height, clamps, then sets contentSize ONCE before show().
-        // Any idealWidth, fixedSize, or maxHeight here would corrupt that measurement.
-        // ❌ NEVER add .frame(idealWidth:), .fixedSize(), or .frame(maxHeight:) here.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
                 stats: systemStats.stats,
@@ -95,58 +79,44 @@ struct PopoverMainView: View {
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
                 .onAppear {
-                    Task {
-                        await MainActor.run { LocalRunnerStore.shared.refresh() }
-                    }
+                    Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
             actionsSection
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // RULE 1: idealWidth:480 pins preferredContentSize.width = 480 always.
+        // ❌ NEVER add idealHeight or maxHeight here.
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            if !popoverOpenState.isOpen {
-                systemStats.start()
-            }
+            if !popoverOpenState.isOpen { systemStats.start() }
             startRunnerRefreshTimer()
         }
         .onDisappear {
             systemStats.stop()
             stopRunnerRefreshTimer()
         }
-        // ⚠️ RULE 6 — systemStats gate via LIVE @EnvironmentObject.
-        // ❌ NEVER change to a plain Bool prop — see RULE 6 comment above.
-        // ❌ NEVER remove this .onChange.
-        // ⚠️ macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in }.
+        // ⚠️ RULE 6: systemStats gate via live @EnvironmentObject.
+        // ❌ NEVER remove. ⚠️ macOS 13-compatible single-value onChange.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-        // is major major major.
+        // UNDER ANY CIRCUMSTANCE.
         .onChange(of: popoverOpenState.isOpen) { open in
-            if open {
-                systemStats.stop()
-            } else {
-                systemStats.start()
-            }
+            if open { systemStats.stop() } else { systemStats.start() }
         }
-        .onChange(of: store.actions) { _ in
-            visibleCount = 10
-        }
+        .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
-    // MARK: - Runner refresh timer (RULE 5)
+    // MARK: - Timer (RULE 7)
+
     private func startRunnerRefreshTimer() {
         stopRunnerRefreshTimer()
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            // ⚠️ RULE 5 — timer guard via LIVE @EnvironmentObject.
-            // ❌ NEVER remove this guard (RULE 5).
-            // ❌ LocalRunnerStore.shared.refresh() is @MainActor-isolated — MUST use
-            //    Task { @MainActor in } from this nonisolated Timer closure.
+            // ⚠️ RULE 7: gate on live @EnvironmentObject.
+            // ❌ NEVER remove this guard.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
-            if !popoverOpenState.isOpen {
-                Task { @MainActor in
-                    LocalRunnerStore.shared.refresh()
-                }
-                store.reload()
+            if !self.popoverOpenState.isOpen {
+                Task { @MainActor in LocalRunnerStore.shared.refresh() }
+                self.store.reload()
             }
         }
     }
@@ -157,6 +127,7 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Rate limit banner
+
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -167,10 +138,8 @@ struct PopoverMainView: View {
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
 
-    // MARK: - Actions section
-    // ⚠️ NO .fixedSize(), NO .frame(maxHeight:) on this section.
-    // Under Architecture 2, fittingSize must see the full natural height.
-    // AppDelegate.maxHeight (75% screen height) is the only cap, applied in openPopover().
+    // MARK: - Actions section (RULE 5: no height cap — NSPanel handles screen bounds)
+
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
@@ -182,8 +151,6 @@ struct PopoverMainView: View {
                 ForEach(visible) { group in
                     ActionRowView(group: group, onSelect: { onSelectAction(group) })
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        // ✅ InlineJobRowsView reads popoverOpenState via @EnvironmentObject
-                        // ❌ NEVER pass isPopoverOpen: as a plain Bool prop
                         InlineJobRowsView(group: group)
                     }
                 }
@@ -210,6 +177,7 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Helpers
+
     private func signInWithGitHub() {
         let urlString = "https://docs.github.com/en/authentication/"
             + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
