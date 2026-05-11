@@ -12,6 +12,14 @@ import SwiftUI
 ///
 /// ⚠️ REGRESSION GUARD: .frame(idealWidth: 480) MUST match AppDelegate.fixedWidth (480).
 /// ❌ NEVER change idealWidth without updating fixedWidth in AppDelegate.
+/// ⚠️ SCROLLVIEW RULE (ref #370, main branch JobDetailView):
+///    ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) or equivalent cap.
+///    Without it, when Settings is the root at openPopover() time, SwiftUI reports
+///    the full unbounded scroll content as fittingSize.height, giving an oversized
+///    popover. When navigated to from main (smaller frame), content is clipped.
+///    The cap ensures a predictable fittingSize that fills the popover correctly.
+/// ❌ NEVER remove the .frame(maxHeight:) from the ScrollView.
+/// ❌ NEVER add maxHeight: .infinity to the root VStack — corrupts fittingSize.width.
 /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
 struct SettingsView: View {
     let onBack: () -> Void
@@ -48,6 +56,14 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
+            // ⚠️ .frame(maxHeight:) is REQUIRED on this ScrollView — do NOT remove.
+            // Without it, fittingSize.height is the full unbounded scroll content height
+            // when Settings is root at openPopover() time, causing an oversized popover.
+            // When navigated to from a shorter frame (main), content is clipped without the cap.
+            // Pattern matches main branch's JobDetailView fix for issue #370.
+            // If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+            // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+            // is major major major.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -66,6 +82,10 @@ struct SettingsView: View {
                 }
                 .padding(.bottom, 16)
             }
+            // ⚠️ REQUIRED — caps fittingSize.height. Prevents oversized or clipped Settings.
+            // Matches main's JobDetailView pattern (issue #370).
+            // ❌ NEVER remove this modifier.
+            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         // ⚠️ REGRESSION GUARD: keep idealWidth: 480 — matches PopoverMainView and AppDelegate.fixedWidth.
         // ❌ NEVER add maxHeight: .infinity here — corrupts fittingSize.width and causes popover side-jump.
