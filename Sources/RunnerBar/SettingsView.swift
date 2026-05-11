@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 ///
-/// ⚠️ REGRESSION GUARD — Architecture 2 (sizingOptions=[]) ref #52 #54 #57 #377
+/// ⚠️ REGRESSION GUARD — Architecture 2 (sizingOptions=[]) ref #52 #54 #57 #375 #376 #377
 /// See also: status-bar-app-position-warning.md
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -35,6 +35,12 @@ import SwiftUI
 ///     - Required so rows expand to full width inside the ScrollView.
 ///     - Safe: inside ScrollView, does not affect fittingSize measurement.
 ///     - ❌ NEVER remove maxWidth:.infinity from the inner VStack.
+///
+/// SIDE-JUMP PROOF BECAUSE:
+///   - AppDelegate.sizingOptions = [] → NO auto-propagation of preferredContentSize.
+///   - contentSize.width is ALWAYS AppDelegate.fixedWidth (480) → NSPopover never
+///     re-anchors horizontally regardless of any SwiftUI layout changes.
+///   - contentSize.height is only written in remeasurePopover() when height truly changed.
 ///
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
