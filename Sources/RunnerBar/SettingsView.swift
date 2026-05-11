@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// ⚠️ REGRESSION GUARD — Architecture 1 + fixed-height shell (ref #375 #376 #377)
 ///
-/// SettingsView uses a FIXED frame height (440pt). This is intentional and correct.
+/// SettingsView uses a FIXED frame height (560pt). This is intentional and correct.
 ///
 /// WHY FIXED HEIGHT HERE:
 ///   With sizingOptions = .preferredContentSize, any async state change that alters
@@ -17,11 +17,17 @@ import SwiftUI
 ///   runner rows appearing) causes NSPopover to re-anchor → side jump.
 ///   SettingsView contains a ScrollView which reports unbounded ideal height to SwiftUI
 ///   → preferredContentSize.height is unstable and changes on every state update.
-///   Fix: pin the root frame to a fixed height. preferredContentSize.height = 440 always.
+///   Fix: pin the root frame to a fixed height. preferredContentSize.height = 560 always.
 ///   ScrollView scrolls content internally. No jump is possible.
 ///
+/// WHY 560pt (not 440pt):
+///   All sections (Local runners, Runner management, Scopes, Notifications, General,
+///   Account, Legal, About) require ~520-540pt at minimum content. 560pt covers
+///   worst-case content (3 local runners + 2 remote runners + 2 scopes) with
+///   a small comfortable margin, without needing to scroll for typical usage.
+///
 /// ❌ NEVER remove .frame(minWidth:420, idealWidth:420, ...) from the root VStack.
-/// ❌ NEVER replace maxHeight: 440 with .infinity — that re-introduces the jump.
+/// ❌ NEVER replace maxHeight: 560 with .infinity — that re-introduces the jump.
 /// ❌ NEVER use .fixedSize on the ScrollView inner VStack — unbounded ideal height → jump.
 /// ❌ NEVER remove idealWidth: 420 — width must be stable.
 struct SettingsView: View {
@@ -57,9 +63,9 @@ struct SettingsView: View {
             headerBar
             Divider()
             // ⚠️ ScrollView + fixed-height container.
-            // The outer VStack is pinned to exactly 440pt (see .frame below).
+            // The outer VStack is pinned to exactly 560pt (see .frame below).
             // ScrollView clips and scrolls content that exceeds this height.
-            // preferredContentSize.height = 440 always — NSPopover never re-anchors.
+            // preferredContentSize.height = 560 always — NSPopover never re-anchors.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     localRunnersSection
@@ -81,10 +87,11 @@ struct SettingsView: View {
             }
         }
         // ⚠️ minWidth MUST precede idealWidth in Swift .frame() call.
-        // Fixed height pins preferredContentSize.height = 440 always — no jump.
+        // Fixed height 560pt pins preferredContentSize.height = 560 always — no jump.
         // ❌ NEVER reorder or remove these constraints.
+        // ❌ NEVER change maxHeight to .infinity — NSPopover re-anchors on every state update.
         .frame(minWidth: 420, idealWidth: 420, maxWidth: 420,
-               minHeight: 440, idealHeight: 440, maxHeight: 440)
+               minHeight: 560, idealHeight: 560, maxHeight: 560)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
