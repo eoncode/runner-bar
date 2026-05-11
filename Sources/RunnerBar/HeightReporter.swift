@@ -3,8 +3,10 @@ import SwiftUI
 // ─────────────────────────────────────────────────────────────────────────────
 // HeightReporter — lets SwiftUI views push their rendered height to AppDelegate
 //
-// Usage: add .reportHeight(to: appDelegate) on any root view.
-// AppDelegate implements HeightReceiver and calls panel.updateHeight().
+// IMPORTANT: uses .overlay (not .background) for the GeometryReader.
+// A GeometryReader in .background greedily expands to fill available space
+// and collapses the parent VStack on first render — causing the header to
+// vanish. .overlay reads the already-computed frame without affecting layout.
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct HeightPreferenceKey: PreferenceKey {
@@ -20,9 +22,11 @@ protocol HeightReceiver: AnyObject {
 
 extension View {
     /// Measures the view's rendered height and reports it to `receiver`.
+    /// Uses .overlay so the GeometryReader reads the settled frame
+    /// without interfering with the VStack layout.
     func reportHeight(to receiver: HeightReceiver) -> some View {
         self
-            .background(
+            .overlay(
                 GeometryReader { geo in
                     Color.clear
                         .preference(key: HeightPreferenceKey.self,
@@ -30,7 +34,9 @@ extension View {
                 }
             )
             .onPreferenceChange(HeightPreferenceKey.self) { h in
-                if h > 0 { receiver.didUpdateHeight(h) }
+                DispatchQueue.main.async {
+                    if h > 0 { receiver.didUpdateHeight(h) }
+                }
             }
     }
 }

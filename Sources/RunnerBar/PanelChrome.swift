@@ -9,38 +9,46 @@ import SwiftUI
 // position — updateHeight() resizes the panel in-place and the arrow stays
 // pinned to the status bar button centre. No re-anchor is possible.
 //
+// COORDINATE SYSTEM (Y-up, origin at panel bottom-left):
+//
+//   totalHeight = contentHeight + kArrowHeight
+//
+//   panel.frame.maxY  ────  arrowTip  (points toward status bar button)
+//                         /      \
+//   bodyTop = contentH  ──────────  ← top of SwiftUI hosting view
+//   |                              |
+//   |   SwiftUI content (body)     |
+//   |                              |
+//   panel.frame.minY  ──────────
+//
+//   hostingView.frame.origin.y = 0   (bottom of panel = bottom of content)
+//   hostingView.frame.size.height  = contentHeight  (NOT totalHeight)
+//
 // See: status-bar-app-position-warning.md §2 (NSPanel option)
 //      issues #52 #54 #375 #376 #377
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Constants ────────────────────────────────────────────────────────────────
-private let kCornerRadius:  CGFloat = 10   // matches NSPopover Sequoia
+private let kCornerRadius:  CGFloat = 10
 private let kArrowHeight:   CGFloat = 9
 private let kArrowWidth:    CGFloat = 20
-private let kArrowOverlapY: CGFloat = 1    // arrow base 1pt inside body — seamless join
+private let kArrowOverlapY: CGFloat = 1
 private let kShadowRadius:  CGFloat = 20
 private let kShadowAlpha:   Float   = 0.35
 
-// ── NSBezierPath → CGPath helper (macOS 13 compatible) ───────────────────────
-// NSBezierPath.cgPath is macOS 14+ only. This extension converts manually.
+// NSBezierPath → CGPath (macOS 13 compatible — .cgPath is macOS 14+ only)
 private extension NSBezierPath {
     var asCGPath: CGPath {
         let cg = CGMutablePath()
-        var points = [NSPoint](repeating: .zero, count: 3)
+        var pts = [NSPoint](repeating: .zero, count: 3)
         for i in 0 ..< elementCount {
-            let type = element(at: i, associatedPoints: &points)
-            switch type {
-            case .moveTo:      cg.move(to: points[0])
-            case .lineTo:      cg.addLine(to: points[0])
-            case .curveTo:     cg.addCurve(to: points[2],
-                                           control1: points[0],
-                                           control2: points[1])
-            case .cubicCurveTo: cg.addCurve(to: points[2],
-                                            control1: points[0],
-                                            control2: points[1])
-            case .quadraticCurveTo: cg.addQuadCurve(to: points[1], control: points[0])
-            case .closePath:   cg.closeSubpath()
-            @unknown default:  break
+            switch element(at: i, associatedPoints: &pts) {
+            case .moveTo:           cg.move(to: pts[0])
+            case .lineTo:           cg.addLine(to: pts[0])
+            case .curveTo,
+                 .cubicCurveTo:     cg.addCurve(to: pts[2], control1: pts[0], control2: pts[1])
+            case .quadraticCurveTo: cg.addQuadCurve(to: pts[1], control: pts[0])
+            case .closePath:        cg.closeSubpath()
+            @unknown default:       break
             }
         }
         return cg
@@ -49,7 +57,6 @@ private extension NSBezierPath {
 
 final class PanelChrome: NSPanel {
 
-    // The hosting view is embedded here by AppDelegate after init.
     var hostingView: NSView? {
         didSet {
             guard let hv = hostingView else { return }
@@ -59,10 +66,8 @@ final class PanelChrome: NSPanel {
         }
     }
 
-    // Arrow tip X offset from panel left edge — set in positionBelow(button:).
     private var arrowTipX: CGFloat = 0
 
-    // The visual-effect (blur) background layer.
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
         v.material     = .menu
@@ -72,39 +77,30 @@ final class PanelChrome: NSPanel {
         return v
     }()
 
-    // Outside-click monitor — replaces NSPopover .transient behaviour.
     private var outsideMonitor: Any?
-
-    // Called by AppDelegate when the panel should close (outside click).
     var onClose: (() -> Void)?
 
     // ── Init ─────────────────────────────────────────────────────────────────
 
     init() {
-        super.init(
-            contentRect: .zero,
-            styleMask:   [.borderless, .nonactivatingPanel],
-            backing:     .buffered,
-            defer:       false
-        )
-        isFloatingPanel      = true
-        level                = .statusBar
-        backgroundColor      = .clear
-        isOpaque             = false
-        hasShadow            = false
-        collectionBehavior   = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                   backing: .buffered, defer: false)
+        isFloatingPanel     = true
+        level               = .statusBar
+        backgroundColor     = .clear
+        isOpaque            = false
+        hasShadow           = false
+        collectionBehavior  = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = false
-
         fx.frame = NSRect(origin: .zero, size: .zero)
         contentView?.addSubview(fx)
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
 
-    /// Position panel so arrow tip points at the centre of `button`, then show.
     func positionBelow(button: NSButton, contentHeight: CGFloat) {
-        guard let buttonWindow = button.window else { return }
-        let btnScreen  = buttonWindow.convertToScreen(button.frame)
+        guard let bw = button.window else { return }
+        let btnScreen  = bw.convertToScreen(button.frame)
         let btnCentreX = btnScreen.midX
         let totalHeight = contentHeight + kArrowHeight
         let panelWidth  = AppDelegate.fixedWidth
@@ -125,7 +121,7 @@ final class PanelChrome: NSPanel {
         installOutsideMonitor()
     }
 
-    /// Resize panel height in-place — arrow tip stays pinned under button.
+    /// Resize in-place. Top edge (arrow) stays fixed. Only bottom moves.
     func updateHeight(_ newContentHeight: CGFloat) {
         guard isVisible else { return }
         let totalHeight = newContentHeight + kArrowHeight
@@ -134,7 +130,6 @@ final class PanelChrome: NSPanel {
                         width: frame.width, height: totalHeight),
                  display: true)
         layoutChrome()
-        hostingView?.frame = bodyRect(in: frame.size)
     }
 
     func closePanel() {
@@ -154,11 +149,14 @@ final class PanelChrome: NSPanel {
         let size = frame.size
         guard size.width > 0, size.height > 0 else { return }
 
+        // fx covers full panel (body + arrow region) for the mask.
         fx.frame = NSRect(origin: .zero, size: size)
+
+        // Hosting view sits in the body only (below the arrow).
         hostingView?.frame = bodyRect(in: size)
 
         let shapeLayer = CAShapeLayer()
-        shapeLayer.path = chromePath(in: size).asCGPath   // macOS 13 safe
+        shapeLayer.path = chromePath(in: size).asCGPath
         fx.layer?.mask  = shapeLayer
 
         let shadow = NSShadow()
@@ -168,51 +166,40 @@ final class PanelChrome: NSPanel {
         contentView?.shadow = shadow
     }
 
+    // Body rect: y=0 (panel bottom), height=contentHeight.
+    // Arrow lives above bodyTop — hosting view must NOT extend into it.
     private func bodyRect(in size: NSSize) -> NSRect {
         NSRect(x: 0, y: 0, width: size.width, height: size.height - kArrowHeight)
     }
 
     // ── Chrome path ──────────────────────────────────────────────────────────
-    //
-    //        arrowTip
-    //         /    \
-    //  ──────/      \──────   ← body top
-    //  |  rounded body rect  |
-    //  └────────────────────┘
-    //
+
     private func chromePath(in size: NSSize) -> NSBezierPath {
-        let w     = size.width
-        let h     = size.height
+        let w = size.width, h = size.height
         let bodyH = h - kArrowHeight
-        let r     = kCornerRadius
-        let aw    = kArrowWidth / 2
-        let tipX  = arrowTipX
-        let tipY  = h
+        let r = kCornerRadius, aw = kArrowWidth / 2
+        let tipX = arrowTipX, tipY = h
         let baseY = bodyH + kArrowOverlapY
 
-        let path = NSBezierPath()
-        path.move(to: NSPoint(x: r, y: 0))
-        path.line(to: NSPoint(x: w - r, y: 0))
-        path.appendArc(withCenter: NSPoint(x: w - r, y: r), radius: r,
-                       startAngle: 270, endAngle: 0)
-        path.line(to: NSPoint(x: w, y: bodyH - r))
-        path.appendArc(withCenter: NSPoint(x: w - r, y: bodyH - r), radius: r,
-                       startAngle: 0, endAngle: 90)
-        path.line(to: NSPoint(x: tipX + aw, y: bodyH))
-        path.curve(to: NSPoint(x: tipX, y: tipY),
-                   controlPoint1: NSPoint(x: tipX + aw * 0.6, y: baseY),
-                   controlPoint2: NSPoint(x: tipX + aw * 0.2, y: tipY))
-        path.curve(to: NSPoint(x: tipX - aw, y: bodyH),
-                   controlPoint1: NSPoint(x: tipX - aw * 0.2, y: tipY),
-                   controlPoint2: NSPoint(x: tipX - aw * 0.6, y: baseY))
-        path.line(to: NSPoint(x: r, y: bodyH))
-        path.appendArc(withCenter: NSPoint(x: r, y: bodyH - r), radius: r,
-                       startAngle: 90, endAngle: 180)
-        path.line(to: NSPoint(x: 0, y: r))
-        path.appendArc(withCenter: NSPoint(x: r, y: r), radius: r,
-                       startAngle: 180, endAngle: 270)
-        path.close()
-        return path
+        let p = NSBezierPath()
+        p.move(to: NSPoint(x: r, y: 0))
+        p.line(to: NSPoint(x: w - r, y: 0))
+        p.appendArc(withCenter: NSPoint(x: w - r, y: r), radius: r, startAngle: 270, endAngle: 0)
+        p.line(to: NSPoint(x: w, y: bodyH - r))
+        p.appendArc(withCenter: NSPoint(x: w - r, y: bodyH - r), radius: r, startAngle: 0, endAngle: 90)
+        p.line(to: NSPoint(x: tipX + aw, y: bodyH))
+        p.curve(to: NSPoint(x: tipX, y: tipY),
+                controlPoint1: NSPoint(x: tipX + aw * 0.6, y: baseY),
+                controlPoint2: NSPoint(x: tipX + aw * 0.2, y: tipY))
+        p.curve(to: NSPoint(x: tipX - aw, y: bodyH),
+                controlPoint1: NSPoint(x: tipX - aw * 0.2, y: tipY),
+                controlPoint2: NSPoint(x: tipX - aw * 0.6, y: baseY))
+        p.line(to: NSPoint(x: r, y: bodyH))
+        p.appendArc(withCenter: NSPoint(x: r, y: bodyH - r), radius: r, startAngle: 90, endAngle: 180)
+        p.line(to: NSPoint(x: 0, y: r))
+        p.appendArc(withCenter: NSPoint(x: r, y: r), radius: r, startAngle: 180, endAngle: 270)
+        p.close()
+        return p
     }
 
     // ── Outside-click dismissal ───────────────────────────────────────────────
@@ -235,9 +222,6 @@ final class PanelChrome: NSPanel {
     }
 
     private func removeOutsideMonitor() {
-        if let m = outsideMonitor {
-            NSEvent.removeMonitor(m)
-            outsideMonitor = nil
-        }
+        if let m = outsideMonitor { NSEvent.removeMonitor(m); outsideMonitor = nil }
     }
 }
