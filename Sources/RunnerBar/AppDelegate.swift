@@ -13,7 +13,7 @@ import SwiftUI
 //   PopoverMainView reports its rendered height via HeightPreferenceKey
 //   (a SwiftUI PreferenceKey backed by a GeometryReader in .background).
 //   AppDelegate reads this in .onPreferenceChange and stores it in measuredHeight.
-//   openPopover() Phase 2 reads measuredHeight directly — fittingSize is NEVER used.
+//   openPopover() Phase 3 reads measuredHeight directly — fittingSize is NEVER used.
 //
 //   WHY NOT fittingSize:
 //   NSHostingController.view.fittingSize with sizingOptions=[] is cached and stale.
@@ -394,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let button = statusItem?.button,
               button.window != nil,
               let popover,
-              let hostingController
+              let hc = hostingController
         else { return }
 
         // ── Phase 1 (sync): stage view and data ──────────────────────────────
@@ -403,10 +403,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         if let saved = savedNavState,
            let restored = validatedView(for: saved) {
-            hostingController.rootView = wrapWithHeightCapture(restored)
+            hc.rootView = wrapWithHeightCapture(restored)
         }
 
-        Task { @MainActor [weak self, weak button, weak popover, weak hostingController] in
+        // Capture as non-weak locals so the Task closures can reference them
+        // without the guard-let Optional-of-Optional compile error.
+        // self is @MainActor final class — captured weakly to avoid retain cycle;
+        // hc is the unwrapped hosting controller — captured weakly for safety.
+        Task { @MainActor [weak self, weak hc, weak button, weak popover] in
 
             // ── Phase 2: prime hosting view width so SwiftUI measures real height ──
             // sizingOptions=[] → hosting view frame is zero until we set it.
@@ -414,33 +418,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             // Set canonicalWidth × minHeight so the layout engine has a real container.
             // HeightPreferenceKey will fire after this layout pass with the true height.
             // ❌ NEVER remove this priming block.
-            guard let self, let hostingController else { return }
-            hostingController.view.setFrameSize(
-                NSSize(width: Self.canonicalWidth, height: Self.minHeight)
-            )
+            guard let s = self, let hc else { return }
+            hc.view.setFrameSize(NSSize(width: Self.canonicalWidth, height: Self.minHeight))
 
             // Two yields: let SwiftUI complete layout and fire HeightPreferenceKey.
             await Task.yield()
             await Task.yield()
 
             // ── Phase 3: read measured height, set final size, show ───────────
-            guard let self,
-                  let button,
-                  let popover,
-                  let hostingController,
-                  self.popoverIsOpen
-            else { return }
-
             // One more yield so Phase 2's HeightPreferenceKey callback has run.
             await Task.yield()
 
+            guard let s, let hc, let button, let popover, s.popoverIsOpen else { return }
+
             // Read SwiftUI-reported height — primed by Phase 2, never stale.
-            let rawHeight = self.measuredHeight
+            let rawHeight = s.measuredHeight
             let height = min(max(rawHeight > 0 ? rawHeight : 300, Self.minHeight), Self.maxHeight)
             let size = NSSize(width: Self.canonicalWidth, height: height)
 
             // Set final size ONCE, BEFORE show(). Nothing touches sizing after this.
-            hostingController.view.setFrameSize(size)
+            hc.view.setFrameSize(size)
             popover.contentSize = size
 
             // Show. Sizing is frozen from this point until next open.
