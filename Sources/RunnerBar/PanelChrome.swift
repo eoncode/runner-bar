@@ -103,17 +103,28 @@ final class PanelChromeView: NSView {
 
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
-        v.material = .hudWindow
+        // ❌ NEVER change .popover to .hudWindow or any other material.
+        // .popover is the exact material used by native NSPopover on Sonoma/Sequoia:
+        // frosted-glass translucency over the desktop. .hudWindow is a darker,
+        // less transparent HUD style that does NOT match NSPopover appearance.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        v.material = .popover
         v.blendingMode = .behindWindow
         v.state = .active
         v.wantsLayer = true
+        // ❌ NEVER set cornerRadius or masksToBounds here — mask via updateFxMask().
         return v
     }()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = CGColor.clear
+        // ❌ NEVER set layer?.backgroundColor = CGColor.clear (alpha 0.0).
+        // alpha=0.0 disables CABackdropLayer sampling — NSVisualEffectView collapses
+        // to flat opaque grey (no vibrancy/blur). Near-zero (0.001) keeps it active.
+        // Reference: iSapozhnik/Popover, Oskar Groth NSVisualEffectView reverse-engineering.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        layer?.backgroundColor = CGColor(gray: 1, alpha: 0.001)
         addSubview(fx)
     }
 
@@ -163,6 +174,7 @@ final class PanelChromeView: NSView {
     // ❌ NEVER change cp offsets to hw/2 (=10pt) — half-circle blob.
     // ❌ NEVER remove the curves — flat arrow.
     // ❌ NEVER add appendArc at base corners — base humps.
+    // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private func chromePath(in rect: NSRect) -> NSBezierPath {
         let w  = rect.width
         let h  = rect.height
@@ -175,8 +187,10 @@ final class PanelChromeView: NSView {
 
         // iSapozhnik fractions: w/6 at base (inward from foot),
         //                       w/9 at tip  (inward from side)
-        let cpBase = arrowWidth / 6   // 3.33pt
-        let cpTip  = arrowWidth / 9   // 2.22pt
+        // ❌ NEVER change these — they reproduce the exact NSPopover arrow shape.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        let cpBase = arrowWidth / 6   // 3.33pt — anchors curve near foot
+        let cpTip  = arrowWidth / 9   // 2.22pt — guides into soft tip
 
         let path = NSBezierPath()
         path.move(to: NSPoint(x: r, y: 0))
@@ -194,10 +208,7 @@ final class PanelChromeView: NSView {
         // Top edge: right segment to arrow right foot
         path.line(to: NSPoint(x: cX + hw, y: baseY))
 
-        // Arrow right side → tip (concave inward curve)
-        // cp1 near the foot, on the base line — anchors curve at bottom
-        // cp2 near tip centre, at tip height — guides into the soft rounded peak
-        // ❌ NEVER set cp2.x to cX+hw/2 (=cX+10) — that bows outward (half-circle)
+        // Arrow right side → tip (concave inward curve, iSapozhnik formula)
         path.curve(to:            NSPoint(x: cX,           y: tipY),
                    controlPoint1: NSPoint(x: cX + cpBase,  y: baseY),
                    controlPoint2: NSPoint(x: cX + cpTip,   y: tipY))
