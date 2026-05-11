@@ -3,10 +3,13 @@ import SwiftUI
 
 // ⚠️ REGRESSION GUARD — frame + padding rules (ref #52 #54 #57 #296)
 //
-// RULE 1: Root VStack MUST use .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+// RULE 1: Root VStack MUST use .frame(width: 420, alignment: .topLeading)
+//         ❌ NEVER use .frame(maxWidth: .infinity) — it conflicts with the outer
+//         .fixedSize(horizontal: false, vertical: true) applied by AppDelegate,
+//         causing SwiftUI to collapse the view height to zero (ref #381).
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
-// RULE 4: NEVER use .fixedSize() on any container.
+// RULE 4: NEVER use .fixedSize() on any container inside PopoverMainView.
 // RULE 5: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
 // HEIGHT REPORTING (ref #377 — Architecture 2b):
@@ -102,7 +105,10 @@ struct PopoverMainView: View {
                 onSelectAction: onSelectAction
             )
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // ⚠️ RULE 1: exact width=420, NOT maxWidth:.infinity.
+        // maxWidth:.infinity conflicts with the outer .fixedSize(horizontal:false, vertical:true)
+        // applied by AppDelegate, causing the view to collapse to zero height (ref #381).
+        .frame(width: PopoverLayout.idealWidth, alignment: .topLeading)
         // ⚠️ HEIGHT REPORTING: measure rendered height and publish via HeightPreferenceKey.
         // AppDelegate reads this to size the popover — replaces unreliable fittingSize.
         // ❌ NEVER remove this .background modifier.
