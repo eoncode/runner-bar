@@ -10,18 +10,21 @@ import SwiftUI
 //   NSVisualEffectView + CAShapeLayer mask for rounded corners and popover arrow.
 //
 // HEIGHT MECHANISM (ref #377):
-//   PopoverMainView reports its rendered height via HeightPreferenceKey.
-//   AppDelegate reads this in .onPreferenceChange and calls resizePanel(to:).
-//   resizePanel:
-//     1. Clamps height to [minHeight, maxHeight]
-//     2. Sets hostingView.frame.size.height = contentH  (exact fit, no sentinel)
-//     3. Sets panel frame keeping TOP-LEFT corner fixed
+//   1. hostingView.sizingOptions = []  — we own the frame; SwiftUI does not resize it.
+//   2. On first build hostingView.frame.height = 2000 (unconstrained) so the
+//      GeometryReader inside SwiftUI can measure and fire HeightPreferenceKey
+//      with the real content height.
+//   3. onPreferenceChange stores measuredHeight and calls resizePanel(to:).
+//   4. resizePanel sets hostingView.frame.height = contentH (exact fit) and,
+//      if the panel is visible, repositions it keeping the top-left corner fixed.
+//   5. showPanel always uses the current measuredHeight for the first frame.
 //
-//   ❌ NEVER use a sentinel/oversized hostingView — content renders outside the
-//      visible panel frame in AppKit's bottom-up coordinate system.
-//   ❌ NEVER use fittingSize — it returns cached/stale values with sizingOptions=[].
+//   ❌ NEVER use sizingOptions = [.preferredContentSize] — it fights manual frame sets.
+//   ❌ NEVER start hostingView at height=minHeight — GeometryReader reads that and
+//      reports minHeight forever.
+//   ❌ NEVER use fittingSize.
+//   ❌ NEVER animate the resize (causes side-jump, ref #379).
 //   ❌ NEVER remove HeightPreferenceKey machinery.
-//   ❌ NEVER animate the resize — causes side-jump (#379).
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 //
 // PANEL SETUP:
@@ -75,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let arrowHeight: CGFloat = 9
     private static let arrowHalfWidth: CGFloat = 10
     private static let cornerRadius: CGFloat = 12
+    /// Initial unconstrained height so GeometryReader can measure freely.
+    private static let unconstrainedHeight: CGFloat = 2000
 
     // MARK: - Lifecycle
 
@@ -97,12 +102,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Build
 
     private func buildPanel() {
-        let initialContentH: CGFloat = Self.minHeight
-        let initialTotalH = initialContentH + Self.arrowHeight
-        let initialSize = NSSize(width: Self.canonicalWidth, height: initialTotalH)
+        // Panel starts off-screen with unconstrained height so SwiftUI can
+        // measure content and HeightPreferenceKey fires with the real height.
+        let offScreenOrigin = NSPoint(x: -10000, y: -10000)
+        let buildSize = NSSize(width: Self.canonicalWidth,
+                               height: Self.unconstrainedHeight + Self.arrowHeight)
 
         let p = RunnerBarPanel(
-            contentRect: NSRect(origin: .zero, size: initialSize),
+            contentRect: NSRect(origin: offScreenOrigin, size: buildSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -117,7 +124,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.hasShadow = false
 
         let shadow = CALayer()
-        shadow.frame = NSRect(origin: .zero, size: initialSize)
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.35).cgColor
         shadow.shadowOffset = CGSize(width: 0, height: -3)
         shadow.shadowRadius = 20
@@ -125,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shadow.backgroundColor = NSColor.clear.cgColor
         shadowLayer = shadow
 
-        let vfx = NSVisualEffectView(frame: NSRect(origin: .zero, size: initialSize))
+        let vfx = NSVisualEffectView(frame: NSRect(origin: .zero, size: buildSize))
         vfx.material = .menu
         vfx.blendingMode = .behindWindow
         vfx.state = .active
@@ -134,18 +140,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visualEffectView = vfx
         vfx.layer?.insertSublayer(shadow, at: 0)
 
-        // hostingView sits at y=0 (bottom of VFX), height = contentH.
-        // resizePanel updates this height whenever HeightPreferenceKey fires.
+        // sizingOptions = [] means WE control the frame. SwiftUI never resizes it.
+        // Start at unconstrainedHeight so GeometryReader reports real content height.
         let hv = NSHostingView(rootView: wrapWithHeightCapture(mainView()))
-        hv.sizingOptions = [.preferredContentSize]
+        hv.sizingOptions = []
         hv.autoresizingMask = [.width]
-        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: initialContentH)
+        hv.frame = NSRect(x: 0, y: 0,
+                          width: Self.canonicalWidth,
+                          height: Self.unconstrainedHeight)
         vfx.addSubview(hv)
         hostingView = hv
 
         p.contentView = vfx
         panel = p
-        applyMask(panelSize: initialSize)
+        // Trigger SwiftUI layout while off-screen so measurement fires
+        p.orderFront(nil)
+        p.orderOut(nil)
     }
 
     // MARK: - Mask
@@ -160,7 +170,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ax = max(r + ahw + 4, min(arrowTipX, w - r - ahw - 4))
         let bodyTop = h - ah
 
-        // AppKit: y=0 at bottom. Arrow points up (toward menu bar) at the top.
         let path = CGMutablePath()
         path.move(to: CGPoint(x: r, y: 0))
         path.addLine(to: CGPoint(x: w - r, y: 0))
@@ -170,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         path.addArc(center: CGPoint(x: w - r, y: bodyTop - r), radius: r,
                     startAngle: 0, endAngle: .pi / 2, clockwise: false)
         path.addLine(to: CGPoint(x: ax + ahw, y: bodyTop))
-        path.addLine(to: CGPoint(x: ax, y: h))      // arrow tip (top)
+        path.addLine(to: CGPoint(x: ax, y: h))
         path.addLine(to: CGPoint(x: ax - ahw, y: bodyTop))
         path.addLine(to: CGPoint(x: r, y: bodyTop))
         path.addArc(center: CGPoint(x: r, y: bodyTop - r), radius: r,
@@ -198,11 +207,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             view.onPreferenceChange(HeightPreferenceKey.self) { [weak self] height in
                 guard let self, height > 0 else { return }
                 self.measuredHeight = height
-                if self.panelIsOpen {
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, self.panelIsOpen else { return }
-                        self.resizePanel(to: height)
-                    }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.resizePanel(to: height)
                 }
             }
         )
@@ -210,24 +217,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Resize
     //
-    // Keeps the TOP-LEFT corner of the panel fixed while changing height.
-    // hostingView.frame.size.height is updated to contentH so SwiftUI
-    // content fills the body area exactly (y=0 to y=contentH).
-    // Arrow area is the top arrowHeight points of the panel.
+    // Sets hostingView height = contentH (exact fit).
+    // If panel is visible, repositions it keeping the TOP-LEFT corner fixed.
+    // Never animates (prevents side-jump).
 
     private func resizePanel(to rawContentHeight: CGFloat) {
         guard let panel, let vfx = visualEffectView, let hv = hostingView else { return }
         let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
         let totalH = contentH + Self.arrowHeight
-        // Keep top-left fixed
+
+        // Update hosting view to exact content height
+        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
+        let newSize = NSSize(width: Self.canonicalWidth, height: totalH)
+        vfx.frame = NSRect(origin: .zero, size: newSize)
+        applyMask(panelSize: newSize)
+
+        guard panelIsOpen else { return }
+        // Keep top-left corner fixed while changing height
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
         let newFrame = NSRect(x: topLeft.x, y: topLeft.y - totalH,
                               width: Self.canonicalWidth, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
-        vfx.frame = NSRect(origin: .zero, size: newFrame.size)
-        // hostingView fills body area: y=0, height=contentH
-        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
-        applyMask(panelSize: newFrame.size)
     }
 
     // MARK: - View factories
@@ -369,7 +379,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Navigation
 
     private func navigate(to view: AnyView) {
-        hostingView?.rootView = wrapWithHeightCapture(view)
+        guard let hv = hostingView else { return }
+        // Reset to unconstrained height so GeometryReader re-measures the new view
+        hv.frame.size.height = Self.unconstrainedHeight
+        hv.rootView = wrapWithHeightCapture(view)
     }
 
     // MARK: - Show / Hide
@@ -387,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observable.reload()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
+            hostingView?.frame.size.height = Self.unconstrainedHeight
             hostingView?.rootView = wrapWithHeightCapture(restored)
         }
 
@@ -432,6 +446,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // Reset to unconstrained so next open re-measures correctly
+            self.hostingView?.frame.size.height = Self.unconstrainedHeight
             self.hostingView?.rootView = self.wrapWithHeightCapture(self.mainView())
         }
     }
