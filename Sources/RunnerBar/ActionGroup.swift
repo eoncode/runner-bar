@@ -115,7 +115,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
     /// has not yet concluded, to prevent a premature FAILED badge.
     var conclusion: String? {
-        // ── Job-based conclusion (preferred) ────────────────────────────────────────────
+        // ── Job-based conclusion (preferred) ─────────────────────────────────────────────────
         // Use job data when available and fully loaded.
         if !jobs.isEmpty {
             // Only conclude when every single job has a conclusion.
@@ -132,7 +132,7 @@ struct ActionGroup: Identifiable, Equatable {
             return "success"
         }
 
-        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ───────────────
+        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ──────────────────
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // Do NOT move the run-based logic back to be the primary path — see above.
@@ -179,6 +179,21 @@ struct ActionGroup: Identifiable, Equatable {
         guard sec >= 0 else { return "00:00" }
         let m = sec / 60; let s = sec % 60
         return String(format: "%02d:%02d", m, s)
+    }
+
+    // MARK: - Runner type
+
+    /// `true` if at least one job in this group ran on a local (self-hosted) runner.
+    /// `false` if all assigned jobs ran on GitHub-hosted runners.
+    /// `nil` if no job has been assigned to a runner yet (all still queued).
+    ///
+    /// Detection: any job with isLocalRunner == true → local; any job with
+    /// isLocalRunner == false → cloud; remaining nils are ignored.
+    /// Priority: local wins over cloud (mixed groups show the local icon).
+    var isLocalGroup: Bool? {
+        let known = jobs.compactMap { $0.isLocalRunner }
+        guard !known.isEmpty else { return nil }
+        return known.contains(true)
     }
 }
 
@@ -365,7 +380,8 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
         completedAt: j.completedAt.flatMap { iso.date(from: $0) },
         htmlUrl: j.htmlUrl,
         isDimmed: isDimmed,
-        steps: steps
+        steps: steps,
+        runnerName: j.runnerName
     )
 }
 
@@ -413,7 +429,8 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
                 completedAt: freshJob.completedAt ?? job.completedAt,
                 htmlUrl: job.htmlUrl,
                 isDimmed: job.isDimmed,
-                steps: freshJob.steps
+                steps: freshJob.steps,
+                runnerName: freshJob.runnerName ?? job.runnerName
             )
         }
     }

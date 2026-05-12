@@ -117,20 +117,28 @@ struct PopoverHeaderView: View {
     }
 }
 
-// MARK: - SectionHeaderLabel
+// MARK: - RunnerTypeIcon
 
-/// Small uppercase section header used for "RUNNERS" and "ACTIONS" labels.
-/// Style mirrors macOS sidebar section headers: caption2, semibold, secondary.
-private struct SectionHeaderLabel: View {
-    let title: String
+/// Tiny icon indicating whether an action group ran on a local or cloud runner.
+///
+/// - local (self-hosted): `desktopcomputer` SF Symbol (CRT-style monitor)
+/// - cloud (GitHub-hosted): `cloud` SF Symbol
+/// - unknown (all jobs still queued, no runner assigned): hidden
+///
+/// Rendered at 9pt in `.secondary` colour so it reads as metadata,
+/// not a primary UI element. Carries an accessibility label for VoiceOver.
+private struct RunnerTypeIcon: View {
+    let isLocal: Bool?
+
     var body: some View {
-        Text(title.uppercased())
-            .font(.system(size: 9, weight: .semibold, design: .default))
-            .foregroundColor(.secondary)
-            .kerning(0.5)
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
+        if let local = isLocal {
+            Image(systemName: local ? "desktopcomputer" : "cloud")
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+                .accessibilityLabel(local ? "Local runner" : "Cloud runner")
+                .fixedSize()
+        }
+        // nil → render nothing: job hasn't been assigned a runner yet.
     }
 }
 
@@ -138,7 +146,6 @@ private struct SectionHeaderLabel: View {
 
 /// Shows runners that are actively running a job (busy == true).
 /// Hidden entirely when no runner is busy — idle/offline runners are not shown.
-/// Renders a "RUNNERS" section header above the runner list when visible.
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
@@ -151,7 +158,6 @@ struct PopoverLocalRunnerRow: View {
 
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
-        SectionHeaderLabel(title: "Runners")
         ForEach(busy.prefix(3)) { runner in
             HStack(spacing: 8) {
                 Circle().fill(Color.yellow).frame(width: 8, height: 8)
@@ -181,8 +187,15 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 
-/// Single action-group row with pie progress dot, started-ago timestamp,
-/// and spec-parity typography (#178).
+/// Single action-group row with pie progress dot, runner-type icon, started-ago
+/// timestamp, and spec-parity typography (#178).
+///
+/// Row layout (left → right):
+///   [PieProgressDot] [RunnerTypeIcon] [SHA label] [Title] ... [timestamp] [job progress] [status chip]
+///
+/// RunnerTypeIcon sits immediately after the dot, before the SHA label.
+/// It is 9pt, .secondary coloured, and fixedSize — zero layout impact on the
+/// rest of the row when it is absent (nil runner = nothing rendered).
 ///
 /// Dynamic-width strategy (NSPanel — no anchor, zero jump on any resize):
 /// - SHA label  (group.label) : .fixedSize() — always 7 chars, never truncate
@@ -192,7 +205,7 @@ struct PopoverLocalRunnerRow: View {
 /// - Status chip              : .fixedSize() — already was
 /// - Title (group.title)      : lineLimit(1) truncation KEPT — commit msgs are long
 /// - currentJobName           : lineLimit(1) truncation KEPT — job names can be long
-/// Panel idealWidth 720 gives comfortable room; preferredContentSize grows it further
+/// Panel idealWidth 560 gives comfortable room; preferredContentSize grows it further
 /// if needed (up to maxWidth = 90% screen).
 ///
 /// ⚠️ TICK CONTRACT: `tick` MUST be read inside `body` (via `rowContent`) so SwiftUI
@@ -221,6 +234,11 @@ struct ActionRowView: View {
         let _ = tick
         return HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
+
+            // Runner-type icon: cloud or local computer.
+            // Placed immediately after the progress dot, before the SHA label.
+            // Hidden (no view) when runner is not yet known (all jobs still queued).
+            RunnerTypeIcon(isLocal: group.isLocalGroup)
 
             // SHA / label: always 7 chars (e.g. "a1b25e4") — fixedSize so it never truncates.
             // ❌ NEVER add frame(width:) here — NSPanel grows to fit.

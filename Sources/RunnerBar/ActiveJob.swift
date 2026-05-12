@@ -24,6 +24,10 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     let isDimmed: Bool
     /// Ordered list of steps within this job.
     let steps: [JobStep]
+    /// Name of the runner that picked up this job.
+    /// `nil` when the job is still queued and hasn't been assigned yet.
+    /// Used to determine local vs cloud icon on action rows.
+    let runnerName: String?
 
     /// Human-readable elapsed time string.
     /// Queued jobs always show "00:00".
@@ -47,6 +51,37 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         let m = secs / 60; let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
+
+    /// `true` if this job ran (or is running) on a self-hosted local runner.
+    /// Detection: runnerName is non-nil and does not match any GitHub-hosted
+    /// name prefix. Returns `nil` when runnerName is unknown (job still queued).
+    var isLocalRunner: Bool? {
+        guard let name = runnerName else { return nil }
+        let lower = name.lowercased()
+        let githubPrefixes = [
+            "github actions ",
+            "ubuntu-",
+            "macos-",
+            "windows-",
+            "buildjet-",
+            "depot-",
+        ]
+        let isHosted = githubPrefixes.contains { lower.hasPrefix($0) }
+        return !isHosted
+    }
+
+    // MARK: Codable
+    // runnerName must appear in CodingKeys so Codable synthesis includes it.
+    enum CodingKeys: String, CodingKey {
+        case id, name, status, conclusion
+        case startedAt = "started_at"
+        case createdAt = "created_at"
+        case completedAt = "completed_at"
+        case htmlUrl = "html_url"
+        case isDimmed
+        case steps
+        case runnerName = "runner_name"
+    }
 }
 
 // MARK: - JobStep
@@ -69,11 +104,11 @@ struct JobStep: Identifiable, Codable, Equatable {
     /// SF Symbol or emoji icon representing the step's conclusion.
     var conclusionIcon: String {
         switch conclusion {
-        case "success": return "✓"
-        case "failure": return "✗"
-        case "skipped": return "⊘"
-        case "cancelled": return "⊘"
-        default: return status == "in_progress" ? "▶" : "·"
+        case "success": return "\u{2713}"
+        case "failure": return "\u{2717}"
+        case "skipped": return "\u{2298}"
+        case "cancelled": return "\u{2298}"
+        default: return status == "in_progress" ? "\u{25B6}" : "\u{00B7}"
         }
     }
 
@@ -109,6 +144,9 @@ struct JobPayload: Decodable {
     let completedAt: String?
     let htmlUrl: String?
     let steps: [StepPayload]?
+    /// GitHub API field: the name of the runner that picked up this job.
+    /// nil when the job hasn't been assigned to a runner yet (queued).
+    let runnerName: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion, steps
@@ -116,6 +154,7 @@ struct JobPayload: Decodable {
         case createdAt = "created_at"
         case completedAt = "completed_at"
         case htmlUrl = "html_url"
+        case runnerName = "runner_name"
     }
 }
 
@@ -168,7 +207,8 @@ extension RunnerStore {
                     startedAt: s.startedAt.flatMap { iso.date(from: $0) },
                     completedAt: s.completedAt.flatMap { iso.date(from: $0) }
                 )
-            }
+            },
+            runnerName: payload.runnerName
         )
     }
 }
