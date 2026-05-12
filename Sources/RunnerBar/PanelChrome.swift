@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 // PanelChrome — NSPanel replacement for NSPopover
 //
 // WHY: NSPopover re-anchors (left-jumps) on any contentSize change while shown.
@@ -18,7 +18,7 @@ import SwiftUI
 //   |   SwiftUI hosting view       |
 //   |   (bodyHeight = contentH)    |
 //   |                              |
-//   panel.frame.minY  ──────────  (LOW Y value, further down screen)
+//   panel.frame.minY  ──────────────  (LOW Y value, further down screen)
 //
 //   hostingView.frame = (x:0, y:0, w:panelWidth, h:contentHeight)
 //   Arrow region occupies the TOP kArrowHeight pts of the panel frame.
@@ -27,7 +27,7 @@ import SwiftUI
 //   positionBelow() receives the REAL contentHeight (from sizeThatFits).
 //   updateHeight() receives updated contentHeight after navigation/data.
 //   ❌ NEVER pass a hardcoded/placeholder height to positionBelow().
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 
 private let kCornerRadius:  CGFloat = 10
 private let kArrowHeight:   CGFloat = 9
@@ -35,8 +35,6 @@ private let kArrowWidth:    CGFloat = 20
 private let kArrowOverlapY: CGFloat = 1
 private let kShadowRadius:  CGFloat = 20
 private let kShadowAlpha:   Float   = 0.35
-private let kBorderWidth:   CGFloat = 0.5
-private let kBorderAlpha:   CGFloat = 0.4
 private let kHeightEpsilon: CGFloat = 1.0
 
 // NSBezierPath → CGPath (macOS 13 compatible — .cgPath is macOS 14+ only)
@@ -59,13 +57,61 @@ private extension NSBezierPath {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ChromeBorderView — draws the 0.5pt popover-style border outline.
+//
+// WHY a dedicated NSView instead of a CAShapeLayer sublayer on fx:
+//   NSVisualEffectView uses a private _NSBackdropLayer internally. Adding
+//   arbitrary CAShapeLayer sublayers to it is unreliable — they may be
+//   composited behind the blur or culled. An NSView subclass placed ABOVE
+//   the fx view in the contentView hierarchy is guaranteed to draw on top.
+//   updateLayer() is called by AppKit with the CURRENT effective appearance
+//   so NSColor.separatorColor resolves correctly in both light and dark mode.
+// ─────────────────────────────────────────────────────────────────────────────
+private final class ChromeBorderView: NSView {
+    var borderPath: NSBezierPath? {
+        didSet { needsDisplay = true }
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        guard let layer = layer else { return }
+        // Remove any existing border sublayer from previous calls.
+        layer.sublayers?.filter { $0.name == "chromeBorder" }.forEach { $0.removeFromSuperlayer() }
+
+        guard let path = borderPath else { return }
+
+        let borderLayer = CAShapeLayer()
+        borderLayer.name        = "chromeBorder"
+        borderLayer.path        = path.asCGPath
+        borderLayer.fillColor   = CGColor.clear
+        borderLayer.lineWidth   = 0.5
+        // Resolve NSColor.separatorColor against the CURRENT effective appearance
+        // so it works correctly in both light and dark mode.
+        var resolvedColor: NSColor = .separatorColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedColor = .separatorColor
+        }
+        borderLayer.strokeColor = resolvedColor.withAlphaComponent(0.55).cgColor
+        layer.addSublayer(borderLayer)
+    }
+
+    // Redraw when the system appearance changes (light ↔ dark).
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
 final class PanelChrome: NSPanel {
 
     var hostingView: NSView? {
         didSet {
             guard let hv = hostingView else { return }
             hv.autoresizingMask = []
-            contentView?.addSubview(hv)
+            // Insert hosting view BELOW the border view so the border renders on top.
+            contentView?.addSubview(hv, positioned: .below, relativeTo: borderView)
         }
     }
 
@@ -81,17 +127,15 @@ final class PanelChrome: NSPanel {
         return v
     }()
 
-    // ⚠️ BORDER: CAShapeLayer added as sublayer of fx.layer (above the mask).
-    // fx.layer?.mask clips the visual effect; borderLayer is a sibling sublayer
-    // of that mask — it sits inside the clipped region and strokes the outline.
-    // Adding to fx.layer (not contentView.layer) guarantees it is clipped to
-    // the chrome shape and always visible above the frosted background.
-    private let borderLayer: CAShapeLayer = {
-        let l = CAShapeLayer()
-        l.fillColor   = CGColor.clear
-        l.lineWidth   = kBorderWidth
-        l.strokeColor = NSColor.separatorColor.withAlphaComponent(kBorderAlpha).cgColor
-        return l
+    // ⚠️ BORDER: a dedicated NSView subclass drawn on top of everything.
+    // See ChromeBorderView for why this is safer than a CAShapeLayer on fx.
+    private let borderView: ChromeBorderView = {
+        let v = ChromeBorderView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = CGColor.clear
+        v.autoresizingMask = []
+        // Transparent to hit-testing so clicks pass through to content below.
+        return v
     }()
 
     private var outsideMonitor: Any?
@@ -113,10 +157,11 @@ final class PanelChrome: NSPanel {
         contentView?.wantsLayer = true
         contentView?.layer?.backgroundColor = CGColor.clear
         contentView?.addSubview(fx)
-        // borderLayer is inserted into fx after fx gets its layer in layoutChrome.
+        // borderView sits on top of fx and any hosting content.
+        contentView?.addSubview(borderView)
     }
 
-    // ── Public API ───────────────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────────
 
     func positionBelow(button: NSButton, contentHeight: CGFloat) {
         guard let bw = button.window else { return }
@@ -164,7 +209,7 @@ final class PanelChrome: NSPanel {
         onClose?()
     }
 
-    // ── Layout ───────────────────────────────────────────────────────────────
+    // ── Layout ─────────────────────────────────────────────────────────────────
 
     private func layoutChrome() {
         let size = frame.size
@@ -172,26 +217,22 @@ final class PanelChrome: NSPanel {
 
         let contentH = size.height - kArrowHeight
 
-        fx.frame = NSRect(origin: .zero, size: size)
+        fx.frame         = NSRect(origin: .zero, size: size)
+        borderView.frame = NSRect(origin: .zero, size: size)
         hostingView?.frame = NSRect(x: 0, y: 0, width: size.width, height: contentH)
 
         guard size != lastLayoutSize else { return }
         lastLayoutSize = size
 
-        let path = chromePath(in: size).asCGPath
+        let path = chromePath(in: size)
 
         // Mask clips fx to the chrome shape.
         let maskLayer = CAShapeLayer()
-        maskLayer.path = path
+        maskLayer.path = path.asCGPath
         fx.layer?.mask = maskLayer
 
-        // ⚠️ Border: add borderLayer as a regular sublayer of fx.layer.
-        // It is NOT the mask — it strokes the path on top of the frosted glass.
-        // We remove+re-add to avoid accumulating duplicate sublayers on resize.
-        borderLayer.removeFromSuperlayer()
-        borderLayer.path  = path
-        borderLayer.frame = NSRect(origin: .zero, size: size)
-        fx.layer?.addSublayer(borderLayer)
+        // Give the border view the new path — it redraws via updateLayer().
+        borderView.borderPath = path
 
         let shadow = NSShadow()
         shadow.shadowColor      = NSColor.black.withAlphaComponent(CGFloat(kShadowAlpha))

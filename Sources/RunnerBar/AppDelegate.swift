@@ -63,6 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
     private var statusItem: NSStatusItem?
     private(set) var panel: PanelChrome?
     private var hostingController: NSHostingController<AnyView>?
+    // Offscreen window used to give hostingController.view a real layout
+    // context before the panel is shown for the first time. Without this,
+    // sizeThatFits returns wrong values on first open because the view has
+    // never been laid out inside a window.
+    private var offscreenWindow: NSWindow?
     private lazy var observable = RunnerStoreObservable()
     private var savedNavState: NavState?
     private var panelIsOpen = false
@@ -79,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             guard let self = self,
                   self.panelIsOpen,
                   let panel = self.panel,
-                  panel.isVisible,        // ← guard: skip if panel not yet on screen
+                  panel.isVisible,
                   height > 0 else { return }
             let clamped = min(height, self.maxContentHeight)
             panel.updateHeight(clamped)
@@ -109,11 +114,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
                                        width: Self.fixedWidth, height: 10)
         hostingController = controller
 
+        // ⚠️ OFFSCREEN WINDOW: attach hostingController.view to a real (but
+        // hidden) NSWindow so AppKit gives it a full layout context. This
+        // ensures sizeThatFits returns an accurate value on the very first
+        // openPanel() call. Without this, first-open main view is offset.
+        let offWin = NSWindow(contentRect: NSRect(x: -10000, y: -10000,
+                                                   width: Self.fixedWidth, height: 10),
+                              styleMask: .borderless,
+                              backing: .buffered,
+                              defer: false)
+        offWin.isReleasedWhenClosed = false
+        offWin.contentView = controller.view
+        offWin.orderBack(nil)   // keeps it off screen but gives it a graphics context
+        offscreenWindow = offWin
+
         let chrome = PanelChrome()
         chrome.onClose = { [weak self] in
             DispatchQueue.main.async { self?.panelDidClose() }
         }
-        chrome.hostingView = controller.view
         panel = chrome
 
         RunnerStore.shared.onChange = { [weak self] in
@@ -128,9 +146,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Panel lifecycle
 
-    // ⚠️ panelDidClose() preserves savedNavState so re-opening restores the
-    // last screen without a main→destination flash.
-    // ❌ NEVER reset rootView to mainView() here — causes settings flicker on reopen.
     @MainActor
     private func panelDidClose() {
         panelIsOpen = false
@@ -372,17 +387,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
         panelIsOpen = true
 
-        // ⚠️ OPEN SEQUENCE:
+        // ⚠️ OPEN SEQUENCE (order is critical):
         // 1. Capture savedNavState before openPanelView() clears it.
-        // 2. Set main/open view (CPU guard — isPopoverOpen: true).
-        // 3. Restore saved nav state if present.
-        // 4. Force AppKit layout pass so sizeThatFits returns the real height
-        //    (without this the hosting view hasn't been laid out yet on first open).
-        // 5. Measure height on the final settled view.
+        // 2. Detach hc.view from offscreen window and attach to panel's contentView.
+        // 3. Set the correct view (main or restored nav state).
+        // 4. Force layout on contentView (which is now in a real on-screen-ready window).
+        // 5. Measure with sizeThatFits on the settled view.
         // 6. positionBelow() — panel becomes visible here.
-        // 7. Reload store data AFTER panel is on screen so any height callbacks
-        //    from reload pass the panel.isVisible guard and don't race.
+        // 7. observable.reload() ONLY if restoring a saved nav state (not on plain main open).
+        //    On plain first open the store already has data; calling reload() here would
+        //    queue a HeightReporter callback that races with positionBelow and causes flicker.
+
         let stateToRestore = savedNavState
+
+        // Move hc.view from offscreen window into the chrome panel so layout
+        // context is correct for sizeThatFits.
+        offscreenWindow?.contentView = nil
+        panel.hostingView = hc.view
+
         hc.rootView = openPanelView()
 
         if let saved = stateToRestore,
@@ -390,8 +412,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             hc.rootView = restored
         }
 
-        // Force a layout pass so sizeThatFits is accurate on first open.
-        hc.view.layoutSubtreeIfNeeded()
+        // Force a synchronous layout pass so sizeThatFits is accurate.
+        panel.contentView?.layoutSubtreeIfNeeded()
 
         let measured = hc.sizeThatFits(
             in: NSSize(width: Self.fixedWidth,
@@ -400,11 +422,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         let contentHeight = min(max(measured.height, 100), maxContentHeight)
         panel.positionBelow(button: button, contentHeight: contentHeight)
 
-        // ⚠️ Reload AFTER positionBelow so the panel is visible before any
-        // HeightReporter callbacks fire. Callbacks check panel.isVisible and
-        // will no-op if panel isn't shown yet — moving reload here ensures
-        // the first-open flicker caused by reload racing positionBelow is gone.
-        observable.reload()
+        // ⚠️ RELOAD GUARD: only reload when restoring a saved nav state.
+        // On a plain main-view open the store data is already current.
+        // Calling reload() unconditionally here queues @Published changes that
+        // fire HeightReporter callbacks on the NEXT run loop tick — after
+        // positionBelow() has made the panel visible — causing the first-open
+        // flicker. On a nav-restore we need fresh data for the restored view.
+        if stateToRestore != nil {
+            observable.reload()
+        }
     }
 }
 // swiftlint:enable type_body_length
