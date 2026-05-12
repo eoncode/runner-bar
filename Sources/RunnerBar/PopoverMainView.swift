@@ -52,10 +52,6 @@ import SwiftUI
 //   stay live while the panel is visible.
 //   ❌ NEVER gate displayTick behind !popoverOpenState.isOpen.
 //   ❌ NEVER merge with runnerRefreshTimer (that one IS gated and fires at 5s).
-//   NOTE: ActionRowView and InlineJobRowsView no longer accept a tick parameter.
-//   The displayTick state var in this view still changes every second, which causes
-//   actionsSection to re-render — that re-render propagates into the child views.
-//   ❌ NEVER pass tick: to ActionRowView or InlineJobRowsView — they have no such param.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -66,6 +62,10 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
+    /// Direct-to-JobDetailView navigation from inline ↳ job rows.
+    /// Receives the tapped job and its parent group; AppDelegate navigates to
+    /// detailViewFromAction(job:group:) so the back button returns to ActionDetailView.
+    let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
     // ⚠️ RULE 6: Live open-state via @EnvironmentObject — NEVER a frozen Bool prop.
     // ❌ NEVER replace with var isPopoverOpen: Bool.
@@ -79,11 +79,9 @@ struct PopoverMainView: View {
     @State private var runnerRefreshTimer: Timer?
 
     // ⚠️ RULE 9: displayTick — 1-second render clock for live elapsed/progress.
-    // Changing this state var causes actionsSection to re-render each second,
-    // which propagates into ActionRowView and InlineJobRowsView children.
+    // Incremented every second, passed into ActionRowView and InlineJobRowsView.
     // ❌ NEVER gate behind !popoverOpenState.isOpen.
     // ❌ NEVER merge with runnerRefreshTimer.
-    // ❌ NEVER pass as tick: param — ActionRowView/InlineJobRowsView have no such param.
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
@@ -149,8 +147,7 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Display tick timer (RULE 9 — ungated, 1s)
-    // Mutating displayTick causes actionsSection to re-render every second,
-    // propagating into ActionRowView + InlineJobRowsView children.
+    // Drives live elapsed/progress re-renders in ActionRowView + InlineJobRowsView.
     // ❌ NEVER gate behind !popoverOpenState.isOpen.
 
     private func startDisplayTickTimer() {
@@ -180,11 +177,7 @@ struct PopoverMainView: View {
     // MARK: - Actions section (RULE 5: no height cap — NSPanel handles screen bounds)
 
     private var actionsSection: some View {
-        // Reading displayTick here causes this computed var to re-evaluate every second,
-        // which re-renders all child ActionRowView and InlineJobRowsView instances.
-        // ❌ NEVER pass displayTick as a parameter to ActionRowView/InlineJobRowsView.
-        let _ = displayTick
-        return VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
                 Text("No recent actions")
                     .font(.caption).foregroundColor(.secondary)
@@ -192,9 +185,15 @@ struct PopoverMainView: View {
             } else {
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, onSelect: { onSelectAction(group) })
+                    // Pass displayTick so SwiftUI sees a changed input every second
+                    // and re-renders the row (elapsed, pie progress, step name).
+                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(group: group)
+                        InlineJobRowsView(
+                            group: group,
+                            tick: displayTick,
+                            onSelectJob: onSelectInlineJob
+                        )
                     }
                 }
                 loadMoreButton

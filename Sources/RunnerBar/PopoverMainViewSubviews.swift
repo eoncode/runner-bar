@@ -177,6 +177,7 @@ struct PopoverLocalRunnerRow: View {
 /// if needed (up to maxWidth = 90% screen).
 struct ActionRowView: View {
     let group: ActionGroup
+    let tick: Int
     let onSelect: () -> Void
 
     var body: some View {
@@ -240,26 +241,12 @@ struct ActionRowView: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
 
-        // Elapsed "02:25", "01:18" — 5 chars (MM:SS), never truncate.
-        // TimelineView drives a 1s re-read of group.elapsed for in-progress groups.
-        // Completed groups use a plain Text — elapsed is static once finished.
-        // monospacedDigit + fixedSize: width is always exactly 5 chars → zero layout
-        // change per tick → no preferredContentSize mutation → no panel resize or jump.
+        // Elapsed "02:25", "01:18" — 5 chars, never truncate.
         // ❌ NEVER add frame(width:) here.
-        // ❌ NEVER wrap more than this Text in TimelineView — extra layout passes.
-        if group.groupStatus == .inProgress {
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                Text(group.elapsed)
-                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-        } else {
-            Text(group.elapsed)
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
+        Text(group.elapsed)
+            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
 
         statusChip
     }
@@ -303,7 +290,10 @@ struct ActionRowView: View {
 /// Passive read-only ↳ job rows shown beneath every in-progress action group.
 /// Only shows jobs that are currently `in_progress` — queued and completed jobs
 /// are intentionally excluded (per spec: inline rows communicate active work only).
-/// Rows have no tap action per spec #324 Gap 2.
+///
+/// Tapping a row navigates directly to JobDetailView for that job, skipping
+/// ActionDetailView — the group is passed along so the back button can return
+/// to ActionDetailView.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
@@ -323,6 +313,12 @@ struct ActionRowView: View {
 /// is major major major.
 struct InlineJobRowsView: View {
     let group: ActionGroup
+    let tick: Int
+    /// Called when the user taps an inline job row.
+    /// Receives the tapped job and its parent group so AppDelegate can navigate
+    /// directly to JobDetailView with the correct back-stack (→ ActionDetailView).
+    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
+
     /// Live open-state signal. Read from environment — never a plain Bool prop.
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
@@ -334,7 +330,14 @@ struct InlineJobRowsView: View {
 
     var body: some View {
         ForEach(activeJobs.prefix(cap)) { job in
-            jobRow(job)
+            if let onSelectJob {
+                Button(action: { onSelectJob(job, group) }, label: {
+                    jobRow(job)
+                })
+                .buttonStyle(.plain)
+            } else {
+                jobRow(job)
+            }
         }
         if activeJobs.count > cap {
             Button(
@@ -388,22 +391,21 @@ struct InlineJobRowsView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
 
-            // Elapsed "01:29", "01:16" — 5 chars (MM:SS), never truncate.
-            // TimelineView drives a 1s re-read of job.elapsed for in-progress jobs.
-            // All jobs in activeJobs are in_progress by construction (filter above),
-            // so TimelineView is always correct here — no conditional needed.
-            // monospacedDigit + fixedSize: width is always exactly 5 chars → zero layout
-            // change per tick → no preferredContentSize mutation → no panel resize or jump.
+            // Elapsed "01:29", "01:16" — 5 chars, never truncate.
             // ❌ NEVER add frame(width:) here.
-            // ❌ NEVER wrap more than this Text in TimelineView — extra layout passes.
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                Text(job.elapsed)
-                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+            Text(job.elapsed)
+                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+            // Chevron hint: only shown when rows are tappable.
+            if onSelectJob != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundColor(.secondary)
             }
         }
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 
     private func jobDotColor(for job: ActiveJob) -> Color {
