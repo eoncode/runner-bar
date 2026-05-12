@@ -261,25 +261,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
         let totalH = contentH + Self.arrowHeight
 
-        // Always update hosting view to exact content height
+        // Only reposition the on-screen panel; skip if panel is hidden
+        guard panelIsOpen else { return }
+
+        // Reveal panel on first resize — position correctly, then set hv height.
+        // We do NOT collapse hv before reveal; it stays at unconstrainedHeight until
+        // the panel is visible so GeometryReader measures in real unconstrained space.
+        if panelAwaitingFirstResize {
+            panelAwaitingFirstResize = false
+            let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
+                                  width: Self.canonicalWidth, height: totalH)
+            panel.setFrame(newFrame, display: false, animate: false)
+            vfx.frame = NSRect(origin: .zero, size: NSSize(width: Self.canonicalWidth, height: totalH))
+            applyMask(panelSize: NSSize(width: Self.canonicalWidth, height: totalH))
+            panel.alphaValue = 1
+            panel.makeKey()
+            // Now collapse hv to exact content height so subsequent HeightPreferenceKey
+            // fires report the real height inside the correctly-sized container.
+            hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
+            return
+        }
+
+        // Normal resize path (after first reveal): update all frames together.
         hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
         let newSize = NSSize(width: Self.canonicalWidth, height: totalH)
         vfx.frame = NSRect(origin: .zero, size: newSize)
         applyMask(panelSize: newSize)
-
-        // Only reposition the on-screen panel; skip if panel is hidden
-        guard panelIsOpen else { return }
         // Always anchor to panelTopY (status bar bottom) — NOT panel.frame.maxY.
-        // panel.frame.maxY is stale on first open (points to off-screen measurement origin).
         let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
                               width: Self.canonicalWidth, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
-        // Reveal panel on first resize after showPanel() — now correctly positioned.
-        if panelAwaitingFirstResize {
-            panelAwaitingFirstResize = false
-            panel.alphaValue = 1
-            panel.makeKey()
-        }
     }
 
     // MARK: - View factories
@@ -518,12 +529,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Do NOT orderFront here — panel is at off-screen measurement position.
         panel.alphaValue = 0   // hide visually until correctly positioned
         panel.orderFront(nil)  // must be ordered in for SwiftUI layout to run
-        // Force-reveal immediately using last known measuredHeight.
-        // onPreferenceChange only fires when the value *changes* — if the view and
-        // height are the same as the previous session it won't fire, leaving alphaValue=0.
-        // Calling resizePanel here guarantees the panel appears regardless.
         panelAwaitingFirstResize = true
-        resizePanel(to: measuredHeight)
+        // Reset hostingView to unconstrainedHeight so GeometryReader re-measures freely.
+        // Then give SwiftUI one runloop pass to measure, then reveal at correct height.
+        // We cannot just call resizePanel(to: measuredHeight) synchronously because
+        // measuredHeight may be stale (120 default) if HeightPreferenceKey hasn't fired yet.
+        hostingView?.frame.size.height = Self.unconstrainedHeight
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // If HeightPreferenceKey fired during the layout pass, measuredHeight is
+            // now accurate. If not (same content as last time, no change event),
+            // fall back to measuredHeight which is at minimum the last known good value.
+            self.resizePanel(to: self.measuredHeight)
+        }
 
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] _ in
