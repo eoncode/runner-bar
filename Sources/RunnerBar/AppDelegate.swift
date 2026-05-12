@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
                               defer: false)
         offWin.isReleasedWhenClosed = false
         offWin.contentView = controller.view
-        offWin.orderBack(nil)   // keeps it off screen but gives it a graphics context
+        offWin.orderBack(nil)
         offscreenWindow = offWin
 
         let chrome = PanelChrome()
@@ -361,7 +361,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         let size = hc.sizeThatFits(in: NSSize(width: Self.fixedWidth,
                                                height: .greatestFiniteMagnitude))
         let clamped = min(size.height, maxContentHeight)
-        if clamped > 0 { panel?.updateHeight(clamped) }
+        // ⚠️ Always call updateHeight when height is reasonable (>= 50pt).
+        // The old `if clamped > 0` guard silently blocked navigation to views
+        // (e.g. SettingsView) whose sizeThatFits returned a small value on the
+        // first pass, leaving the panel stuck at the previous view's height.
+        if clamped >= 50 { panel?.updateHeight(clamped) }
     }
 
     // MARK: - Panel show/hide
@@ -387,21 +391,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
         panelIsOpen = true
 
-        // ⚠️ OPEN SEQUENCE (order is critical):
-        // 1. Capture savedNavState before openPanelView() clears it.
-        // 2. Detach hc.view from offscreen window and attach to panel's contentView.
-        // 3. Set the correct view (main or restored nav state).
-        // 4. Force layout on contentView (which is now in a real on-screen-ready window).
-        // 5. Measure with sizeThatFits on the settled view.
-        // 6. positionBelow() — panel becomes visible here.
-        // 7. observable.reload() ONLY if restoring a saved nav state (not on plain main open).
-        //    On plain first open the store already has data; calling reload() here would
-        //    queue a HeightReporter callback that races with positionBelow and causes flicker.
-
         let stateToRestore = savedNavState
 
-        // Move hc.view from offscreen window into the chrome panel so layout
-        // context is correct for sizeThatFits.
+        // Move hc.view from offscreen window into the chrome panel.
         offscreenWindow?.contentView = nil
         panel.hostingView = hc.view
 
@@ -424,10 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
         // ⚠️ RELOAD GUARD: only reload when restoring a saved nav state.
         // On a plain main-view open the store data is already current.
-        // Calling reload() unconditionally here queues @Published changes that
-        // fire HeightReporter callbacks on the NEXT run loop tick — after
-        // positionBelow() has made the panel visible — causing the first-open
-        // flicker. On a nav-restore we need fresh data for the restored view.
+        // Calling reload() unconditionally here causes first-open flicker.
         if stateToRestore != nil {
             observable.reload()
         }
