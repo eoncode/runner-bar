@@ -17,6 +17,7 @@ struct ReRunFailedButton: View {
 
     @State private var phase: Phase = .idle
 
+    /// Phase states for the re-run-failed button lifecycle.
     enum Phase {
         case idle, loading, done, failed
     }
@@ -76,10 +77,12 @@ struct ReRunFailedButton: View {
         phase = .loading
         action { success in
             DispatchQueue.main.async {
-                phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    phase = .idle
+                if success {
+                    phase = .done
+                } else {
+                    phase = .failed
                 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }
     }

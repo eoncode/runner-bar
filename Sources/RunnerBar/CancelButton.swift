@@ -19,10 +19,11 @@ import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView, ActionDetailView, and StepLogView.
 ///
-/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") → done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
+/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") →
+/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
 ///
 /// When `isDisabled` is true the button returns **EmptyView** and occupies no space.
-/// This is intentional: keeping a zero-opacity placeholder creates a blank gap in the header.
+/// This is intentional: keeping a zero-opacity placeholder creates a blank gap.
 struct CancelButton: View {
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -57,8 +58,6 @@ struct CancelButton: View {
                             .font(.caption)
                         Text("Cancel")
                             .font(.caption)
-                            // ✔ .fixedSize() here is SAFE — this is a label inside HStack,
-                            // not a root view. It just prevents the text from wrapping.
                             .fixedSize()
                     }
                     .foregroundColor(.secondary)
@@ -102,9 +101,7 @@ struct CancelButton: View {
         action { success in
             DispatchQueue.main.async {
                 phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    phase = .idle
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }
     }

@@ -20,10 +20,10 @@ extension RunnerMetrics {
     static func sample(for runnerName: String) -> RunnerMetrics? {
         let output = shell("ps aux")
         let lines = output.components(separatedBy: "\n")
-        for sample in lines {
-            guard sample.contains("Runner.Worker"),
-                  sample.contains(runnerName) else { continue }
-            let parts = sample.split(separator: " ", omittingEmptySubsequences: true)
+        for line in lines {
+            guard line.contains("Runner.Worker"),
+                  line.contains(runnerName) else { continue }
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
             guard parts.count > 3,
                   let cpu = Double(parts[2]),
                   let mem = Double(parts[3]) else { continue }

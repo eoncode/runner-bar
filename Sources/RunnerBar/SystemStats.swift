@@ -9,7 +9,7 @@ import Foundation
 /// All values are computed off the main thread by `SystemStatsViewModel` and
 /// published to SwiftUI via `@Published` on the main thread.
 struct SystemStats {
-    /// CPU utilisation across all cores, 0–100 %%.
+    /// CPU utilisation across all cores, 0–100%.
     var cpuPct: Double
     /// Memory actively in use (active + wired pages × page size), in GB.
     var memUsedGB: Double
@@ -26,8 +26,13 @@ struct SystemStats {
 
     /// Safe default shown while the first sample is being computed.
     static let zero = SystemStats(
-        cpuPct: 0, memUsedGB: 0, memTotalGB: 16,
-        diskUsedGB: 0, diskTotalGB: 460, diskFreeGB: 460, diskFreePct: 100
+        cpuPct: 0,
+        memUsedGB: 0,
+        memTotalGB: 16,
+        diskUsedGB: 0,
+        diskTotalGB: 460,
+        diskFreeGB: 460,
+        diskFreePct: 100
     )
 }
 
@@ -53,6 +58,7 @@ private struct DiskStats {
 }
 
 // MARK: - SystemStatsViewModel
+// swiftlint:disable type_body_length
 
 /// ObservableObject that owns the 2-second polling loop for system metrics.
 ///
@@ -65,17 +71,16 @@ private struct DiskStats {
 ///
 /// stop() calls sample() synchronously (on background) to capture a fresh
 /// prevTicks snapshot. This means the next start() delta is already valid,
-/// so CPU never shows 0.0%% on re-open.
+/// so CPU never shows 0.0% on re-open.
 ///
 /// ❌ NEVER call sample() synchronously from start() on the main thread.
-///    cpuPercent() does a blocking host_processor_info() call — it must
-///    run on a background queue.
+/// cpuPercent() does a blocking host_processor_info() call — it must
+/// run on a background queue.
 /// ❌ NEVER remove the stop() pre-warm sample() call.
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
-
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
@@ -89,7 +94,6 @@ final class SystemStatsViewModel: ObservableObject {
     /// ❌ NEVER call sample() synchronously here — must be on background queue.
     func start() {
         timer?.invalidate()
-        // Immediate background sample → real values before first timer tick.
         DispatchQueue.global(qos: .utility).async { self.sample() }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             DispatchQueue.global(qos: .utility).async { self?.sample() }
@@ -102,7 +106,6 @@ final class SystemStatsViewModel: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
-        // Pre-warm: capture current ticks so next start() has a valid delta.
         DispatchQueue.global(qos: .utility).async { self.sample() }
     }
 
@@ -113,19 +116,23 @@ final class SystemStatsViewModel: ObservableObject {
         var msgType = natural_t(0)
         var numCPUInfo = mach_msg_type_number_t(0)
         guard host_processor_info(
-            mach_host_self(), PROCESSOR_CPU_LOAD_INFO,
-            &msgType, &cpuInfo, &numCPUInfo
-        ) == KERN_SUCCESS, let info = cpuInfo else { return 0 }
+            mach_host_self(),
+            PROCESSOR_CPU_LOAD_INFO,
+            &msgType,
+            &cpuInfo,
+            &numCPUInfo
+        ) == KERN_SUCCESS,
+        let info = cpuInfo else { return 0 }
         let numCPUs = Int(msgType)
         var userTicks = 0.0
         var sysTicks = 0.0
         var totalTicks = 0.0
         for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
-            let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
-            let sysLoad  = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
-            let idleLoad = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
-            let niceLoad = Double(info[Int(base) + Int(CPU_STATE_NICE)])
+            let userLoad  = Double(info[Int(base) + Int(CPU_STATE_USER)])
+            let sysLoad   = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
+            let idleLoad  = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
+            let niceLoad  = Double(info[Int(base) + Int(CPU_STATE_NICE)])
             userTicks  += userLoad + niceLoad
             sysTicks   += sysLoad
             totalTicks += userLoad + sysLoad + idleLoad + niceLoad
@@ -133,7 +140,7 @@ final class SystemStatsViewModel: ObservableObject {
         vm_deallocate(
             mach_task_self_,
             vm_address_t(bitPattern: cpuInfo),
-            vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<integer_t>.stride)
+            vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<Int32>.stride)
         )
         let cur = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
         let dUser  = cur.user   - prevTicks.user
@@ -157,7 +164,7 @@ final class SystemStatsViewModel: ObservableObject {
             }
         }
         guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
-        let pageSize  = Double(vm_kernel_page_size)
+        let pageSize = Double(vm_kernel_page_size)
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
         var memSize: UInt64 = 0
@@ -189,16 +196,15 @@ final class SystemStatsViewModel: ObservableObject {
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
         let gigabytes = 1024.0 * 1024.0 * 1024.0
-        guard
-            let values = try? url.resourceValues(forKeys: [
-                .volumeTotalCapacityKey,
-                .volumeAvailableCapacityKey          // ✅ TCC-free
-            ]),
-            let totalBytes = values.volumeTotalCapacity,
-            let freeBytes  = values.volumeAvailableCapacity  // ✅ not ForImportantUsage
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeTotalCapacityKey,
+            .volumeAvailableCapacityKey // ✅ TCC-free
+        ]),
+        let totalBytes = values.volumeTotalCapacity,
+        let freeBytes  = values.volumeAvailableCapacity // ✅ not ForImportantUsage
         else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
         let total   = Double(totalBytes) / gigabytes
-        let free    = Double(freeBytes)  / gigabytes
+        let free    = Double(freeBytes) / gigabytes
         let used    = total - free
         let freePct = total > 0 ? (free / total) * 100 : 100
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
@@ -212,10 +218,14 @@ final class SystemStatsViewModel: ObservableObject {
         let disk = diskStats()
         let snapshot = SystemStats(
             cpuPct: cpu,
-            memUsedGB: mem.used,  memTotalGB: mem.total,
-            diskUsedGB: disk.used, diskTotalGB: disk.total,
-            diskFreeGB: disk.free, diskFreePct: disk.freePct
+            memUsedGB: mem.used,
+            memTotalGB: mem.total,
+            diskUsedGB: disk.used,
+            diskTotalGB: disk.total,
+            diskFreeGB: disk.free,
+            diskFreePct: disk.freePct
         )
         DispatchQueue.main.async { self.stats = snapshot }
     }
 }
+// swiftlint:enable type_body_length
