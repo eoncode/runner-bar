@@ -12,9 +12,10 @@ import SwiftUI
 // NSPanel.setFrame(), repositioning under the status button each time.
 //
 // ROOT FRAME RULE:
-//   .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
-//   • idealWidth: 560 — MUST match AppDelegate.initPanelWidth (currently 560).
-//   • maxWidth: .infinity — fills the panel width.
+//   .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
+//   • minWidth: 560 — minimum panel width; content decides actual width.
+//   • maxWidth: .infinity — fills the panel width up to AppDelegate.maxWidth.
+//   • NO idealWidth — width is content-driven, not pinned to a fixed value.
 //   • NO idealHeight / maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
@@ -30,16 +31,11 @@ import SwiftUI
 //   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
 //   Side-jump is impossible with NSPanel — no anchor to re-calculate.
 //   Added #N order index badge to each job row (1-based, start order).
-//   Replaced generic "X/N jobs concluded" with context-aware outcome label:
-//     in progress → "X/N jobs running"
-//     all success  → "X/N jobs succeeded"
-//     any failure  → "X/N jobs failed"
-//     any cancel   → "X/N jobs cancelled"
-//     otherwise    → "X/N jobs completed"
+//   Replaced generic "X/N jobs concluded" with context-aware outcome label.
 //   Elapsed moved from header to timing row below branch label.
 //   SHA/PR label made tappable: opens commit or PR on GitHub.
 //   Time-range and elapsed columns hidden for queued jobs (no startedAt).
-//   Previously these showed "–" which carried no meaning — now suppressed.
+//   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -72,7 +68,6 @@ struct ActionDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header ──────────────────────────────────────────────────────────────
-            // Elapsed has been moved to the timing row below the branch label.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -127,8 +122,6 @@ struct ActionDetailView: View {
             // ── Group title block ───────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    // SHA / PR label: tappable, opens commit or PR on GitHub.
-                    // PR labels start with "#"; everything else is a short sha.
                     Button(action: openLabelOnGitHub) {
                         Text(group.label)
                             .font(.caption.monospacedDigit())
@@ -149,9 +142,6 @@ struct ActionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                // Timing row: start → end · elapsed
-                // Shows start time of first job and end time of last job (or "now" if running).
-                // Elapsed ticks every second via `tick`.
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
                         .font(.system(size: 9))
@@ -195,9 +185,6 @@ struct ActionDetailView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                     } else {
-                        // Use enumerated() so each row can display its 1-based start order index.
-                        // The index reflects the order jobs appear in group.jobs (sorted by
-                        // startedAt/createdAt upstream), so #1 = first job started, #N = last.
                         ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
                             Button(action: { onSelectJob(job) }, label: {
                                 jobRow(job, index: index + 1)
@@ -210,7 +197,10 @@ struct ActionDetailView: View {
             }
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
+        // Content-driven width: SwiftUI reports natural width as preferredContentSize.
+        // AppDelegate clamps it to [minWidth..maxWidth] in resizeAndRepositionPanel().
+        // ❌ NEVER restore idealWidth here — that pins width to a fixed value.
+        .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -223,23 +213,18 @@ struct ActionDetailView: View {
 
     // MARK: - GitHub link helpers
 
-    /// Opens the commit or PR on GitHub.
-    /// PR labels start with "#" (e.g. "#1270") — those link to the PR page.
-    /// Everything else is a short sha — links to the commit page.
     private func openLabelOnGitHub() {
         let urlString: String
         if group.label.hasPrefix("#"),
            let number = Int(group.label.dropFirst()) {
             urlString = "https://github.com/\(group.repo)/pull/\(number)"
         } else {
-            // Use the full headSha for the commit link so GitHub resolves it correctly.
             urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
         }
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
     }
 
-    /// Tooltip for the label button.
     private var labelLinkTooltip: String {
         group.label.hasPrefix("#")
             ? "Open pull request on GitHub"
@@ -261,59 +246,31 @@ struct ActionDetailView: View {
 
     // MARK: - Job summary line
 
-    /// Context-aware summary shown below the group title.
-    ///
-    /// Priority order (first match wins):
-    ///   1. Any job still running/queued  → "X/N jobs running"
-    ///   2. Any job failed                → "X/N jobs failed"
-    ///   3. Any job cancelled             → "X/N jobs cancelled"
-    ///   4. All jobs succeeded            → "X/N jobs succeeded"
-    ///   5. Otherwise                     → "X/N jobs completed"
-    ///
-    /// Note: jobsDone counts jobs that have a conclusion (completed field set).
-    /// jobsTotal is the total job count for this group.
     private var jobsSummaryLine: String {
         let done  = group.jobsDone
         let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
 
-        // Still running: at least one job has no conclusion yet
         if group.groupStatus == .inProgress || conclusions.count < total {
             return "\(done)/\(total) jobs running"
         }
-        // Any failure takes priority over everything else
         if conclusions.contains("failure") {
             return "\(done)/\(total) jobs failed"
         }
-        // Any cancellation
         if conclusions.contains("cancelled") {
             return "\(done)/\(total) jobs cancelled"
         }
-        // All succeeded (skipped counts as a passing outcome here)
         if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) {
             return "\(done)/\(total) jobs succeeded"
         }
-        // Catch-all for mixed/unknown conclusions
         return "\(done)/\(total) jobs completed"
     }
 
     // MARK: - Job row
 
-    /// Single-line job row:
-    /// [#N] [dot] [name — truncates last] [time range — fixed width] ... [status] [elapsed] [›]
-    ///
-    /// Column widths (right side, fixed so columns stay aligned):
-    ///   index      : 28pt  ("#10" = 3 chars monospaced, left-aligned)
-    ///   time range : 130pt  ("HH:mm:ss→HH:mm:ss" = 19 chars monospaced)
-    ///                shown only when job has started — hidden for queued jobs
-    ///   status     : 80pt
-    ///   elapsed    : 40pt  shown only when job has started
-    ///   chevron    : intrinsic
     @ViewBuilder
     private func jobRow(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 8) {
-            // Order index badge: #1, #2 … #10 etc.
-            // Fixed width so all job names left-align regardless of digit count.
             Text("#\(index)")
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
@@ -323,7 +280,6 @@ struct ActionDetailView: View {
                 .fill(jobDotColor(for: job))
                 .frame(width: 7, height: 7)
 
-            // Name: flex, truncates when row is tight
             Text(job.name)
                 .font(.system(size: 12))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
@@ -331,9 +287,6 @@ struct ActionDetailView: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
 
-            // Time range: only shown when the job has actually started.
-            // Queued jobs have no startedAt — suppress entirely rather than
-            // showing a meaningless "–" placeholder.
             if job.startedAt != nil {
                 Text(jobTimeRange(job))
                     .font(.caption2.monospacedDigit())
@@ -341,14 +294,12 @@ struct ActionDetailView: View {
                     .lineLimit(1)
                     .frame(width: 130, alignment: .leading)
             } else {
-                // Reserve the same space so right-side columns stay aligned.
                 Spacer()
                     .frame(width: 130)
             }
 
             Spacer(minLength: 0)
 
-            // Status / conclusion: fixed width, right-aligned
             if let conclusion = job.conclusion {
                 Text(conclusionLabel(conclusion))
                     .font(.caption)
@@ -361,8 +312,6 @@ struct ActionDetailView: View {
                     .frame(width: 80, alignment: .trailing)
             }
 
-            // Elapsed: only shown when the job has started.
-            // Queued jobs have no duration yet — suppress rather than showing "–".
             if job.startedAt != nil {
                 Text(job.elapsed)
                     .font(.caption.monospacedDigit())
@@ -385,10 +334,6 @@ struct ActionDetailView: View {
 
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    /// Formats the start → end time range with seconds.
-    /// Only called when job.startedAt is non-nil.
-    /// in_progress:  "HH:mm:ss→now"
-    /// completed:    "HH:mm:ss→HH:mm:ss"
     private func jobTimeRange(_ job: ActiveJob) -> String {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm:ss"
