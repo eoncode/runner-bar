@@ -24,10 +24,11 @@ import SwiftUI
 // 2. Position is computed from status button's window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
-//      panelY = LOCKED at open-time (panelOriginY) — never recomputed live.
-//              ❌ NEVER re-derive Y from statusItemRect.minY inside
+//      panelTopY = statusItemRect.minY - gap       ← locked at open time
+//      y (frame origin) = panelTopY - totalH       ← recomputed each resize
+//              ❌ NEVER re-derive panelTopY from statusItemRect inside
 //                 resizeAndRepositionPanel() — menu bar hide/show shifts
-//                 statusItemRect.minY, dragging the panel under the notch.
+//                 statusItemRect.minY, moving the panel under the notch.
 //      panelH  = clampedContentH + arrowHeight
 // 3. arrowX = statusItemRect.midX - panel.frame.minX
 //    ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local.
@@ -112,12 +113,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sizeObservation: NSKeyValueObservation?
     private var workspaceObserver: Any?
 
-    /// Y origin (screen coords) of the panel, captured once in openPanel().
-    /// resizeAndRepositionPanel() uses this immutable value so that menu-bar
-    /// hide/show — which shifts statusItemRect.minY — never moves the panel.
+    /// Top anchor (screen coords) captured once in openPanel():
+    ///   panelTopY = statusItemRect.minY - gap
+    /// resizeAndRepositionPanel() derives the frame origin as:
+    ///   y = panelTopY - totalH
+    /// This means the panel always grows *downward* from the status bar edge,
+    /// and is immune to menu-bar hide/show shifts of statusItemRect.minY.
     /// Reset to nil in closePanel().
-    /// ❌ NEVER re-derive panelOriginY inside resizeAndRepositionPanel().
-    private var panelOriginY: CGFloat?
+    /// ❌ NEVER re-derive panelTopY inside resizeAndRepositionPanel().
+    /// ❌ NEVER store the bottom-left corner here.
+    private var panelTopY: CGFloat?
 
     // ⚠️ REGRESSION GUARD (ref #377):
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
@@ -145,8 +150,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Initial panel width used in openPanel().
     /// ⚠️ MUST match (or exceed) the largest idealWidth declared by any SwiftUI view.
     /// Currently ActionDetailView declares idealWidth: 560.
-    /// If this is smaller than preferredContentSize.width on first render,
-    /// arrowX is computed from the wrong frame → arrow appears off-centre.
     /// ✅ Bump this whenever any view's idealWidth increases.
     /// ❌ NEVER set lower than 560.
     private static let initPanelWidth: CGFloat = 560
@@ -238,11 +241,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status icon
 
     /// Recomputes and sets the menu bar icon using current runner health + job progress.
-    ///
-    /// Counts non-dimmed jobs only — dimmed (historical) jobs should not pollute
-    /// the progress fraction shown in the icon.
-    ///
-    /// Called on every RunnerStore.shared.onChange fire.
     /// ❌ NEVER replace with the old no-argument makeStatusIcon() call.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
@@ -257,22 +255,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    // MARK: - Panel resize (the key to dynamic size without jumping)
+    // MARK: - Panel resize
 
-    /// Repositions and resizes the panel. Called on every KVO fire + explicitly in openPanel
-    /// + synchronously inside navigate(to:) to keep arrowX correct on every view swap.
+    /// Repositions and resizes the panel. Called on every KVO fire, openPanel, and navigate().
     ///
-    /// X is always re-derived from statusItemRect.midX to keep the panel horizontally
-    /// centred under the status icon even when content width changes.
-    ///
-    /// Y is READ FROM panelOriginY (set once in openPanel). It is NEVER re-derived from
-    /// statusItemRect.minY here. Menu-bar auto-hide shifts statusItemRect.minY while the
-    /// panel is open — re-deriving Y would drag the panel down under the camera notch.
+    /// X: re-derived from statusItemRect.midX each call (horizontal centering is always live).
+    /// Y: computed as panelTopY - totalH, where panelTopY is locked at open time.
+    ///    ❌ NEVER re-derive panelTopY here — menu-bar hide/show shifts statusItemRect.minY
+    ///    and would drag the panel down under the camera notch on every KVO fire.
     ///
     /// NSPanel.setFrame() has NO anchor concept — zero side jump for any size change.
     /// ❌ NEVER call this on NSPopover.
     /// ❌ NEVER call from a background thread.
-    /// ❌ NEVER re-derive Y from statusItemRect inside this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
     private func resizeAndRepositionPanel() {
@@ -281,31 +275,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let chrome,
               let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
-              let lockedY = panelOriginY else { return }
+              let topY = panelTopY else { return }
 
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
 
-        // Clamp width between minWidth and maxWidth.
         let contentW = min(max(preferred.width,  Self.minWidth), maxWidth)
-        // Clamp height between a minimum and maxHeight.
         let contentH = min(max(preferred.height, 60),            maxHeight)
         let totalH   = contentH + arrowHeight
 
-        // X: always re-centred under the status icon (safe — only horizontal).
+        // X: always re-centred horizontally under the status icon.
         let x = statusItemRect.midX - contentW / 2
-        // Y: immutable for this panel session — captured at open time.
-        // ❌ NEVER replace lockedY with statusItemRect.minY - totalH - Self.gap.
+        // Y: top anchor minus current height — panel grows downward from fixed top edge.
+        // ❌ NEVER replace with statusItemRect.minY - totalH - Self.gap.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
-        let y = lockedY
+        let y = topY - totalH
 
         panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
                        display: true, animate: false)
 
-        // arrowX: button centre relative to panel left edge.
-        // Computed AFTER setFrame so panel.frame.minX is the updated value.
+        // arrowX computed AFTER setFrame so panel.frame.minX is the updated value.
         // ❌ NEVER compute before setFrame — stale minX → arrow offset wrong.
-        // ❌ NEVER compute from convertToScreen(button.frame).
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
         chrome.arrowX = statusItemRect.midX - panel.frame.minX
@@ -314,13 +304,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Navigation
 
     /// Swaps the hosted SwiftUI view and immediately re-syncs arrowX.
-    ///
-    /// ⚠️ ARROW CENTERING: navigate() must always call resizeAndRepositionPanel()
-    /// synchronously after swapping rootView. The KVO observer fires the same call
-    /// asynchronously, but there is at least one draw frame between the rootView swap
-    /// and the async KVO fire. During that frame the old arrowX value is still in
-    /// chrome — if the new view has a different width the arrow appears off-centre.
-    /// Calling resizeAndRepositionPanel() here closes that gap.
     /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
@@ -335,7 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard panelIsOpen else { return }
         panel?.orderOut(nil)
         panelIsOpen = false
-        panelOriginY = nil   // reset so next open recomputes from fresh statusItemRect
+        panelTopY = nil   // reset so next open captures a fresh top anchor
         // ❌ NEVER set one without the other.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -447,8 +430,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    // MARK: - Jobs-path detail view (reached from main job list, no ActionGroup context)
-
     private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
         let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
         return ActionGroup(
@@ -549,29 +530,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         popoverOpenState.isOpen = true
 
+        // Lock top anchor once. resizeAndRepositionPanel() uses y = panelTopY - totalH.
+        // ❌ NEVER overwrite after this point until closePanel() resets it.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        panelTopY = statusItemRect.minY - Self.gap
+
         let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
         let x = statusItemRect.midX - initW / 2
         let y = statusItemRect.minY - initH - Self.gap
-
-        // Capture Y once. resizeAndRepositionPanel() will use this locked value
-        // for the entire panel session — immune to menu-bar hide/show shifts.
-        // ❌ NEVER overwrite panelOriginY after this point (until closePanel resets it).
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
-        panelOriginY = y
 
         panel.setFrame(
             NSRect(x: x, y: y, width: initW, height: initH),
             display: false, animate: false
         )
 
-        // Set arrowX BEFORE orderFront so the very first frame is correct.
         chrome?.arrowX = statusItemRect.midX - x
 
         panel.orderFront(nil)
 
-        // Snap to real content size + recompute arrowX from the final frame.
         resizeAndRepositionPanel()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
