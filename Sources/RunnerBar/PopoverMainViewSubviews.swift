@@ -39,13 +39,13 @@ struct PopoverHeaderView: View {
             )
             .buttonStyle(.plain).help("Settings")
             Button(
-                action: { NSApplication.shared.hide(nil) },
+                action: { NSApplication.shared.terminate(nil) },
                 label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
                 }
             )
-            .buttonStyle(.plain).help("Close")
+            .buttonStyle(.plain).help("Quit RunnerBar")
         }
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
