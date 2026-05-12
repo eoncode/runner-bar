@@ -21,7 +21,7 @@ import SwiftUI
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from status button’s window frame (screen coords):
+// 2. Position is computed from status button's window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
 //      panelY = statusItemRect.minY - clampedContentH - arrowHeight - gap
@@ -40,6 +40,14 @@ import SwiftUI
 // resizeAndRepositionPanel() reads preferredContentSize.width and re-centres.
 // Width is clamped to [minWidth..maxWidth].
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
+//
+// INITIAL WIDTH (openPanel):
+// initW MUST match the widest view's idealWidth (currently 560 for ActionDetailView).
+// If initW is smaller than the actual preferredContentSize.width, the first
+// resizeAndRepositionPanel() call repositions the panel — but arrowX is computed
+// from the *old* frame, producing a stale offset that makes the arrow appear off-centre.
+// ✅ Keep initW = 560 (or bump to match whenever idealWidth increases).
+// ❌ NEVER set initW smaller than the largest idealWidth in any view.
 //
 // POPOVEROPENSTATE:
 // popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
@@ -108,6 +116,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Gap between status bar bottom and arrow tip.
     private static let gap: CGFloat = 2
 
+    /// Initial panel width used in openPanel().
+    /// ⚠️ MUST match (or exceed) the largest idealWidth declared by any SwiftUI view.
+    /// Currently ActionDetailView declares idealWidth: 560.
+    /// If this is smaller than preferredContentSize.width on first render,
+    /// arrowX is computed from the wrong frame → arrow appears off-centre.
+    /// ✅ Bump this whenever any view's idealWidth increases.
+    /// ❌ NEVER set lower than 560.
+    private static let initPanelWidth: CGFloat = 560
+
     // MARK: - Environment injection
 
     /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
@@ -139,9 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.view.autoresizingMask = [.width, .height]
         hostingController = controller
 
-        let initialW: CGFloat = 480
+        let initW = Self.initPanelWidth
         let chromeView = PanelChromeView(
-            frame: NSRect(x: 0, y: 0, width: initialW, height: 300 + arrowHeight)
+            frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight)
         )
         // ❌ NEVER set controller.view.frame here only — layout() re-pins it on every resize.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -150,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chrome = chromeView
 
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: initialW, height: 300 + arrowHeight),
+            contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -214,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let button = statusItem?.button,
               let statusItemRect = button.window?.frame else { return }
 
-        let preferred = hostingController?.preferredContentSize ?? CGSize(width: 480, height: 300)
+        let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
 
         // Clamp width between minWidth and maxWidth.
         let contentW = min(max(preferred.width,  Self.minWidth), maxWidth)
@@ -230,10 +247,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                        display: true, animate: false)
 
         // arrowX: button centre relative to panel left edge.
+        // Computed AFTER setFrame so panel.frame.minX is the updated value.
+        // ❌ NEVER compute before setFrame — stale minX → arrow offset wrong.
         // ❌ NEVER compute from convertToScreen(button.frame).
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
-        chrome.arrowX = statusItemRect.midX - x
+        chrome.arrowX = statusItemRect.midX - panel.frame.minX
     }
 
     // MARK: - Navigation
@@ -444,9 +463,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         popoverOpenState.isOpen = true
 
-        // Use 480 as the initial placeholder width. resizeAndRepositionPanel() will
-        // immediately snap to the real preferredContentSize after orderFront.
-        let initW: CGFloat = 480
+        // initW MUST match (or exceed) the largest idealWidth in any SwiftUI view (560).
+        // If initW < preferredContentSize.width, resizeAndRepositionPanel() shifts the
+        // panel left on the first KVO fire — arrowX is then computed from the pre-shift
+        // minX and the arrow appears off-centre until the next resize.
+        // ✅ initW = initPanelWidth (560) eliminates that first-frame offset entirely.
+        let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
         let x = statusItemRect.midX - initW / 2
         let y = statusItemRect.minY - initH - Self.gap
@@ -455,9 +477,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             display: false, animate: false
         )
 
+        // Set arrowX BEFORE orderFront so the very first frame is correct.
+        chrome?.arrowX = statusItemRect.midX - x
+
         panel.orderFront(nil)
 
-        // Snap to real content size + correct arrowX immediately after showing.
+        // Snap to real content size + recompute arrowX from the final frame.
         resizeAndRepositionPanel()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
