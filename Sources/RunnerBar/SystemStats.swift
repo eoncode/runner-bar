@@ -58,7 +58,6 @@ private struct DiskStats {
 }
 
 // MARK: - SystemStatsViewModel
-// swiftlint:disable type_body_length
 
 /// ObservableObject that owns the 2-second polling loop for system metrics.
 ///
@@ -228,4 +227,3 @@ final class SystemStatsViewModel: ObservableObject {
         DispatchQueue.main.async { self.stats = snapshot }
     }
 }
-// swiftlint:enable type_body_length

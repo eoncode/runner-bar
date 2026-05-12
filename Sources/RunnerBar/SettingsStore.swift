@@ -2,7 +2,6 @@ import Combine
 import Foundation
 
 // MARK: - SettingsStore
-// swiftlint:disable file_length
 
 /// Persists general app settings to UserDefaults.
 final class SettingsStore: ObservableObject {
@@ -29,4 +28,3 @@ final class SettingsStore: ObservableObject {
         showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
     }
 }
-// swiftlint:enable file_length
