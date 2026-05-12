@@ -34,6 +34,7 @@ import SwiftUI
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 ///
 /// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
+// swiftlint:disable:next type_body_length
 struct JobDetailView: View {
     let job: ActiveJob
     let group: ActionGroup
@@ -178,8 +179,11 @@ struct JobDetailView: View {
                             .padding(.vertical, 8)
                     } else {
                         ForEach(job.steps) { step in
-                            Button(action: { onSelectStep(step) }, label: { stepRow(step) })
-                                .buttonStyle(.plain)
+                            Button(
+                                action: { onSelectStep(step) },
+                                label: { stepRow(step) }
+                            )
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -190,7 +194,11 @@ struct JobDetailView: View {
         }
         .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
         .onAppear {
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
+            tickTimer = Timer.scheduledTimer(
+                withTimeInterval: 1,
+                repeats: true,
+                block: { _ in tick += 1 }
+            )
         }
         .onDisappear {
             tickTimer?.invalidate()

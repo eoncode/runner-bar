@@ -198,10 +198,14 @@ final class PanelChromeView: NSView {
         path.move(to: NSPoint(x: rad, y: 0))
         path.line(to: NSPoint(x: width - rad, y: 0))
         path.appendArc(withCenter: NSPoint(x: width - rad, y: rad),
-                       radius: rad, startAngle: 270, endAngle: 0)
+                       radius: rad,
+                       startAngle: 270,
+                       endAngle: 0)
         path.line(to: NSPoint(x: width, y: baseY - rad))
         path.appendArc(withCenter: NSPoint(x: width - rad, y: baseY - rad),
-                       radius: rad, startAngle: 0, endAngle: 90)
+                       radius: rad,
+                       startAngle: 0,
+                       endAngle: 90)
         path.line(to: rightPoint)
         // Arrow right side: rightPoint → toPoint
         path.curve(
@@ -217,10 +221,14 @@ final class PanelChromeView: NSView {
         )
         path.line(to: NSPoint(x: rad, y: baseY))
         path.appendArc(withCenter: NSPoint(x: rad, y: baseY - rad),
-                       radius: rad, startAngle: 90, endAngle: 180)
+                       radius: rad,
+                       startAngle: 90,
+                       endAngle: 180)
         path.line(to: NSPoint(x: 0, y: rad))
         path.appendArc(withCenter: NSPoint(x: rad, y: rad),
-                       radius: rad, startAngle: 180, endAngle: 270)
+                       radius: rad,
+                       startAngle: 180,
+                       endAngle: 270)
         path.close()
         return path
     }

@@ -298,8 +298,11 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
             ?? String(sha.prefix(7))
         let title = String(rawTitle.prefix(40))
         let runs: [WorkflowRunRef] = shaRuns.map {
-            WorkflowRunRef(id: $0.id, name: $0.name, status: $0.status,
-                           conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
+            WorkflowRunRef(id: $0.id,
+                           name: $0.name,
+                           status: $0.status,
+                           conclusion: $0.conclusion,
+                           htmlUrl: $0.htmlUrl)
         }
         let allJobs: [ActiveJob]
         if let cached = cache[sha],
