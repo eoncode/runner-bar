@@ -6,7 +6,7 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 //
 // SYMPTOM:  Popover jumps sideways (shifts left/right) when navigate() is called.
-// ROOT CAUSE: AppDelegate sizes the popover window using SwiftUI's fittingSize.
+// ROOT CAUSE: AppDelegate sizes the popover window using SwiftUI’s fittingSize.
 //             fittingSize is computed by offering the view an UNCONSTRAINED size.
 //             If the view expands to fill infinite height (maxHeight: .infinity),
 //             SwiftUI returns a non-deterministic fittingSize.width, which causes
@@ -48,7 +48,7 @@ import SwiftUI
 //   full unbounded content height as preferredContentSize.height on navigate().
 //   NSPopover re-anchors on any preferredContentSize change → side-jump.
 //   The cap is computed from NSScreen.main so it adapts to any screen size.
-//   ✅ ALWAYS keep .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+//   ✔ ALWAYS keep .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
 //   ❌ NEVER remove the maxHeight cap from the ScrollView.
 //   ❌ NEVER use a fixed constant — must adapt to screen size.
 //
@@ -83,7 +83,7 @@ struct JobDetailView: View {
         // Do NOT add .frame(maxHeight:), .frame(height:), or .fixedSize() here.
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ──────────────────────────────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -94,7 +94,9 @@ struct JobDetailView: View {
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
+
                 Spacer()
+
                 ReRunButton(
                     action: { completion in
                         let jobID = job.id
@@ -110,6 +112,7 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
                 )
+
                 CancelButton(
                     action: { completion in
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
@@ -125,6 +128,25 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status != "in_progress" && job.status != "queued"
                 )
+
+                // ─ GitHub deep-link button ───────────────────────────────
+                // Opens job.htmlUrl (the job page, not the log) in the default browser.
+                // Hidden when htmlUrl is unavailable.
+                if let urlString = job.htmlUrl, let url = URL(string: urlString) {
+                    Button(action: { NSWorkspace.shared.open(url) }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "safari")
+                                .font(.caption)
+                            Text("GitHub")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open job on GitHub")
+                }
+
                 LogCopyButton(
                     fetch: { completion in
                         let jobID = job.id
@@ -135,6 +157,7 @@ struct JobDetailView: View {
                     },
                     isDisabled: false
                 )
+
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -143,7 +166,7 @@ struct JobDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Job title ──────────────────────────────────────────────────────────────
+            // ── Job title ──────────────────────────────────────────────────────
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -151,7 +174,7 @@ struct JobDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, job.startedAt != nil ? 3 : 8)
 
-            // ── Job timing bar ──────────────────────────────────────────────────
+            // ── Job timing bar ──────────────────────────────────────────────
             if let start = job.startedAt {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
@@ -179,7 +202,7 @@ struct JobDetailView: View {
 
             Divider()
 
-            // ── Steps list ──────────────────────────────────────────────────────────────
+            // ── Steps list ───────────────────────────────────────────────────
             // ⚠️ maxHeight cap is REQUIRED — see regression guard above (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -205,13 +228,13 @@ struct JobDetailView: View {
             // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ════════════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.
         // idealWidth MUST match AppDelegate.fixedWidth (480).
         // DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
         // DO NOT reduce idealWidth back to 420 — fixedWidth is 480, not 420
         // DO NOT add .frame(height:) or .fixedSize() here
-        // ════════════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════════════════════
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(
@@ -230,19 +253,14 @@ struct JobDetailView: View {
 
     /// Single-height step row.
     /// Layout: [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
-    /// The name takes all available space (truncates in the middle if needed).
-    /// Timestamps are right-aligned to the name, left-aligned to elapsed.
-    /// Only rendered when step.startedAt is non-nil; queued steps show no timestamps.
     @ViewBuilder
     private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 8) {
-            // Icon
             Text(step.conclusionIcon)
                 .font(.system(size: 11))
                 .foregroundColor(stepColor(step))
                 .frame(width: 14, alignment: .center)
 
-            // Step name — truncates to give room to timestamps + elapsed
             Text(step.name)
                 .font(.system(size: 12))
                 .foregroundColor(step.status == "queued" ? .secondary : .primary)
@@ -251,7 +269,6 @@ struct JobDetailView: View {
 
             Spacer(minLength: 4)
 
-            // Timestamps — shown only when the step has started
             if let start = step.startedAt {
                 HStack(spacing: 3) {
                     Text(wallTime(start))
@@ -270,10 +287,9 @@ struct JobDetailView: View {
                             .foregroundColor(.yellow)
                     }
                 }
-                .fixedSize()  // ✔ SAFE: scoped to this inner HStack, not root
+                .fixedSize()  // ✔ SAFE: scoped to this inner HStack
             }
 
-            // Elapsed duration
             Text(step.elapsed)
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
