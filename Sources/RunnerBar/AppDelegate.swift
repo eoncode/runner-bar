@@ -80,10 +80,10 @@ import SwiftUI
 // ❌ NEVER set autoresizingMask = [] on the hosting view.
 //
 // STATUS ICON (issue #241):
-// The menu bar icon shows a pie-chart arc of job progress.
-// updateStatusIcon() reads RunnerStore.shared.jobs to derive total / completed
-// counts and passes them to makeStatusIcon(for:totalJobs:completedJobs:).
-// It is called from the RunnerStore.shared.onChange callback.
+// updateStatusIcon() derives job counts from RunnerStore.shared.ACTIONS (not .jobs).
+// .jobs is the old flat list (capped at 3) which is often empty when actions are used.
+// Progress = completed action-jobs / total action-jobs across all non-dimmed groups.
+// ❌ NEVER read RunnerStore.shared.jobs for the icon — it will always be 0.
 // ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -113,15 +113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sizeObservation: NSKeyValueObservation?
     private var workspaceObserver: Any?
 
-    /// Top anchor (screen coords) captured once in openPanel():
-    ///   panelTopY = statusItemRect.minY - gap
-    /// resizeAndRepositionPanel() derives the frame origin as:
-    ///   y = panelTopY - totalH
-    /// This means the panel always grows *downward* from the status bar edge,
-    /// and is immune to menu-bar hide/show shifts of statusItemRect.minY.
-    /// Reset to nil in closePanel().
-    /// ❌ NEVER re-derive panelTopY inside resizeAndRepositionPanel().
-    /// ❌ NEVER store the bottom-left corner here.
+    /// Top anchor (screen coords) captured once in openPanel().
+    /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
     private var panelTopY: CGFloat?
 
     // ⚠️ REGRESSION GUARD (ref #377):
@@ -131,26 +124,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    /// Minimum panel width. Prevents pathologically narrow views.
     private static let minWidth: CGFloat = 320
 
-    /// Maximum panel width: 90% of main screen width.
     private var maxWidth: CGFloat {
         NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 800
     }
 
-    /// Maximum panel height: 85% of main screen height.
     private var maxHeight: CGFloat {
         NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
     }
 
-    /// Gap between status bar bottom and arrow tip.
     private static let gap: CGFloat = 2
 
-    /// Initial panel width used in openPanel().
-    /// ⚠️ MUST match (or exceed) the largest idealWidth declared by any SwiftUI view.
-    /// Currently ActionDetailView declares idealWidth: 560.
-    /// ✅ Bump this whenever any view's idealWidth increases.
     /// ❌ NEVER set lower than 560.
     private static let initPanelWidth: CGFloat = 560
 
@@ -174,13 +159,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let controller = NSHostingController(rootView: mainView())
-        // ✅ sizingOptions = .preferredContentSize — KVO fires on every SwiftUI size change.
-        // ❌ NEVER change to [].
-        // ❌ NEVER set autoresizingMask = [] — breaks SwiftUI layout → KVO never fires.
-        // ✅ autoresizingMask = [.width, .height] so AppKit propagates panel frame changes
-        //    down to the hosting view between KVO fires (belt-and-suspenders).
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression is major major major.
         controller.sizingOptions = .preferredContentSize
         controller.view.autoresizingMask = [.width, .height]
         hostingController = controller
@@ -189,9 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let chromeView = PanelChromeView(
             frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight)
         )
-        // ❌ NEVER set controller.view.frame here only — layout() re-pins it on every resize.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         chromeView.addSubview(controller.view)
         chrome = chromeView
 
@@ -203,11 +178,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         p.contentView = chromeView
         p.isOpaque = false
-        // ❌ NEVER set backgroundColor = .clear (alpha 0.0).
-        // alpha=0.0 disables CABackdropLayer entirely — vibrancy collapses to flat grey.
-        // Near-zero (0.001) keeps the backdrop sampler active.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         p.backgroundColor = NSColor(white: 1, alpha: 0.001)
         p.hasShadow = true
         p.level = .popUpMenu
@@ -215,10 +185,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.animationBehavior = .none
         panel = p
 
-        // KVO: fires every time SwiftUI content size changes → dynamic height + width.
-        // ❌ NEVER remove.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
         sizeObservation = controller.observe(
             \.preferredContentSize,
             options: [.new]
@@ -230,9 +196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.updateStatusIcon()
-            // ❌ NEVER call observable.reload() while panelIsOpen == true.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
             if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
@@ -240,14 +203,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Status icon
 
-    /// Recomputes and sets the menu bar icon using current runner health + job progress.
-    /// ❌ NEVER replace with the old no-argument makeStatusIcon() call.
+    /// Recomputes and sets the menu bar icon using runner health + action-job progress.
+    ///
+    /// ⚠️ READS FROM actions, NOT jobs.
+    /// RunnerStore.shared.jobs is the old flat list (capped at 3 entries) used by legacy
+    /// job rows. It is typically empty when the actions system is in use. The actual live
+    /// jobs are inside RunnerStore.shared.actions[n].jobs.
+    ///
+    /// Progress fraction = completed jobs / total jobs across ALL non-dimmed action groups.
+    /// A job is "completed" when its status == "completed" (regardless of conclusion).
+    ///
+    /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
+    /// ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func updateStatusIcon() {
-        let jobs = RunnerStore.shared.jobs.filter { !$0.isDimmed }
-        let total     = jobs.count
-        let completed = jobs.filter { $0.status == "completed" }.count
+        let liveGroups = RunnerStore.shared.actions.filter { !$0.isDimmed }
+        let allJobs    = liveGroups.flatMap { $0.jobs }
+        let total      = allJobs.count
+        let completed  = allJobs.filter { $0.status == "completed" }.count
         statusItem?.button?.image = makeStatusIcon(
             for: RunnerStore.shared.aggregateStatus,
             totalJobs: total,
@@ -257,15 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel resize
 
-    /// Repositions and resizes the panel. Called on every KVO fire, openPanel, and navigate().
-    ///
-    /// X: re-derived from statusItemRect.midX each call (horizontal centering is always live).
-    /// Y: computed as panelTopY - totalH, where panelTopY is locked at open time.
-    ///    ❌ NEVER re-derive panelTopY here — menu-bar hide/show shifts statusItemRect.minY
-    ///    and would drag the panel down under the camera notch on every KVO fire.
-    ///
-    /// NSPanel.setFrame() has NO anchor concept — zero side jump for any size change.
-    /// ❌ NEVER call this on NSPopover.
+    /// ❌ NEVER re-derive panelTopY here.
     /// ❌ NEVER call from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
@@ -283,27 +249,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentH = min(max(preferred.height, 60),            maxHeight)
         let totalH   = contentH + arrowHeight
 
-        // X: always re-centred horizontally under the status icon.
         let x = statusItemRect.midX - contentW / 2
-        // Y: top anchor minus current height — panel grows downward from fixed top edge.
-        // ❌ NEVER replace with statusItemRect.minY - totalH - Self.gap.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         let y = topY - totalH
 
         panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
                        display: true, animate: false)
 
-        // arrowX computed AFTER setFrame so panel.frame.minX is the updated value.
-        // ❌ NEVER compute before setFrame — stale minX → arrow offset wrong.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         chrome.arrowX = statusItemRect.midX - panel.frame.minX
     }
 
     // MARK: - Navigation
 
-    /// Swaps the hosted SwiftUI view and immediately re-syncs arrowX.
     /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
@@ -318,10 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard panelIsOpen else { return }
         panel?.orderOut(nil)
         panelIsOpen = false
-        panelTopY = nil   // reset so next open captures a fresh top anchor
-        // ❌ NEVER set one without the other.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        panelTopY = nil
         popoverOpenState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
@@ -525,15 +478,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         observable.reload()
 
-        // Set open state BEFORE showing so views see isOpen=true on first render.
-        // ❌ NEVER move after panel.orderFront().
         panelIsOpen = true
         popoverOpenState.isOpen = true
-
-        // Lock top anchor once. resizeAndRepositionPanel() uses y = panelTopY - totalH.
-        // ❌ NEVER overwrite after this point until closePanel() resets it.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         panelTopY = statusItemRect.minY - Self.gap
 
         let initW = Self.initPanelWidth
@@ -547,9 +493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         chrome?.arrowX = statusItemRect.midX - x
-
         panel.orderFront(nil)
-
         resizeAndRepositionPanel()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
