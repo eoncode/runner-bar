@@ -26,9 +26,10 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
 //   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
-//   Job rows collapsed to single line: [dot][name][time range]...[status][elapsed][›]
+//   Job rows collapsed to single line: [#N][dot][name][time range]...[status][elapsed][›]
 //   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
 //   Side-jump is impossible with NSPanel — no anchor to re-calculate.
+//   Added #N order index badge to each job row (1-based, start order).
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -41,7 +42,7 @@ import SwiftUI
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
-    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
+    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).\
     let onSelectJob: (ActiveJob) -> Void
 
     /// Drives the live elapsed timer every second.
@@ -145,9 +146,12 @@ struct ActionDetailView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                     } else {
-                        ForEach(group.jobs) { job in
+                        // Use enumerated() so each row can display its 1-based start order index.
+                        // The index reflects the order jobs appear in group.jobs (sorted by
+                        // startedAt/createdAt upstream), so #1 = first job started, #N = last.
+                        ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
                             Button(action: { onSelectJob(job) }, label: {
-                                jobRow(job)
+                                jobRow(job, index: index + 1)
                             })
                             .buttonStyle(.plain)
                         }
@@ -171,16 +175,24 @@ struct ActionDetailView: View {
     // MARK: - Job row
 
     /// Single-line job row:
-    /// [dot] [name — truncates last] [time range — fixed width] ... [status] [elapsed] [›]
+    /// [#N] [dot] [name — truncates last] [time range — fixed width] ... [status] [elapsed] [›]
     ///
     /// Column widths (right side, fixed so columns stay aligned):
+    ///   index      : 28pt  ("#10" = 3 chars monospaced, left-aligned)
     ///   time range : 130pt  ("HH:mm:ss→HH:mm:ss" = 19 chars monospaced)
     ///   status     : 80pt
     ///   elapsed    : 40pt
     ///   chevron    : intrinsic
     @ViewBuilder
-    private func jobRow(_ job: ActiveJob) -> some View {
+    private func jobRow(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 8) {
+            // Order index badge: #1, #2 … #10 etc.
+            // Fixed width so all job names left-align regardless of digit count.
+            Text("#\(index)")
+                .font(.caption2.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 28, alignment: .leading)
+
             Circle()
                 .fill(jobDotColor(for: job))
                 .frame(width: 7, height: 7)
