@@ -31,9 +31,8 @@ struct PieProgressDot: View {
     var size: CGFloat = 8
 
     // MARK: Animated state
-
     /// Animated shadow of `progress`. Drives the wedge Path angle.
-    @State private var displayProgress: Double? = nil
+    @State private var displayProgress: Double?
     /// Animated shadow of `color`. Drives fill + stroke colour with a crossfade.
     @State private var displayColor: Color = .clear
     /// Current rotation angle for the indeterminate spinning arc (degrees).
@@ -43,16 +42,14 @@ struct PieProgressDot: View {
 
     var body: some View {
         GeometryReader { geo in
-            let side   = min(geo.size.width, geo.size.height)
+            let side = min(geo.size.width, geo.size.height)
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             let radius = side / 2
-
             ZStack {
                 // --- Background ring (always visible) ---
                 Circle()
                     .stroke(displayColor.opacity(0.22), lineWidth: 1)
                     .frame(width: side, height: side)
-
                 if let fraction = displayProgress {
                     if fraction >= 1 {
                         // Full fill + completion scale pulse
@@ -60,9 +57,8 @@ struct PieProgressDot: View {
                             .fill(displayColor)
                             .frame(width: side, height: side)
                             .scaleEffect(completionScale)
-
                     } else if fraction > 0 {
-                        // Filled wedge from 12-o’clock sweeping clockwise
+                        // Filled wedge from 12-o'clock sweeping clockwise
                         Path { path in
                             path.move(to: center)
                             path.addArc(
@@ -75,21 +71,15 @@ struct PieProgressDot: View {
                             path.closeSubpath()
                         }
                         .fill(displayColor)
-
                     }
                     // fraction == 0: background ring only
-
                 } else {
                     // Indeterminate: spinning arc segment (~120° sweep)
-                    // Uses a Group + rotationEffect driven by spinAngle.
-                    // The arc is drawn as a stroked open path rather than a fill
-                    // so it looks like a spinner, not a wedge.
                     Group {
                         // Thin background track
                         Circle()
                             .stroke(displayColor.opacity(0.15), lineWidth: 1.5)
                             .frame(width: side * 0.85, height: side * 0.85)
-
                         // Spinning arc head
                         Path { path in
                             path.addArc(
@@ -123,10 +113,8 @@ struct PieProgressDot: View {
         .onAppear {
             // Seed both display values instantly (no animation) on first render.
             displayProgress = progress
-            displayColor    = color
+            displayColor = color
             // Start the indeterminate spinner — always running.
-            // It only shows when displayProgress == nil, so the rotation is
-            // harmless when the wedge is visible.
             // ❌ NEVER use .easeInOut here — must be .linear + repeatForever.
             withAnimation(
                 .linear(duration: 1.2)
@@ -142,11 +130,10 @@ struct PieProgressDot: View {
                 displayProgress = newValue
             }
             // Trigger completion pulse when reaching 100%.
-            if let v = newValue, v >= 1.0 {
+            if let value = newValue, value >= 1.0 {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.45)) {
                     completionScale = 1.28
                 }
-                // Settle back to normal size after the pulse.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         completionScale = 1.0
@@ -154,7 +141,7 @@ struct PieProgressDot: View {
                 }
             }
         }
-        // Animate color crossfade on state transitions (queued→in-progress→success/fail).
+        // Animate color crossfade on state transitions.
         // ❌ macOS 13 compat: single-value onChange only.
         .onChange(of: color) { newColor in
             withAnimation(.easeInOut(duration: 0.35)) {
@@ -177,10 +164,10 @@ enum RelativeTimeFormatter {
     static func string(from date: Date, relativeTo now: Date = Date()) -> String {
         let seconds = max(0, now.timeIntervalSince(date))
         switch seconds {
-        case ..<60:      return "just now"
-        case ..<3_600:   return "\(Int(seconds / 60))m ago"
-        case ..<172_800: return "\(Int(seconds / 3_600))h ago"
-        default:         return "\(Int(seconds / 86_400))d ago"
+        case ..<60:        return "just now"
+        case ..<3_600:     return "\(Int(seconds / 60))m ago"
+        case ..<172_800:   return "\(Int(seconds / 3_600))h ago"
+        default:           return "\(Int(seconds / 86_400))d ago"
         }
     }
 }
@@ -192,10 +179,8 @@ extension ActionGroup {
     /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
     var progressFraction: Double? {
         switch groupStatus {
-        case .queued:
-            return nil
-        case .completed:
-            return 1.0
+        case .queued:     return nil
+        case .completed:  return 1.0
         case .inProgress:
             guard jobsTotal > 0 else { return nil }
             return Double(jobsDone) / Double(jobsTotal)
@@ -210,10 +195,8 @@ extension ActiveJob {
     /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no steps are available.
     var progressFraction: Double? {
         switch status {
-        case "queued":
-            return nil
-        case "completed":
-            return 1.0
+        case "queued":    return nil
+        case "completed": return 1.0
         default:
             guard !steps.isEmpty else { return nil }
             let done = steps.filter { $0.conclusion != nil }.count
