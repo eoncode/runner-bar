@@ -2,36 +2,41 @@ import AppKit
 
 // MARK: - StatusIcon
 //
-// Draws a 16×16 menu bar icon that encodes both runner health AND job progress
-// as a pie-chart arc — implementing issue #241.
+// Draws a 16×16 menu bar icon that mirrors the PieProgressDot style used in
+// the main popover rows — implementing issue #241.
 //
-// VISUAL RULES:
+// VISUAL RULES (must match PieProgressDot in PopoverProgressViews.swift):
 //
-// 1. RING BACKGROUND: always drawn as a thin dimmed circle (stroke only).
+// 1. BACKGROUND: always a filled dark circle at low opacity.
+//    Same as PieProgressDot’s background ring but filled, not stroked.
 //
-// 2. ARC FILL (progress sweep):
-//    - Starts at 12-o'clock (90°), sweeps clockwise.
+// 2. PIE WEDGE (progress fill):
+//    - Starts at 12-o’clock (90° in NSBezierPath coords), sweeps clockwise.
 //    - Fraction = completedJobs / totalJobs (non-dimmed jobs only).
-//    - 0 jobs / all queued  → empty ring (no arc).
-//    - all completed        → full circle fill.
-//    - fraction in between  → partial arc sweep.
+//    - fraction == 0    → background circle only (jobs queued / not started).
+//    - 0 < fraction < 1 → filled pie wedge (move → arc → close → fill).
+//    - fraction >= 1    → full filled circle.
 //
-// 3. COLOUR:
-//    - Any in_progress jobs present  → systemOrange arc
-//    - All completed / success        → systemGreen arc
-//    - Any failure                    → systemRed arc
-//    - No jobs / all offline          → systemGray dot (legacy solid circle)
+// 3. NO JOBS: legacy solid dot coloured by runner health (allOnline/someOffline/allOffline).
 //
-// 4. isTemplate = false — colours are meaningful, never discarded by AppKit.
+// 4. COLOUR per runner health:
+//    - allOnline   → systemGreen
+//    - someOffline → systemOrange
+//    - allOffline  → systemRed
 //
-// ❌ NEVER change isTemplate to true — it strips colour.
-// ❌ NEVER remove the ring background — it anchors the icon when arc is thin.
+// 5. isTemplate = false — colours are meaningful.
+//    ❌ NEVER set isTemplate = true — strips colour.
+//    ❌ NEVER use stroke-only ring — must match PieProgressDot filled wedge style.
+//    ❌ NEVER remove background fill — dot needs a solid base.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
 /// Builds the menu bar icon from runner aggregate status + live job counts.
 ///
+/// Visual style matches `PieProgressDot` in `PopoverProgressViews.swift`:
+/// faint filled background circle + solid filled pie wedge from 12-o’clock clockwise.
+///
 /// - Parameters:
-///   - status:         Overall runner health (`.allOnline`, `.someOffline`, `.allOffline`).
+///   - status:         Overall runner health.
 ///   - totalJobs:      Count of non-dimmed jobs currently tracked.
 ///   - completedJobs:  Count of those jobs whose `status == "completed"`.
 func makeStatusIcon(
@@ -41,72 +46,55 @@ func makeStatusIcon(
 ) -> NSImage {
     let size = NSSize(width: 16, height: 16)
     let image = NSImage(size: size, flipped: false) { rect in
-        let center  = CGPoint(x: rect.midX, y: rect.midY)
-        let radius: CGFloat = 6.0
-        let lineW:  CGFloat = 1.5
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius: CGFloat = 6.5
 
-        // --- Determine arc colour ---
+        // Colour from runner health
         let arcColor: NSColor
+        switch status {
+        case .allOnline:   arcColor = .systemGreen
+        case .someOffline: arcColor = .systemOrange
+        case .allOffline:  arcColor = .systemRed
+        }
+
+        // No live jobs → legacy solid dot
         if totalJobs == 0 {
-            // No live jobs — fall back to runner-health colour (solid dot legacy style)
-            switch status {
-            case .allOnline:   arcColor = .systemGreen
-            case .someOffline: arcColor = .systemOrange
-            case .allOffline:  arcColor = .systemRed
-            }
             arcColor.setFill()
             NSBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
             return true
-        } else {
-            switch status {
-            case .allOffline:  arcColor = .systemRed
-            case .someOffline: arcColor = .systemOrange
-            case .allOnline:   arcColor = .systemGreen
-            }
         }
 
-        // --- Ring background (faint) ---
-        arcColor.withAlphaComponent(0.25).setStroke()
-        let ring = NSBezierPath()
-        ring.appendArc(
-            withCenter: center,
-            radius: radius,
-            startAngle: 0,
-            endAngle: 360
-        )
-        ring.lineWidth = lineW
-        ring.stroke()
+        // Background: faint filled circle (mirrors PieProgressDot’s 0.22-opacity ring)
+        arcColor.withAlphaComponent(0.22).setFill()
+        let bg = NSBezierPath()
+        bg.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+        bg.fill()
 
-        // --- Progress arc ---
-        let fraction: CGFloat = totalJobs > 0
-            ? min(1.0, CGFloat(completedJobs) / CGFloat(totalJobs))
-            : 0
+        let fraction = min(1.0, max(0, CGFloat(completedJobs) / CGFloat(totalJobs)))
+        guard fraction > 0 else { return true }  // 0% → background only
 
-        guard fraction > 0 else { return true }
-
-        arcColor.setStroke()
         arcColor.setFill()
 
         if fraction >= 1.0 {
-            // Full circle fill
-            NSBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
+            // 100% → full filled circle
+            let full = NSBezierPath()
+            full.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+            full.fill()
         } else {
-            // Partial arc: start at 12-o'clock (90°), sweep clockwise.
-            // NSBezierPath uses counter-clockwise convention with flipped=false,
-            // so clockwise sweep = startAngle > endAngle (or use negative sweep).
-            let startAngle: CGFloat = 90
-            let endAngle:   CGFloat = 90 - (fraction * 360)
-            let arc = NSBezierPath()
-            arc.move(to: center)
-            arc.appendArc(
+            // Pie wedge: move to center → arc → close → fill
+            // NSBezierPath: 0° = 3-o’clock, angles counter-clockwise.
+            // 12-o’clock = 90°. clockwise: true sweeps CW (decreasing angle).
+            let wedge = NSBezierPath()
+            wedge.move(to: center)
+            wedge.appendArc(
                 withCenter: center,
-                radius: radius - lineW * 0.5,
-                startAngle: startAngle,
-                endAngle: endAngle,
+                radius: radius,
+                startAngle: 90,
+                endAngle: 90 - (fraction * 360),
                 clockwise: true
             )
-            arc.close()
-            arc.fill()
+            wedge.close()
+            wedge.fill()
         }
         return true
     }
