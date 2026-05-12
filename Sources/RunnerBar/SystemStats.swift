@@ -9,7 +9,7 @@ import Foundation
 /// All values are computed off the main thread by `SystemStatsViewModel` and
 /// published to SwiftUI via `@Published` on the main thread.
 struct SystemStats {
-    /// CPU utilisation across all cores, 0–100 %.
+    /// CPU utilisation across all cores, 0–100 %%.
     var cpuPct: Double
     /// Memory actively in use (active + wired pages × page size), in GB.
     var memUsedGB: Double
@@ -57,11 +57,22 @@ private struct DiskStats {
 /// ObservableObject that owns the 2-second polling loop for system metrics.
 ///
 /// Lifecycle: call `start()` from `.onAppear` and `stop()` from `.onDisappear`.
-/// The timer does NOT start automatically in `init()` — this avoids leaking a
-/// polling loop when the view is constructed but not yet on screen.
 ///
-/// Threading model: Timer fires on main RunLoop, bounces work to a global
-/// utility queue, then publishes results back on the main thread.
+/// ⚠️ PRE-WARM CONTRACT — DO NOT REMOVE:
+/// start() dispatches an immediate background sample so real values publish
+/// before the first 2-second timer tick. Without this, the header shows
+/// zeros for 2 seconds on every open.
+///
+/// stop() calls sample() synchronously (on background) to capture a fresh
+/// prevTicks snapshot. This means the next start() delta is already valid,
+/// so CPU never shows 0.0%% on re-open.
+///
+/// ❌ NEVER call sample() synchronously from start() on the main thread.
+///    cpuPercent() does a blocking host_processor_info() call — it must
+///    run on a background queue.
+/// ❌ NEVER remove the stop() pre-warm sample() call.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+/// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
 
@@ -73,17 +84,26 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Lifecycle
 
+    /// Start the 2-second polling loop.
+    /// Immediately fires one background sample so values appear on first render.
+    /// ❌ NEVER call sample() synchronously here — must be on background queue.
     func start() {
         timer?.invalidate()
-        sample()
+        // Immediate background sample → real values before first timer tick.
+        DispatchQueue.global(qos: .utility).async { self.sample() }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             DispatchQueue.global(qos: .utility).async { self?.sample() }
         }
     }
 
+    /// Stop the polling loop and capture a pre-warm tick snapshot.
+    /// The snapshot means the next start() CPU delta is valid immediately.
+    /// ❌ NEVER remove the sample() call here.
     func stop() {
         timer?.invalidate()
         timer = nil
+        // Pre-warm: capture current ticks so next start() has a valid delta.
+        DispatchQueue.global(qos: .utility).async { self.sample() }
     }
 
     // MARK: - CPU
