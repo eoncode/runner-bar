@@ -93,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Y coordinate the top of the panel must always snap to (status bar button bottom - gap).
     /// Set once per showPanel() call; used by resizePanel() to anchor correctly on first resize.
     private var panelTopY: CGFloat = 0
+    /// True when showPanel() has positioned the panel but is waiting for resizePanel()
+    /// to fire with the real content height before calling orderFront.
+    private var panelAwaitingFirstResize = false
     /// Last measured content height reported by HeightPreferenceKey.
     /// NOTE: Never use this in showPanel() initial sizing — it may be stale.
     /// showPanel() always opens at minHeight; resizePanel fires within 1 render cycle.
@@ -271,6 +274,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
                               width: Self.canonicalWidth, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
+        // Reveal panel on first resize after showPanel() — now correctly positioned.
+        if panelAwaitingFirstResize {
+            panelAwaitingFirstResize = false
+            panel.alphaValue = 1
+            panel.makeKey()
+        }
     }
 
     // MARK: - View factories
@@ -479,13 +488,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let buttonInWindow = button.convert(button.bounds, to: nil)
         let buttonScreenRect = buttonWindow.convertToScreen(buttonInWindow)
 
-        // ⚠️ ALWAYS open at minHeight — NEVER use stale measuredHeight here.
-        // HeightPreferenceKey will fire within 1 render cycle and call resizePanel(),
-        // which will grow/shrink the panel to the correct content height instantly.
-        // Using measuredHeight here causes content to appear vertically centered in
-        // an oversized panel when the previous session had more content (stale race).
-        let initialH = Self.minHeight
-        let totalH = initialH + Self.arrowHeight
         let width = Self.canonicalWidth
 
         var originX = buttonScreenRect.midX - width / 2
@@ -506,14 +508,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //    to the off-screen origin, not the status bar. Use panelTopY instead.
         panelTopY = buttonScreenRect.minY - Self.statusBarGap
         let measureH = Self.unconstrainedHeight + Self.arrowHeight
-        // Position off-screen so the 2000pt panel doesn't flash visibly
+        // Position off-screen at unconstrainedHeight — hostingView (2000pt) must fit inside
+        // panel/vfx so GeometryReader can measure. Panel stays hidden until resizePanel fires.
         let offScreenFrame = NSRect(x: originX, y: panelTopY - measureH, width: width, height: measureH)
         panel.setFrame(offScreenFrame, display: false)
         visualEffectView?.frame = NSRect(origin: .zero, size: offScreenFrame.size)
         applyMask(panelSize: offScreenFrame.size)
-
-        panel.orderFront(nil)
-        panel.makeKey()
+        // Mark that the next resizePanel() call should make the panel visible.
+        // Do NOT orderFront here — panel is at off-screen measurement position.
+        panelAwaitingFirstResize = true
+        panel.orderFront(nil)  // must be ordered in for SwiftUI layout to run
+        panel.alphaValue = 0   // hide visually until resizePanel positions correctly
 
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] _ in
@@ -526,6 +531,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func dismiss() {
         panelIsOpen = false
+        panelAwaitingFirstResize = false
+        panel?.alphaValue = 0
         panel?.orderOut(nil)
         if let monitor = mouseMonitor {
             NSEvent.removeMonitor(monitor)
