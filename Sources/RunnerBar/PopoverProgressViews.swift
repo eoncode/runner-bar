@@ -2,49 +2,67 @@ import SwiftUI
 
 // MARK: - PieProgressDot
 
-/// Small pie/radial fill indicator that replaces the plain `Circle` dot on action
-/// and job rows. Sized to match the existing 8 pt dot footprint so layout is unchanged.
+/// Small animated pie/radial fill indicator used on action and job rows.
+/// Sized to match the existing 8 pt dot footprint so layout is unchanged.
 ///
-/// - `progress`: 0.0–1.0 fill fraction for a filled wedge. Pass `nil` for an indeterminate ring.
-/// - `color`: fill colour — matches existing green/yellow/blue/red/gray semantics.
+/// Behaviour per state:
+/// - `progress == nil`   → Spinning indeterminate arc (queued / unknown)
+/// - `0 < progress < 1`  → Filled wedge sweeping clockwise, animated on change
+/// - `progress == 1`     → Full fill + brief spring scale pulse
+/// - `progress == 0`     → Background ring only
 ///
-/// #24: The wedge animates live. `displayProgress` is a @State that shadows `progress`.
-/// When `progress` changes (polled every 5 s or on RunnerStore reload), `.onChange`
-/// drives `displayProgress` inside `withAnimation(.easeInOut(duration: 0.4))` so the
-/// wedge sweeps smoothly rather than jumping. The initial value is set in `.onAppear`
-/// with no animation so the first render is instant.
+/// Animation contract:
+/// - `displayProgress` shadows `progress` with `.easeInOut(duration:0.4)` —
+///   wedge angle interpolates every frame.
+/// - `displayColor` shadows `color` with `.easeInOut(duration:0.35)` —
+///   color crossfades on state transitions (queued→in-progress→success/fail).
+/// - `spinAngle` drives the indeterminate arc via a `.linear(duration:1.2)`
+///   repeating animation started in `.onAppear`.
+/// - `completionScale` gives a spring pulse when progress reaches 1.0.
+///
+/// ❌ NEVER change onChange to two-argument form — macOS 13 only supports single-value.
+/// ❌ NEVER set displayProgress directly without withAnimation — breaks interpolation.
 struct PieProgressDot: View {
-    /// Radial fill fraction (0.0–1.0). Nil renders a thin unfilled ring (indeterminate).
+    /// Radial fill fraction (0.0–1.0). Nil renders a spinning indeterminate arc.
     let progress: Double?
-    /// Wedge fill and ring stroke colour.
+    /// Wedge fill and ring stroke colour. Animated on change.
     let color: Color
     /// Dot diameter; defaults to 8 to match existing action-row dots.
     var size: CGFloat = 8
 
-    /// #24: Animated shadow of `progress`. Drives the actual Path so SwiftUI
-    /// interpolates the wedge angle on every frame of the easeInOut curve.
-    /// Starts as `nil` (matches the indeterminate / not-yet-loaded state) and
-    /// is set to `progress` on `.onAppear` (instant) and on every subsequent
-    /// `.onChange` of `progress` (animated).
-    @State private var displayProgress: Double? = nil
+    // MARK: Animated state
 
-    /// Renders a filled pie-wedge, indeterminate ring, or empty ring depending on `displayProgress`.
+    /// Animated shadow of `progress`. Drives the wedge Path angle.
+    @State private var displayProgress: Double? = nil
+    /// Animated shadow of `color`. Drives fill + stroke colour with a crossfade.
+    @State private var displayColor: Color = .clear
+    /// Current rotation angle for the indeterminate spinning arc (degrees).
+    @State private var spinAngle: Double = 0
+    /// Scale factor for the completion pulse. 1.0 → 1.25 → 1.0 on reaching 100%.
+    @State private var completionScale: CGFloat = 1.0
+
     var body: some View {
         GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
+            let side   = min(geo.size.width, geo.size.height)
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             let radius = side / 2
+
             ZStack {
-                // Background ring
+                // --- Background ring (always visible) ---
                 Circle()
-                    .stroke(color.opacity(0.25), lineWidth: 1)
+                    .stroke(displayColor.opacity(0.22), lineWidth: 1)
                     .frame(width: side, height: side)
+
                 if let fraction = displayProgress {
                     if fraction >= 1 {
-                        // Full fill
-                        Circle().fill(color).frame(width: side, height: side)
+                        // Full fill + completion scale pulse
+                        Circle()
+                            .fill(displayColor)
+                            .frame(width: side, height: side)
+                            .scaleEffect(completionScale)
+
                     } else if fraction > 0 {
-                        // Filled wedge from -90° sweeping clockwise
+                        // Filled wedge from 12-o’clock sweeping clockwise
                         Path { path in
                             path.move(to: center)
                             path.addArc(
@@ -56,28 +74,91 @@ struct PieProgressDot: View {
                             )
                             path.closeSubpath()
                         }
-                        .fill(color)
+                        .fill(displayColor)
+
                     }
-                    // fraction == 0: only the background ring shows
+                    // fraction == 0: background ring only
+
                 } else {
-                    // Indeterminate: small filled centre dot
-                    Circle()
-                        .fill(color)
-                        .frame(width: side * 0.5, height: side * 0.5)
-                        .position(center)
+                    // Indeterminate: spinning arc segment (~120° sweep)
+                    // Uses a Group + rotationEffect driven by spinAngle.
+                    // The arc is drawn as a stroked open path rather than a fill
+                    // so it looks like a spinner, not a wedge.
+                    Group {
+                        // Thin background track
+                        Circle()
+                            .stroke(displayColor.opacity(0.15), lineWidth: 1.5)
+                            .frame(width: side * 0.85, height: side * 0.85)
+
+                        // Spinning arc head
+                        Path { path in
+                            path.addArc(
+                                center: CGPoint(x: side / 2, y: side / 2),
+                                radius: side * 0.85 / 2,
+                                startAngle: .degrees(0),
+                                endAngle: .degrees(130),
+                                clockwise: false
+                            )
+                        }
+                        .stroke(
+                            AngularGradient(
+                                gradient: Gradient(colors: [
+                                    displayColor.opacity(0.0),
+                                    displayColor.opacity(0.9)
+                                ]),
+                                center: .center,
+                                startAngle: .degrees(0),
+                                endAngle: .degrees(130)
+                            ),
+                            style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+                        )
+                        .frame(width: side * 0.85, height: side * 0.85)
+                    }
+                    .rotationEffect(.degrees(spinAngle))
                 }
             }
         }
         .frame(width: size, height: size)
-        // #24: Seed displayProgress instantly on first appear (no animation).
+        // MARK: - Lifecycle
         .onAppear {
+            // Seed both display values instantly (no animation) on first render.
             displayProgress = progress
+            displayColor    = color
+            // Start the indeterminate spinner — always running.
+            // It only shows when displayProgress == nil, so the rotation is
+            // harmless when the wedge is visible.
+            // ❌ NEVER use .easeInOut here — must be .linear + repeatForever.
+            withAnimation(
+                .linear(duration: 1.2)
+                .repeatForever(autoreverses: false)
+            ) {
+                spinAngle = 360
+            }
         }
-        // #24: Animate wedge sweep when progress updates.
-        // macOS 13-compatible single-value onChange — ❌ NEVER use { _, _ in } (macOS 14+ only).
+        // Animate wedge angle when progress changes.
+        // ❌ macOS 13 compat: single-value onChange only.
         .onChange(of: progress) { newValue in
             withAnimation(.easeInOut(duration: 0.4)) {
                 displayProgress = newValue
+            }
+            // Trigger completion pulse when reaching 100%.
+            if let v = newValue, v >= 1.0 {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.45)) {
+                    completionScale = 1.28
+                }
+                // Settle back to normal size after the pulse.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        completionScale = 1.0
+                    }
+                }
+            }
+        }
+        // Animate color crossfade on state transitions (queued→in-progress→success/fail).
+        // ❌ macOS 13 compat: single-value onChange only.
+        .onChange(of: color) { newColor in
+            withAnimation(.easeInOut(duration: 0.35)) {
+                displayColor = newColor
             }
         }
     }
