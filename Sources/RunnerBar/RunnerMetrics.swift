@@ -1,7 +1,6 @@
 import Foundation
 
 // MARK: - RunnerMetrics
-
 /// CPU and memory utilisation sampled from `ps aux` for a single runner process.
 struct RunnerMetrics: Codable {
     /// CPU usage percentage (0–100+, can exceed 100 on multi-core).
@@ -11,16 +10,12 @@ struct RunnerMetrics: Codable {
 }
 
 // MARK: - RunnerMetrics + ps
-
 extension RunnerMetrics {
     /// Samples CPU and memory for the first `Runner.Worker` process whose
-    /// command line contains `runnerName`.
-    ///
-    /// Returns `nil` if no matching process is found or parsing fails.
+    /// command line contains `runnerName`. Returns `nil` if no match or parse fails.
     static func sample(for runnerName: String) -> RunnerMetrics? {
         let output = shell("ps aux")
-        let lines = output.components(separatedBy: "\n")
-        for line in lines {
+        for line in output.components(separatedBy: "\n") {
             guard line.contains("Runner.Worker"),
                   line.contains(runnerName) else { continue }
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
@@ -31,4 +26,22 @@ extension RunnerMetrics {
         }
         return nil
     }
+}
+
+// MARK: - allWorkerMetrics
+/// Returns CPU/MEM metrics for every `Runner.Worker` process found in `ps aux`,
+/// in the order they appear. Used by `RunnerStore.fetchAndEnrichRunners()` to
+/// assign metrics to runners by slot index.
+func allWorkerMetrics() -> [RunnerMetrics] {
+    let output = shell("ps aux")
+    var result: [RunnerMetrics] = []
+    for line in output.components(separatedBy: "\n") {
+        guard line.contains("Runner.Worker") else { continue }
+        let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+        guard parts.count > 3,
+              let cpu = Double(parts[2]),
+              let mem = Double(parts[3]) else { continue }
+        result.append(RunnerMetrics(cpu: cpu, mem: mem))
+    }
+    return result
 }

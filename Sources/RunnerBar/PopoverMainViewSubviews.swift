@@ -1,8 +1,20 @@
-// swiftlint:disable file_length
 import SwiftUI
 
-// MARK: - PopoverHeaderView
+// MARK: - SectionHeaderLabel
+/// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
+struct SectionHeaderLabel: View {
+    let title: String
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+    }
+}
 
+// MARK: - PopoverHeaderView
 /// Header row: system stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
@@ -15,6 +27,7 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
+            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -50,6 +63,9 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
+    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
+    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
+    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
             statChip(
@@ -59,8 +75,7 @@ struct PopoverHeaderView: View {
             )
             statChip(
                 label: "MEM",
-                value: blockBar(pct: stats.memTotalGB > 0
-                    ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
+                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
                     + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
                 pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
             )
@@ -69,15 +84,14 @@ struct PopoverHeaderView: View {
     }
 
     private var diskChip: some View {
-        let total = stats.diskTotalGB
-        let used = stats.diskUsedGB
-        let free = max(0, total - used)
-        let pct = total > 0 ? (used / total) * 100 : 0
+        let total   = stats.diskTotalGB
+        let used    = stats.diskUsedGB
+        let free    = max(0, total - used)
+        let pct     = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? (free / total) * 100 : 0
-        let value = blockBar(pct: pct)
+        let value   = blockBar(pct: pct)
             + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded()))
-            + ")"
+            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
         return statChip(label: "DISK", value: value, pct: pct)
     }
 
@@ -95,25 +109,22 @@ struct PopoverHeaderView: View {
     }
 
     private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw = Int((pct / 100.0 * Double(width)).rounded())
+        let raw         = Int((pct / 100.0 * Double(width)).rounded())
         let filledCount = max(0, min(width, raw))
         return String(repeating: "\u{2588}", count: filledCount)
-            + String(repeating: "\u{2591}", count: width - filledCount)
+             + String(repeating: "\u{2591}", count: width - filledCount)
     }
 
     private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .red }
+        if pct > 85 { return .red    }
         if pct > 60 { return .yellow }
         return .green
     }
 }
 
 // MARK: - RunnerTypeIcon
-
-/// Tiny icon indicating whether an action group ran on a local or cloud runner.
 private struct RunnerTypeIcon: View {
     let isLocal: Bool?
-
     var body: some View {
         if let local = isLocal {
             Image(systemName: local ? "desktopcomputer" : "cloud")
@@ -126,14 +137,14 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
-
-/// Shows runners that are actively running a job (busy == true).
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
     var body: some View {
         let busy = runners.filter { $0.busy }
-        if !busy.isEmpty { runnerList(busy) }
+        if !busy.isEmpty {
+            runnerList(busy)
+        }
     }
 
     @ViewBuilder
@@ -162,11 +173,9 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-
-/// Single action-group row with pie progress dot, runner-type icon, timestamp, and status chip.
 struct ActionRowView: View {
-    let group: ActionGroup
-    let tick: Int
+    let group:    ActionGroup
+    let tick:     Int
     let onSelect: () -> Void
 
     var body: some View {
@@ -179,7 +188,8 @@ struct ActionRowView: View {
 
     private var rowContent: some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        _ = tick
+        // ❌ NEVER remove this line.
+        let _ = tick
         return HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
             RunnerTypeIcon(isLocal: group.isLocalGroup)
@@ -255,19 +265,28 @@ struct ActionRowView: View {
 }
 
 // MARK: - InlineJobRowsView
-
-/// Passive read-only ↳ job rows shown beneath every in-progress or queued action group.
-// swiftlint:disable type_body_length
+/// Passive read-only ↳ job rows shown beneath every in-progress action group.
+/// Only shows jobs that are currently `in_progress`.
+///
+/// ⚠️ REGRESSION GUARD (#377):
+/// `cap += 4` on button tap mutates @State while the popover is visible.
+/// isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NOT from a plain Bool prop.
+/// ❌ NEVER add `var isPopoverOpen: Bool` prop back.
+/// ❌ NEVER mutate cap while popoverOpenState.isOpen == true.
+/// ❌ NEVER remove .disabled(popoverOpenState.isOpen) from the expand button.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+/// is major major major.
 struct InlineJobRowsView: View {
     let group: ActionGroup
-    let tick: Int
-    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
+    let tick:  Int
+    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
     private var activeJobs: [ActiveJob] {
-        group.jobs.filter { $0.status == "in_progress" && $0.conclusion == nil }
+        group.jobs.filter { $0.status == "in_progress" }
     }
 
     var body: some View {
@@ -297,10 +316,11 @@ struct InlineJobRowsView: View {
 
     private func jobRow(_ job: ActiveJob) -> some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        _ = tick
+        // ❌ NEVER remove this line.
+        let _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
-        let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
-        let done = job.steps.filter { $0.conclusion != nil }.count
+        let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+        let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
             Text("\u{21B3}").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
@@ -339,10 +359,7 @@ struct InlineJobRowsView: View {
         switch job.status {
         case "in_progress": return .yellow
         case "queued":      return .blue
-        default:
-            return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
+        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
         }
     }
 }
-// swiftlint:enable type_body_length
-// swiftlint:enable file_length
