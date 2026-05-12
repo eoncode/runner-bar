@@ -23,6 +23,7 @@ import SwiftUI
 //   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
 //   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 //   Pressable repo / branch / SHA-origin labels added to header metadata row.
+//   Elapsed moved from top action bar to beside start→end timestamps (mirrors StepLogView).
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -41,6 +42,7 @@ struct JobDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header ────────────────────────────────────────────────────────────
+            // Elapsed has been moved to the timing bar below (next to start→end).
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -109,10 +111,6 @@ struct JobDetailView: View {
                     },
                     isDisabled: false
                 )
-
-                Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -130,7 +128,9 @@ struct JobDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, job.startedAt != nil ? 3 : 8)
 
-            // ── Job timing bar ────────────────────────────────────────────────
+            // ── Job timing bar (start → end · elapsed) ────────────────────────
+            // Elapsed is shown here, directly after the end time, separated by a bullet.
+            // ❌ NEVER move elapsed back to the top action bar.
             if let start = job.startedAt {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
@@ -151,6 +151,13 @@ struct JobDetailView: View {
                             .font(.caption)
                             .foregroundColor(.yellow)
                     }
+                    // Elapsed duration — moved from top bar, mirrors StepLogView Row 3.
+                    Text("·")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
