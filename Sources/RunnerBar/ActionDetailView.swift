@@ -26,6 +26,7 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
 //   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
+//   Job rows collapsed to single line: [dot][name][time range]...[status][elapsed][›]
 //   Side-jump is impossible with NSPanel — no anchor to re-calculate.
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -168,56 +169,63 @@ struct ActionDetailView: View {
 
     // MARK: - Job row
 
-    /// Two-line job row:
-    /// Line 1: [dot] [name ...] [status/conclusion] [elapsed] [›]
-    /// Line 2: [start time → end time] (caption, secondary)
+    /// Single-line job row:
+    /// [dot] [name — truncates last] [time range — fixed width] ... [status] [elapsed] [›]
+    ///
+    /// Column widths (right side, fixed so columns stay aligned):
+    ///   time range : 96pt  ("HH:mm → HH:mm" = 13 chars monospaced)
+    ///   status     : 80pt
+    ///   elapsed    : 40pt
+    ///   chevron    : intrinsic
     @ViewBuilder
     private func jobRow(_ job: ActiveJob) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            // Line 1
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(jobDotColor(for: job))
-                    .frame(width: 7, height: 7)
-                Text(job.name)
-                    .font(.system(size: 12))
-                    .foregroundColor(job.isDimmed ? .secondary : .primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer()
-                // Status/conclusion label
-                if let conclusion = job.conclusion {
-                    Text(conclusionLabel(conclusion))
-                        .font(.caption)
-                        .foregroundColor(conclusionColor(conclusion))
-                        .frame(width: 80, alignment: .trailing)
-                } else {
-                    Text(jobStatusLabel(for: job))
-                        .font(.caption)
-                        .foregroundColor(jobStatusColor(for: job))
-                        .frame(width: 80, alignment: .trailing)
-                }
-                // Elapsed
-                Text(job.elapsed)
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .frame(width: 40, alignment: .trailing)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+        HStack(spacing: 8) {
+            Circle()
+                .fill(jobDotColor(for: job))
+                .frame(width: 7, height: 7)
+
+            // Name: flex, truncates when row is tight
+            Text(job.name)
+                .font(.system(size: 12))
+                .foregroundColor(job.isDimmed ? .secondary : .primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+
+            // Time range: fixed width, always visible
+            Text(jobTimeRange(job))
+                .font(.caption2.monospacedDigit())
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .frame(width: 96, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            // Status / conclusion: fixed width, right-aligned
+            if let conclusion = job.conclusion {
+                Text(conclusionLabel(conclusion))
+                    .font(.caption)
+                    .foregroundColor(conclusionColor(conclusion))
+                    .frame(width: 80, alignment: .trailing)
+            } else {
+                Text(jobStatusLabel(for: job))
+                    .font(.caption)
+                    .foregroundColor(jobStatusColor(for: job))
+                    .frame(width: 80, alignment: .trailing)
             }
-            // Line 2: start → end times, indented to align with name
-            HStack(spacing: 4) {
-                // 7pt dot + 8pt spacing = 15pt indent to align with name text
-                Color.clear.frame(width: 15, height: 1)
-                Text(jobTimeRange(job))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
+
+            // Elapsed: fixed width
+            Text(job.elapsed)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 40, alignment: .trailing)
+
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(.secondary)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
         .contentShape(Rectangle())
     }
 
@@ -225,21 +233,20 @@ struct ActionDetailView: View {
 
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    /// Formats the start → end time range for a job.
-    /// Examples:
-    ///   queued:       "–"
-    ///   in progress:  "14:23 → now"
-    ///   completed:    "14:23 → 14:25"
+    /// Formats the start → end time range.
+    /// queued (no timestamps): "–"
+    /// in_progress:            "14:23 → now"
+    /// completed:              "14:23 → 14:25"
     private func jobTimeRange(_ job: ActiveJob) -> String {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         guard let start = job.startedAt ?? job.createdAt else { return "–" }
         let startStr = fmt.string(from: start)
         if let end = job.completedAt {
-            return "\(startStr) → \(fmt.string(from: end))"
+            return "\(startStr)→\(fmt.string(from: end))"
         }
         if job.status == "queued" { return "–" }
-        return "\(startStr) → now"
+        return "\(startStr)→now"
     }
 
     private func jobDotColor(for job: ActiveJob) -> Color {
