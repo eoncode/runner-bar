@@ -80,9 +80,10 @@ import SwiftUI
 // ❌ NEVER set autoresizingMask = [] on the hosting view.
 //
 // STATUS ICON (issue #241):
-// updateStatusIcon() derives job counts from RunnerStore.shared.ACTIONS (not .jobs).
-// .jobs is the old flat list (capped at 3) which is often empty when actions are used.
-// Progress = completed action-jobs / total action-jobs across all non-dimmed groups.
+// updateStatusIcon() counts jobs from ALL groups that have any incomplete job
+// (conclusion == nil), regardless of isDimmed. This ensures the icon reflects
+// the true in-progress fraction across all active work.
+// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
 // ❌ NEVER read RunnerStore.shared.jobs for the icon — it will always be 0.
 // ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -205,23 +206,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Recomputes and sets the menu bar icon using runner health + action-job progress.
     ///
-    /// ⚠️ READS FROM actions, NOT jobs.
-    /// RunnerStore.shared.jobs is the old flat list (capped at 3 entries) used by legacy
-    /// job rows. It is typically empty when the actions system is in use. The actual live
-    /// jobs are inside RunnerStore.shared.actions[n].jobs.
+    /// ⚠️ COUNTS FROM ALL GROUPS WITH ANY INCOMPLETE JOB — NOT JUST !isDimmed.
     ///
-    /// Progress fraction = completed jobs / total jobs across ALL non-dimmed action groups.
-    /// A job is "completed" when its status == "completed" (regardless of conclusion).
+    /// isDimmed marks groups that have been frozen into cache after completion, BUT a
+    /// dimmed group can still contain in-progress jobs during a transition window.
+    /// Filtering by !isDimmed alone means those jobs are invisible to the icon, causing
+    /// the icon to show progress for only 2 jobs when 10 are actually running.
     ///
+    /// Rule: include a group in the progress count if it has at least one job with
+    /// conclusion == nil (i.e. still running or queued). Dimmed groups where every job
+    /// has concluded are excluded — they are truly done and must not skew the fraction.
+    ///
+    /// Progress fraction = completed jobs / total jobs across all active groups.
+    /// A job is "completed" when its conclusion != nil (any conclusion counts).
+    ///
+    /// ❌ NEVER filter by !isDimmed only — misses in-progress jobs in dimmed groups.
     /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
     /// ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func updateStatusIcon() {
-        let liveGroups = RunnerStore.shared.actions.filter { !$0.isDimmed }
-        let allJobs    = liveGroups.flatMap { $0.jobs }
-        let total      = allJobs.count
-        let completed  = allJobs.filter { $0.status == "completed" }.count
+        // Include ALL groups that have at least one incomplete job (conclusion == nil).
+        // This covers both non-dimmed (actively displayed) and dimmed groups that are
+        // still transitioning — ensuring the icon reflects the true running job count.
+        let activeGroups = RunnerStore.shared.actions.filter { group in
+            group.jobs.contains { $0.conclusion == nil }
+        }
+        let allJobs   = activeGroups.flatMap { $0.jobs }
+        let total     = allJobs.count
+        let completed = allJobs.filter { $0.conclusion != nil }.count
         statusItem?.button?.image = makeStatusIcon(
             for: RunnerStore.shared.aggregateStatus,
             totalJobs: total,
@@ -515,8 +528,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
+            guard let self else { return }\n            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
                 self.closePanel()
             }
         }
