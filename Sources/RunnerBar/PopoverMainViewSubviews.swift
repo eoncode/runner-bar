@@ -52,8 +52,7 @@ struct PopoverHeaderView: View {
 
     /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
-    /// would change `hc.view.fittingSize.height` and corrupt the popover frame in
-    /// `AppDelegate.openPopover()` (ref #52 #54).
+    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
             statChip(
@@ -127,12 +126,17 @@ struct PopoverLocalRunnerRow: View {
         ForEach(active.prefix(3)) { runner in
             HStack(spacing: 8) {
                 Circle().fill(runner.busy ? Color.yellow : Color.green).frame(width: 8, height: 8)
+                // Runner name: lineLimit(1) — machine names can be arbitrarily long.
+                // Title truncation is intentional here (machine names vs commit titles).
                 Text(runner.name)
                     .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
                 Spacer()
                 if let metrics = runner.metrics {
+                    // CPU/MEM stats are short fixed-format strings — fixedSize prevents
+                    // them ever being truncated regardless of panel width.
                     Text(String(format: "CPU: %.1f%%  MEM: %.1f%%", metrics.cpu, metrics.mem))
                         .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 3)
@@ -151,11 +155,16 @@ struct PopoverLocalRunnerRow: View {
 /// Single action-group row with pie progress dot, started-ago timestamp,
 /// and spec-parity typography (#178).
 ///
-/// #22: Title text uses `.layoutPriority(1)` so it claims horizontal space
-/// before the fixed trailing columns. The `currentJobName` field drops its
-/// `frame(width:)` cap and uses `layoutPriority(0)` (default) so it yields
-/// space to the title rather than competing for it. The popover is now 480 pt
-/// wide (was 420), giving ~60 pt more room across the board.
+/// Dynamic-width strategy (NSPanel — no anchor, zero jump on any resize):
+/// - SHA label  (group.label) : .fixedSize() — always 7 chars, never truncate
+/// - Timestamp                : .fixedSize() — "2m ago" / "just now", short
+/// - Steps progress           : .fixedSize() — "0/10" format, 4-6 chars max
+/// - Elapsed                  : .fixedSize() — "02:25" format, 5 chars max
+/// - Status chip              : .fixedSize() — already was
+/// - Title (group.title)      : lineLimit(1) truncation KEPT — commit msgs are long
+/// - currentJobName           : lineLimit(1) truncation KEPT — job names can be long
+/// Panel idealWidth 560 gives comfortable room; preferredContentSize grows it further
+/// if needed (up to maxWidth = 90% screen).
 struct ActionRowView: View {
     let group: ActionGroup
     let onSelect: () -> Void
@@ -171,16 +180,23 @@ struct ActionRowView: View {
     private var rowContent: some View {
         HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
+
+            // SHA / label: always 7 chars (e.g. "a1b25e4") — fixedSize so it never truncates.
+            // ❌ NEVER add frame(width:) here — NSPanel grows to fit.
             Text(group.label)
                 .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1).frame(width: 52, alignment: .leading)
-            // #22: layoutPriority(1) gives the title first claim on available width.
-            // ❌ NEVER add .frame(width:) here — it would reintroduce truncation.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+            // Title: commit message — intentionally truncated, can be very long.
+            // layoutPriority(1) gives it first claim on remaining space.
+            // ❌ NEVER add frame(width:) here.
             Text(group.title)
                 .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
+
             Spacer()
             metaTrailing
         }
@@ -190,36 +206,43 @@ struct ActionRowView: View {
     @ViewBuilder
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
-            // #7: lineLimit(1) prevents timestamp from wrapping (load-bearing, ref #52 #54)
+            // Timestamp: "2m ago", "just now", "1h ago" — short, never truncate.
+            // fixedSize lets the panel grow rather than clipping the date.
+            // ❌ NEVER add frame(width:) here.
             Text(RelativeTimeFormatter.string(from: start))
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
                 .lineLimit(1)
-                .frame(width: 44, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
-            // #8 #22: No frame(width:) cap — currentJobName is allowed to be as wide
-            // as it needs but yields to the title (layoutPriority 0 < title's 1).
-            // lineLimit(1) + truncationMode(.tail) still prevent height growth.
+            // currentJobName: can be long — keep truncation, yield to title.
+            // layoutPriority(0) means it shrinks before the title does.
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(0)
         }
-        // #7: lineLimit(1) prevents jobProgress/elapsed from wrapping (load-bearing)
+        // Steps progress "0/10", "3/10" — short numeric, never truncate.
+        // fixedSize lets the panel grow to show it fully.
+        // ❌ NEVER add frame(width:) here.
         Text(group.jobProgress)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
             .lineLimit(1)
-            .frame(width: 30, alignment: .trailing)
+            .fixedSize(horizontal: true, vertical: false)
+
+        // Elapsed "02:25", "01:18" — 5 chars, never truncate.
+        // ❌ NEVER add frame(width:) here.
         Text(group.elapsed)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
             .lineLimit(1)
-            .frame(width: 40, alignment: .trailing)
+            .fixedSize(horizontal: true, vertical: false)
+
         statusChip
     }
 
-    /// Status chip — .lineLimit(1) + .fixedSize(horizontal: true, vertical: false) prevents
-    /// multi-word labels like "IN PROGRESS" from wrapping onto a second line, which would
-    /// corrupt fittingSize.height and cause the popover to be mis-sized (ref #52 #54).
+    /// Status chip — lineLimit(1) + fixedSize prevents multi-word labels like
+    /// "IN PROGRESS" from wrapping onto a second line, corrupting
+    /// preferredContentSize.height and mis-sizing the panel (ref #52 #54).
     @ViewBuilder
     private var statusChip: some View {
         switch group.groupStatus {
@@ -260,8 +283,8 @@ struct ActionRowView: View {
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
-/// This triggers a SwiftUI height change → preferredContentSize update → NSPopover
-/// re-anchor → side-jump. The expand button is disabled while popoverOpenState.isOpen.
+/// This triggers a SwiftUI height change → preferredContentSize update → NSPanel
+/// resize → (safe, no jump, but still guard it to avoid mid-open layout thrash).
 ///
 /// isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NOT from a plain
 /// Bool prop. A Bool prop is frozen at construction time (always false because
@@ -293,7 +316,7 @@ struct InlineJobRowsView: View {
             Button(
                 action: {
                     // ❌ NEVER remove the isOpen guard — mutating cap while
-                    // the popover is open causes a height change → side-jump.
+                    // the panel is open causes a height change → layout thrash.
                     if !popoverOpenState.isOpen { cap += 4 }
                 },
                 label: {
@@ -318,6 +341,8 @@ struct InlineJobRowsView: View {
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Group {
                 if let name = stepName {
+                    // "JobName · StepName" — truncate at tail, step name yields to job name.
+                    // lineLimit(1) is load-bearing (prevents height growth).
                     Text(job.name + " \u{00B7} " + name)
                 } else {
                     Text(job.name)
@@ -325,17 +350,26 @@ struct InlineJobRowsView: View {
             }
             .font(.caption).foregroundColor(.secondary)
             .lineLimit(1).truncationMode(.tail)
+            .layoutPriority(1)  // claim space before trailing numerics
+
             Spacer()
+
             if total > 0 {
+                // "13/..." "11/..." — short numeric, never truncate.
+                // fixedSize lets the panel grow rather than clipping step counts.
+                // ❌ NEVER add frame(width:) here.
                 Text("\(done)/\(total)")
                     .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
                     .lineLimit(1)
-                    .frame(width: 28, alignment: .trailing)
+                    .fixedSize(horizontal: true, vertical: false)
             }
+
+            // Elapsed "01:29", "01:16" — 5 chars, never truncate.
+            // ❌ NEVER add frame(width:) here.
             Text(job.elapsed)
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
                 .lineLimit(1)
-                .frame(width: 36, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
     }
