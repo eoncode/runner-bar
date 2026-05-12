@@ -52,8 +52,10 @@ private enum NavState {
 // in a nonisolated context (let delegate = AppDelegate()). A class-level
 // @MainActor would make that call illegal. Instead every method that touches
 // UI is individually annotated @MainActor or dispatched via DispatchQueue.main.
+// @unchecked Sendable: AppDelegate is only ever used from main thread in practice;
+// the checker cannot verify this statically because we dropped class-level @MainActor.
 
-final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
+final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unchecked Sendable {
 
     // Fixed canvas width — PanelChrome and all views use this.
     static let fixedWidth: CGFloat = 420
