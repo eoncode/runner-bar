@@ -528,7 +528,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            guard let self else { return }\n            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
+            guard let self else { return }
+            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
                 self.closePanel()
             }
         }
