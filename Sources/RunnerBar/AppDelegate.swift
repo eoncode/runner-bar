@@ -14,21 +14,22 @@ import SwiftUI
 //   and resizes in-place via updateHeight() — the arrow stays pinned to the
 //   status bar button centre. No re-anchor is possible.
 //
-// HEIGHT STRATEGY: HeightPreferenceKey (HeightReporter.swift)
-//   Each view factory appends .reportHeight(to: self).
-//   didUpdateHeight() is called on the main thread whenever rendered height
-//   changes and calls panel.updateHeight() for an in-place resize.
+// SIZING STRATEGY:
+//   openPanel() calls hc.sizeThatFits(in: NSSize(width: fixedWidth, height: .greatestFiniteMagnitude))
+//   BEFORE positionBelow() to get the real content height synchronously.
+//   positionBelow() is NEVER called with a placeholder/hardcoded height.
+//   didUpdateHeight() still handles live resize after navigation or data load.
 //
 // CONTRACT (DO NOT VIOLATE ANY RULE):
 //   ✅ AppDelegate conforms to HeightReceiver.
 //   ✅ Every view factory ends with .reportHeight(to: self).
-//   ✅ openPanel() calls panel.positionBelow() once — no re-position on resize.
+//   ✅ openPanel() measures real height THEN calls panel.positionBelow().
+//   ❌ NEVER pass a hardcoded height to positionBelow() — causes wrong initial size.
 //   ❌ NEVER reintroduce NSPopover — the jump cannot be fixed.
 //   ❌ NEVER replace HeightPreferenceKey with fittingSize — unreliable pre-layout.
 //   ❌ NEVER call positionBelow() from didUpdateHeight() — re-anchors every resize.
-//   ❌ NEVER reload() before panelIsOpen = true — race with onChange.
 //
-// WHY systemStats IS STOPPED WHILE PANEL IS OPEN (ref #375 #376 #377 — CPU GUARD):
+// CPU GUARD (ref #375 #376 #377):
 //   systemStats fires @Published every ~1s. It is stopped while the panel is
 //   open to save CPU. isPopoverOpen passed to PopoverMainView controls this.
 // ❌ NEVER remove the isPopoverOpen parameter from PopoverMainView — it stops systemStats.
@@ -48,7 +49,8 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unchecked Sendable {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
 
     // Fixed canvas width — PanelChrome and all views use this.
     static let fixedWidth: CGFloat = 420
@@ -56,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
     private var statusItem: NSStatusItem?
     private(set) var panel: PanelChrome?
     private var hostingController: NSHostingController<AnyView>?
-    @MainActor private lazy var observable = RunnerStoreObservable()
+    private lazy var observable = RunnerStoreObservable()
     private var savedNavState: NavState?
     private var panelIsOpen = false
 
@@ -66,18 +68,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - HeightReceiver
     // Called on main thread by HeightReporter whenever rendered content height changes.
-    // Calls panel.updateHeight() for in-place resize — no re-anchor possible.
+    // Handles live resize after the panel is already open (navigation, data load).
     // ❌ NEVER call positionBelow() here — that re-anchors the panel.
-    // ❌ NEVER call this from a timer or store update.
-    func didUpdateHeight(_ height: CGFloat) {
-        guard panelIsOpen, let panel, panel.isVisible, height > 0 else { return }
-        let clamped = min(height, maxContentHeight)
-        panel.updateHeight(clamped)
+    nonisolated func didUpdateHeight(_ height: CGFloat) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panelIsOpen,
+                  let panel = self.panel, panel.isVisible,
+                  height > 0 else { return }
+            let clamped = min(height, self.maxContentHeight)
+            panel.updateHeight(clamped)
+        }
     }
 
     // MARK: - App lifecycle
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    nonisolated func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            self?.setupUI()
+        }
+    }
+
+    private func setupUI() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
             button.image = makeStatusIcon(for: .allOffline)
@@ -85,11 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             button.target = self
         }
 
+        // Create hosting controller with a fixed width so SwiftUI can measure.
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = []
-        // Give the hosting view a real width so SwiftUI can compute height.
-        controller.view.frame = NSRect(origin: .zero,
-                                       size: NSSize(width: Self.fixedWidth, height: 10))
+        controller.view.frame = NSRect(x: 0, y: 0,
+                                       width: Self.fixedWidth, height: 10)
         hostingController = controller
 
         let chrome = PanelChrome()
@@ -109,17 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Panel lifecycle
 
-    func panelDidClose() {
+    private func panelDidClose() {
         panelIsOpen = false
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.hostingController?.rootView = self.mainView()
-        }
+        hostingController?.rootView = mainView()
     }
 
     // MARK: - View factories
-    // Each factory appends .reportHeight(to: self) so didUpdateHeight() fires whenever
-    // the rendered content height changes.
+    // Each factory appends .reportHeight(to: self) so didUpdateHeight() fires
+    // whenever rendered content height changes (live resize while panel is open).
 
     private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
@@ -131,7 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         return makeActiveJob(from: fresh, iso: ISO8601DateFormatter(), isDimmed: job.isDimmed)
     }
 
-    @MainActor
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -165,7 +172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
     // ❌ NEVER use this method anywhere except openPanel().
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     // UNDER ANY CIRCUMSTANCE.
-    @MainActor
     private func openPanelView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
@@ -197,7 +203,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
         return AnyView(ActionDetailView(
@@ -219,7 +224,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
         return AnyView(JobDetailView(
@@ -235,7 +239,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
@@ -248,7 +251,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         return AnyView(JobDetailView(
@@ -264,7 +266,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
@@ -276,7 +277,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
@@ -289,7 +289,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         ).reportHeight(to: self))
     }
 
-    @MainActor
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -320,11 +319,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Navigation
 
-    /// Swaps rootView. Height self-corrects automatically via didUpdateHeight()
-    /// after SwiftUI renders the new content — no manual sizing needed.
+    /// Swaps rootView. Height self-corrects via didUpdateHeight() after SwiftUI
+    /// renders the new content — or immediately via the next sizeThatFits if needed.
     /// ❌ NEVER call this from a timer, onChange, or any polling path.
     private func navigate(to view: AnyView) {
-        hostingController?.rootView = view
+        guard let hc = hostingController else { return }
+        hc.rootView = view
+        // Synchronously measure and resize for the new view.
+        let size = hc.sizeThatFits(in: NSSize(width: Self.fixedWidth,
+                                               height: .greatestFiniteMagnitude))
+        let clamped = min(size.height, maxContentHeight)
+        if clamped > 0 { panel?.updateHeight(clamped) }
     }
 
     // MARK: - Panel show/hide
@@ -334,14 +339,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         if panel.isVisible { panel.closePanel() } else { openPanel() }
     }
 
-    /// Opens the panel below the status bar button.
-    /// positionBelow() is called ONCE here — never again until next open.
-    /// didUpdateHeight() resizes in-place without re-positioning.
+    /// Opens the panel below the status bar button with the REAL measured height.
+    /// positionBelow() is called ONCE — never again until next open.
     /// ❌ NEVER replace openPanelView() with mainView() here.
+    /// ❌ NEVER pass a hardcoded height to positionBelow().
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
-    @MainActor
     private func openPanel() {
         guard let button = statusItem?.button,
               button.window != nil,
@@ -349,6 +353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
               let hc = hostingController
         else { return }
 
+        // Set panelIsOpen BEFORE assigning rootView so that didUpdateHeight()
+        // does not early-return on the very first HeightReporter callback.
         panelIsOpen = true
         hc.rootView = openPanelView()
         observable.reload()
@@ -358,9 +364,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             hc.rootView = restored
         }
 
-        // Use 300 as a safe initial height — HeightReporter will fire the real
-        // height within the same run loop and panel.updateHeight() corrects it.
-        panel.positionBelow(button: button, contentHeight: 300)
+        // Measure the REAL height synchronously before positioning.
+        // This guarantees the panel opens at the correct size regardless
+        // of HeightReporter timing.
+        let measured = hc.sizeThatFits(
+            in: NSSize(width: Self.fixedWidth,
+                       height: .greatestFiniteMagnitude)
+        )
+        let contentHeight = min(max(measured.height, 100), maxContentHeight)
+        panel.positionBelow(button: button, contentHeight: contentHeight)
     }
 }
 // swiftlint:enable type_body_length

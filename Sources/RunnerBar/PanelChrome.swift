@@ -9,23 +9,24 @@ import SwiftUI
 // position — updateHeight() resizes the panel in-place and the arrow stays
 // pinned to the status bar button centre. No re-anchor is possible.
 //
-// COORDINATE SYSTEM (Y-up, origin at panel bottom-left):
+// COORDINATE SYSTEM (macOS is Y-up; origin at BOTTOM-LEFT of screen):
 //
-//   totalHeight = contentHeight + kArrowHeight
-//
-//   panel.frame.maxY  ────  arrowTip  (points toward status bar button)
+//   panel.frame.maxY  ────  arrowTip  (near status bar, HIGH Y value)
 //                         /      \
-//   bodyTop = contentH  ──────────  ← top of SwiftUI hosting view
+//   arrowBase = maxY – kArrowHeight
 //   |                              |
-//   |   SwiftUI content (body)     |
+//   |   SwiftUI hosting view       |
+//   |   (bodyHeight = contentH)    |
 //   |                              |
-//   panel.frame.minY  ──────────
+//   panel.frame.minY  ──────────  (LOW Y value, further down screen)
 //
-//   hostingView.frame.origin.y = 0   (bottom of panel = bottom of content)
-//   hostingView.frame.size.height  = contentHeight  (NOT totalHeight)
+//   hostingView.frame = (x:0, y:0, w:panelWidth, h:contentHeight)
+//   Arrow region occupies the TOP kArrowHeight pts of the panel frame.
 //
-// See: status-bar-app-position-warning.md §2 (NSPanel option)
-//      issues #52 #54 #375 #376 #377
+// SIZING CONTRACT:
+//   positionBelow() receives the REAL contentHeight (from sizeThatFits).
+//   updateHeight() receives updated contentHeight after navigation/data.
+//   ❌ NEVER pass a hardcoded/placeholder height to positionBelow().
 // ═══════════════════════════════════════════════════════════════════════════════
 
 private let kCornerRadius:  CGFloat = 10
@@ -57,11 +58,12 @@ private extension NSBezierPath {
 
 final class PanelChrome: NSPanel {
 
+    // hostingView is set once by AppDelegate and lives for the panel's lifetime.
+    // Its frame is managed entirely by layoutChrome().
     var hostingView: NSView? {
         didSet {
             guard let hv = hostingView else { return }
-            hv.autoresizingMask = [.width, .height]
-            hv.frame = bodyRect(in: frame.size)
+            hv.autoresizingMask = []
             contentView?.addSubview(hv)
         }
     }
@@ -73,7 +75,7 @@ final class PanelChrome: NSPanel {
         v.material     = .menu
         v.blendingMode = .behindWindow
         v.state        = .active
-        v.autoresizingMask = [.width, .height]
+        v.autoresizingMask = []
         return v
     }()
 
@@ -83,21 +85,22 @@ final class PanelChrome: NSPanel {
     // ── Init ─────────────────────────────────────────────────────────────────
 
     init() {
-        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+        super.init(contentRect: .zero,
+                   styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: false)
-        isFloatingPanel     = true
-        level               = .statusBar
-        backgroundColor     = .clear
-        isOpaque            = false
-        hasShadow           = false
-        collectionBehavior  = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        isFloatingPanel    = true
+        level              = .statusBar
+        backgroundColor    = .clear
+        isOpaque           = false
+        hasShadow          = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = false
-        fx.frame = NSRect(origin: .zero, size: .zero)
         contentView?.addSubview(fx)
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
 
+    /// Call with the REAL content height (from sizeThatFits), never a placeholder.
     func positionBelow(button: NSButton, contentHeight: CGFloat) {
         guard let bw = button.window else { return }
         let btnScreen  = bw.convertToScreen(button.frame)
@@ -110,10 +113,12 @@ final class PanelChrome: NSPanel {
             originX = max(screen.visibleFrame.minX,
                          min(originX, screen.visibleFrame.maxX - panelWidth))
         }
+        // Y-up: panel sits below the button, so originY < btnScreen.minY
         let originY = btnScreen.minY - totalHeight
         arrowTipX = btnCentreX - originX
 
-        setFrame(NSRect(x: originX, y: originY, width: panelWidth, height: totalHeight),
+        setFrame(NSRect(x: originX, y: originY,
+                        width: panelWidth, height: totalHeight),
                  display: false)
         layoutChrome()
         orderFront(nil)
@@ -121,7 +126,7 @@ final class PanelChrome: NSPanel {
         installOutsideMonitor()
     }
 
-    /// Resize in-place. Top edge (arrow) stays fixed. Only bottom moves.
+    /// Resize in-place. Top edge (arrowTip) stays fixed; only bottom moves.
     func updateHeight(_ newContentHeight: CGFloat) {
         guard isVisible else { return }
         let totalHeight = newContentHeight + kArrowHeight
@@ -140,31 +145,32 @@ final class PanelChrome: NSPanel {
 
     // ── Layout ───────────────────────────────────────────────────────────────
 
-    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
-        super.setFrame(frameRect, display: flag)
-        layoutChrome()
-    }
-
+    // Called after every frame change. Lays out fx and hostingView explicitly.
     private func layoutChrome() {
         let size = frame.size
         guard size.width > 0, size.height > 0 else { return }
 
-        fx.frame = NSRect(origin: .zero, size: size)
-        hostingView?.frame = bodyRect(in: size)
+        let contentH = size.height - kArrowHeight
 
+        // fx covers the full panel frame for the shape mask.
+        fx.frame = NSRect(origin: .zero, size: size)
+
+        // hostingView fills the body (below the arrow region).
+        // y=0 = bottom of panel, height = contentH.
+        hostingView?.frame = NSRect(x: 0, y: 0,
+                                    width: size.width, height: contentH)
+
+        // Shape mask: rounded rect body + bezier arrow at top.
         let shapeLayer = CAShapeLayer()
         shapeLayer.path = chromePath(in: size).asCGPath
         fx.layer?.mask  = shapeLayer
 
+        // Drop shadow on the content view.
         let shadow = NSShadow()
         shadow.shadowColor      = NSColor.black.withAlphaComponent(CGFloat(kShadowAlpha))
         shadow.shadowOffset     = NSSize(width: 0, height: -4)
         shadow.shadowBlurRadius = kShadowRadius
         contentView?.shadow = shadow
-    }
-
-    private func bodyRect(in size: NSSize) -> NSRect {
-        NSRect(x: 0, y: 0, width: size.width, height: size.height - kArrowHeight)
     }
 
     // ── Chrome path ──────────────────────────────────────────────────────────
@@ -179,9 +185,11 @@ final class PanelChrome: NSPanel {
         let p = NSBezierPath()
         p.move(to: NSPoint(x: r, y: 0))
         p.line(to: NSPoint(x: w - r, y: 0))
-        p.appendArc(withCenter: NSPoint(x: w - r, y: r), radius: r, startAngle: 270, endAngle: 0)
+        p.appendArc(withCenter: NSPoint(x: w - r, y: r),
+                    radius: r, startAngle: 270, endAngle: 0)
         p.line(to: NSPoint(x: w, y: bodyH - r))
-        p.appendArc(withCenter: NSPoint(x: w - r, y: bodyH - r), radius: r, startAngle: 0, endAngle: 90)
+        p.appendArc(withCenter: NSPoint(x: w - r, y: bodyH - r),
+                    radius: r, startAngle: 0, endAngle: 90)
         p.line(to: NSPoint(x: tipX + aw, y: bodyH))
         p.curve(to: NSPoint(x: tipX, y: tipY),
                 controlPoint1: NSPoint(x: tipX + aw * 0.6, y: baseY),
@@ -190,9 +198,11 @@ final class PanelChrome: NSPanel {
                 controlPoint1: NSPoint(x: tipX - aw * 0.2, y: tipY),
                 controlPoint2: NSPoint(x: tipX - aw * 0.6, y: baseY))
         p.line(to: NSPoint(x: r, y: bodyH))
-        p.appendArc(withCenter: NSPoint(x: r, y: bodyH - r), radius: r, startAngle: 90, endAngle: 180)
+        p.appendArc(withCenter: NSPoint(x: r, y: bodyH - r),
+                    radius: r, startAngle: 90, endAngle: 180)
         p.line(to: NSPoint(x: 0, y: r))
-        p.appendArc(withCenter: NSPoint(x: r, y: r), radius: r, startAngle: 180, endAngle: 270)
+        p.appendArc(withCenter: NSPoint(x: r, y: r),
+                    radius: r, startAngle: 180, endAngle: 270)
         p.close()
         return p
     }
@@ -217,6 +227,9 @@ final class PanelChrome: NSPanel {
     }
 
     private func removeOutsideMonitor() {
-        if let m = outsideMonitor { NSEvent.removeMonitor(m); outsideMonitor = nil }
+        if let m = outsideMonitor {
+            NSEvent.removeMonitor(m)
+            outsideMonitor = nil
+        }
     }
 }
