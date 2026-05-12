@@ -33,13 +33,14 @@ import SwiftUI
 //   from ActionsListView empty branch.
 //
 // HEADER HEIGHT RULE (ref #misalignment #header-hidden):
-//   PopoverHeaderView MUST use .frame(minHeight:32, idealHeight:32, maxHeight:32).
-//   Using only .frame(height:32) sets the EXACT height but NOT the idealHeight.
-//   The outer .fixedSize(horizontal:false, vertical:true) from AppDelegate resolves
-//   each view's height to its IDEAL size — so without idealHeight:32, SwiftUI sees
-//   idealHeight=0 and collapses the header to zero, hiding it entirely.
-//   ❌ NEVER use plain .frame(height:32) here — it does not set idealHeight.
-//   ❌ NEVER add .fixedSize() to statChip calls.
+//   PopoverHeaderView wraps SystemStatsView.statsContent (proven working) and adds
+//   settings/close buttons. systemStats MUST be @ObservedObject so stat updates
+//   re-render the header. Using a plain `let` means the header freezes at zero stats
+//   on first render and the @Published updates are silently dropped.
+//   The outer HStack uses .frame(minHeight:32, idealHeight:32, maxHeight:32) so that
+//   .fixedSize(horizontal:false, vertical:true) from AppDelegate resolves to 32pt.
+//   ❌ NEVER use plain .frame(height:32) — it does not set idealHeight.
+//   ❌ NEVER make systemStats a plain `let` — header won't update after start().
 //   ❌ NEVER remove this .frame(minHeight:idealHeight:maxHeight:) — header disappears.
 //
 // MODEL API — verified against source files, DO NOT hallucinate properties:
@@ -138,62 +139,29 @@ struct PopoverMainView: View {
     }
 }
 
-// MARK: - MiniBarView
-
-private struct MiniBarView: View {
-    let fraction: Double
-    var width: CGFloat = 22
-    var height: CGFloat = 6
-
-    private var clampedFraction: Double { max(0, min(1, fraction)) }
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 1)
-                .fill(Color.primary.opacity(0.12))
-                .frame(width: width, height: height)
-            RoundedRectangle(cornerRadius: 1)
-                .fill(barColor)
-                .frame(width: CGFloat(clampedFraction) * width, height: height)
-        }
-    }
-
-    private var barColor: Color {
-        if clampedFraction > 0.85 { return .red }
-        if clampedFraction > 0.60 { return .yellow }
-        return .green
-    }
-}
-
 // MARK: - PopoverHeaderView
 
+/// Header row: CPU/MEM/DISK stats + optional sign-in warning + settings/close buttons.
+///
+/// ⚠️ systemStats MUST be @ObservedObject.
+///   SystemStatsViewModel is an ObservableObject whose @Published var stats updates
+///   every 2 s after start() is called. Without @ObservedObject the header freezes
+///   at zero values on first render and never updates — which also means the view
+///   may collapse if SwiftUI decides zero-value content has zero ideal height.
+///   A plain `let` silently drops all @Published updates.
+///   ❌ NEVER change @ObservedObject to a plain `let` here.
 private struct PopoverHeaderView: View {
-    let systemStats: SystemStatsViewModel
+    @ObservedObject var systemStats: SystemStatsViewModel
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            statChip(
-                label: "CPU",
-                fraction: systemStats.stats.cpuPct / 100,
-                value: String(format: "%.1f%%", systemStats.stats.cpuPct)
-            )
-            statChip(
-                label: "MEM",
-                fraction: systemStats.stats.memTotalGB > 0
-                    ? systemStats.stats.memUsedGB / systemStats.stats.memTotalGB : 0,
-                value: String(format: "%.1f/%.0fGB",
-                              systemStats.stats.memUsedGB, systemStats.stats.memTotalGB)
-            )
-            statChip(
-                label: "DISK",
-                fraction: systemStats.stats.diskTotalGB > 0
-                    ? systemStats.stats.diskUsedGB / systemStats.stats.diskTotalGB : 0,
-                value: String(format: "%.0f/%.0fGB",
-                              systemStats.stats.diskUsedGB, systemStats.stats.diskTotalGB)
-            )
-            Spacer(minLength: 0)
+        HStack(spacing: 0) {
+            // Re-use proven SystemStatsView.statsContent (no double padding).
+            // statsContent is the inner HStack without the outer .padding(.horizontal,12).
+            // We supply our own padding via the outer HStack's .padding below.
+            SystemStatsView(stats: systemStats.stats).statsContent
+            Spacer(minLength: 4)
             if !isAuthenticated {
                 Button(
                     action: onSelectSettings,
@@ -206,6 +174,7 @@ private struct PopoverHeaderView: View {
                 )
                 .buttonStyle(.plain)
                 .help("Not authenticated — open Settings to add a GitHub token")
+                .padding(.trailing, 6)
             }
             Button(
                 action: onSelectSettings,
@@ -217,6 +186,7 @@ private struct PopoverHeaderView: View {
             )
             .buttonStyle(.plain)
             .help("Settings")
+            .padding(.trailing, 8)
             Button(
                 action: { NSApplication.shared.hide(nil) },
                 label: {
@@ -239,15 +209,6 @@ private struct PopoverHeaderView: View {
         .frame(minHeight: PopoverLayout.headerHeight,
                idealHeight: PopoverLayout.headerHeight,
                maxHeight: PopoverLayout.headerHeight)
-    }
-
-    @ViewBuilder
-    private func statChip(label: String, fraction: Double, value: String) -> some View {
-        HStack(spacing: 4) {
-            Text(label).font(.caption2).foregroundColor(.secondary)
-            MiniBarView(fraction: fraction)
-            Text(value).font(.caption2.monospacedDigit()).foregroundColor(.primary)
-        }
     }
 }
 
