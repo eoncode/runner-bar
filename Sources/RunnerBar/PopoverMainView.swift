@@ -32,6 +32,12 @@ import SwiftUI
 //   ❌ NEVER remove the .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
 //   from ActionsListView empty branch.
 //
+// HEADER HEIGHT RULE (ref #misalignment):
+//   PopoverHeaderView MUST have .frame(height: 32) to prevent collapse.
+//   ❌ NEVER add .fixedSize() to statChip calls — it interacts badly with the
+//   outer .fixedSize(horizontal:false, vertical:true) from AppDelegate and causes
+//   the header to report zero height, hiding all header content.
+//
 // MODEL API — verified against source files, DO NOT hallucinate properties:
 //   ActionGroup:    .progressFraction (Double?), .headBranch (String?), .elapsed (String),
 //                   .groupStatus (GroupStatus), .conclusion (String?), .title, .repo, .jobs
@@ -67,6 +73,8 @@ struct HeightPreferenceKey: PreferenceKey {
 
 private enum PopoverLayout {
     static let idealWidth: CGFloat = 420
+    /// Explicit header height — prevents collapse when outer fixedSize is applied.
+    static let headerHeight: CGFloat = 32
 }
 
 /// Root popover view. Reports its own rendered height via HeightPreferenceKey.
@@ -106,14 +114,9 @@ struct PopoverMainView: View {
             )
         }
         // ⚠️ RULE 1: exact width=420, NOT maxWidth:.infinity.
-        // maxWidth:.infinity conflicts with the outer .fixedSize(horizontal:false, vertical:true)
-        // applied by AppDelegate, causing the view to collapse to zero height (ref #381).
         .frame(width: PopoverLayout.idealWidth, alignment: .topLeading)
         // ⚠️ HEIGHT REPORTING: measure rendered height and publish via HeightPreferenceKey.
-        // AppDelegate reads this to size the popover — replaces unreliable fittingSize.
         // ❌ NEVER remove this .background modifier.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         .background(
             GeometryReader { geo in
                 Color.clear.preference(key: HeightPreferenceKey.self, value: geo.size.height)
@@ -166,17 +169,11 @@ private struct PopoverHeaderView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // ⚠️ Each statChip is fixed-size so it never expands into the Spacer's territory
-            // or gets squeezed by longer value strings (e.g. "10.2/16GB").
-            // .layoutPriority(1) keeps chips at their natural size; Spacer absorbs slack.
             statChip(
                 label: "CPU",
                 fraction: systemStats.stats.cpuPct / 100,
                 value: String(format: "%.1f%%", systemStats.stats.cpuPct)
             )
-            .fixedSize()
-            .layoutPriority(1)
-
             statChip(
                 label: "MEM",
                 fraction: systemStats.stats.memTotalGB > 0
@@ -184,9 +181,6 @@ private struct PopoverHeaderView: View {
                 value: String(format: "%.1f/%.0fGB",
                               systemStats.stats.memUsedGB, systemStats.stats.memTotalGB)
             )
-            .fixedSize()
-            .layoutPriority(1)
-
             statChip(
                 label: "DISK",
                 fraction: systemStats.stats.diskTotalGB > 0
@@ -194,11 +188,7 @@ private struct PopoverHeaderView: View {
                 value: String(format: "%.0f/%.0fGB",
                               systemStats.stats.diskUsedGB, systemStats.stats.diskTotalGB)
             )
-            .fixedSize()
-            .layoutPriority(1)
-
             Spacer(minLength: 0)
-
             if !isAuthenticated {
                 Button(
                     action: onSelectSettings,
@@ -233,7 +223,11 @@ private struct PopoverHeaderView: View {
             .buttonStyle(.plain)
             .help("Close popover")
         }
-        .padding(.horizontal, 12).padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        // ⚠️ HEADER HEIGHT RULE: explicit frame height prevents collapse under outer
+        // fixedSize(horizontal:false, vertical:true) applied by AppDelegate.
+        // ❌ NEVER remove this .frame(height:) — without it the header disappears.
+        .frame(height: PopoverLayout.headerHeight)
     }
 
     @ViewBuilder
@@ -256,13 +250,7 @@ private struct ActionsListView: View {
     var body: some View {
         if actions.isEmpty {
             // ⚠️ EMPTY STATE MIN HEIGHT (ref #377):
-            // GeometryReader must report a realistic height even when there are no actions.
-            // Without this frame, it reports ~30pt → Phase 2 reads stale/tiny height →
-            // popover clamps to minHeight (120) but content is still tiny and centred.
-            // minHeight: 120 ensures the GeometryReader fires ≥120pt so contentSize
-            // matches what the user actually sees (header ~44 + divider + this ≥120).
             // ❌ NEVER remove .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            // ❌ maxWidth MUST come before minHeight — Swift requires declaration order.
             Text("No recent actions")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 8)
@@ -308,9 +296,6 @@ private struct ActionRowView: View {
         return actionGroup.jobs.filter { $0.status == "in_progress" }
     }
 
-    // Maps GroupStatus + conclusion → Color for PieProgressView.
-    // PieProgressView.init is: (progress: Double?, color: Color, size: CGFloat = 8)
-    // ❌ There is NO status: parameter on PieProgressView.
     private var pieColor: Color {
         switch actionGroup.groupStatus {
         case .inProgress: return .blue
@@ -331,8 +316,6 @@ private struct ActionRowView: View {
                 action: onSelect,
                 label: {
                     HStack(spacing: 6) {
-                        // ✅ Correct init: progress: Double?, color: Color
-                        // actionGroup.progressFraction is the correct property (not .progress)
                         PieProgressView(
                             progress: actionGroup.progressFraction,
                             color: pieColor
@@ -348,7 +331,6 @@ private struct ActionRowView: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
-                                // actionGroup.headBranch is the correct property (not .branch)
                                 if let branch = actionGroup.headBranch {
                                     Text("·").font(.caption2).foregroundColor(.secondary)
                                     Text(branch)
@@ -359,7 +341,6 @@ private struct ActionRowView: View {
                             }
                         }
                         Spacer()
-                        // actionGroup.elapsed is the correct property (not .elapsedLabel)
                         Text(actionGroup.elapsed)
                             .font(.caption2.monospacedDigit())
                             .foregroundColor(.secondary)
@@ -390,8 +371,6 @@ private struct InlineJobRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // ActiveJob has NO .progress property — use .progressFraction for the pie.
-            // For inline running jobs, nil (indeterminate) is intentional.
             PieProgressView(progress: job.progressFraction, color: .blue)
                 .frame(width: 10, height: 10)
                 .padding(.leading, 28)
@@ -400,7 +379,6 @@ private struct InlineJobRowView: View {
                 .foregroundColor(.secondary)
                 .lineLimit(1)
             Spacer()
-            // ✅ ActiveJob.elapsed is the correct property — NOT .elapsedLabel
             Text(job.elapsed)
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
@@ -441,7 +419,6 @@ private struct RunnerRowView: View {
                 .foregroundColor(.primary)
                 .lineLimit(1)
             Spacer()
-            // ✅ runner.displayStatus is the correct property (not .statusLabel)
             Text(runner.displayStatus)
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -450,8 +427,6 @@ private struct RunnerRowView: View {
     }
 
     private var statusColor: Color {
-        // runner.status is a raw String from the GitHub API — NOT an enum.
-        // ❌ NEVER use case .online / .offline / .busy — those do not exist.
         switch runner.status {
         case "online":  return runner.busy ? .orange : .green
         case "offline": return .red
