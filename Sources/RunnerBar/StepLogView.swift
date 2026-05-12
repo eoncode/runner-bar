@@ -21,7 +21,7 @@ import SwiftUI
 // ║    ❌ NEVER omit idealWidth: 480 from the root frame                        ║
 // ║    ❌ NEVER add .frame(height:) here                                        ║
 // ║    ❌ NEVER add .fixedSize() here                                           ║
-// ║    ✅ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap       ║
+// ║    ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap       ║
 // ║       Without it, with sizingOptions=.preferredContentSize, SwiftUI         ║
 // ║       reports the full log text height as preferredContentSize.height on    ║
 // ║       navigate → NSPopover re-anchors → side-jump. (ref #370)              ║
@@ -30,7 +30,7 @@ import SwiftUI
 // ║  If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
 // ║  ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
 // ║  is removed is major major major.                                           ║
-// ╚══════════════════════════════════════════════════════════════════════════════╝
+// ╙══════════════════════════════════════════════════════════════════════════════╝
 
 /// Shows the raw log text for a single `JobStep`.
 ///
@@ -56,10 +56,75 @@ struct StepLogView: View {
     /// True while the background fetch is in-flight.
     @State private var isLoading = true
 
+    // MARK: - Formatters (static to avoid re-allocation)
+
+    private static let timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    private static let dateFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    // MARK: - Derived helpers
+
+    /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
+    private var repoSlug: String {
+        let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
+        guard parts.count >= 5 else { return "—" }
+        let owner = parts[3]; let repo = parts[4]
+        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
+    }
+
+    /// Step conclusion label with icon, or live/queued status.
+    private var stepStatusLabel: String {
+        switch step.conclusion {
+        case "success":   return "✓ success"
+        case "failure":   return "✗ failure"
+        case "skipped":   return "⧘ skipped"
+        case "cancelled": return "⧘ cancelled"
+        default:
+            return step.status == "in_progress" ? "▶ running" : "· queued"
+        }
+    }
+
+    private var stepStatusColor: Color {
+        switch step.conclusion {
+        case "success":   return .green
+        case "failure":   return .red
+        case "skipped", "cancelled": return .secondary
+        default:
+            return step.status == "in_progress" ? .yellow : .secondary
+        }
+    }
+
+    /// Formatted start time, or "—" if unavailable.
+    private var startLabel: String {
+        guard let d = step.startedAt else { return "—" }
+        return Self.timeFmt.string(from: d)
+    }
+
+    /// Formatted end time, or "—" if unavailable (still running shows live status).
+    private var endLabel: String {
+        guard let d = step.completedAt else { return step.status == "in_progress" ? "running…" : "—" }
+        return Self.timeFmt.string(from: d)
+    }
+
+    /// Date string (yyyy-MM-dd) for context when the step ran.
+    private var dateLabel: String {
+        guard let d = step.startedAt ?? step.completedAt else { return "—" }
+        return Self.dateFmt.string(from: d)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header — always visible, OUTSIDE ScrollView ──────────────────────
-            // ❌ NEVER move this inside the ScrollView — it must stay visible always.
+
+            // ── Top bar: back + copy + elapsed ────────────────────────────────────
+            // ❌ NEVER move this inside the ScrollView.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -81,17 +146,116 @@ struct StepLogView: View {
                 Text(step.elapsed)
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
+                    .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
-            .padding(.bottom, 2)
+            .padding(.bottom, 4)
 
+            // ── Step name (large) ───────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12)
-                .padding(.bottom, 6)
+                .padding(.bottom, 5)
+
+            // ── Meta rows ──────────────────────────────────────────────────────
+            // Row 1: job name (parent) + step number chip
+            HStack(spacing: 6) {
+                // Parent job breadcrumb
+                Image(systemName: "briefcase")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                Text(job.name)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+
+                Spacer()
+
+                // Step number chip  e.g. "step #7"
+                // step.id is the GitHub Actions step number (1-based, from the `number` field).
+                // This is the closest thing to a "step ID" the API exposes at this level.
+                Text("step #\(step.id)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12))
+                    .cornerRadius(4)
+                    .fixedSize()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 3)
+
+            // Row 2: repo slug + job ID
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                Text(repoSlug)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+
+                Spacer()
+
+                // GitHub job ID (numeric) — useful for API / deep-link construction
+                Text("job #\(job.id)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12))
+                    .cornerRadius(4)
+                    .fixedSize()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 3)
+
+            // Row 3: start → end timestamps + date + status
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+
+                // Start time
+                Text(startLabel)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize()
+
+                Text("→")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+
+                // End time
+                Text(endLabel)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize()
+
+                // Date (day context)
+                Text(dateLabel)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize()
+
+                Spacer()
+
+                // Step conclusion / live status
+                Text(stepStatusLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(stepStatusColor)
+                    .fixedSize()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
+
             Divider()
 
             // ── Log — INSIDE ScrollView ──────────────────────────────────────────
