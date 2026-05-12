@@ -335,9 +335,19 @@ struct ActionRowView: View {
 
 // MARK: - InlineJobRowsView
 
-/// Passive read-only ↳ job rows shown beneath every in-progress action group.
-/// Only shows jobs that are currently `in_progress` — queued and completed jobs
-/// are intentionally excluded (per spec: inline rows communicate active work only).
+/// Passive read-only ↳ job rows shown beneath every in-progress or queued action group.
+/// Only shows jobs that are currently `in_progress` with no conclusion yet —
+/// queued jobs and jobs that have just completed are intentionally excluded.
+///
+/// ⚠️ activeJobs filter: BOTH conditions are required:
+///   1. status == "in_progress"  — job is actively executing
+///   2. conclusion == nil        — job has not yet concluded
+/// A job can briefly have status=="in_progress" AND a non-nil conclusion in the
+/// same poll cycle (race between runner reporting and API propagation). Requiring
+/// conclusion==nil ensures such jobs are immediately removed from the inline list
+/// rather than lingering until the next store refresh.
+/// ❌ NEVER loosen this filter back to status-only — that caused completed jobs
+///    to linger in the inline rows while other sibling jobs were still running.
 ///
 /// Tapping a row navigates directly to JobDetailView for that job, skipping
 /// ActionDetailView — the group is passed along so the back button can return
@@ -371,9 +381,11 @@ struct InlineJobRowsView: View {
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
-    /// Only in-progress jobs — ❌ never include queued or completed jobs here.
+    /// Only actively running jobs with no conclusion.
+    /// ⚠️ BOTH conditions required — see struct-level doc above.
+    /// ❌ NEVER simplify to status-only.
     private var activeJobs: [ActiveJob] {
-        group.jobs.filter { $0.status == "in_progress" }
+        group.jobs.filter { $0.status == "in_progress" && $0.conclusion == nil }
     }
 
     var body: some View {
