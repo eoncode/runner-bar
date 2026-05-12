@@ -75,6 +75,12 @@ import SwiftUI
 // ❌ NEVER set hosting view frame only at init. layout() must always re-pin it.
 // ❌ NEVER set autoresizingMask = [] on the hosting view.
 //
+// STATUS ICON (issue #241):
+// The menu bar icon shows a pie-chart arc of job progress.
+// updateStatusIcon() reads RunnerStore.shared.jobs to derive total / completed
+// counts and passes them to makeStatusIcon(for:totalJobs:completedJobs:).
+// It is called from the RunnerStore.shared.onChange callback.
+// ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -210,15 +216,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
-            self.statusItem?.button?.image = makeStatusIcon(
-                for: RunnerStore.shared.aggregateStatus
-            )
+            self.updateStatusIcon()
             // ❌ NEVER call observable.reload() while panelIsOpen == true.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
             // ALLOWED UNDER ANY CIRCUMSTANCE.
             if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
+    }
+
+    // MARK: - Status icon
+
+    /// Recomputes and sets the menu bar icon using current runner health + job progress.
+    ///
+    /// Counts non-dimmed jobs only — dimmed (historical) jobs should not pollute
+    /// the progress fraction shown in the icon.
+    ///
+    /// Called on every RunnerStore.shared.onChange fire.
+    /// ❌ NEVER replace with the old no-argument makeStatusIcon() call.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
+    private func updateStatusIcon() {
+        let jobs = RunnerStore.shared.jobs.filter { !$0.isDimmed }
+        let total     = jobs.count
+        let completed = jobs.filter { $0.status == "completed" }.count
+        statusItem?.button?.image = makeStatusIcon(
+            for: RunnerStore.shared.aggregateStatus,
+            totalJobs: total,
+            completedJobs: completed
+        )
     }
 
     // MARK: - Panel resize (the key to dynamic size without jumping)
