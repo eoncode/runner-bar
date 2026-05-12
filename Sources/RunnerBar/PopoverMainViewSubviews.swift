@@ -117,10 +117,28 @@ struct PopoverHeaderView: View {
     }
 }
 
+// MARK: - SectionHeaderLabel
+
+/// Small uppercase section header used for "RUNNERS" and "ACTIONS" labels.
+/// Style mirrors macOS sidebar section headers: caption2, semibold, secondary.
+private struct SectionHeaderLabel: View {
+    let title: String
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .semibold, design: .default))
+            .foregroundColor(.secondary)
+            .kerning(0.5)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+    }
+}
+
 // MARK: - PopoverLocalRunnerRow
 
 /// Shows runners that are actively running a job (busy == true).
 /// Hidden entirely when no runner is busy — idle/offline runners are not shown.
+/// Renders a "RUNNERS" section header above the runner list when visible.
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
@@ -133,6 +151,7 @@ struct PopoverLocalRunnerRow: View {
 
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
+        SectionHeaderLabel(title: "Runners")
         ForEach(busy.prefix(3)) { runner in
             HStack(spacing: 8) {
                 Circle().fill(Color.yellow).frame(width: 8, height: 8)
@@ -173,7 +192,7 @@ struct PopoverLocalRunnerRow: View {
 /// - Status chip              : .fixedSize() — already was
 /// - Title (group.title)      : lineLimit(1) truncation KEPT — commit msgs are long
 /// - currentJobName           : lineLimit(1) truncation KEPT — job names can be long
-/// Panel idealWidth 560 gives comfortable room; preferredContentSize grows it further
+/// Panel idealWidth 720 gives comfortable room; preferredContentSize grows it further
 /// if needed (up to maxWidth = 90% screen).
 ///
 /// ⚠️ TICK CONTRACT: `tick` MUST be read inside `body` (via `rowContent`) so SwiftUI

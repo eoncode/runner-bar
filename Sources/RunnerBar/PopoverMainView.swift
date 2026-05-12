@@ -204,6 +204,8 @@ struct PopoverMainView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
+                // "ACTIONS" section header — always shown when there is at least one action.
+                SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
                     // Pass displayTick so SwiftUI sees a changed input every second
