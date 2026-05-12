@@ -46,6 +46,13 @@ import SwiftUI
 // RULE 8: idealWidth is 480. AppDelegate.fixedWidth is also 480.
 //   ❌ NEVER change one without changing the other.
 //
+// RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
+//   Its sole purpose is to force ActionRowView and InlineJobRowsView to
+//   re-render so elapsed strings, pie-chart progress and currentStep names
+//   stay live while the panel is visible.
+//   ❌ NEVER gate displayTick behind !popoverOpenState.isOpen.
+//   ❌ NEVER merge with runnerRefreshTimer (that one IS gated and fires at 5s).
+//
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -66,6 +73,13 @@ struct PopoverMainView: View {
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
     @State private var runnerRefreshTimer: Timer?
+
+    // ⚠️ RULE 9: displayTick — 1-second render clock for live elapsed/progress.
+    // Incremented every second, passed into ActionRowView and InlineJobRowsView.
+    // ❌ NEVER gate behind !popoverOpenState.isOpen.
+    // ❌ NEVER merge with runnerRefreshTimer.
+    @State private var displayTick: Int = 0
+    @State private var displayTickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -90,10 +104,12 @@ struct PopoverMainView: View {
             isAuthenticated = (githubToken() != nil)
             if !popoverOpenState.isOpen { systemStats.start() }
             startRunnerRefreshTimer()
+            startDisplayTickTimer()
         }
         .onDisappear {
             systemStats.stop()
             stopRunnerRefreshTimer()
+            stopDisplayTickTimer()
         }
         // ⚠️ RULE 6: systemStats gate via live @EnvironmentObject.
         // ❌ NEVER remove. ⚠️ macOS 13-compatible single-value onChange.
@@ -105,7 +121,7 @@ struct PopoverMainView: View {
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
-    // MARK: - Timer (RULE 7)
+    // MARK: - Runner refresh timer (RULE 7 — gated, 5s)
 
     private func startRunnerRefreshTimer() {
         stopRunnerRefreshTimer()
@@ -124,6 +140,22 @@ struct PopoverMainView: View {
     private func stopRunnerRefreshTimer() {
         runnerRefreshTimer?.invalidate()
         runnerRefreshTimer = nil
+    }
+
+    // MARK: - Display tick timer (RULE 9 — ungated, 1s)
+    // Drives live elapsed/progress re-renders in ActionRowView + InlineJobRowsView.
+    // ❌ NEVER gate behind !popoverOpenState.isOpen.
+
+    private func startDisplayTickTimer() {
+        stopDisplayTickTimer()
+        displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            self.displayTick &+= 1
+        }
+    }
+
+    private func stopDisplayTickTimer() {
+        displayTickTimer?.invalidate()
+        displayTickTimer = nil
     }
 
     // MARK: - Rate limit banner
@@ -149,9 +181,11 @@ struct PopoverMainView: View {
             } else {
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, onSelect: { onSelectAction(group) })
+                    // Pass displayTick so SwiftUI sees a changed input every second
+                    // and re-renders the row (elapsed, pie progress, step name).
+                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(group: group)
+                        InlineJobRowsView(group: group, tick: displayTick)
                     }
                 }
                 loadMoreButton
