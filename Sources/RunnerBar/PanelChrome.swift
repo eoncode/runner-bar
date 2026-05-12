@@ -35,6 +35,13 @@ private let kArrowWidth:    CGFloat = 20
 private let kArrowOverlapY: CGFloat = 1
 private let kShadowRadius:  CGFloat = 20
 private let kShadowAlpha:   Float   = 0.35
+// Border stroke matching NSPopover's thin separator line.
+// NSColor.separatorColor at ~0.4 alpha matches the original popover border.
+private let kBorderWidth:   CGFloat = 0.5
+private let kBorderAlpha:   CGFloat = 0.4
+// Height change threshold below which updateHeight() is a no-op.
+// Prevents rapid HeightReporter callbacks from causing visible flicker.
+private let kHeightEpsilon: CGFloat = 1.0
 
 // NSBezierPath → CGPath (macOS 13 compatible — .cgPath is macOS 14+ only)
 private extension NSBezierPath {
@@ -69,6 +76,8 @@ final class PanelChrome: NSPanel {
     }
 
     private var arrowTipX: CGFloat = 0
+    // Track last laid-out size so layoutChrome() can skip no-op redraws.
+    private var lastLayoutSize: NSSize = .zero
 
     // ⚠️ TRANSLUCENCY: use .popover material which gives the frosted-glass look
     // matching NSPopover. .behindWindow blending requires the window to be
@@ -82,6 +91,18 @@ final class PanelChrome: NSPanel {
         v.state        = .active
         v.autoresizingMask = []
         return v
+    }()
+
+    // Border stroke layer — sits above fx, below hostingView.
+    // Reuses the same chromePath so it perfectly traces the panel outline.
+    private let borderLayer: CAShapeLayer = {
+        let l = CAShapeLayer()
+        l.fillColor   = CGColor.clear
+        l.lineWidth   = kBorderWidth
+        // separatorColor adapts to light/dark mode automatically.
+        l.strokeColor = NSColor.separatorColor
+            .withAlphaComponent(kBorderAlpha).cgColor
+        return l
     }()
 
     private var outsideMonitor: Any?
@@ -104,6 +125,8 @@ final class PanelChrome: NSPanel {
         contentView?.wantsLayer = true
         contentView?.layer?.backgroundColor = CGColor.clear
         contentView?.addSubview(fx)
+        // Add border layer above fx in the content view layer tree.
+        contentView?.layer?.addSublayer(borderLayer)
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -131,6 +154,8 @@ final class PanelChrome: NSPanel {
         let originY = btnScreen.minY - totalHeight
         arrowTipX = btnCentreX - originX
 
+        // Reset lastLayoutSize so layoutChrome() always runs on first open.
+        lastLayoutSize = .zero
         setFrame(NSRect(x: originX, y: originY,
                         width: panelWidth, height: totalHeight),
                  display: false)
@@ -141,8 +166,12 @@ final class PanelChrome: NSPanel {
     }
 
     /// Resize in-place. Top edge (arrowTip) stays fixed; only bottom moves.
+    /// ⚠️ No-op if height change is within kHeightEpsilon — prevents flicker
+    /// from rapid HeightReporter callbacks (e.g. observable.reload() on Settings).
     func updateHeight(_ newContentHeight: CGFloat) {
         guard isVisible else { return }
+        let currentContentHeight = frame.height - kArrowHeight
+        guard abs(newContentHeight - currentContentHeight) > kHeightEpsilon else { return }
         let totalHeight = newContentHeight + kArrowHeight
         let newOriginY  = frame.maxY - totalHeight
         setFrame(NSRect(x: frame.minX, y: newOriginY,
@@ -159,7 +188,8 @@ final class PanelChrome: NSPanel {
 
     // ── Layout ───────────────────────────────────────────────────────────────
 
-    // Called after every frame change. Lays out fx and hostingView explicitly.
+    // Called after every frame change. Skips shape/border layer rebuild if
+    // the panel size hasn't changed — avoids flicker on same-height redraws.
     private func layoutChrome() {
         let size = frame.size
         guard size.width > 0, size.height > 0 else { return }
@@ -174,10 +204,23 @@ final class PanelChrome: NSPanel {
         hostingView?.frame = NSRect(x: 0, y: 0,
                                     width: size.width, height: contentH)
 
-        // Shape mask: rounded rect body + bezier arrow at top.
+        // Only rebuild CALayer objects if size actually changed.
+        // This is the primary flicker guard — CAShapeLayer reassignment
+        // triggers a compositor redraw even when nothing visually changed.
+        guard size != lastLayoutSize else { return }
+        lastLayoutSize = size
+
+        let path = chromePath(in: size).asCGPath
+
+        // Shape mask clips the fx visual effect view to the chrome outline.
         let shapeLayer = CAShapeLayer()
-        shapeLayer.path = chromePath(in: size).asCGPath
+        shapeLayer.path = path
         fx.layer?.mask  = shapeLayer
+
+        // Border stroke traces the same path, giving the NSPopover-style
+        // thin separator line around the entire panel including the arrow.
+        borderLayer.path  = path
+        borderLayer.frame = NSRect(origin: .zero, size: size)
 
         // Drop shadow on the content view.
         let shadow = NSShadow()
