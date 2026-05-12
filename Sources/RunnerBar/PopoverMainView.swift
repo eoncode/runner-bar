@@ -37,6 +37,15 @@ import SwiftUI
 //   ❌ NEVER re-add `var isPopoverOpen: Bool` prop — frozen at construction.
 //   ❌ NEVER remove .onChange(of: popoverOpenState.isOpen).
 //
+// RULE 6b: systemStats must RESTART when the main view becomes visible again.
+//   onChange(of: popoverOpenState.isOpen) only fires on panel open/close — it
+//   does NOT fire when the user navigates back from a drill-down view. Without
+//   this rule the header shows zeroed stats after back-navigation.
+//   Fix: call systemStats.start() inside PopoverHeaderView .onAppear (which
+//   re-fires on every back-navigation). The onChange(open=true) stop-guard
+//   still wins because isOpen is already true when the back-nav fires.
+//   ❌ NEVER remove the systemStats.start() from PopoverHeaderView .onAppear.
+//
 // RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload().
 //   BOTH gated behind !popoverOpenState.isOpen.
 //   ❌ NEVER remove this guard.
@@ -87,12 +96,24 @@ struct PopoverMainView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // ⚠️ RULE 6b: .onAppear on PopoverHeaderView restarts systemStats on
+            // back-navigation. This fires every time the main view becomes the
+            // active route — including after returning from JobDetailView or
+            // ActionDetailView. The onChange(open=true) guard wins when the panel
+            // is open (isOpen=true → stop is called immediately after start).
+            // ❌ NEVER remove this .onAppear.
             PopoverHeaderView(
                 stats: systemStats.stats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
             )
+            .onAppear {
+                // Restart whenever main view becomes visible (back-nav or initial appear).
+                // onChange handles the stop-on-open contract; this handles the
+                // start-on-return contract.
+                systemStats.start()
+            }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
