@@ -211,7 +211,15 @@ struct PopoverMainView: View {
                     // Pass displayTick so SwiftUI sees a changed input every second
                     // and re-renders the row (elapsed, pie progress, step name).
                     ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
-                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
+                    // Show inline ↳ job rows for any group that is actively running
+                    // OR still queued (jobs may be starting up).
+                    // ⚠️ activeJobs inside InlineJobRowsView filters to
+                    //    status == "in_progress" && conclusion == nil — so a job
+                    //    that just finished is removed from the inline list even
+                    //    while sibling jobs are still running in the same group.
+                    //    ❌ NEVER loosen the activeJobs filter back to status only.
+                    let isActive = group.groupStatus == .inProgress || group.groupStatus == .queued
+                    if isActive && !group.jobs.isEmpty {
                         InlineJobRowsView(
                             group: group,
                             tick: displayTick,
