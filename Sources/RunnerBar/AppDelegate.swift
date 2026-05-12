@@ -90,6 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelIsOpen = false
     private var mouseMonitor: Any?
     private var arrowTipX: CGFloat = 210
+    /// The Y coordinate the top of the panel must always snap to (status bar button bottom - gap).
+    /// Set once per showPanel() call; used by resizePanel() to anchor correctly on first resize.
+    private var panelTopY: CGFloat = 0
     /// Last measured content height reported by HeightPreferenceKey.
     /// NOTE: Never use this in showPanel() initial sizing — it may be stale.
     /// showPanel() always opens at minHeight; resizePanel fires within 1 render cycle.
@@ -263,9 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Only reposition the on-screen panel; skip if panel is hidden
         guard panelIsOpen else { return }
-        // Keep top-left corner fixed while changing height
-        let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
-        let newFrame = NSRect(x: topLeft.x, y: topLeft.y - totalH,
+        // Always anchor to panelTopY (status bar bottom) — NOT panel.frame.maxY.
+        // panel.frame.maxY is stale on first open (points to off-screen measurement origin).
+        let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
                               width: Self.canonicalWidth, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
     }
@@ -492,17 +495,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         arrowTipX = buttonScreenRect.midX - originX
 
-        // ⚠️ HEIGHT MEASUREMENT: open panel at unconstrainedHeight so hostingView fits inside
-        // the window and GeometryReader can measure real content height via HeightPreferenceKey.
-        // resizePanel() will shrink to actual content height within 1 render cycle (~16ms).
-        // ❌ NEVER use initialH/minHeight for panel or vfx frame here — hostingView is 2000pt
-        // and must fit inside its container or all content is clipped and invisible. (#296)
+        // ⚠️ HEIGHT MEASUREMENT STRATEGY (#296):
+        // 1. Store panelTopY = the Y the top edge must always sit at (just below status bar).
+        // 2. Open panel OFF-SCREEN at unconstrainedHeight so hostingView (2000pt) fits inside
+        //    its container and GeometryReader can measure real content height.
+        // 3. resizePanel() fires within 1 render cycle, reads panelTopY to anchor correctly,
+        //    and shrinks the panel to actual content height.
+        // ❌ NEVER open at minHeight/initialH — hostingView is 2000pt and overflows a small panel.
+        // ❌ NEVER use panel.frame.maxY inside resizePanel for first-open anchoring — it points
+        //    to the off-screen origin, not the status bar. Use panelTopY instead.
+        panelTopY = buttonScreenRect.minY - Self.statusBarGap
         let measureH = Self.unconstrainedHeight + Self.arrowHeight
-        let originY = buttonScreenRect.minY - measureH - Self.statusBarGap
-        let frame = NSRect(x: originX, y: originY, width: width, height: measureH)
-        panel.setFrame(frame, display: false)
-        visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        applyMask(panelSize: frame.size)
+        // Position off-screen so the 2000pt panel doesn't flash visibly
+        let offScreenFrame = NSRect(x: originX, y: panelTopY - measureH, width: width, height: measureH)
+        panel.setFrame(offScreenFrame, display: false)
+        visualEffectView?.frame = NSRect(origin: .zero, size: offScreenFrame.size)
+        applyMask(panelSize: offScreenFrame.size)
 
         panel.orderFront(nil)
         panel.makeKey()
