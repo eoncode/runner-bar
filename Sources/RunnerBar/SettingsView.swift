@@ -397,16 +397,22 @@ struct SettingsView: View {
             Text("Notifications")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $notifications.notifyOnSuccess) {
+            HStack {
                 Text("Notify on success").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $notifications.notifyOnSuccess)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            Toggle(isOn: $notifications.notifyOnFailure) {
+            HStack {
                 Text("Notify on failure").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $notifications.notifyOnFailure)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
     }
@@ -416,16 +422,23 @@ struct SettingsView: View {
             Text("General")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle("Launch at login", isOn: $launchAtLogin)
-                .toggleStyle(.switch)
-                .font(.system(size: 12))
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
-            Divider().padding(.leading, 12)
-            Toggle(isOn: $settings.showDimmedRunners) {
-                Text("Show offline runners").font(.system(size: 12))
+            HStack {
+                Text("Launch at login").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $launchAtLogin)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
-            .toggleStyle(.switch)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            Divider().padding(.leading, 12)
+            HStack {
+                Text("Show offline runners").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $settings.showDimmedRunners)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
             HStack {
@@ -473,10 +486,13 @@ struct SettingsView: View {
             Text("Legal")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $legal.analyticsEnabled) {
+            HStack {
                 Text("Share analytics").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $legal.analyticsEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
             Divider().padding(.leading, 12)
