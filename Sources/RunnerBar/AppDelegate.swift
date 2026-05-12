@@ -64,9 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
     private(set) var panel: PanelChrome?
     private var hostingController: NSHostingController<AnyView>?
     // Offscreen window used to give hostingController.view a real layout
-    // context before the panel is shown for the first time. Without this,
-    // sizeThatFits returns wrong values on first open because the view has
-    // never been laid out inside a window.
+    // context before the panel is shown for the first time.
     private var offscreenWindow: NSWindow?
     private lazy var observable = RunnerStoreObservable()
     private var savedNavState: NavState?
@@ -77,8 +75,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
     }
 
     // MARK: - HeightReceiver
-    // Called on any thread by HeightReporter. Hops to main before touching UI.
-    // ❌ NEVER call positionBelow() here — that re-anchors the panel.
     nonisolated func didUpdateHeight(_ height: CGFloat) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
@@ -110,14 +106,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = []
-        controller.view.frame = NSRect(x: 0, y: 0,
-                                       width: Self.fixedWidth, height: 10)
+        controller.view.frame = NSRect(x: 0, y: 0, width: Self.fixedWidth, height: 10)
         hostingController = controller
 
-        // ⚠️ OFFSCREEN WINDOW: attach hostingController.view to a real (but
-        // hidden) NSWindow so AppKit gives it a full layout context. This
-        // ensures sizeThatFits returns an accurate value on the very first
-        // openPanel() call. Without this, first-open main view is offset.
         let offWin = NSWindow(contentRect: NSRect(x: -10000, y: -10000,
                                                    width: Self.fixedWidth, height: 10),
                               styleMask: .borderless,
@@ -144,8 +135,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         RunnerStore.shared.start()
     }
 
-    // MARK: - Panel lifecycle
-
     @MainActor
     private func panelDidClose() {
         panelIsOpen = false
@@ -170,8 +159,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             store: observable,
             onSelectJob: { [weak self] job in
                 guard let self = self else { return }
-                // ⚠️ async: job detail fetch is already on background thread;
-                // navigate() is dispatched to main after fetch completes.
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
@@ -183,18 +170,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             onSelectAction: { [weak self] group in
                 guard let self = self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                // ⚠️ async: defer navigate() past the current SwiftUI body pass to
-                // prevent re-entrant rootView mutation which silently drops the swap.
                 DispatchQueue.main.async { self.navigate(to: self.actionDetailView(group: latest)) }
             },
             onSelectSettings: { [weak self] in
                 guard let self = self else { return }
-                // ⚠️ async: CRITICAL — this closure fires inside a SwiftUI button action
-                // which is still within the SwiftUI render/update cycle. Calling
-                // hc.rootView = ... synchronously here causes SwiftUI re-entry and
-                // silently drops the rootView swap, so settings never appears.
-                // Deferring to the next run loop tick lets SwiftUI finish its pass first.
-                // ❌ NEVER unwrap this back to a synchronous navigate() call.
+                // ⚠️ async: defer past SwiftUI body pass to prevent re-entrant rootView drop.
+                // ❌ NEVER make synchronous.
                 DispatchQueue.main.async { self.navigate(to: self.settingsView()) }
             },
             isPopoverOpen: panelIsOpen
@@ -229,14 +210,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             },
             onSelectSettings: { [weak self] in
                 guard let self = self else { return }
-                // ⚠️ async: same reason as mainView() — defer past SwiftUI body pass.
-                // ❌ NEVER make this synchronous.
+                // ⚠️ async: same reason as mainView().
+                // ❌ NEVER make synchronous.
                 DispatchQueue.main.async { self.navigate(to: self.settingsView()) }
             },
-            // ⚠️ CRITICAL: literal true — CPU guard, stops systemStats on first render.
+            // ⚠️ CRITICAL: literal true — CPU guard.
             // ❌ NEVER change to panelIsOpen here.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE.
             isPopoverOpen: true
         ).reportHeight(to: self))
     }
@@ -368,23 +348,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Navigation
 
-    /// Swaps rootView and immediately resizes panel to fit new content.
-    /// Must always be called from the main thread.
-    /// ❌ NEVER call this from a timer, onChange, or any polling path.
-    /// ❌ NEVER call this synchronously from inside a SwiftUI button action / body pass —
-    ///   always wrap the call site in DispatchQueue.main.async { } to defer past the
-    ///   current SwiftUI update cycle and prevent silent re-entrant rootView drops.
+    /// Swaps rootView, forces AppKit layout, then resizes the panel.
+    /// ⚠️ Always called via DispatchQueue.main.async from SwiftUI closures to
+    ///    prevent re-entrant rootView mutation during a SwiftUI body pass.
+    /// ❌ NEVER call synchronously from a SwiftUI button action / body pass.
     @MainActor
     private func navigate(to view: AnyView) {
-        guard let hc = hostingController else { return }
+        guard let hc = hostingController, let panel = panel else { return }
+
+        // 1. Swap the view.
         hc.rootView = view
+
+        // 2. ⚠️ NUCLEAR: force a full AppKit layout pass on the hosting view
+        //    so the new SwiftUI tree is committed before we measure.
+        //    Without this, sizeThatFits may return the OLD view's height when
+        //    the new view happens to start with the same ideal size (e.g.
+        //    SettingsView.cappedHeight == current panel height).
+        hc.view.needsLayout = true
+        hc.view.layoutSubtreeIfNeeded()
+
+        // 3. Measure the new content.
         let size = hc.sizeThatFits(in: NSSize(width: Self.fixedWidth,
                                                height: .greatestFiniteMagnitude))
         let clamped = min(size.height, maxContentHeight)
-        // ⚠️ Threshold 50pt: guards against transient zero returns from sizeThatFits
-        // while still allowing small views. The old `> 0` guard blocked SettingsView
-        // when its idealHeight-only frame returned a near-zero on first measurement.
-        if clamped >= 50 { panel?.updateHeight(clamped) }
+
+        // 4. Resize panel. forceLayout:true bypasses the kHeightEpsilon guard
+        //    so the panel always re-frames on navigation even if height is equal.
+        if clamped >= 50 { panel.updateHeight(clamped, force: true) }
     }
 
     // MARK: - Panel show/hide
@@ -412,7 +402,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
         let stateToRestore = savedNavState
 
-        // Move hc.view from offscreen window into the chrome panel.
         offscreenWindow?.contentView = nil
         panel.hostingView = hc.view
 
@@ -423,7 +412,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             hc.rootView = restored
         }
 
-        // Force a synchronous layout pass so sizeThatFits is accurate.
         panel.contentView?.layoutSubtreeIfNeeded()
 
         let measured = hc.sizeThatFits(
@@ -434,8 +422,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         panel.positionBelow(button: button, contentHeight: contentHeight)
 
         // ⚠️ RELOAD GUARD: only reload when restoring a saved nav state.
-        // On a plain main-view open the store data is already current.
-        // Calling reload() unconditionally here causes first-open flicker.
         if stateToRestore != nil {
             observable.reload()
         }

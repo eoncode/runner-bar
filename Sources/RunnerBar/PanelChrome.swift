@@ -77,7 +77,6 @@ private final class ChromeBorderView: NSView {
 
     override func updateLayer() {
         guard let layer = layer else { return }
-        // Remove any existing border sublayer from previous calls.
         layer.sublayers?.filter { $0.name == "chromeBorder" }.forEach { $0.removeFromSuperlayer() }
 
         guard let path = borderPath else { return }
@@ -87,8 +86,6 @@ private final class ChromeBorderView: NSView {
         borderLayer.path        = path.asCGPath
         borderLayer.fillColor   = CGColor.clear
         borderLayer.lineWidth   = 0.5
-        // Resolve NSColor.separatorColor against the CURRENT effective appearance
-        // so it works correctly in both light and dark mode.
         var resolvedColor: NSColor = .separatorColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
             resolvedColor = .separatorColor
@@ -97,7 +94,6 @@ private final class ChromeBorderView: NSView {
         layer.addSublayer(borderLayer)
     }
 
-    // Redraw when the system appearance changes (light ↔ dark).
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
@@ -110,7 +106,6 @@ final class PanelChrome: NSPanel {
         didSet {
             guard let hv = hostingView else { return }
             hv.autoresizingMask = []
-            // Insert hosting view BELOW the border view so the border renders on top.
             contentView?.addSubview(hv, positioned: .below, relativeTo: borderView)
         }
     }
@@ -127,14 +122,11 @@ final class PanelChrome: NSPanel {
         return v
     }()
 
-    // ⚠️ BORDER: a dedicated NSView subclass drawn on top of everything.
-    // See ChromeBorderView for why this is safer than a CAShapeLayer on fx.
     private let borderView: ChromeBorderView = {
         let v = ChromeBorderView()
         v.wantsLayer = true
         v.layer?.backgroundColor = CGColor.clear
         v.autoresizingMask = []
-        // Transparent to hit-testing so clicks pass through to content below.
         return v
     }()
 
@@ -157,7 +149,6 @@ final class PanelChrome: NSPanel {
         contentView?.wantsLayer = true
         contentView?.layer?.backgroundColor = CGColor.clear
         contentView?.addSubview(fx)
-        // borderView sits on top of fx and any hosting content.
         contentView?.addSubview(borderView)
     }
 
@@ -183,24 +174,26 @@ final class PanelChrome: NSPanel {
         setFrame(NSRect(x: originX, y: originY,
                         width: panelWidth, height: totalHeight),
                  display: false)
-        layoutChrome()
+        layoutChrome(force: true)
         orderFront(nil)
         makeKey()
         installOutsideMonitor()
     }
 
-    /// No-op if height change ≤ kHeightEpsilon — prevents flicker from rapid
-    /// HeightReporter callbacks when content height hasn't meaningfully changed.
-    func updateHeight(_ newContentHeight: CGFloat) {
+    /// Resizes the panel to newContentHeight.
+    /// When force=true (called from navigate()) the kHeightEpsilon guard is
+    /// bypassed so the panel always re-frames on navigation even when the new
+    /// view has the same height as the previous one.
+    func updateHeight(_ newContentHeight: CGFloat, force: Bool = false) {
         guard isVisible else { return }
         let currentContentHeight = frame.height - kArrowHeight
-        guard abs(newContentHeight - currentContentHeight) > kHeightEpsilon else { return }
+        guard force || abs(newContentHeight - currentContentHeight) > kHeightEpsilon else { return }
         let totalHeight = newContentHeight + kArrowHeight
         let newOriginY  = frame.maxY - totalHeight
         setFrame(NSRect(x: frame.minX, y: newOriginY,
                         width: frame.width, height: totalHeight),
                  display: true)
-        layoutChrome()
+        layoutChrome(force: force)
     }
 
     func closePanel() {
@@ -211,27 +204,31 @@ final class PanelChrome: NSPanel {
 
     // ── Layout ─────────────────────────────────────────────────────────────────
 
-    private func layoutChrome() {
+    /// force=true skips the lastLayoutSize dedup so mask+border always redraw
+    /// after navigation (required when switching between views of equal height).
+    private func layoutChrome(force: Bool = false) {
         let size = frame.size
         guard size.width > 0, size.height > 0 else { return }
 
         let contentH = size.height - kArrowHeight
 
-        fx.frame         = NSRect(origin: .zero, size: size)
-        borderView.frame = NSRect(origin: .zero, size: size)
+        // Always update subview frames — this is cheap and must never be skipped.
+        fx.frame           = NSRect(origin: .zero, size: size)
+        borderView.frame   = NSRect(origin: .zero, size: size)
         hostingView?.frame = NSRect(x: 0, y: 0, width: size.width, height: contentH)
 
-        guard size != lastLayoutSize else { return }
+        // Rebuild mask + border path only when size changed OR force requested.
+        // (The path geometry only depends on size+arrowTipX, so deduping is safe
+        //  for same-size updates driven by HeightReporter — but not for navigation.)
+        guard force || size != lastLayoutSize else { return }
         lastLayoutSize = size
 
         let path = chromePath(in: size)
 
-        // Mask clips fx to the chrome shape.
         let maskLayer = CAShapeLayer()
         maskLayer.path = path.asCGPath
         fx.layer?.mask = maskLayer
 
-        // Give the border view the new path — it redraws via updateLayer().
         borderView.borderPath = path
 
         let shadow = NSShadow()
