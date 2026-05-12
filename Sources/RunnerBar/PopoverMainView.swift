@@ -32,11 +32,15 @@ import SwiftUI
 //   ❌ NEVER remove the .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
 //   from ActionsListView empty branch.
 //
-// HEADER HEIGHT RULE (ref #misalignment):
-//   PopoverHeaderView MUST have .frame(height: 32) to prevent collapse.
-//   ❌ NEVER add .fixedSize() to statChip calls — it interacts badly with the
-//   outer .fixedSize(horizontal:false, vertical:true) from AppDelegate and causes
-//   the header to report zero height, hiding all header content.
+// HEADER HEIGHT RULE (ref #misalignment #header-hidden):
+//   PopoverHeaderView MUST use .frame(minHeight:32, idealHeight:32, maxHeight:32).
+//   Using only .frame(height:32) sets the EXACT height but NOT the idealHeight.
+//   The outer .fixedSize(horizontal:false, vertical:true) from AppDelegate resolves
+//   each view's height to its IDEAL size — so without idealHeight:32, SwiftUI sees
+//   idealHeight=0 and collapses the header to zero, hiding it entirely.
+//   ❌ NEVER use plain .frame(height:32) here — it does not set idealHeight.
+//   ❌ NEVER add .fixedSize() to statChip calls.
+//   ❌ NEVER remove this .frame(minHeight:idealHeight:maxHeight:) — header disappears.
 //
 // MODEL API — verified against source files, DO NOT hallucinate properties:
 //   ActionGroup:    .progressFraction (Double?), .headBranch (String?), .elapsed (String),
@@ -73,7 +77,8 @@ struct HeightPreferenceKey: PreferenceKey {
 
 private enum PopoverLayout {
     static let idealWidth: CGFloat = 420
-    /// Explicit header height — prevents collapse when outer fixedSize is applied.
+    /// Header height — must be set as minHeight/idealHeight/maxHeight so that
+    /// outer .fixedSize(vertical:true) resolves to 32pt, not 0.
     static let headerHeight: CGFloat = 32
 }
 
@@ -224,10 +229,16 @@ private struct PopoverHeaderView: View {
             .help("Close popover")
         }
         .padding(.horizontal, 12)
-        // ⚠️ HEADER HEIGHT RULE: explicit frame height prevents collapse under outer
-        // fixedSize(horizontal:false, vertical:true) applied by AppDelegate.
-        // ❌ NEVER remove this .frame(height:) — without it the header disappears.
-        .frame(height: PopoverLayout.headerHeight)
+        // ⚠️ HEADER HEIGHT RULE: must use minHeight/idealHeight/maxHeight — NOT plain height.
+        // .fixedSize(vertical:true) from AppDelegate resolves each view to its IDEAL height.
+        // .frame(height:32) sets exact but NOT idealHeight, so SwiftUI collapses to 0.
+        // .frame(minHeight:32,idealHeight:32,maxHeight:32) sets idealHeight=32 so fixedSize
+        // correctly allocates 32pt to the header.
+        // ❌ NEVER replace with .frame(height:32) — header will disappear again.
+        // ❌ NEVER remove — header becomes invisible without this.
+        .frame(minHeight: PopoverLayout.headerHeight,
+               idealHeight: PopoverLayout.headerHeight,
+               maxHeight: PopoverLayout.headerHeight)
     }
 
     @ViewBuilder
