@@ -516,9 +516,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyMask(panelSize: offScreenFrame.size)
         // Mark that the next resizePanel() call should make the panel visible.
         // Do NOT orderFront here — panel is at off-screen measurement position.
-        panelAwaitingFirstResize = true
+        panel.alphaValue = 0   // hide visually until correctly positioned
         panel.orderFront(nil)  // must be ordered in for SwiftUI layout to run
-        panel.alphaValue = 0   // hide visually until resizePanel positions correctly
+        // Force-reveal immediately using last known measuredHeight.
+        // onPreferenceChange only fires when the value *changes* — if the view and
+        // height are the same as the previous session it won't fire, leaving alphaValue=0.
+        // Calling resizePanel here guarantees the panel appears regardless.
+        panelAwaitingFirstResize = true
+        resizePanel(to: measuredHeight)
 
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] _ in
