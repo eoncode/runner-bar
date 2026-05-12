@@ -240,12 +240,26 @@ struct ActionRowView: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
 
-        // Elapsed "02:25", "01:18" — 5 chars, never truncate.
+        // Elapsed "02:25", "01:18" — 5 chars (MM:SS), never truncate.
+        // TimelineView drives a 1s re-read of group.elapsed for in-progress groups.
+        // Completed groups use a plain Text — elapsed is static once finished.
+        // monospacedDigit + fixedSize: width is always exactly 5 chars → zero layout
+        // change per tick → no preferredContentSize mutation → no panel resize or jump.
         // ❌ NEVER add frame(width:) here.
-        Text(group.elapsed)
-            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
+        // ❌ NEVER wrap more than this Text in TimelineView — extra layout passes.
+        if group.groupStatus == .inProgress {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                Text(group.elapsed)
+                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        } else {
+            Text(group.elapsed)
+                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
 
         statusChip
     }
@@ -374,12 +388,20 @@ struct InlineJobRowsView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
 
-            // Elapsed "01:29", "01:16" — 5 chars, never truncate.
+            // Elapsed "01:29", "01:16" — 5 chars (MM:SS), never truncate.
+            // TimelineView drives a 1s re-read of job.elapsed for in-progress jobs.
+            // All jobs in activeJobs are in_progress by construction (filter above),
+            // so TimelineView is always correct here — no conditional needed.
+            // monospacedDigit + fixedSize: width is always exactly 5 chars → zero layout
+            // change per tick → no preferredContentSize mutation → no panel resize or jump.
             // ❌ NEVER add frame(width:) here.
-            Text(job.elapsed)
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+            // ❌ NEVER wrap more than this Text in TimelineView — extra layout passes.
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                Text(job.elapsed)
+                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
     }
