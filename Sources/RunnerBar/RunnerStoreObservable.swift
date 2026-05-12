@@ -32,11 +32,12 @@ final class RunnerStoreObservable: ObservableObject {
     /// ❌ NEVER call this from popoverDidClose() — clobbers savedNavState.
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     func reload() {
+        let store = RunnerStore.shared
         withAnimation(nil) {
-            runners = RunnerStore.shared.runners
-            jobs = RunnerStore.shared.jobs
-            actions = RunnerStore.shared.actions
-            isRateLimited = RunnerStore.shared.isRateLimited
+            runners = store.runners
+            jobs = store.jobs
+            actions = store.actions
+            isRateLimited = store.isRateLimited
         }
     }
 }
