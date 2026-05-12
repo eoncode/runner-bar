@@ -30,6 +30,12 @@ import SwiftUI
 //   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
 //   Side-jump is impossible with NSPanel — no anchor to re-calculate.
 //   Added #N order index badge to each job row (1-based, start order).
+//   Replaced generic "X/N jobs concluded" with context-aware outcome label:
+//     in progress → "X/N jobs running"
+//     all success  → "X/N jobs succeeded"
+//     any failure  → "X/N jobs failed"
+//     any cancel   → "X/N jobs cancelled"
+//     otherwise    → "X/N jobs completed"
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -42,7 +48,7 @@ import SwiftUI
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
-    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).\
+    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
     let onSelectJob: (ActiveJob) -> Void
 
     /// Drives the live elapsed timer every second.
@@ -126,7 +132,7 @@ struct ActionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text("\(group.jobsDone)/\(group.jobsTotal) jobs concluded")
+                Text(jobsSummaryLine)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -170,6 +176,44 @@ struct ActionDetailView: View {
             tickTimer?.invalidate()
             tickTimer = nil
         }
+    }
+
+    // MARK: - Job summary line
+
+    /// Context-aware summary shown below the group title.
+    ///
+    /// Priority order (first match wins):
+    ///   1. Any job still running/queued  → "X/N jobs running"
+    ///   2. Any job failed                → "X/N jobs failed"
+    ///   3. Any job cancelled             → "X/N jobs cancelled"
+    ///   4. All jobs succeeded            → "X/N jobs succeeded"
+    ///   5. Otherwise                     → "X/N jobs completed"
+    ///
+    /// Note: jobsDone counts jobs that have a conclusion (completed field set).
+    /// jobsTotal is the total job count for this group.
+    private var jobsSummaryLine: String {
+        let done  = group.jobsDone
+        let total = group.jobsTotal
+        let conclusions = group.jobs.compactMap { $0.conclusion }
+
+        // Still running: at least one job has no conclusion yet
+        if group.groupStatus == .inProgress || conclusions.count < total {
+            return "\(done)/\(total) jobs running"
+        }
+        // Any failure takes priority over everything else
+        if conclusions.contains("failure") {
+            return "\(done)/\(total) jobs failed"
+        }
+        // Any cancellation
+        if conclusions.contains("cancelled") {
+            return "\(done)/\(total) jobs cancelled"
+        }
+        // All succeeded (skipped counts as a passing outcome here)
+        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) {
+            return "\(done)/\(total) jobs succeeded"
+        }
+        // Catch-all for mixed/unknown conclusions
+        return "\(done)/\(total) jobs completed"
     }
 
     // MARK: - Job row
