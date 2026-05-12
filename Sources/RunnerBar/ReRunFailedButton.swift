@@ -7,8 +7,8 @@ import SwiftUI
 /// GitHub API: POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
 ///
 /// idle (exclamationmark.arrow.clockwise + "Re-run failed") →
-///   loading (spinner + "Running…") →
-///   done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
+/// loading (spinner + "Running…") →
+/// done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
 struct ReRunFailedButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -77,7 +77,9 @@ struct ReRunFailedButton: View {
         action { success in
             DispatchQueue.main.async {
                 phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    phase = .idle
+                }
             }
         }
     }

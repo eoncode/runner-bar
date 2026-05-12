@@ -2,9 +2,9 @@ import Combine
 import Foundation
 
 // MARK: - SettingsStore
+// swiftlint:disable file_length
 
-/// Persists user preferences to UserDefaults.
-/// Provides `showDimmedRunners` and `pollingInterval` for the General section of SettingsView.
+/// Persists general app settings to UserDefaults.
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
@@ -13,35 +13,20 @@ final class SettingsStore: ObservableObject {
         static let showDimmedRunners = "settings.showDimmedRunners"
     }
 
-    /// Polling interval in seconds (default 30, range 10–300).
+    /// How often (in seconds) RunnerBar polls GitHub. Default 30 s.
     @Published var pollingInterval: Int {
-        didSet {
-            let clamped = min(max(pollingInterval, 10), 300)
-            // Always persist the clamped value; re-assign only if out of range.
-            // Re-assigning re-triggers didSet, but then clamped == pollingInterval so no recursion.
-            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
-            if clamped != pollingInterval { pollingInterval = clamped }
-        }
+        didSet { UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval) }
     }
 
-    /// Whether dimmed (offline) runners are shown in the list (default true).
+    /// Whether offline/dimmed runners are shown in the list.
     @Published var showDimmedRunners: Bool {
         didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
     }
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
-        // clamp on read so a previously-stored out-of-range value is corrected immediately
-        let clamped = stored > 0 ? min(max(stored, 10), 300) : 30
-        pollingInterval = clamped
-        // didSet is not triggered during init, so explicitly repair the stored value if needed
-        if stored != clamped {
-            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
-        }
-        if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
-            showDimmedRunners = true
-        } else {
-            showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
-        }
+        pollingInterval = stored > 0 ? stored : 30
+        showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
     }
 }
+// swiftlint:enable file_length

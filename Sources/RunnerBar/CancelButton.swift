@@ -7,14 +7,14 @@ import SwiftUI
 // this view is embedded inside an HStack header, never at the root level.
 //
 // ❌ NEVER wrap CancelButton in a .frame(height:) or .fixedSize() at the
-//    CALL SITE — that would corrupt the parent view's fittingSize and cause
-//    the popover to jump sideways when AppDelegate calls navigate().
+// CALL SITE — that would corrupt the parent view's fittingSize and cause
+// the popover to jump sideways when AppDelegate calls navigate().
 //
 // ✔ The isDisabled=true state returns EmptyView, completely removing the
-//   button from layout so it occupies zero space in the header HStack.
-//   The Spacer() before ReRunButton already keeps ReRunButton right-aligned,
-//   so removing CancelButton from layout has no effect on ReRunButton position.
-//   ❌ Do NOT revert to opacity(0) — that leaves a blank gap in the header.
+// button from layout so it occupies zero space in the header HStack.
+// The Spacer() before ReRunButton already keeps ReRunButton right-aligned,
+// so removing CancelButton from layout has no effect on ReRunButton position.
+// ❌ Do NOT revert to opacity(0) — that leaves a blank gap in the header.
 // ════════════════════════════════════════════════════════════════════════
 
 /// Top-bar cancel button used in JobDetailView, ActionDetailView, and StepLogView.
@@ -48,7 +48,6 @@ struct CancelButton: View {
         // ✔ Return EmptyView when disabled — zero layout space, zero hit area.
         // ❌ NEVER use .opacity(0) here — it keeps the space occupied (blank gap).
         if isDisabled { return AnyView(EmptyView()) }
-
         return AnyView(Group {
             switch phase {
             case .idle:
@@ -59,7 +58,7 @@ struct CancelButton: View {
                         Text("Cancel")
                             .font(.caption)
                             // ✔ .fixedSize() here is SAFE — this is a label inside HStack,
-                            //   not a root view. It just prevents the text from wrapping.
+                            // not a root view. It just prevents the text from wrapping.
                             .fixedSize()
                     }
                     .foregroundColor(.secondary)
@@ -103,7 +102,9 @@ struct CancelButton: View {
         action { success in
             DispatchQueue.main.async {
                 phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    phase = .idle
+                }
             }
         }
     }

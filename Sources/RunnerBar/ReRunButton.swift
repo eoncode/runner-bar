@@ -77,7 +77,9 @@ struct ReRunButton: View {
         action { success in
             DispatchQueue.main.async {
                 phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    phase = .idle
+                }
             }
         }
     }
