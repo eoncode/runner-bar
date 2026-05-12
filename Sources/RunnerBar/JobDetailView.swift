@@ -21,6 +21,7 @@ import SwiftUI
 // HISTORY:
 //   idealWidth bumped 480 → 560 to match AppDelegate.initPanelWidth.
 //   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
+//   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -188,17 +189,14 @@ struct JobDetailView: View {
 
     /// Single-line step row:
     /// [#N] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
-    ///
-    /// #N is left-aligned in a fixed 28pt column so all names line up regardless
-    /// of whether there are 1-digit or 2-digit step numbers.
     @ViewBuilder
     private func stepRow(_ step: JobStep) -> some View {
-        HStack(spacing: 8) {
-            // Step number badge — fixed width so names stay aligned
+        HStack(spacing: 6) {
+            // Step number badge — tightened to 18pt to balance left/right margins
             Text("#\(step.id)")
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
-                .frame(width: 28, alignment: .trailing)
+                .frame(width: 18, alignment: .trailing)
 
             // Conclusion / status icon
             Text(step.conclusionIcon)
@@ -235,14 +233,14 @@ struct JobDetailView: View {
                             .foregroundColor(.yellow)
                     }
                 }
-                .fixedSize()  // ✔ SAFE: scoped to inner HStack
+                .fixedSize()
             }
 
             // Elapsed
             Text(step.elapsed)
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
-                .fixedSize()  // ✔ SAFE: scoped
+                .fixedSize()
                 .frame(width: 40, alignment: .trailing)
 
             Image(systemName: "chevron.right")
