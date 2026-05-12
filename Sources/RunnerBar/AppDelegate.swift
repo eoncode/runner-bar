@@ -178,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hv = NSHostingView(rootView: wrapWithHeightCapture(mainView()))
         hv.sizingOptions = []
         hv.autoresizingMask = [.width]
-        hv.frame = NSRect(x: 0, y: 0,
+        hv.frame = NSRect(x: 0, y: Self.arrowHeight,
                           width: Self.canonicalWidth,
                           height: Self.unconstrainedHeight)
         vfx.addSubview(hv)
@@ -260,37 +260,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let panel, let vfx = visualEffectView, let hv = hostingView else { return }
         let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
         let totalH = contentH + Self.arrowHeight
+        let panelW = Self.canonicalWidth
+
+        // Always keep hv pinned to the TOP of vfx.
+        // AppKit y=0 is bottom; vfx height = totalH; content height = contentH.
+        // hv must sit at y = arrowHeight (above the arrow zone) with height = contentH.
+        // This ensures SwiftUI VStack top == vfx top, so header is never clipped.
+        hv.frame = NSRect(x: 0, y: Self.arrowHeight, width: panelW, height: contentH)
+
+        let newSize = NSSize(width: panelW, height: totalH)
+        vfx.frame = NSRect(origin: .zero, size: newSize)
+        applyMask(panelSize: newSize)
 
         // Only reposition the on-screen panel; skip if panel is hidden
         guard panelIsOpen else { return }
 
-        // Reveal panel on first resize — position correctly, then set hv height.
-        // We do NOT collapse hv before reveal; it stays at unconstrainedHeight until
-        // the panel is visible so GeometryReader measures in real unconstrained space.
+        let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
+                              width: panelW, height: totalH)
+        panel.setFrame(newFrame, display: true, animate: false)
+
         if panelAwaitingFirstResize {
             panelAwaitingFirstResize = false
-            let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
-                                  width: Self.canonicalWidth, height: totalH)
-            panel.setFrame(newFrame, display: false, animate: false)
-            vfx.frame = NSRect(origin: .zero, size: NSSize(width: Self.canonicalWidth, height: totalH))
-            applyMask(panelSize: NSSize(width: Self.canonicalWidth, height: totalH))
             panel.alphaValue = 1
             panel.makeKey()
-            // Now collapse hv to exact content height so subsequent HeightPreferenceKey
-            // fires report the real height inside the correctly-sized container.
-            hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
-            return
         }
-
-        // Normal resize path (after first reveal): update all frames together.
-        hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
-        let newSize = NSSize(width: Self.canonicalWidth, height: totalH)
-        vfx.frame = NSRect(origin: .zero, size: newSize)
-        applyMask(panelSize: newSize)
-        // Always anchor to panelTopY (status bar bottom) — NOT panel.frame.maxY.
-        let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
-                              width: Self.canonicalWidth, height: totalH)
-        panel.setFrame(newFrame, display: true, animate: false)
     }
 
     // MARK: - View factories
@@ -467,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func navigate(to view: AnyView) {
         guard let hv = hostingView else { return }
         // Reset to unconstrained height so GeometryReader re-measures the new view
-        hv.frame.size.height = Self.unconstrainedHeight
+        hv.frame = NSRect(x: 0, y: Self.arrowHeight, width: Self.canonicalWidth, height: Self.unconstrainedHeight)
         hv.rootView = wrapWithHeightCapture(view)
     }
 
@@ -487,7 +480,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Reset to unconstrained so the new rootView measures freely.
         // We do this BEFORE setting rootView so the layout pass sees 2000pt height.
-        hostingView?.frame.size.height = Self.unconstrainedHeight
+        hostingView?.frame = NSRect(x: 0, y: Self.arrowHeight, width: Self.canonicalWidth, height: Self.unconstrainedHeight)
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             hostingView?.rootView = wrapWithHeightCapture(restored)
@@ -527,21 +520,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyMask(panelSize: offScreenFrame.size)
         // Mark that the next resizePanel() call should make the panel visible.
         // Do NOT orderFront here — panel is at off-screen measurement position.
-        panel.alphaValue = 0   // hide visually until correctly positioned
-        panel.orderFront(nil)  // must be ordered in for SwiftUI layout to run
-        panelAwaitingFirstResize = true
         // Reset hostingView to unconstrainedHeight so GeometryReader re-measures freely.
-        // Then give SwiftUI one runloop pass to measure, then reveal at correct height.
-        // We cannot just call resizePanel(to: measuredHeight) synchronously because
-        // measuredHeight may be stale (120 default) if HeightPreferenceKey hasn't fired yet.
-        hostingView?.frame.size.height = Self.unconstrainedHeight
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            // If HeightPreferenceKey fired during the layout pass, measuredHeight is
-            // now accurate. If not (same content as last time, no change event),
-            // fall back to measuredHeight which is at minimum the last known good value.
-            self.resizePanel(to: self.measuredHeight)
-        }
+        // hv y-origin is set to arrowHeight in resizePanel so SwiftUI top == panel top.
+        // panelAwaitingFirstResize = true: first HeightPreferenceKey callback reveals panel.
+        hostingView?.frame = NSRect(x: 0, y: Self.arrowHeight,
+                                    width: Self.canonicalWidth, height: Self.unconstrainedHeight)
+        panelAwaitingFirstResize = true
+        panel.alphaValue = 0
+        panel.orderFront(nil)
 
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] _ in
@@ -565,7 +551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // fires off-screen and measuredHeight is fresh before next open.
         // Done synchronously (no async) to avoid the race where showPanel fires
         // before the async block completes and reads stale measuredHeight.
-        hostingView?.frame.size.height = Self.unconstrainedHeight
+        hostingView?.frame = NSRect(x: 0, y: Self.arrowHeight, width: Self.canonicalWidth, height: Self.unconstrainedHeight)
         hostingView?.rootView = wrapWithHeightCapture(mainView())
     }
 }
