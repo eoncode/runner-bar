@@ -8,8 +8,8 @@ import SwiftUI
 // ARCHITECTURE: NSPanel (NOT NSPopover). Width is dynamic.
 //
 // ROOT FRAME RULE:
-//   .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
-//   • idealWidth: 560 — MUST match AppDelegate.initPanelWidth (currently 560).
+//   .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
+//   • idealWidth: 720 — MUST match AppDelegate.initPanelWidth (currently 720).
 //   • NO maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
@@ -20,10 +20,11 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
 //   idealWidth bumped 480 → 560 to match AppDelegate.initPanelWidth.
+//   idealWidth bumped 560 → 720 to match updated AppDelegate.initPanelWidth.
 //   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
 //   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 //   Pressable repo / branch / SHA-origin labels added to header metadata row.
-//   Elapsed moved from top action bar to beside start→end timestamps.
+//   Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
 //   ReRunFailedButton added after ReRunButton.
 //   Step number zero-padded to #01…#99 for equal-width alignment.
 //   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
@@ -47,10 +48,8 @@ struct JobDetailView: View {
 
             // ── Row 1: [‹ Jobs] [title — flex] [Re-run][Re-run failed][Cancel][GitHub][Copy log]
             //
-            // Title sits between the back button and the action cluster on the right.
-            // layoutPriority(1) lets the title claim available space while allowing
-            // the fixed-size action buttons to shrink it if the panel gets very narrow.
-            // ❌ Do NOT wrap the title in a separate row — that wastes vertical space.
+            // ⚠️ Elapsed is in infoBar (row 2) ONLY.
+            // ❌ NEVER add elapsed back to this row.
             HStack(spacing: 6) {
 
                 // Back
@@ -73,7 +72,7 @@ struct JobDetailView: View {
 
                 Spacer(minLength: 8)
 
-                // ── Action cluster ───────────────────────────────────────
+                // ── Action cluster ───────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
                         let jobID = job.id
@@ -153,16 +152,15 @@ struct JobDetailView: View {
 
             // ── Row 2: [🕓 start→end · elapsed] [· repo · branch · origin]
             //
-            // All contextual info in one compact caption-height line.
-            // Timing comes first (most actionable), metadata chips follow.
-            // The whole row is left-aligned and never wraps.
+            // Elapsed lives here and ONLY here.
+            // ❌ NEVER move elapsed back to row 1.
             infoBar
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
             Divider()
 
-            // ── Steps list ──────────────────────────────────────────────────────────────
+            // ── Steps list ────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -186,7 +184,7 @@ struct JobDetailView: View {
             // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
         }
@@ -201,8 +199,8 @@ struct JobDetailView: View {
     /// Single caption-height line combining timing + metadata chips.
     /// Layout: 🕓 start→end · elapsed · [repo] [branch] [origin]
     ///
-    /// ❌ NEVER split this back into separate timing and metadata rows —
-    ///   that wastes vertical space and leaves the right side empty.
+    /// ❌ NEVER split this back into separate timing and metadata rows.
+    /// ❌ NEVER move elapsed out of this view and into row 1.
     @ViewBuilder
     private var infoBar: some View {
         HStack(spacing: 4) {
@@ -304,13 +302,6 @@ struct JobDetailView: View {
 
     /// Single-line step row:
     /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
-    ///
-    /// Step number is zero-padded to 2 digits (#01…#99) so every badge is
-    /// exactly 3 chars wide. monospacedDigit + fixedSize keeps the dot
-    /// indicator perfectly column-aligned across all rows without a fixed
-    /// frame width.
-    /// ❌ NEVER revert to "#\(step.id)" — unpadded single-digit numbers are
-    /// 2 chars wide, causing the dot column to shift right for #1–#9.
     @ViewBuilder
     private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
