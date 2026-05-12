@@ -5,7 +5,7 @@ import SwiftUI
 struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
-    /// When true the button is rendered at reduced opacity and cannot be tapped.
+    /// When true the button is completely hidden and takes no layout space.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
@@ -26,18 +26,19 @@ struct ReRunButton: View {
         Group {
             switch phase {
             case .idle:
-                Button(action: startRerun) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption)
-                        Text("Re-run")
-                            .font(.caption)
-                            .fixedSize()
+                if !isDisabled {
+                    Button(action: startRerun) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption)
+                            Text("Re-run")
+                                .font(.caption)
+                                .fixedSize()
+                        }
+                        .foregroundColor(.secondary)
                     }
-                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
             case .loading:
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
