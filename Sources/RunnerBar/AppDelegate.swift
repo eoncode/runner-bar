@@ -93,6 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Y coordinate the top of the panel must always snap to (status bar button bottom - gap).
     /// Set once per showPanel() call; used by resizePanel() to anchor correctly on first resize.
     private var panelTopY: CGFloat = 0
+    /// The X origin of the panel, set once per showPanel() call.
+    /// resizePanel() reads this instead of panel.frame.minX so the anchor is stable
+    /// even if dismiss() is called mid-flight and panel.frame moves to the off-screen origin.
+    private var panelOriginX: CGFloat = 0
     /// True when showPanel() has positioned the panel but is waiting for resizePanel()
     /// to fire with the real content height before calling orderFront.
     private var panelAwaitingFirstResize = false
@@ -275,7 +279,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Only reposition the on-screen panel; skip if panel is hidden
         guard panelIsOpen else { return }
 
-        let newFrame = NSRect(x: panel.frame.minX, y: panelTopY - totalH,
+        // Use panelOriginX (set once in showPanel) rather than panel.frame.minX.
+        // panel.frame.minX is unreliable here: if dismiss() fires mid-flight the
+        // frame moves to the off-screen measurement origin (-10000) and the panel
+        // would be placed off-screen on reveal.
+        let newFrame = NSRect(x: panelOriginX, y: panelTopY - totalH,
                               width: panelW, height: totalH)
         panel.setFrame(newFrame, display: true, animate: false)
 
@@ -478,9 +486,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         observable.reload()
 
-        // Reset to unconstrained so the new rootView measures freely.
-        // We do this BEFORE setting rootView so the layout pass sees 2000pt height.
-        hostingView?.frame = NSRect(x: 0, y: Self.arrowHeight, width: Self.canonicalWidth, height: Self.unconstrainedHeight)
+        // ── Single frame reset — done once, before rootView assignment ─────────────
+        // unconstrainedHeight lets SwiftUI lay out freely so HeightPreferenceKey
+        // reports the real content height. Do NOT reset again below.
+        hostingView?.frame = NSRect(x: 0, y: Self.arrowHeight,
+                                    width: Self.canonicalWidth, height: Self.unconstrainedHeight)
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             hostingView?.rootView = wrapWithHeightCapture(restored)
@@ -503,28 +513,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // ⚠️ HEIGHT MEASUREMENT STRATEGY (#296):
         // 1. Store panelTopY = the Y the top edge must always sit at (just below status bar).
-        // 2. Open panel OFF-SCREEN at unconstrainedHeight so hostingView (2000pt) fits inside
+        // 2. Store panelOriginX = the X origin; resizePanel reads this, NOT panel.frame.minX.
+        //    panel.frame.minX is unsafe: if dismiss() fires mid-flight the panel moves to
+        //    the off-screen measurement origin (-10000) and the panel would fly off-screen.
+        // 3. Open panel OFF-SCREEN at unconstrainedHeight so hostingView (2000pt) fits inside
         //    its container and GeometryReader can measure real content height.
-        // 3. resizePanel() fires within 1 render cycle, reads panelTopY to anchor correctly,
-        //    and shrinks the panel to actual content height.
+        // 4. resizePanel() fires within 1 render cycle, reads panelTopY / panelOriginX to
+        //    anchor correctly, and shrinks the panel to actual content height.
         // ❌ NEVER open at minHeight/initialH — hostingView is 2000pt and overflows a small panel.
-        // ❌ NEVER use panel.frame.maxY inside resizePanel for first-open anchoring — it points
-        //    to the off-screen origin, not the status bar. Use panelTopY instead.
+        // ❌ NEVER reset hostingView.frame again after this point in showPanel.
         panelTopY = buttonScreenRect.minY - Self.statusBarGap
+        panelOriginX = originX
         let measureH = Self.unconstrainedHeight + Self.arrowHeight
-        // Position off-screen at unconstrainedHeight — hostingView (2000pt) must fit inside
-        // panel/vfx so GeometryReader can measure. Panel stays hidden until resizePanel fires.
         let offScreenFrame = NSRect(x: originX, y: panelTopY - measureH, width: width, height: measureH)
         panel.setFrame(offScreenFrame, display: false)
         visualEffectView?.frame = NSRect(origin: .zero, size: offScreenFrame.size)
         applyMask(panelSize: offScreenFrame.size)
-        // Mark that the next resizePanel() call should make the panel visible.
-        // Do NOT orderFront here — panel is at off-screen measurement position.
-        // Reset hostingView to unconstrainedHeight so GeometryReader re-measures freely.
-        // hv y-origin is set to arrowHeight in resizePanel so SwiftUI top == panel top.
-        // panelAwaitingFirstResize = true: first HeightPreferenceKey callback reveals panel.
-        hostingView?.frame = NSRect(x: 0, y: Self.arrowHeight,
-                                    width: Self.canonicalWidth, height: Self.unconstrainedHeight)
+
         panelAwaitingFirstResize = true
         panel.alphaValue = 0
         panel.orderFront(nil)
