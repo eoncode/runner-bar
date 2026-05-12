@@ -405,6 +405,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
+            // ── Show offline runners ──────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -412,8 +413,12 @@ struct SettingsView: View {
                     .toggleStyle(.switch)
                     .labelsHidden()
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
+            Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
+            // ── Polling interval ─────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -423,7 +428,10 @@ struct SettingsView: View {
                 Stepper("", value: $settings.pollingInterval, in: 10...300)
                     .labelsHidden()
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
+            Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 6)
         }
     }
 
