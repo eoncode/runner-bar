@@ -23,35 +23,25 @@ import SwiftUI
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
 ///
-/// ⚠️ REGRESSION GUARD (NSPanel architecture — ref #52 #54 #57 #377):
+/// ⚠️ ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize (ref #377).
+/// AppDelegate KVO-observes preferredContentSize and calls NSPanel.setFrame().
+/// NSPanel.setFrame() has no anchor → zero side jump on any size change.
 ///
-///   ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize.
-///   AppDelegate KVO-observes preferredContentSize and calls NSPanel.setFrame().
-///   NSPanel.setFrame() has no anchor → zero side jump.
+/// HEIGHT CONTRACT:
+/// NO ScrollView, NO frame(maxHeight:) cap.
+/// preferredContentSize reports the full natural VStack height.
+/// AppDelegate.resizeAndRepositionPanel() clamps to maxHeight = 85% screen.
+/// That is the only height cap — enforced at the AppDelegate level, not here.
+/// ❌ NEVER add a ScrollView or frame(maxHeight:) cap back to SettingsView.
+/// ❌ NEVER add idealHeight to the root frame.
 ///
-///   ROOT FRAME RULE:
-///   .frame(idealWidth: 480)
-///   Only idealWidth is needed. No idealHeight. NSPanel handles screen bounds.
+/// WIDTH CONTRACT:
+/// .frame(idealWidth: 480) — only idealWidth needed. NSPanel handles bounds.
+/// ❌ NEVER remove idealWidth: 480.
 ///
-///   SCROLLVIEW HEIGHT CAP:
-///   The ScrollView has .frame(maxHeight: cappedHeight) to prevent the panel
-///   from growing taller than 85% of the screen when Settings is very long.
-///   This is a screen safety cap — not a fixed height.
-///   ❌ NEVER remove .frame(maxHeight: cappedHeight) from the ScrollView.
-///   ❌ NEVER increase cappedHeight factor above 0.85.
-///
-///   WHY ScrollView STILL NEEDS A CAP HERE:
-///   ScrollView reports idealHeight = full unbounded content height.
-///   Without capping, the ScrollView would make preferredContentSize.height
-///   equal to ALL Settings content (~800pt). The panel would be taller than
-///   the screen. cappedHeight caps this at screen-safe height.
-///
-///   ❌ NEVER remove idealWidth: 480 from the root frame.
-///   ❌ NEVER add idealHeight to the root frame — NSPanel handles positioning.
-///
-///   If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-///   UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-///   is major major major.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+/// is major major major.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -92,44 +82,33 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
-    /// Screen-safe height cap for the Settings ScrollView.
-    /// 80% of visible screen height — keeps Settings within screen bounds.
-    /// ❌ NEVER increase above 0.85.
-    /// ❌ NEVER apply as a fixed .frame(height:).
-    private var cappedHeight: CGFloat {
-        NSScreen.main.map { $0.visibleFrame.height * 0.80 } ?? 640
-    }
-
     var body: some View {
+        // NO ScrollView — NSPanel grows to show all content.
+        // AppDelegate clamps panel height to 85% screen visibleFrame.
+        // ❌ NEVER wrap in ScrollView or add frame(maxHeight:) here.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            // ⚠️ ScrollView height cap — screen safety under NSPanel architecture.
-            // Prevents the panel from growing beyond the screen height.
-            // ❌ NEVER remove .frame(maxHeight: cappedHeight).
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-            // UNDER ANY CIRCUMSTANCE.
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    localRunnersSection
-                    Divider()
-                    runnerSection
-                    Divider()
-                    notificationsSection
-                    Divider()
-                    generalSection
-                    Divider()
-                    accountSection
-                    Divider()
-                    legalSection
-                    Divider()
-                    aboutSection
-                }
-                .padding(.bottom, 16)
+            VStack(alignment: .leading, spacing: 0) {
+                localRunnersSection
+                Divider()
+                runnerSection
+                Divider()
+                notificationsSection
+                Divider()
+                generalSection
+                Divider()
+                accountSection
+                Divider()
+                legalSection
+                Divider()
+                aboutSection
             }
-            .frame(maxHeight: cappedHeight)
+            .padding(.bottom, 16)
         }
-        // Only idealWidth needed — no idealHeight under NSPanel architecture.
+        // idealWidth only — no idealHeight. NSPanel handles screen bounds.
         // ❌ NEVER add idealHeight here.
         // ❌ NEVER remove idealWidth: 480.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -167,9 +146,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
-                // Gate on token: de-registration requires GitHub auth.
-                // Without a token svc.sh uninstall succeeds but config.sh remove
-                // fails, leaving a ghost registration on the GitHub side.
                 guard isAuthenticated else {
                     runnerPendingRemoval = nil
                     return
@@ -177,9 +153,6 @@ struct SettingsView: View {
                 runnerPendingRemoval = nil
                 removeErrorMessage = nil
                 DispatchQueue.global(qos: .userInitiated).async {
-                    // Capture result: @discardableResult on remove() must not be
-                    // silently dropped. A false return means config.sh remove
-                    // failed and the GitHub registration was NOT cleaned up.
                     let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
                     DispatchQueue.main.async {
                         if !succeeded {
