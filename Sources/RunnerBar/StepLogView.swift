@@ -123,7 +123,7 @@ struct StepLogView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Top bar: back + copy + elapsed ────────────────────────────────────
+            // ── Top bar: back · spacer · GitHub link · copy · elapsed ─────────────
             // ❌ NEVER move this inside the ScrollView.
             HStack(spacing: 6) {
                 Button(action: onBack) {
@@ -135,7 +135,27 @@ struct StepLogView: View {
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
+
                 Spacer()
+
+                // ─ GitHub deep-link button ──────────────────────────────────
+                // Opens job.htmlUrl in the default browser (NSWorkspace).
+                // Hidden when htmlUrl is unavailable.
+                if let urlString = job.htmlUrl, let url = URL(string: urlString) {
+                    Button(action: { NSWorkspace.shared.open(url) }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "safari")
+                                .font(.caption)
+                            Text("GitHub")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open job on GitHub")
+                }
+
                 LogCopyButton(
                     fetch: { completion in
                         let text = logText
@@ -143,6 +163,7 @@ struct StepLogView: View {
                     },
                     isDisabled: logText == nil || logText?.isEmpty == true
                 )
+
                 Text(step.elapsed)
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -161,9 +182,8 @@ struct StepLogView: View {
                 .padding(.bottom, 5)
 
             // ── Meta rows ──────────────────────────────────────────────────────
-            // Row 1: job name (parent) + step number chip
+            // Row 1: parent job name + step number chip
             HStack(spacing: 6) {
-                // Parent job breadcrumb
                 Image(systemName: "briefcase")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
@@ -173,12 +193,7 @@ struct StepLogView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
-
                 Spacer()
-
-                // Step number chip  e.g. "step #7"
-                // step.id is the GitHub Actions step number (1-based, from the `number` field).
-                // This is the closest thing to a "step ID" the API exposes at this level.
                 Text("step #\(step.id)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(.secondary)
@@ -191,7 +206,7 @@ struct StepLogView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 3)
 
-            // Row 2: repo slug + job ID
+            // Row 2: repo slug + job ID chip
             HStack(spacing: 6) {
                 Image(systemName: "folder")
                     .font(.system(size: 10))
@@ -201,10 +216,7 @@ struct StepLogView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .fixedSize()
-
                 Spacer()
-
-                // GitHub job ID (numeric) — useful for API / deep-link construction
                 Text("job #\(job.id)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(.secondary)
@@ -222,32 +234,22 @@ struct StepLogView: View {
                 Image(systemName: "clock")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
-
-                // Start time
                 Text(startLabel)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
                     .fixedSize()
-
                 Text("→")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
-
-                // End time
                 Text(endLabel)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
                     .fixedSize()
-
-                // Date (day context)
                 Text(dateLabel)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
                     .fixedSize()
-
                 Spacer()
-
-                // Step conclusion / live status
                 Text(stepStatusLabel)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(stepStatusColor)
@@ -260,9 +262,6 @@ struct StepLogView: View {
 
             // ── Log — INSIDE ScrollView ──────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
-            // Without it, with sizingOptions=.preferredContentSize, SwiftUI reports
-            // the full log text height as preferredContentSize.height on navigate()
-            // → NSPopover re-anchors → side-jump.
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             // ❌ NEVER use a fixed constant — must adapt to screen size.
             ScrollView(.vertical, showsIndicators: true) {
@@ -289,18 +288,12 @@ struct StepLogView: View {
                 }
             }
             // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents side-jump on navigate.
-            // Matches SettingsView and PopoverMainView pattern (issue #370).
             // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         // ════════════════════════════════════════════════════════════════════════
         // ⚠️ THE ONE FRAME RULE — idealWidth: 480 MUST match AppDelegate.idealWidth.
-        // NSHostingController.preferredContentSize.width = idealWidth = 480.
-        // Width is constant across all nav states = NSPopover never re-anchors =
-        // zero side-jump. Removing idealWidth or using a different value = jump.
-        //
         // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
-        //    maxHeight: .infinity corrupts fittingSize.width (AppKit bug #375 #376)
         // ❌ NEVER omit idealWidth: 480
         // ❌ NEVER add .frame(height:) or .fixedSize() here
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
