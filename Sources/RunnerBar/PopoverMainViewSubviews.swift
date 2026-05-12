@@ -112,20 +112,23 @@ struct PopoverHeaderView: View {
 
 // MARK: - PopoverLocalRunnerRow
 
-/// Conditionally shows online local runners — hidden when all are idle/offline.
+/// Shows runners that are actively running a job (busy == true).
+/// Hidden entirely when no runner is busy — idle/offline runners are not shown.
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
     var body: some View {
-        let active = runners.filter { $0.status == "online" }
-        if !active.isEmpty { runnerList(active) }
+        // Spec: only show runners when they are actively busy (running a job).
+        // Idle online runners are intentionally hidden.
+        let busy = runners.filter { $0.busy }
+        if !busy.isEmpty { runnerList(busy) }
     }
 
     @ViewBuilder
-    private func runnerList(_ active: [Runner]) -> some View {
-        ForEach(active.prefix(3)) { runner in
+    private func runnerList(_ busy: [Runner]) -> some View {
+        ForEach(busy.prefix(3)) { runner in
             HStack(spacing: 8) {
-                Circle().fill(runner.busy ? Color.yellow : Color.green).frame(width: 8, height: 8)
+                Circle().fill(Color.yellow).frame(width: 8, height: 8)
                 // Runner name: lineLimit(1) — machine names can be arbitrarily long.
                 // Title truncation is intentional here (machine names vs commit titles).
                 Text(runner.name)
@@ -141,8 +144,8 @@ struct PopoverLocalRunnerRow: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 3)
         }
-        if active.count > 3 {
-            Text("+ \(active.count - 3) more\u{2026}")
+        if busy.count > 3 {
+            Text("+ \(busy.count - 3) more\u{2026}")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 2)
         }
