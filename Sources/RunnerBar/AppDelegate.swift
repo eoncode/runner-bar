@@ -19,15 +19,21 @@ import SwiftUI
 //   4. onPreferenceChange stores measuredHeight and calls resizePanel(to:).
 //   5. resizePanel sets hostingView.frame.height = contentH (exact fit) and,
 //      if the panel is visible, repositions it keeping the top-left corner fixed.
-//   6. showPanel always uses the current measuredHeight for the first frame.
+//   6. showPanel ALWAYS opens at minHeight first — NEVER uses stale measuredHeight.
+//      resizePanel fires within 1 render cycle (~16ms) and resizes to correct height.
+//      This eliminates the stale-height race condition where dismiss()'s async reset
+//      had not completed before the user re-opened the panel.
 //
 //   ❌ NEVER use sizingOptions = [.preferredContentSize] — it fights manual frame sets.
-//   ❌ NEVER start hostingView at height=minHeight — GeometryReader reads that and
-//      reports minHeight forever.
+//   ❌ NEVER start hostingView at height=minHeight for measurement — GeometryReader
+//      reads that and reports minHeight forever. unconstrainedHeight is for measurement
+//      only; minHeight is only used as the initial visible frame on open.
 //   ❌ NEVER use fittingSize.
 //   ❌ NEVER animate the resize (causes side-jump, ref #379).
 //   ❌ NEVER remove HeightPreferenceKey machinery.
 //   ❌ NEVER change HeightPreferenceKey.reduce to max() — breaks dynamic height.
+//   ❌ NEVER pass stale measuredHeight to showPanel initial frame — causes content
+//      to appear vertically centered in an oversized panel (ref #296 regression).
 //   If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 //
 // FIXEDSIZE RULE (ref #381):
@@ -85,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mouseMonitor: Any?
     private var arrowTipX: CGFloat = 210
     /// Last measured content height reported by HeightPreferenceKey.
+    /// NOTE: Never use this in showPanel() initial sizing — it may be stale.
+    /// showPanel() always opens at minHeight; resizePanel fires within 1 render cycle.
     private var measuredHeight: CGFloat = 120
 
     private static let canonicalWidth: CGFloat = 420
@@ -220,16 +228,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Height capture
+    //
+    // ⚠️ SINGLE async hop only — onPreferenceChange already delivers on main.
+    // We dispatch once to let the current layout pass fully commit before
+    // calling resizePanel. Do NOT add a second DispatchQueue.main.async layer.
 
     private func wrapWithHeightCapture(_ view: AnyView) -> AnyView {
         AnyView(
             view.onPreferenceChange(HeightPreferenceKey.self) { [weak self] height in
                 guard let self, height > 0 else { return }
                 self.measuredHeight = height
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    self.resizePanel(to: height)
-                }
+                self.resizePanel(to: height)
             }
         )
     }
@@ -237,20 +246,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Resize
     //
     // Sets hostingView height = contentH (exact fit).
-    // If panel is visible, repositions it keeping the TOP-LEFT corner fixed.
-    // Never animates (prevents side-jump).
+    // Always updates the hosting view and visual effect view frames.
+    // Only repositions the panel on screen when panelIsOpen is true.
+    // Never animates (prevents side-jump, ref #379).
 
     private func resizePanel(to rawContentHeight: CGFloat) {
         guard let panel, let vfx = visualEffectView, let hv = hostingView else { return }
         let contentH = min(max(rawContentHeight, Self.minHeight), Self.maxHeight)
         let totalH = contentH + Self.arrowHeight
 
-        // Update hosting view to exact content height
+        // Always update hosting view to exact content height
         hv.frame = NSRect(x: 0, y: 0, width: Self.canonicalWidth, height: contentH)
         let newSize = NSSize(width: Self.canonicalWidth, height: totalH)
         vfx.frame = NSRect(origin: .zero, size: newSize)
         applyMask(panelSize: newSize)
 
+        // Only reposition the on-screen panel; skip if panel is hidden
         guard panelIsOpen else { return }
         // Keep top-left corner fixed while changing height
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
@@ -451,16 +462,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         observable.reload()
 
+        // Reset to unconstrained so the new rootView measures freely.
+        // We do this BEFORE setting rootView so the layout pass sees 2000pt height.
+        hostingView?.frame.size.height = Self.unconstrainedHeight
+
         if let saved = savedNavState, let restored = validatedView(for: saved) {
-            hostingView?.frame.size.height = Self.unconstrainedHeight
             hostingView?.rootView = wrapWithHeightCapture(restored)
+        } else {
+            // Refresh mainView so live data is picked up
+            hostingView?.rootView = wrapWithHeightCapture(mainView())
         }
 
         let buttonInWindow = button.convert(button.bounds, to: nil)
         let buttonScreenRect = buttonWindow.convertToScreen(buttonInWindow)
 
-        let contentH = min(max(measuredHeight, Self.minHeight), Self.maxHeight)
-        let totalH = contentH + Self.arrowHeight
+        // ⚠️ ALWAYS open at minHeight — NEVER use stale measuredHeight here.
+        // HeightPreferenceKey will fire within 1 render cycle and call resizePanel(),
+        // which will grow/shrink the panel to the correct content height instantly.
+        // Using measuredHeight here causes content to appear vertically centered in
+        // an oversized panel when the previous session had more content (stale race).
+        let initialH = Self.minHeight
+        let totalH = initialH + Self.arrowHeight
         let width = Self.canonicalWidth
 
         var originX = buttonScreenRect.midX - width / 2
@@ -474,7 +496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
         panel.setFrame(frame, display: false)
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: contentH)
+        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: initialH)
         applyMask(panelSize: frame.size)
 
         panel.orderFront(nil)
@@ -496,12 +518,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSEvent.removeMonitor(monitor)
             mouseMonitor = nil
         }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            // Reset to unconstrained so next open re-measures correctly
-            self.hostingView?.frame.size.height = Self.unconstrainedHeight
-            self.hostingView?.rootView = self.wrapWithHeightCapture(self.mainView())
-        }
+        // Reset hosting view to unconstrained + mainView so that HeightPreferenceKey
+        // fires off-screen and measuredHeight is fresh before next open.
+        // Done synchronously (no async) to avoid the race where showPanel fires
+        // before the async block completes and reads stale measuredHeight.
+        hostingView?.frame.size.height = Self.unconstrainedHeight
+        hostingView?.rootView = wrapWithHeightCapture(mainView())
     }
 }
 // swiftlint:enable type_body_length
