@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 // swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
 
@@ -21,7 +22,7 @@ enum GroupStatus {
 /// minimal so the full job list lives on the parent ActionGroup instead.
 struct WorkflowRunRef: Identifiable {
     let id: Int
-    let name: String         // workflow file name, e.g. "SonarQube", "vitest"
+    let name: String // workflow file name, e.g. "SonarQube", "vitest"
     let status: String
     let conclusion: String?
     let htmlUrl: String?
@@ -37,11 +38,11 @@ struct WorkflowRunRef: Identifiable {
 /// `ActionDetailView` drills into the flat job list; `JobDetailView`/`StepLogView`
 /// are reused unchanged below that.
 struct ActionGroup: Identifiable, Equatable {
-    let headSha: String         // head_sha — kept as the underlying group identity
-    let label: String           // "#1270" if PR, else "d6281b" (sha[:7])
-    let title: String           // commit/PR message first line (≤40 chars)
+    let headSha: String // head_sha — kept as the underlying group identity
+    let label: String   // "#1270" if PR, else "d6281b" (sha[:7])
+    let title: String   // commit/PR message first line (≤40 chars)
     let headBranch: String?
-    let repo: String            // owner/repo scope
+    let repo: String    // owner/repo scope
 
     /// All sibling workflow runs sharing this `head_sha`.
     var runs: [WorkflowRunRef]
@@ -67,6 +68,7 @@ struct ActionGroup: Identifiable, Equatable {
     var isDimmed: Bool = false
 
     // MARK: Equatable
+
     // Identity-based equality: two groups are equal when their stable `id` matches.
     // This satisfies the `onChange(of: store.actions)` requirement in PopoverMainView
     // without deep-comparing mutable job arrays on every poll.
@@ -79,11 +81,17 @@ struct ActionGroup: Identifiable, Equatable {
     /// full struct at every call site.
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
         ActionGroup(
-            headSha: headSha, label: label, title: title, headBranch: headBranch,
-            repo: repo, runs: runs, jobs: newJobs,
+            headSha: headSha,
+            label: label,
+            title: title,
+            headBranch: headBranch,
+            repo: repo,
+            runs: runs,
+            jobs: newJobs,
             firstJobStartedAt: firstJobStartedAt,
             lastJobCompletedAt: lastJobCompletedAt,
-            createdAt: createdAt, isDimmed: isDimmed
+            createdAt: createdAt,
+            isDimmed: isDimmed
         )
     }
 
@@ -94,10 +102,11 @@ struct ActionGroup: Identifiable, Equatable {
     /// Also treats the group as completed if all jobs are done, even if the
     /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
-        if jobsTotal > 0,
-           jobs.filter({ $0.conclusion != nil }).count == jobsTotal { return .completed }
+        if jobsTotal > 0, jobs.filter({ $0.conclusion != nil }).count == jobsTotal {
+            return .completed
+        }
         if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
-        if runs.contains(where: { $0.status == "queued" }) { return .queued }
+        if runs.contains(where: { $0.status == "queued" })      { return .queued }
         return .completed
     }
 
@@ -121,25 +130,23 @@ struct ActionGroup: Identifiable, Equatable {
             // Only conclude when every single job has a conclusion.
             // If even one is nil the run is still in progress — return nil.
             guard jobs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-
             // All jobs are done. Derive group conclusion from their results.
             // ⚠️ Do NOT change this to read from runs[].conclusion — run-level API
             // conclusions are stale and can report "failure" even when all jobs pass
             // (e.g. after a retry). This caused the spurious FAILED badge (issue #294).
             if jobs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
-            if jobs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-            if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+            if jobs.contains(where: { $0.conclusion == "cancelled" })  { return "cancelled" }
+            if jobs.contains(where: { $0.conclusion == "skipped" })    { return "skipped" }
             return "success"
         }
-
         // ── Run-based conclusion (fallback when jobs haven't loaded yet) ──────────────────
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // Do NOT move the run-based logic back to be the primary path — see above.
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
-        if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+        if runs.contains(where: { $0.conclusion == "cancelled" })  { return "cancelled" }
+        if runs.contains(where: { $0.conclusion == "skipped" })    { return "skipped" }
         return "success"
     }
 
@@ -148,9 +155,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// ⚠️ "Concluded" means: success, failure, cancelled, skipped, or timed_out.
     /// We count ALL non-nil conclusions, not just success+skipped, so that
     /// jobsDone/jobsTotal reflects actual completion state (not just passed jobs).
-    var jobsDone: Int {
-        jobs.filter { $0.conclusion != nil }.count
-    }
+    var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
 
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
@@ -160,8 +165,8 @@ struct ActionGroup: Identifiable, Equatable {
 
     /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
-        if let j = jobs.first(where: { $0.status == "in_progress" }) { return j.name }
-        if let j = jobs.first(where: { $0.status == "queued" })      { return j.name }
+        if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
+        if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
         return "—"
     }
 
@@ -171,14 +176,14 @@ struct ActionGroup: Identifiable, Equatable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            let m = sec / 60; let s = sec % 60
-            return String(format: "%02d:%02d", m, s)
+            let mins = sec / 60; let secs = sec % 60
+            return String(format: "%02d:%02d", mins, secs)
         }
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let m = sec / 60; let s = sec % 60
-        return String(format: "%02d:%02d", m, s)
+        let mins = sec / 60; let secs = sec % 60
+        return String(format: "%02d:%02d", mins, secs)
     }
 
     // MARK: - Runner type
@@ -217,16 +222,15 @@ private struct RunPayload: Codable {
     let htmlUrl: String?
     let headCommit: HeadCommit?
     let pullRequests: [PRRef]?
-
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case headBranch = "head_branch"
-        case headSha = "head_sha"
+        case headBranch   = "head_branch"
+        case headSha      = "head_sha"
         case displayTitle = "display_title"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-        case htmlUrl = "html_url"
-        case headCommit = "head_commit"
+        case createdAt    = "created_at"
+        case updatedAt    = "updated_at"
+        case htmlUrl      = "html_url"
+        case headCommit   = "head_commit"
         case pullRequests = "pull_requests"
     }
 }
@@ -259,7 +263,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         log("fetchActionGroups › skipping org scope \(scope)")
         return []
     }
-
     let iso = ISO8601DateFormatter()
     var runPayloads: [RunPayload] = []
     var seenIDs = Set<Int>()
@@ -267,9 +270,8 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     // Phase 1: fetch in_progress and queued runs.
     for status in ["in_progress", "queued"] {
         let endpoint = "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
-        guard
-            let data = ghAPI(endpoint),
-            let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data)
+        guard let data = ghAPI(endpoint),
+              let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data)
         else { continue }
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
             runPayloads.append(run)
@@ -278,41 +280,32 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
     // Group by head_sha.
     var bySha: [String: [RunPayload]] = [:]
-    for run in runPayloads {
-        bySha[run.headSha, default: []].append(run)
-    }
+    for run in runPayloads { bySha[run.headSha, default: []].append(run) }
 
     // Phase 2: merge recently completed runs into EXISTING groups only.
     if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
-            if bySha[run.headSha] != nil {
-                bySha[run.headSha]!.append(run)
-            }
+            if bySha[run.headSha] != nil { bySha[run.headSha]!.append(run) }
         }
     }
 
     var groups: [ActionGroup] = bySha.map { sha, shaRuns in
-        let rep = shaRuns.sorted {
-            ($0.createdAt ?? "") > ($1.createdAt ?? "")
-        }.first!
-
+        let rep = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
         let label = prLabel(from: rep)
         let rawTitle = rep.displayTitle
             ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
         let title = String(rawTitle.prefix(40))
-
         let runs: [WorkflowRunRef] = shaRuns.map {
             WorkflowRunRef(id: $0.id, name: $0.name, status: $0.status,
                            conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
         }
-
         let allJobs: [ActiveJob]
         if let cached = cache[sha],
            !cached.jobs.isEmpty,
-           cached.jobs.allSatisfy({ $0.conclusion != nil }) &&
-           !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
+           cached.jobs.allSatisfy({ $0.conclusion != nil })
+               && !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
             allJobs = cached.jobs
         } else {
             var fetched: [ActiveJob] = []
@@ -326,10 +319,8 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
             fetched.sort { $0.id < $1.id }
             allJobs = fetched
         }
-
         let starts = allJobs.compactMap { $0.startedAt }
         let ends   = allJobs.compactMap { $0.completedAt }
-
         return ActionGroup(
             headSha: sha,
             label: label,
@@ -344,13 +335,12 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         )
     }
 
-    groups.sort { a, b in
-        let aPriority = statusPriority(a.groupStatus)
-        let bPriority = statusPriority(b.groupStatus)
-        if aPriority != bPriority { return aPriority < bPriority }
-        return (a.createdAt ?? .distantPast) > (b.createdAt ?? .distantPast)
+    groups.sort { leftGroup, rightGroup in
+        let leftPriority  = statusPriority(leftGroup.groupStatus)
+        let rightPriority = statusPriority(rightGroup.groupStatus)
+        if leftPriority != rightPriority { return leftPriority < rightPriority }
+        return (leftGroup.createdAt ?? .distantPast) > (rightGroup.createdAt ?? .distantPast)
     }
-
     log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
     return groups
 }
@@ -358,30 +348,31 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 // MARK: - Private helpers
 
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
-func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
+func makeActiveJob(from jobPayload: JobPayload,
+                   iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (j.steps ?? []).enumerated().map { idx, s in
+    let steps: [JobStep] = (jobPayload.steps ?? []).enumerated().map { idx, step in
         JobStep(
             id: idx + 1,
-            name: s.name,
-            status: s.status,
-            conclusion: s.conclusion,
-            startedAt: s.startedAt.flatMap { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+            name: step.name,
+            status: step.status,
+            conclusion: step.conclusion,
+            startedAt: step.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: step.completedAt.flatMap { iso.date(from: $0) }
         )
     }
     return ActiveJob(
-        id: j.id,
-        name: j.name,
-        status: j.status,
-        conclusion: j.conclusion,
-        startedAt: j.startedAt.flatMap { iso.date(from: $0) },
-        createdAt: j.createdAt.flatMap { iso.date(from: $0) },
-        completedAt: j.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl: j.htmlUrl,
+        id: jobPayload.id,
+        name: jobPayload.name,
+        status: jobPayload.status,
+        conclusion: jobPayload.conclusion,
+        startedAt: jobPayload.startedAt.flatMap { iso.date(from: $0) },
+        createdAt: jobPayload.createdAt.flatMap { iso.date(from: $0) },
+        completedAt: jobPayload.completedAt.flatMap { iso.date(from: $0) },
+        htmlUrl: jobPayload.htmlUrl,
         isDimmed: isDimmed,
         steps: steps,
-        runnerName: j.runnerName
+        runnerName: jobPayload.runnerName
     )
 }
 
@@ -389,37 +380,28 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
 /// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
 /// causing the main row to show a lower jobsTotal than the detail view.
 /// per_page=100 is the GitHub API maximum and covers all realistic job counts.
-private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
-    guard
-        let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
-        let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
-    else { return [] }
-
+private func fetchJobsForRun(_ runID: Int,
+                              scope: String,
+                              iso: ISO8601DateFormatter) -> [ActiveJob] {
+    guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
+          let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else { return [] }
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
-
     var result = initial
     var refreshCount = 0
-    for i in result.indices {
-        let job = result[i]
+    for idx in result.indices {
+        let job = result[idx]
         let needsRefresh = job.conclusion == nil
             || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh, refreshCount < 3 else { continue }
         refreshCount += 1
-        guard
-            let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-            let fresh     = try? JSONDecoder().decode(JobPayload.self, from: freshData)
-        else { continue }
-
+        guard let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: freshData) else { continue }
         let freshJob = makeActiveJob(from: fresh, iso: iso)
-
-        if fresh.conclusion != nil {
-            result[i] = freshJob
-            continue
-        }
+        if fresh.conclusion != nil { result[idx] = freshJob; continue }
         let betterSteps = !freshJob.steps.isEmpty
             && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
-            result[i] = ActiveJob(
+            result[idx] = ActiveJob(
                 id: job.id,
                 name: job.name,
                 status: job.status,
@@ -446,3 +428,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     }
 }
 // swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment
+// swiftlint:enable file_length
