@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             guard let self = self,
                   self.panelIsOpen,
                   let panel = self.panel,
-                  panel.isVisible,
+                  panel.isVisible,        // ← guard: skip if panel not yet on screen
                   height > 0 else { return }
             let clamped = min(height, self.maxContentHeight)
             panel.updateHeight(clamped)
@@ -128,22 +128,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Panel lifecycle
 
-    // ⚠️ panelDidClose() saves the current nav state so re-opening restores it
-    // without a main→destination flash. We do NOT reset rootView to mainView()
-    // here — the next openPanel() call sets the correct view after restore.
+    // ⚠️ panelDidClose() preserves savedNavState so re-opening restores the
+    // last screen without a main→destination flash.
     // ❌ NEVER reset rootView to mainView() here — causes settings flicker on reopen.
     @MainActor
     private func panelDidClose() {
         panelIsOpen = false
-        // savedNavState is already set by whichever view factory was last called;
-        // we leave it intact so openPanel() can restore it.
     }
 
     // MARK: - View factories
 
-    // enrichStepsIfNeeded is nonisolated: it only does synchronous network I/O
-    // and JSON decoding — no UI access. It is always called from
-    // DispatchQueue.global(qos: .userInitiated) closures.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
@@ -376,17 +370,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
               let hc = hostingController
         else { return }
 
-        // Set panelIsOpen BEFORE assigning rootView so didUpdateHeight()
-        // does not early-return on the very first HeightReporter callback.
         panelIsOpen = true
 
-        // ⚠️ OPEN SEQUENCE (order matters for correct first-load sizing):
+        // ⚠️ OPEN SEQUENCE:
         // 1. Capture savedNavState before openPanelView() clears it.
-        // 2. Set main view (CPU guard — isPopoverOpen: true).
+        // 2. Set main/open view (CPU guard — isPopoverOpen: true).
         // 3. Restore saved nav state if present.
-        // 4. Reload store data AFTER view is set (avoids double-render flash).
-        // 5. Measure sizeThatFits on the FINAL view (after restore).
-        // 6. positionBelow() with the real height.
+        // 4. Force AppKit layout pass so sizeThatFits returns the real height
+        //    (without this the hosting view hasn't been laid out yet on first open).
+        // 5. Measure height on the final settled view.
+        // 6. positionBelow() — panel becomes visible here.
+        // 7. Reload store data AFTER panel is on screen so any height callbacks
+        //    from reload pass the panel.isVisible guard and don't race.
         let stateToRestore = savedNavState
         hc.rootView = openPanelView()
 
@@ -395,17 +390,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             hc.rootView = restored
         }
 
-        // Reload after view is settled so observable changes don't cause a
-        // height-measurement race on first open.
-        observable.reload()
+        // Force a layout pass so sizeThatFits is accurate on first open.
+        hc.view.layoutSubtreeIfNeeded()
 
-        // Measure the REAL height of the final view synchronously.
         let measured = hc.sizeThatFits(
             in: NSSize(width: Self.fixedWidth,
                        height: .greatestFiniteMagnitude)
         )
         let contentHeight = min(max(measured.height, 100), maxContentHeight)
         panel.positionBelow(button: button, contentHeight: contentHeight)
+
+        // ⚠️ Reload AFTER positionBelow so the panel is visible before any
+        // HeightReporter callbacks fire. Callbacks check panel.isVisible and
+        // will no-op if panel isn't shown yet — moving reload here ensures
+        // the first-open flicker caused by reload racing positionBelow is gone.
+        observable.reload()
     }
 }
 // swiftlint:enable type_body_length

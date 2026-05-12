@@ -35,12 +35,8 @@ private let kArrowWidth:    CGFloat = 20
 private let kArrowOverlapY: CGFloat = 1
 private let kShadowRadius:  CGFloat = 20
 private let kShadowAlpha:   Float   = 0.35
-// Border stroke matching NSPopover's thin separator line.
-// NSColor.separatorColor at ~0.4 alpha matches the original popover border.
 private let kBorderWidth:   CGFloat = 0.5
 private let kBorderAlpha:   CGFloat = 0.4
-// Height change threshold below which updateHeight() is a no-op.
-// Prevents rapid HeightReporter callbacks from causing visible flicker.
 private let kHeightEpsilon: CGFloat = 1.0
 
 // NSBezierPath → CGPath (macOS 13 compatible — .cgPath is macOS 14+ only)
@@ -65,8 +61,6 @@ private extension NSBezierPath {
 
 final class PanelChrome: NSPanel {
 
-    // hostingView is set once by AppDelegate and lives for the panel's lifetime.
-    // Its frame is managed entirely by layoutChrome().
     var hostingView: NSView? {
         didSet {
             guard let hv = hostingView else { return }
@@ -76,32 +70,27 @@ final class PanelChrome: NSPanel {
     }
 
     private var arrowTipX: CGFloat = 0
-    // Track last laid-out size so layoutChrome() can skip no-op redraws.
     private var lastLayoutSize: NSSize = .zero
 
-    // ⚠️ TRANSLUCENCY: use .popover material which gives the frosted-glass look
-    // matching NSPopover. .behindWindow blending requires the window to be
-    // positioned correctly in the compositor — on a borderless NSPanel this
-    // reliably renders translucent. The contentView and panel background are
-    // both .clear so the shape mask alone defines the visible region.
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
-        v.material     = .popover          // frosted-glass, matches old NSPopover look
+        v.material     = .popover
         v.blendingMode = .behindWindow
         v.state        = .active
         v.autoresizingMask = []
         return v
     }()
 
-    // Border stroke layer — sits above fx, below hostingView.
-    // Reuses the same chromePath so it perfectly traces the panel outline.
+    // ⚠️ BORDER: CAShapeLayer added as sublayer of fx.layer (above the mask).
+    // fx.layer?.mask clips the visual effect; borderLayer is a sibling sublayer
+    // of that mask — it sits inside the clipped region and strokes the outline.
+    // Adding to fx.layer (not contentView.layer) guarantees it is clipped to
+    // the chrome shape and always visible above the frosted background.
     private let borderLayer: CAShapeLayer = {
         let l = CAShapeLayer()
         l.fillColor   = CGColor.clear
         l.lineWidth   = kBorderWidth
-        // separatorColor adapts to light/dark mode automatically.
-        l.strokeColor = NSColor.separatorColor
-            .withAlphaComponent(kBorderAlpha).cgColor
+        l.strokeColor = NSColor.separatorColor.withAlphaComponent(kBorderAlpha).cgColor
         return l
     }()
 
@@ -121,24 +110,16 @@ final class PanelChrome: NSPanel {
         hasShadow          = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = false
-        // Make contentView transparent so the fx visual effect shows through.
         contentView?.wantsLayer = true
         contentView?.layer?.backgroundColor = CGColor.clear
         contentView?.addSubview(fx)
-        // Add border layer above fx in the content view layer tree.
-        contentView?.layer?.addSublayer(borderLayer)
+        // borderLayer is inserted into fx after fx gets its layer in layoutChrome.
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
 
-    /// Call with the REAL content height (from sizeThatFits), never a placeholder.
-    /// button must be the NSStatusBarButton — we convert its bounds to screen
-    /// coordinates correctly via convert(_:to:nil) + convertToScreen.
     func positionBelow(button: NSButton, contentHeight: CGFloat) {
         guard let bw = button.window else { return }
-        // ✅ Convert button bounds → window coords → screen coords.
-        // Using button.frame directly was wrong: button.frame is in the
-        // superview coordinate space, not the window coordinate space.
         let btnInWindow = button.convert(button.bounds, to: nil)
         let btnScreen   = bw.convertToScreen(btnInWindow)
         let btnCentreX  = btnScreen.midX
@@ -150,11 +131,9 @@ final class PanelChrome: NSPanel {
             originX = max(screen.visibleFrame.minX,
                          min(originX, screen.visibleFrame.maxX - panelWidth))
         }
-        // Y-up: panel sits below the button, so originY < btnScreen.minY
         let originY = btnScreen.minY - totalHeight
         arrowTipX = btnCentreX - originX
 
-        // Reset lastLayoutSize so layoutChrome() always runs on first open.
         lastLayoutSize = .zero
         setFrame(NSRect(x: originX, y: originY,
                         width: panelWidth, height: totalHeight),
@@ -165,9 +144,8 @@ final class PanelChrome: NSPanel {
         installOutsideMonitor()
     }
 
-    /// Resize in-place. Top edge (arrowTip) stays fixed; only bottom moves.
-    /// ⚠️ No-op if height change is within kHeightEpsilon — prevents flicker
-    /// from rapid HeightReporter callbacks (e.g. observable.reload() on Settings).
+    /// No-op if height change ≤ kHeightEpsilon — prevents flicker from rapid
+    /// HeightReporter callbacks when content height hasn't meaningfully changed.
     func updateHeight(_ newContentHeight: CGFloat) {
         guard isVisible else { return }
         let currentContentHeight = frame.height - kArrowHeight
@@ -188,41 +166,33 @@ final class PanelChrome: NSPanel {
 
     // ── Layout ───────────────────────────────────────────────────────────────
 
-    // Called after every frame change. Skips shape/border layer rebuild if
-    // the panel size hasn't changed — avoids flicker on same-height redraws.
     private func layoutChrome() {
         let size = frame.size
         guard size.width > 0, size.height > 0 else { return }
 
         let contentH = size.height - kArrowHeight
 
-        // fx covers the full panel frame for the shape mask.
         fx.frame = NSRect(origin: .zero, size: size)
+        hostingView?.frame = NSRect(x: 0, y: 0, width: size.width, height: contentH)
 
-        // hostingView fills the body (below the arrow region).
-        // y=0 = bottom of panel, height = contentH.
-        hostingView?.frame = NSRect(x: 0, y: 0,
-                                    width: size.width, height: contentH)
-
-        // Only rebuild CALayer objects if size actually changed.
-        // This is the primary flicker guard — CAShapeLayer reassignment
-        // triggers a compositor redraw even when nothing visually changed.
         guard size != lastLayoutSize else { return }
         lastLayoutSize = size
 
         let path = chromePath(in: size).asCGPath
 
-        // Shape mask clips the fx visual effect view to the chrome outline.
-        let shapeLayer = CAShapeLayer()
-        shapeLayer.path = path
-        fx.layer?.mask  = shapeLayer
+        // Mask clips fx to the chrome shape.
+        let maskLayer = CAShapeLayer()
+        maskLayer.path = path
+        fx.layer?.mask = maskLayer
 
-        // Border stroke traces the same path, giving the NSPopover-style
-        // thin separator line around the entire panel including the arrow.
+        // ⚠️ Border: add borderLayer as a regular sublayer of fx.layer.
+        // It is NOT the mask — it strokes the path on top of the frosted glass.
+        // We remove+re-add to avoid accumulating duplicate sublayers on resize.
+        borderLayer.removeFromSuperlayer()
         borderLayer.path  = path
         borderLayer.frame = NSRect(origin: .zero, size: size)
+        fx.layer?.addSublayer(borderLayer)
 
-        // Drop shadow on the content view.
         let shadow = NSShadow()
         shadow.shadowColor      = NSColor.black.withAlphaComponent(CGFloat(kShadowAlpha))
         shadow.shadowOffset     = NSSize(width: 0, height: -4)
