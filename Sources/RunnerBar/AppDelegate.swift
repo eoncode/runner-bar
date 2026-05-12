@@ -24,7 +24,10 @@ import SwiftUI
 // 2. Position is computed from status button's window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
-//      panelY = statusItemRect.minY - clampedContentH - arrowHeight - gap
+//      panelY = LOCKED at open-time (panelOriginY) — never recomputed live.
+//              ❌ NEVER re-derive Y from statusItemRect.minY inside
+//                 resizeAndRepositionPanel() — menu bar hide/show shifts
+//                 statusItemRect.minY, dragging the panel under the notch.
 //      panelH  = clampedContentH + arrowHeight
 // 3. arrowX = statusItemRect.midX - panel.frame.minX
 //    ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local.
@@ -108,6 +111,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventMonitor: Any?
     private var sizeObservation: NSKeyValueObservation?
     private var workspaceObserver: Any?
+
+    /// Y origin (screen coords) of the panel, captured once in openPanel().
+    /// resizeAndRepositionPanel() uses this immutable value so that menu-bar
+    /// hide/show — which shifts statusItemRect.minY — never moves the panel.
+    /// Reset to nil in closePanel().
+    /// ❌ NEVER re-derive panelOriginY inside resizeAndRepositionPanel().
+    private var panelOriginY: CGFloat?
 
     // ⚠️ REGRESSION GUARD (ref #377):
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
@@ -252,13 +262,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Repositions and resizes the panel. Called on every KVO fire + explicitly in openPanel
     /// + synchronously inside navigate(to:) to keep arrowX correct on every view swap.
     ///
-    /// Reads BOTH preferredContentSize.width and .height from the hosting controller.
-    /// Each SwiftUI view sets its preferred width via .frame(idealWidth: N).
-    /// The panel is always re-centred horizontally under the status icon.
+    /// X is always re-derived from statusItemRect.midX to keep the panel horizontally
+    /// centred under the status icon even when content width changes.
+    ///
+    /// Y is READ FROM panelOriginY (set once in openPanel). It is NEVER re-derived from
+    /// statusItemRect.minY here. Menu-bar auto-hide shifts statusItemRect.minY while the
+    /// panel is open — re-deriving Y would drag the panel down under the camera notch.
     ///
     /// NSPanel.setFrame() has NO anchor concept — zero side jump for any size change.
     /// ❌ NEVER call this on NSPopover.
     /// ❌ NEVER call from a background thread.
+    /// ❌ NEVER re-derive Y from statusItemRect inside this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
     private func resizeAndRepositionPanel() {
@@ -266,7 +280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let panel,
               let chrome,
               let button = statusItem?.button,
-              let statusItemRect = button.window?.frame else { return }
+              let statusItemRect = button.window?.frame,
+              let lockedY = panelOriginY else { return }
 
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
 
@@ -276,9 +291,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentH = min(max(preferred.height, 60),            maxHeight)
         let totalH   = contentH + arrowHeight
 
-        // Always re-centre horizontally under the status icon.
+        // X: always re-centred under the status icon (safe — only horizontal).
         let x = statusItemRect.midX - contentW / 2
-        let y = statusItemRect.minY - totalH - Self.gap
+        // Y: immutable for this panel session — captured at open time.
+        // ❌ NEVER replace lockedY with statusItemRect.minY - totalH - Self.gap.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        let y = lockedY
 
         panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
                        display: true, animate: false)
@@ -316,6 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard panelIsOpen else { return }
         panel?.orderOut(nil)
         panelIsOpen = false
+        panelOriginY = nil   // reset so next open recomputes from fresh statusItemRect
         // ❌ NEVER set one without the other.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -402,7 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionJobDetail(job, group)
         return wrapEnv(JobDetailView(
             job: job,
-            group: group,           // ← repo / branch / SHA context for metadata row
+            group: group,
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.actionDetailView(group: group))
@@ -429,16 +449,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Jobs-path detail view (reached from main job list, no ActionGroup context)
 
-    /// Constructs a minimal synthetic ActionGroup from the job's htmlUrl so that
-    /// JobDetailView's metadata row (repo / branch / SHA chips) can still render
-    /// on the direct-from-main-list navigation path.
-    ///
-    /// Fields populated:
-    ///   repo      → owner/repo derived from htmlUrl
-    ///   headSha   → empty (no run context on this path)
-    ///   label     → empty (chip hidden when label is "")
-    ///   headBranch → nil (branch chip omitted)
-    ///   runs      → [] (not needed for display)
     private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
         let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
         return ActionGroup(
@@ -456,7 +466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let group = syntheticGroup(for: job)
         return wrapEnv(JobDetailView(
             job: job,
-            group: group,           // ← repo chip available; branch/SHA chips omitted
+            group: group,
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())
@@ -539,15 +549,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         popoverOpenState.isOpen = true
 
-        // initW MUST match (or exceed) the largest idealWidth in any SwiftUI view (560).
-        // If initW < preferredContentSize.width, resizeAndRepositionPanel() shifts the
-        // panel left on the first KVO fire — arrowX is then computed from the pre-shift
-        // minX and the arrow appears off-centre until the next resize.
-        // ✅ initW = initPanelWidth (560) eliminates that first-frame offset entirely.
         let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
         let x = statusItemRect.midX - initW / 2
         let y = statusItemRect.minY - initH - Self.gap
+
+        // Capture Y once. resizeAndRepositionPanel() will use this locked value
+        // for the entire panel session — immune to menu-bar hide/show shifts.
+        // ❌ NEVER overwrite panelOriginY after this point (until closePanel resets it).
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        panelOriginY = y
+
         panel.setFrame(
             NSRect(x: x, y: y, width: initW, height: initH),
             display: false, animate: false
