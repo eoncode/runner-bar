@@ -496,7 +496,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
         panel.setFrame(frame, display: false)
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        hostingView?.frame = NSRect(x: 0, y: 0, width: width, height: initialH)
+        // ❌ NEVER set hostingView.frame.height to initialH or minHeight here.
+        // hostingView MUST remain at unconstrainedHeight so GeometryReader can measure
+        // real content height and HeightPreferenceKey fires correctly.
+        // Setting height=initialH here collapses measurement → panel locks at 120pt → header hidden.
+        // ref #296 regression guard.
         applyMask(panelSize: frame.size)
 
         panel.orderFront(nil)
