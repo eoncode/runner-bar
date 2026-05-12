@@ -123,7 +123,8 @@ struct StepLogView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Top bar: back · spacer · GitHub link · copy · elapsed ─────────────
+            // ── Top bar: back · spacer · GitHub link · copy ───────────────────────
+            // Elapsed has been moved to Row 3 (next to start→end timestamps).
             // ❌ NEVER move this inside the ScrollView.
             HStack(spacing: 6) {
                 Button(action: onBack) {
@@ -163,11 +164,6 @@ struct StepLogView: View {
                     },
                     isDisabled: logText == nil || logText?.isEmpty == true
                 )
-
-                Text(step.elapsed)
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -229,7 +225,8 @@ struct StepLogView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 3)
 
-            // Row 3: start → end timestamps + date + status
+            // Row 3: start → end timestamps · elapsed · date + status
+            // Elapsed moved here from the top bar so it reads naturally next to the times.
             HStack(spacing: 6) {
                 Image(systemName: "clock")
                     .font(.system(size: 10))
@@ -242,6 +239,14 @@ struct StepLogView: View {
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
                 Text(endLabel)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize()
+                // Elapsed duration sits directly after the end time, separated by a bullet.
+                Text("·")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                Text(step.elapsed)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
                     .fixedSize()
