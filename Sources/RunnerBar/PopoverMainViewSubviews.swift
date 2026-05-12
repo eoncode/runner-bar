@@ -175,6 +175,12 @@ struct PopoverLocalRunnerRow: View {
 /// - currentJobName           : lineLimit(1) truncation KEPT — job names can be long
 /// Panel idealWidth 560 gives comfortable room; preferredContentSize grows it further
 /// if needed (up to maxWidth = 90% screen).
+///
+/// ⚠️ TICK CONTRACT: `tick` MUST be read inside `body` (via `rowContent`) so SwiftUI
+/// invalidates this view on every displayTick beat. Without this, elapsed/progress
+/// strings on action rows update on SwiftUI's own schedule instead of the shared
+/// 1-second clock, causing rows to tick at different rates.
+/// ❌ NEVER remove the `_ = tick` line from rowContent.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -189,7 +195,12 @@ struct ActionRowView: View {
     }
 
     private var rowContent: some View {
-        HStack(spacing: 6) {
+        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
+        // Consuming tick here forces SwiftUI to re-evaluate rowContent every second,
+        // keeping elapsed/progress in sync with InlineJobRowsView on the same beat.
+        // ❌ NEVER remove this line.
+        let _ = tick
+        return HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
 
             // SHA / label: always 7 chars (e.g. "a1b25e4") — fixedSize so it never truncates.
@@ -359,6 +370,11 @@ struct InlineJobRowsView: View {
     }
 
     private func jobRow(_ job: ActiveJob) -> some View {
+        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
+        // tick is consumed here so SwiftUI re-evaluates jobRow on every 1s beat,
+        // keeping elapsed in sync with ActionRowView.
+        // ❌ NEVER remove this line.
+        let _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
         let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done = job.steps.filter { $0.conclusion != nil }.count
