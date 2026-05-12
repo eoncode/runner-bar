@@ -68,18 +68,25 @@ struct PopoverHeaderView: View {
                     + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
                 pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
             )
-            statChip(
-                label: "DISK",
-                value: blockBar(pct: stats.diskTotalGB > 0
-                    ? (stats.diskUsedGB / stats.diskTotalGB) * 100 : 0)
-                    + " "
-                    + String(
-                        format: "%d/%dGB",
-                        Int(stats.diskUsedGB.rounded()), Int(stats.diskTotalGB.rounded())
-                    ),
-                pct: stats.diskTotalGB > 0 ? (stats.diskUsedGB / stats.diskTotalGB) * 100 : 0
-            )
+            diskChip
         }
+    }
+
+    /// DISK chip: used/total + free space and free percent in parens.
+    /// e.g. "██░ 333/460GB (127GB 28%)"
+    private var diskChip: some View {
+        let total = stats.diskTotalGB
+        let used = stats.diskUsedGB
+        let free = max(0, total - used)
+        let pct = total > 0 ? (used / total) * 100 : 0
+        let freePct = total > 0 ? (free / total) * 100 : 0
+        let value = blockBar(pct: pct)
+            + " "
+            + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+            + " ("
+            + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded()))
+            + ")"
+        return statChip(label: "DISK", value: value, pct: pct)
     }
 
     /// Single label+value chip coloured by usage level.
@@ -168,17 +175,8 @@ struct PopoverLocalRunnerRow: View {
 /// - currentJobName           : lineLimit(1) truncation KEPT — job names can be long
 /// Panel idealWidth 560 gives comfortable room; preferredContentSize grows it further
 /// if needed (up to maxWidth = 90% screen).
-///
-/// `tick` is supplied by PopoverMainView's 1-second displayTick timer.
-/// It has no semantic meaning — its only job is to make SwiftUI see a changed
-/// input every second so the row body re-evaluates (elapsed, progressFraction,
-/// currentStep name all recompute from live Dates).
-/// ❌ NEVER use tick for anything other than triggering a re-render.
 struct ActionRowView: View {
     let group: ActionGroup
-    /// 1-second render clock. Causes SwiftUI to re-evaluate body every second
-    /// so elapsed, pie-chart progress and currentStep stay live.
-    let tick: Int
     let onSelect: () -> Void
 
     var body: some View {
@@ -191,8 +189,6 @@ struct ActionRowView: View {
 
     private var rowContent: some View {
         HStack(spacing: 6) {
-            // PieProgressDot re-renders with every tick because group.progressFraction
-            // is derived from live job states. The animation is driven by the value change.
             PieProgressDot(progress: group.progressFraction, color: dotColor)
 
             // SHA / label: always 7 chars (e.g. "a1b25e4") — fixedSize so it never truncates.
@@ -245,7 +241,6 @@ struct ActionRowView: View {
             .fixedSize(horizontal: true, vertical: false)
 
         // Elapsed "02:25", "01:18" — 5 chars, never truncate.
-        // Recomputed every second because tick causes body re-evaluation.
         // ❌ NEVER add frame(width:) here.
         Text(group.elapsed)
             .font(.caption.monospacedDigit()).foregroundColor(.secondary)
@@ -312,15 +307,8 @@ struct ActionRowView: View {
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
-///
-/// `tick` is supplied by PopoverMainView's 1-second displayTick timer.
-/// Its only job is to trigger a re-render each second so elapsed, progressFraction
-/// and the current step name stay live.
-/// ❌ NEVER use tick for anything other than triggering a re-render.
 struct InlineJobRowsView: View {
     let group: ActionGroup
-    /// 1-second render clock from PopoverMainView.displayTick.
-    let tick: Int
     /// Live open-state signal. Read from environment — never a plain Bool prop.
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
@@ -354,15 +342,12 @@ struct InlineJobRowsView: View {
     }
 
     private func jobRow(_ job: ActiveJob) -> some View {
-        // Both currentStep and progressFraction recompute from live Date values
-        // every second because tick causes body re-evaluation.
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
         let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
             Text("\u{21B3}").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
-            // PieProgressDot redraws because progressFraction is recomputed each tick.
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Group {
                 if let name = stepName {
@@ -389,7 +374,7 @@ struct InlineJobRowsView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
 
-            // Elapsed "01:29", "01:16" — recomputed every second via tick.
+            // Elapsed "01:29", "01:16" — 5 chars, never truncate.
             // ❌ NEVER add frame(width:) here.
             Text(job.elapsed)
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
