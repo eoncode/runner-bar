@@ -342,6 +342,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onSelectSettings: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
+            },
+            onSelectInlineJob: { [weak self] job, group in
+                // Tapping an inline ↳ job row navigates directly to JobDetailView,
+                // bypassing ActionDetailView. Back button returns to ActionDetailView.
+                guard let self else { return }
+                let latestGroup = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichStepsIfNeeded(job)
+                    DispatchQueue.main.async {
+                        guard self.panelIsOpen else { return }
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: latestGroup))
+                    }
+                }
             }
         ))
     }
