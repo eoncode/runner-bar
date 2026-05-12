@@ -128,10 +128,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Panel lifecycle
 
+    // ⚠️ panelDidClose() saves the current nav state so re-opening restores it
+    // without a main→destination flash. We do NOT reset rootView to mainView()
+    // here — the next openPanel() call sets the correct view after restore.
+    // ❌ NEVER reset rootView to mainView() here — causes settings flicker on reopen.
     @MainActor
     private func panelDidClose() {
         panelIsOpen = false
-        hostingController?.rootView = mainView()
+        // savedNavState is already set by whichever view factory was last called;
+        // we leave it intact so openPanel() can restore it.
     }
 
     // MARK: - View factories
@@ -374,14 +379,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         // Set panelIsOpen BEFORE assigning rootView so didUpdateHeight()
         // does not early-return on the very first HeightReporter callback.
         panelIsOpen = true
-        hc.rootView = openPanelView()
-        observable.reload()
 
-        if let saved = savedNavState,
+        // ⚠️ OPEN SEQUENCE (order matters for correct first-load sizing):
+        // 1. Capture savedNavState before openPanelView() clears it.
+        // 2. Set main view (CPU guard — isPopoverOpen: true).
+        // 3. Restore saved nav state if present.
+        // 4. Reload store data AFTER view is set (avoids double-render flash).
+        // 5. Measure sizeThatFits on the FINAL view (after restore).
+        // 6. positionBelow() with the real height.
+        let stateToRestore = savedNavState
+        hc.rootView = openPanelView()
+
+        if let saved = stateToRestore,
            let restored = validatedView(for: saved) {
             hc.rootView = restored
         }
 
+        // Reload after view is settled so observable changes don't cause a
+        // height-measurement race on first open.
+        observable.reload()
+
+        // Measure the REAL height of the final view synchronously.
         let measured = hc.sizeThatFits(
             in: NSSize(width: Self.fixedWidth,
                        height: .greatestFiniteMagnitude)

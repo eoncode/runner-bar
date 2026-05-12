@@ -70,9 +70,14 @@ final class PanelChrome: NSPanel {
 
     private var arrowTipX: CGFloat = 0
 
+    // ⚠️ TRANSLUCENCY: use .popover material which gives the frosted-glass look
+    // matching NSPopover. .behindWindow blending requires the window to be
+    // positioned correctly in the compositor — on a borderless NSPanel this
+    // reliably renders translucent. The contentView and panel background are
+    // both .clear so the shape mask alone defines the visible region.
     private let fx: NSVisualEffectView = {
         let v = NSVisualEffectView()
-        v.material     = .menu
+        v.material     = .popover          // frosted-glass, matches old NSPopover look
         v.blendingMode = .behindWindow
         v.state        = .active
         v.autoresizingMask = []
@@ -95,16 +100,25 @@ final class PanelChrome: NSPanel {
         hasShadow          = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = false
+        // Make contentView transparent so the fx visual effect shows through.
+        contentView?.wantsLayer = true
+        contentView?.layer?.backgroundColor = CGColor.clear
         contentView?.addSubview(fx)
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
 
     /// Call with the REAL content height (from sizeThatFits), never a placeholder.
+    /// button must be the NSStatusBarButton — we convert its bounds to screen
+    /// coordinates correctly via convert(_:to:nil) + convertToScreen.
     func positionBelow(button: NSButton, contentHeight: CGFloat) {
         guard let bw = button.window else { return }
-        let btnScreen  = bw.convertToScreen(button.frame)
-        let btnCentreX = btnScreen.midX
+        // ✅ Convert button bounds → window coords → screen coords.
+        // Using button.frame directly was wrong: button.frame is in the
+        // superview coordinate space, not the window coordinate space.
+        let btnInWindow = button.convert(button.bounds, to: nil)
+        let btnScreen   = bw.convertToScreen(btnInWindow)
+        let btnCentreX  = btnScreen.midX
         let totalHeight = contentHeight + kArrowHeight
         let panelWidth  = AppDelegate.fixedWidth
 
