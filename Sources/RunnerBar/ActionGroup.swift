@@ -115,7 +115,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
     /// has not yet concluded, to prevent a premature FAILED badge.
     var conclusion: String? {
-        // ── Job-based conclusion (preferred) ────────────────────────────────────────
+        // ── Job-based conclusion (preferred) ────────────────────────────────────────────
         // Use job data when available and fully loaded.
         if !jobs.isEmpty {
             // Only conclude when every single job has a conclusion.
@@ -132,7 +132,7 @@ struct ActionGroup: Identifiable, Equatable {
             return "success"
         }
 
-        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ─────────────
+        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ───────────────
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // Do NOT move the run-based logic back to be the primary path — see above.
@@ -370,9 +370,12 @@ func makeActiveJob(from j: JobPayload, iso: ISO8601DateFormatter,
 }
 
 /// Fetch and decode jobs for a single run ID.
+/// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
+/// causing the main row to show a lower jobsTotal than the detail view.
+/// per_page=100 is the GitHub API maximum and covers all realistic job counts.
 private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
     guard
-        let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?filter=latest&per_page=100"),
+        let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
         let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
     else { return [] }
 
