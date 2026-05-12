@@ -3,64 +3,30 @@ import SwiftUI
 // swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ════════════════════════════════════════════════════════════════════════════════
-// ⚠️⚠️⚠️  POPOVER SIDE-JUMP REGRESSION GUARD — READ THIS BEFORE ANY EDIT  ⚠️⚠️⚠️
+// ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
 // ════════════════════════════════════════════════════════════════════════════════
 //
-// SYMPTOM:  Popover jumps sideways (shifts left/right) when navigate() is called.
-// ROOT CAUSE: AppDelegate sizes the popover window using SwiftUI's fittingSize.
-//             fittingSize is computed by offering the view an UNCONSTRAINED size.
-//             If the view expands to fill infinite height (maxHeight: .infinity),
-//             SwiftUI returns a non-deterministic fittingSize.width, which causes
-//             AppKit to re-position the popover anchor every time the root view swaps.
+// ARCHITECTURE: NSPanel (NOT NSPopover).
+// NSPanel has no anchor — setFrame() never causes a side-jump.
+// Width IS dynamic: AppDelegate KVO-observes preferredContentSize and calls
+// NSPanel.setFrame(), repositioning under the status button each time.
 //
-// ════════════════════════════════════════════════════════════════════════════════
-// THE ONE FRAME RULE (applies to THIS file and EVERY detail/settings view):
+// ROOT FRAME RULE:
+//   .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
+//   • idealWidth: 560 — MUST match AppDelegate.fixedWidth (currently 560).
+//   • maxWidth: .infinity — fills the panel width.
+//   • NO idealHeight / maxHeight on the root frame.
 //
-//   .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-//
-//   • idealWidth: 480  — MUST match AppDelegate.fixedWidth (currently 480).
-//                        If you change fixedWidth in AppDelegate, change this too.
-//   • maxWidth: .infinity — lets the view fill the popover width.
-//   • NO maxHeight — letting SwiftUI compute natural height from content is what
-//                    allows the popover to resize correctly on navigate().
-//   • NO .frame(height:) anywhere on the root VStack.
-//   • NO .fixedSize(horizontal: false, vertical: true) on multi-line title texts
-//     that are direct children of the root VStack — corrupts fittingSize.
-//
-// ════════════════════════════════════════════════════════════════════════════════
-// BANNED modifiers on the ROOT VStack or any DIRECT CHILD of it:
-//
-//   ❌ .frame(maxHeight: .infinity)         — corrupts fittingSize.width
-//   ❌ .frame(height: <any constant>)       — prevents popover from resizing
-//   ❌ .fixedSize(horizontal: false, vertical: true)  — forces unconstrained height
-//   ❌ .fixedSize()                         — same problem
-//   ❌ navigate() called directly           — use onBack / onSelectJob callbacks
-//
-// SAFE modifiers (inside HStack/ScrollView children, not root level):
-//
-//   ✔ .fixedSize() on individual Text labels inside HStack — fine, scoped
-//   ✔ .frame(width:) on fixed-width labels — fine
-//   ✔ .lineLimit(N) on Text — fine
-//   ✔ .frame(maxWidth: .infinity, alignment: .leading) inside ScrollView — fine
-//
-// SCROLLVIEW maxHeight CAP — REQUIRED (ref #370):
-//   The ScrollView wrapping the jobs list MUST have a .frame(maxHeight:) cap.
-//   Without it, with sizingOptions=.preferredContentSize, SwiftUI reports the
-//   full unbounded content height as preferredContentSize.height on navigate().
-//   NSPopover re-anchors on any preferredContentSize change → side-jump.
-//   The cap is computed from NSScreen.main so it adapts to any screen size.
-//   ✅ ALWAYS keep .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-//   ❌ NEVER remove the maxHeight cap from the ScrollView.
+// SCROLLVIEW HEIGHT CAP — REQUIRED:
+//   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+//   Prevents the panel growing taller than the screen.
+//   ❌ NEVER remove this modifier from the ScrollView.
 //   ❌ NEVER use a fixed constant — must adapt to screen size.
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
-//   Broken by: adding .frame(maxHeight: .infinity) to root (multiple times)
-//   Fixed by:  replacing with .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-//   Bug ref:   issue #294, commits 318da0b, fd1c960
-//   #22 note:  idealWidth was 420, bumped to 480 to match AppDelegate.fixedWidth after
-//              fixedWidth was widened in commit #22. NEVER let these diverge again.
-//   #370 fix:  ScrollView maxHeight cap added to prevent side-jump on navigate.
+//   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
+//   Side-jump is impossible with NSPanel — no anchor to re-calculate.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -78,19 +44,13 @@ struct ActionDetailView: View {
 
     /// Drives the live elapsed timer every second.
     @State private var tick = 0
-    /// Held so we can invalidate on disappear and prevent timer accumulation
-    /// when the user navigates away and back (AppDelegate swaps rootView each time).
+    /// Held so we can invalidate on disappear and prevent timer accumulation.
     @State private var tickTimer: Timer?
 
     var body: some View {
-        // ⚠️ ROOT VStack — frame contract enforced at the BOTTOM of this body.
-        // Do NOT add .frame(maxHeight:), .frame(height:), or .fixedSize() here.
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Header ────────────────────────────────────────────────────────────
-            // MUST remain OUTSIDE ScrollView. Do not move into ScrollView.
-            // Adding .fixedSize() or .frame(height:) to this HStack will
-            // corrupt the parent fittingSize — see regression guard above.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -98,11 +58,10 @@ struct ActionDetailView: View {
                         Text("Actions").font(.caption)
                     }
                     .foregroundColor(.secondary)
-                    // ✔ .fixedSize() here is SAFE — scoped to this small label HStack.
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
+                Spacer()
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
@@ -116,9 +75,6 @@ struct ActionDetailView: View {
                     },
                     isDisabled: group.groupStatus == .inProgress
                 )
-                // ⚠️ CancelButton: when isDisabled=true it is INVISIBLE (opacity 0).
-                // This is intentional — do not change to a faded state.
-                // See CancelButton.swift regression guard.
                 CancelButton(
                     action: { completion in
                         let scope = group.repo
@@ -150,8 +106,6 @@ struct ActionDetailView: View {
             .padding(.bottom, 4)
 
             // ── Group title block ─────────────────────────────────────────────────
-            // .fixedSize(horizontal:false,vertical:true) is BANNED on group.title Text.
-            // Use lineLimit + truncationMode instead. See regression guard above.
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(group.label)
@@ -160,8 +114,6 @@ struct ActionDetailView: View {
                     Text(group.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
-                        // ⚠️ DO NOT ADD .fixedSize(horizontal: false, vertical: true) here.
-                        // It was removed intentionally. See regression guard at top of file.
                         .truncationMode(.tail)
                 }
                 if let branch = group.headBranch {
@@ -180,11 +132,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list: MUST be inside ScrollView ─────────────────────────────
-            // NEVER move the header above outside into here.
-            // ⚠️ maxHeight cap is REQUIRED — see regression guard above (ref #370).
-            // Without it, preferredContentSize.height = full content height on navigate
-            // → NSPopover re-anchors → side-jump.
+            // ── Jobs list ────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -197,59 +145,17 @@ struct ActionDetailView: View {
                     } else {
                         ForEach(group.jobs) { job in
                             Button(action: { onSelectJob(job) }, label: {
-                                HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(jobDotColor(for: job))
-                                        .frame(width: 7, height: 7)
-                                    Text(job.name)
-                                        .font(.system(size: 12))
-                                        .foregroundColor(job.isDimmed ? .secondary : .primary)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                    Spacer()  // ⚠️ load-bearing
-                                    if let conclusion = job.conclusion {
-                                        Text(conclusionLabel(conclusion))
-                                            .font(.caption)
-                                            .foregroundColor(conclusionColor(conclusion))
-                                            .frame(width: 76, alignment: .trailing)
-                                    } else {
-                                        Text(jobStatusLabel(for: job))
-                                            .font(.caption)
-                                            .foregroundColor(jobStatusColor(for: job))
-                                            .frame(width: 76, alignment: .trailing)
-                                    }
-                                    Text(job.elapsed)
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 40, alignment: .trailing)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 3)
-                                .contentShape(Rectangle())
+                                jobRow(job)
                             })
                             .buttonStyle(.plain)
                         }
                     }
                 }
-                // ✔ .frame(maxWidth: .infinity) inside ScrollView is SAFE.
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents side-jump on navigate.
-            // Matches SettingsView and PopoverMainView pattern (issue #370).
-            // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ════════════════════════════════════════════════════════════════════════
-        // ⚠️ THE ONE FRAME RULE — see regression guard at top of this file.
-        // idealWidth MUST match AppDelegate.fixedWidth (480).
-        // DO NOT change to .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // DO NOT reduce idealWidth back to 420 — fixedWidth is 480, not 420
-        // DO NOT add .frame(height:) or .fixedSize() here
-        // ════════════════════════════════════════════════════════════════════════
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -260,9 +166,81 @@ struct ActionDetailView: View {
         }
     }
 
+    // MARK: - Job row
+
+    /// Two-line job row:
+    /// Line 1: [dot] [name ...] [status/conclusion] [elapsed] [›]
+    /// Line 2: [start time → end time] (caption, secondary)
+    @ViewBuilder
+    private func jobRow(_ job: ActiveJob) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            // Line 1
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(jobDotColor(for: job))
+                    .frame(width: 7, height: 7)
+                Text(job.name)
+                    .font(.system(size: 12))
+                    .foregroundColor(job.isDimmed ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                // Status/conclusion label
+                if let conclusion = job.conclusion {
+                    Text(conclusionLabel(conclusion))
+                        .font(.caption)
+                        .foregroundColor(conclusionColor(conclusion))
+                        .frame(width: 80, alignment: .trailing)
+                } else {
+                    Text(jobStatusLabel(for: job))
+                        .font(.caption)
+                        .foregroundColor(jobStatusColor(for: job))
+                        .frame(width: 80, alignment: .trailing)
+                }
+                // Elapsed
+                Text(job.elapsed)
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            // Line 2: start → end times, indented to align with name
+            HStack(spacing: 4) {
+                // 7pt dot + 8pt spacing = 15pt indent to align with name text
+                Color.clear.frame(width: 15, height: 1)
+                Text(jobTimeRange(job))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: - Helpers
+
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    // MARK: - Job row helpers
+    /// Formats the start → end time range for a job.
+    /// Examples:
+    ///   queued:       "–"
+    ///   in progress:  "14:23 → now"
+    ///   completed:    "14:23 → 14:25"
+    private func jobTimeRange(_ job: ActiveJob) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        guard let start = job.startedAt ?? job.createdAt else { return "–" }
+        let startStr = fmt.string(from: start)
+        if let end = job.completedAt {
+            return "\(startStr) → \(fmt.string(from: end))"
+        }
+        if job.status == "queued" { return "–" }
+        return "\(startStr) → now"
+    }
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return .secondary }
