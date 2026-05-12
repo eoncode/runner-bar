@@ -10,25 +10,24 @@ import SwiftUI
 //    CALL SITE — that would corrupt the parent view's fittingSize and cause
 //    the popover to jump sideways when AppDelegate calls navigate().
 //
-// ✔ The isDisabled=true state HIDES the button entirely (opacity 0 +
-//   allowsHitTesting false). This keeps the HStack width stable so the
-//   Re-run button always stays right-aligned next to the elapsed timer.
-//   Do NOT change this back to a faded visible state — it caused perceived
-//   misalignment of the Re-run button (reported in issue #294).
+// ✔ The isDisabled=true state returns EmptyView, completely removing the
+//   button from layout so it occupies zero space in the header HStack.
+//   The Spacer() before ReRunButton already keeps ReRunButton right-aligned,
+//   so removing CancelButton from layout has no effect on ReRunButton position.
+//   ❌ Do NOT revert to opacity(0) — that leaves a blank gap in the header.
 // ════════════════════════════════════════════════════════════════════════
 
 /// Top-bar cancel button used in JobDetailView, ActionDetailView, and StepLogView.
 ///
 /// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") → done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
 ///
-/// When `isDisabled` is true the button is **invisible** (opacity 0, not hit-testable).
-/// This is intentional: a faded-but-present Cancel button creates visual noise and makes
-/// the Re-run button look misaligned. Hiding it keeps the header toolbar clean.
+/// When `isDisabled` is true the button returns **EmptyView** and occupies no space.
+/// This is intentional: keeping a zero-opacity placeholder creates a blank gap in the header.
 struct CancelButton: View {
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
-    /// When true the button is invisible and cannot be tapped.
-    /// ⚠️ Do NOT change to .opacity(0.4) visible state — see regression guard above.
+    /// When true the button is removed from layout entirely (returns EmptyView).
+    /// ⚠️ Do NOT change to .opacity(0.4) or .opacity(0) — see regression guard above.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
@@ -46,7 +45,11 @@ struct CancelButton: View {
     }
 
     var body: some View {
-        Group {
+        // ✔ Return EmptyView when disabled — zero layout space, zero hit area.
+        // ❌ NEVER use .opacity(0) here — it keeps the space occupied (blank gap).
+        if isDisabled { return AnyView(EmptyView()) }
+
+        return AnyView(Group {
             switch phase {
             case .idle:
                 Button(action: startCancel) {
@@ -62,11 +65,6 @@ struct CancelButton: View {
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                // ⚠️ When disabled: HIDE entirely, do not just dim.
-                // Rationale: a ghost "Cancel" label shifts the Re-run button left and looks
-                // broken. The button re-appears automatically when isDisabled becomes false.
-                .opacity(isDisabled ? 0 : 1)
-                .allowsHitTesting(!isDisabled)
             case .loading:
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
@@ -96,7 +94,7 @@ struct CancelButton: View {
                         .fixedSize()
                 }
             }
-        }
+        })
     }
 
     private func startCancel() {
