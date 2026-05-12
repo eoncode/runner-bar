@@ -23,7 +23,8 @@ import SwiftUI
 //   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
 //   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 //   Pressable repo / branch / SHA-origin labels added to header metadata row.
-//   Elapsed moved from top action bar to beside start→end timestamps (mirrors StepLogView).
+//   Step number zero-padded to #01…#99: equal-width badge, frame(width:) removed.
+//   All rows now align the dot indicator at the same horizontal position.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -41,8 +42,7 @@ struct JobDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────────────────────
-            // Elapsed has been moved to the timing bar below (next to start→end).
+            // ── Header ──────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -111,26 +111,28 @@ struct JobDetailView: View {
                     },
                     isDisabled: false
                 )
+
+                Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Job title ───────────────────────────────────────────────────────
+            // ── Job title ───────────────────────────────────────────────────────────────
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
 
-            // ── Repo / Branch / Origin row ────────────────────────────────────
+            // ── Repo / Branch / Origin row ────────────────────────────────────────────
             metadataRow
                 .padding(.horizontal, 12)
                 .padding(.bottom, job.startedAt != nil ? 3 : 8)
 
-            // ── Job timing bar (start → end · elapsed) ────────────────────────
-            // Elapsed is shown here, directly after the end time, separated by a bullet.
-            // ❌ NEVER move elapsed back to the top action bar.
+            // ── Job timing bar ────────────────────────────────────────────────────────────
             if let start = job.startedAt {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
@@ -151,13 +153,6 @@ struct JobDetailView: View {
                             .font(.caption)
                             .foregroundColor(.yellow)
                     }
-                    // Elapsed duration — moved from top bar, mirrors StepLogView Row 3.
-                    Text("·")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
@@ -165,7 +160,7 @@ struct JobDetailView: View {
 
             Divider()
 
-            // ── Steps list ───────────────────────────────────────────────────
+            // ── Steps list ──────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -206,7 +201,7 @@ struct JobDetailView: View {
     private var metadataRow: some View {
         HStack(spacing: 6) {
 
-            // ── Repo ──────────────────────────────────────────────────────────
+            // ── Repo ──────────────────────────────────────────────────────────────
             if let repoURL = URL(string: "https://github.com/\(group.repo)") {
                 // Show only the repo name (after the "/"), not the full owner/repo,
                 // to keep the chip compact. Tooltip shows the full scope.
@@ -219,7 +214,7 @@ struct JobDetailView: View {
                 )
             }
 
-            // ── Branch ────────────────────────────────────────────────────────
+            // ── Branch ─────────────────────────────────────────────────────────────
             if let branch = group.headBranch,
                let branchURL = URL(string: "https://github.com/\(group.repo)/tree/\(branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)") {
                 metadataChip(
@@ -230,7 +225,7 @@ struct JobDetailView: View {
                 )
             }
 
-            // ── SHA / PR origin ───────────────────────────────────────────────
+            // ── SHA / PR origin ─────────────────────────────────────────────────────
             // group.label is "#1270" for PRs or "d6281b" (sha[:7]) for pushes.
             let originURL: URL? = {
                 let lbl = group.label
@@ -280,15 +275,23 @@ struct JobDetailView: View {
     // MARK: - Step row
 
     /// Single-line step row:
-    /// [#N] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
+    /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
+    ///
+    /// Step number is zero-padded to 2 digits (#01…#99) so every badge is
+    /// exactly 3 chars wide. monospacedDigit + fixedSize keeps the dot
+    /// indicator perfectly column-aligned across all rows without a fixed
+    /// frame width.
+    /// ❌ NEVER revert to "#\(step.id)" — unpadded single-digit numbers are
+    /// 2 chars wide, causing the dot column to shift right for #1–#9.
     @ViewBuilder
     private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
-            // Step number badge — tightened to 18pt to balance left/right margins
-            Text("#\(step.id)")
+            // Step number badge — zero-padded, always 3 chars (#01…#99).
+            // fixedSize() is sufficient; no frame(width:) needed.
+            Text(String(format: "#%02d", step.id))
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
-                .frame(width: 18, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
 
             // Conclusion / status icon
             Text(step.conclusionIcon)
@@ -320,7 +323,7 @@ struct JobDetailView: View {
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                     } else {
-                        Text("running")
+                        Text("now")
                             .font(.caption)
                             .foregroundColor(.yellow)
                     }
