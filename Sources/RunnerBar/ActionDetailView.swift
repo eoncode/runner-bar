@@ -13,7 +13,7 @@ import SwiftUI
 //
 // ROOT FRAME RULE:
 //   .frame(idealWidth: 560, maxWidth: .infinity, alignment: .top)
-//   • idealWidth: 560 — MUST match AppDelegate.fixedWidth (currently 560).
+//   • idealWidth: 560 — MUST match AppDelegate.initPanelWidth (currently 560).
 //   • maxWidth: .infinity — fills the panel width.
 //   • NO idealHeight / maxHeight on the root frame.
 //
@@ -27,6 +27,7 @@ import SwiftUI
 // HISTORY:
 //   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
 //   Job rows collapsed to single line: [dot][name][time range]...[status][elapsed][›]
+//   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
 //   Side-jump is impossible with NSPanel — no anchor to re-calculate.
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -173,7 +174,7 @@ struct ActionDetailView: View {
     /// [dot] [name — truncates last] [time range — fixed width] ... [status] [elapsed] [›]
     ///
     /// Column widths (right side, fixed so columns stay aligned):
-    ///   time range : 96pt  ("HH:mm → HH:mm" = 13 chars monospaced)
+    ///   time range : 130pt  ("HH:mm:ss→HH:mm:ss" = 19 chars monospaced)
     ///   status     : 80pt
     ///   elapsed    : 40pt
     ///   chevron    : intrinsic
@@ -193,11 +194,12 @@ struct ActionDetailView: View {
                 .layoutPriority(1)
 
             // Time range: fixed width, always visible
+            // Format: HH:mm:ss→HH:mm:ss  |  HH:mm:ss→now  |  –
             Text(jobTimeRange(job))
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-                .frame(width: 96, alignment: .leading)
+                .frame(width: 130, alignment: .leading)
 
             Spacer(minLength: 0)
 
@@ -233,13 +235,13 @@ struct ActionDetailView: View {
 
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    /// Formats the start → end time range.
+    /// Formats the start → end time range with seconds.
     /// queued (no timestamps): "–"
-    /// in_progress:            "14:23 → now"
-    /// completed:              "14:23 → 14:25"
+    /// in_progress:            "HH:mm:ss→now"
+    /// completed:              "HH:mm:ss→HH:mm:ss"
     private func jobTimeRange(_ job: ActiveJob) -> String {
         let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm"
+        fmt.dateFormat = "HH:mm:ss"
         guard let start = job.startedAt ?? job.createdAt else { return "–" }
         let startStr = fmt.string(from: start)
         if let end = job.completedAt {
