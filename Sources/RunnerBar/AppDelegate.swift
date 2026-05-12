@@ -492,15 +492,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         arrowTipX = buttonScreenRect.midX - originX
 
-        let originY = buttonScreenRect.minY - totalH - Self.statusBarGap
-        let frame = NSRect(x: originX, y: originY, width: width, height: totalH)
+        // ⚠️ HEIGHT MEASUREMENT: open panel at unconstrainedHeight so hostingView fits inside
+        // the window and GeometryReader can measure real content height via HeightPreferenceKey.
+        // resizePanel() will shrink to actual content height within 1 render cycle (~16ms).
+        // ❌ NEVER use initialH/minHeight for panel or vfx frame here — hostingView is 2000pt
+        // and must fit inside its container or all content is clipped and invisible. (#296)
+        let measureH = Self.unconstrainedHeight + Self.arrowHeight
+        let originY = buttonScreenRect.minY - measureH - Self.statusBarGap
+        let frame = NSRect(x: originX, y: originY, width: width, height: measureH)
         panel.setFrame(frame, display: false)
         visualEffectView?.frame = NSRect(origin: .zero, size: frame.size)
-        // ❌ NEVER set hostingView.frame.height to initialH or minHeight here.
-        // hostingView MUST remain at unconstrainedHeight so GeometryReader can measure
-        // real content height and HeightPreferenceKey fires correctly.
-        // Setting height=initialH here collapses measurement → panel locks at 120pt → header hidden.
-        // ref #296 regression guard.
         applyMask(panelSize: frame.size)
 
         panel.orderFront(nil)
