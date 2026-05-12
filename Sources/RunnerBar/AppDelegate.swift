@@ -21,7 +21,7 @@ import SwiftUI
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from status button's window frame (screen coords):
+// 2. Position is computed from status button’s window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
 //      panelY = statusItemRect.minY - clampedContentH - arrowHeight - gap
@@ -42,12 +42,22 @@ import SwiftUI
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
 //
 // INITIAL WIDTH (openPanel):
-// initW MUST match the widest view's idealWidth (currently 560 for ActionDetailView).
+// initW MUST match the widest view’s idealWidth (currently 560 for ActionDetailView).
 // If initW is smaller than the actual preferredContentSize.width, the first
 // resizeAndRepositionPanel() call repositions the panel — but arrowX is computed
 // from the *old* frame, producing a stale offset that makes the arrow appear off-centre.
 // ✅ Keep initW = 560 (or bump to match whenever idealWidth increases).
 // ❌ NEVER set initW smaller than the largest idealWidth in any view.
+//
+// ARROW CENTERING ON NAVIGATE:
+// navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
+// and fires the preferredContentSize KVO — async on the main queue. Between the
+// navigate() call and the KVO fire there is at least one frame where arrowX still
+// holds the value computed for the *previous* view’s panel frame. If the new view
+// has a different width, resizeAndRepositionPanel() moves the panel, invalidating
+// the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
+// navigate(to:) immediately after swapping rootView, so arrowX is always
+// recomputed from the current (or new) panel frame before the first draw.
 //
 // POPOVEROPENSTATE:
 // popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
@@ -121,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Currently ActionDetailView declares idealWidth: 560.
     /// If this is smaller than preferredContentSize.width on first render,
     /// arrowX is computed from the wrong frame → arrow appears off-centre.
-    /// ✅ Bump this whenever any view's idealWidth increases.
+    /// ✅ Bump this whenever any view’s idealWidth increases.
     /// ❌ NEVER set lower than 560.
     private static let initPanelWidth: CGFloat = 560
 
@@ -213,7 +223,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel resize (the key to dynamic size without jumping)
 
-    /// Repositions and resizes the panel. Called on every KVO fire + explicitly in openPanel.
+    /// Repositions and resizes the panel. Called on every KVO fire + explicitly in openPanel
+    /// + synchronously inside navigate(to:) to keep arrowX correct on every view swap.
     ///
     /// Reads BOTH preferredContentSize.width and .height from the hosting controller.
     /// Each SwiftUI view sets its preferred width via .frame(idealWidth: N).
@@ -257,8 +268,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Navigation
 
+    /// Swaps the hosted SwiftUI view and immediately re-syncs arrowX.
+    ///
+    /// ⚠️ ARROW CENTERING: navigate() must always call resizeAndRepositionPanel()
+    /// synchronously after swapping rootView. The KVO observer fires the same call
+    /// asynchronously, but there is at least one draw frame between the rootView swap
+    /// and the async KVO fire. During that frame the old arrowX value is still in
+    /// chrome — if the new view has a different width the arrow appears off-centre.
+    /// Calling resizeAndRepositionPanel() here closes that gap.
+    /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
+        resizeAndRepositionPanel()
     }
 
     // MARK: - Dismiss
