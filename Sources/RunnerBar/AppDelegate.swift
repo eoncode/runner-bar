@@ -48,8 +48,11 @@ private enum NavState {
 }
 
 // MARK: - AppDelegate
+// ⚠️ NO class-level @MainActor — main.swift constructs AppDelegate synchronously
+// in a nonisolated context (let delegate = AppDelegate()). A class-level
+// @MainActor would make that call illegal. Instead every method that touches
+// UI is individually annotated @MainActor or dispatched via DispatchQueue.main.
 
-@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
 
     // Fixed canvas width — PanelChrome and all views use this.
@@ -67,13 +70,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
     }
 
     // MARK: - HeightReceiver
-    // Called on main thread by HeightReporter whenever rendered content height changes.
-    // Handles live resize after the panel is already open (navigation, data load).
+    // Called on any thread by HeightReporter. Hops to main before touching UI.
     // ❌ NEVER call positionBelow() here — that re-anchors the panel.
     nonisolated func didUpdateHeight(_ height: CGFloat) {
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.panelIsOpen,
-                  let panel = self.panel, panel.isVisible,
+            guard let self = self,
+                  self.panelIsOpen,
+                  let panel = self.panel,
+                  panel.isVisible,
                   height > 0 else { return }
             let clamped = min(height, self.maxContentHeight)
             panel.updateHeight(clamped)
@@ -88,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
         }
     }
 
+    @MainActor
     private func setupUI() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -96,7 +101,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
             button.target = self
         }
 
-        // Create hosting controller with a fixed width so SwiftUI can measure.
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = []
         controller.view.frame = NSRect(x: 0, y: 0,
@@ -104,15 +108,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
         hostingController = controller
 
         let chrome = PanelChrome()
-        chrome.onClose = { [weak self] in self?.panelDidClose() }
+        chrome.onClose = { [weak self] in
+            DispatchQueue.main.async { self?.panelDidClose() }
+        }
         chrome.hostingView = controller.view
         panel = chrome
 
         RunnerStore.shared.onChange = { [weak self] in
-            guard let self else { return }
-            self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
-            if !self.panelIsOpen {
-                DispatchQueue.main.async { self.observable.reload() }
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.statusItem?.button?.image = makeStatusIcon(for: RunnerStore.shared.aggregateStatus)
+                if !self.panelIsOpen { self.observable.reload() }
             }
         }
         RunnerStore.shared.start()
@@ -120,16 +126,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
 
     // MARK: - Panel lifecycle
 
+    @MainActor
     private func panelDidClose() {
         panelIsOpen = false
         hostingController?.rootView = mainView()
     }
 
     // MARK: - View factories
-    // Each factory appends .reportHeight(to: self) so didUpdateHeight() fires
-    // whenever rendered content height changes (live resize while panel is open).
 
-    private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
+    // enrichStepsIfNeeded is nonisolated: it only does synchronous network I/O
+    // and JSON decoding — no UI access. It is always called from
+    // DispatchQueue.global(qos: .userInitiated) closures.
+    nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty
                 || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -139,12 +147,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
         return makeActiveJob(from: fresh, iso: ISO8601DateFormatter(), isDimmed: job.isDimmed)
     }
 
+    @MainActor
     private func mainView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
             store: observable,
             onSelectJob: { [weak self] job in
-                guard let self else { return }
+                guard let self = self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
@@ -154,12 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
                 }
             },
             onSelectAction: { [weak self] group in
-                guard let self else { return }
+                guard let self = self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                 self.navigate(to: self.actionDetailView(group: latest))
             },
             onSelectSettings: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.settingsView())
             },
             isPopoverOpen: panelIsOpen
@@ -172,12 +181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
     // ❌ NEVER use this method anywhere except openPanel().
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     // UNDER ANY CIRCUMSTANCE.
+    @MainActor
     private func openPanelView() -> AnyView {
         savedNavState = nil
         return AnyView(PopoverMainView(
             store: observable,
             onSelectJob: { [weak self] job in
-                guard let self else { return }
+                guard let self = self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
@@ -187,12 +197,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
                 }
             },
             onSelectAction: { [weak self] group in
-                guard let self else { return }
+                guard let self = self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                 self.navigate(to: self.actionDetailView(group: latest))
             },
             onSelectSettings: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.settingsView())
             },
             // ⚠️ CRITICAL: literal true — CPU guard, stops systemStats on first render.
@@ -203,16 +213,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
         return AnyView(ActionDetailView(
             group: group,
             onBack: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.mainView())
             },
             onSelectJob: { [weak self] job in
-                guard let self else { return }
+                guard let self = self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
@@ -224,71 +235,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
         return AnyView(JobDetailView(
             job: job,
             onBack: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.actionDetailView(group: group))
             },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
             }
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return AnyView(StepLogView(
             job: job,
             step: step,
             onBack: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
             }
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         return AnyView(JobDetailView(
             job: job,
             onBack: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.mainView())
             },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.logView(job: job, step: step))
             }
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return AnyView(SettingsView(
             onBack: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.mainView())
             },
             store: observable
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return AnyView(StepLogView(
             job: job,
             step: step,
             onBack: { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 self.navigate(to: self.detailView(job: job))
             }
         ).reportHeight(to: self))
     }
 
+    @MainActor
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -319,13 +336,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
 
     // MARK: - Navigation
 
-    /// Swaps rootView. Height self-corrects via didUpdateHeight() after SwiftUI
-    /// renders the new content — or immediately via the next sizeThatFits if needed.
+    /// Swaps rootView and immediately resizes panel to fit new content.
     /// ❌ NEVER call this from a timer, onChange, or any polling path.
+    @MainActor
     private func navigate(to view: AnyView) {
         guard let hc = hostingController else { return }
         hc.rootView = view
-        // Synchronously measure and resize for the new view.
         let size = hc.sizeThatFits(in: NSSize(width: Self.fixedWidth,
                                                height: .greatestFiniteMagnitude))
         let clamped = min(size.height, maxContentHeight)
@@ -339,13 +355,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
         if panel.isVisible { panel.closePanel() } else { openPanel() }
     }
 
-    /// Opens the panel below the status bar button with the REAL measured height.
-    /// positionBelow() is called ONCE — never again until next open.
+    /// Opens the panel with the REAL measured height. positionBelow() called once per open.
     /// ❌ NEVER replace openPanelView() with mainView() here.
     /// ❌ NEVER pass a hardcoded height to positionBelow().
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
+    @MainActor
     private func openPanel() {
         guard let button = statusItem?.button,
               button.window != nil,
@@ -353,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
               let hc = hostingController
         else { return }
 
-        // Set panelIsOpen BEFORE assigning rootView so that didUpdateHeight()
+        // Set panelIsOpen BEFORE assigning rootView so didUpdateHeight()
         // does not early-return on the very first HeightReporter callback.
         panelIsOpen = true
         hc.rootView = openPanelView()
@@ -364,9 +380,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver {
             hc.rootView = restored
         }
 
-        // Measure the REAL height synchronously before positioning.
-        // This guarantees the panel opens at the correct size regardless
-        // of HeightReporter timing.
         let measured = hc.sizeThatFits(
             in: NSSize(width: Self.fixedWidth,
                        height: .greatestFiniteMagnitude)
