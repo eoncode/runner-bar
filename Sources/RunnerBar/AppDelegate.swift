@@ -170,6 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             store: observable,
             onSelectJob: { [weak self] job in
                 guard let self = self else { return }
+                // ⚠️ async: job detail fetch is already on background thread;
+                // navigate() is dispatched to main after fetch completes.
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
@@ -181,11 +183,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             onSelectAction: { [weak self] group in
                 guard let self = self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
+                // ⚠️ async: defer navigate() past the current SwiftUI body pass to
+                // prevent re-entrant rootView mutation which silently drops the swap.
+                DispatchQueue.main.async { self.navigate(to: self.actionDetailView(group: latest)) }
             },
             onSelectSettings: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.settingsView())
+                // ⚠️ async: CRITICAL — this closure fires inside a SwiftUI button action
+                // which is still within the SwiftUI render/update cycle. Calling
+                // hc.rootView = ... synchronously here causes SwiftUI re-entry and
+                // silently drops the rootView swap, so settings never appears.
+                // Deferring to the next run loop tick lets SwiftUI finish its pass first.
+                // ❌ NEVER unwrap this back to a synchronous navigate() call.
+                DispatchQueue.main.async { self.navigate(to: self.settingsView()) }
             },
             isPopoverOpen: panelIsOpen
         ).reportHeight(to: self))
@@ -215,11 +225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             onSelectAction: { [weak self] group in
                 guard let self = self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
+                DispatchQueue.main.async { self.navigate(to: self.actionDetailView(group: latest)) }
             },
             onSelectSettings: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.settingsView())
+                // ⚠️ async: same reason as mainView() — defer past SwiftUI body pass.
+                // ❌ NEVER make this synchronous.
+                DispatchQueue.main.async { self.navigate(to: self.settingsView()) }
             },
             // ⚠️ CRITICAL: literal true — CPU guard, stops systemStats on first render.
             // ❌ NEVER change to panelIsOpen here.
@@ -236,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             group: group,
             onBack: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.mainView())
+                DispatchQueue.main.async { self.navigate(to: self.mainView()) }
             },
             onSelectJob: { [weak self] job in
                 guard let self = self else { return }
@@ -258,11 +270,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             job: job,
             onBack: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
+                DispatchQueue.main.async { self.navigate(to: self.actionDetailView(group: group)) }
             },
             onSelectStep: { [weak self] step in
                 guard let self = self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+                DispatchQueue.main.async {
+                    self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+                }
             }
         ).reportHeight(to: self))
     }
@@ -275,7 +289,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             step: step,
             onBack: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
+                DispatchQueue.main.async {
+                    self.navigate(to: self.detailViewFromAction(job: job, group: group))
+                }
             }
         ).reportHeight(to: self))
     }
@@ -287,11 +303,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             job: job,
             onBack: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.mainView())
+                DispatchQueue.main.async { self.navigate(to: self.mainView()) }
             },
             onSelectStep: { [weak self] step in
                 guard let self = self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
+                DispatchQueue.main.async { self.navigate(to: self.logView(job: job, step: step)) }
             }
         ).reportHeight(to: self))
     }
@@ -302,7 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         return AnyView(SettingsView(
             onBack: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.mainView())
+                DispatchQueue.main.async { self.navigate(to: self.mainView()) }
             },
             store: observable
         ).reportHeight(to: self))
@@ -316,7 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
             step: step,
             onBack: { [weak self] in
                 guard let self = self else { return }
-                self.navigate(to: self.detailView(job: job))
+                DispatchQueue.main.async { self.navigate(to: self.detailView(job: job)) }
             }
         ).reportHeight(to: self))
     }
@@ -353,7 +369,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
     // MARK: - Navigation
 
     /// Swaps rootView and immediately resizes panel to fit new content.
+    /// Must always be called from the main thread.
     /// ❌ NEVER call this from a timer, onChange, or any polling path.
+    /// ❌ NEVER call this synchronously from inside a SwiftUI button action / body pass —
+    ///   always wrap the call site in DispatchQueue.main.async { } to defer past the
+    ///   current SwiftUI update cycle and prevent silent re-entrant rootView drops.
     @MainActor
     private func navigate(to view: AnyView) {
         guard let hc = hostingController else { return }
@@ -361,10 +381,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
         let size = hc.sizeThatFits(in: NSSize(width: Self.fixedWidth,
                                                height: .greatestFiniteMagnitude))
         let clamped = min(size.height, maxContentHeight)
-        // ⚠️ Always call updateHeight when height is reasonable (>= 50pt).
-        // The old `if clamped > 0` guard silently blocked navigation to views
-        // (e.g. SettingsView) whose sizeThatFits returned a small value on the
-        // first pass, leaving the panel stuck at the previous view's height.
+        // ⚠️ Threshold 50pt: guards against transient zero returns from sizeThatFits
+        // while still allowing small views. The old `> 0` guard blocked SettingsView
+        // when its idealHeight-only frame returned a near-zero on first measurement.
         if clamped >= 50 { panel?.updateHeight(clamped) }
     }
 
