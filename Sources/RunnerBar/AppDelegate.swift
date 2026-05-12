@@ -329,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, HeightReceiver, @unche
 
     // MARK: - Panel show/hide
 
-    @objc private func togglePanel() {
+    @MainActor @objc private func togglePanel() {
         guard let panel else { return }
         if panel.isVisible { panel.closePanel() } else { openPanel() }
     }
