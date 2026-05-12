@@ -38,6 +38,8 @@ import SwiftUI
 //     otherwise    → "X/N jobs completed"
 //   Elapsed moved from header to timing row below branch label.
 //   SHA/PR label made tappable: opens commit or PR on GitHub.
+//   Time-range and elapsed columns hidden for queued jobs (no startedAt).
+//   Previously these showed "–" which carried no meaning — now suppressed.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -303,8 +305,9 @@ struct ActionDetailView: View {
     /// Column widths (right side, fixed so columns stay aligned):
     ///   index      : 28pt  ("#10" = 3 chars monospaced, left-aligned)
     ///   time range : 130pt  ("HH:mm:ss→HH:mm:ss" = 19 chars monospaced)
+    ///                shown only when job has started — hidden for queued jobs
     ///   status     : 80pt
-    ///   elapsed    : 40pt
+    ///   elapsed    : 40pt  shown only when job has started
     ///   chevron    : intrinsic
     @ViewBuilder
     private func jobRow(_ job: ActiveJob, index: Int) -> some View {
@@ -328,13 +331,20 @@ struct ActionDetailView: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
 
-            // Time range: fixed width, always visible
-            // Format: HH:mm:ss→HH:mm:ss  |  HH:mm:ss→now  |  –
-            Text(jobTimeRange(job))
-                .font(.caption2.monospacedDigit())
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .frame(width: 130, alignment: .leading)
+            // Time range: only shown when the job has actually started.
+            // Queued jobs have no startedAt — suppress entirely rather than
+            // showing a meaningless "–" placeholder.
+            if job.startedAt != nil {
+                Text(jobTimeRange(job))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 130, alignment: .leading)
+            } else {
+                // Reserve the same space so right-side columns stay aligned.
+                Spacer()
+                    .frame(width: 130)
+            }
 
             Spacer(minLength: 0)
 
@@ -351,11 +361,16 @@ struct ActionDetailView: View {
                     .frame(width: 80, alignment: .trailing)
             }
 
-            // Elapsed: fixed width
-            Text(job.elapsed)
-                .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
-                .frame(width: 40, alignment: .trailing)
+            // Elapsed: only shown when the job has started.
+            // Queued jobs have no duration yet — suppress rather than showing "–".
+            if job.startedAt != nil {
+                Text(job.elapsed)
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+            } else {
+                Spacer().frame(width: 40)
+            }
 
             Image(systemName: "chevron.right")
                 .font(.caption2)
@@ -371,18 +386,17 @@ struct ActionDetailView: View {
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     /// Formats the start → end time range with seconds.
-    /// queued (no timestamps): "–"
-    /// in_progress:            "HH:mm:ss→now"
-    /// completed:              "HH:mm:ss→HH:mm:ss"
+    /// Only called when job.startedAt is non-nil.
+    /// in_progress:  "HH:mm:ss→now"
+    /// completed:    "HH:mm:ss→HH:mm:ss"
     private func jobTimeRange(_ job: ActiveJob) -> String {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm:ss"
-        guard let start = job.startedAt ?? job.createdAt else { return "–" }
+        guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = fmt.string(from: start)
         if let end = job.completedAt {
             return "\(startStr)→\(fmt.string(from: end))"
         }
-        if job.status == "queued" { return "–" }
         return "\(startStr)→now"
     }
 
