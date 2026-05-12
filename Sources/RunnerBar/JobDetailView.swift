@@ -22,6 +22,7 @@ import SwiftUI
 //   idealWidth bumped 480 → 560 to match AppDelegate.initPanelWidth.
 //   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
 //   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
+//   Pressable repo / branch / SHA-origin labels added to header metadata row.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -29,6 +30,7 @@ import SwiftUI
 /// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
 struct JobDetailView: View {
     let job: ActiveJob
+    let group: ActionGroup          // ← NEW: supplies repo / branch / SHA context
     let onBack: () -> Void
     let onSelectStep: (JobStep) -> Void
 
@@ -121,6 +123,11 @@ struct JobDetailView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
                 .padding(.horizontal, 12)
+                .padding(.bottom, 4)
+
+            // ── Repo / Branch / Origin row ────────────────────────────────────
+            metadataRow
+                .padding(.horizontal, 12)
                 .padding(.bottom, job.startedAt != nil ? 3 : 8)
 
             // ── Job timing bar ────────────────────────────────────────────────
@@ -183,6 +190,84 @@ struct JobDetailView: View {
             tickTimer?.invalidate()
             tickTimer = nil
         }
+    }
+
+    // MARK: - Metadata row (repo · branch · origin)
+
+    /// Pressable repo / branch / SHA-or-PR origin chips displayed below the job title.
+    @ViewBuilder
+    private var metadataRow: some View {
+        HStack(spacing: 6) {
+
+            // ── Repo ──────────────────────────────────────────────────────────
+            if let repoURL = URL(string: "https://github.com/\(group.repo)") {
+                // Show only the repo name (after the "/"), not the full owner/repo,
+                // to keep the chip compact. Tooltip shows the full scope.
+                let repoName = group.repo.components(separatedBy: "/").last ?? group.repo
+                metadataChip(
+                    icon: "folder",
+                    label: repoName,
+                    url: repoURL,
+                    tooltip: group.repo
+                )
+            }
+
+            // ── Branch ────────────────────────────────────────────────────────
+            if let branch = group.headBranch,
+               let branchURL = URL(string: "https://github.com/\(group.repo)/tree/\(branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)") {
+                metadataChip(
+                    icon: "arrow.triangle.branch",
+                    label: branch,
+                    url: branchURL,
+                    tooltip: "Branch: \(branch)"
+                )
+            }
+
+            // ── SHA / PR origin ───────────────────────────────────────────────
+            // group.label is "#1270" for PRs or "d6281b" (sha[:7]) for pushes.
+            let originURL: URL? = {
+                let lbl = group.label
+                if lbl.hasPrefix("#"),
+                   let num = lbl.dropFirst().components(separatedBy: CharacterSet.decimalDigits.inverted).first,
+                   !num.isEmpty {
+                    // PR origin
+                    return URL(string: "https://github.com/\(group.repo)/pull/\(num)")
+                } else {
+                    // Commit origin — use full headSha so GitHub resolves correctly
+                    return URL(string: "https://github.com/\(group.repo)/commit/\(group.headSha)")
+                }
+            }()
+
+            if let url = originURL {
+                let isPR = group.label.hasPrefix("#")
+                metadataChip(
+                    icon: isPR ? "arrow.triangle.pull" : "chevron.left.forwardslash.chevron.right",
+                    label: group.label,
+                    url: url,
+                    tooltip: isPR
+                        ? "Pull request \(group.label)"
+                        : "Commit \(group.headSha.prefix(7))"
+                )
+            }
+        }
+    }
+
+    /// A small pressable label chip: [icon] [text], opens `url` on click.
+    @ViewBuilder
+    private func metadataChip(icon: String, label: String, url: URL, tooltip: String) -> some View {
+        Button(action: { NSWorkspace.shared.open(url) }) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                Text(label)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .foregroundColor(.secondary)
+            .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
     }
 
     // MARK: - Step row
