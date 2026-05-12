@@ -67,6 +67,8 @@ struct SettingsView: View {
     @State private var showAddRunnerSheet = false
     /// Surfaced when remove() returns false — cleared on next refresh.
     @State private var removeErrorMessage: String?
+    /// `true` while `gh auth logout` is in flight — disables the button to prevent double-tap.
+    @State private var isSigningOut = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -435,6 +437,17 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Account section
+    //
+    // When authenticated, shows:
+    //   GitHub   ● Authenticated   [Sign out]
+    //
+    // Sign out runs `gh auth logout --hostname github.com` on a background
+    // thread, then re-checks githubToken() to refresh isAuthenticated.
+    // isSigningOut disables the button while the shell call is in flight.
+    //
+    // ❌ NEVER remove the `gh auth login` hint below — it is the only
+    //    recovery path shown to the user after signing out.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
@@ -444,9 +457,19 @@ struct SettingsView: View {
                 Text("GitHub").font(.system(size: 12))
                 Spacer()
                 if isAuthenticated {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated").font(.caption).foregroundColor(.secondary)
+                    HStack(spacing: 8) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            Text("Authenticated").font(.caption).foregroundColor(.secondary)
+                        }
+                        Button(action: signOutOfGitHub) {
+                            Text("Sign out")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSigningOut)
+                        .help("Run gh auth logout and disconnect RunnerBar from GitHub")
                     }
                 } else {
                     Button(action: signInWithGitHub, label: {
@@ -547,6 +570,23 @@ struct SettingsView: View {
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Runs `gh auth logout --hostname github.com` on a background thread.
+    /// Updates `isAuthenticated` on the main thread when the call completes.
+    /// Uses `isSigningOut` to prevent double-tap.
+    ///
+    /// ❌ NEVER run shell calls on the main thread — they block the UI.
+    private func signOutOfGitHub() {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
+            DispatchQueue.main.async {
+                isAuthenticated = (githubToken() != nil)
+                isSigningOut = false
+            }
+        }
     }
 }
 // swiftlint:enable type_body_length
