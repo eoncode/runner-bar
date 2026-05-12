@@ -36,6 +36,8 @@ import SwiftUI
 //     any failure  → "X/N jobs failed"
 //     any cancel   → "X/N jobs cancelled"
 //     otherwise    → "X/N jobs completed"
+//   Elapsed moved from header to timing row below branch label.
+//   SHA/PR label made tappable: opens commit or PR on GitHub.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -56,10 +58,19 @@ struct ActionDetailView: View {
     /// Held so we can invalidate on disappear and prevent timer accumulation.
     @State private var tickTimer: Timer?
 
+    // MARK: - Formatters
+
+    private static let timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────────────────
+            // Elapsed has been moved to the timing row below the branch label.
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -106,20 +117,24 @@ struct ActionDetailView: View {
                     },
                     isDisabled: false
                 )
-                Text(elapsedLive(tick: tick))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ─────────────────────────────────────────────────
+            // ── Group title block ───────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(group.label)
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                    // SHA / PR label: tappable, opens commit or PR on GitHub.
+                    // PR labels start with "#"; everything else is a short sha.
+                    Button(action: openLabelOnGitHub) {
+                        Text(group.label)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(labelLinkTooltip)
+
                     Text(group.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
@@ -132,6 +147,32 @@ struct ActionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                // Timing row: start → end · elapsed
+                // Shows start time of first job and end time of last job (or "now" if running).
+                // Elapsed ticks every second via `tick`.
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    Text(groupStartLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    Text("→")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(groupEndLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    Text("·")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(elapsedLive(tick: tick))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                }
                 Text(jobsSummaryLine)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -141,7 +182,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ────────────────────────────────────────────────────────
+            // ── Jobs list ──────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -176,6 +217,44 @@ struct ActionDetailView: View {
             tickTimer?.invalidate()
             tickTimer = nil
         }
+    }
+
+    // MARK: - GitHub link helpers
+
+    /// Opens the commit or PR on GitHub.
+    /// PR labels start with "#" (e.g. "#1270") — those link to the PR page.
+    /// Everything else is a short sha — links to the commit page.
+    private func openLabelOnGitHub() {
+        let urlString: String
+        if group.label.hasPrefix("#"),
+           let number = Int(group.label.dropFirst()) {
+            urlString = "https://github.com/\(group.repo)/pull/\(number)"
+        } else {
+            // Use the full headSha for the commit link so GitHub resolves it correctly.
+            urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
+        }
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Tooltip for the label button.
+    private var labelLinkTooltip: String {
+        group.label.hasPrefix("#")
+            ? "Open pull request on GitHub"
+            : "Open commit on GitHub"
+    }
+
+    // MARK: - Timing row helpers
+
+    private var groupStartLabel: String {
+        guard let d = group.firstJobStartedAt ?? group.createdAt else { return "—" }
+        return Self.timeFmt.string(from: d)
+    }
+
+    private var groupEndLabel: String {
+        if let d = group.lastJobCompletedAt { return Self.timeFmt.string(from: d) }
+        if group.groupStatus == .inProgress { return "now" }
+        return "—"
     }
 
     // MARK: - Job summary line
