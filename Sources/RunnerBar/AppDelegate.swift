@@ -21,7 +21,7 @@ import SwiftUI
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from status button’s window frame (screen coords):
+// 2. Position is computed from status button's window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
 //      panelY = statusItemRect.minY - clampedContentH - arrowHeight - gap
@@ -42,7 +42,7 @@ import SwiftUI
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
 //
 // INITIAL WIDTH (openPanel):
-// initW MUST match the widest view’s idealWidth (currently 560 for ActionDetailView).
+// initW MUST match the widest view's idealWidth (currently 560 for ActionDetailView).
 // If initW is smaller than the actual preferredContentSize.width, the first
 // resizeAndRepositionPanel() call repositions the panel — but arrowX is computed
 // from the *old* frame, producing a stale offset that makes the arrow appear off-centre.
@@ -53,7 +53,7 @@ import SwiftUI
 // navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
 // and fires the preferredContentSize KVO — async on the main queue. Between the
 // navigate() call and the KVO fire there is at least one frame where arrowX still
-// holds the value computed for the *previous* view’s panel frame. If the new view
+// holds the value computed for the *previous* view's panel frame. If the new view
 // has a different width, resizeAndRepositionPanel() moves the panel, invalidating
 // the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
 // navigate(to:) immediately after swapping rootView, so arrowX is always
@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Currently ActionDetailView declares idealWidth: 560.
     /// If this is smaller than preferredContentSize.width on first render,
     /// arrowX is computed from the wrong frame → arrow appears off-centre.
-    /// ✅ Bump this whenever any view’s idealWidth increases.
+    /// ✅ Bump this whenever any view's idealWidth increases.
     /// ❌ NEVER set lower than 560.
     private static let initPanelWidth: CGFloat = 560
 
@@ -402,6 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionJobDetail(job, group)
         return wrapEnv(JobDetailView(
             job: job,
+            group: group,           // ← repo / branch / SHA context for metadata row
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.actionDetailView(group: group))
@@ -426,10 +427,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    // MARK: - Jobs-path detail view (reached from main job list, no ActionGroup context)
+
+    /// Constructs a minimal synthetic ActionGroup from the job's htmlUrl so that
+    /// JobDetailView's metadata row (repo / branch / SHA chips) can still render
+    /// on the direct-from-main-list navigation path.
+    ///
+    /// Fields populated:
+    ///   repo      → owner/repo derived from htmlUrl
+    ///   headSha   → empty (no run context on this path)
+    ///   label     → empty (chip hidden when label is "")
+    ///   headBranch → nil (branch chip omitted)
+    ///   runs      → [] (not needed for display)
+    private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
+        let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
+        return ActionGroup(
+            headSha: "",
+            label: "",
+            title: "",
+            headBranch: nil,
+            repo: scope,
+            runs: []
+        )
+    }
+
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
+        let group = syntheticGroup(for: job)
         return wrapEnv(JobDetailView(
             job: job,
+            group: group,           // ← repo chip available; branch/SHA chips omitted
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())
