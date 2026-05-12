@@ -10,11 +10,11 @@ import SwiftUI
 // AppDelegate observes it and calls NSPanel.setFrame() — zero jump (no anchor).
 // SwiftUI views report their natural ideal size. No height caps needed here.
 //
-// RULE 1: Root VStack uses .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-//   idealWidth: 480 pins preferredContentSize.width = 480 (panel width never changes).
-//   ❌ NEVER remove idealWidth: 480.
+// RULE 1: Root VStack uses .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
+//   idealWidth: 720 pins preferredContentSize.width = 720 (panel width never changes).
+//   ❌ NEVER remove idealWidth: 720.
 //   ❌ NEVER add idealHeight or maxHeight to the root frame.
-//   ❌ NEVER use .frame(width: 480) — not equivalent.
+//   ❌ NEVER use .frame(width: 720) — not equivalent.
 //   ❌ NEVER use .fixedSize() on the root VStack.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
@@ -52,7 +52,7 @@ import SwiftUI
 //   ❌ NEVER call LocalRunnerStore.shared.refresh() directly from Timer closure
 //      — it is @MainActor isolated, requires Task { @MainActor in }.
 //
-// RULE 8: idealWidth is 480. AppDelegate.fixedWidth is also 480.
+// RULE 8: idealWidth is 720. AppDelegate.initPanelWidth is also 720.
 //   ❌ NEVER change one without changing the other.
 //
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
@@ -122,9 +122,9 @@ struct PopoverMainView: View {
                 }
             actionsSection
         }
-        // RULE 1: idealWidth:480 pins preferredContentSize.width = 480 always.
+        // RULE 1: idealWidth:720 pins preferredContentSize.width = 720 always.
         // ❌ NEVER add idealHeight or maxHeight here.
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if !popoverOpenState.isOpen { systemStats.start() }

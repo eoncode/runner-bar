@@ -46,11 +46,12 @@ import SwiftUI
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
 //
 // INITIAL WIDTH (openPanel):
-// initW MUST match the widest view's idealWidth (currently 560 for ActionDetailView).
-// If initW is smaller than the actual preferredContentSize.width, the first
-// resizeAndRepositionPanel() call repositions the panel — but arrowX is computed
-// from the *old* frame, producing a stale offset that makes the arrow appear off-centre.
-// ✅ Keep initW = 560 (or bump to match whenever idealWidth increases).
+// initW MUST match the widest view's idealWidth (currently 720 for PopoverMainView
+// and ActionDetailView). If initW is smaller than the actual
+// preferredContentSize.width, the first resizeAndRepositionPanel() call
+// repositions the panel — but arrowX is computed from the *old* frame, producing
+// a stale offset that makes the arrow appear off-centre.
+// ✅ Keep initW = 720 (or bump to match whenever idealWidth increases).
 // ❌ NEVER set initW smaller than the largest idealWidth in any view.
 //
 // ARROW CENTERING ON NAVIGATE:
@@ -137,8 +138,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let gap: CGFloat = 2
 
-    /// ❌ NEVER set lower than 560.
-    private static let initPanelWidth: CGFloat = 560
+    /// Must equal the largest idealWidth across all SwiftUI views (currently 720).
+    /// ❌ NEVER set lower than 720. ❌ NEVER change without updating idealWidth in
+    /// PopoverMainView (RULE 8).
+    private static let initPanelWidth: CGFloat = 720
 
     // MARK: - Environment injection
 
