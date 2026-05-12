@@ -83,7 +83,7 @@ struct JobDetailView: View {
         // Do NOT add .frame(maxHeight:), .frame(height:), or .fixedSize() here.
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────────────────
             // MUST remain OUTSIDE ScrollView. Do not move into ScrollView.
             // Adding .fixedSize() or .frame(height:) to this HStack will
             // corrupt the parent fittingSize — see regression guard above.
@@ -151,20 +151,46 @@ struct JobDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Job title ─────────────────────────────────────────────────────────
-            // lineLimit(2) is safe here. .fixedSize(horizontal:false,vertical:true)
-            // is BANNED — it forces an unconstrained vertical layout pass on the
-            // root VStack which corrupts fittingSize. lineLimit(2) alone is enough.
+            // ── Job title ──────────────────────────────────────────────────────────────
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
                 // ⚠️ DO NOT ADD .fixedSize(horizontal: false, vertical: true) here.
                 // It was removed intentionally. See regression guard at top of file.
                 .padding(.horizontal, 12)
+                .padding(.bottom, job.startedAt != nil ? 3 : 8)
+
+            // ── Job timing bar ────────────────────────────────────────────────────
+            // Shown only when startedAt is available. For in-progress jobs,
+            // completedAt is nil so we show "running" in its place.
+            if let start = job.startedAt {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Text(wallTime(start))
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    if let end = job.completedAt {
+                        Text(wallTime(end))
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("running")
+                            .font(.caption)
+                            .foregroundColor(.yellow)
+                    }
+                }
+                .padding(.horizontal, 12)
                 .padding(.bottom, 8)
+            }
+
             Divider()
 
-            // ── Steps list: MUST be inside ScrollView ─────────────────────────────
+            // ── Steps list: MUST be inside ScrollView ─────────────────────────────────
             // NEVER move the header above outside into here.
             // ⚠️ maxHeight cap is REQUIRED — see regression guard above (ref #370).
             // Without it, preferredContentSize.height = full content height on navigate
@@ -181,28 +207,7 @@ struct JobDetailView: View {
                     } else {
                         ForEach(job.steps) { step in
                             Button(action: { onSelectStep(step) }, label: {
-                                HStack(spacing: 8) {
-                                    Text(step.conclusionIcon)
-                                        .font(.system(size: 11))
-                                        .foregroundColor(stepColor(step))
-                                        .frame(width: 14, alignment: .center)
-                                    Text(step.name)
-                                        .font(.system(size: 12))
-                                        .foregroundColor(step.status == "queued" ? .secondary : .primary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                    Spacer()
-                                    Text(step.elapsed)
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 40, alignment: .trailing)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 3)
-                                .contentShape(Rectangle())
+                                stepRow(step)
                             })
                             .buttonStyle(.plain)
                         }
@@ -237,6 +242,63 @@ struct JobDetailView: View {
         }
     }
 
+    // MARK: - Step row
+
+    /// Renders one step row: icon + name + start→end timestamps + elapsed + chevron.
+    @ViewBuilder
+    private func stepRow(_ step: JobStep) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(step.conclusionIcon)
+                .font(.system(size: 11))
+                .foregroundColor(stepColor(step))
+                .frame(width: 14, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(step.name)
+                    .font(.system(size: 12))
+                    .foregroundColor(step.status == "queued" ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                // Start → end timestamps — shown only when the step has started.
+                if let start = step.startedAt {
+                    HStack(spacing: 3) {
+                        Text(wallTime(start))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundColor(.secondary)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                        if let end = step.completedAt {
+                            Text(wallTime(end))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("running")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+
+            Text(step.elapsed)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .fixedSize()
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: - Helpers
+
     /// Returns job.elapsed, re-evaluated every tick so the header updates live.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
@@ -248,4 +310,19 @@ struct JobDetailView: View {
         default: return step.status == "in_progress" ? .yellow : .secondary
         }
     }
+}
+
+// MARK: - Wallclock formatter
+
+/// Formats a `Date` as a local-timezone HH:mm:ss wallclock string.
+/// Used for start/end timestamps in job and step rows.
+/// File-private so it doesn’t leak into other files.
+private let _wallTimeFmt: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "HH:mm:ss"
+    return f
+}()
+
+private func wallTime(_ date: Date) -> String {
+    _wallTimeFmt.string(from: date)
 }
