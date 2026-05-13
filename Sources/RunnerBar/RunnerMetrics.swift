@@ -13,7 +13,8 @@ struct RunnerMetrics: Codable {
 /// Extension providing shell-based sampling helpers for `RunnerMetrics`.
 extension RunnerMetrics {
     /// Samples CPU and memory for the first `Runner.Worker` process whose
-    /// command line contains `runnerName`. Returns `nil` if no match or parse fails.
+    /// command line contains `runnerName`.
+    /// Returns `nil` if no match or parse fails.
     static func sample(for runnerName: String) -> RunnerMetrics? {
         let output = shell("ps aux")
         for line in output.components(separatedBy: "\n") {
@@ -31,8 +32,9 @@ extension RunnerMetrics {
 
 // MARK: - allWorkerMetrics
 /// Returns CPU/MEM metrics for every `Runner.Worker` process found in `ps aux`,
-/// in the order they appear. Used by `RunnerStore.fetchAndEnrichRunners()` to
-/// assign metrics to runners by slot index.
+/// in the order they appear.
+/// Used by `RunnerStore.fetchAndEnrichRunners()` to assign metrics to runners
+/// by slot index.
 func allWorkerMetrics() -> [RunnerMetrics] {
     let output = shell("ps aux")
     var result: [RunnerMetrics] = []
