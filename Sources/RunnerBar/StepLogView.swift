@@ -8,7 +8,7 @@ import SwiftUI
 // ║                                                                            ║
 // ║ LAYOUT RULES:                                                              ║
 // ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)      ║
-// ║ • idealWidth: 480 hints SwiftUI’s initial natural width measurement.        ║
+// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.        ║
 // ║   NSHostingController reads idealWidth as preferredContentSize.width        ║
 // ║   on the first layout pass (NSPanel architecture, not NSPopover).           ║
 // ║   The panel then resizes to content-driven width via KVO on                ║
@@ -97,6 +97,7 @@ struct StepLogView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
+                // swiftlint:disable:next multiple_closures_with_trailing_closure
                 LogCopyButton(
                     fetch: { completion in
                         let text = logText
