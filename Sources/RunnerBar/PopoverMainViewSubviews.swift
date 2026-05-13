@@ -174,8 +174,8 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 struct ActionRowView: View {
-    let group:    ActionGroup
-    let tick:     Int
+    let group: ActionGroup
+    let tick: Int
     let onSelect: () -> Void
 
     var body: some View {
@@ -189,7 +189,7 @@ struct ActionRowView: View {
     private var rowContent: some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         // ❌ NEVER remove this line.
-        let _ = tick
+        _ = tick
         return HStack(spacing: 6) {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
             RunnerTypeIcon(isLocal: group.isLocalGroup)
@@ -279,7 +279,7 @@ struct ActionRowView: View {
 /// is major major major.
 struct InlineJobRowsView: View {
     let group: ActionGroup
-    let tick:  Int
+    let tick: Int
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
@@ -317,7 +317,7 @@ struct InlineJobRowsView: View {
     private func jobRow(_ job: ActiveJob) -> some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         // ❌ NEVER remove this line.
-        let _ = tick
+        _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
         let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done  = job.steps.filter { $0.conclusion != nil }.count
