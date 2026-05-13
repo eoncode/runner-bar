@@ -7,7 +7,7 @@ import SwiftUI
 // this view is embedded inside an HStack header, never at the root level.
 //
 // ❌ NEVER wrap CancelButton in a .frame(height:) or .fixedSize() at the
-// CALL SITE — that would corrupt the parent view's preferredContentSize and cause
+// CALL SITE — that would corrupt the parent view’s preferredContentSize and cause
 // the panel to jump sideways when AppDelegate calls navigate().
 //
 // ✔ The isDisabled=true state returns EmptyView, completely removing the
@@ -19,8 +19,8 @@ import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView, ActionDetailView, and StepLogView.
 ///
-/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") →
-/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
+/// States: idle (xmark.circle + “Cancel”) → loading (spinner + “Running…”) →
+/// done(true) (✓ + “Done”, 1.5 s) OR done(false) (✗ + “Failed”, 1.5 s) → idle
 ///
 /// When `isDisabled` is true the button returns **EmptyView** and occupies no space.
 /// This is intentional: keeping a zero-opacity placeholder creates a blank gap.
