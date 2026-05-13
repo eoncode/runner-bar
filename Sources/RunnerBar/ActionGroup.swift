@@ -3,6 +3,13 @@ import Foundation
 
 // swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
 
+// MARK: - File-level formatter
+
+/// Shared ISO-8601 date formatter for this file.
+/// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
+/// keeping one instance avoids repeated allocation on every fetch cycle.
+private let iso8601 = ISO8601DateFormatter()
+
 // MARK: - GroupStatus
 /// Type-safe status for a workflow run group (commit/PR trigger).
 /// Mirrors ci-dash.py's group status derivation logic.
@@ -121,7 +128,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
     /// has not yet concluded, to prevent a premature FAILED badge.
     var conclusion: String? {
-        // ── Job-based conclusion (preferred) ──────────────────────────────────────────────────
+        // ── Job-based conclusion (preferred) ──────────────────────────────────────────────────────
         // Use job data when available and fully loaded.
         if !jobs.isEmpty {
             // Only conclude when every single job has a conclusion.
@@ -136,7 +143,7 @@ struct ActionGroup: Identifiable, Equatable {
             if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
             return "success"
         }
-        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ──────────────────────
+        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ────────────────────
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // Do NOT move the run-based logic back to be the primary path — see above.
@@ -264,7 +271,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         log("fetchActionGroups › skipping org scope \(scope)")
         return []
     }
-    let iso = ISO8601DateFormatter()
     var runPayloads: [RunPayload] = []
     var seenIDs = Set<Int>()
 
@@ -317,7 +323,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
             var fetched: [ActiveJob] = []
             var seenJobIDs = Set<Int>()
             for runID in shaRuns.map({ $0.id }) {
-                for job in fetchJobsForRun(runID, scope: scope, iso: iso)
+                for job in fetchJobsForRun(runID, scope: scope)
                 where seenJobIDs.insert(job.id).inserted {
                     fetched.append(job)
                 }
@@ -337,7 +343,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
             jobs: allJobs,
             firstJobStartedAt: starts.min(),
             lastJobCompletedAt: ends.max(),
-            createdAt: rep.createdAt.flatMap { iso.date(from: $0) }
+            createdAt: rep.createdAt.flatMap { iso8601.date(from: $0) }
         )
     }
     groups.sort { leftGroup, rightGroup in
@@ -384,11 +390,11 @@ func makeActiveJob(from jobPayload: JobPayload,
 /// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
 /// causing the main row to show a lower jobsTotal than the detail view.
 /// per_page=100 is the GitHub API maximum and covers all realistic job counts.
-private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
+private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
     else { return [] }
-    let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
+    let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso8601) }
     var result = initial
     var refreshCount = 0
     for idx in result.indices {
@@ -399,7 +405,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormat
         guard let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
               let fresh = try? JSONDecoder().decode(JobPayload.self, from: freshData)
         else { continue }
-        let freshJob = makeActiveJob(from: fresh, iso: iso)
+        let freshJob = makeActiveJob(from: fresh, iso: iso8601)
         if fresh.conclusion != nil { result[idx] = freshJob; continue }
         let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
