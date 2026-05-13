@@ -237,20 +237,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chromeView.addSubview(controller.view)
         chrome = chromeView
 
-        let p = NSPanel(
+        let newPanel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        p.contentView = chromeView
-        p.isOpaque = false
-        p.backgroundColor = NSColor(white: 1, alpha: 0.001)
-        p.hasShadow = true
-        p.level = .popUpMenu
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        p.animationBehavior = .none
-        panel = p
+        newPanel.contentView = chromeView
+        newPanel.isOpaque = false
+        newPanel.backgroundColor = NSColor(white: 1, alpha: 0.001)
+        newPanel.hasShadow = true
+        newPanel.level = .popUpMenu
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        newPanel.animationBehavior = .none
+        panel = newPanel
 
         sizeObservation = controller.observe(
             \.preferredContentSize,

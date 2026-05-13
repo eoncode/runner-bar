@@ -200,7 +200,7 @@ final class SystemStatsViewModel: ObservableObject {
             .volumeAvailableCapacityKey // ✅ TCC-free
         ]),
         let totalBytes = values.volumeTotalCapacity,
-        let freeBytes  = values.volumeAvailableCapacity // ✅ not ForImportantUsage
+        let freeBytes = values.volumeAvailableCapacity // ✅ not ForImportantUsage
         else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
         let total = Double(totalBytes) / gigabytes
         let free = Double(freeBytes) / gigabytes
