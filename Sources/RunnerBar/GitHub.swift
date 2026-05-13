@@ -6,7 +6,8 @@ import os
 /// Thread-safe rate-limit flag.
 /// Replaces the bare `var ghIsRateLimited: Bool` global that was written from
 /// background threads without synchronization (data race, issue #399 item 2).
-/// Access via `ghRateLimitFlag.withLock { ... }` or the helpers below.
+/// Access via `_rateLimitLock.withLock { ... }` or the `ghIsRateLimited` computed
+/// property below.
 private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
 
 /// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.

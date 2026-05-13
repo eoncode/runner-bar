@@ -47,7 +47,8 @@ import SwiftUI
 // the panel under the status button.
 // ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-// ❌ NEVER restore minWidth to 560 in AppDelegate — that was the old fixed-width floor.
+// ❌ NEVER restore minWidth to 560 in ActionDetailView — that was ActionDetailView's
+//    content minWidth, not AppDelegate's floor (AppDelegate's old floor was fixedWidth = 340).
 //
 // INITIAL WIDTH (openPanel):
 // initPanelWidth is the fallback frame width used for the initial open before
@@ -175,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     /// Views declare their own, larger minWidth/idealWidth — this is the AppDelegate floor only.
-    /// ❌ NEVER restore to 560 — that was the old fixed-width floor.
+    /// ❌ NEVER restore to 280 without also reviewing each view's own minWidth/idealWidth.
     private static let minWidth: CGFloat = 280
 
     private var maxWidth: CGFloat {

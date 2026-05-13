@@ -21,7 +21,8 @@ import SwiftUI
 // HISTORY:
 //   idealWidth bumped 480 → 560 to accommodate step timing columns.
 //   idealWidth bumped 560 → 720 to accommodate action cluster width.
-//   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
+//   Step number badge (#N) added to step rows (step.id is 1-based, assigned
+//     locally from the enumerated index — not a GitHub API field).
 //   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 //   Pressable repo / branch / SHA-origin labels added to header metadata row.
 //   Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
