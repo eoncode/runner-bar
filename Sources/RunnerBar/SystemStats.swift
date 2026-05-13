@@ -68,18 +68,15 @@ private struct DiskStats {
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
-    /// The latest system snapshot published to SwiftUI observers.
     @Published var stats: SystemStats = .zero
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
-    /// Creates a new view model. Call `start()` to begin polling.
     init() {}
     deinit { timer?.invalidate() }
 
     // MARK: - Lifecycle
 
-    /// Starts the 2-second polling loop and fires one immediate background sample.
     func start() {
         timer?.invalidate()
         DispatchQueue.global(qos: .utility).async { self.sample() }
@@ -88,7 +85,6 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
-    /// Stops the polling loop and captures a pre-warm tick snapshot for the next `start()` call.
     func stop() {
         timer?.invalidate()
         timer = nil
@@ -113,7 +109,7 @@ final class SystemStatsViewModel: ObservableObject {
         var userTicks = 0.0
         var sysTicks = 0.0
         var totalTicks = 0.0
-        for coreIdx in 0..<numCPUs {
+        for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
             let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
             let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
@@ -164,10 +160,6 @@ final class SystemStatsViewModel: ObservableObject {
 
     /// ⚠️ PERMISSION GUARD: Uses `volumeAvailableCapacityKey` — NOT
     /// `volumeAvailableCapacityForImportantUsageKey`.
-    ///
-    /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
-    /// on every popover open. This app declares no media entitlements and
-    /// must never use that key.
     ///
     /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT

@@ -13,7 +13,7 @@ final class SettingsStore: ObservableObject {
     }
 
     /// Valid range for the polling interval (seconds).
-    static let pollingRange: ClosedRange<Int> = 10...300
+    static let pollingRange: ClosedRange<Int> = 10 ... 300
 
     /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
     @Published var pollingInterval: Int {
