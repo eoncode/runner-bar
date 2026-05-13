@@ -142,9 +142,9 @@ final class SystemStatsViewModel: ObservableObject {
             vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<Int32>.stride)
         )
         let cur = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
-        let dUser  = cur.user   - prevTicks.user
-        let dSys   = cur.system - prevTicks.system
-        let dTotal = cur.total  - prevTicks.total
+        let dUser = cur.user - prevTicks.user
+        let dSys = cur.system - prevTicks.system
+        let dTotal = cur.total - prevTicks.total
         prevTicks = cur
         guard dTotal > 0 else { return 0 }
         return min(100, ((dUser + dSys) / dTotal) * 100)
