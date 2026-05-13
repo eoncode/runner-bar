@@ -1,4 +1,3 @@
-// swiftlint:disable line_length operator_usage_whitespace trailing_newline superfluous_disable_command
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
@@ -76,6 +75,7 @@ struct PopoverHeaderView: View {
             )
             statChip(
                 label: "MEM",
+                // swiftlint:disable:next line_length
                 value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
                     + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
                 pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
@@ -90,6 +90,7 @@ struct PopoverHeaderView: View {
         let free    = max(0, total - used)
         let pct     = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? (free / total) * 100 : 0
+        // swiftlint:disable:next line_length
         let value   = blockBar(pct: pct)
             + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
             + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
