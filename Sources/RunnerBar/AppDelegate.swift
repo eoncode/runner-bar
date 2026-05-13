@@ -86,7 +86,7 @@ import SwiftUI
 // STATUS ICON (issue #241):
 // updateStatusIcon() sets the menu bar image from RunnerStore.shared.aggregateStatus.
 // ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
-// ❌ NEVER read RunnerStore.shared.jobs for the icon — it will always be 0.
+// ❌ NEVER read RunnerStore.shared.jobs for the icon — it is almost always empty.
 // ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
 //    Use AggregateStatus.symbolName with NSImage(systemSymbolName:) instead.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -173,7 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    /// Lower bound for panel content width. Matches minWidth in all SwiftUI root frames.
+    /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
+    /// Views declare their own, larger minWidth/idealWidth — this is the AppDelegate floor only.
     /// ❌ NEVER restore to 560 — that was the old fixed-width floor.
     private static let minWidth: CGFloat = 280
 
