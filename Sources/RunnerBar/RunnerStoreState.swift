@@ -178,8 +178,8 @@ extension RunnerStore {
             + " | cache: \(newCache.count) | display: \(display.count)"
         )
 
-        let enriched      = display.map    { $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) }
-        let enrichedCache = newCache.mapValues { $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) }
+        let enriched      = display.map({ $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) })
+        let enrichedCache = newCache.mapValues({ $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) })
 
         return GroupPollResult(
             display: enriched,

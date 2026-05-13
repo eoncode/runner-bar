@@ -68,60 +68,9 @@ struct StepLogView: View {
         return formatter
     }()
 
-    // MARK: - Derived helpers
-    /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
-    private var repoSlug: String {
-        let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "—" }
-        let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
-    }
-
-    /// Step conclusion label with icon, or live/queued status.
-    private var stepStatusLabel: String {
-        switch step.conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "skipped":   return "⊘ skipped"
-        case "cancelled": return "⊘ cancelled"
-        default: return step.status == "in_progress" ? "▶ running" : "· queued"
-        }
-    }
-
-    private var stepStatusColor: Color {
-        switch step.conclusion {
-        case "success":            return .green
-        case "failure":            return .red
-        case "skipped", "cancelled": return .secondary
-        default: return step.status == "in_progress" ? .yellow : .secondary
-        }
-    }
-
-    /// Formatted start time, or "—" if unavailable.
-    private var startLabel: String {
-        guard let dateValue = step.startedAt else { return "—" }
-        return Self.timeFmt.string(from: dateValue)
-    }
-
-    /// Formatted end time, or "—" if unavailable (still running shows live status).
-    private var endLabel: String {
-        guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running…" : "—"
-        }
-        return Self.timeFmt.string(from: dateValue)
-    }
-
-    /// Date string (yyyy-MM-dd) for context when the step ran.
-    private var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
-        return Self.dateFmt.string(from: dateValue)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar: back · spacer · GitHub link · copy ──────────────────────────────────────────
-            // Elapsed has been moved to Row 3 (next to start→end timestamps).
-            // ❌ NEVER move this inside the ScrollView.
+            // ── Top bar ──────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -133,30 +82,28 @@ struct StepLogView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                // ─ GitHub deep-link button ────────────────────────────────────────────────────────
-                // Opens job.htmlUrl in the default browser (NSWorkspace).
-                // Hidden when htmlUrl is unavailable.
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                    let openAction = { NSWorkspace.shared.open(url) }
-                    let linkLabel = {
-                        HStack(spacing: 3) {
-                            Image(systemName: "safari")
-                                .font(.caption)
-                            Text("GitHub")
-                                .font(.caption)
+                    Button(
+                        action: { NSWorkspace.shared.open(url) },
+                        label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "safari").font(.caption)
+                                Text("GitHub").font(.caption)
+                            }
+                            .foregroundColor(.secondary)
+                            .fixedSize()
                         }
-                        .foregroundColor(.secondary)
-                        .fixedSize()
-                    }
-                    Button(action: openAction, label: linkLabel)
-                        .buttonStyle(.plain)
-                        .help("Open job on GitHub")
+                    )
+                    .buttonStyle(.plain)
+                    .help("Open job on GitHub")
                 }
-                let copyFetch: (@escaping (String?) -> Void) -> Void = { completion in
-                    let text = logText
-                    DispatchQueue.global(qos: .userInitiated).async { completion(text) }
-                }
-                LogCopyButton(fetch: copyFetch, isDisabled: logText == nil || logText?.isEmpty == true)
+                LogCopyButton(
+                    fetch: { completion in
+                        let text = logText
+                        DispatchQueue.global(qos: .userInitiated).async { completion(text) }
+                    },
+                    isDisabled: logText == nil || logText?.isEmpty == true
+                )
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -171,100 +118,50 @@ struct StepLogView: View {
                 .padding(.bottom, 5)
 
             // ── Meta rows ──────────────────────────────────────────────────────────────────
-            // Row 1: parent job name + step number chip
             HStack(spacing: 6) {
-                Image(systemName: "briefcase")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text(job.name)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
+                Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(.secondary)
+                Text(job.name).font(.caption).foregroundColor(.secondary)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(1)
                 Spacer()
                 Text("step #\(step.id)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(4)
-                    .fixedSize()
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12)).cornerRadius(4).fixedSize()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 3)
+            .padding(.horizontal, 12).padding(.bottom, 3)
 
-            // Row 2: repo slug + job ID chip
             HStack(spacing: 6) {
-                Image(systemName: "folder")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text(repoSlug)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
+                Image(systemName: "folder").font(.system(size: 10)).foregroundColor(.secondary)
+                Text(repoSlug).font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
                 Spacer()
                 Text("job #\(job.id)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(4)
-                    .fixedSize()
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12)).cornerRadius(4).fixedSize()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 3)
+            .padding(.horizontal, 12).padding(.bottom, 3)
 
-            // Row 3: start → end timestamps · elapsed · date + status
-            // Elapsed moved here from the top bar so it reads naturally next to the times.
             HStack(spacing: 6) {
-                Image(systemName: "clock")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text(startLabel)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .fixedSize()
-                Text("→")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text(endLabel)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .fixedSize()
-                // Elapsed duration sits directly after the end time, separated by a bullet.
-                Text("·")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text(step.elapsed)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .fixedSize()
-                Text("·")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
-                Text(dateLabel)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .fixedSize()
+                Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.secondary)
+                Text(startLabel).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text("→").font(.system(size: 10)).foregroundColor(.secondary)
+                Text(endLabel).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+                Text(step.elapsed).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                Text(dateLabel).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
                 Spacer()
-                Text(stepStatusLabel)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(stepStatusColor)
-                    .fixedSize()
+                Text(stepStatusLabel).font(.system(size: 10, weight: .medium)).foregroundColor(stepStatusColor).fixedSize()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 12).padding(.bottom, 6)
 
             Divider()
 
             // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
-            // ❌ NEVER use a fixed constant — must adapt to screen size.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -278,14 +175,11 @@ struct StepLogView: View {
                         .foregroundColor(.primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
                 } else {
                     Text("Log not available")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .font(.caption).foregroundColor(.secondary)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
                 }
             }
             // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents side-jump on navigate.
@@ -327,5 +221,56 @@ struct StepLogView: View {
                 onLogLoaded?()
             }
         }
+    }
+}
+
+// MARK: - Derived helpers
+extension StepLogView {
+    /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
+    var repoSlug: String {
+        let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
+        guard parts.count >= 5 else { return "—" }
+        let owner = parts[3]; let repo = parts[4]
+        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
+    }
+
+    /// Step conclusion label with icon, or live/queued status.
+    var stepStatusLabel: String {
+        switch step.conclusion {
+        case "success":   return "✓ success"
+        case "failure":   return "✗ failure"
+        case "skipped":   return "⊘ skipped"
+        case "cancelled": return "⊘ cancelled"
+        default: return step.status == "in_progress" ? "▶ running" : "· queued"
+        }
+    }
+
+    var stepStatusColor: Color {
+        switch step.conclusion {
+        case "success":            return .green
+        case "failure":            return .red
+        case "skipped", "cancelled": return .secondary
+        default: return step.status == "in_progress" ? .yellow : .secondary
+        }
+    }
+
+    /// Formatted start time, or "—" if unavailable.
+    var startLabel: String {
+        guard let dateValue = step.startedAt else { return "—" }
+        return Self.timeFmt.string(from: dateValue)
+    }
+
+    /// Formatted end time, or "—" if unavailable.
+    var endLabel: String {
+        guard let dateValue = step.completedAt else {
+            return step.status == "in_progress" ? "running…" : "—"
+        }
+        return Self.timeFmt.string(from: dateValue)
+    }
+
+    /// Date string (yyyy-MM-dd) for context when the step ran.
+    var dateLabel: String {
+        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
+        return Self.dateFmt.string(from: dateValue)
     }
 }

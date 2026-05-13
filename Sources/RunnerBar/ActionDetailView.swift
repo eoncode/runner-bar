@@ -76,7 +76,7 @@ struct ActionDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -128,7 +128,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ──────────────────────────────────────────────────────
+            // ── Group title block ──────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -152,47 +152,28 @@ struct ActionDetailView: View {
                         .truncationMode(.middle)
                 }
                 HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                    Text(groupStartLabel)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(.secondary)
-                        .fixedSize()
-                    Text("→")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    Text(groupEndLabel)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(.secondary)
-                        .fixedSize()
-                    Text("·")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    Text(elapsedLive(tick: tick))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(.secondary)
-                        .fixedSize()
+                    Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.secondary)
+                    Text(groupStartLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
+                    Text("→").font(.caption2).foregroundColor(.secondary)
+                    Text(groupEndLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
+                    Text("·").font(.caption2).foregroundColor(.secondary)
+                    Text(elapsedLive(tick: tick)).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
                 }
-                Text(jobsSummaryLine)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Text(jobsSummaryLine).font(.caption).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
             Divider()
 
-            // ── Jobs list ──────────────────────────────────────────────────────────────
+            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
                         Text("No jobs available")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .font(.caption).foregroundColor(.secondary)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
                     } else {
                         ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
                             Button(action: { onSelectJob(job) }, label: {
@@ -206,9 +187,6 @@ struct ActionDetailView: View {
             }
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // Content-driven width: SwiftUI reports natural width as preferredContentSize.
-        // AppDelegate clamps it to [minWidth..maxWidth] in resizeAndRepositionPanel().
-        // ❌ NEVER restore idealWidth here — that pins width to a fixed value.
         .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
@@ -219,10 +197,12 @@ struct ActionDetailView: View {
             tickTimer = nil
         }
     }
+}
+// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-    // MARK: - GitHub link helpers
-
-    private func openLabelOnGitHub() {
+// MARK: - Helpers
+extension ActionDetailView {
+    func openLabelOnGitHub() {
         let urlString: String
         if group.label.hasPrefix("#"),
            let number = Int(group.label.dropFirst()) {
@@ -234,123 +214,90 @@ struct ActionDetailView: View {
         NSWorkspace.shared.open(url)
     }
 
-    private var labelLinkTooltip: String {
+    var labelLinkTooltip: String {
         group.label.hasPrefix("#")
             ? "Open pull request on GitHub"
             : "Open commit on GitHub"
     }
 
-    // MARK: - Timing row helpers
-
-    private var groupStartLabel: String {
+    var groupStartLabel: String {
         guard let d = group.firstJobStartedAt ?? group.createdAt else { return "—" }
         return Self.timeFmt.string(from: d)
     }
 
-    private var groupEndLabel: String {
+    var groupEndLabel: String {
         if let d = group.lastJobCompletedAt { return Self.timeFmt.string(from: d) }
         if group.groupStatus == .inProgress { return "now" }
         return "—"
     }
 
-    // MARK: - Job summary line
-
-    private var jobsSummaryLine: String {
+    var jobsSummaryLine: String {
         let done  = group.jobsDone
         let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
-        if group.groupStatus == .inProgress || conclusions.count < total {
-            return "\(done)/\(total) jobs running"
-        }
-        if conclusions.contains("failure") {
-            return "\(done)/\(total) jobs failed"
-        }
-        if conclusions.contains("cancelled") {
-            return "\(done)/\(total) jobs cancelled"
-        }
-        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) {
-            return "\(done)/\(total) jobs succeeded"
-        }
+        if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
+        if conclusions.contains("failure")   { return "\(done)/\(total) jobs failed" }
+        if conclusions.contains("cancelled") { return "\(done)/\(total) jobs cancelled" }
+        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) { return "\(done)/\(total) jobs succeeded" }
         return "\(done)/\(total) jobs completed"
     }
 
-    // MARK: - Job row
+    func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     @ViewBuilder
-    // swiftlint:disable:next function_body_length
-    private func jobRow(_ job: ActiveJob, index: Int) -> some View {
+    func jobRow(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 8) {
             Text("#\(index)")
-                .font(.caption2.monospacedDigit())
-                .foregroundColor(.secondary)
+                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
-            Circle()
-                .fill(jobDotColor(for: job))
-                .frame(width: 7, height: 7)
+            Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
             Text(job.name)
                 .font(.system(size: 12))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(1)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
             if job.startedAt != nil {
                 Text(jobTimeRange(job))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .frame(width: 130, alignment: .leading)
+                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                    .lineLimit(1).frame(width: 130, alignment: .leading)
             } else {
-                Spacer()
-                    .frame(width: 130)
+                Spacer().frame(width: 130)
             }
             Spacer(minLength: 0)
             if let conclusion = job.conclusion {
                 Text(conclusionLabel(conclusion))
-                    .font(.caption)
-                    .foregroundColor(conclusionColor(conclusion))
+                    .font(.caption).foregroundColor(conclusionColor(conclusion))
                     .frame(width: 80, alignment: .trailing)
             } else {
                 Text(jobStatusLabel(for: job))
-                    .font(.caption)
-                    .foregroundColor(jobStatusColor(for: job))
+                    .font(.caption).foregroundColor(jobStatusColor(for: job))
                     .frame(width: 80, alignment: .trailing)
             }
             if job.startedAt != nil {
                 Text(job.elapsed)
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
                     .frame(width: 40, alignment: .trailing)
             } else {
                 Spacer().frame(width: 40)
             }
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 12).padding(.vertical, 5)
         .contentShape(Rectangle())
     }
 
-    // MARK: - Helpers
-
-    private func elapsedLive(tick _: Int) -> String { group.elapsed }
-
-    private func jobTimeRange(_ job: ActiveJob) -> String {
+    func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
-        if let end = job.completedAt {
-            return "\(startStr)→\(Self.jobTimeFmt.string(from: end))"
-        }
+        if let end = job.completedAt { return "\(startStr)→\(Self.jobTimeFmt.string(from: end))" }
         return "\(startStr)→now"
     }
 
-    private func jobDotColor(for job: ActiveJob) -> Color {
+    func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return .secondary }
         return job.status == "in_progress" ? .yellow : .gray
     }
 
-    private func jobStatusLabel(for job: ActiveJob) -> String {
+    func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "In Progress"
         case "queued":      return "Queued"
@@ -358,21 +305,19 @@ struct ActionDetailView: View {
         }
     }
 
-    private func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? .yellow : .secondary
-    }
+    func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
 
-    private func conclusionLabel(_ c: String) -> String {
+    func conclusionLabel(_ c: String) -> String {
         switch c {
-        case "success":   return "\u{2713} success"
-        case "failure":   return "\u{2717} failure"
-        case "cancelled": return "\u{2297} cancelled"
-        case "skipped":   return "\u{2212} skipped"
+        case "success":   return "✓ success"
+        case "failure":   return "✗ failure"
+        case "cancelled": return "⊗ cancelled"
+        case "skipped":   return "− skipped"
         default:          return c
         }
     }
 
-    private func conclusionColor(_ c: String) -> Color {
+    func conclusionColor(_ c: String) -> Color {
         switch c {
         case "success": return .green
         case "failure": return .red
@@ -380,4 +325,3 @@ struct ActionDetailView: View {
         }
     }
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
