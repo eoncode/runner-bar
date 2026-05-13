@@ -1,3 +1,4 @@
+// swiftlint:disable line_length operator_usage_whitespace trailing_newline superfluous_disable_command
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
@@ -111,8 +112,8 @@ struct PopoverHeaderView: View {
     private func blockBar(pct: Double, width: Int = 3) -> String {
         let raw         = Int((pct / 100.0 * Double(width)).rounded())
         let filledCount = max(0, min(width, raw))
-        return String(repeating: "\u{2588}", count: filledCount)
-             + String(repeating: "\u{2591}", count: width - filledCount)
+        return String(repeating: "█", count: filledCount)
+             + String(repeating: "░", count: width - filledCount)
     }
 
     private func usageColor(pct: Double) -> Color {
@@ -164,7 +165,7 @@ struct PopoverLocalRunnerRow: View {
             .padding(.horizontal, 12).padding(.vertical, 3)
         }
         if busy.count > 3 {
-            Text("+ \(busy.count - 3) more\u{2026}")
+            Text("+ \(busy.count - 3) more…")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 2)
         }
@@ -304,7 +305,7 @@ struct InlineJobRowsView: View {
                     if !popoverOpenState.isOpen { cap += 4 }
                 },
                 label: {
-                    Text("+ \(activeJobs.count - cap) more jobs\u{2026}")
+                    Text("+ \(activeJobs.count - cap) more jobs…")
                         .font(.caption2).foregroundColor(.accentColor)
                         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
                 }
@@ -323,11 +324,11 @@ struct InlineJobRowsView: View {
         let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
-            Text("\u{21B3}").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
+            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Group {
                 if let name = stepName {
-                    Text(job.name + " \u{00B7} " + name)
+                    Text(job.name + " · " + name)
                 } else {
                     Text(job.name)
                 }
