@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 
 // MARK: - RunnerMetrics
@@ -48,3 +49,4 @@ func allWorkerMetrics() -> [RunnerMetrics] {
     }
     return result
 }
+// swiftlint:enable line_length
