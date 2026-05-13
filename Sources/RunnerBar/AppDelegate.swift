@@ -211,20 +211,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chromeView.addSubview(controller.view)
         chrome = chromeView
 
-        let p = NSPanel(
+        let newPanel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        p.contentView = chromeView
-        p.isOpaque = false
-        p.backgroundColor = NSColor(white: 1, alpha: 0.001)
-        p.hasShadow = true
-        p.level = .popUpMenu
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        p.animationBehavior = .none
-        panel = p
+        newPanel.contentView = chromeView
+        newPanel.isOpaque = false
+        newPanel.backgroundColor = NSColor(white: 1, alpha: 0.001)
+        newPanel.hasShadow = true
+        newPanel.level = .popUpMenu
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        newPanel.animationBehavior = .none
+        panel = newPanel
 
         sizeObservation = controller.observe(
             \.preferredContentSize,
@@ -282,10 +282,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH   = contentH + arrowHeight
 
-        let x = statusItemRect.midX - contentW / 2
-        let y = topY - totalH
+        let originX = statusItemRect.midX - contentW / 2
+        let originY = topY - totalH
 
-        panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
+        panel.setFrame(NSRect(x: originX, y: originY, width: contentW, height: totalH),
                        display: true, animate: false)
 
         chrome.arrowX = statusItemRect.midX - panel.frame.minX
@@ -598,15 +598,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
-        let x = statusItemRect.midX - initW / 2
-        let y = statusItemRect.minY - initH - Self.gap
+        let originX = statusItemRect.midX - initW / 2
+        let originY = statusItemRect.minY - initH - Self.gap
 
         panel.setFrame(
-            NSRect(x: x, y: y, width: initW, height: initH),
+            NSRect(x: originX, y: originY, width: initW, height: initH),
             display: false, animate: false
         )
 
-        chrome?.arrowX = statusItemRect.midX - x
+        chrome?.arrowX = statusItemRect.midX - originX
         panel.orderFront(nil)
         resizeAndRepositionPanel()
 
