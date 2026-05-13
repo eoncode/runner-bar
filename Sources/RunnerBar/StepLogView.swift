@@ -119,7 +119,7 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar: back · spacer · GitHub link · copy ──────────────────────────
+            // ── Top bar: back · spacer · GitHub link · copy ──────────────────────────────────────────
             // Elapsed has been moved to Row 3 (next to start→end timestamps).
             // ❌ NEVER move this inside the ScrollView.
             HStack(spacing: 6) {
@@ -133,7 +133,7 @@ struct StepLogView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                // ─ GitHub deep-link button ──────────────────────────────────────────
+                // ─ GitHub deep-link button ────────────────────────────────────────────────────────
                 // Opens job.htmlUrl in the default browser (NSWorkspace).
                 // Hidden when htmlUrl is unavailable.
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
@@ -150,6 +150,7 @@ struct StepLogView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
+                // swiftlint:disable:next multiple_closures_with_trailing_closure
                 LogCopyButton(fetch: { completion in
                     let text = logText
                     DispatchQueue.global(qos: .userInitiated).async {
@@ -161,7 +162,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ──────────────────────────────────────────────────
+            // ── Step name (large) ──────────────────────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -169,7 +170,7 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ──────────────────────────────────────────────────────────
+            // ── Meta rows ──────────────────────────────────────────────────────────────────
             // Row 1: parent job name + step number chip
             HStack(spacing: 6) {
                 Image(systemName: "briefcase")
@@ -260,7 +261,7 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ──────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             // ❌ NEVER use a fixed constant — must adapt to screen size.

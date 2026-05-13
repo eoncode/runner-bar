@@ -179,7 +179,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
     /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
-    /// on every popover open ("access data from other apps", Apple Music,
+    /// on every popover open (“access data from other apps”, Apple Music,
     /// Photo Library) because it internally queries Photos/Music databases to
     /// calculate purgeable space. This app declares no media entitlements and
     /// must never use that key.
@@ -202,9 +202,9 @@ final class SystemStatsViewModel: ObservableObject {
         let totalBytes = values.volumeTotalCapacity,
         let freeBytes  = values.volumeAvailableCapacity // ✅ not ForImportantUsage
         else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
-        let total   = Double(totalBytes) / gigabytes
-        let free    = Double(freeBytes) / gigabytes
-        let used    = total - free
+        let total = Double(totalBytes) / gigabytes
+        let free = Double(freeBytes) / gigabytes
+        let used = total - free
         let freePct = total > 0 ? (free / total) * 100 : 100
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
