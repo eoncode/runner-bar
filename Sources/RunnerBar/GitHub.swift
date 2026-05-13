@@ -161,18 +161,18 @@ private struct WorkflowRun: Codable { let id: Int }
 
 /// Fetches all self-hosted runners for the given scope via the GitHub CLI.
 func fetchRunners(for scope: String) -> [Runner] {
-    let path: String
+    let endpoint: String
     if scope.contains("/") {
-        path = "/repos/\(scope)/actions/runners"
+        endpoint = "repos/\(scope)/actions/runners"
     } else {
-        path = "/orgs/\(scope)/actions/runners"
+        endpoint = "orgs/\(scope)/actions/runners"
     }
-    log("fetchRunners › \(path)")
-    let json = shell("/opt/homebrew/bin/gh api \(path)")
-    log("fetchRunners › response prefix: \(json.prefix(120))")
-    guard let data = json.data(using: .utf8),
-          let response = try? JSONDecoder().decode(RunnersResponse.self, from: data)
-    else {
+    log("fetchRunners › \(endpoint)")
+    guard let data = ghAPI(endpoint) else {
+        log("fetchRunners › no data for scope: \(scope)")
+        return []
+    }
+    guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
         log("fetchRunners › decode failed for scope: \(scope)")
         return []
     }
