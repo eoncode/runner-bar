@@ -4,6 +4,10 @@ import Foundation
 // MARK: - NotificationPrefsStore
 
 /// Persists notification preferences to UserDefaults.
+///
+/// Default values are registered via `UserDefaults.register(defaults:)` in
+/// `init()`, the idiomatic macOS pattern. This removes the per-read nil-coalescing
+/// guards and lets `bool(forKey:)` return the default value automatically.
 final class NotificationPrefsStore: ObservableObject {
     static let shared = NotificationPrefsStore()
 
@@ -23,12 +27,13 @@ final class NotificationPrefsStore: ObservableObject {
     }
 
     private init() {
-        let defaults = UserDefaults.standard
-        notifyOnSuccess = defaults.object(forKey: Key.notifyOnSuccess) == nil
-            ? true
-            : defaults.bool(forKey: Key.notifyOnSuccess)
-        notifyOnFailure = defaults.object(forKey: Key.notifyOnFailure) == nil
-            ? true
-            : defaults.bool(forKey: Key.notifyOnFailure)
+        // Register factory defaults once so bool(forKey:) returns them
+        // even before the user has ever changed a preference.
+        UserDefaults.standard.register(defaults: [
+            Key.notifyOnSuccess: true,
+            Key.notifyOnFailure: true,
+        ])
+        notifyOnSuccess = UserDefaults.standard.bool(forKey: Key.notifyOnSuccess)
+        notifyOnFailure = UserDefaults.standard.bool(forKey: Key.notifyOnFailure)
     }
 }
