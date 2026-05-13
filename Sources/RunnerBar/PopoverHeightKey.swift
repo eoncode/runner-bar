@@ -10,7 +10,7 @@ import SwiftUI
 //
 // ════════════════════════════════════════════════════════════════════════════════
 
-/// Propagates the total rendered height of the popover content view.
+/// Retained for source compatibility. Not used in the current NSPanel architecture.
 struct PopoverHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
