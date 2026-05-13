@@ -23,12 +23,20 @@ final class NotificationPrefsStore: ObservableObject {
     }
 
     private init() {
-        let defaults = UserDefaults.standard
-        notifyOnSuccess = defaults.object(forKey: Key.notifyOnSuccess) == nil
-            ? true
-            : defaults.bool(forKey: Key.notifyOnSuccess)
-        notifyOnFailure = defaults.object(forKey: Key.notifyOnFailure) == nil
-            ? true
-            : defaults.bool(forKey: Key.notifyOnFailure)
+        NotificationPrefsStore.register(defaults: .standard)
+        notifyOnSuccess = UserDefaults.standard.bool(forKey: Key.notifyOnSuccess)
+        notifyOnFailure = UserDefaults.standard.bool(forKey: Key.notifyOnFailure)
+    }
+
+    /// Registers factory defaults so that `bool(forKey:)` returns the intended
+    /// value on first launch without requiring a `object(forKey:) == nil` guard.
+    ///
+    /// Call once at app startup (e.g. from `applicationDidFinishLaunching`) and
+    /// again in unit tests before exercising notification logic.
+    static func register(defaults: UserDefaults) {
+        defaults.register(defaults: [
+            Key.notifyOnSuccess: true,
+            Key.notifyOnFailure: true,
+        ])
     }
 }
