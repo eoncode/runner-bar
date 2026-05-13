@@ -155,10 +155,7 @@ struct ActionGroup: Identifiable, Equatable {
     }
 
     /// Number of jobs with a concluded result across all sibling runs.
-    ///
-    /// ⚠️ "Concluded" means: success, failure, cancelled, skipped, or timed_out.
-    /// We count ALL non-nil conclusions, not just success+skipped, so that
-    /// jobsDone/jobsTotal reflects actual completion state (not just passed jobs).
+    /// Counts all jobs whose `conclusion` is non-nil, regardless of the specific outcome.
     var jobsDone: Int  { jobs.filter { $0.conclusion != nil }.count }
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
