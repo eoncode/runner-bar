@@ -305,8 +305,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - View factories
+    // MARK: - Enrichment helpers
 
+    /// Re-fetches steps for a single job when they are missing or still in-progress.
+    /// Blocking — always call from a background queue.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -316,6 +318,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let iso = ISO8601DateFormatter()
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
+
+    /// Re-fetches job data for a group when any run has an empty or incomplete job list.
+    ///
+    /// Called on a background queue from onSelectAction before navigating to
+    /// ActionDetailView. Prevents the detail view opening with a blank job list on
+    /// first tap or after a cache miss.
+    ///
+    /// Strategy: if every job in the group already has a conclusion AND none have
+    /// in-progress steps, the group is considered fully enriched and returned as-is.
+    /// Otherwise, we re-fetch jobs for all runs in the group and return an enriched copy.
+    ///
+    /// Blocking — always call from a background queue.
+    nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
+        let fullyEnriched = !group.jobs.isEmpty
+            && group.jobs.allSatisfy { $0.conclusion != nil }
+            && !group.jobs.contains { $0.steps.contains { $0.status == "in_progress" } }
+        guard !fullyEnriched else { return group }
+
+        let iso = ISO8601DateFormatter()
+        var fetched: [ActiveJob] = []
+        var seenIDs = Set<Int>()
+        for run in group.runs {
+            guard let data = ghAPI("repos/\(group.repo)/actions/runs/\(run.id)/jobs?per_page=100"),
+                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+            else { continue }
+            for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
+                fetched.append(makeActiveJob(from: payload, iso: iso, isDimmed: group.isDimmed))
+            }
+        }
+        guard !fetched.isEmpty else { return group }
+        fetched.sort { $0.id < $1.id }
+        let starts = fetched.compactMap { $0.startedAt }
+        let ends   = fetched.compactMap { $0.completedAt }
+        return ActionGroup(
+            headSha: group.headSha,
+            label: group.label,
+            title: group.title,
+            headBranch: group.headBranch,
+            repo: group.repo,
+            runs: group.runs,
+            jobs: fetched,
+            firstJobStartedAt: starts.min() ?? group.firstJobStartedAt,
+            lastJobCompletedAt: ends.max() ?? group.lastJobCompletedAt,
+            createdAt: group.createdAt,
+            isDimmed: group.isDimmed
+        )
+    }
+
+    // MARK: - View factories
 
     private func mainView() -> AnyView {
         savedNavState = nil
@@ -333,8 +384,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
+                // Grab the freshest snapshot from the store, then eagerly enrich
+                // job data on a background queue before navigating. This prevents
+                // ActionDetailView opening with a blank job list on first tap.
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichGroupIfNeeded(latest)
+                    DispatchQueue.main.async {
+                        guard self.panelIsOpen else { return }
+                        self.navigate(to: self.actionDetailView(group: enriched))
+                    }
+                }
             },
             onSelectSettings: { [weak self] in
                 guard let self else { return }
