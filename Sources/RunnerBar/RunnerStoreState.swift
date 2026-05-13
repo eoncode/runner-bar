@@ -24,7 +24,10 @@ struct GroupPollResult {
 
 // MARK: - Job state builder
 
+/// RunnerStore extension providing the job-state builder used by the background poll.
 extension RunnerStore {
+    /// Builds the job display list and updated caches from a background poll.
+    // swiftlint:disable:next function_body_length
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
         for scope in ScopeStore.shared.scopes {
@@ -126,7 +129,9 @@ extension RunnerStore {
 
 // MARK: - Group state builder
 
+/// RunnerStore extension providing the group-state builder used by the background poll.
 extension RunnerStore {
+    /// Builds the action-group display list and updated caches from a background poll.
     func buildGroupState(
         snapPrevGroups: [String: ActionGroup],
         snapGroupCache: [String: ActionGroup],
@@ -230,9 +235,9 @@ extension RunnerStore {
 
     private func trimGroupCache(_ cache: inout [String: ActionGroup], limit: Int) {
         guard cache.count > limit else { return }
-        let sorted = cache.values.sorted {
-            ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
-            > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
+        let sorted = cache.values.sorted { lhs, rhs in
+            (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
+            > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
         }
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
@@ -244,9 +249,9 @@ extension RunnerStore {
         let inProgress     = live.filter { $0.groupStatus == .inProgress }
         let queued         = live.filter { $0.groupStatus == .queued }
         let liveDisplayIDs = Set((inProgress + queued).map { $0.id })
-        let cached         = cache.values.sorted {
-            ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
-            > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
+        let cached         = cache.values.sorted { lhs, rhs in
+            (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
+            > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
         }
         var display: [ActionGroup] = []
         for grp in inProgress where display.count < 30 { display.append(grp) }
