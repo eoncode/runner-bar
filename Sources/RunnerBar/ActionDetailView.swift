@@ -243,7 +243,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
         if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
-        if conclusions.contains("failure")   { return "\(done)/\(total) jobs failed" }
+        if conclusions.contains("failure") { return "\(done)/\(total) jobs failed" }
         if conclusions.contains("cancelled") { return "\(done)/\(total) jobs cancelled" }
         if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) { return "\(done)/\(total) jobs succeeded" }
         return "\(done)/\(total) jobs completed"
