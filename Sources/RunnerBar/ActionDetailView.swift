@@ -58,9 +58,18 @@ struct ActionDetailView: View {
 
     // MARK: - Formatters
 
+    /// HH:mm formatter — used for group start/end labels in the header.
     private static let timeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// HH:mm:ss formatter — used for per-job time-range column.
+    /// Static so it is created once and reused on every 1 Hz tick × N job rows.
+    private static let jobTimeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
         return f
     }()
 
@@ -335,12 +344,10 @@ struct ActionDetailView: View {
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     private func jobTimeRange(_ job: ActiveJob) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm:ss"
         guard let start = job.startedAt ?? job.createdAt else { return "" }
-        let startStr = fmt.string(from: start)
+        let startStr = Self.jobTimeFmt.string(from: start)
         if let end = job.completedAt {
-            return "\(startStr)→\(fmt.string(from: end))"
+            return "\(startStr)→\(Self.jobTimeFmt.string(from: end))"
         }
         return "\(startStr)→now"
     }
