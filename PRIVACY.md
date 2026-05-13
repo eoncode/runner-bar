@@ -40,8 +40,8 @@ All user preferences are stored in **`UserDefaults`** (the standard macOS per-ap
 |---|---|---|---|
 | Polling interval | `settings.pollingInterval` | Integer (10–300 s) | 30 |
 | Show dimmed runners | `settings.showDimmedRunners` | Boolean | `true` |
-| Notify on success | `notifications.notifyOnSuccess` | Boolean | `false` |
-| Notify on failure | `notifications.notifyOnFailure` | Boolean | `false` |
+| Notify on success | `notifications.notifyOnSuccess` | Boolean | `true` |
+| Notify on failure | `notifications.notifyOnFailure` | Boolean | `true` |
 | Watched scopes (repos/orgs) | `scopes` | String array | `[]` |
 | Legal acceptance | `legal.*` | Boolean flags | `false` |
 
