@@ -1,19 +1,39 @@
 import Foundation
+import os
 
 // MARK: - gh API
 
+/// Thread-safe rate-limit flag.
+/// Replaces the bare `var ghIsRateLimited: Bool` global that was written from
+/// background threads without synchronization (data race, issue #399 item 2).
+/// Access via `ghRateLimitFlag.withLock { ... }` or the helpers below.
+private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
+
 /// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.
 /// Reset to `false` at the start of each `RunnerStore.fetch()` poll cycle.
-var ghIsRateLimited: Bool = false
+var ghIsRateLimited: Bool {
+    get { _rateLimitLock.withLock { $0 } }
+    set { _rateLimitLock.withLock { $0 = newValue } }
+}
 
-/// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
-func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    // swiftlint:disable:next identifier_name
-    guard let gh = ghBinaryPath() else { log("ghAPI › gh not found"); return nil }
+// MARK: - Process runner (private)
+
+/// Launches `gh` with the given arguments, streams stdout into a `Data` buffer,
+/// and enforces a hard timeout. Shared by ghAPI, ghAPIPaginated, fetchRegistrationToken.
+///
+/// - Parameters:
+///   - arguments: Arguments passed directly to the `gh` binary.
+///   - timeout:   Kill timeout in seconds. Defaults to 20 s for API calls.
+/// - Returns: Raw stdout bytes, or `nil` on launch failure or empty output.
+private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Data? {
+    guard let gh = ghBinaryPath() else {
+        log("runGHProcess › gh not found")
+        return nil
+    }
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: gh)
-    task.arguments = ["api", endpoint]
+    task.arguments = arguments
     task.standardOutput = pipe
     task.standardError = Pipe()
     var outputData = Data()
@@ -24,7 +44,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         lock.lock(); outputData.append(chunk); lock.unlock()
     }
     do { try task.run() } catch {
-        log("ghAPI › launch error: \(error)")
+        log("runGHProcess › launch error: \(error)")
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
@@ -35,7 +55,17 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("ghAPI › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    return outputData.isEmpty ? nil : outputData
+}
+
+// MARK: - Public gh wrappers
+
+/// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
+func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    guard let outputData = runGHProcess(arguments: ["api", endpoint], timeout: timeout) else {
+        return nil
+    }
+    log("ghAPI › \(endpoint) → \(outputData.count)b")
     if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
        let status = json["status"] as? String,
        status == "403" || status == "429" {
@@ -43,13 +73,13 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         log("ghAPI › rate limit (\(status)): \(endpoint)")
         return nil
     }
-    return outputData.isEmpty ? nil : outputData
+    return outputData
 }
 
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    // swiftlint:disable:next identifier_name
     guard let gh = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
+    // Need exit code for rate-limit detection, so run the process manually to capture it.
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: gh)
@@ -211,37 +241,13 @@ func fetchRegistrationToken(scope: String) -> String? {
     } else {
         endpoint = "orgs/\(scope)/actions/runners/registration-token"
     }
-    guard let ghPath = ghBinaryPath() else {
-        log("fetchRegistrationToken › gh not found")
+    let args = ["api", "--method", "POST",
+                "-H", "Accept: application/vnd.github+json", endpoint]
+    guard let outputData = runGHProcess(arguments: args, timeout: 30) else {
+        log("fetchRegistrationToken › no data for \(endpoint)")
         return nil
     }
-    let task = Process()
-    let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST",
-                      "-H", "Accept: application/vnd.github+json", endpoint]
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-    var outputData = Data()
-    let lock = NSLock()
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-        let chunk = handle.availableData
-        guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
-    }
-    do { try task.run() } catch {
-        log("fetchRegistrationToken › launch error: \(error)")
-        pipe.fileHandleForReading.readabilityHandler = nil
-        return nil
-    }
-    let timeoutItem = DispatchWorkItem { task.terminate() }
-    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    pipe.fileHandleForReading.readabilityHandler = nil
-    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("fetchRegistrationToken › \(endpoint) \(outputData.count)b exit \(task.terminationStatus)")
+    log("fetchRegistrationToken › \(endpoint) \(outputData.count)b")
     struct TokenResponse: Decodable { let token: String }
     guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
         log("fetchRegistrationToken › decode failed: "
