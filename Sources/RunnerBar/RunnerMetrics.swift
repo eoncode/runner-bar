@@ -1,7 +1,5 @@
 import Foundation
 
-// MARK: - RunnerMetrics
-
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
 /// Values are percentages sourced from the `%CPU` and `%MEM` columns of `ps aux`.
 struct RunnerMetrics {
@@ -31,8 +29,8 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         guard parts.count > 3,
               let cpu = Double(parts[2]),
               let mem = Double(parts[3]) else { continue }
-        let cmdSuffix = parts.dropFirst(10).prefix(3).joined(separator: " ")
-        log("allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): \(cmdSuffix)")
+        let tail = parts.dropFirst(10).prefix(3).joined(separator: " ")
+        log("allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): \(tail)")
         results.append(RunnerMetrics(cpu: cpu, mem: mem))
     }
     // Highest CPU first — matches ci-dash.py Worker ordering

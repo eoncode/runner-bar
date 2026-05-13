@@ -5,17 +5,14 @@ import SwiftUI
 /// Top-bar cancel button used in JobDetailView and StepLogView.
 /// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
 struct CancelButton: View {
-
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
-
     /// When true the button is rendered at reduced opacity and cannot be tapped.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
 
     // MARK: - Phase
-
     enum Phase {
         case idle
         case loading
@@ -24,7 +21,6 @@ struct CancelButton: View {
     }
 
     // MARK: - Body
-
     var body: some View {
         Group {
             switch phase {
@@ -41,7 +37,6 @@ struct CancelButton: View {
     }
 
     // MARK: - Phase Views
-
     private var idleView: some View {
         Button(action: startCancel) {
             HStack(spacing: 4) {
@@ -93,7 +88,6 @@ struct CancelButton: View {
     }
 
     // MARK: - Actions
-
     private func startCancel() {
         guard phase == .idle else { return }
         phase = .loading
