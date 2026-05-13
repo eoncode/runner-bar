@@ -7,7 +7,7 @@ import SwiftUI
 // this view is embedded inside an HStack header, never at the root level.
 //
 // ❌ NEVER wrap CancelButton in a .frame(height:) or .fixedSize() at the
-// CALL SITE — that would corrupt the parent view’s preferredContentSize and cause
+// CALL SITE — that would corrupt the parent view's preferredContentSize and cause
 // the panel to jump sideways when AppDelegate calls navigate().
 //
 // ✔ The isDisabled=true state returns EmptyView, completely removing the
