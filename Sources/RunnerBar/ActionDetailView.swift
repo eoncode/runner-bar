@@ -30,7 +30,7 @@ import SwiftUI
 //   Job rows collapsed to single line: [#N][dot][name][time range]...[status][elapsed][›]
 //   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
 //   Side-jump is impossible with NSPanel — no anchor to re-calculate.
-//   Added #N order index badge to each job row (1-based, ID order).
+//   Added #N order index badge to each job row (1-based display order).
 //   Replaced generic "X/N jobs concluded" with context-aware outcome label.
 //   Elapsed moved from header to timing row below branch label.
 //   SHA/PR label made tappable: opens commit or PR on GitHub.
