@@ -26,13 +26,13 @@ var ghIsRateLimited: Bool {
 ///   - timeout:   Kill timeout in seconds. Defaults to 20 s for API calls.
 /// - Returns: Raw stdout bytes, or `nil` on launch failure or empty output.
 private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Data? {
-    guard let gh = ghBinaryPath() else {
+    guard let ghPath = ghBinaryPath() else {
         log("runGHProcess › gh not found")
         return nil
     }
     let task = Process()
     let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: gh)
+    task.executableURL = URL(fileURLWithPath: ghPath)
     task.arguments = arguments
     task.standardOutput = pipe
     task.standardError = Pipe()
@@ -78,11 +78,11 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard let gh = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
+    guard let ghPath = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
     // Need exit code for rate-limit detection, so run the process manually to capture it.
     let task = Process()
     let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: gh)
+    task.executableURL = URL(fileURLWithPath: ghPath)
     task.arguments = ["api", "--paginate", endpoint]
     task.standardOutput = pipe
     task.standardError = Pipe()
