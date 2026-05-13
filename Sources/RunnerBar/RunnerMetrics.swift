@@ -1,51 +1,39 @@
-// swiftlint:disable line_length operator_usage_whitespace trailing_newline superfluous_disable_command
 import Foundation
 
-// MARK: - RunnerMetrics
-/// CPU and memory utilisation sampled from `ps aux` for a single runner process.
-struct RunnerMetrics: Codable {
-    /// CPU usage percentage (0–100+, can exceed 100 on multi-core).
+/// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
+/// Values are percentages sourced from the `%CPU` and `%MEM` columns of `ps aux`.
+struct RunnerMetrics {
+    /// CPU utilisation as a percentage (e.g. `12.5` means 12.5% of one core).
     let cpu: Double
-    /// Memory usage as a percentage of total RAM.
+    /// Memory utilisation as a percentage of total physical RAM (from `ps aux` `%MEM`).
     let mem: Double
 }
 
-// MARK: - RunnerMetrics + ps
-/// Extension providing shell-based sampling helpers for `RunnerMetrics`.
-extension RunnerMetrics {
-    /// Samples CPU and memory for the first `Runner.Worker` process whose
-    /// command line contains `runnerName`.
-    /// Returns `nil` if no match or parse fails.
-    static func sample(for runnerName: String) -> RunnerMetrics? {
-        let output = shell("ps aux")
-        for line in output.components(separatedBy: "\n") {
-            guard line.contains("Runner.Worker"),
-                  line.contains(runnerName) else { continue }
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard parts.count > 3,
-                  let cpu = Double(parts[2]),
-                  let mem = Double(parts[3]) else { continue }
-            return RunnerMetrics(cpu: cpu, mem: mem)
-        }
-        return nil
-    }
-}
-
-// MARK: - allWorkerMetrics
-/// Returns CPU/MEM metrics for every `Runner.Worker` process found in `ps aux`,
-/// in the order they appear.
-/// Used by `RunnerStore.fetchAndEnrichRunners()` to assign metrics to runners
-/// by slot index.
+/// Collects all Runner.Worker processes from `ps aux` and returns them
+/// sorted by CPU% descending.
+///
+/// Mirrors ci-dash.py `runner_procs()` + `pair_runners()`: the runner name
+/// does NOT appear in ps args, so name-based matching always fails.
+/// Instead the caller assigns metrics by slot index (busy runners first).
 func allWorkerMetrics() -> [RunnerMetrics] {
-    let output = shell("ps aux")
-    var result: [RunnerMetrics] = []
+    let output = shell("ps aux", timeout: 5)
+    guard !output.isEmpty else {
+        log("allWorkerMetrics › ps aux returned empty")
+        return []
+    }
+
+    var results: [RunnerMetrics] = []
     for line in output.components(separatedBy: "\n") {
-        guard line.contains("Runner.Worker") else { continue }
+        guard line.contains("Runner.Worker") || line.contains("Runner.Listener") else { continue }
+        // ps aux columns: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND…
         let parts = line.split(separator: " ", omittingEmptySubsequences: true)
         guard parts.count > 3,
               let cpu = Double(parts[2]),
               let mem = Double(parts[3]) else { continue }
-        result.append(RunnerMetrics(cpu: cpu, mem: mem))
+        log("allWorkerMetrics › found process cpu=\(cpu) mem=\(mem): \(parts[10...].prefix(3).joined(separator: " "))")
+        results.append(RunnerMetrics(cpu: cpu, mem: mem))
     }
-    return result
+
+    // Highest CPU first — matches ci-dash.py Worker ordering
+    return results.sorted { $0.cpu > $1.cpu }
 }
