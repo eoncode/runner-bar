@@ -23,7 +23,6 @@ import SwiftUI
 //   idealWidth bumped 560 → 720 to accommodate action cluster width.
 //   Step number badge (#N) added to step rows (step.id is 1-based, assigned
 //     locally from the enumerated index — not a GitHub API field).
-//   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 //   Pressable repo / branch / SHA-origin labels added to header metadata row.
 //   Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
 //   ReRunFailedButton added after ReRunButton.
@@ -321,7 +320,7 @@ struct JobDetailView: View {
     /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
-            // Step number badge — zero-padded, always 3 chars (#01…#99).
+            // Step number badge — zero-padded (#01…#99).
             Text(String(format: "#%02d", step.id))
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
