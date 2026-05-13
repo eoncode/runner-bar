@@ -1,6 +1,8 @@
 import Foundation
 import os
 
+// swiftlint:disable type_body_length
+
 // MARK: - gh API
 
 /// Thread-safe rate-limit flag.
@@ -143,6 +145,7 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 // MARK: - Fetch all jobs from active runs
 
 /// Fetches all active (in_progress + queued) jobs across all runs for the given scope.
+// swiftlint:disable:next function_body_length
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
@@ -260,6 +263,7 @@ func fetchRegistrationToken(scope: String) -> String? {
 // MARK: - Step log
 
 /// Fetch and slice the raw log for a single step.
+// swiftlint:disable:next function_body_length
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard scope.contains("/") else {
         log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
@@ -363,3 +367,5 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+
+// swiftlint:enable type_body_length

@@ -137,7 +137,8 @@ struct StepLogView: View {
                 // Opens job.htmlUrl in the default browser (NSWorkspace).
                 // Hidden when htmlUrl is unavailable.
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                    Button(action: { NSWorkspace.shared.open(url) }) {
+                    let openAction = { NSWorkspace.shared.open(url) }
+                    let linkLabel = {
                         HStack(spacing: 3) {
                             Image(systemName: "safari")
                                 .font(.caption)
@@ -147,8 +148,9 @@ struct StepLogView: View {
                         .foregroundColor(.secondary)
                         .fixedSize()
                     }
-                    .buttonStyle(.plain)
-                    .help("Open job on GitHub")
+                    Button(action: openAction, label: linkLabel)
+                        .buttonStyle(.plain)
+                        .help("Open job on GitHub")
                 }
                 let copyFetch: (@escaping (String?) -> Void) -> Void = { completion in
                     let text = logText
