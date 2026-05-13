@@ -2,30 +2,34 @@ import AppKit
 import SwiftUI
 
 // ╔════════════════════════════════════════════════════════════════════════════╗
-// ║ ☹️ StepLogView — LAYOUT + SIZING CONTRACT ☹️                ║
+// ║ ☹️  StepLogView — LAYOUT + SIZING CONTRACT ☹️                             ║
 // ╠════════════════════════════════════════════════════════════════════════════╣
-// ║ Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).  ║
+// ║ Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).       ║
 // ║                                                                            ║
-// ║ LAYOUT RULES:                                                             ║
-// ║ • Root: .frame(minWidth: 560, maxWidth: 900, alignment: .top)            ║
-// ║   Content-driven width; AppDelegate clamps to [560..900].                 ║
-// ║ ❌ NEVER restore idealWidth — pins width regardless of content.            ║
-// ║ • Log content MUST be inside the ScrollView.                             ║
-// ║ • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
-// ║ ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the     ║
-// ║   maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-      ║
-// ║   troller measures the view unconstrained (AppKit bug, see #375 #376)     ║
+// ║ LAYOUT RULES:                                                              ║
+// ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)      ║
+// ║ • idealWidth: 480 MUST match AppDelegate.idealWidth (currently 480).       ║
+// ║   NSHostingController reads idealWidth as preferredContentSize.width.      ║
+// ║   If ANY view in the nav tree omits idealWidth or uses a different         ║
+// ║   value, preferredContentSize.width becomes non-deterministic and          ║
+// ║   NSPopover re-anchors → side-jump on navigate. (issues #52 #54 #377)     ║
+// ║ • Log content MUST be inside the ScrollView.                               ║
+// ║ • Header MUST be outside the ScrollView (always visible, not scrolled).   ║
+// ║ ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the      ║
+// ║    maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-     ║
+// ║    troller measures the view unconstrained (AppKit bug, see #375 #376)    ║
+// ║ ❌ NEVER omit idealWidth: 480 from the root frame                         ║
 // ║ ❌ NEVER add .frame(height:) here                                         ║
 // ║ ❌ NEVER add .fixedSize() here                                            ║
-// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap        ║
-// ║   Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
-// ║   reports the full log text height as preferredContentSize.height on      ║
-// ║   navigate → NSPopover re-anchors → side-jump. (ref #370)               ║
+// ║ ✔  ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap        ║
+// ║    Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
+// ║    reports the full log text height as preferredContentSize.height on     ║
+// ║    navigate → NSPopover re-anchors → side-jump. (ref #370)                ║
 // ║ ❌ NEVER remove the .frame(maxHeight:) from the ScrollView                ║
 // ║                                                                            ║
-// ║ If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT    ║
-// ║ ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment  ║
-// ║ is removed is major major major.                                          ║
+// ║ If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
+// ║ ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
+// ║ is removed is major major major.                                           ║
 // ╙════════════════════════════════════════════════════════════════════════════╝
 
 /// Shows the raw log text for a single `JobStep`.
@@ -46,14 +50,12 @@ struct StepLogView: View {
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     var onLogLoaded: (() -> Void)? = nil
-
     /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
     @State private var logText: String?
     /// True while the background fetch is in-flight.
     @State private var isLoading = true
 
     // MARK: - Formatters (static to avoid re-allocation)
-
     private static let timeFmt: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
@@ -67,7 +69,6 @@ struct StepLogView: View {
     }()
 
     // MARK: - Derived helpers
-
     /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
     private var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
@@ -89,8 +90,8 @@ struct StepLogView: View {
 
     private var stepStatusColor: Color {
         switch step.conclusion {
-        case "success":             return .green
-        case "failure":             return .red
+        case "success":            return .green
+        case "failure":            return .red
         case "skipped", "cancelled": return .secondary
         default: return step.status == "in_progress" ? .yellow : .secondary
         }
@@ -98,28 +99,28 @@ struct StepLogView: View {
 
     /// Formatted start time, or "—" if unavailable.
     private var startLabel: String {
-        guard let d = step.startedAt else { return "—" }
-        return Self.timeFmt.string(from: d)
+        guard let dateValue = step.startedAt else { return "—" }
+        return Self.timeFmt.string(from: dateValue)
     }
 
     /// Formatted end time, or "—" if unavailable (still running shows live status).
     private var endLabel: String {
-        guard let d = step.completedAt else {
+        guard let dateValue = step.completedAt else {
             return step.status == "in_progress" ? "running…" : "—"
         }
-        return Self.timeFmt.string(from: d)
+        return Self.timeFmt.string(from: dateValue)
     }
 
     /// Date string (yyyy-MM-dd) for context when the step ran.
     private var dateLabel: String {
-        guard let d = step.startedAt ?? step.completedAt else { return "—" }
-        return Self.dateFmt.string(from: d)
+        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
+        return Self.dateFmt.string(from: dateValue)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar: back · spacer · GitHub link · copy ───────────────────────
-            // Elapsed is in Row 3 (next to start→end timestamps).
+            // ── Top bar: back · spacer · GitHub link · copy ───────────────────────────
+            // Elapsed has been moved to Row 3 (next to start→end timestamps).
             // ❌ NEVER move this inside the ScrollView.
             HStack(spacing: 6) {
                 Button(action: onBack) {
@@ -131,9 +132,10 @@ struct StepLogView: View {
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
-
                 Spacer()
-
+                // ─ GitHub deep-link button ───────────────────────────────────
+                // Opens job.htmlUrl in the default browser (NSWorkspace).
+                // Hidden when htmlUrl is unavailable.
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
                     Button(action: { NSWorkspace.shared.open(url) }) {
                         HStack(spacing: 3) {
@@ -148,7 +150,6 @@ struct StepLogView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
-
                 LogCopyButton(
                     fetch: { completion in
                         let text = logText
@@ -163,7 +164,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ────────────────────────────────────────────────
+            // ── Step name (large) ──────────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -171,7 +172,7 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────
+            // ── Meta rows ────────────────────────────────────────────────────────
             // Row 1: parent job name + step number chip
             HStack(spacing: 6) {
                 Image(systemName: "briefcase")
@@ -220,6 +221,7 @@ struct StepLogView: View {
             .padding(.bottom, 3)
 
             // Row 3: start → end timestamps · elapsed · date + status
+            // Elapsed moved here from the top bar so it reads naturally next to the times.
             HStack(spacing: 6) {
                 Image(systemName: "clock")
                     .font(.system(size: 10))
@@ -235,6 +237,7 @@ struct StepLogView: View {
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
                     .fixedSize()
+                // Elapsed duration sits directly after the end time, separated by a bullet.
                 Text("·")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
@@ -260,7 +263,7 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ──────────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ───────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             // ❌ NEVER use a fixed constant — must adapt to screen size.
@@ -291,23 +294,23 @@ struct StepLogView: View {
             // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // Content-driven width — SwiftUI reports natural content width as preferredContentSize.
-        // AppDelegate clamps to [560..900] in resizeAndRepositionPanel().
-        // ❌ NEVER restore idealWidth here.
+        // ════════════════════════════════════════════════════════════════════════
+        // ⚠️ THE ONE FRAME RULE — idealWidth: 480 MUST match AppDelegate.idealWidth.
         // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // ❌ NEVER omit idealWidth: 480
         // ❌ NEVER add .frame(height:) or .fixedSize() here
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
         // is removed is major major major.
-        .frame(minWidth: 560, maxWidth: 900, alignment: .top)
+        // ════════════════════════════════════════════════════════════════════════
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
 
     // MARK: - Log loading
-
     private func loadLog() {
         isLoading = true
-        let jobID = job.id
+        let jobID   = job.id
         let stepNum = step.id
         let scope: String = {
             let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
@@ -321,8 +324,8 @@ struct StepLogView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
             DispatchQueue.main.async {
-                logText = text ?? ""
-                isLoading = false
+                logText    = text ?? ""
+                isLoading  = false
                 onLogLoaded?()
             }
         }

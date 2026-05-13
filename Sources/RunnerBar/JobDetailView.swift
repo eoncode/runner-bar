@@ -8,32 +8,31 @@ import SwiftUI
 // ARCHITECTURE: NSPanel (NOT NSPopover). Width is dynamic.
 //
 // ROOT FRAME RULE:
-// .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-// • idealWidth: 720 — MUST match AppDelegate.initPanelWidth (currently 720).
-// • NO maxHeight on the root frame.
+//   .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
+//   • idealWidth: 720 — MUST match AppDelegate.initPanelWidth (currently 720).
+//   • NO maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
-// .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-// ❌ NEVER remove this modifier from the ScrollView.
-// ❌ NEVER use a fixed constant.
+//   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+//   ❌ NEVER remove this modifier from the ScrollView.
+//   ❌ NEVER use a fixed constant.
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
-// idealWidth bumped 480 → 560 to match AppDelegate.initPanelWidth.
-// idealWidth bumped 560 → 720 to match updated AppDelegate.initPanelWidth.
-// Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
-// Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
-// Pressable repo / branch / SHA-origin labels added to header metadata row.
-// Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
-// ReRunFailedButton added after ReRunButton.
-// Step number zero-padded to #01…#99 for equal-width alignment.
-// Header collapsed from 4 rows to 2 rows: title+actions on row 1,
-// timing+metadata chips on row 2 — eliminates empty right-side dead space.
+//   idealWidth bumped 480 → 560 to match AppDelegate.initPanelWidth.
+//   idealWidth bumped 560 → 720 to match updated AppDelegate.initPanelWidth.
+//   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
+//   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
+//   Pressable repo / branch / SHA-origin labels added to header metadata row.
+//   Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
+//   ReRunFailedButton added after ReRunButton.
+//   Step number zero-padded to #01…#99 for equal-width alignment.
+//   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
+//     timing+metadata chips on row 2 — eliminates empty right-side dead space.
 // ════════════════════════════════════════════════════════════════════════════════
 
-/// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
-///
-/// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
+// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
+// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
 // swiftlint:disable:next type_body_length
 struct JobDetailView: View {
     let job: ActiveJob
@@ -71,15 +70,15 @@ struct JobDetailView: View {
 
                 Spacer(minLength: 8)
 
-                // ── Action cluster ─────────────────────────────────────────────────
+                // ── Action cluster ──────────────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
-                        let jobID = job.id
+                        let jobID    = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         if scopeStr.isEmpty {
                             log(
                                 "ReRunButton › could not derive scope from htmlUrl: "
-                                    + "\(String(describing: job.htmlUrl))"
+                                + "\(String(describing: job.htmlUrl))"
                             )
                         }
                         DispatchQueue.global(qos: .userInitiated).async {
@@ -90,14 +89,15 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
                 )
+
                 ReRunFailedButton(
                     action: { completion in
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        let runID = runIDFromHtmlUrl(job.htmlUrl)
+                        let runID    = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
                             log(
                                 "ReRunFailedButton › could not derive scope/runID from htmlUrl: "
-                                    + "\(String(describing: job.htmlUrl))"
+                                + "\(String(describing: job.htmlUrl))"
                             )
                             completion(false)
                             return
@@ -112,14 +112,15 @@ struct JobDetailView: View {
                         || job.status == "queued"
                         || (job.conclusion != "failure" && job.conclusion != "cancelled")
                 )
+
                 CancelButton(
                     action: { completion in
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        let runID = runIDFromHtmlUrl(job.htmlUrl)
+                        let runID    = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
                             log(
                                 "CancelButton › could not derive scope/runID from htmlUrl: "
-                                    + "\(String(describing: job.htmlUrl))"
+                                + "\(String(describing: job.htmlUrl))"
                             )
                             completion(false)
                             return
@@ -130,21 +131,26 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status != "in_progress" && job.status != "queued"
                 )
+
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                    Button(action: { NSWorkspace.shared.open(url) }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "safari").font(.caption)
-                            Text("GitHub").font(.caption)
+                    Button(
+                        action: { NSWorkspace.shared.open(url) },
+                        label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "safari").font(.caption)
+                                Text("GitHub").font(.caption)
+                            }
+                            .foregroundColor(.secondary)
+                            .fixedSize()
                         }
-                        .foregroundColor(.secondary)
-                        .fixedSize()
-                    }
+                    )
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
+
                 LogCopyButton(
                     fetch: { completion in
-                        let jobID = job.id
+                        let jobID    = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         DispatchQueue.global(qos: .userInitiated).async {
                             completion(fetchJobLog(jobID: jobID, scope: scopeStr))
@@ -167,7 +173,7 @@ struct JobDetailView: View {
 
             Divider()
 
-            // ── Steps list ──────────────────────────────────────────────────────────────────────
+            // ── Steps list ───────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -207,7 +213,6 @@ struct JobDetailView: View {
     }
 
     // MARK: - Info bar (row 2)
-
     /// Single caption-height line combining timing + metadata chips.
     /// Layout: 🕓 start→end · elapsed · [repo] [branch] [origin]
     ///
@@ -247,7 +252,6 @@ struct JobDetailView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 1)
             }
-
             // Metadata chips — repo, branch, origin
             if let repoURL = URL(string: "https://github.com/\(group.repo)") {
                 let repoName = group.repo.components(separatedBy: "/").last ?? group.repo
@@ -255,8 +259,8 @@ struct JobDetailView: View {
             }
             if let branch = group.headBranch,
                let branchURL = URL(
-                string: "https://github.com/\(group.repo)/tree/"
-                    + (branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)
+                    string: "https://github.com/\(group.repo)/tree/"
+                        + (branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)
                ) {
                 metadataChip(
                     icon: "arrow.triangle.branch",
@@ -269,7 +273,7 @@ struct JobDetailView: View {
                 let lbl = group.label
                 if lbl.hasPrefix("#"),
                    let num = lbl.dropFirst()
-                    .components(separatedBy: CharacterSet.decimalDigits.inverted).first,
+                        .components(separatedBy: CharacterSet.decimalDigits.inverted).first,
                    !num.isEmpty {
                     return URL(string: "https://github.com/\(group.repo)/pull/\(num)")
                 } else {
@@ -292,29 +296,29 @@ struct JobDetailView: View {
     }
 
     /// A small pressable label chip: [icon] [text], opens `url` on click.
-    @ViewBuilder
-    private func metadataChip(icon: String, label: String, url: URL, tooltip: String) -> some View {
-        Button(action: { NSWorkspace.shared.open(url) }) {
-            HStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 9))
-                Text(label)
-                    .font(.caption)
-                    .lineLimit(1)
+    @ViewBuilder private func metadataChip(icon: String, label: String, url: URL, tooltip: String) -> some View {
+        Button(
+            action: { NSWorkspace.shared.open(url) },
+            label: {
+                HStack(spacing: 3) {
+                    Image(systemName: icon)
+                        .font(.system(size: 9))
+                    Text(label)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+                .foregroundColor(.secondary)
+                .fixedSize()
             }
-            .foregroundColor(.secondary)
-            .fixedSize()
-        }
+        )
         .buttonStyle(.plain)
         .help(tooltip)
     }
 
     // MARK: - Step row
-
     /// Single-line step row:
     /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
-    @ViewBuilder
-    private func stepRow(_ step: JobStep) -> some View {
+    @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
             // Step number badge — zero-padded, always 3 chars (#01…#99).
             Text(String(format: "#%02d", step.id))
@@ -367,25 +371,24 @@ struct JobDetailView: View {
     }
 
     // MARK: - Helpers
-
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .green
         case "failure": return .red
-        default:
-            return step.status == "in_progress" ? .yellow : .secondary
+        default: return step.status == "in_progress" ? .yellow : .secondary
         }
     }
 }
 
 // MARK: - Wallclock formatter
-
 private let _wallTimeFmt: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "HH:mm:ss"
     return formatter
 }()
 
-private func wallTime(_ date: Date) -> String { _wallTimeFmt.string(from: date) }
+private func wallTime(_ date: Date) -> String {
+    _wallTimeFmt.string(from: date)
+}

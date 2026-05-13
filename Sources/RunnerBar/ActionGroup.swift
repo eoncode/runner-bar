@@ -1,9 +1,9 @@
 // swiftlint:disable file_length
 import Foundation
+
 // swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
 
 // MARK: - GroupStatus
-
 /// Type-safe status for a workflow run group (commit/PR trigger).
 /// Mirrors ci-dash.py's group status derivation logic.
 enum GroupStatus {
@@ -16,20 +16,18 @@ enum GroupStatus {
 }
 
 // MARK: - WorkflowRunRef
-
 /// Lightweight reference to a single workflow run inside an ActionGroup.
 /// Holds only the data needed for display and job fetching — deliberately
 /// minimal so the full job list lives on the parent ActionGroup instead.
 struct WorkflowRunRef: Identifiable {
     let id: Int
-    let name: String // workflow file name, e.g. "SonarQube", "vitest"
+    let name: String       // workflow file name, e.g. "SonarQube", "vitest"
     let status: String
     let conclusion: String?
     let htmlUrl: String?
 }
 
 // MARK: - ActionGroup
-
 /// Represents one **commit / PR trigger**: all GitHub Actions workflow runs
 /// that share the same `head_sha`. Mirrors ci-dash.py's "Group" concept from
 /// `group_runs()` + `enrich_group()`.
@@ -38,11 +36,11 @@ struct WorkflowRunRef: Identifiable {
 /// `ActionDetailView` drills into the flat job list; `JobDetailView`/`StepLogView`
 /// are reused unchanged below that.
 struct ActionGroup: Identifiable, Equatable {
-    let headSha: String // head_sha — kept as the underlying group identity
-    let label: String   // "#1270" if PR, else "d6281b" (sha[:7])
-    let title: String   // commit/PR message first line (≤40 chars)
+    let headSha: String        // head_sha — kept as the underlying group identity
+    let label: String          // "#1270" if PR, else "d6281b" (sha[:7])
+    let title: String          // commit/PR message first line (≤40 chars)
     let headBranch: String?
-    let repo: String    // owner/repo scope
+    let repo: String           // owner/repo scope
 
     /// All sibling workflow runs sharing this `head_sha`.
     var runs: [WorkflowRunRef]
@@ -68,7 +66,6 @@ struct ActionGroup: Identifiable, Equatable {
     var isDimmed: Bool = false
 
     // MARK: Equatable
-
     // Identity-based equality: two groups are equal when their stable `id` matches.
     // This satisfies the `onChange(of: store.actions)` requirement in PopoverMainView
     // without deep-comparing mutable job arrays on every poll.
@@ -124,7 +121,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
     /// has not yet concluded, to prevent a premature FAILED badge.
     var conclusion: String? {
-        // ── Job-based conclusion (preferred) ─────────────────────────────────────────────────
+        // ── Job-based conclusion (preferred) ──────────────────────────────────────────────────
         // Use job data when available and fully loaded.
         if !jobs.isEmpty {
             // Only conclude when every single job has a conclusion.
@@ -135,18 +132,18 @@ struct ActionGroup: Identifiable, Equatable {
             // conclusions are stale and can report "failure" even when all jobs pass
             // (e.g. after a retry). This caused the spurious FAILED badge (issue #294).
             if jobs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
-            if jobs.contains(where: { $0.conclusion == "cancelled" })  { return "cancelled" }
-            if jobs.contains(where: { $0.conclusion == "skipped" })    { return "skipped" }
+            if jobs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
+            if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
             return "success"
         }
-        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ──────────────────
+        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ──────────────────────
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // Do NOT move the run-based logic back to be the primary path — see above.
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
-        if runs.contains(where: { $0.conclusion == "cancelled" })  { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == "skipped" })    { return "skipped" }
+        if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
+        if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
         return "success"
     }
 
@@ -155,8 +152,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// ⚠️ "Concluded" means: success, failure, cancelled, skipped, or timed_out.
     /// We count ALL non-nil conclusions, not just success+skipped, so that
     /// jobsDone/jobsTotal reflects actual completion state (not just passed jobs).
-    var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
-
+    var jobsDone: Int  { jobs.filter { $0.conclusion != nil }.count }
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
 
@@ -206,7 +202,9 @@ struct ActionGroup: Identifiable, Equatable {
 
 private struct ActionRunsResponse: Codable {
     let workflowRuns: [RunPayload]
-    enum CodingKeys: String, CodingKey { case workflowRuns = "workflow_runs" }
+    enum CodingKeys: String, CodingKey {
+        case workflowRuns = "workflow_runs"
+    }
 }
 
 private struct RunPayload: Codable {
@@ -224,22 +222,26 @@ private struct RunPayload: Codable {
     let pullRequests: [PRRef]?
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
-        case headBranch   = "head_branch"
-        case headSha      = "head_sha"
-        case displayTitle = "display_title"
-        case createdAt    = "created_at"
-        case updatedAt    = "updated_at"
-        case htmlUrl      = "html_url"
-        case headCommit   = "head_commit"
-        case pullRequests = "pull_requests"
+        case headBranch    = "head_branch"
+        case headSha       = "head_sha"
+        case displayTitle  = "display_title"
+        case createdAt     = "created_at"
+        case updatedAt     = "updated_at"
+        case htmlUrl       = "html_url"
+        case headCommit    = "head_commit"
+        case pullRequests  = "pull_requests"
     }
 }
 
-private struct HeadCommit: Codable { let message: String }
-private struct PRRef: Codable { let number: Int }
+private struct HeadCommit: Codable {
+    let message: String
+}
+
+private struct PRRef: Codable {
+    let number: Int
+}
 
 // MARK: - PR label
-
 /// Derives the short identifier for an action group row.
 /// Priority: PR number → branch-embedded number → sha[:7].
 private func prLabel(from run: RunPayload) -> String {
@@ -253,7 +255,6 @@ private func prLabel(from run: RunPayload) -> String {
 }
 
 // MARK: - Fetch + Group
-
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
 /// in_progress first, then queued, then done — newest first.
@@ -292,30 +293,32 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
     var groups: [ActionGroup] = bySha.map { sha, shaRuns in
         let rep = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
-        let label = prLabel(from: rep)
-        let rawTitle = rep.displayTitle
-            ?? rep.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
+        let label    = prLabel(from: rep)
+        let rawTitle = rep.displayTitle ?? rep.headCommit
+            .map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
         let title = String(rawTitle.prefix(40))
         let runs: [WorkflowRunRef] = shaRuns.map {
-            WorkflowRunRef(id: $0.id,
-                           name: $0.name,
-                           status: $0.status,
-                           conclusion: $0.conclusion,
-                           htmlUrl: $0.htmlUrl)
+            WorkflowRunRef(
+                id: $0.id,
+                name: $0.name,
+                status: $0.status,
+                conclusion: $0.conclusion,
+                htmlUrl: $0.htmlUrl
+            )
         }
         let allJobs: [ActiveJob]
         if let cached = cache[sha],
            !cached.jobs.isEmpty,
-           cached.jobs.allSatisfy({ $0.conclusion != nil })
-               && !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
+           cached.jobs.allSatisfy({ $0.conclusion != nil }) &&
+           !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
             allJobs = cached.jobs
         } else {
             var fetched: [ActiveJob] = []
             var seenJobIDs = Set<Int>()
             for runID in shaRuns.map({ $0.id }) {
                 for job in fetchJobsForRun(runID, scope: scope, iso: iso)
-                    where seenJobIDs.insert(job.id).inserted {
+                where seenJobIDs.insert(job.id).inserted {
                     fetched.append(job)
                 }
             }
@@ -337,7 +340,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
             createdAt: rep.createdAt.flatMap { iso.date(from: $0) }
         )
     }
-
     groups.sort { leftGroup, rightGroup in
         let leftPriority  = statusPriority(leftGroup.groupStatus)
         let rightPriority = statusPriority(rightGroup.groupStatus)
@@ -349,7 +351,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 }
 
 // MARK: - Private helpers
-
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
 func makeActiveJob(from jobPayload: JobPayload,
                    iso: ISO8601DateFormatter,
@@ -383,26 +384,24 @@ func makeActiveJob(from jobPayload: JobPayload,
 /// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
 /// causing the main row to show a lower jobsTotal than the detail view.
 /// per_page=100 is the GitHub API maximum and covers all realistic job counts.
-private func fetchJobsForRun(_ runID: Int,
-                              scope: String,
-                              iso: ISO8601DateFormatter) -> [ActiveJob] {
+private func fetchJobsForRun(_ runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
     guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
-          let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else { return [] }
+          let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+    else { return [] }
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso) }
     var result = initial
     var refreshCount = 0
     for idx in result.indices {
         let job = result[idx]
-        let needsRefresh = job.conclusion == nil
-            || job.steps.contains { $0.status == "in_progress" }
+        let needsRefresh = job.conclusion == nil || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh, refreshCount < 3 else { continue }
         refreshCount += 1
         guard let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: freshData) else { continue }
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: freshData)
+        else { continue }
         let freshJob = makeActiveJob(from: fresh, iso: iso)
         if fresh.conclusion != nil { result[idx] = freshJob; continue }
-        let betterSteps = !freshJob.steps.isEmpty
-            && !freshJob.steps.contains { $0.status == "in_progress" }
+        let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == "in_progress" }
         if betterSteps {
             result[idx] = ActiveJob(
                 id: job.id,
@@ -430,5 +429,6 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
+
 // swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment
 // swiftlint:enable file_length
