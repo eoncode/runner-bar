@@ -26,7 +26,6 @@ struct GroupPollResult {
 
 /// RunnerStore extension providing the job-state builder used by the background poll.
 extension RunnerStore {
-    // swiftlint:disable:next function_body_length
     /// Builds the job display list and updated caches from a background poll snapshot.
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
@@ -40,23 +39,7 @@ extension RunnerStore {
         let now       = Date()
         var newCache  = snapCache
 
-        // ⚠️ CALLSITE 2 of 3 — Vanished jobs: were live last poll, gone now.
-        for (jobID, job) in snapPrev where !liveIDs.contains(jobID) {
-            guard newCache[jobID] == nil else { continue }
-            newCache[jobID] = ActiveJob(
-                id: job.id,
-                name: job.name,
-                status: "completed",
-                conclusion: job.conclusion ?? "success",
-                startedAt: job.startedAt,
-                createdAt: job.createdAt,
-                completedAt: job.completedAt ?? now,
-                htmlUrl: job.htmlUrl,
-                isDimmed: true,
-                steps: job.steps,
-                runnerName: job.runnerName
-            )
-        }
+        applyVanishedJobs(snapPrev: snapPrev, liveIDs: liveIDs, now: now, into: &newCache)
 
         // ⚠️ CALLSITE 3 of 3 — Fresh done: jobs with a conclusion inside active runs.
         for job in freshDone {
@@ -88,6 +71,32 @@ extension RunnerStore {
             + " | cache: \(newCache.count) | display: \(display.count)"
         )
         return JobPollResult(display: display, newCache: newCache, newPrevLive: newPrevLive)
+    }
+
+    /// Inserts completed stubs for jobs that were live last poll but have since vanished.
+    private func applyVanishedJobs(
+        snapPrev: [Int: ActiveJob],
+        liveIDs: Set<Int>,
+        now: Date,
+        into cache: inout [Int: ActiveJob]
+    ) {
+        // ⚠️ CALLSITE 2 of 3 — Vanished jobs: were live last poll, gone now.
+        for (jobID, job) in snapPrev where !liveIDs.contains(jobID) {
+            guard cache[jobID] == nil else { continue }
+            cache[jobID] = ActiveJob(
+                id: job.id,
+                name: job.name,
+                status: "completed",
+                conclusion: job.conclusion ?? "success",
+                startedAt: job.startedAt,
+                createdAt: job.createdAt,
+                completedAt: job.completedAt ?? now,
+                htmlUrl: job.htmlUrl,
+                isDimmed: true,
+                steps: job.steps,
+                runnerName: job.runnerName
+            )
+        }
     }
 
     private func trimJobCache(_ cache: inout [Int: ActiveJob], limit: Int) {
