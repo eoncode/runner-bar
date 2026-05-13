@@ -256,7 +256,7 @@ struct ActionRowView: View {
     private var dotColor: Color {
         switch group.groupStatus {
         case .inProgress: return .yellow
-        case .queued:     return .blue
+        case .queued: return .blue
         case .completed:
             if group.isDimmed { return .gray }
             return group.conclusion == "success" ? .green : .red
@@ -280,7 +280,7 @@ struct ActionRowView: View {
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick:  Int
-    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
+    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
