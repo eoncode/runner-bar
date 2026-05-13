@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView and StepLogView.
-/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") → done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
+/// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
 struct CancelButton: View {
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
