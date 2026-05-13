@@ -308,10 +308,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH   = contentH + arrowHeight
 
-        let x = statusItemRect.midX - contentW / 2
-        let y = topY - totalH
+        let posX = statusItemRect.midX - contentW / 2
+        let posY = topY - totalH
 
-        panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
+        panel.setFrame(NSRect(x: posX, y: posY, width: contentW, height: totalH),
                        display: true, animate: false)
 
         chrome.arrowX = statusItemRect.midX - panel.frame.minX
@@ -357,7 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func removeEventMonitor() {
-        if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
+        if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
     }
 
     private func removeWorkspaceObserver() {
@@ -624,15 +624,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
-        let x = statusItemRect.midX - initW / 2
-        let y = statusItemRect.minY - initH - Self.gap
+        let posX = statusItemRect.midX - initW / 2
+        let posY = statusItemRect.minY - initH - Self.gap
 
         panel.setFrame(
-            NSRect(x: x, y: y, width: initW, height: initH),
+            NSRect(x: posX, y: posY, width: initW, height: initH),
             display: false, animate: false
         )
 
-        chrome?.arrowX = statusItemRect.midX - x
+        chrome?.arrowX = statusItemRect.midX - posX
         panel.orderFront(nil)
         resizeAndRepositionPanel()
 
