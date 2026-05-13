@@ -334,6 +334,10 @@ struct ActionDetailView: View {
 
     // MARK: - Helpers
 
+    /// Returns the group's computed elapsed string.
+    /// The `tick` parameter is intentionally unused — it exists solely to force
+    /// SwiftUI to re-call this function every second when the 1 Hz timer fires,
+    /// keeping the elapsed display live without storing a separate @State string.
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     private func jobTimeRange(_ job: ActiveJob) -> String {

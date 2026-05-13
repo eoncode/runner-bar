@@ -371,6 +371,11 @@ struct JobDetailView: View {
     }
 
     // MARK: - Helpers
+
+    /// Returns the job's computed elapsed string.
+    /// The `tick` parameter is intentionally unused — it exists solely to force
+    /// SwiftUI to re-call this function every second when the 1 Hz timer fires,
+    /// keeping the elapsed display live without storing a separate @State string.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
     private func stepColor(_ step: JobStep) -> Color {
