@@ -306,7 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
         let contentH = min(max(preferred.height, 60), maxHeight)
-        let totalH   = contentH + arrowHeight
+        let totalH = contentH + arrowHeight
 
         let posX = statusItemRect.midX - contentW / 2
         let posY = topY - totalH
@@ -361,8 +361,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func removeWorkspaceObserver() {
-        if let o = workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(o)
+        if let opt = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(opt)
             workspaceObserver = nil
         }
     }
@@ -412,7 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !fetched.isEmpty else { return group }
         fetched.sort { $0.id < $1.id }
         let starts = fetched.compactMap { $0.startedAt }
-        let ends   = fetched.compactMap { $0.completedAt }
+        let ends = fetched.compactMap { $0.completedAt }
         return ActionGroup(
             headSha: group.headSha,
             label: group.label,

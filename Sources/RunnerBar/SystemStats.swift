@@ -128,12 +128,12 @@ final class SystemStatsViewModel: ObservableObject {
         var totalTicks = 0.0
         for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
-            let userLoad  = Double(info[Int(base) + Int(CPU_STATE_USER)])
-            let sysLoad   = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
-            let idleLoad  = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
-            let niceLoad  = Double(info[Int(base) + Int(CPU_STATE_NICE)])
-            userTicks  += userLoad + niceLoad
-            sysTicks   += sysLoad
+            let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
+            let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
+            let idleLoad = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
+            let niceLoad = Double(info[Int(base) + Int(CPU_STATE_NICE)])
+            userTicks += userLoad + niceLoad
+            sysTicks += sysLoad
             totalTicks += userLoad + sysLoad + idleLoad + niceLoad
         }
         vm_deallocate(
@@ -212,8 +212,8 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - Sample
 
     private func sample() {
-        let cpu  = cpuPercent()
-        let mem  = memStats()
+        let cpu = cpuPercent()
+        let mem = memStats()
         let disk = diskStats()
         let snapshot = SystemStats(
             cpuPct: cpu,
