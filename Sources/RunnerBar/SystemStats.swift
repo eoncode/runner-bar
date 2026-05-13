@@ -126,7 +126,7 @@ final class SystemStatsViewModel: ObservableObject {
         var userTicks = 0.0
         var sysTicks = 0.0
         var totalTicks = 0.0
-        for coreIdx in 0..<numCPUs {
+        for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
             let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
             let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
