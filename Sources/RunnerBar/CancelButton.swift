@@ -37,11 +37,15 @@ struct CancelButton: View {
         case idle, loading, done(Bool)
     }
 
+    // ✔ @ViewBuilder lets each branch return its own concrete type — no AnyView erasure.
+    // ❌ NEVER revert to `AnyView(Group { switch ... })` — see regression guard above.
+    @ViewBuilder
     var body: some View {
         // ✔ Return EmptyView when disabled — zero layout space, zero hit area.
         // ❌ NEVER use .opacity(0) here — it keeps the space occupied (blank gap).
-        if isDisabled { return AnyView(EmptyView()) }
-        return AnyView(Group {
+        if isDisabled {
+            EmptyView()
+        } else {
             switch phase {
             case .idle:
                 Button(action: startCancel) {
@@ -73,7 +77,7 @@ struct CancelButton: View {
                         .fixedSize()
                 }
             }
-        })
+        }
     }
 
     private func startCancel() {
