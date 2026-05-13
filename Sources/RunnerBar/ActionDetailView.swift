@@ -259,7 +259,6 @@ struct ActionDetailView: View {
         let done  = group.jobsDone
         let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
-
         if group.groupStatus == .inProgress || conclusions.count < total {
             return "\(done)/\(total) jobs running"
         }
@@ -329,7 +328,6 @@ struct ActionDetailView: View {
             } else {
                 Spacer().frame(width: 40)
             }
-
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(.secondary)
