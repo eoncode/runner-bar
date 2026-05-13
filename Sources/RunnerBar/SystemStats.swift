@@ -1,3 +1,4 @@
+// swiftlint:disable operator_usage_whitespace
 import Combine
 import Darwin
 import Foundation
@@ -76,8 +77,8 @@ private struct DiskStats {
 /// cpuPercent() does a blocking host_processor_info() call — it must
 /// run on a background queue.
 /// ❌ NEVER remove the stop() pre-warm sample() call.
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT,
-/// YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+/// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
     private var timer: Timer?
@@ -179,7 +180,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
     /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
-    /// on every popover open ("access data from other apps", Apple Music,
+    /// on every popover open (“access data from other apps”, Apple Music,
     /// Photo Library) because it internally queries Photos/Music databases to
     /// calculate purgeable space. This app declares no media entitlements and
     /// must never use that key.
@@ -189,9 +190,9 @@ final class SystemStatsViewModel: ObservableObject {
     /// for display purposes.
     ///
     /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT,
-    /// YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE.
-    /// The regression we get when this comment is removed is major major major.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+    /// ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
+    /// is removed is major major major.
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
         let gigabytes = 1024.0 * 1024.0 * 1024.0
@@ -227,3 +228,4 @@ final class SystemStatsViewModel: ObservableObject {
         DispatchQueue.main.async { self.stats = snapshot }
     }
 }
+// swiftlint:enable operator_usage_whitespace
