@@ -1,10 +1,20 @@
 import Foundation
+import os
 
 // MARK: - gh API
 
+/// Thread-safe rate-limit flag.
+/// Replaces the bare `var ghIsRateLimited: Bool` global that was written from
+/// background threads without synchronization (data race, issue #399 item 2).
+/// Access via `ghRateLimitFlag.withLock { ... }` or the helpers below.
+private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
+
 /// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.
 /// Reset to `false` at the start of each `RunnerStore.fetch()` poll cycle.
-var ghIsRateLimited: Bool = false
+var ghIsRateLimited: Bool {
+    get { _rateLimitLock.withLock { $0 } }
+    set { _rateLimitLock.withLock { $0 = newValue } }
+}
 
 /// Calls the GitHub CLI (`gh api`) with the given endpoint and returns raw response data.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
@@ -190,7 +200,7 @@ func fetchUserOrgs() -> [String] {
     return orgs.map(\.login)
 }
 
-/// Returns `owner/repo` strings for the authenticated user's repositories.
+/// Returns `owner/repo` strings for the authenticated user’s repositories.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
     struct Repo: Decodable {
