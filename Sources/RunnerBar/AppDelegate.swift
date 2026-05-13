@@ -39,20 +39,20 @@ import SwiftUI
 // CHROME DIMENSIONS (match NSPopover exactly):
 //   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
-// WIDTH: Dynamic per-view via preferredContentSize.width.
-// Each SwiftUI view declares .frame(idealWidth: N) to set its preferred width.
-// resizeAndRepositionPanel() reads preferredContentSize.width and re-centres.
-// Width is clamped to [minWidth..maxWidth].
+// WIDTH: Content-driven via preferredContentSize.width.
+// SwiftUI views declare .frame(minWidth: 560, maxWidth: 900) — NO idealWidth.
+// Dropping idealWidth lets SwiftUI measure actual content and report its natural
+// width as preferredContentSize.width. resizeAndRepositionPanel() clamps it to
+// [minWidth..maxWidth] and re-centres the panel under the status button.
+// ❌ NEVER restore idealWidth in any view — it pins width regardless of content.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
 //
 // INITIAL WIDTH (openPanel):
-// initW MUST match the widest view's idealWidth (currently 720 for PopoverMainView
-// and ActionDetailView). If initW is smaller than the actual
-// preferredContentSize.width, the first resizeAndRepositionPanel() call
-// repositions the panel — but arrowX is computed from the *old* frame, producing
-// a stale offset that makes the arrow appear off-centre.
-// ✅ Keep initW = 720 (or bump to match whenever idealWidth increases).
-// ❌ NEVER set initW smaller than the largest idealWidth in any view.
+// initPanelWidth is the fallback frame width used for the initial open before
+// SwiftUI has measured anything. It does NOT need to match any idealWidth (there
+// are none). A reasonable default like 600 is fine; the panel resizes to content
+// width on the first preferredContentSize KVO fire.
+// ❌ NEVER set initPanelWidth > maxWidth.
 //
 // ARROW CENTERING ON NAVIGATE:
 // navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
@@ -126,10 +126,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    private static let minWidth: CGFloat = 320
+    /// Lower bound for panel content width. Matches minWidth in all SwiftUI root frames.
+    private static let minWidth: CGFloat = 560
 
     private var maxWidth: CGFloat {
-        NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 800
+        // Cap at 900 or 90% of screen width, whichever is smaller.
+        let screenMax = NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 900
+        return min(900, screenMax)
     }
 
     private var maxHeight: CGFloat {
@@ -138,10 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let gap: CGFloat = 2
 
-    /// Must equal the largest idealWidth across all SwiftUI views (currently 720).
-    /// ❌ NEVER set lower than 720. ❌ NEVER change without updating idealWidth in
-    /// PopoverMainView (RULE 8).
-    private static let initPanelWidth: CGFloat = 720
+    /// Initial panel width used before SwiftUI has measured content.
+    /// Does NOT need to match any idealWidth (there are none — width is content-driven).
+    /// A reasonable default; the panel resizes to actual content on the first KVO fire.
+    /// ❌ NEVER set above maxWidth. ❌ NEVER restore to 720 (that was the old idealWidth).
+    private static let initPanelWidth: CGFloat = 600
 
     // MARK: - Environment injection
 
@@ -229,9 +233,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func updateStatusIcon() {
-        // Include ALL groups that have at least one incomplete job (conclusion == nil).
-        // This covers both non-dimmed (actively displayed) and dimmed groups that are
-        // still transitioning — ensuring the icon reflects the true running job count.
         let activeGroups = RunnerStore.shared.actions.filter { group in
             group.jobs.contains { $0.conclusion == nil }
         }
@@ -347,8 +348,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.navigate(to: self.settingsView())
             },
             onSelectInlineJob: { [weak self] job, group in
-                // Tapping an inline ↳ job row navigates directly to JobDetailView,
-                // bypassing ActionDetailView. Back button returns to ActionDetailView.
                 guard let self else { return }
                 let latestGroup = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                 DispatchQueue.global(qos: .userInitiated).async {
