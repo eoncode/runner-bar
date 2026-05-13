@@ -331,12 +331,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func removeEventMonitor() {
-        if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
+        if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
     }
 
     private func removeWorkspaceObserver() {
-        if let o = workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(o)
+        if let observer = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
             workspaceObserver = nil
         }
     }
@@ -580,7 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Toggle
 
     @objc private func togglePanel() {
-        panelIsOpen ? closePanel() : openPanel()
+        if panelIsOpen { closePanel() } else { openPanel() }
     }
 
     // MARK: - Open
