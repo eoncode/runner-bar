@@ -26,8 +26,8 @@ struct GroupPollResult {
 
 /// RunnerStore extension providing the job-state builder used by the background poll.
 extension RunnerStore {
-    // swiftlint:disable:next function_body_length
     /// Builds the job display list and updated caches from a background poll.
+    // swiftlint:disable:next function_body_length
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
         for scope in ScopeStore.shared.scopes {
@@ -117,10 +117,9 @@ extension RunnerStore {
     private func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress = live.filter { $0.status == "in_progress" }
         let queued     = live.filter { $0.status == "queued" }
-        let cached     = cache.values
-            .sorted { lhs, rhs in
-                (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
-            }
+        let cached     = cache.values.sorted { lhs, rhs in
+            (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
+        }
         var display: [ActiveJob] = []
         for job in inProgress where display.count < 3 { display.append(job) }
         for job in queued     where display.count < 3 { display.append(job) }
@@ -251,10 +250,10 @@ extension RunnerStore {
         let inProgress     = live.filter { $0.groupStatus == .inProgress }
         let queued         = live.filter { $0.groupStatus == .queued }
         let liveDisplayIDs = Set((inProgress + queued).map { $0.id })
-        let cached         = cache.values.sorted { lhs, rhs in
+        let cached         = cache.values.sorted(by: { lhs, rhs in
             (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
             > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
-        }
+        })
         var display: [ActionGroup] = []
         for grp in inProgress where display.count < 30 { display.append(grp) }
         for grp in queued     where display.count < 30 { display.append(grp) }
