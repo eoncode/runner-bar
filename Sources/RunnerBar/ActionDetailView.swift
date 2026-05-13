@@ -157,7 +157,10 @@ struct ActionDetailView: View {
                     Text("→").font(.caption2).foregroundColor(.secondary)
                     Text(groupEndLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
                     Text("·").font(.caption2).foregroundColor(.secondary)
-                    Text(elapsedLive(tick: tick)).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
+                    Text(elapsedLive(tick: tick))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .fixedSize()
                 }
                 Text(jobsSummaryLine).font(.caption).foregroundColor(.secondary)
             }
@@ -202,6 +205,7 @@ struct ActionDetailView: View {
 
 // MARK: - Helpers
 extension ActionDetailView {
+    /// Opens the SHA commit or PR associated with the group label on GitHub.
     func openLabelOnGitHub() {
         let urlString: String
         if group.label.hasPrefix("#"),
@@ -214,23 +218,27 @@ extension ActionDetailView {
         NSWorkspace.shared.open(url)
     }
 
+    /// Tooltip text for the label link button, describing whether it links to a PR or commit.
     var labelLinkTooltip: String {
         group.label.hasPrefix("#")
             ? "Open pull request on GitHub"
             : "Open commit on GitHub"
     }
 
+    /// Formatted start time for the group (first job started or group created).
     var groupStartLabel: String {
-        guard let d = group.firstJobStartedAt ?? group.createdAt else { return "—" }
-        return Self.timeFmt.string(from: d)
+        guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
+        return Self.timeFmt.string(from: date)
     }
 
+    /// Formatted end time for the group, or "now" while in progress.
     var groupEndLabel: String {
-        if let d = group.lastJobCompletedAt { return Self.timeFmt.string(from: d) }
+        if let date = group.lastJobCompletedAt { return Self.timeFmt.string(from: date) }
         if group.groupStatus == .inProgress { return "now" }
         return "—"
     }
 
+    /// Human-readable summary of job completion state for the group.
     var jobsSummaryLine: String {
         let done  = group.jobsDone
         let total = group.jobsTotal
@@ -242,6 +250,7 @@ extension ActionDetailView {
         return "\(done)/\(total) jobs completed"
     }
 
+    /// Returns the group elapsed string; `tick` parameter triggers SwiftUI refresh every second.
     func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     @ViewBuilder
@@ -285,6 +294,7 @@ extension ActionDetailView {
         .contentShape(Rectangle())
     }
 
+    /// Formats start→end time range for a job row, using HH:mm:ss precision.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
@@ -292,11 +302,13 @@ extension ActionDetailView {
         return "\(startStr)→now"
     }
 
+    /// Returns the status dot colour for a job row.
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return .secondary }
         return job.status == "in_progress" ? .yellow : .gray
     }
 
+    /// Short status label shown when a job has no conclusion yet.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "In Progress"
@@ -305,20 +317,23 @@ extension ActionDetailView {
         }
     }
 
+    /// Text colour for a live (no-conclusion) job status label.
     func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
 
-    func conclusionLabel(_ c: String) -> String {
-        switch c {
+    /// Maps a raw conclusion string to a human-readable icon + label.
+    func conclusionLabel(_ conclusion: String) -> String {
+        switch conclusion {
         case "success":   return "✓ success"
         case "failure":   return "✗ failure"
         case "cancelled": return "⊗ cancelled"
         case "skipped":   return "− skipped"
-        default:          return c
+        default:          return conclusion
         }
     }
 
-    func conclusionColor(_ c: String) -> Color {
-        switch c {
+    /// Maps a raw conclusion string to a display colour.
+    func conclusionColor(_ conclusion: String) -> Color {
+        switch conclusion {
         case "success": return .green
         case "failure": return .red
         default:        return .secondary

@@ -145,15 +145,20 @@ struct StepLogView: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(startLabel).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text(startLabel)
+                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
                 Text("→").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(endLabel).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text(endLabel)
+                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
                 Text("·").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(step.elapsed).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text(step.elapsed)
+                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
                 Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
-                Text(dateLabel).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                Text(dateLabel)
+                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
                 Spacer()
-                Text(stepStatusLabel).font(.system(size: 10, weight: .medium)).foregroundColor(stepStatusColor).fixedSize()
+                Text(stepStatusLabel)
+                    .font(.system(size: 10, weight: .medium)).foregroundColor(stepStatusColor).fixedSize()
             }
             .padding(.horizontal, 12).padding(.bottom, 6)
 
@@ -245,6 +250,7 @@ extension StepLogView {
         }
     }
 
+    /// Colour used to render `stepStatusLabel` based on conclusion or live status.
     var stepStatusColor: Color {
         switch step.conclusion {
         case "success":            return .green
