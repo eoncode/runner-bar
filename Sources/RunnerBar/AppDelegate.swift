@@ -40,13 +40,14 @@ import SwiftUI
 //   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
 // WIDTH: Content-driven via preferredContentSize.width.
-// SwiftUI views declare .frame(minWidth: 280, maxWidth: 900) — NO idealWidth.
-// Dropping idealWidth lets SwiftUI measure actual content and report its natural
-// width as preferredContentSize.width. resizeAndRepositionPanel() clamps it to
-// [minWidth..maxWidth] and re-centres the panel under the status button.
-// ❌ NEVER restore idealWidth in any view — it pins width regardless of content.
+// SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
+//   ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
+//   JobDetailView:    .frame(idealWidth: 720, maxWidth: .infinity)
+// resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
+// the panel under the status button.
+// ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-// ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
+// ❌ NEVER restore minWidth to 560 in AppDelegate — that was the old fixed-width floor.
 //
 // INITIAL WIDTH (openPanel):
 // initPanelWidth is the fallback frame width used for the initial open before
@@ -83,9 +84,7 @@ import SwiftUI
 // ❌ NEVER set autoresizingMask = [] on the hosting view.
 //
 // STATUS ICON (issue #241):
-// updateStatusIcon() counts jobs from ALL groups that have any incomplete job
-// (conclusion == nil), regardless of isDimmed. This ensures the icon reflects
-// the true in-progress fraction across all active work.
+// updateStatusIcon() sets the menu bar image from RunnerStore.shared.aggregateStatus.
 // ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
 // ❌ NEVER read RunnerStore.shared.jobs for the icon — it will always be 0.
 // ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
@@ -270,16 +269,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Status icon
 
-    /// Recomputes and sets the menu bar icon using runner health.
+    /// Sets the menu bar icon from `RunnerStore.shared.aggregateStatus`.
     ///
-    /// ⚠️ COUNTS FROM ALL GROUPS WITH ANY INCOMPLETE JOB — NOT JUST !isDimmed.
-    ///
-    /// isDimmed marks groups that have been frozen into cache after completion, BUT a
-    /// dimmed group can still contain in-progress jobs during a transition window.
-    /// Filtering by !isDimmed alone means those jobs are invisible to the icon, causing
-    /// the icon to show progress for only 2 jobs when 10 are actually running.
-    ///
-    /// ❌ NEVER filter by !isDimmed only — misses in-progress jobs in dimmed groups.
+    /// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
     /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
     /// ❌ NEVER call makeStatusIcon() — it no longer exists; use menuBarImage(for:).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
