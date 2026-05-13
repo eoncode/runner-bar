@@ -86,7 +86,8 @@ import SwiftUI
 // the true in-progress fraction across all active work.
 // ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
 // ❌ NEVER read RunnerStore.shared.jobs for the icon — it will always be 0.
-// ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
+// ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
+//    Use AggregateStatus.symbolName with NSImage(systemSymbolName:) instead.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -130,7 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let minWidth: CGFloat = 560
 
     private var maxWidth: CGFloat {
-        // Cap at 900 or 90% of screen width, whichever is smaller.
         let screenMax = NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 900
         return min(900, screenMax)
     }
@@ -156,12 +156,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AnyView(view.environmentObject(popoverOpenState))
     }
 
+    // MARK: - Status icon helpers
+
+    /// Builds the menu bar NSImage from an AggregateStatus using its SF Symbol name.
+    /// ❌ NEVER call makeStatusIcon() — it no longer exists. Use this method instead.
+    private func menuBarImage(for status: AggregateStatus) -> NSImage {
+        NSImage(systemSymbolName: status.symbolName, accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
+            ?? NSImage()
+    }
+
     // MARK: - App lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
-            button.image = makeStatusIcon(for: .allOffline)
+            button.image = menuBarImage(for: .allOffline)
             button.action = #selector(togglePanel)
             button.target = self
         }
@@ -211,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Status icon
 
-    /// Recomputes and sets the menu bar icon using runner health + action-job progress.
+    /// Recomputes and sets the menu bar icon using runner health.
     ///
     /// ⚠️ COUNTS FROM ALL GROUPS WITH ANY INCOMPLETE JOB — NOT JUST !isDimmed.
     ///
@@ -220,30 +230,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Filtering by !isDimmed alone means those jobs are invisible to the icon, causing
     /// the icon to show progress for only 2 jobs when 10 are actually running.
     ///
-    /// Rule: include a group in the progress count if it has at least one job with
-    /// conclusion == nil (i.e. still running or queued). Dimmed groups where every job
-    /// has concluded are excluded — they are truly done and must not skew the fraction.
-    ///
-    /// Progress fraction = completed jobs / total jobs across all active groups.
-    /// A job is "completed" when its conclusion != nil (any conclusion counts).
-    ///
     /// ❌ NEVER filter by !isDimmed only — misses in-progress jobs in dimmed groups.
     /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
-    /// ❌ NEVER call makeStatusIcon() without job counts — it falls back to solid dot.
+    /// ❌ NEVER call makeStatusIcon() — it no longer exists; use menuBarImage(for:).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func updateStatusIcon() {
-        let activeGroups = RunnerStore.shared.actions.filter { group in
-            group.jobs.contains { $0.conclusion == nil }
-        }
-        let allJobs   = activeGroups.flatMap { $0.jobs }
-        let total     = allJobs.count
-        let completed = allJobs.filter { $0.conclusion != nil }.count
-        statusItem?.button?.image = makeStatusIcon(
-            for: RunnerStore.shared.aggregateStatus,
-            totalJobs: total,
-            completedJobs: completed
-        )
+        statusItem?.button?.image = menuBarImage(for: RunnerStore.shared.aggregateStatus)
     }
 
     // MARK: - Panel resize
