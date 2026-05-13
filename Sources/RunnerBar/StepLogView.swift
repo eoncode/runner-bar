@@ -97,7 +97,6 @@ struct StepLogView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
-                // swiftlint:disable:next multiple_closures_with_trailing_closure
                 LogCopyButton(
                     fetch: { completion in
                         let text = logText
