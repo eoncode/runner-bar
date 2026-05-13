@@ -49,7 +49,7 @@ struct StepLogView: View {
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
-    var onLogLoaded: (() -> Void)? = nil
+    var onLogLoaded: (() -> Void)?
     /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
     @State private var logText: String?
     /// True while the background fetch is in-flight.

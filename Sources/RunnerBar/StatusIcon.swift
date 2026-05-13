@@ -62,7 +62,7 @@ struct StatusIcon {
         let str = NSAttributedString(string: icon, attributes: attrs)
         let strSize = str.size()
         str.draw(at: NSPoint(
-            x: (size - strSize.width)  / 2,
+            x: (size - strSize.width) / 2,
             y: (size - strSize.height) / 2
         ))
 
