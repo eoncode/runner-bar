@@ -179,7 +179,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
     /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
-    /// on every popover open (“access data from other apps”, Apple Music,
+    /// on every popover open ("access data from other apps", Apple Music,
     /// Photo Library) because it internally queries Photos/Music databases to
     /// calculate purgeable space. This app declares no media entitlements and
     /// must never use that key.
