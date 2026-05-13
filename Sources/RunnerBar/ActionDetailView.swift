@@ -283,18 +283,15 @@ struct ActionDetailView: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
-
             Circle()
                 .fill(jobDotColor(for: job))
                 .frame(width: 7, height: 7)
-
             Text(job.name)
                 .font(.system(size: 12))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
-
             if job.startedAt != nil {
                 Text(jobTimeRange(job))
                     .font(.caption2.monospacedDigit())
@@ -305,9 +302,7 @@ struct ActionDetailView: View {
                 Spacer()
                     .frame(width: 130)
             }
-
             Spacer(minLength: 0)
-
             if let conclusion = job.conclusion {
                 Text(conclusionLabel(conclusion))
                     .font(.caption)
@@ -319,7 +314,6 @@ struct ActionDetailView: View {
                     .foregroundColor(jobStatusColor(for: job))
                     .frame(width: 80, alignment: .trailing)
             }
-
             if job.startedAt != nil {
                 Text(job.elapsed)
                     .font(.caption.monospacedDigit())

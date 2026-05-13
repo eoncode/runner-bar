@@ -255,8 +255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
 
-        let contentW = min(max(preferred.width,  Self.minWidth), maxWidth)
-        let contentH = min(max(preferred.height, 60),            maxHeight)
+        let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
+        let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH   = contentH + arrowHeight
 
         let x = statusItemRect.midX - contentW / 2
@@ -604,7 +604,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil, queue: .main
+            object: nil,
+            queue: .main
         ) { [weak self] _ in
             guard let self else { return }
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
