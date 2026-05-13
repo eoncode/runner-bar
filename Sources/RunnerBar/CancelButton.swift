@@ -7,7 +7,7 @@ import SwiftUI
 // this view is embedded inside an HStack header, never at the root level.
 //
 // ❌ NEVER wrap CancelButton in a .frame(height:) or .fixedSize() at the
-// CALL SITE — that would corrupt the parent view's fittingSize and cause
+// CALL SITE — that would corrupt the parent view’s fittingSize and cause
 // the popover to jump sideways when AppDelegate calls navigate().
 //
 // ✔ The isDisabled=true state returns EmptyView, completely removing the
@@ -19,8 +19,8 @@ import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView, ActionDetailView, and StepLogView.
 ///
-/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") →
-/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
+/// States: idle (xmark.circle + “Cancel”) → loading (spinner + “Running…”) →
+/// done (✓ + “Done”, 1.5 s) OR failed (✗ + “Failed”, 1.5 s) → idle
 ///
 /// When `isDisabled` is true the button returns **EmptyView** and occupies no space.
 /// This is intentional: keeping a zero-opacity placeholder creates a blank gap.
@@ -45,11 +45,11 @@ struct CancelButton: View {
         case failed
     }
 
-    var body: some View {
-        // ✔ Return EmptyView when disabled — zero layout space, zero hit area.
-        // ❌ NEVER use .opacity(0) here — it keeps the space occupied (blank gap).
-        if isDisabled { return AnyView(EmptyView()) }
-        return AnyView(Group {
+    // ✔ @ViewBuilder keeps the return type opaque (no AnyView heap allocation).
+    // ❌ NEVER revert to `if isDisabled { return AnyView(EmptyView()) }` —
+    //   that wraps every branch in AnyView, disabling SwiftUI structural diffing.
+    @ViewBuilder var body: some View {
+        if !isDisabled {
             switch phase {
             case .idle:
                 Button(action: startCancel) {
@@ -92,7 +92,7 @@ struct CancelButton: View {
                         .fixedSize()
                 }
             }
-        })
+        }
     }
 
     private func startCancel() {
