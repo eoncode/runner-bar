@@ -358,12 +358,15 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
 // MARK: - Private helpers
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
+/// ⚠️ Uses `step.number` (the API-supplied step sequence number), NOT `idx + 1`.
+/// GitHub step numbers can be non-contiguous (e.g. after retries or skipped steps);
+/// using the array index would cause `fetchStepLog(jobID:stepNumber:)` to fetch the wrong log.
 func makeActiveJob(from jobPayload: JobPayload,
                    iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (jobPayload.steps ?? []).enumerated().map { idx, step in
+    let steps: [JobStep] = (jobPayload.steps ?? []).map { step in
         JobStep(
-            id: idx + 1,
+            id: step.number,
             name: step.name,
             status: step.status,
             conclusion: step.conclusion,
