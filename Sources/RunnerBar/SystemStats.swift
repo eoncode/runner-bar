@@ -1,4 +1,3 @@
-// swiftlint:disable operator_usage_whitespace
 import Combine
 import Darwin
 import Foundation
@@ -228,4 +227,3 @@ final class SystemStatsViewModel: ObservableObject {
         DispatchQueue.main.async { self.stats = snapshot }
     }
 }
-// swiftlint:enable operator_usage_whitespace
