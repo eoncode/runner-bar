@@ -5,13 +5,12 @@ import Foundation
 // MARK: - SystemStats
 
 /// A snapshot of CPU, memory, and disk metrics at a single point in time.
-///
-/// All values are computed off the main thread by `SystemStatsViewModel` and
-/// published to SwiftUI via `@Published` on the main thread.
+/// All values are computed off the main thread by `SystemStatsViewModel`
+/// and published to SwiftUI via `@Published` on the main thread.
 struct SystemStats {
     /// CPU utilisation across all cores, 0–100%.
     var cpuPct: Double
-    /// Memory actively in use (active + wired pages × page size), in GB.
+    /// Memory actively in use (active + wired pages), in GB.
     var memUsedGB: Double
     /// Physical RAM installed, in GB.
     var memTotalGB: Double
@@ -21,7 +20,7 @@ struct SystemStats {
     var diskTotalGB: Double
     /// Available space from `volumeAvailableCapacityKey` (TCC-free), in GB.
     var diskFreeGB: Double
-    /// Free disk space as a percentage of total: (diskFreeGB / diskTotalGB) × 100.
+    /// Free disk space as a percentage of total.
     var diskFreePct: Double
 
     /// Safe default shown while the first sample is being computed.
@@ -36,20 +35,17 @@ struct SystemStats {
     )
 }
 
-/// CPU tick counters captured from `host_processor_info()`.
 private struct CPUTicks {
     var user: Double
     var system: Double
     var total: Double
 }
 
-/// Memory usage snapshot in GB.
 private struct MemoryStats {
     var used: Double
     var total: Double
 }
 
-/// Disk usage snapshot in GB and percent free.
 private struct DiskStats {
     var used: Double
     var total: Double
@@ -65,32 +61,25 @@ private struct DiskStats {
 ///
 /// ⚠️ PRE-WARM CONTRACT — DO NOT REMOVE:
 /// start() dispatches an immediate background sample so real values publish
-/// before the first 2-second timer tick. Without this, the header shows
-/// zeros for 2 seconds on every open.
-///
-/// stop() calls sample() synchronously (on background) to capture a fresh
-/// prevTicks snapshot. This means the next start() delta is already valid,
-/// so CPU never shows 0.0% on re-open.
+/// before the first 2-second timer tick.
 ///
 /// ❌ NEVER call sample() synchronously from start() on the main thread.
-/// cpuPercent() does a blocking host_processor_info() call — it must
-/// run on a background queue.
 /// ❌ NEVER remove the stop() pre-warm sample() call.
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
+    /// The latest system snapshot published to SwiftUI observers.
     @Published var stats: SystemStats = .zero
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
+    /// Creates a new view model. Call `start()` to begin polling.
     init() {}
     deinit { timer?.invalidate() }
 
     // MARK: - Lifecycle
 
-    /// Start the 2-second polling loop.
-    /// Immediately fires one background sample so values appear on first render.
-    /// ❌ NEVER call sample() synchronously here — must be on background queue.
+    /// Starts the 2-second polling loop and fires one immediate background sample.
     func start() {
         timer?.invalidate()
         DispatchQueue.global(qos: .utility).async { self.sample() }
@@ -99,9 +88,7 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
-    /// Stop the polling loop and capture a pre-warm tick snapshot.
-    /// The snapshot means the next start() CPU delta is valid immediately.
-    /// ❌ NEVER remove the sample() call here.
+    /// Stops the polling loop and captures a pre-warm tick snapshot for the next `start()` call.
     func stop() {
         timer?.invalidate()
         timer = nil
@@ -126,7 +113,7 @@ final class SystemStatsViewModel: ObservableObject {
         var userTicks = 0.0
         var sysTicks = 0.0
         var totalTicks = 0.0
-        for coreIdx in 0..<numCPUs {
+        for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
             let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
             let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
@@ -164,7 +151,7 @@ final class SystemStatsViewModel: ObservableObject {
         }
         guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
         let pageSize = Double(vm_kernel_page_size)
-        let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
+        let gigabytes = 1024.0 * 1024.0 * 1024.0
         let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
         var memSize: UInt64 = 0
         var memSizeLen = MemoryLayout<UInt64>.size
@@ -179,14 +166,8 @@ final class SystemStatsViewModel: ObservableObject {
     /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
     /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
-    /// on every popover open (“access data from other apps”, Apple Music,
-    /// Photo Library) because it internally queries Photos/Music databases to
-    /// calculate purgeable space. This app declares no media entitlements and
+    /// on every popover open. This app declares no media entitlements and
     /// must never use that key.
-    ///
-    /// `volumeAvailableCapacityKey` is TCC-free and requires no entitlements.
-    /// It returns a slightly more conservative free-space value, which is fine
-    /// for display purposes.
     ///
     /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
@@ -194,7 +175,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// is removed is major major major.
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
-        let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
+        let gigabytes = 1024.0 * 1024.0 * 1024.0
         guard let values = try? url.resourceValues(forKeys: [
             .volumeTotalCapacityKey,
             .volumeAvailableCapacityKey
