@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command missing_docs opening_brace
+// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
@@ -203,7 +203,7 @@ struct ActionDetailView: View {
 }
 // swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-// MARK: - Helpers // swiftlint:disable:next missing_docs extension ActionDetailView {
+extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Opens the SHA commit or PR associated with the group label on GitHub.
     func openLabelOnGitHub() {
         let urlString: String
@@ -252,7 +252,7 @@ struct ActionDetailView: View {
     /// Returns the group elapsed string; `tick` parameter triggers SwiftUI refresh every second.
     func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    @ViewBuilder     // swiftlint:disable:next missing_docs     func jobRow(_ job: ActiveJob, index: Int) -> some View {
+    @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
         HStack(spacing: 8) {
             Text("#\(index)")
                 .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
