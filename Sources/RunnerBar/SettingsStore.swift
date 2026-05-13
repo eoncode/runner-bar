@@ -12,9 +12,19 @@ final class SettingsStore: ObservableObject {
         static let showDimmedRunners = "settings.showDimmedRunners"
     }
 
-    /// How often (in seconds) RunnerBar polls GitHub. Default 30 s.
+    /// Valid range for the polling interval (seconds).
+    static let pollingRange: ClosedRange<Int> = 10...300
+
+    /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
     @Published var pollingInterval: Int {
-        didSet { UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval) }
+        didSet {
+            let clamped = pollingInterval.clamped(to: Self.pollingRange)
+            if clamped != pollingInterval {
+                pollingInterval = clamped
+                return
+            }
+            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
+        }
     }
 
     /// Whether offline/dimmed runners are shown in the list.
@@ -24,7 +34,16 @@ final class SettingsStore: ObservableObject {
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
-        pollingInterval = stored > 0 ? stored : 30
+        let raw = stored > 0 ? stored : 30
+        pollingInterval = raw.clamped(to: Self.pollingRange)
         showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
+    }
+}
+
+// MARK: - Comparable+clamped
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
