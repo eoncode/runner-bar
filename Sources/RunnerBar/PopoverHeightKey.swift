@@ -10,8 +10,7 @@ import SwiftUI
 //
 // ════════════════════════════════════════════════════════════════════════════════
 
-/// Retained for source compatibility. Not used in the current NSPanel architecture.
-// swiftlint:disable:next type_body_length
+// Retained for source compatibility. Not used in the current NSPanel architecture.
 struct PopoverHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {

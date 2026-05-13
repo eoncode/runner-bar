@@ -27,6 +27,7 @@ struct GroupPollResult {
 /// RunnerStore extension providing the job-state builder used by the background poll.
 extension RunnerStore {
     // swiftlint:disable:next function_body_length
+    /// Builds the job display list and updated caches from a background poll snapshot.
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
         for scope in ScopeStore.shared.scopes {
@@ -233,10 +234,7 @@ extension RunnerStore {
         }
     }
 
-    private func trimGroupCache(
-        _ cache: inout [String: ActionGroup],
-        limit: Int
-    ) {
+    private func trimGroupCache(_ cache: inout [String: ActionGroup], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted { lhs, rhs in
             (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
