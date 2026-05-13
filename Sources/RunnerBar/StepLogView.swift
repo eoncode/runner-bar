@@ -230,6 +230,7 @@ struct StepLogView: View {
 }
 
 // MARK: - Derived helpers
+/// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
 extension StepLogView {
     /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
     var repoSlug: String {
