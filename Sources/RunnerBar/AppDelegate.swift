@@ -93,13 +93,39 @@ import SwiftUI
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
+
+/// Represents the currently visible navigation screen.
+///
+/// Persisted in `AppDelegate.savedNavState` so the panel can restore the user's
+/// position when it is re-opened after being dismissed. Each case maps 1-to-1 to
+/// a view factory method on `AppDelegate`.
 private enum NavState {
+    /// The root popover showing runners and the recent-actions list.
+    /// Created by `mainView()`. `savedNavState` is set to `nil` here (no restore needed).
     case main
+
+    /// The step list for a single job, reached from the Jobs tab.
+    /// Created by `detailView(job:)`.
     case jobDetail(ActiveJob)
+
+    /// The raw log for a single step, reached from the Jobs path.
+    /// Created by `logView(job:step:)`.
     case stepLog(ActiveJob, JobStep)
+
+    /// The flat job list for a commit/PR action group, reached from the Actions tab.
+    /// Created by `actionDetailView(group:)`.
     case actionDetail(ActionGroup)
+
+    /// The step list for a single job reached via the Actions → job-row path.
+    /// Created by `detailViewFromAction(job:group:)`.
     case actionJobDetail(ActiveJob, ActionGroup)
+
+    /// The raw log for a single step reached via the Actions → job → step path.
+    /// Created by `logViewFromAction(job:step:group:)`.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
+
+    /// The Settings sheet.
+    /// Created by `settingsView()`.
     case settings
 }
 
@@ -211,20 +237,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chromeView.addSubview(controller.view)
         chrome = chromeView
 
-        let newPanel = NSPanel(
+        let p = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        newPanel.contentView = chromeView
-        newPanel.isOpaque = false
-        newPanel.backgroundColor = NSColor(white: 1, alpha: 0.001)
-        newPanel.hasShadow = true
-        newPanel.level = .popUpMenu
-        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        newPanel.animationBehavior = .none
-        panel = newPanel
+        p.contentView = chromeView
+        p.isOpaque = false
+        p.backgroundColor = NSColor(white: 1, alpha: 0.001)
+        p.hasShadow = true
+        p.level = .popUpMenu
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.animationBehavior = .none
+        panel = p
 
         sizeObservation = controller.observe(
             \.preferredContentSize,
@@ -282,10 +308,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH   = contentH + arrowHeight
 
-        let originX = statusItemRect.midX - contentW / 2
-        let originY = topY - totalH
+        let x = statusItemRect.midX - contentW / 2
+        let y = topY - totalH
 
-        panel.setFrame(NSRect(x: originX, y: originY, width: contentW, height: totalH),
+        panel.setFrame(NSRect(x: x, y: y, width: contentW, height: totalH),
                        display: true, animate: false)
 
         chrome.arrowX = statusItemRect.midX - panel.frame.minX
@@ -331,12 +357,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func removeEventMonitor() {
-        if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
+        if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
     }
 
     private func removeWorkspaceObserver() {
-        if let observer = workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        if let o = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(o)
             workspaceObserver = nil
         }
     }
@@ -580,7 +606,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Toggle
 
     @objc private func togglePanel() {
-        if panelIsOpen { closePanel() } else { openPanel() }
+        panelIsOpen ? closePanel() : openPanel()
     }
 
     // MARK: - Open
@@ -598,15 +624,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
-        let originX = statusItemRect.midX - initW / 2
-        let originY = statusItemRect.minY - initH - Self.gap
+        let x = statusItemRect.midX - initW / 2
+        let y = statusItemRect.minY - initH - Self.gap
 
         panel.setFrame(
-            NSRect(x: originX, y: originY, width: initW, height: initH),
+            NSRect(x: x, y: y, width: initW, height: initH),
             display: false, animate: false
         )
 
-        chrome?.arrowX = statusItemRect.midX - originX
+        chrome?.arrowX = statusItemRect.midX - x
         panel.orderFront(nil)
         resizeAndRepositionPanel()
 
