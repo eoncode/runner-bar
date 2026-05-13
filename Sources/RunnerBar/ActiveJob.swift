@@ -29,10 +29,14 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     /// Used to determine local vs cloud icon on action rows.
     let runnerName: String?
 
-    /// Human-readable elapsed time string.
-    /// Queued jobs always show "00:00".
-    /// Completed jobs return "--:--" when timestamps are unavailable.
-    /// Live jobs fall back to createdAt while startedAt may not yet be set.
+    /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
+    ///
+    /// - Queued jobs always return `"00:00"` (no time has elapsed yet).
+    /// - Completed jobs return `"--:--"` when both `startedAt` and `completedAt`
+    ///   are unavailable, otherwise the fixed duration.
+    /// - Live (`in_progress`) jobs use `startedAt` if available, falling back to
+    ///   `createdAt` while the runner assignment is still pending, and measure
+    ///   up to `Date()` (wall clock).
     var elapsed: String {
         guard status != "queued" else { return "00:00" }
         if conclusion != nil {
@@ -112,7 +116,13 @@ struct JobStep: Identifiable, Codable, Equatable {
         }
     }
 
-    /// Human-readable elapsed time for this step.
+    /// Human-readable elapsed wall-clock string for this step in `MM:SS` format.
+    ///
+    /// - Uses `startedAt` as the start anchor, falling back to `Date()` when nil
+    ///   (step hasn't started yet — this should not normally occur).
+    /// - Uses `completedAt` as the end anchor for finished steps, falling back
+    ///   to `Date()` for live steps to show a running clock.
+    /// - Returns `"00:00"` when the computed interval is negative (clock skew guard).
     var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
