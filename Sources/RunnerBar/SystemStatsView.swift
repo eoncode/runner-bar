@@ -11,11 +11,11 @@ struct SystemStatsView: View {
                 .font(.headline)
                 .padding(.bottom, 4)
 
-            statRow(label: "CPU",          value: String(format: "%.1f%%",  viewModel.stats.cpuPct))
-            statRow(label: "Memory Used",  value: String(format: "%.1f GB", viewModel.stats.memUsedGB))
+            statRow(label: "CPU", value: String(format: "%.1f%%", viewModel.stats.cpuPct))
+            statRow(label: "Memory Used", value: String(format: "%.1f GB", viewModel.stats.memUsedGB))
             statRow(label: "Memory Total", value: String(format: "%.1f GB", viewModel.stats.memTotalGB))
-            statRow(label: "Disk Used",    value: String(format: "%.1f GB", viewModel.stats.diskUsedGB))
-            statRow(label: "Disk Total",   value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
+            statRow(label: "Disk Used", value: String(format: "%.1f GB", viewModel.stats.diskUsedGB))
+            statRow(label: "Disk Total", value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
         }
         .padding()
         .onAppear { viewModel.start() }
@@ -38,7 +38,7 @@ struct SystemStatsView: View {
 /// Renders a coloured block-bar and percentage label for a given metric.
 struct BlockBarView: View {
     let label: String
-    let pct:   Double
+    let pct: Double
 
     var body: some View {
         HStack(spacing: 6) {
@@ -67,7 +67,7 @@ struct BlockBarView: View {
     }
 
     private var usageColor: Color {
-        if pct > 85 { return .red    }
+        if pct > 85 { return .red }
         if pct > 60 { return .yellow }
         return .green
     }
