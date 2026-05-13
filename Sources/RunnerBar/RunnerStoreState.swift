@@ -233,7 +233,7 @@ extension RunnerStore {
         }
     }
 
-    private func trimGroupCache( _ cache: inout [String: ActionGroup], limit: Int) {
+    private func trimGroupCache(_ cache: inout [String: ActionGroup], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted { lhs, rhs in
             (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
