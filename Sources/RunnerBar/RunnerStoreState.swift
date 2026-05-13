@@ -24,10 +24,10 @@ struct GroupPollResult {
 
 // MARK: - Job state builder
 
-// RunnerStore extension providing the job-state builder used by the background poll.
+/// RunnerStore extension providing the job-state builder used by the background poll.
 extension RunnerStore {
-    /// Builds the job display list and updated caches from a background poll.
     // swiftlint:disable:next function_body_length
+    /// Builds the job display list and updated caches from a background poll.
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
         for scope in ScopeStore.shared.scopes {

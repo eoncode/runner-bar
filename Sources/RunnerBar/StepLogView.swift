@@ -150,15 +150,12 @@ struct StepLogView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
-                LogCopyButton(
-                    fetch: { completion in
-                        let text = logText
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(text)
-                        }
-                    },
-                    isDisabled: logText == nil || logText?.isEmpty == true
-                )
+                LogCopyButton(fetch: { completion in
+                    let text = logText
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        completion(text)
+                    }
+                }, isDisabled: logText == nil || logText?.isEmpty == true)
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
