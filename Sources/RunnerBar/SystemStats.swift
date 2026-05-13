@@ -5,26 +5,18 @@ import Foundation
 // MARK: - SystemStats
 
 /// A snapshot of CPU, memory, and disk metrics at a single point in time.
-///
-/// All values are computed off the main thread by `SystemStatsViewModel` and
-/// published to SwiftUI via `@Published` on the main thread.
+/// All values are computed off the main thread by `SystemStatsViewModel`
+/// and published to SwiftUI via `@Published` on the main thread.
 struct SystemStats {
-    /// CPU utilisation across all cores, 0–100%.
     var cpuPct: Double
-    /// Memory actively in use (active + wired pages × page size), in GB.
     var memUsedGB: Double
-    /// Physical RAM installed, in GB.
     var memTotalGB: Double
-    /// Disk space occupied (total − free), in GB.
     var diskUsedGB: Double
-    /// Raw partition capacity from `volumeTotalCapacity`, in GB.
     var diskTotalGB: Double
     /// Available space from `volumeAvailableCapacityKey` (TCC-free), in GB.
     var diskFreeGB: Double
-    /// Free disk space as a percentage of total: (diskFreeGB / diskTotalGB) × 100.
     var diskFreePct: Double
 
-    /// Safe default shown while the first sample is being computed.
     static let zero = SystemStats(
         cpuPct: 0,
         memUsedGB: 0,
@@ -36,20 +28,17 @@ struct SystemStats {
     )
 }
 
-/// CPU tick counters captured from `host_processor_info()`.
 private struct CPUTicks {
     var user: Double
     var system: Double
     var total: Double
 }
 
-/// Memory usage snapshot in GB.
 private struct MemoryStats {
     var used: Double
     var total: Double
 }
 
-/// Disk usage snapshot in GB and percent free.
 private struct DiskStats {
     var used: Double
     var total: Double
@@ -65,16 +54,9 @@ private struct DiskStats {
 ///
 /// ⚠️ PRE-WARM CONTRACT — DO NOT REMOVE:
 /// start() dispatches an immediate background sample so real values publish
-/// before the first 2-second timer tick. Without this, the header shows
-/// zeros for 2 seconds on every open.
-///
-/// stop() calls sample() synchronously (on background) to capture a fresh
-/// prevTicks snapshot. This means the next start() delta is already valid,
-/// so CPU never shows 0.0% on re-open.
+/// before the first 2-second timer tick.
 ///
 /// ❌ NEVER call sample() synchronously from start() on the main thread.
-/// cpuPercent() does a blocking host_processor_info() call — it must
-/// run on a background queue.
 /// ❌ NEVER remove the stop() pre-warm sample() call.
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -86,11 +68,6 @@ final class SystemStatsViewModel: ObservableObject {
     init() {}
     deinit { timer?.invalidate() }
 
-    // MARK: - Lifecycle
-
-    /// Start the 2-second polling loop.
-    /// Immediately fires one background sample so values appear on first render.
-    /// ❌ NEVER call sample() synchronously here — must be on background queue.
     func start() {
         timer?.invalidate()
         DispatchQueue.global(qos: .utility).async { self.sample() }
@@ -99,16 +76,11 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
-    /// Stop the polling loop and capture a pre-warm tick snapshot.
-    /// The snapshot means the next start() CPU delta is valid immediately.
-    /// ❌ NEVER remove the sample() call here.
     func stop() {
         timer?.invalidate()
         timer = nil
         DispatchQueue.global(qos: .utility).async { self.sample() }
     }
-
-    // MARK: - CPU
 
     private func cpuPercent() -> Double {
         var cpuInfo: processor_info_array_t?
@@ -126,7 +98,7 @@ final class SystemStatsViewModel: ObservableObject {
         var userTicks = 0.0
         var sysTicks = 0.0
         var totalTicks = 0.0
-        for coreIdx in 0..<numCPUs {
+        for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
             let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
             let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
@@ -149,8 +121,6 @@ final class SystemStatsViewModel: ObservableObject {
         guard dTotal > 0 else { return 0 }
         return min(100, ((dUser + dSys) / dTotal) * 100)
     }
-
-    // MARK: - Memory
 
     private func memStats() -> MemoryStats {
         var vmStats = vm_statistics64()
@@ -179,14 +149,8 @@ final class SystemStatsViewModel: ObservableObject {
     /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
     /// `volumeAvailableCapacityForImportantUsageKey` triggers macOS TCC dialogs
-    /// on every popover open (“access data from other apps”, Apple Music,
-    /// Photo Library) because it internally queries Photos/Music databases to
-    /// calculate purgeable space. This app declares no media entitlements and
+    /// on every popover open. This app declares no media entitlements and
     /// must never use that key.
-    ///
-    /// `volumeAvailableCapacityKey` is TCC-free and requires no entitlements.
-    /// It returns a slightly more conservative free-space value, which is fine
-    /// for display purposes.
     ///
     /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
@@ -197,10 +161,10 @@ final class SystemStatsViewModel: ObservableObject {
         let gigabytes = 1024.0 * 1024.0 * 1024.0
         guard let values = try? url.resourceValues(forKeys: [
             .volumeTotalCapacityKey,
-            .volumeAvailableCapacityKey // ✅ TCC-free
+            .volumeAvailableCapacityKey
         ]),
         let totalBytes = values.volumeTotalCapacity,
-        let freeBytes = values.volumeAvailableCapacity // ✅ not ForImportantUsage
+        let freeBytes = values.volumeAvailableCapacity
         else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
         let total = Double(totalBytes) / gigabytes
         let free = Double(freeBytes) / gigabytes
@@ -208,8 +172,6 @@ final class SystemStatsViewModel: ObservableObject {
         let freePct = total > 0 ? (free / total) * 100 : 100
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
-
-    // MARK: - Sample
 
     private func sample() {
         let cpu = cpuPercent()
