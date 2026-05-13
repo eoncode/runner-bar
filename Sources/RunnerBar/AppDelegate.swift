@@ -606,7 +606,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Toggle
 
     @objc private func togglePanel() {
-        panelIsOpen ? closePanel() : openPanel()
+        if panelIsOpen {
+            closePanel()
+        } else {
+            openPanel()
+        }
     }
 
     // MARK: - Open
