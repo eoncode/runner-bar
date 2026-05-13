@@ -19,8 +19,8 @@ import SwiftUI
 
 /// Top-bar cancel button used in JobDetailView, ActionDetailView, and StepLogView.
 ///
-/// States: idle (xmark.circle + “Cancel”) → loading (spinner + “Running…”) →
-/// done(true) (✓ + “Done”, 1.5 s) OR done(false) (✗ + “Failed”, 1.5 s) → idle
+/// States: idle (xmark.circle + "Cancel") → loading (spinner + "Running…") →
+/// done(true) (✓ + "Done", 1.5 s) OR done(false) (✗ + "Failed", 1.5 s) → idle
 ///
 /// When `isDisabled` is true the button returns **EmptyView** and occupies no space.
 /// This is intentional: keeping a zero-opacity placeholder creates a blank gap.
@@ -85,7 +85,8 @@ struct CancelButton: View {
         action { success in
             DispatchQueue.main.async {
                 self.phase = .done(success)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                let delay = DispatchTime.now() + 1.5
+                DispatchQueue.main.asyncAfter(deadline: delay) {
                     self.phase = .idle
                 }
             }
