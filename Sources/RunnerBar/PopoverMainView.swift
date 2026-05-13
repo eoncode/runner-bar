@@ -10,11 +10,12 @@ import SwiftUI
 // AppDelegate observes it and calls NSPanel.setFrame() — zero jump (no anchor).
 // SwiftUI views report their natural ideal size. No height caps needed here.
 //
-// RULE 1: Root VStack uses .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-//   idealWidth: 720 pins preferredContentSize.width = 720 (panel width never changes).
-//   ❌ NEVER remove idealWidth: 720.
+// RULE 1: Root VStack uses .frame(minWidth: 560, maxWidth: 900, alignment: .top)
+//   Dropping idealWidth lets SwiftUI report the natural content width as
+//   preferredContentSize.width. The panel clamps between 560 and 900.
+//   AppDelegate.resizeAndRepositionPanel() enforces these bounds at the NSPanel level.
+//   ❌ NEVER add idealWidth here — it pins the width to a fixed value regardless of content.
 //   ❌ NEVER add idealHeight or maxHeight to the root frame.
-//   ❌ NEVER use .frame(width: 720) — not equivalent.
 //   ❌ NEVER use .fixedSize() on the root VStack.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
@@ -52,8 +53,9 @@ import SwiftUI
 //   ❌ NEVER call LocalRunnerStore.shared.refresh() directly from Timer closure
 //      — it is @MainActor isolated, requires Task { @MainActor in }.
 //
-// RULE 8: idealWidth is 720. AppDelegate.initPanelWidth is also 720.
-//   ❌ NEVER change one without changing the other.
+// RULE 8: AppDelegate.initPanelWidth is 600 (initial open before SwiftUI measures).
+//   Panel width is then content-driven, clamped 560–900 by resizeAndRepositionPanel.
+//   ❌ NEVER add idealWidth back to this view.
 //
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 //   Its sole purpose is to force ActionRowView and InlineJobRowsView to
@@ -71,49 +73,26 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
-    /// Direct-to-JobDetailView navigation from inline ↳ job rows.
-    /// Receives the tapped job and its parent group; AppDelegate navigates to
-    /// detailViewFromAction(job:group:) so the back button returns to ActionDetailView.
     let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
-    // ⚠️ RULE 6: Live open-state via @EnvironmentObject — NEVER a frozen Bool prop.
-    // ❌ NEVER replace with var isPopoverOpen: Bool.
-    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    // UNDER ANY CIRCUMSTANCE.
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
     @State private var runnerRefreshTimer: Timer?
-
-    // ⚠️ RULE 9: displayTick — 1-second render clock for live elapsed/progress.
-    // Incremented every second, passed into ActionRowView and InlineJobRowsView.
-    // ❌ NEVER gate behind !popoverOpenState.isOpen.
-    // ❌ NEVER merge with runnerRefreshTimer.
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ⚠️ RULE 6b: .onAppear on PopoverHeaderView restarts systemStats on
-            // back-navigation. This fires every time the main view becomes the
-            // active route — including after returning from JobDetailView or
-            // ActionDetailView. The onChange(open=true) guard wins when the panel
-            // is open (isOpen=true → stop is called immediately after start).
-            // ❌ NEVER remove this .onAppear.
             PopoverHeaderView(
                 stats: systemStats.stats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
             )
-            .onAppear {
-                // Restart whenever main view becomes visible (back-nav or initial appear).
-                // onChange handles the stop-on-open contract; this handles the
-                // start-on-return contract.
-                systemStats.start()
-            }
+            .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
@@ -122,9 +101,10 @@ struct PopoverMainView: View {
                 }
             actionsSection
         }
-        // RULE 1: idealWidth:720 pins preferredContentSize.width = 720 always.
+        // RULE 1: content-driven width, clamped 560–900.
+        // ❌ NEVER add idealWidth here.
         // ❌ NEVER add idealHeight or maxHeight here.
-        .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
+        .frame(minWidth: 560, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if !popoverOpenState.isOpen { systemStats.start() }
@@ -136,10 +116,6 @@ struct PopoverMainView: View {
             stopRunnerRefreshTimer()
             stopDisplayTickTimer()
         }
-        // ⚠️ RULE 6: systemStats gate via live @EnvironmentObject.
-        // ❌ NEVER remove. ⚠️ macOS 13-compatible single-value onChange.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         .onChange(of: popoverOpenState.isOpen) { open in
             if open { systemStats.stop() } else { systemStats.start() }
         }
@@ -151,10 +127,6 @@ struct PopoverMainView: View {
     private func startRunnerRefreshTimer() {
         stopRunnerRefreshTimer()
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            // ⚠️ RULE 7: gate on live @EnvironmentObject.
-            // ❌ NEVER remove this guard.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE.
             if !self.popoverOpenState.isOpen {
                 Task { @MainActor in LocalRunnerStore.shared.refresh() }
                 self.store.reload()
@@ -168,8 +140,6 @@ struct PopoverMainView: View {
     }
 
     // MARK: - Display tick timer (RULE 9 — ungated, 1s)
-    // Drives live elapsed/progress re-renders in ActionRowView + InlineJobRowsView.
-    // ❌ NEVER gate behind !popoverOpenState.isOpen.
 
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
@@ -195,7 +165,7 @@ struct PopoverMainView: View {
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
 
-    // MARK: - Actions section (RULE 5: no height cap — NSPanel handles screen bounds)
+    // MARK: - Actions section (RULE 5: no height cap)
 
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -204,22 +174,11 @@ struct PopoverMainView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
-                // "ACTIONS" section header — always shown when there is at least one action.
                 SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    // Pass displayTick so SwiftUI sees a changed input every second
-                    // and re-renders the row (elapsed, pie progress, step name).
                     ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
-                    // Show inline ↳ job rows for any group that is actively running
-                    // OR still queued (jobs may be starting up).
-                    // ⚠️ activeJobs inside InlineJobRowsView filters to
-                    //    status == "in_progress" && conclusion == nil — so a job
-                    //    that just finished is removed from the inline list even
-                    //    while sibling jobs are still running in the same group.
-                    //    ❌ NEVER loosen the activeJobs filter back to status only.
-                    let isActive = group.groupStatus == .inProgress || group.groupStatus == .queued
-                    if isActive && !group.jobs.isEmpty {
+                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
                         InlineJobRowsView(
                             group: group,
                             tick: displayTick,
