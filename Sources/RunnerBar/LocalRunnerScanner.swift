@@ -105,7 +105,9 @@ struct LocalRunnerScanner {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         // Known self-hosted runner install directories — explicit paths only.
         // ⚠️ DO NOT add `~` or `$HOME` here: broad home-dir scans trigger TCC dialogs.
-        let searchPaths = [
+        // ⚠️ Each path is single-quoted before shell interpolation so that home
+        // directories containing spaces (e.g. /Users/First Last) don't break find.
+        let rawPaths = [
             "\(home)/actions-runner",
             "\(home)/runner",
             "\(home)/github-runner",
@@ -113,7 +115,8 @@ struct LocalRunnerScanner {
             "/opt/runner",
             "/usr/local/actions-runner",
             "/usr/local/runner",
-        ].joined(separator: " ")
+        ]
+        let searchPaths = rawPaths.map { "'\($0)'" }.joined(separator: " ")
 
         let raw = shell(
             "find \(searchPaths) -maxdepth 6 -name '.runner' 2>/dev/null",
