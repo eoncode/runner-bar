@@ -9,7 +9,7 @@ import SwiftUI
 //
 // ROOT FRAME RULE:
 //   .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-//   • idealWidth: 720 — MUST match AppDelegate.initPanelWidth (currently 720).
+//   • idealWidth: 720 — hints SwiftUI's initial natural width measurement.
 //   • NO maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
@@ -19,8 +19,8 @@ import SwiftUI
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
-//   idealWidth bumped 480 → 560 to match AppDelegate.initPanelWidth.
-//   idealWidth bumped 560 → 720 to match updated AppDelegate.initPanelWidth.
+//   idealWidth bumped 480 → 560 to accommodate step timing columns.
+//   idealWidth bumped 560 → 720 to accommodate action cluster width.
 //   Step number badge (#N) added to step rows (step.id is 1-based from GitHub API).
 //   Badge width tightened 28 → 18 to reduce left dead space (#spacing-fix).
 //   Pressable repo / branch / SHA-origin labels added to header metadata row.
