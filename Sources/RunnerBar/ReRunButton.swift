@@ -1,7 +1,11 @@
 import SwiftUI
 
-/// Top-bar re-run button. Mirrors CancelButton phase-machine pattern.
-/// idle (arrow.clockwise + "Re-run") → loading (spinner + "Running…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
+// MARK: - ReRunButton
+
+/// Top-bar re-run button.
+/// idle (arrow.clockwise + "Re-run") →
+/// loading (spinner + "Running\u{2026}") →
+/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
 struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -9,6 +13,8 @@ struct ReRunButton: View {
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
+
+    // MARK: - Phase
 
     /// Visual states of the re-run button lifecycle.
     enum Phase {
@@ -21,6 +27,8 @@ struct ReRunButton: View {
         /// Red cross shown for 1.5 s after failure.
         case failed
     }
+
+    // MARK: - Body
 
     var body: some View {
         Group {
@@ -40,36 +48,16 @@ struct ReRunButton: View {
                     .buttonStyle(.plain)
                 }
             case .loading:
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.mini)
-                    Text("Running…")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize()
-                }
+                ButtonPhaseView(phase: .loading)
             case .done:
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                    Text("Done")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                        .fixedSize()
-                }
+                ButtonPhaseView(phase: .done)
             case .failed:
-                HStack(spacing: 4) {
-                    Image(systemName: "xmark")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                    Text("Failed")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .fixedSize()
-                }
+                ButtonPhaseView(phase: .failed)
             }
         }
     }
+
+    // MARK: - Actions
 
     private func startRerun() {
         guard phase == .idle else { return }

@@ -13,81 +13,49 @@ struct CancelButton: View {
     @State private var phase: Phase = .idle
 
     // MARK: - Phase
+
+    /// Visual states of the cancel button lifecycle.
     enum Phase {
+        /// Normal tappable state.
         case idle
+        /// Spinner shown while the cancel request is in-flight.
         case loading
+        /// Green checkmark shown for 1.5 s after success.
         case done
+        /// Red cross shown for 1.5 s after failure.
         case failed
     }
 
     // MARK: - Body
+
     var body: some View {
         Group {
             switch phase {
             case .idle:
-                idleView
+                Button(action: startCancel) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark.circle")
+                            .font(.caption)
+                        Text("Cancel")
+                            .font(.caption)
+                            .fixedSize()
+                    }
+                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(isDisabled)
             case .loading:
-                loadingView
+                ButtonPhaseView(phase: .loading)
             case .done:
-                doneView
+                ButtonPhaseView(phase: .done)
             case .failed:
-                failedView
+                ButtonPhaseView(phase: .failed)
             }
-        }
-    }
-
-    // MARK: - Phase Views
-    private var idleView: some View {
-        Button(action: startCancel) {
-            HStack(spacing: 4) {
-                Image(systemName: "xmark.circle")
-                    .font(.caption)
-                Text("Cancel")
-                    .font(.caption)
-                    .fixedSize()
-            }
-            .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-    }
-
-    private var loadingView: some View {
-        HStack(spacing: 4) {
-            ProgressView()
-                .controlSize(.mini)
-            Text("Running\u{2026}")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize()
-        }
-    }
-
-    private var doneView: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "checkmark")
-                .font(.caption)
-                .foregroundColor(.green)
-            Text("Done")
-                .font(.caption)
-                .foregroundColor(.green)
-                .fixedSize()
-        }
-    }
-
-    private var failedView: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "xmark.circle")
-                .font(.caption)
-                .foregroundColor(.red)
-            Text("Failed")
-                .font(.caption)
-                .foregroundColor(.red)
-                .fixedSize()
         }
     }
 
     // MARK: - Actions
+
     private func startCancel() {
         guard phase == .idle else { return }
         phase = .loading

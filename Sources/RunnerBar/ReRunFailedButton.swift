@@ -3,14 +3,14 @@ import SwiftUI
 // MARK: - ReRunFailedButton
 
 /// Top-bar "Re-run failed jobs" button.
-/// Mirrors ReRunButton’s phase-machine pattern but calls the
-/// GitHub “rerun-failed-jobs” endpoint instead of the full rerun endpoint.
+/// Mirrors ReRunButton's phase-machine pattern but calls the
+/// GitHub "rerun-failed-jobs" endpoint instead of the full rerun endpoint.
 ///
 /// GitHub API: POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
 ///
-/// idle (exclamationmark.arrow.clockwise + “Re-run failed”) →
-/// loading (spinner + “Running…”) →
-/// done (✓ + “Done”, 1.5 s) OR failed (✗ + “Failed”, 1.5 s) → idle
+/// idle (exclamationmark.arrow.clockwise + "Re-run failed") →
+/// loading (spinner + "Running\u{2026}") →
+/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
 struct ReRunFailedButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
@@ -20,85 +20,51 @@ struct ReRunFailedButton: View {
     @State private var phase: Phase = .idle
 
     // MARK: - Phase
+
+    /// Visual states of the re-run-failed button lifecycle.
     enum Phase {
+        /// Normal tappable state.
         case idle
+        /// Spinner shown while the re-run request is in-flight.
         case loading
+        /// Green checkmark shown for 1.5 s after success.
         case done
+        /// Red cross shown for 1.5 s after failure.
         case failed
     }
 
     // MARK: - Body
+
     var body: some View {
         Group {
             switch phase {
             case .idle:
-                idleView
-            case .loading:
-                loadingView
-            case .done:
-                doneView
-            case .failed:
-                failedView
-            }
-        }
-    }
-
-    // MARK: - Phase Views
-    private var idleView: some View {
-        Group {
-            if !isDisabled {
-                Button(action: startRerun) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.arrow.clockwise")
-                            .font(.caption)
-                        Text("Re-run failed")
-                            .font(.caption)
-                            .fixedSize()
+                if !isDisabled {
+                    Button(action: startRerun) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.arrow.clockwise")
+                                .font(.caption)
+                            Text("Re-run failed")
+                                .font(.caption)
+                                .fixedSize()
+                        }
+                        .foregroundColor(.secondary)
                     }
-                    .foregroundColor(.secondary)
+                    .buttonStyle(.plain)
+                    .help("Re-run only the failed and cancelled jobs in this workflow run")
                 }
-                .buttonStyle(.plain)
-                .help("Re-run only the failed and cancelled jobs in this workflow run")
+            case .loading:
+                ButtonPhaseView(phase: .loading)
+            case .done:
+                ButtonPhaseView(phase: .done)
+            case .failed:
+                ButtonPhaseView(phase: .failed)
             }
-        }
-    }
-
-    private var loadingView: some View {
-        HStack(spacing: 4) {
-            ProgressView()
-                .controlSize(.mini)
-            Text("Running\u{2026}")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize()
-        }
-    }
-
-    private var doneView: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "checkmark")
-                .font(.caption)
-                .foregroundColor(.green)
-            Text("Done")
-                .font(.caption)
-                .foregroundColor(.green)
-                .fixedSize()
-        }
-    }
-
-    private var failedView: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "xmark")
-                .font(.caption)
-                .foregroundColor(.red)
-            Text("Failed")
-                .font(.caption)
-                .foregroundColor(.red)
-                .fixedSize()
         }
     }
 
     // MARK: - Actions
+
     private func startRerun() {
         guard phase == .idle else { return }
         phase = .loading
