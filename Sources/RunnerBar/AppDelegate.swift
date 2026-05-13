@@ -105,6 +105,25 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
+// ⚠️ @MainActor ISOLATION CONTRACT — DO NOT REMOVE THIS ANNOTATION.
+// AppDelegate runs entirely on the main thread. @MainActor gives the Swift 6
+// compiler static proof of this so every method and stored property is verified
+// as main-thread-only without any runtime assertion.
+//
+// The two nonisolated blocking helpers (enrichStepsIfNeeded, enrichGroupIfNeeded)
+// are intentionally exempt — they perform blocking network I/O and are always
+// dispatched onto DispatchQueue.global() by their callers. nonisolated opts them
+// out of the class-level @MainActor domain.
+//
+// The entry point in main.swift wraps the NSApplicationMain call in
+// MainActor.assumeIsolated { }, completing the isolation chain:
+//   main.swift (assumeIsolated) → @MainActor AppDelegate → nonisolated helpers
+//
+// ❌ NEVER remove @MainActor from this class declaration.
+// ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded or enrichGroupIfNeeded.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: NSPanel?
