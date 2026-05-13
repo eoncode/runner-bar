@@ -150,13 +150,11 @@ struct StepLogView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
-                // swiftlint:disable:next multiple_closures_with_trailing_closure
-                LogCopyButton(fetch: { completion in
+                let copyFetch: (@escaping (String?) -> Void) -> Void = { completion in
                     let text = logText
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        completion(text)
-                    }
-                }, isDisabled: logText == nil || logText?.isEmpty == true)
+                    DispatchQueue.global(qos: .userInitiated).async { completion(text) }
+                }
+                LogCopyButton(fetch: copyFetch, isDisabled: logText == nil || logText?.isEmpty == true)
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
