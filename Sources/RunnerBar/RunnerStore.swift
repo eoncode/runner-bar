@@ -73,6 +73,11 @@ final class RunnerStore {
     /// Called on the main thread after each poll completes.
     var onChange: (() -> Void)?
 
+    // ⚠️ REGRESSION GUARD — sign-out race condition (ref issue #361)
+    // Prevents in-flight background fetches from repopulating state after sign-out.
+    // Set to true by stop(), reset to false by start().
+    private var isStopped = false
+
     /// Derives the aggregate runner status from the current `runners` array.
     var aggregateStatus: AggregateStatus {
         guard !runners.isEmpty else { return .allOffline }
@@ -95,8 +100,25 @@ final class RunnerStore {
     /// Starts (or restarts) the polling timer and fires an immediate fetch.
     func start() {
         log("RunnerStore › start")
+        isStopped = false
         timer?.invalidate()
         fetch()
+    }
+
+    /// Stops polling, clears all runner/job/action state, and sets isStopped so any
+    /// in-flight background fetch cannot repopulate state after sign-out.
+    /// Called by `OAuthService.signOut()` as part of the sign-out flow.
+    func stop() {
+        log("RunnerStore › stop (sign-out)")
+        isStopped = true
+        timer?.invalidate()
+        timer = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.runners = []
+            self?.jobs = []
+            self?.actions = []
+            self?.onChange?()
+        }
     }
 
     /// Schedules the next one-shot poll timer using an adaptive interval.
@@ -126,7 +148,8 @@ final class RunnerStore {
         let snapPrevGroups = prevLiveGroups
         let snapGroupCache = actionGroupCache
         DispatchQueue.global(qos: .background).async { [weak self] in
-            guard let self else { return }
+            // Guard 1 — bail immediately if stop() was called before this closure ran.
+            guard let self, !self.isStopped else { return }
             ghIsRateLimited = false
             let enrichedRunners = self.fetchAndEnrichRunners()
             let jobResult = self.buildJobState(snapPrev: snapPrev, snapCache: snapCache)
@@ -136,6 +159,8 @@ final class RunnerStore {
                 jobCache: jobResult.newCache
             )
             DispatchQueue.main.async {
+                // Guard 2 — bail if stop() was called while fetch work was in flight.
+                guard !self.isStopped else { return }
                 self.runners = enrichedRunners
                 self.jobs = jobResult.display
                 self.completedCache = jobResult.newCache

@@ -96,8 +96,9 @@ struct StepLogView: View {
         isLoading = true
         let jobID = job.id
         let stepNum = step.id
+        // job.htmlUrl is String? — use optional chaining to avoid force-unwrap.
         let scope: String = {
-            let parts = job.htmlUrl.components(separatedBy: "/")
+            let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
             if parts.count >= 5 {
                 let owner = parts[3]
                 let repo = parts[4]

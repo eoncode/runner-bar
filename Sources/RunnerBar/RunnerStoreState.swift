@@ -114,6 +114,27 @@ extension RunnerStore {
         for job in cached     where display.count < 3 { display.append(job) }
         return display
     }
+
+    // MARK: - Job enrichment
+
+    /// Merges step data from `jobCache` into a flat job list.
+    /// Returns the same jobs with steps backfilled from cache where the live
+    /// job has no steps yet. No-op if `jobs` is empty or cache has no match.
+    func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
+        guard !jobs.isEmpty else { return jobs }
+        return jobs.map { job in
+            guard job.steps.isEmpty, let cached = jobCache[job.id], !cached.steps.isEmpty
+            else { return job }
+            return ActiveJob(
+                id: job.id, name: job.name, status: job.status,
+                conclusion: job.conclusion,
+                startedAt: job.startedAt, createdAt: job.createdAt,
+                completedAt: job.completedAt,
+                htmlUrl: job.htmlUrl, isDimmed: job.isDimmed,
+                steps: cached.steps
+            )
+        }
+    }
 }
 
 // MARK: - Group state builder
