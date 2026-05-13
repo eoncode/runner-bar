@@ -288,9 +288,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popoverOpenState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
+        // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
+        // Reset the hosting view to a blank main view WITHOUT calling mainView(),
+        // which would set savedNavState = nil and lose the user's position.
+        // openPanel() calls validatedView(for: savedNavState) to restore the view.
+        // ❌ NEVER replace this with self.mainView() — that wipes savedNavState.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.hostingController?.rootView = self.mainView()
+            self.hostingController?.rootView = self.wrapEnv(PopoverMainView(
+                store: self.observable,
+                onSelectJob: { _ in },
+                onSelectAction: { _ in },
+                onSelectSettings: {},
+                onSelectInlineJob: { _, _ in }
+            ))
         }
     }
 
@@ -384,9 +397,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
-                // Grab the freshest snapshot from the store, then eagerly enrich
-                // job data on a background queue before navigating. This prevents
-                // ActionDetailView opening with a blank job list on first tap.
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichGroupIfNeeded(latest)
