@@ -93,13 +93,39 @@ import SwiftUI
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
+
+/// Represents the currently visible navigation screen.
+///
+/// Persisted in `AppDelegate.savedNavState` so the panel can restore the user's
+/// position when it is re-opened after being dismissed. Each case maps 1-to-1 to
+/// a view factory method on `AppDelegate`.
 private enum NavState {
+    /// The root popover showing runners and the recent-actions list.
+    /// Created by `mainView()`. `savedNavState` is set to `nil` here (no restore needed).
     case main
+
+    /// The step list for a single job, reached from the Jobs tab.
+    /// Created by `detailView(job:)`.
     case jobDetail(ActiveJob)
+
+    /// The raw log for a single step, reached from the Jobs path.
+    /// Created by `logView(job:step:)`.
     case stepLog(ActiveJob, JobStep)
+
+    /// The flat job list for a commit/PR action group, reached from the Actions tab.
+    /// Created by `actionDetailView(group:)`.
     case actionDetail(ActionGroup)
+
+    /// The step list for a single job reached via the Actions → job-row path.
+    /// Created by `detailViewFromAction(job:group:)`.
     case actionJobDetail(ActiveJob, ActionGroup)
+
+    /// The raw log for a single step reached via the Actions → job → step path.
+    /// Created by `logViewFromAction(job:step:group:)`.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
+
+    /// The Settings sheet.
+    /// Created by `settingsView()`.
     case settings
 }
 
