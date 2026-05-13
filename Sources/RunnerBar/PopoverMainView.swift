@@ -30,11 +30,11 @@ import SwiftUI
 //   ❌ NEVER wrap actionsSection in ScrollView.
 //   ❌ NEVER add .fixedSize() to actionsSection.
 //
-// RULE 6: systemStats MUST be paused while the panel is open.
+// RULE 6: systemStats MUST be stopped while the panel is open.
 //   SystemStatsViewModel fires every 2s, mutating @StateObject → SwiftUI re-render
 //   → new preferredContentSize → KVO fires → resizeAndRepositionPanel().
-//   While open: this is fine (panel just resizes smoothly, no jump).
-//   While closed: systemStats should run to keep status icon updated.
+//   While open: stats polling is stopped to prevent unnecessary re-renders/resizes.
+//   While closed: stats polling runs to keep the header display current on next open.
 //   Gate reads PopoverOpenState via @EnvironmentObject (live, never stale).
 //   ❌ NEVER re-add `var isPopoverOpen: Bool` prop — frozen at construction.
 //   ❌ NEVER remove .onChange(of: popoverOpenState.isOpen).
