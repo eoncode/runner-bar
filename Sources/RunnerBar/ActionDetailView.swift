@@ -58,9 +58,18 @@ struct ActionDetailView: View {
 
     // MARK: - Formatters
 
+    /// HH:mm formatter — used for group start/end labels in the header.
     private static let timeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// HH:mm:ss formatter — used for per-job time-range column.
+    /// Static so it is created once and reused on every 1 Hz tick × N job rows.
+    private static let jobTimeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
         return f
     }()
 
@@ -250,7 +259,6 @@ struct ActionDetailView: View {
         let done  = group.jobsDone
         let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
-
         if group.groupStatus == .inProgress || conclusions.count < total {
             return "\(done)/\(total) jobs running"
         }
@@ -275,18 +283,15 @@ struct ActionDetailView: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
-
             Circle()
                 .fill(jobDotColor(for: job))
                 .frame(width: 7, height: 7)
-
             Text(job.name)
                 .font(.system(size: 12))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
-
             if job.startedAt != nil {
                 Text(jobTimeRange(job))
                     .font(.caption2.monospacedDigit())
@@ -297,9 +302,7 @@ struct ActionDetailView: View {
                 Spacer()
                     .frame(width: 130)
             }
-
             Spacer(minLength: 0)
-
             if let conclusion = job.conclusion {
                 Text(conclusionLabel(conclusion))
                     .font(.caption)
@@ -311,7 +314,6 @@ struct ActionDetailView: View {
                     .foregroundColor(jobStatusColor(for: job))
                     .frame(width: 80, alignment: .trailing)
             }
-
             if job.startedAt != nil {
                 Text(job.elapsed)
                     .font(.caption.monospacedDigit())
@@ -320,7 +322,6 @@ struct ActionDetailView: View {
             } else {
                 Spacer().frame(width: 40)
             }
-
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -335,12 +336,10 @@ struct ActionDetailView: View {
     private func elapsedLive(tick _: Int) -> String { group.elapsed }
 
     private func jobTimeRange(_ job: ActiveJob) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm:ss"
         guard let start = job.startedAt ?? job.createdAt else { return "" }
-        let startStr = fmt.string(from: start)
+        let startStr = Self.jobTimeFmt.string(from: start)
         if let end = job.completedAt {
-            return "\(startStr)→\(fmt.string(from: end))"
+            return "\(startStr)→\(Self.jobTimeFmt.string(from: end))"
         }
         return "\(startStr)→now"
     }

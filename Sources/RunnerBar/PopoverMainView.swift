@@ -10,13 +10,14 @@ import SwiftUI
 // AppDelegate observes it and calls NSPanel.setFrame() — zero jump (no anchor).
 // SwiftUI views report their natural ideal size. No height caps needed here.
 //
-// RULE 1: Root VStack uses .frame(minWidth: 560, maxWidth: 900, alignment: .top)
+// RULE 1: Root VStack uses .frame(minWidth: 280, maxWidth: 900, alignment: .top)
 //   Dropping idealWidth lets SwiftUI report the natural content width as
-//   preferredContentSize.width. The panel clamps between 560 and 900.
+//   preferredContentSize.width. The panel clamps between 280 and 900.
 //   AppDelegate.resizeAndRepositionPanel() enforces these bounds at the NSPanel level.
 //   ❌ NEVER add idealWidth here — it pins the width to a fixed value regardless of content.
 //   ❌ NEVER add idealHeight or maxHeight to the root frame.
 //   ❌ NEVER use .fixedSize() on the root VStack.
+//   ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
@@ -53,9 +54,10 @@ import SwiftUI
 //   ❌ NEVER call LocalRunnerStore.shared.refresh() directly from Timer closure
 //      — it is @MainActor isolated, requires Task { @MainActor in }.
 //
-// RULE 8: AppDelegate.initPanelWidth is 600 (initial open before SwiftUI measures).
-//   Panel width is then content-driven, clamped 560–900 by resizeAndRepositionPanel.
+// RULE 8: AppDelegate.initPanelWidth is 320 (initial open before SwiftUI measures).
+//   Panel width is then content-driven, clamped 280–900 by resizeAndRepositionPanel.
 //   ❌ NEVER add idealWidth back to this view.
+//   ❌ NEVER restore initPanelWidth to 600 — that was over-wide.
 //
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 //   Its sole purpose is to force ActionRowView and InlineJobRowsView to
@@ -101,10 +103,11 @@ struct PopoverMainView: View {
                 }
             actionsSection
         }
-        // RULE 1: content-driven width, clamped 560–900.
+        // RULE 1: content-driven width, clamped 280–900.
         // ❌ NEVER add idealWidth here.
         // ❌ NEVER add idealHeight or maxHeight here.
-        .frame(minWidth: 560, maxWidth: 900, alignment: .top)
+        // ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
+        .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if !popoverOpenState.isOpen { systemStats.start() }

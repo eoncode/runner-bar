@@ -40,19 +40,21 @@ import SwiftUI
 //   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
 // WIDTH: Content-driven via preferredContentSize.width.
-// SwiftUI views declare .frame(minWidth: 560, maxWidth: 900) — NO idealWidth.
+// SwiftUI views declare .frame(minWidth: 280, maxWidth: 900) — NO idealWidth.
 // Dropping idealWidth lets SwiftUI measure actual content and report its natural
 // width as preferredContentSize.width. resizeAndRepositionPanel() clamps it to
 // [minWidth..maxWidth] and re-centres the panel under the status button.
 // ❌ NEVER restore idealWidth in any view — it pins width regardless of content.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
+// ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
 //
 // INITIAL WIDTH (openPanel):
 // initPanelWidth is the fallback frame width used for the initial open before
 // SwiftUI has measured anything. It does NOT need to match any idealWidth (there
-// are none). A reasonable default like 600 is fine; the panel resizes to content
-// width on the first preferredContentSize KVO fire.
+// are none). 320 is a compact default; the panel resizes to actual content on the
+// first preferredContentSize KVO fire.
 // ❌ NEVER set initPanelWidth > maxWidth.
+// ❌ NEVER restore initPanelWidth to 600 — that was wider than necessary.
 //
 // ARROW CENTERING ON NAVIGATE:
 // navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
@@ -128,7 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popoverOpenState = PopoverOpenState()
 
     /// Lower bound for panel content width. Matches minWidth in all SwiftUI root frames.
-    private static let minWidth: CGFloat = 560
+    /// ❌ NEVER restore to 560 — that was the old fixed-width floor.
+    private static let minWidth: CGFloat = 280
 
     private var maxWidth: CGFloat {
         let screenMax = NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 900
@@ -143,9 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Initial panel width used before SwiftUI has measured content.
     /// Does NOT need to match any idealWidth (there are none — width is content-driven).
-    /// A reasonable default; the panel resizes to actual content on the first KVO fire.
-    /// ❌ NEVER set above maxWidth. ❌ NEVER restore to 720 (that was the old idealWidth).
-    private static let initPanelWidth: CGFloat = 600
+    /// 320 is a compact default; the panel resizes to actual content on the first KVO fire.
+    /// ❌ NEVER set above maxWidth.
+    /// ❌ NEVER restore to 600 or 720 — those were the old over-wide defaults.
+    private static let initPanelWidth: CGFloat = 320
 
     // MARK: - Environment injection
 
@@ -255,8 +259,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
 
-        let contentW = min(max(preferred.width,  Self.minWidth), maxWidth)
-        let contentH = min(max(preferred.height, 60),            maxHeight)
+        let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
+        let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH   = contentH + arrowHeight
 
         let x = statusItemRect.midX - contentW / 2
@@ -288,9 +292,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popoverOpenState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
+        // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
+        // Reset the hosting view to a blank main view WITHOUT calling mainView(),
+        // which would set savedNavState = nil and lose the user's position.
+        // openPanel() calls validatedView(for: savedNavState) to restore the view.
+        // ❌ NEVER replace this with self.mainView() — that wipes savedNavState.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.hostingController?.rootView = self.mainView()
+            self.hostingController?.rootView = self.wrapEnv(PopoverMainView(
+                store: self.observable,
+                onSelectJob: { _ in },
+                onSelectAction: { _ in },
+                onSelectSettings: {},
+                onSelectInlineJob: { _, _ in }
+            ))
         }
     }
 
@@ -305,8 +322,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - View factories
+    // MARK: - Enrichment helpers
 
+    /// Re-fetches steps for a single job when they are missing or still in-progress.
+    /// Blocking — always call from a background queue.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -316,6 +335,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let iso = ISO8601DateFormatter()
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
+
+    /// Re-fetches job data for a group when any run has an empty or incomplete job list.
+    ///
+    /// Called on a background queue from onSelectAction before navigating to
+    /// ActionDetailView. Prevents the detail view opening with a blank job list on
+    /// first tap or after a cache miss.
+    ///
+    /// Strategy: if every job in the group already has a conclusion AND none have
+    /// in-progress steps, the group is considered fully enriched and returned as-is.
+    /// Otherwise, we re-fetch jobs for all runs in the group and return an enriched copy.
+    ///
+    /// Blocking — always call from a background queue.
+    nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
+        let fullyEnriched = !group.jobs.isEmpty
+            && group.jobs.allSatisfy { $0.conclusion != nil }
+            && !group.jobs.contains { $0.steps.contains { $0.status == "in_progress" } }
+        guard !fullyEnriched else { return group }
+
+        let iso = ISO8601DateFormatter()
+        var fetched: [ActiveJob] = []
+        var seenIDs = Set<Int>()
+        for run in group.runs {
+            guard let data = ghAPI("repos/\(group.repo)/actions/runs/\(run.id)/jobs?per_page=100"),
+                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+            else { continue }
+            for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
+                fetched.append(makeActiveJob(from: payload, iso: iso, isDimmed: group.isDimmed))
+            }
+        }
+        guard !fetched.isEmpty else { return group }
+        fetched.sort { $0.id < $1.id }
+        let starts = fetched.compactMap { $0.startedAt }
+        let ends   = fetched.compactMap { $0.completedAt }
+        return ActionGroup(
+            headSha: group.headSha,
+            label: group.label,
+            title: group.title,
+            headBranch: group.headBranch,
+            repo: group.repo,
+            runs: group.runs,
+            jobs: fetched,
+            firstJobStartedAt: starts.min() ?? group.firstJobStartedAt,
+            lastJobCompletedAt: ends.max() ?? group.lastJobCompletedAt,
+            createdAt: group.createdAt,
+            isDimmed: group.isDimmed
+        )
+    }
+
+    // MARK: - View factories
 
     private func mainView() -> AnyView {
         savedNavState = nil
@@ -334,7 +402,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onSelectAction: { [weak self] group in
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                self.navigate(to: self.actionDetailView(group: latest))
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let enriched = self.enrichGroupIfNeeded(latest)
+                    DispatchQueue.main.async {
+                        guard self.panelIsOpen else { return }
+                        self.navigate(to: self.actionDetailView(group: enriched))
+                    }
+                }
             },
             onSelectSettings: { [weak self] in
                 guard let self else { return }
@@ -534,7 +608,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil, queue: .main
+            object: nil,
+            queue: .main
         ) { [weak self] _ in
             guard let self else { return }
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {

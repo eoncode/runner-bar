@@ -10,6 +10,7 @@ struct RunnerMetrics: Codable {
 }
 
 // MARK: - RunnerMetrics + ps
+/// Extension providing shell-based sampling helpers for `RunnerMetrics`.
 extension RunnerMetrics {
     /// Samples CPU and memory for the first `Runner.Worker` process whose
     /// command line contains `runnerName`. Returns `nil` if no match or parse fails.

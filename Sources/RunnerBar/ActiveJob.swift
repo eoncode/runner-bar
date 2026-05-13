@@ -198,14 +198,14 @@ extension RunnerStore {
             completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
             htmlUrl: payload.htmlUrl,
             isDimmed: isDimmed,
-            steps: (payload.steps ?? []).enumerated().map { idx, s in
+            steps: (payload.steps ?? []).enumerated().map { idx, stepPayload in
                 JobStep(
                     id: idx + 1,
-                    name: s.name,
-                    status: s.status,
-                    conclusion: s.conclusion,
-                    startedAt: s.startedAt.flatMap { iso.date(from: $0) },
-                    completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                    name: stepPayload.name,
+                    status: stepPayload.status,
+                    conclusion: stepPayload.conclusion,
+                    startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
                 )
             },
             runnerName: payload.runnerName
