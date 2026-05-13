@@ -40,19 +40,21 @@ import SwiftUI
 //   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
 // WIDTH: Content-driven via preferredContentSize.width.
-// SwiftUI views declare .frame(minWidth: 560, maxWidth: 900) — NO idealWidth.
+// SwiftUI views declare .frame(minWidth: 280, maxWidth: 900) — NO idealWidth.
 // Dropping idealWidth lets SwiftUI measure actual content and report its natural
 // width as preferredContentSize.width. resizeAndRepositionPanel() clamps it to
 // [minWidth..maxWidth] and re-centres the panel under the status button.
 // ❌ NEVER restore idealWidth in any view — it pins width regardless of content.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
+// ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
 //
 // INITIAL WIDTH (openPanel):
 // initPanelWidth is the fallback frame width used for the initial open before
 // SwiftUI has measured anything. It does NOT need to match any idealWidth (there
-// are none). A reasonable default like 600 is fine; the panel resizes to content
-// width on the first preferredContentSize KVO fire.
+// are none). 320 is a compact default; the panel resizes to actual content on the
+// first preferredContentSize KVO fire.
 // ❌ NEVER set initPanelWidth > maxWidth.
+// ❌ NEVER restore initPanelWidth to 600 — that was wider than necessary.
 //
 // ARROW CENTERING ON NAVIGATE:
 // navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
@@ -128,7 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popoverOpenState = PopoverOpenState()
 
     /// Lower bound for panel content width. Matches minWidth in all SwiftUI root frames.
-    private static let minWidth: CGFloat = 560
+    /// ❌ NEVER restore to 560 — that was the old fixed-width floor.
+    private static let minWidth: CGFloat = 280
 
     private var maxWidth: CGFloat {
         let screenMax = NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 900
@@ -143,9 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Initial panel width used before SwiftUI has measured content.
     /// Does NOT need to match any idealWidth (there are none — width is content-driven).
-    /// A reasonable default; the panel resizes to actual content on the first KVO fire.
-    /// ❌ NEVER set above maxWidth. ❌ NEVER restore to 720 (that was the old idealWidth).
-    private static let initPanelWidth: CGFloat = 600
+    /// 320 is a compact default; the panel resizes to actual content on the first KVO fire.
+    /// ❌ NEVER set above maxWidth.
+    /// ❌ NEVER restore to 600 or 720 — those were the old over-wide defaults.
+    private static let initPanelWidth: CGFloat = 320
 
     // MARK: - Environment injection
 
