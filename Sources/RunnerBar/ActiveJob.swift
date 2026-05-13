@@ -31,8 +31,8 @@ struct ActiveJob: Identifiable, Codable, Equatable {
 
     /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
     ///
-    /// - Queued jobs always return `00:00` (no time has elapsed yet).
-    /// - Completed jobs return `--:--` when both `startedAt` and `completedAt`
+    /// - Queued jobs always return `"00:00"` (no time has elapsed yet).
+    /// - Completed jobs return `"--:--"` when both `startedAt` and `completedAt`
     ///   are unavailable, otherwise the fixed duration.
     /// - Live (`in_progress`) jobs use `startedAt` if available, falling back to
     ///   `createdAt` while the runner assignment is still pending, and measures
@@ -44,7 +44,9 @@ struct ActiveJob: Identifiable, Codable, Equatable {
             let secs = Int(end.timeIntervalSince(start))
             guard secs >= 0 else { return "--:--" }
             // swiftlint:disable:next identifier_name
-            let m = secs / 60; let s = secs % 60
+            let m = secs / 60
+            // swiftlint:disable:next identifier_name
+            let s = secs % 60
             return String(format: "%02d:%02d", m, s)
         }
         guard let start = startedAt ?? createdAt else { return "00:00" }
@@ -52,7 +54,9 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
         // swiftlint:disable:next identifier_name
-        let m = secs / 60; let s = secs % 60
+        let m = secs / 60
+        // swiftlint:disable:next identifier_name
+        let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
 
@@ -122,14 +126,16 @@ struct JobStep: Identifiable, Codable, Equatable {
     ///   (step hasn't started yet — this should not normally occur).
     /// - Uses `completedAt` as the end anchor for finished steps, falling back
     ///   to `Date()` for live steps to show a running clock.
-    /// - Returns `00:00` when the computed interval is negative (clock skew guard).
+    /// - Returns `"00:00"` when the computed interval is negative (clock skew guard).
     var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
         // swiftlint:disable:next identifier_name
-        let m = secs / 60; let s = secs % 60
+        let m = secs / 60
+        // swiftlint:disable:next identifier_name
+        let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
 
@@ -210,7 +216,7 @@ extension RunnerStore {
             isDimmed: isDimmed,
             steps: (payload.steps ?? []).map { stepPayload in
                 JobStep(
-                    // ⚠️ Use the API-supplied step number, not the array index.
+                    // ⚠️: Use the API-supplied step number, not the array index.
                     // GitHub step numbers can be non-contiguous (e.g. retried or skipped steps).
                     // Using idx+1 would cause fetchStepLog(jobID:stepNumber:) to fetch the wrong log.
                     id: stepPayload.number,
