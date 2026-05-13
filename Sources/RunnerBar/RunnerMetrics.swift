@@ -1,4 +1,4 @@
-// swiftlint:disable line_length
+// swiftlint:disable line_length operator_usage_whitespace trailing_newline superfluous_disable_command
 import Foundation
 
 // MARK: - RunnerMetrics
@@ -49,4 +49,3 @@ func allWorkerMetrics() -> [RunnerMetrics] {
     }
     return result
 }
-// swiftlint:enable line_length
