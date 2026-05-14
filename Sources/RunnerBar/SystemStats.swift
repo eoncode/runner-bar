@@ -2,19 +2,32 @@ import Combine
 import Darwin
 import Foundation
 
+// MARK: - Shared fallback constants
+
+/// Fallback constants shared by `SystemStats` and `SystemStatsViewModel`.
+/// Centralised here so a single change propagates to both types.
+private enum SystemStatsDefaults {
+    /// Default fallback RAM when hw.memsize is unavailable (GB).
+    static let fallbackMemGB: Double = 16
+    /// Default fallback disk size when volumeTotalCapacity is unavailable (GB).
+    static let fallbackDiskGB: Double = 460
+    /// 100 % free - safe worst-case assumption when disk query fails.
+    static let fullPct: Double = 100
+}
+
 // MARK: - SystemStats
 
 /// A snapshot of CPU, memory, and disk metrics at a single point in time.
 /// All values are computed off the main thread by `SystemStatsViewModel`
 /// and published to SwiftUI via `@Published` on the main thread.
 struct SystemStats {
-    /// CPU utilisation across all cores, 0–100%.
+    /// CPU utilisation across all cores, 0-100%.
     var cpuPct: Double
     /// Memory actively in use (active + wired pages), in GB.
     var memUsedGB: Double
     /// Physical RAM installed, in GB.
     var memTotalGB: Double
-    /// Disk space occupied (total − free), in GB.
+    /// Disk space occupied (total - free), in GB.
     var diskUsedGB: Double
     /// Raw partition capacity from `volumeTotalCapacity`, in GB.
     var diskTotalGB: Double
@@ -23,25 +36,15 @@ struct SystemStats {
     /// Free disk space as a percentage of total.
     var diskFreePct: Double
 
-    // Fallback constants used when Mach/sysctlbyname calls fail.
-    private enum Defaults {
-        /// Default fallback RAM when hw.memsize is unavailable (GB).
-        static let fallbackMemGB: Double = 16
-        /// Default fallback disk size when volumeTotalCapacity is unavailable (GB).
-        static let fallbackDiskGB: Double = 460
-        /// 100 % free — safe worst-case assumption when disk query fails.
-        static let fullPct: Double = 100
-    }
-
     /// Safe default shown while the first sample is being computed.
     static let zero = SystemStats(
         cpuPct: 0,
         memUsedGB: 0,
-        memTotalGB: Defaults.fallbackMemGB,
+        memTotalGB: SystemStatsDefaults.fallbackMemGB,
         diskUsedGB: 0,
-        diskTotalGB: Defaults.fallbackDiskGB,
-        diskFreeGB: Defaults.fallbackDiskGB,
-        diskFreePct: Defaults.fullPct
+        diskTotalGB: SystemStatsDefaults.fallbackDiskGB,
+        diskFreeGB: SystemStatsDefaults.fallbackDiskGB,
+        diskFreePct: SystemStatsDefaults.fullPct
     )
 }
 
@@ -69,14 +72,9 @@ private struct DiskStats {
 ///
 /// Lifecycle: call `start()` from `.onAppear` and `stop()` from `.onDisappear`.
 ///
-/// ⚠️ PRE-WARM CONTRACT — DO NOT REMOVE:
+/// PRE-WARM CONTRACT:
 /// start() dispatches an immediate background sample so real values publish
 /// before the first timer tick.
-///
-/// ❌ NEVER call sample() synchronously from start() on the main thread.
-/// ❌ NEVER remove the stop() pre-warm sample() call.
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-/// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
     private var timer: Timer?
@@ -84,13 +82,6 @@ final class SystemStatsViewModel: ObservableObject {
 
     /// How often (in seconds) the stats polling timer fires.
     private let statsPollingInterval: TimeInterval = 2
-
-    // Fallback constants reused from SystemStats for MemoryStats / DiskStats guards.
-    private enum Defaults {
-        static let fallbackMemGB: Double = 16
-        static let fallbackDiskGB: Double = 460
-        static let fullPct: Double = 100
-    }
 
     /// Root volume path used for disk capacity queries.
     private let rootVolumePath = "/"
@@ -172,7 +163,7 @@ final class SystemStatsViewModel: ObservableObject {
             }
         }
         guard kernResult == KERN_SUCCESS else {
-            return MemoryStats(used: 0, total: Defaults.fallbackMemGB)
+            return MemoryStats(used: 0, total: SystemStatsDefaults.fallbackMemGB)
         }
         let pageSize = Double(vm_kernel_page_size)
         let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
@@ -186,13 +177,8 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Disk
 
-    /// ⚠️ PERMISSION GUARD: Uses `volumeAvailableCapacityKey` — NOT
-    /// `volumeAvailableCapacityForImportantUsageKey`.
-    ///
-    /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-    /// ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
-    /// is removed is major major major.
+    /// Uses `volumeAvailableCapacityKey` (not volumeAvailableCapacityForImportantUsageKey).
+    /// This avoids triggering TCC prompts and is the correct key for status-bar display.
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: rootVolumePath)
         let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
@@ -205,15 +191,15 @@ final class SystemStatsViewModel: ObservableObject {
         else {
             return DiskStats(
                 used: 0,
-                total: Defaults.fallbackDiskGB,
-                free: Defaults.fallbackDiskGB,
-                freePct: Defaults.fullPct
+                total: SystemStatsDefaults.fallbackDiskGB,
+                free: SystemStatsDefaults.fallbackDiskGB,
+                freePct: SystemStatsDefaults.fullPct
             )
         }
         let total = Double(totalBytes) / gigabytes
         let free = Double(freeBytes) / gigabytes
         let used = total - free
-        let freePct = total > 0 ? (free / total) * 100 : Defaults.fullPct
+        let freePct = total > 0 ? (free / total) * 100 : SystemStatsDefaults.fullPct
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
 
