@@ -103,14 +103,15 @@ struct PopoverHeaderView: View {
             Text(freeStr)
                 .font(DesignTokens.Font.monoXSmall)
                 .foregroundColor(DesignTokens.Color.statColor(for: usedPct))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 1)
+                .padding(.horizontal, 8).padding(.vertical, 1)
                 .background(
                     Capsule()
                         .fill(DesignTokens.Color.statColor(for: usedPct).opacity(0.15))
                         .overlay(
-                            Capsule()
-                                .strokeBorder(DesignTokens.Color.statColor(for: usedPct).opacity(0.4), lineWidth: 1)
+                            Capsule().strokeBorder(
+                                DesignTokens.Color.statColor(for: usedPct).opacity(0.4),
+                                lineWidth: 1
+                            )
                         )
                 )
                 .lineLimit(1)
@@ -140,10 +141,21 @@ struct PopoverHeaderView: View {
 
 // MARK: - DesignTokens.Color helper
 extension DesignTokens.Color {
+    /// Returns the appropriate status colour for a 0–100 percentage.
     static func statColor(for pct: Double) -> SwiftUI.Color {
         if pct > 85 { return statusRed    }
         if pct > 60 { return statusOrange }
         return statusGreen
+    }
+
+    /// Returns the accent colour for a given GroupStatus + conclusion.
+    static func actionColor(status: GroupStatus, conclusion: String?) -> SwiftUI.Color {
+        switch status {
+        case .inProgress: return statusBlue
+        case .queued:     return statusBlue
+        case .completed:
+            return conclusion == "success" ? statusGreen : statusRed
+        }
     }
 }
 
@@ -158,6 +170,7 @@ struct SparklineView: View {
         Canvas { context, size in
             guard samples.count > 1 else { return }
             let pts = points(in: size)
+
             var fillPath = Path()
             fillPath.move(to: CGPoint(x: 0, y: size.height))
             for pt in pts { fillPath.addLine(to: pt) }
@@ -174,11 +187,13 @@ struct SparklineView: View {
                     endPoint:   CGPoint(x: 0, y: size.height)
                 )
             )
+
             var basePath = Path()
-            basePath.move(to:    CGPoint(x: 0,          y: size.height))
+            basePath.move(to: CGPoint(x: 0, y: size.height))
             basePath.addLine(to: CGPoint(x: size.width, y: size.height))
             context.stroke(basePath, with: .color(color.opacity(0.25)),
                            style: StrokeStyle(lineWidth: 0.5))
+
             var linePath = Path()
             linePath.move(to: pts[0])
             for pt in pts.dropFirst() { linePath.addLine(to: pt) }
@@ -236,8 +251,7 @@ struct PopoverLocalRunnerRow: View {
             if busy.count > 3 {
                 Text("+ \(busy.count - 3) more…")
                     .font(.caption2).foregroundColor(.secondary)
-                    .padding(.horizontal, DesignTokens.Layout.panelHPad)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, DesignTokens.Layout.panelHPad).padding(.vertical, 2)
             }
         }
         .padding(.horizontal, DesignTokens.Layout.sectionInset)
@@ -259,8 +273,7 @@ struct RunnerCardRow: View {
             Text(runner.name)
                 .font(DesignTokens.Font.monoBody)
                 .foregroundColor(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
             Spacer()
             if let metrics = runner.metrics {
@@ -281,7 +294,8 @@ struct RunnerCardRow: View {
                 .fill(Color.primary.opacity(0.03))
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius)
-                        .strokeBorder(DesignTokens.Color.cardBorder, lineWidth: DesignTokens.Layout.cardBorderWidth)
+                        .strokeBorder(DesignTokens.Color.cardBorder,
+                                      lineWidth: DesignTokens.Layout.cardBorderWidth)
                 )
         )
         .contentShape(Rectangle())
@@ -302,108 +316,104 @@ struct MetricPill: View {
                 .font(DesignTokens.Font.monoXSmall)
                 .foregroundColor(.primary.opacity(0.75))
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 7).padding(.vertical, 2)
         .background(
             Capsule()
                 .fill(DesignTokens.Color.pillBg)
-                .overlay(
-                    Capsule()
-                        .strokeBorder(DesignTokens.Color.pillBorder, lineWidth: 0.75)
-                )
+                .overlay(Capsule().strokeBorder(DesignTokens.Color.pillBorder, lineWidth: 0.75))
         )
         .fixedSize(horizontal: true, vertical: false)
     }
 }
 
 // MARK: - ActionRowView
-/// Redesigned action row with:
-/// - Left-side coloured vertical indicator (expand/collapse toggle)
-/// - StatusDonutView replacing PieProgressDot at the row level
-/// - Per-row status tint background
-/// - chevron.right always points right (never down)
-///
-/// ⚠️ TICK CONTRACT — DO NOT REMOVE the `_ = tick` line in rowContent.
-/// ❌ NEVER remove it — it forces re-render for live elapsed/progress.
+/// Action group row — Phase 4 redesign:
+/// - Left vertical indicator bar (colour = status)
+/// - StatusDonutView replaces PieProgressDot
+/// - Faint per-row status tint background
+/// - chevron.right always points right
+/// - Meta text in monospaced font
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
 
+    private var accentColor: Color {
+        DesignTokens.Color.actionColor(status: group.groupStatus, conclusion: group.conclusion)
+    }
+
     var body: some View {
-        ZStack(alignment: .leading) {
-            // Per-row status tint (~6% opacity background)
-            rowTintColor.opacity(0.06)
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius))
+        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
+        // ❌ NEVER remove this line.
+        _ = tick
+        return ZStack(alignment: .leading) {
+            // Faint per-row status tint
+            Rectangle().fill(accentColor.opacity(0.06))
 
             HStack(spacing: 0) {
-                // Left vertical indicator — half-pill, status colour, acts as expand signal
-                leftIndicator
+                // Left vertical indicator — tappable as expand toggle
+                Button(action: onSelect) { leftIndicator }
+                    .buttonStyle(.plain)
+                    .help("Toggle details")
 
-                Button(action: onSelect, label: { rowContent })
+                // Main tappable row content
+                Button(action: onSelect) { rowContent }
                     .buttonStyle(.plain)
 
-                // Chevron always points right (spec fix: was .down on in-progress)
+                // Chevron — always chevron.right (Phase 4 fix, was pointing down on in-progress)
                 Image(systemName: "chevron.right")
                     .font(.caption2)
-                    .foregroundColor(DesignTokens.Color.labelTertiary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.trailing, 12)
             }
         }
-        .padding(.horizontal, DesignTokens.Layout.sectionInset)
-        .padding(.vertical, 2)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
-    // MARK: - Left indicator bar
+    // MARK: - Left vertical half-pill indicator bar
     private var leftIndicator: some View {
-        indicatorColor
+        accentColor
             .frame(width: DesignTokens.Layout.leftIndicatorWidth)
-            .clipShape(
-                RoundedRectangle(cornerRadius: DesignTokens.Layout.leftIndicatorWidth / 2)
-            )
-            .padding(.vertical, 6)
-            .padding(.trailing, 8)
+            .clipShape(RoundedCorners(tl: 0, tr: 3, bl: 0, br: 3))
+            .padding(.vertical, 4)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
     }
 
     // MARK: - Row content
     private var rowContent: some View {
-        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ❌ NEVER remove this line.
-        _ = tick
-        return HStack(spacing: 8) {
-            // New status donut replaces PieProgressDot at action-row level
+        HStack(spacing: 8) {
             StatusDonutView(
                 status: group.groupStatus,
                 conclusion: group.conclusion,
                 progress: group.progressFraction
             )
-
             RunnerTypeIcon(isLocal: group.isLocalGroup)
-
             Text(group.label)
-                .font(.caption.monospacedDigit())
+                .font(DesignTokens.Font.monoSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-
             Text(group.title)
-                .font(DesignTokens.Font.monoBody)
+                .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
-
             Spacer()
             metaTrailing
         }
-        .padding(.leading, 6).padding(.trailing, 4).padding(.vertical, 5)
+        .padding(.leading, 8)
+        .padding(.trailing, 4)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
     }
 
-    // MARK: - Trailing meta
+    // MARK: - Trailing meta labels
     @ViewBuilder
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
-                .font(.caption2.monospacedDigit())
+                .font(DesignTokens.Font.monoSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -411,97 +421,85 @@ struct ActionRowView: View {
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.currentJobName)
                 .font(.caption)
-                .foregroundColor(DesignTokens.Color.labelSecondary)
+                .foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(0)
         }
         Text(group.jobProgress)
-            .font(.caption.monospacedDigit())
+            .font(DesignTokens.Font.monoSmall)
             .foregroundColor(DesignTokens.Color.labelSecondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         Text(group.elapsed)
-            .font(.caption.monospacedDigit())
+            .font(DesignTokens.Font.monoSmall)
             .foregroundColor(DesignTokens.Color.labelSecondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         statusChip
     }
 
-    // MARK: - Status chip (text badge, right-aligned)
+    // MARK: - Status chip
     @ViewBuilder
     private var statusChip: some View {
         switch group.groupStatus {
         case .inProgress:
-            Text("IN PROGRESS")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Color.statusBlue)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
-                        .fill(DesignTokens.Color.statusBlue.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
-                                .strokeBorder(DesignTokens.Color.statusBlue.opacity(0.3), lineWidth: 0.5)
-                        )
-                )
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(label: "IN PROGRESS", color: DesignTokens.Color.statusBlue)
         case .queued:
-            Text("QUEUED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Color.statusBlue)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
-                        .fill(DesignTokens.Color.statusBlue.opacity(0.10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
-                                .strokeBorder(DesignTokens.Color.statusBlue.opacity(0.25), lineWidth: 0.5)
-                        )
-                )
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(label: "QUEUED", color: DesignTokens.Color.statusBlue)
         case .completed:
             let success = group.conclusion == "success"
-            let color: Color = success ? DesignTokens.Color.statusGreen : DesignTokens.Color.statusRed
-            Text(success ? "SUCCESS" : "FAILED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(color)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
-                        .fill(color.opacity(0.10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
-                                .strokeBorder(color.opacity(0.25), lineWidth: 0.5)
-                        )
-                )
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(
+                label: success ? "SUCCESS" : "FAILED",
+                color: success ? DesignTokens.Color.statusGreen : DesignTokens.Color.statusRed
+            )
         }
     }
+}
 
-    // MARK: - Color helpers
-    private var rowTintColor: Color {
-        switch group.groupStatus {
-        case .inProgress: return DesignTokens.Color.statusBlue
-        case .queued:     return DesignTokens.Color.statusBlue
-        case .completed:
-            if group.isDimmed { return .clear }
-            return group.conclusion == "success"
-                ? DesignTokens.Color.statusGreen
-                : DesignTokens.Color.statusRed
-        }
+// MARK: - StatusBadge
+/// Pill-shaped status label for action rows. Replaces the plain coloured Text chip.
+struct StatusBadge: View {
+    let label: String
+    let color: Color
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(
+                Capsule()
+                    .fill(color.opacity(0.12))
+                    .overlay(Capsule().strokeBorder(color.opacity(0.3), lineWidth: 0.75))
+            )
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
+}
 
-    private var indicatorColor: Color {
-        switch group.groupStatus {
-        case .inProgress: return DesignTokens.Color.statusBlue
-        case .queued:     return DesignTokens.Color.statusBlue.opacity(0.5)
-        case .completed:
-            if group.isDimmed { return DesignTokens.Color.labelTertiary }
-            return group.conclusion == "success"
-                ? DesignTokens.Color.statusGreen
-                : DesignTokens.Color.statusRed
-        }
+// MARK: - RoundedCorners
+/// Custom shape with per-corner independent radii.
+/// Used for the left indicator bar: right corners rounded (3pt), left flush (0pt).
+private struct RoundedCorners: Shape {
+    var tl, tr, bl, br: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        path.addArc(center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr),
+                    radius: tr, startAngle: .degrees(-90), endAngle: .degrees(0),   clockwise: false)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+        path.addArc(center: CGPoint(x: rect.maxX - br, y: rect.maxY - br),
+                    radius: br, startAngle: .degrees(0),   endAngle: .degrees(90),  clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+        path.addArc(center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl),
+                    radius: bl, startAngle: .degrees(90),  endAngle: .degrees(180), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+        path.addArc(center: CGPoint(x: rect.minX + tl, y: rect.minY + tl),
+                    radius: tl, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
     }
 }
 
