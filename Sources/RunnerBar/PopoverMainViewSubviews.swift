@@ -22,12 +22,14 @@ struct PopoverHeaderView: View {
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
+    /// Phase 2: history buffers passed from the view model
+    var cpuHistory: [Double] = []
+    var memHistory: [Double] = []
 
     var body: some View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
-            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -65,56 +67,74 @@ struct PopoverHeaderView: View {
         .padding(.bottom, 8)
     }
 
-    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
+    /// Phase 2: sparkline stat blocks separated by vertical dividers.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
     /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
-        HStack(spacing: 8) {
-            statChip(
+        HStack(spacing: 0) {
+            // CPU block
+            statBlock(
                 label: "CPU",
-                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
+                value: String(format: "%.1f%%", stats.cpuPct),
+                pct: stats.cpuPct,
+                history: cpuHistory
             )
-            statChip(
+            divider
+            // MEM block
+            let memPct = stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
+            statBlock(
                 label: "MEM",
-                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
+                value: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
+                pct: memPct,
+                history: memHistory
             )
-            diskChip
+            divider
+            // DISK block — pill style
+            diskBlock
         }
     }
 
-    private var diskChip: some View {
-        let total   = stats.diskTotalGB
-        let used    = stats.diskUsedGB
-        let free    = max(0, total - used)
-        let pct     = total > 0 ? (used / total) * 100 : 0
-        let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = blockBar(pct: pct)
-            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
+    /// Vertical hairline divider between stat blocks.
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.1))
+            .frame(width: 0.5, height: 20)
+            .padding(.horizontal, 8)
     }
 
-    private func statChip(label: String, value: String, pct: Double) -> some View {
-        HStack(spacing: 3) {
+    /// Single stat block: label + sparkline + value.
+    private func statBlock(label: String, value: String, pct: Double, history: [Double]) -> some View {
+        HStack(spacing: 5) {
             Text(label)
-                .font(DesignTokens.Fonts.monoLabel)   // Phase 1: mono font token
+                .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+            // Phase 2: sparkline replaces the block-bar glyph string
+            if history.count >= 2 {
+                SparklineView(history: history, currentPct: pct)
+                    .frame(width: 44, height: 18)
+            }
             Text(value)
-                .font(DesignTokens.Fonts.monoStat)    // Phase 1: mono font token
-                .foregroundColor(DesignTokens.Colors.usage(pct: pct)) // Phase 1: colour token
+                .font(DesignTokens.Fonts.monoStat)
+                .foregroundColor(DesignTokens.Colors.usage(pct: pct))
                 .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw         = Int((pct / 100.0 * Double(width)).rounded())
-        let filledCount = max(0, min(width, raw))
-        return String(repeating: "█", count: filledCount)
-             + String(repeating: "░", count: width - filledCount)
+    /// Phase 2: DISK pill view.
+    private var diskBlock: some View {
+        HStack(spacing: 5) {
+            Text("DISK")
+                .font(DesignTokens.Fonts.monoLabel)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            DiskPillView(
+                freePct: stats.diskFreePct,
+                usedGB: Int(stats.diskUsedGB.rounded()),
+                totalGB: Int(stats.diskTotalGB.rounded())
+            )
+        }
     }
 }
 
@@ -149,13 +169,13 @@ struct PopoverLocalRunnerRow: View {
             HStack(spacing: 8) {
                 Circle().fill(Color.yellow).frame(width: 8, height: 8)
                 Text(runner.name)
-                    .font(DesignTokens.Fonts.mono)     // Phase 1: mono font token
+                    .font(DesignTokens.Fonts.mono)
                     .foregroundColor(.primary)
                     .lineLimit(1)
                 Spacer()
                 if let metrics = runner.metrics {
                     Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(DesignTokens.Fonts.mono)  // Phase 1: mono font token
+                        .font(DesignTokens.Fonts.mono)
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: true, vertical: false)
                 }
@@ -195,7 +215,7 @@ struct ActionRowView: View {
             PieProgressDot(progress: group.progressFraction, color: dotColor)
             RunnerTypeIcon(isLocal: group.isLocalGroup)
             Text(group.label)
-                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -216,7 +236,7 @@ struct ActionRowView: View {
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
-                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -228,12 +248,12 @@ struct ActionRowView: View {
                 .layoutPriority(0)
         }
         Text(group.jobProgress)
-            .font(DesignTokens.Fonts.mono)             // Phase 1: mono font token
+            .font(DesignTokens.Fonts.mono)
             .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         Text(group.elapsed)
-            .font(DesignTokens.Fonts.mono)             // Phase 1: mono font token
+            .font(DesignTokens.Fonts.mono)
             .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
@@ -246,33 +266,29 @@ struct ActionRowView: View {
         case .inProgress:
             Text("IN PROGRESS")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Colors.statusBlue) // Phase 1: colour token
+                .foregroundColor(DesignTokens.Colors.statusBlue)
                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         case .queued:
             Text("QUEUED")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Colors.statusBlue) // Phase 1: colour token
+                .foregroundColor(DesignTokens.Colors.statusBlue)
                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         case .completed:
             let success = group.conclusion == "success"
             Text(success ? "SUCCESS" : "FAILED")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundColor(success
-                    ? DesignTokens.Colors.statusGreen  // Phase 1: colour token
-                    : DesignTokens.Colors.statusRed)   // Phase 1: colour token
+                .foregroundColor(success ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed)
                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         }
     }
 
     private var dotColor: Color {
         switch group.groupStatus {
-        case .inProgress: return DesignTokens.Colors.statusBlue   // Phase 1: colour token
-        case .queued:     return DesignTokens.Colors.statusBlue   // Phase 1: colour token
+        case .inProgress: return DesignTokens.Colors.statusBlue
+        case .queued:     return DesignTokens.Colors.statusBlue
         case .completed:
             if group.isDimmed { return .gray }
-            return group.conclusion == "success"
-                ? DesignTokens.Colors.statusGreen                  // Phase 1: colour token
-                : DesignTokens.Colors.statusRed                    // Phase 1: colour token
+            return group.conclusion == "success" ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed
         }
     }
 }
@@ -351,13 +367,13 @@ struct InlineJobRowsView: View {
             Spacer()
             if total > 0 {
                 Text("\(done)/\(total)")
-                    .font(DesignTokens.Fonts.mono)      // Phase 1: mono font token
+                    .font(DesignTokens.Fonts.mono)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
             Text(job.elapsed)
-                .font(DesignTokens.Fonts.mono)          // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -374,11 +390,11 @@ struct InlineJobRowsView: View {
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
-        case "in_progress": return DesignTokens.Colors.statusBlue  // Phase 1: colour token
-        case "queued":      return DesignTokens.Colors.statusBlue  // Phase 1: colour token
+        case "in_progress": return DesignTokens.Colors.statusBlue
+        case "queued":      return DesignTokens.Colors.statusBlue
         default: return job.conclusion == "success"
-            ? DesignTokens.Colors.statusGreen                       // Phase 1: colour token
-            : (job.isDimmed ? .gray : DesignTokens.Colors.statusRed) // Phase 1: colour token
+            ? DesignTokens.Colors.statusGreen
+            : (job.isDimmed ? .gray : DesignTokens.Colors.statusRed)
         }
     }
 }

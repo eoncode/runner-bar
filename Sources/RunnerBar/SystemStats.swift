@@ -69,8 +69,14 @@ private struct DiskStats {
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
+    /// Normalised (0–1) CPU history, oldest first. Max 20 samples. Phase 2.
+    @Published var cpuHistory: [Double] = []
+    /// Normalised (0–1) MEM history, oldest first. Max 20 samples. Phase 2.
+    @Published var memHistory: [Double] = []
+
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
+    private let historyCapacity = 20
 
     init() {}
     deinit { timer?.invalidate() }
@@ -197,6 +203,13 @@ final class SystemStatsViewModel: ObservableObject {
             diskFreeGB: disk.free,
             diskFreePct: disk.freePct
         )
-        DispatchQueue.main.async { self.stats = snapshot }
+        // Phase 2: append normalised values to history buffers
+        let cpuNorm = cpu / 100.0
+        let memNorm = mem.total > 0 ? mem.used / mem.total : 0
+        DispatchQueue.main.async {
+            self.stats = snapshot
+            self.cpuHistory = Array((self.cpuHistory + [cpuNorm]).suffix(self.historyCapacity))
+            self.memHistory = Array((self.memHistory + [memNorm]).suffix(self.historyCapacity))
+        }
     }
 }
