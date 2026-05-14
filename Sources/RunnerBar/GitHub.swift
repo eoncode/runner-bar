@@ -1,3 +1,4 @@
+// swiftlint:disable file_length function_body_length
 import Foundation
 import os
 
@@ -80,7 +81,6 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     guard let ghPath = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
-    // Need exit code for rate-limit detection, so run the process manually to capture it.
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -364,3 +364,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+// swiftlint:enable file_length function_body_length

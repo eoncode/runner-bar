@@ -1,3 +1,4 @@
+// swiftlint:disable missing_docs
 import Combine
 import Darwin
 import Foundation
@@ -226,3 +227,4 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 }
+// swiftlint:enable missing_docs

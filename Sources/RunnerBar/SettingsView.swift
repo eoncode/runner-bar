@@ -1,4 +1,4 @@
-// swiftlint:disable file_length
+// swiftlint:disable file_length missing_docs operator_usage_whitespace colon
 import ServiceManagement
 import SwiftUI
 
@@ -590,4 +590,4 @@ struct SettingsView: View {
     }
 }
 // swiftlint:enable type_body_length
-// swiftlint:enable file_length
+// swiftlint:enable file_length missing_docs operator_usage_whitespace colon

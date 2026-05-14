@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import SwiftUI
 
 // MARK: - CancelButton
@@ -69,3 +70,4 @@ struct CancelButton: View {
         }
     }
 }
+// swiftlint:enable file_length

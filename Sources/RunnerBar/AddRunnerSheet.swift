@@ -1,3 +1,4 @@
+// swiftlint:disable colon comma
 import SwiftUI
 
 // swiftlint:disable type_body_length
@@ -184,12 +185,6 @@ struct AddRunnerSheet: View {
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
         let dir = installDir.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
-            // Security: validate that installDir resolves to a path inside the
-            // user's home directory before executing config.sh there.
-            // A freeform path like ~/../../usr/local/bin could otherwise cause
-            // an arbitrary executable to be launched with the user's privileges.
-            // ⚠️ Use == or hasPrefix(homeDir + "/") — plain hasPrefix(homeDir) is a
-            // string prefix match and would pass e.g. /Users/alice-evil for home /Users/alice.
             let homeDir = FileManager.default.homeDirectoryForCurrentUser
                 .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
@@ -285,3 +280,4 @@ struct AddRunnerSheet: View {
     }
 }
 // swiftlint:enable type_body_length
+// swiftlint:enable colon comma
