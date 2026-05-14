@@ -9,11 +9,11 @@ func log(
 ) {
     let filename = URL(fileURLWithPath: file)
         .deletingPathExtension().lastPathComponent
-    let timestamp = _logFormatter.string(from: Date())
+    let timestamp = logFormatter.string(from: Date())
     fputs("[RunnerBar \(timestamp)] \(filename):\(line) — \(message)\n", stderr)
 }
 
 /// Shared ISO-8601 formatter for log timestamps.
 /// ISO8601DateFormatter is expensive to allocate; keeping one static instance
 /// avoids repeated allocation on every `log()` call.
-private let _logFormatter = ISO8601DateFormatter()
+private let logFormatter = ISO8601DateFormatter()

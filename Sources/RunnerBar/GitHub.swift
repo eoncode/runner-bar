@@ -6,15 +6,15 @@ import os
 /// Thread-safe rate-limit flag.
 /// Replaces the bare `var ghIsRateLimited: Bool` global that was written from
 /// background threads without synchronization (data race, issue #399 item 2).
-/// Access via `_rateLimitLock.withLock { ... }` or the `ghIsRateLimited` computed
+/// Access via `rateLimitLock.withLock { ... }` or the `ghIsRateLimited` computed
 /// property below.
-private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
+private let rateLimitLock = OSAllocatedUnfairLock(initialState: false)
 
 /// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.
 /// Reset to `false` at the start of each `RunnerStore.fetch()` poll cycle.
 var ghIsRateLimited: Bool {
-    get { _rateLimitLock.withLock { $0 } }
-    set { _rateLimitLock.withLock { $0 = newValue } }
+    get { rateLimitLock.withLock { $0 } }
+    set { rateLimitLock.withLock { $0 = newValue } }
 }
 
 // MARK: - Process runner (private)
