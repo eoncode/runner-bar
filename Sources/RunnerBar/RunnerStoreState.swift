@@ -216,7 +216,11 @@ extension RunnerStore {
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
-    /// Assembles the ordered group display list: in_progress → queued → cached done, capped at 5.
+    /// Assembles the ordered group display list: in_progress → queued → cached done.
+    ///
+    /// Live (in_progress + queued) groups are **never capped** — all active
+    /// workflows must be visible. Up to 5 cached/completed groups are appended
+    /// after the live ones.
     private func buildGroupDisplay(
         live: [ActionGroup],
         cache: [String: ActionGroup]
@@ -228,10 +232,11 @@ extension RunnerStore {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
             > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
-        var display: [ActionGroup] = []
-        for grp in inProgress where display.count < 5 { display.append(grp) }
-        for grp in queued     where display.count < 5 { display.append(grp) }
-        for grp in cached where display.count < 5 && !liveDisplayIDs.contains(grp.id) {
+        // Fix (#407 Bug 2): never cap live groups — append them all unconditionally.
+        var display: [ActionGroup] = inProgress + queued
+        let cachedLimit = 5
+        for grp in cached where display.count < display.count - queued.count - inProgress.count + cachedLimit
+            && !liveDisplayIDs.contains(grp.id) {
             display.append(grp)
         }
         return display
