@@ -92,6 +92,9 @@ final class SystemStatsViewModel: ObservableObject {
         static let fullPct: Double = 100
     }
 
+    /// Root volume path used for disk capacity queries.
+    private let rootVolumePath = "/"
+
     init() {}
     deinit { timer?.invalidate() }
 
@@ -191,7 +194,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
     /// is removed is major major major.
     private func diskStats() -> DiskStats {
-        let url = URL(fileURLWithPath: "/")
+        let url = URL(fileURLWithPath: rootVolumePath)
         let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
         guard let values = try? url.resourceValues(forKeys: [
             .volumeTotalCapacityKey,

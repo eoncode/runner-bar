@@ -3,7 +3,7 @@ set -e
 
 VERSION=$(cat dist/version.txt)
 
-echo "→ Deploying $VERSION to gh-pages..."
+echo "→ Deploying \"${VERSION}\" to gh-pages..."
 
 if [ ! -d "_pages" ]; then
     git worktree add _pages gh-pages
@@ -15,7 +15,7 @@ cp install.sh _pages/
 
 cd _pages
 git add -A
-git commit -m "Release $VERSION"
+git commit -m "Release ${VERSION}"
 git push origin gh-pages
 cd ..
 

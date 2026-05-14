@@ -74,7 +74,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Start
 
-    /// Starts the runner’s launchd service.
+    /// Starts the runner's launchd service.
     /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
@@ -87,7 +87,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Stops the runner’s launchd service.
+    /// Stops the runner's launchd service.
     /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
@@ -194,8 +194,12 @@ struct RunnerLifecycleService {
         return task.terminationStatus == 0
     }
 
-    // MARK: - Rename (Phase 2 — incomplete, private)
+    // MARK: - Rename
 
+    // TODO: Phase 2 (#253) — expose rename() publicly once the SettingsView
+    // runner-rename UI is wired up. Requires re-reading customLabels from
+    // RunnerJSON in LocalRunnerScanner after write so RunnerModel.labels reflects
+    // the new name on the next scan cycle.
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
