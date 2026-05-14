@@ -31,13 +31,9 @@ struct PieProgressDot: View {
     var size: CGFloat = 8
 
     // MARK: Animated state
-    /// Animated shadow of `progress`. Drives the wedge Path angle.
     @State private var displayProgress: Double?
-    /// Animated shadow of `color`. Drives fill + stroke colour with a crossfade.
     @State private var displayColor: Color = .clear
-    /// Current rotation angle for the indeterminate spinning arc (degrees).
     @State private var spinAngle: Double = 0
-    /// Scale factor for the completion pulse. 1.0 → 1.25 → 1.0 on reaching 100%.
     @State private var completionScale: CGFloat = 1.0
 
     var body: some View {
@@ -46,19 +42,16 @@ struct PieProgressDot: View {
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             let radius = side / 2
             ZStack {
-                // --- Background ring (always visible) ---
                 Circle()
                     .stroke(displayColor.opacity(0.22), lineWidth: 1)
                     .frame(width: side, height: side)
                 if let fraction = displayProgress {
                     if fraction >= 1 {
-                        // Full fill + completion scale pulse
                         Circle()
                             .fill(displayColor)
                             .frame(width: side, height: side)
                             .scaleEffect(completionScale)
                     } else if fraction > 0 {
-                        // Filled wedge from 12-o'clock sweeping clockwise
                         Path { path in
                             path.move(to: center)
                             path.addArc(
@@ -72,15 +65,11 @@ struct PieProgressDot: View {
                         }
                         .fill(displayColor)
                     }
-                    // fraction == 0: background ring only
                 } else {
-                    // Indeterminate: spinning arc segment (~120° sweep)
                     Group {
-                        // Thin background track
                         Circle()
                             .stroke(displayColor.opacity(0.15), lineWidth: 1.5)
                             .frame(width: side * 0.85, height: side * 0.85)
-                        // Spinning arc head
                         Path { path in
                             path.addArc(
                                 center: CGPoint(x: side / 2, y: side / 2),
@@ -109,58 +98,165 @@ struct PieProgressDot: View {
             }
         }
         .frame(width: size, height: size)
-        // MARK: - Lifecycle
         .onAppear {
-            // Seed both display values instantly (no animation) on first render.
             displayProgress = progress
             displayColor = color
-            // Start the indeterminate spinner — always running.
-            // ❌ NEVER use .easeInOut here — must be .linear + repeatForever.
-            withAnimation(
-                .linear(duration: 1.2)
-                .repeatForever(autoreverses: false)
-            ) {
+            withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
                 spinAngle = 360
             }
         }
-        // Animate wedge angle when progress changes.
-        // ❌ macOS 13 compat: single-value onChange only.
         .onChange(of: progress) { newValue in
-            withAnimation(.easeInOut(duration: 0.4)) {
-                displayProgress = newValue
-            }
-            // Trigger completion pulse when reaching 100%.
+            withAnimation(.easeInOut(duration: 0.4)) { displayProgress = newValue }
             if let value = newValue, value >= 1.0 {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.45)) {
-                    completionScale = 1.28
-                }
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.45)) { completionScale = 1.28 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        completionScale = 1.0
-                    }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { completionScale = 1.0 }
                 }
             }
         }
-        // Animate color crossfade on state transitions.
-        // ❌ macOS 13 compat: single-value onChange only.
         .onChange(of: color) { newColor in
-            withAnimation(.easeInOut(duration: 0.35)) {
-                displayColor = newColor
+            withAnimation(.easeInOut(duration: 0.35)) { displayColor = newColor }
+        }
+    }
+}
+
+// MARK: - StatusDonutView
+/// Phase 4: Redesigned status indicator for action rows.
+/// Three states:
+/// - in_progress: animated blue arc ring (trim + spinning AngularGradient)
+/// - success: green circle stroke + checkmark SF Symbol
+/// - failed/other: red circle stroke + xmark SF Symbol
+///
+/// Part of redesign plan tracked in #421.
+struct StatusDonutView: View {
+    let status: GroupStatus
+    let conclusion: String?
+    /// Arc progress 0–1 for in-progress state.
+    let progress: Double?
+    var size: CGFloat = 18
+
+    @State private var arcPhase: Double = 0
+
+    private var isSuccess: Bool { conclusion == "success" }
+    private var isInProgress: Bool { status == .inProgress }
+    private var isQueued: Bool { status == .queued }
+
+    var body: some View {
+        ZStack {
+            switch status {
+            case .inProgress:
+                inProgressDonut
+            case .queued:
+                queuedDonut
+            case .completed:
+                completedDonut
             }
         }
+        .frame(width: size, height: size)
+        .onAppear {
+            guard status == .inProgress else { return }
+            withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                arcPhase = 360
+            }
+        }
+    }
+
+    /// Animated blue arc for in-progress runs.
+    private var inProgressDonut: some View {
+        let fraction = progress ?? 0
+        return ZStack {
+            // Background track
+            Circle()
+                .stroke(DesignTokens.Colors.statusBlue.opacity(0.18), lineWidth: 2)
+            // Animated AngularGradient "alive" ring
+            Circle()
+                .trim(from: 0, to: max(0.08, CGFloat(fraction)))
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [
+                            DesignTokens.Colors.statusBlue.opacity(0),
+                            DesignTokens.Colors.statusBlue
+                        ]),
+                        center: .center,
+                        startAngle: .degrees(arcPhase),
+                        endAngle: .degrees(arcPhase + 300)
+                    ),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+        }
+    }
+
+    /// Spinning dotted ring for queued.
+    private var queuedDonut: some View {
+        Circle()
+            .stroke(
+                DesignTokens.Colors.statusBlue.opacity(0.5),
+                style: StrokeStyle(lineWidth: 1.5, dash: [2, 3])
+            )
+    }
+
+    /// Static ring + SF symbol for completed state.
+    private var completedDonut: some View {
+        let color = isSuccess ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed
+        let symbol = isSuccess ? "checkmark" : "xmark"
+        return ZStack {
+            Circle().stroke(color.opacity(0.5), lineWidth: 1.5)
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.45, weight: .semibold))
+                .foregroundColor(color)
+        }
+    }
+}
+
+// MARK: - LeftIndicatorPill
+/// Phase 4: Tappable left-edge pill that expands/collapses inline job rows.
+/// Leading corners are rounded, trailing corners are square (UnevenRoundedRectangle
+/// requires macOS 14; we use a custom shape for macOS 13 compat).
+///
+/// Part of redesign plan tracked in #421.
+struct LeftIndicatorPill: View {
+    let color: Color
+    let isExpanded: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            LeadingRoundedRect(radius: 3)
+                .fill(color)
+                .frame(width: 4)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.15), value: isExpanded)
+    }
+}
+
+/// Rectangle with rounded leading corners only (macOS 13-compatible).
+private struct LeadingRoundedRect: Shape {
+    let radius: CGFloat
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
 // MARK: - RelativeTimeFormatter
 
-/// Formats a `Date` into a compact relative string like `"3m ago"`, `"1h ago"`, `"2d ago"`.
-///
-/// Intended for one-off formatting in row views; not observation-based —
-/// callers should refresh on a suitable timer tick.
 enum RelativeTimeFormatter {
-    /// Returns a short relative string for the interval between `date` and `now`.
-    /// Returns `"just now"` for intervals < 60 s, `"Nm ago"` < 60 min,
-    /// `"Nh ago"` < 48 h, and `"Nd ago"` otherwise.
     static func string(from date: Date, relativeTo now: Date = Date()) -> String {
         let seconds = max(0, now.timeIntervalSince(date))
         switch seconds {
@@ -173,10 +269,7 @@ enum RelativeTimeFormatter {
 }
 
 // MARK: - ActionGroup + progressFraction
-
-/// Adds a pie-progress fraction property to `ActionGroup` for use with `PieProgressDot`.
 extension ActionGroup {
-    /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
     var progressFraction: Double? {
         switch groupStatus {
         case .queued:     return nil
@@ -189,10 +282,7 @@ extension ActionGroup {
 }
 
 // MARK: - ActiveJob + progressFraction
-
-/// Adds a pie-progress fraction property to `ActiveJob` for use with `PieProgressDot`.
 extension ActiveJob {
-    /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no steps are available.
     var progressFraction: Double? {
         switch status {
         case "queued":    return nil
