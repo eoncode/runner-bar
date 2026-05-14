@@ -137,6 +137,12 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
+/// Card-styled busy runner row.
+/// Phase 3 changes:
+///  - Each runner gets a RoundedRectangle card with .rbSurfaceElevated fill + .rbBorderSubtle stroke
+///  - CPU / MEM values use StatPill from ViewModifiers (ultraThinMaterial pill)
+///  - Runner name uses RBFont.label monospaced style
+///  - Trailing chevron.right added
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
@@ -150,18 +156,7 @@ struct PopoverLocalRunnerRow: View {
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
         ForEach(busy.prefix(3)) { runner in
-            HStack(spacing: 8) {
-                Circle().fill(Color.yellow).frame(width: 8, height: 8)
-                Text(runner.name)
-                    .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
-                Spacer()
-                if let metrics = runner.metrics {
-                    Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 3)
+            runnerCard(runner)
         }
         if busy.count > 3 {
             Text("+ \(busy.count - 3) more…")
@@ -169,6 +164,54 @@ struct PopoverLocalRunnerRow: View {
                 .padding(.horizontal, 12).padding(.vertical, 2)
         }
         Divider()
+    }
+
+    private func runnerCard(_ runner: Runner) -> some View {
+        HStack(spacing: 8) {
+            // Status dot
+            Circle()
+                .fill(Color.rbWarning)
+                .frame(width: 7, height: 7)
+
+            // Runner name — monospaced per Phase 1 spec
+            Text(runner.name)
+                .font(RBFont.label)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .layoutPriority(1)
+
+            Spacer()
+
+            // CPU / MEM stat pills
+            if let metrics = runner.metrics {
+                StatPill(
+                    label: "CPU",
+                    value: String(format: "%.0f%%", metrics.cpu)
+                )
+                StatPill(
+                    label: "MEM",
+                    value: String(format: "%.0f%%", metrics.mem)
+                )
+            }
+
+            // Trailing chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.rbTextTertiary)
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xs + 2)
+        // Card background: elevated fill + subtle border
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        )
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xxs)
     }
 }
 
