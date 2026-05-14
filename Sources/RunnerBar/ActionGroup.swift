@@ -258,6 +258,22 @@ private func prLabel(from run: RunPayload) -> String {
     return String(run.headSha.prefix(7))
 }
 
+// MARK: - Job fetch helper
+
+/// Fetches and deduplicates all jobs for a set of sibling run payloads.
+/// Extracted from `fetchActionGroups` to keep closure nesting ≤ 2 levels (S3776).
+private func fetchFlatJobs(for shaRuns: [RunPayload], scope: String) -> [ActiveJob] {
+    var fetched: [ActiveJob] = []
+    var seenJobIDs = Set<Int>()
+    for runID in shaRuns.map({ $0.id }) {
+        for job in fetchJobsForRun(runID, scope: scope) where seenJobIDs.insert(job.id).inserted {
+            fetched.append(job)
+        }
+    }
+    fetched.sort { $0.id < $1.id }
+    return fetched
+}
+
 // MARK: - Fetch + Group
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
@@ -317,16 +333,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
            !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
             allJobs = cached.jobs
         } else {
-            var fetched: [ActiveJob] = []
-            var seenJobIDs = Set<Int>()
-            for runID in shaRuns.map({ $0.id }) {
-                for job in fetchJobsForRun(runID, scope: scope)
-                where seenJobIDs.insert(job.id).inserted {
-                    fetched.append(job)
-                }
-            }
-            fetched.sort { $0.id < $1.id }
-            allJobs = fetched
+            allJobs = fetchFlatJobs(for: shaRuns, scope: scope)
         }
         let starts = allJobs.compactMap { $0.startedAt }
         let ends   = allJobs.compactMap { $0.completedAt }
