@@ -172,18 +172,24 @@ struct SparklineView: View {
             var basePath = Path()
             basePath.move(to: CGPoint(x: 0, y: size.height))
             basePath.addLine(to: CGPoint(x: size.width, y: size.height))
-            context.stroke(basePath, with: .color(color.opacity(0.25)),
-                           style: StrokeStyle(lineWidth: 0.5))
+            context.stroke(
+                basePath,
+                with: .color(color.opacity(0.25)),
+                style: StrokeStyle(lineWidth: 0.5)
+            )
 
             var linePath = Path()
             linePath.move(to: pts[0])
             for point in pts.dropFirst() { linePath.addLine(to: point) }
-            context.stroke(linePath, with: .color(color),
-                           style: StrokeStyle(
-                            lineWidth: DesignTokens.Layout.sparklineStroke,
-                            lineCap: .round,
-                            lineJoin: .round
-                           ))
+            context.stroke(
+                linePath,
+                with: .color(color),
+                style: StrokeStyle(
+                    lineWidth: DesignTokens.Layout.sparklineStroke,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
         }
         .opacity(0.85)
         .frame(width: DesignTokens.Layout.sparklineWidth, height: DesignTokens.Layout.sparklineHeight)
@@ -276,8 +282,10 @@ struct RunnerCardRow: View {
                 .fill(Color.primary.opacity(0.03))
                 .overlay(
                     RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius)
-                        .strokeBorder(DesignTokens.Color.cardBorder,
-                                      lineWidth: DesignTokens.Layout.cardBorderWidth)
+                        .strokeBorder(
+                            DesignTokens.Color.cardBorder,
+                            lineWidth: DesignTokens.Layout.cardBorderWidth
+                        )
                 )
         )
         .contentShape(Rectangle())

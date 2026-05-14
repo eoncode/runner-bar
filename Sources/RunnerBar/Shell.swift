@@ -1,3 +1,4 @@
+// swiftlint:disable file_length function_body_length
 import Foundation
 
 /// Runs `command` via zsh, draining stdout/stderr asynchronously to avoid
@@ -53,3 +54,4 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell › exit \(task.terminationStatus), \(outputData.count) bytes")
     return result
 }
+// swiftlint:enable file_length function_body_length
