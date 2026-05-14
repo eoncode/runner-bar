@@ -93,13 +93,22 @@ struct ActionGroup: Identifiable {
         return .completed
     }
 
-    /// Group conclusion: only non-nil when every run has concluded.
+    /// Group conclusion derived from runs that have already concluded.
+    ///
+    /// Fix (#407 Bug 3): the previous implementation required ALL runs to have
+    /// a conclusion before returning non-nil, causing groups whose `groupStatus`
+    /// is already `.completed` (via the job-count override) to show nil — which
+    /// the UI rendered as a red FAILED badge.
+    ///
+    /// New behaviour: filter to concluded runs only; derive priority-ordered
+    /// result from that subset. Returns nil only when no run has concluded yet.
     /// Priority: failure > cancelled > skipped > success.
     var conclusion: String? {
-        guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-        if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
-        if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+        let concluded = runs.filter { $0.conclusion != nil }
+        guard !concluded.isEmpty else { return nil }
+        if concluded.contains(where: { $0.conclusion == "failure" })   { return "failure" }
+        if concluded.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
+        if concluded.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
         return "success"
     }
 
