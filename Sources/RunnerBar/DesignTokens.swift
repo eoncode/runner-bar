@@ -1,105 +1,65 @@
 import SwiftUI
 
-// MARK: - Color Tokens
+// MARK: - DesignTokens
+/// Central style constants for the RunnerBar redesign (#421).
+/// All phases source colours, fonts and spacing from here — never hardcode.
+enum DesignTokens {
 
+    // MARK: Colors
+    enum Colors {
+        // Status
+        static let statusGreen:  Color = Color(hex: "#30D158")
+        static let statusOrange: Color = Color(hex: "#FF9F0A")
+        static let statusRed:    Color = Color(hex: "#FF453A")
+        static let statusBlue:   Color = Color(hex: "#0A84FF")
+
+        // Row chrome
+        /// Subtle elevated background for card rows (light/dark adaptive).
+        static let rowBackground: Color = Color.primary.opacity(0.04)
+        /// Hairline border on card rows.
+        static let rowBorder:     Color = Color.primary.opacity(0.06)
+        /// Pill background for CPU/MEM metric badges inside runner rows.
+        static let metricPill:    Color = Color.primary.opacity(0.07)
+
+        // Usage thresholds — mirrors legacy usageColor logic
+        static func usage(pct: Double) -> Color {
+            if pct > 85 { return statusRed    }
+            if pct > 60 { return statusOrange }
+            return statusGreen
+        }
+    }
+
+    // MARK: Fonts
+    enum Fonts {
+        /// Monospaced caption for hashes, metrics, elapsed times.
+        static let mono:      Font = .system(size: 11, design: .monospaced)
+        /// Slightly larger monospaced for primary stat values in the header.
+        static let monoStat:  Font = .system(size: 12, weight: .semibold, design: .monospaced)
+        /// Tiny monospaced label (e.g. "CPU", "MEM").
+        static let monoLabel: Font = .system(size: 10, weight: .semibold, design: .monospaced)
+    }
+
+    // MARK: Spacing
+    enum Spacing {
+        static let rowHPad:   CGFloat = 12
+        static let rowVPad:   CGFloat = 8
+        static let chipHPad:  CGFloat = 8
+        static let chipVPad:  CGFloat = 3
+        static let cardRadius: CGFloat = 8
+    }
+}
+
+// MARK: - Color hex init
 extension Color {
-    // Status colors
-    static let rbBlue    = Color(red: 0.04, green: 0.52, blue: 1.00)   // #0A84FF
-    static let rbSuccess = Color(red: 0.19, green: 0.82, blue: 0.35)   // #30D158
-    static let rbWarning = Color(red: 1.00, green: 0.62, blue: 0.04)   // #FF9F0A
-    static let rbDanger  = Color(red: 1.00, green: 0.27, blue: 0.23)   // #FF453A
-
-    // Neutral / surface
-    static let rbSurface        = Color(white: 0.11)                   // #1C1C1E
-    static let rbSurfaceElevated = Color(white: 0.14)                  // slightly lifted card
-    static let rbBorderSubtle   = Color(white: 1.0).opacity(0.06)
-    static let rbBorderMid      = Color(white: 1.0).opacity(0.10)
-    static let rbDivider        = Color(white: 1.0).opacity(0.08)
-
-    // Text
-    static let rbTextPrimary    = Color.white
-    static let rbTextSecondary  = Color(white: 0.55)                   // #8C8C8E
-    static let rbTextTertiary   = Color(white: 0.39)                   // #636366
-
-    // Tinted row backgrounds (very faint, status-keyed)
-    static let rbBlueTint   = rbBlue.opacity(0.05)
-    static let rbGreenTint  = rbSuccess.opacity(0.05)
-    static let rbRedTint    = rbDanger.opacity(0.05)
-    static let rbOrangeTint = rbWarning.opacity(0.05)
-}
-
-// MARK: - Status helpers
-
-enum RBStatus {
-    case inProgress, success, failed, queued, unknown
-
-    var color: Color {
-        switch self {
-        case .inProgress: return .rbBlue
-        case .success:    return .rbSuccess
-        case .failed:     return .rbDanger
-        case .queued:     return .rbTextSecondary
-        case .unknown:    return .rbTextTertiary
-        }
+    /// Convenience initialiser for 6-digit hex strings ("#RRGGBB" or "RRGGBB").
+    init(hex: String) {
+        let raw = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        let scanner = Scanner(string: raw)
+        var value: UInt64 = 0
+        scanner.scanHexInt64(&value)
+        let r = Double((value >> 16) & 0xFF) / 255
+        let g = Double((value >>  8) & 0xFF) / 255
+        let b = Double( value        & 0xFF) / 255
+        self.init(red: r, green: g, blue: b)
     }
-
-    var tint: Color {
-        switch self {
-        case .inProgress: return .rbBlueTint
-        case .success:    return .rbGreenTint
-        case .failed:     return .rbRedTint
-        default:          return .clear
-        }
-    }
-
-    var sfSymbol: String {
-        switch self {
-        case .inProgress: return "arrow.trianglehead.2.clockwise"
-        case .success:    return "checkmark"
-        case .failed:     return "xmark"
-        case .queued:     return "clock"
-        case .unknown:    return "questionmark"
-        }
-    }
-}
-
-// MARK: - Spacing & Geometry Tokens
-
-enum RBSpacing {
-    static let xxs: CGFloat = 2
-    static let xs:  CGFloat = 4
-    static let sm:  CGFloat = 8
-    static let md:  CGFloat = 12
-    static let lg:  CGFloat = 16
-    static let xl:  CGFloat = 20
-    static let xxl: CGFloat = 28
-}
-
-enum RBRadius {
-    static let pill:   CGFloat = 20
-    static let card:   CGFloat = 8
-    static let small:  CGFloat = 5
-    static let badge:  CGFloat = 6
-    static let indicator: CGFloat = 2
-}
-
-enum RBShadow {
-    static let cardOpacity: Double = 0.35
-    static let cardRadius:  CGFloat = 12
-    static let cardY:       CGFloat = 4
-}
-
-// MARK: - Typography Tokens
-
-enum RBFont {
-    /// Monospaced caption — used for hashes, timestamps, step counts
-    static let mono:      Font = .system(.caption, design: .monospaced)
-    /// Monospaced small — used for runner CPU/MEM values
-    static let monoSmall: Font = .system(size: 11, weight: .regular, design: .monospaced)
-    /// Monospaced medium bold — runner names, commit titles
-    static let monoBold:  Font = .system(size: 13, weight: .semibold, design: .monospaced)
-    /// Standard label
-    static let label:     Font = .system(size: 13, weight: .medium)
-    /// Section label / header key
-    static let sectionKey: Font = .system(size: 12.5, weight: .regular)
 }
