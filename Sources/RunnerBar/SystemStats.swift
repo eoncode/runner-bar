@@ -23,15 +23,25 @@ struct SystemStats {
     /// Free disk space as a percentage of total.
     var diskFreePct: Double
 
+    // Fallback constants used when Mach/sysctlbyname calls fail.
+    private enum Defaults {
+        /// Default fallback RAM when hw.memsize is unavailable (GB).
+        static let fallbackMemGB: Double = 16
+        /// Default fallback disk size when volumeTotalCapacity is unavailable (GB).
+        static let fallbackDiskGB: Double = 460
+        /// 100 % free — safe worst-case assumption when disk query fails.
+        static let fullPct: Double = 100
+    }
+
     /// Safe default shown while the first sample is being computed.
     static let zero = SystemStats(
         cpuPct: 0,
         memUsedGB: 0,
-        memTotalGB: 16,
+        memTotalGB: Defaults.fallbackMemGB,
         diskUsedGB: 0,
-        diskTotalGB: 460,
-        diskFreeGB: 460,
-        diskFreePct: 100
+        diskTotalGB: Defaults.fallbackDiskGB,
+        diskFreeGB: Defaults.fallbackDiskGB,
+        diskFreePct: Defaults.fullPct
     )
 }
 
@@ -55,13 +65,13 @@ private struct DiskStats {
 
 // MARK: - SystemStatsViewModel
 
-/// ObservableObject that owns the 2-second polling loop for system metrics.
+/// ObservableObject that owns the polling loop for system metrics.
 ///
 /// Lifecycle: call `start()` from `.onAppear` and `stop()` from `.onDisappear`.
 ///
 /// ⚠️ PRE-WARM CONTRACT — DO NOT REMOVE:
 /// start() dispatches an immediate background sample so real values publish
-/// before the first 2-second timer tick.
+/// before the first timer tick.
 ///
 /// ❌ NEVER call sample() synchronously from start() on the main thread.
 /// ❌ NEVER remove the stop() pre-warm sample() call.
@@ -72,6 +82,16 @@ final class SystemStatsViewModel: ObservableObject {
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
+    /// How often (in seconds) the stats polling timer fires.
+    private let statsPollingInterval: TimeInterval = 2
+
+    // Fallback constants reused from SystemStats for MemoryStats / DiskStats guards.
+    private enum Defaults {
+        static let fallbackMemGB: Double = 16
+        static let fallbackDiskGB: Double = 460
+        static let fullPct: Double = 100
+    }
+
     init() {}
     deinit { timer?.invalidate() }
 
@@ -80,7 +100,10 @@ final class SystemStatsViewModel: ObservableObject {
     func start() {
         timer?.invalidate()
         DispatchQueue.global(qos: .utility).async { self.sample() }
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(
+            withTimeInterval: statsPollingInterval,
+            repeats: true
+        ) { [weak self] _ in
             DispatchQueue.global(qos: .utility).async { self?.sample() }
         }
     }
@@ -145,9 +168,11 @@ final class SystemStatsViewModel: ObservableObject {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
+        guard kernResult == KERN_SUCCESS else {
+            return MemoryStats(used: 0, total: Defaults.fallbackMemGB)
+        }
         let pageSize = Double(vm_kernel_page_size)
-        let gigabytes = 1024.0 * 1024.0 * 1024.0
+        let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
         let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
         var memSize: UInt64 = 0
         var memSizeLen = MemoryLayout<UInt64>.size
@@ -167,18 +192,25 @@ final class SystemStatsViewModel: ObservableObject {
     /// is removed is major major major.
     private func diskStats() -> DiskStats {
         let url = URL(fileURLWithPath: "/")
-        let gigabytes = 1024.0 * 1024.0 * 1024.0
+        let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
         guard let values = try? url.resourceValues(forKeys: [
             .volumeTotalCapacityKey,
             .volumeAvailableCapacityKey
         ]),
         let totalBytes = values.volumeTotalCapacity,
         let freeBytes = values.volumeAvailableCapacity
-        else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
+        else {
+            return DiskStats(
+                used: 0,
+                total: Defaults.fallbackDiskGB,
+                free: Defaults.fallbackDiskGB,
+                freePct: Defaults.fullPct
+            )
+        }
         let total = Double(totalBytes) / gigabytes
         let free = Double(freeBytes) / gigabytes
         let used = total - free
-        let freePct = total > 0 ? (free / total) * 100 : 100
+        let freePct = total > 0 ? (free / total) * 100 : Defaults.fullPct
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
 
