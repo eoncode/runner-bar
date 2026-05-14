@@ -10,6 +10,63 @@ import Foundation
 /// Fields are populated by `LocalRunnerScanner` and can later be enriched with
 /// live GitHub API status in Phase 4.
 struct RunnerModel: Identifiable, Hashable {
+    // MARK: - Config
+
+    /// All constructor inputs bundled into a single value type.
+    /// Keeps `RunnerModel.init` under the S107 7-parameter limit.
+    struct Config {
+        var runnerName: String
+        var gitHubUrl: String?
+        var agentId: Int?
+        var workFolder: String?
+        var labels: [String]
+        var installPath: String?
+        var isRunning: Bool
+        var githubStatus: String?
+        var isBusy: Bool
+
+        // MARK: Convenience factories
+
+        /// Builds a Config from a `.runner` JSON file parse result.
+        static func fromJSON(
+            runnerName: String,
+            gitHubUrl: String?,
+            agentId: Int?,
+            workFolder: String?,
+            installPath: String?
+        ) -> Config {
+            Config(
+                runnerName: runnerName,
+                gitHubUrl: gitHubUrl,
+                agentId: agentId,
+                workFolder: workFolder,
+                labels: [],
+                installPath: installPath,
+                isRunning: false,
+                githubStatus: nil,
+                isBusy: false
+            )
+        }
+
+        /// Builds a Config from a LaunchAgent plist filename parse result.
+        static func fromLaunchAgent(
+            runnerName: String,
+            gitHubUrl: String
+        ) -> Config {
+            Config(
+                runnerName: runnerName,
+                gitHubUrl: gitHubUrl,
+                agentId: nil,
+                workFolder: nil,
+                labels: [],
+                installPath: nil,
+                isRunning: false,
+                githubStatus: nil,
+                isBusy: false
+            )
+        }
+    }
+
     // MARK: Identity
 
     /// Stable, unique identifier computed once at init-time from `agentId`
@@ -73,30 +130,22 @@ struct RunnerModel: Identifiable, Hashable {
 
     // MARK: - Init
 
-    init(
-        runnerName: String,
-        gitHubUrl: String?,
-        agentId: Int?,
-        workFolder: String?,
-        labels: [String] = [],
-        installPath: String?,
-        isRunning: Bool,
-        githubStatus: String? = nil,
-        isBusy: Bool = false
-    ) {
-        self.runnerName = runnerName
-        self.gitHubUrl = gitHubUrl
-        self.agentId = agentId
-        self.workFolder = workFolder
-        self.labels = labels
-        self.installPath = installPath
-        self.isRunning = isRunning
-        self.githubStatus = githubStatus
-        self.isBusy = isBusy
-        if let aid = agentId {
-            self.id = String(aid)
+    /// Designated initialiser. Takes a `Config` to stay under the S107
+    /// 7-parameter limit while preserving all 9 stored fields.
+    init(_ config: Config) {
+        runnerName   = config.runnerName
+        gitHubUrl    = config.gitHubUrl
+        agentId      = config.agentId
+        workFolder   = config.workFolder
+        labels       = config.labels
+        installPath  = config.installPath
+        isRunning    = config.isRunning
+        githubStatus = config.githubStatus
+        isBusy       = config.isBusy
+        if let aid = config.agentId {
+            id = String(aid)
         } else {
-            self.id = "\(runnerName)-\(gitHubUrl ?? "")"
+            id = "\(config.runnerName)-\(config.gitHubUrl ?? "")"
         }
     }
 
