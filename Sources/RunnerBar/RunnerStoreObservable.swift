@@ -22,7 +22,9 @@ final class RunnerStoreObservable: ObservableObject {
     /// Mirrors `RunnerStore.shared.isRateLimited`.
     @Published private(set) var isRateLimited = false
 
-    init() {}
+    init() {
+        // No setup required — state is populated via reload().
+    }
 
     /// Pulls the current state from `RunnerStore.shared` with no animation
     /// (see REGRESSION GUARD in PopoverMainView — NEVER add animation here).
