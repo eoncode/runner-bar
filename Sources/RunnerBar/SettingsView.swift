@@ -420,7 +420,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
-            // ── Polling interval ───────────────────────────────────────────────
+            // ── Polling interval ─────────────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -500,9 +500,9 @@ struct SettingsView: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
             Divider().padding(.leading, 12)
-            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar") // NOSONAR S1075 — user-facing navigation URL
+            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar") // NOSONAR — user-navigation URL
             Divider().padding(.leading, 12)
-            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar") // NOSONAR S1075 — user-facing navigation URL
+            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar") // NOSONAR — user-navigation URL
 #endif
         }
     }
@@ -547,8 +547,8 @@ struct SettingsView: View {
         newScope = ""
     }
 
-    /// Returns the dot colour for an API-registered `Runner` row.
-    /// Flattened from a nested ternary to a guard+return for readability (S3358).
+    /// Returns the status-dot colour for an API-registered runner.
+    /// Reads linearly: offline → gray; busy → yellow; online → green.
     private func runnerDotColor(for runner: Runner) -> Color {
         guard runner.status == "online" else { return .gray }
         return runner.busy ? .yellow : .green
@@ -569,7 +569,7 @@ struct SettingsView: View {
     }
 
     private func signInWithGitHub() {
-        // NOSONAR S1075 — user-facing docs URL, not a configurable system path
+        // NOSONAR — user-navigation URL, not a hard-coded URI resource
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
@@ -583,12 +583,10 @@ struct SettingsView: View {
     /// ❌ NEVER run shell calls on the main thread — they block the UI.
     private func signOutOfGitHub() {
         guard !isSigningOut else { return }
+        guard let ghPath = ghBinaryPath() else { return }
         isSigningOut = true
         DispatchQueue.global(qos: .userInitiated).async {
-            // ghBinaryPath() avoids a hard-coded /opt/homebrew/bin/gh path (S1075).
-            if let ghPath = ghBinaryPath() {
-                _ = shell("\(ghPath) auth logout --hostname github.com")
-            }
+            _ = shell("\(ghPath) auth logout --hostname github.com")
             DispatchQueue.main.async {
                 isAuthenticated = (githubToken() != nil)
                 isSigningOut = false

@@ -218,8 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - App lifecycle
 
-    // `_` suppresses the S1172 unused-parameter warning: the Notification value
-    // is not needed; only the callback timing matters.
+    /// S1172: `notification` is not used — renamed to `_`.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
