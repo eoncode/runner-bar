@@ -14,9 +14,9 @@ struct RunnerLifecycleService {
 
     /// The shared `RunnerLifecycleService` instance used throughout the app.
     static let shared = RunnerLifecycleService()
-    private init() {
-        // Singleton — use RunnerLifecycleService.shared.
-    }
+
+    /// Use `RunnerLifecycleService.shared`.
+    private init() {}
 
     // MARK: - launchctl label helper
 
@@ -128,7 +128,14 @@ struct RunnerLifecycleService {
 
     // MARK: - Remove
 
-    /// Uninstalls and de-registers the runner.
+    /// Uninstalls and de-registers the runner from GitHub.
+    ///
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// Requires a GitHub token (gh auth login, GH_TOKEN, or GITHUB_TOKEN).
+    ///
+    /// Priority: GitHub de-registration (`config.sh remove`) is always attempted
+    /// even if the local service uninstall (`svc.sh uninstall`) fails, so the
+    /// runner does not remain in a half-registered state on GitHub.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         guard let path = runner.installPath else {
@@ -196,10 +203,13 @@ struct RunnerLifecycleService {
 
     // MARK: - Rename
 
-    // Phase 2 (#253) — expose rename() publicly once the SettingsView
-    // runner-rename UI is wired up. Requires re-reading customLabels from
-    // RunnerJSON in LocalRunnerScanner after write so RunnerModel.labels reflects
-    // the new name on the next scan cycle.
+    /// Writes a new `runnerName` into the runner's `.runner` JSON file.
+    ///
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// ⚠️ Phase 2 (#253) — intentionally private. Do NOT expose via UI until
+    /// the SettingsView rename flow is wired up and `LocalRunnerScanner` re-reads
+    /// `customLabels` from RunnerJSON so `RunnerModel.labels` reflects the new
+    /// name on the next scan cycle.
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
@@ -247,6 +257,8 @@ struct RunnerLifecycleService {
     // MARK: - Update config (labels / workFolder)
 
     /// Writes updated labels and workFolder to the `.runner` JSON at `installPath`.
+    ///
+    /// ⚠️ Blocking — must only be called from a background thread.
     ///
     /// Note: the runner agent caches config in memory — changes take effect after
     /// the next runner restart.
