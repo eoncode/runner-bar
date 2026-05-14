@@ -86,8 +86,11 @@ struct RunnerStatusEnricher {
                     log("RunnerStatusEnricher › API call failed for scope: \(scope) page: \(page)")
                     break
                 }
-                guard let decoded = try? JSONDecoder().decode(APIRunnersPage.self, from: data) else {
-                    log("RunnerStatusEnricher › decode failed for scope: \(scope) page: \(page)")
+                let decoded: APIRunnersPage
+                do {
+                    decoded = try JSONDecoder().decode(APIRunnersPage.self, from: data)
+                } catch {
+                    log("RunnerStatusEnricher › decode failed for scope: \(scope) page: \(page) error: \(error)")
                     break
                 }
                 let pageRunners = decoded.runners
