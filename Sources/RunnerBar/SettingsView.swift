@@ -232,9 +232,9 @@ struct SettingsView: View {
 
             if let errMsg = removeErrorMessage {
                 Text(errMsg)
-                    .font(.caption).foregroundColor(.red)
+                    .font(.caption).foregroundColor(.rbDanger)
                     .padding(.horizontal, 12).padding(.vertical, 4)
-                    .background(Color.red.opacity(0.07))
+                    .background(Color.rbDanger.opacity(0.07))
             }
 
             if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
@@ -256,7 +256,7 @@ struct SettingsView: View {
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(runner.runnerName)
-                    .font(.system(size: 13)).lineLimit(1)
+                    .font(RBFont.mono).lineLimit(1)
                 if let url = runner.gitHubUrl {
                     Text(url)
                         .font(.caption2).foregroundColor(.secondary).lineLimit(1)
@@ -291,7 +291,7 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .help("Configure runner")
             Button(action: { runnerPendingRemoval = runner }, label: {
-                Image(systemName: "minus.circle").font(.caption2).foregroundColor(.red)
+                Image(systemName: "minus.circle").font(.caption2).foregroundColor(.rbDanger)
             })
             .buttonStyle(.plain)
             .help("Remove runner")
@@ -306,12 +306,13 @@ struct SettingsView: View {
         }
     }
 
+    /// Local runner status dot — Phase 7: uses DesignTokens instead of raw system colors.
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
-        case .running: return .green
-        case .busy: return .yellow
-        case .idle: return .gray
-        case .offline: return .red
+        case .running: return .rbSuccess
+        case .busy:    return .rbBlue
+        case .idle:    return .secondary
+        case .offline: return .rbDanger
         }
     }
 
@@ -326,7 +327,7 @@ struct SettingsView: View {
                 ForEach(store.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
-                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
+                        Text(runner.name).font(RBFont.mono).lineLimit(1)
                         Spacer()
                         Text(runner.displayStatus)
                             .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
@@ -348,7 +349,7 @@ struct SettingsView: View {
                         ScopeStore.shared.remove(scopeStr)
                         RunnerStore.shared.start()
                     }, label: {
-                        Image(systemName: "minus.circle").foregroundColor(.red)
+                        Image(systemName: "minus.circle").foregroundColor(.rbDanger)
                     }).buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 2)
@@ -407,7 +408,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // ── Show offline runners ──────────────────────────────────────
+            // ── Show offline runners ───────────────────────────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -420,7 +421,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
-            // ── Polling interval ─────────────────────────────────────────
+            // ── Polling interval ────────────────────────────────────────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -459,13 +460,15 @@ struct SettingsView: View {
                 if isAuthenticated {
                     HStack(spacing: 8) {
                         HStack(spacing: 4) {
-                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            // Phase 7: use rbSuccess instead of .green
+                            Circle().fill(Color.rbSuccess).frame(width: 8, height: 8)
                             Text("Authenticated").font(.caption).foregroundColor(.secondary)
                         }
                         Button(action: signOutOfGitHub) {
                             Text("Sign out")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                // Phase 7: use rbDanger instead of .red
+                                .foregroundColor(.rbDanger)
                         }
                         .buttonStyle(.plain)
                         .disabled(isSigningOut)
@@ -473,7 +476,8 @@ struct SettingsView: View {
                     }
                 } else {
                     Button(action: signInWithGitHub, label: {
-                        Text("Sign in").font(.caption).foregroundColor(.orange)
+                        // Phase 7: use rbWarning instead of .orange
+                        Text("Sign in").font(.caption).foregroundColor(.rbWarning)
                     }).buttonStyle(.plain)
                 }
             }
@@ -547,8 +551,10 @@ struct SettingsView: View {
         newScope = ""
     }
 
+    /// API runner status dot — Phase 7: uses DesignTokens instead of raw system colors.
     private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+        if runner.status != "online" { return .secondary }
+        return runner.busy ? .rbBlue : .rbSuccess
     }
 
     private func linkRow(label: String, url: String) -> some View {
