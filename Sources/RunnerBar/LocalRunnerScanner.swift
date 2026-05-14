@@ -128,9 +128,20 @@ struct LocalRunnerScanner {
             .filter { !$0.isEmpty }
             .compactMap { path -> RunnerModel? in
                 let url = URL(fileURLWithPath: path)
-                guard let data = try? Data(contentsOf: url),
-                      let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
-                else { return nil }
+                let data: Data
+                do {
+                    data = try Data(contentsOf: url)
+                } catch {
+                    log("LocalRunnerScanner › failed to read \(path): \(error)")
+                    return nil
+                }
+                let json: RunnerJSON
+                do {
+                    json = try JSONDecoder().decode(RunnerJSON.self, from: data)
+                } catch {
+                    log("LocalRunnerScanner › failed to decode \(path): \(error)")
+                    return nil
+                }
                 let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
                 return RunnerModel(
                     runnerName: name,

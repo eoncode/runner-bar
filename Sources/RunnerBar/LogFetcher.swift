@@ -105,6 +105,7 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         try fileManager.createDirectory(at: tmp, withIntermediateDirectories: true)
         try zipData.write(to: zipFile)
     } catch {
+        log("unzipLogs › failed to write ZIP to tmp: \(error)")
         return []
     }
     let proc = Process()
@@ -112,7 +113,12 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
     proc.standardOutput = FileHandle.nullDevice
     proc.standardError = FileHandle.nullDevice
-    try? proc.run()
+    do {
+        try proc.run()
+    } catch {
+        log("unzipLogs › failed to launch /usr/bin/unzip: \(error)")
+        return []
+    }
     proc.waitUntilExit()
     guard proc.terminationStatus == 0 else { return [] }
     guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else {
@@ -122,8 +128,11 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     for case let url as URL in enumerator where url.pathExtension == "txt" {
         let relative = url.path.replacingOccurrences(of: tmp.path + "/", with: "")
         let name = URL(fileURLWithPath: relative).deletingPathExtension().path
-        if let text = try? String(contentsOf: url, encoding: .utf8) {
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
             results.append((name: name, text: text))
+        } catch {
+            log("unzipLogs › failed to read \(url.lastPathComponent): \(error)")
         }
     }
     return results
