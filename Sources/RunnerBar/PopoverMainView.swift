@@ -92,7 +92,10 @@ struct PopoverMainView: View {
                 stats: systemStats.stats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
-                onSignIn: signInWithGitHub
+                onSignIn: signInWithGitHub,
+                cpuHistory:  systemStats.cpuHistory,
+                memHistory:  systemStats.memHistory,
+                diskHistory: systemStats.diskHistory
             )
             .onAppear { systemStats.start() }
             Divider()
