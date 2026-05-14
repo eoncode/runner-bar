@@ -41,12 +41,6 @@ struct RunnerLifecycleService {
     /// Looks up the exact launchd label for this runner by running
     /// `launchctl list` via Process (no shell, no grep) and filtering
     /// the output lines in Swift.
-    ///
-    /// Uses `hasSuffix("." + runnerName)` rather than `contains(runnerName)`
-    /// to prevent a runner named "ci-runner" from matching
-    /// "actions.runner.org.repo.ci-runner-backup" or similar.
-    ///
-    /// Falls back to the derived `serviceLabel(for:)` if no match is found.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: BinaryPaths.launchctl)
@@ -62,8 +56,10 @@ struct RunnerLifecycleService {
         DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutItem)
         task.waitUntilExit()
         timeoutItem.cancel()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
+        let output = String(
+            data: pipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
         let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
@@ -78,7 +74,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Start
 
-    /// Starts the runner's launchd service.
+    /// Starts the runner’s launchd service.
     /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
@@ -91,7 +87,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Stops the runner's launchd service.
+    /// Stops the runner’s launchd service.
     /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
@@ -122,7 +118,10 @@ struct RunnerLifecycleService {
         DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: timeoutItem)
         task.waitUntilExit()
         timeoutItem.cancel()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let output = String(
+            data: pipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
         log("RunnerLifecycle › launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus == 0
     }
@@ -155,6 +154,7 @@ struct RunnerLifecycleService {
     }
 
     /// Launches `<workingDirectory>/<executableName>` via `Process.arguments`.
+    /// Blocking — always call from a background thread.
     private func runScript(
         executableName: String,
         arguments: [String],
@@ -194,7 +194,7 @@ struct RunnerLifecycleService {
         return task.terminationStatus == 0
     }
 
-    // MARK: - Rename
+    // MARK: - Rename (Phase 2 — incomplete, private)
 
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
@@ -202,11 +202,12 @@ struct RunnerLifecycleService {
             log("RunnerLifecycle › rename: no installPath for \(runner.runnerName)")
             return false
         }
-        let jsonURL = URL(fileURLWithPath: path).appendingPathComponent(".runner")
-        guard let data = try? Data(contentsOf: jsonURL),
+        let jsonPath = "\(path)/.runner"
+        let url = URL(fileURLWithPath: jsonPath)
+        guard let data = try? Data(contentsOf: url),
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonURL.path)")
+            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonPath)")
             return false
         }
         json["runnerName"] = newName
@@ -216,7 +217,7 @@ struct RunnerLifecycleService {
             return false
         }
         do {
-            try updated.write(to: jsonURL)
+            try updated.write(to: url)
             log("RunnerLifecycle › rename: \(runner.runnerName) → \(newName)")
             return true
         } catch {
@@ -232,20 +233,21 @@ struct RunnerLifecycleService {
     /// Note: the runner agent caches config in memory — changes take effect after
     /// the next runner restart.
     ///
-    /// Follow-up: add `customLabels` to `RunnerJSON` in `LocalRunnerScanner` so
-    /// labels written here are re-read on the next scan and reflected in
-    /// `RunnerModel.labels`. Tracked in issue #253.
+    /// Phase 2 follow-up (#253): add `customLabels` to `RunnerJSON` in
+    /// `LocalRunnerScanner` so labels written here are re-read on the next scan
+    /// and reflected in `RunnerModel.labels`.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
             log("RunnerLifecycle › updateConfig: no installPath for \(runner.runnerName)")
             return false
         }
-        let jsonURL = URL(fileURLWithPath: path).appendingPathComponent(".runner")
-        guard let data = try? Data(contentsOf: jsonURL),
+        let jsonPath = "\(path)/.runner"
+        let url = URL(fileURLWithPath: jsonPath)
+        guard let data = try? Data(contentsOf: url),
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonURL.path)")
+            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonPath)")
             return false
         }
         json["workFolder"] = workFolder
@@ -253,7 +255,7 @@ struct RunnerLifecycleService {
         guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
         else { return false }
         do {
-            try updated.write(to: jsonURL)
+            try updated.write(to: url)
             log("RunnerLifecycle › updateConfig: labels=\(labels) workFolder=\(workFolder)")
             return true
         } catch {

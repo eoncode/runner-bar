@@ -3,12 +3,13 @@ import Foundation
 // MARK: - BinaryPaths
 
 /// Centralised constants for system binary paths used throughout the app.
-/// Avoids S1075 (URI hard-coded) violations and makes path changes a single-point edit.
+/// Avoids hard-coded URI literals (SonarCloud S1075) and makes path
+/// changes easy to find.
 enum BinaryPaths {
-    /// The zsh shell binary — used by `shell()` to execute commands.
+    /// The system zsh shell, used by `shell()` to run arbitrary commands.
     static let zsh = "/bin/zsh"
-    /// The launchctl binary — used by `RunnerLifecycleService` for service control.
+    /// The launchd control CLI, used by `RunnerLifecycleService`.
     static let launchctl = "/bin/launchctl"
-    /// The unzip binary — used by `LogFetcher.unzipLogs` to extract run log ZIPs.
+    /// The system unzip binary, always available on macOS, used by `unzipLogs`.
     static let unzip = "/usr/bin/unzip"
 }

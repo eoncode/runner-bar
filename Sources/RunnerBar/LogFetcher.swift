@@ -96,6 +96,7 @@ func fetchActionLogs(group: ActionGroup) -> String? {
 // MARK: - ZIP extraction
 
 /// Extracts all `.txt` files from a ZIP blob and returns `(name, text)` pairs.
+/// Uses `BinaryPaths.unzip` (/usr/bin/unzip) which is always available on macOS.
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     let fileManager = FileManager.default
     let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
