@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️ NSPANEL SIZING GUARD — READ THIS BEFORE ANY EDIT ⚠️⚠️⚠️
 // ════════════════════════════════════════════════════════════════════════════════
@@ -8,29 +7,28 @@ import SwiftUI
 // ARCHITECTURE: NSPanel (NOT NSPopover). Width is dynamic.
 //
 // ROOT FRAME RULE:
-//   .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-//   • idealWidth: 720 — hints SwiftUI's initial natural width measurement.
-//   • NO maxHeight on the root frame.
+// .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
+// • idealWidth: 720 — hints SwiftUI's initial natural width measurement.
+// • NO maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
-//   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-//   ❌ NEVER remove this modifier from the ScrollView.
-//   ❌ NEVER use a fixed constant.
+// .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+// ❌ NEVER remove this modifier from the ScrollView.
+// ❌ NEVER use a fixed constant.
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
-//   idealWidth bumped 480 → 560 to accommodate step timing columns.
-//   idealWidth bumped 560 → 720 to accommodate action cluster width.
-//   Step number badge (#N) added to step rows (step.id is 1-based and comes from
-//     the GitHub API step number field, not from a local enumerated index).
-//   Pressable repo / branch / SHA-origin labels added to header metadata row.
-//   Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
-//   ReRunFailedButton added after ReRunButton.
-//   Step number zero-padded to #01…#99 for equal-width alignment.
-//   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
-//     timing+metadata chips on row 2 — eliminates empty right-side dead space.
+// idealWidth bumped 480 → 560 to accommodate step timing columns.
+// idealWidth bumped 560 → 720 to accommodate action cluster width.
+// Step number badge (#N) added to step rows.
+// Pressable repo / branch / SHA-origin labels added to header metadata row.
+// Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
+// ReRunFailedButton added after ReRunButton.
+// Step number zero-padded to #01…#99 for equal-width alignment.
+// Header collapsed from 4 rows to 2 rows.
+// Phase 5: DesignToken colour sweep — .yellow/.green/.red → rbWarning/rbSuccess/rbDanger;
+//          step rows wrapped in card-style RoundedRectangle.
 // ════════════════════════════════════════════════════════════════════════════════
-
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 // Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
 // swiftlint:disable:next type_body_length
@@ -56,24 +54,21 @@ struct JobDetailView: View {
                         Image(systemName: "chevron.left").font(.caption)
                         Text("Jobs").font(.caption)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
-
                 // Job title — flex, truncates when the panel is very narrow
                 Text(job.name)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
-
                 Spacer(minLength: 8)
-
-                // ── Action cluster ──────────────────────────────────────────────────────
+                // ── Action cluster ───────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
-                        let jobID    = job.id
+                        let jobID = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         if scopeStr.isEmpty {
                             log(
@@ -89,11 +84,10 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status == "in_progress" || job.status == "queued"
                 )
-
                 ReRunFailedButton(
                     action: { completion in
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        let runID    = runIDFromHtmlUrl(job.htmlUrl)
+                        let runID = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
                             log(
                                 "ReRunFailedButton › could not derive scope/runID from htmlUrl: "
@@ -108,15 +102,13 @@ struct JobDetailView: View {
                             )
                         }
                     },
-                    isDisabled: job.status == "in_progress"
-                        || job.status == "queued"
+                    isDisabled: job.status == "in_progress" || job.status == "queued"
                         || (job.conclusion != "failure" && job.conclusion != "cancelled")
                 )
-
                 CancelButton(
                     action: { completion in
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        let runID    = runIDFromHtmlUrl(job.htmlUrl)
+                        let runID = runIDFromHtmlUrl(job.htmlUrl)
                         guard scopeStr.contains("/"), let runID else {
                             log(
                                 "CancelButton › could not derive scope/runID from htmlUrl: "
@@ -131,7 +123,6 @@ struct JobDetailView: View {
                     },
                     isDisabled: job.status != "in_progress" && job.status != "queued"
                 )
-
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
                     Button(
                         action: { NSWorkspace.shared.open(url) },
@@ -140,17 +131,16 @@ struct JobDetailView: View {
                                 Image(systemName: "safari").font(.caption)
                                 Text("GitHub").font(.caption)
                             }
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.rbTextSecondary)
                             .fixedSize()
                         }
                     )
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
-
                 LogCopyButton(
                     fetch: { completion in
-                        let jobID    = job.id
+                        let jobID = job.id
                         let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
                         DispatchQueue.global(qos: .userInitiated).async {
                             completion(fetchJobLog(jobID: jobID, scope: scopeStr))
@@ -159,7 +149,7 @@ struct JobDetailView: View {
                     isDisabled: false
                 )
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, RBSpacing.md)
             .padding(.top, 10)
             .padding(.bottom, 3)
 
@@ -168,20 +158,20 @@ struct JobDetailView: View {
             // Elapsed lives here and ONLY here.
             // ❌ NEVER move elapsed back to row 1.
             infoBar
-                .padding(.horizontal, 12)
+                .padding(.horizontal, RBSpacing.md)
                 .padding(.bottom, 8)
 
             Divider()
 
-            // ── Steps list ───────────────────────────────────────────────────────────────────────
+            // ── Steps list ──────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: RBSpacing.xxs) {
                     if job.steps.isEmpty {
                         Text("No step data available")
                             .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
+                            .foregroundColor(Color.rbTextSecondary)
+                            .padding(.horizontal, RBSpacing.md)
                             .padding(.vertical, 8)
                     } else {
                         ForEach(job.steps) { step in
@@ -193,6 +183,8 @@ struct JobDetailView: View {
                         }
                     }
                 }
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, RBSpacing.xs)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // ❌ NEVER remove this modifier.
@@ -224,32 +216,32 @@ struct JobDetailView: View {
             if let start = job.startedAt {
                 Image(systemName: "clock")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                 Text(wallTime(start))
                     .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                 Image(systemName: "arrow.right")
                     .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                 if let end = job.completedAt {
                     Text(wallTime(end))
                         .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.rbTextSecondary)
                 } else {
                     Text("running")
                         .font(.caption)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(Color.rbWarning)
                 }
                 Text("·")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
                     .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                 // Separator before metadata chips
                 Text("·")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                     .padding(.horizontal, 1)
             }
             // Metadata chips — repo, branch, origin
@@ -259,8 +251,8 @@ struct JobDetailView: View {
             }
             if let branch = group.headBranch,
                let branchURL = URL(
-                    string: "https://github.com/\(group.repo)/tree/"
-                        + (branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)
+                string: "https://github.com/\(group.repo)/tree/"
+                    + (branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)
                ) {
                 metadataChip(
                     icon: "arrow.triangle.branch",
@@ -273,7 +265,7 @@ struct JobDetailView: View {
                 let lbl = group.label
                 if lbl.hasPrefix("#"),
                    let num = lbl.dropFirst()
-                        .components(separatedBy: CharacterSet.decimalDigits.inverted).first,
+                    .components(separatedBy: CharacterSet.decimalDigits.inverted).first,
                    !num.isEmpty {
                     return URL(string: "https://github.com/\(group.repo)/pull/\(num)")
                 } else {
@@ -286,9 +278,7 @@ struct JobDetailView: View {
                     icon: isPR ? "arrow.triangle.pull" : "chevron.left.forwardslash.chevron.right",
                     label: group.label,
                     url: url,
-                    tooltip: isPR
-                        ? "Pull request \(group.label)"
-                        : "Commit \(group.headSha.prefix(7))"
+                    tooltip: isPR ? "Pull request \(group.label)" : "Commit \(group.headSha.prefix(7))"
                 )
             }
             Spacer(minLength: 0)
@@ -307,7 +297,7 @@ struct JobDetailView: View {
                         .font(.caption)
                         .lineLimit(1)
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.rbTextSecondary)
                 .fixedSize()
             }
         )
@@ -323,15 +313,15 @@ struct JobDetailView: View {
             // Step number badge — zero-padded (#01…#99).
             Text(String(format: "#%02d", step.id))
                 .font(.caption2.monospacedDigit())
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.rbTextTertiary)
                 .fixedSize(horizontal: true, vertical: false)
             Text(step.conclusionIcon)
                 .font(.system(size: 11))
                 .foregroundColor(stepColor(step))
                 .frame(width: 14, alignment: .center)
             Text(step.name)
-                .font(.system(size: 12))
-                .foregroundColor(step.status == "queued" ? .secondary : .primary)
+                .font(RBFont.body)
+                .foregroundColor(step.status == "queued" ? Color.rbTextSecondary : Color.rbTextPrimary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
@@ -340,33 +330,41 @@ struct JobDetailView: View {
                 HStack(spacing: 3) {
                     Text(wallTime(start))
                         .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.rbTextSecondary)
                     Text("→")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.rbTextSecondary)
                     if let end = step.completedAt {
                         Text(wallTime(end))
                             .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.rbTextSecondary)
                     } else {
                         Text("now")
                             .font(.caption)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(Color.rbWarning)
                     }
                 }
                 .fixedSize()
             }
             Text(step.elapsed)
                 .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.rbTextSecondary)
                 .fixedSize()
                 .frame(width: 40, alignment: .trailing)
             Image(systemName: "chevron.right")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.rbTextTertiary)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, RBSpacing.sm)
         .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.small)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.small)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        )
         .contentShape(Rectangle())
     }
 
@@ -375,9 +373,9 @@ struct JobDetailView: View {
 
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
-        case "success": return .green
-        case "failure": return .red
-        default: return step.status == "in_progress" ? .yellow : .secondary
+        case "success": return Color.rbSuccess
+        case "failure": return Color.rbDanger
+        default: return step.status == "in_progress" ? Color.rbWarning : Color.rbTextSecondary
         }
     }
 }
