@@ -244,6 +244,7 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
+/// Displays busy local runners as elevated bordered cards with CPU/MEM pill badges.
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
@@ -256,26 +257,101 @@ struct PopoverLocalRunnerRow: View {
 
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
-        ForEach(busy.prefix(3)) { runner in
-            HStack(spacing: 8) {
-                Circle().fill(Color.yellow).frame(width: 8, height: 8)
-                Text(runner.name)
-                    .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
-                Spacer()
-                if let metrics = runner.metrics {
-                    Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
+        VStack(spacing: 4) {
+            ForEach(busy.prefix(3)) { runner in
+                RunnerCardRow(runner: runner)
             }
-            .padding(.horizontal, 12).padding(.vertical, 3)
+            if busy.count > 3 {
+                Text("+ \(busy.count - 3) more…")
+                    .font(.caption2).foregroundColor(.secondary)
+                    .padding(.horizontal, DesignTokens.Layout.panelHPad)
+                    .padding(.vertical, 2)
+            }
         }
-        if busy.count > 3 {
-            Text("+ \(busy.count - 3) more…")
-                .font(.caption2).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 2)
-        }
+        .padding(.horizontal, DesignTokens.Layout.sectionInset)
+        .padding(.vertical, 6)
         Divider()
+    }
+}
+
+// MARK: - RunnerCardRow
+/// A single busy runner displayed as a bordered, elevated card.
+/// Layout: status dot | runner name (mono) | spacer | CPU pill | MEM pill | chevron
+struct RunnerCardRow: View {
+    let runner: Runner
+
+    var body: some View {
+        HStack(spacing: DesignTokens.Layout.runnerRowGap) {
+            // Status dot — yellow = busy/active
+            Circle()
+                .fill(Color.yellow)
+                .frame(width: 8, height: 8)
+                .shadow(color: Color.yellow.opacity(0.6), radius: 3)
+
+            // Runner name
+            Text(runner.name)
+                .font(DesignTokens.Font.monoBody)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+
+            Spacer()
+
+            // CPU + MEM pill badges
+            if let metrics = runner.metrics {
+                MetricPill(label: "CPU", value: String(format: "%.1f%%", metrics.cpu))
+                MetricPill(label: "MEM", value: String(format: "%.1f%%", metrics.mem))
+            } else {
+                MetricPill(label: "CPU", value: "—")
+                MetricPill(label: "MEM", value: "—")
+            }
+
+            // Drill-down chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(DesignTokens.Color.labelTertiary)
+        }
+        .padding(.horizontal, DesignTokens.Layout.rowHPad)
+        .padding(.vertical, DesignTokens.Layout.rowVPad)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius)
+                .fill(Color.primary.opacity(0.03))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius)
+                        .strokeBorder(DesignTokens.Color.cardBorder, lineWidth: DesignTokens.Layout.cardBorderWidth)
+                )
+        )
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - MetricPill
+/// A small pill badge showing a label + value, used for CPU and MEM on runner cards.
+struct MetricPill: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
+            Text(value)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(.primary.opacity(0.75))
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(DesignTokens.Color.pillBg)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(DesignTokens.Color.pillBorder, lineWidth: 0.75)
+                )
+        )
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
