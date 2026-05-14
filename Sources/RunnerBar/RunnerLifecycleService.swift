@@ -196,7 +196,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Rename
 
-    // TODO: Phase 2 (#253) — expose rename() publicly once the SettingsView
+    // Phase 2 (#253) — expose rename() publicly once the SettingsView
     // runner-rename UI is wired up. Requires re-reading customLabels from
     // RunnerJSON in LocalRunnerScanner after write so RunnerModel.labels reflects
     // the new name on the next scan cycle.
@@ -208,16 +208,30 @@ struct RunnerLifecycleService {
         }
         let jsonPath = "\(path)/.runner"
         let url = URL(fileURLWithPath: jsonPath)
-        guard let data = try? Data(contentsOf: url),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonPath)")
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonPath): \(error)")
+            return false
+        }
+        var json: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                log("RunnerLifecycle › rename: unexpected JSON structure at \(jsonPath)")
+                return false
+            }
+            json = decoded
+        } catch {
+            log("RunnerLifecycle › rename: failed to decode .runner JSON at \(jsonPath): \(error)")
             return false
         }
         json["runnerName"] = newName
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-        else {
-            log("RunnerLifecycle › rename: failed to serialise updated JSON")
+        let updated: Data
+        do {
+            updated = try JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
+        } catch {
+            log("RunnerLifecycle › rename: failed to serialise updated JSON: \(error)")
             return false
         }
         do {
@@ -248,16 +262,33 @@ struct RunnerLifecycleService {
         }
         let jsonPath = "\(path)/.runner"
         let url = URL(fileURLWithPath: jsonPath)
-        guard let data = try? Data(contentsOf: url),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonPath)")
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonPath): \(error)")
+            return false
+        }
+        var json: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                log("RunnerLifecycle › updateConfig: unexpected JSON structure at \(jsonPath)")
+                return false
+            }
+            json = decoded
+        } catch {
+            log("RunnerLifecycle › updateConfig: failed to decode .runner at \(jsonPath): \(error)")
             return false
         }
         json["workFolder"] = workFolder
         json["customLabels"] = labels
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-        else { return false }
+        let updated: Data
+        do {
+            updated = try JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
+        } catch {
+            log("RunnerLifecycle › updateConfig: failed to serialise JSON: \(error)")
+            return false
+        }
         do {
             try updated.write(to: url)
             log("RunnerLifecycle › updateConfig: labels=\(labels) workFolder=\(workFolder)")
