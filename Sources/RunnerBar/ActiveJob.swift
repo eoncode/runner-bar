@@ -24,11 +24,19 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     let isDimmed: Bool
     /// Ordered list of steps within this job.
     let steps: [JobStep]
+    /// Name of the runner that picked up this job.
+    /// `nil` when the job is still queued and hasn't been assigned yet.
+    /// Used to determine local vs cloud icon on action rows.
+    let runnerName: String?
 
-    /// Human-readable elapsed time string.
-    /// Queued jobs always show "00:00".
-    /// Completed jobs return "--:--" when timestamps are unavailable.
-    /// Live jobs fall back to createdAt while startedAt may not yet be set.
+    /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
+    ///
+    /// - Queued jobs always return `"00:00"` (no time has elapsed yet).
+    /// - Completed jobs return `"--:--"` when both `startedAt` and `completedAt`
+    ///   are unavailable, otherwise the fixed duration.
+    /// - Live (`in_progress`) jobs use `startedAt` if available, falling back to
+    ///   `createdAt` while the runner assignment is still pending, and measures
+    ///   up to `Date()` (wall clock).
     var elapsed: String {
         guard status != "queued" else { return "00:00" }
         if conclusion != nil {
@@ -36,7 +44,9 @@ struct ActiveJob: Identifiable, Codable, Equatable {
             let secs = Int(end.timeIntervalSince(start))
             guard secs >= 0 else { return "--:--" }
             // swiftlint:disable:next identifier_name
-            let m = secs / 60; let s = secs % 60
+            let m = secs / 60
+            // swiftlint:disable:next identifier_name
+            let s = secs % 60
             return String(format: "%02d:%02d", m, s)
         }
         guard let start = startedAt ?? createdAt else { return "00:00" }
@@ -44,8 +54,41 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
         // swiftlint:disable:next identifier_name
-        let m = secs / 60; let s = secs % 60
+        let m = secs / 60
+        // swiftlint:disable:next identifier_name
+        let s = secs % 60
         return String(format: "%02d:%02d", m, s)
+    }
+
+    /// `true` if this job ran (or is running) on a self-hosted local runner.
+    /// Detection: runnerName is non-nil and does not match any GitHub-hosted
+    /// name prefix. Returns `nil` when runnerName is unknown (job still queued).
+    var isLocalRunner: Bool? {
+        guard let name = runnerName else { return nil }
+        let lower = name.lowercased()
+        let githubPrefixes = [
+            "github actions ",
+            "ubuntu-",
+            "macos-",
+            "windows-",
+            "buildjet-",
+            "depot-",
+        ]
+        let isHosted = githubPrefixes.contains { lower.hasPrefix($0) }
+        return !isHosted
+    }
+
+    // MARK: Codable
+    // runnerName must appear in CodingKeys so Codable synthesis includes it.
+    enum CodingKeys: String, CodingKey {
+        case id, name, status, conclusion
+        case startedAt = "started_at"
+        case createdAt = "created_at"
+        case completedAt = "completed_at"
+        case htmlUrl = "html_url"
+        case isDimmed
+        case steps
+        case runnerName = "runner_name"
     }
 }
 
@@ -69,22 +112,30 @@ struct JobStep: Identifiable, Codable, Equatable {
     /// SF Symbol or emoji icon representing the step's conclusion.
     var conclusionIcon: String {
         switch conclusion {
-        case "success": return "✓"
-        case "failure": return "✗"
-        case "skipped": return "⊘"
-        case "cancelled": return "⊘"
-        default: return status == "in_progress" ? "▶" : "·"
+        case "success": return "\u{2713}"
+        case "failure": return "\u{2797}"
+        case "skipped": return "\u{2298}"
+        case "cancelled": return "\u{2298}"
+        default: return status == "in_progress" ? "\u{25B6}" : "\u{00B7}"
         }
     }
 
-    /// Human-readable elapsed time for this step.
+    /// Human-readable elapsed wall-clock string for this step in `MM:SS` format.
+    ///
+    /// - Uses `startedAt` as the start anchor, falling back to `Date()` when nil
+    ///   (step hasn't started yet — this should not normally occur).
+    /// - Uses `completedAt` as the end anchor for finished steps, falling back
+    ///   to `Date()` for live steps to show a running clock.
+    /// - Returns `"00:00"` when the computed interval is negative (clock skew guard).
     var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
         // swiftlint:disable:next identifier_name
-        let m = secs / 60; let s = secs % 60
+        let m = secs / 60
+        // swiftlint:disable:next identifier_name
+        let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
 
@@ -108,7 +159,10 @@ struct JobPayload: Decodable {
     let createdAt: String?
     let completedAt: String?
     let htmlUrl: String?
-    let steps: [JobStep]?
+    let steps: [StepPayload]?
+    /// GitHub API field: the name of the runner that picked up this job.
+    /// nil when the job hasn't been assigned to a runner yet (queued).
+    let runnerName: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion, steps
@@ -116,6 +170,27 @@ struct JobPayload: Decodable {
         case createdAt = "created_at"
         case completedAt = "completed_at"
         case htmlUrl = "html_url"
+        case runnerName = "runner_name"
+    }
+}
+
+// MARK: - StepPayload (API decoding)
+
+/// Raw API type for a single step inside a `JobPayload`.
+/// Kept separate from `JobStep` so that `JobStep` remains `Codable` with `Date` fields
+/// while the API always delivers timestamps as ISO-8601 strings.
+struct StepPayload: Decodable {
+    let number: Int
+    let name: String
+    let status: String
+    let conclusion: String?
+    let startedAt: String?
+    let completedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case number, name, status, conclusion
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
     }
 }
 
@@ -139,7 +214,20 @@ extension RunnerStore {
             completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
             htmlUrl: payload.htmlUrl,
             isDimmed: isDimmed,
-            steps: payload.steps ?? []
+            steps: (payload.steps ?? []).map { stepPayload in
+                JobStep(
+                    // ⚠️: Use the API-supplied step number, not the array index.
+                    // GitHub step numbers can be non-contiguous (e.g. retried or skipped steps).
+                    // Using idx+1 would cause fetchStepLog(jobID:stepNumber:) to fetch the wrong log.
+                    id: stepPayload.number,
+                    name: stepPayload.name,
+                    status: stepPayload.status,
+                    conclusion: stepPayload.conclusion,
+                    startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
+                )
+            },
+            runnerName: payload.runnerName
         )
     }
 }
@@ -147,4 +235,4 @@ extension RunnerStore {
 // MARK: - Codable helpers
 
 /// Shared response wrapper used by ActionGroup.swift and RunnerStoreState.swift.
-struct JobsResponse: Codable { let jobs: [JobPayload] }
+struct JobsResponse: Decodable { let jobs: [JobPayload] }

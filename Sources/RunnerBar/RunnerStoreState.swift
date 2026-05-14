@@ -16,7 +16,7 @@ struct JobPollResult {
 struct GroupPollResult {
     /// Action groups to display in the popover.
     let display: [ActionGroup]
-    /// Updated group cache, trimmed to 5 entries.
+    /// Updated group cache, trimmed to 30 entries.
     let newGroupCache: [String: ActionGroup]
     /// Live-group snapshot for the next poll's diff.
     let newPrevLiveGroups: [String: ActionGroup]
@@ -26,38 +26,35 @@ struct GroupPollResult {
 
 /// RunnerStore extension providing the job-state builder used by the background poll.
 extension RunnerStore {
-    /// Builds the job display list and updated caches from a background poll.
+    /// Builds the job display list and updated caches from a background poll snapshot.
     func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         var allFetched: [ActiveJob] = []
         for scope in ScopeStore.shared.scopes {
             allFetched.append(contentsOf: fetchActiveJobs(for: scope))
         }
-        let liveJobs = allFetched.filter { $0.conclusion == nil && $0.status != "completed" }
-        let freshDone = allFetched.filter { $0.conclusion != nil || $0.status == "completed" }
-        let liveIDs = Set(liveJobs.map { $0.id })
-        let now = Date()
-        var newCache = snapCache
 
-        // ⚠️ CALLSITE 2 of 3 — Vanished jobs: were live last poll, gone now.
-        for (jobID, job) in snapPrev where !liveIDs.contains(jobID) {
-            guard newCache[jobID] == nil else { continue }
-            newCache[jobID] = ActiveJob(
-                id: job.id, name: job.name, status: "completed",
-                conclusion: job.conclusion ?? "success",
-                startedAt: job.startedAt, createdAt: job.createdAt,
-                completedAt: job.completedAt ?? now,
-                htmlUrl: job.htmlUrl, isDimmed: true, steps: job.steps
-            )
-        }
+        let liveJobs  = allFetched.filter { $0.conclusion == nil && $0.status != "completed" }
+        let freshDone = allFetched.filter { $0.conclusion != nil || $0.status == "completed" }
+        let liveIDs   = Set(liveJobs.map { $0.id })
+        let now       = Date()
+        var newCache  = snapCache
+
+        applyVanishedJobs(snapPrev: snapPrev, liveIDs: liveIDs, now: now, into: &newCache)
 
         // ⚠️ CALLSITE 3 of 3 — Fresh done: jobs with a conclusion inside active runs.
         for job in freshDone {
             newCache[job.id] = ActiveJob(
-                id: job.id, name: job.name, status: "completed",
+                id: job.id,
+                name: job.name,
+                status: "completed",
                 conclusion: job.conclusion ?? "success",
-                startedAt: job.startedAt, createdAt: job.createdAt,
+                startedAt: job.startedAt,
+                createdAt: job.createdAt,
                 completedAt: job.completedAt ?? Date(),
-                htmlUrl: job.htmlUrl, isDimmed: true, steps: job.steps
+                htmlUrl: job.htmlUrl,
+                isDimmed: true,
+                steps: job.steps,
+                runnerName: job.runnerName
             )
         }
 
@@ -65,7 +62,8 @@ extension RunnerStore {
         backfillSteps(into: &newCache)
 
         let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
-        let display = buildJobDisplay(live: liveJobs, cache: newCache)
+        let display     = buildJobDisplay(live: liveJobs, cache: newCache)
+
         let inProgCount = liveJobs.filter { $0.status == "in_progress" }.count
         let queuedCount = liveJobs.filter { $0.status == "queued" }.count
         log(
@@ -75,25 +73,48 @@ extension RunnerStore {
         return JobPollResult(display: display, newCache: newCache, newPrevLive: newPrevLive)
     }
 
-    /// Trims the job cache to the `limit` most-recently-completed entries.
+    /// Inserts completed stubs for jobs that were live last poll but have since vanished.
+    private func applyVanishedJobs(
+        snapPrev: [Int: ActiveJob],
+        liveIDs: Set<Int>,
+        now: Date,
+        into cache: inout [Int: ActiveJob]
+    ) {
+        // ⚠️ CALLSITE 2 of 3 — Vanished jobs: were live last poll, gone now.
+        for (jobID, job) in snapPrev where !liveIDs.contains(jobID) {
+            guard cache[jobID] == nil else { continue }
+            cache[jobID] = ActiveJob(
+                id: job.id,
+                name: job.name,
+                status: "completed",
+                conclusion: job.conclusion ?? "success",
+                startedAt: job.startedAt,
+                createdAt: job.createdAt,
+                completedAt: job.completedAt ?? now,
+                htmlUrl: job.htmlUrl,
+                isDimmed: true,
+                steps: job.steps,
+                runnerName: job.runnerName
+            )
+        }
+    }
+
     private func trimJobCache(_ cache: inout [Int: ActiveJob], limit: Int) {
         guard cache.count > limit else { return }
-        let sorted = cache.values.sorted {
-            ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
+        let sorted = cache.values.sorted { lhs, rhs in
+            (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
         }
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
-    /// Backfills missing steps for cached completed jobs via the single-job API (#110/#111).
     private func backfillSteps(into cache: inout [Int: ActiveJob]) {
         let iso = ISO8601DateFormatter()
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil,
-                  cached.steps.isEmpty
-                  || cached.steps.contains(where: { $0.status == "in_progress" }),
+                  cached.steps.isEmpty || cached.steps.contains(where: { $0.status == "in_progress" }),
                   let scope = scopeFromHtmlUrl(cached.htmlUrl),
-                  let data = ghAPI("repos/\(scope)/actions/jobs/\(cacheID)"),
+                  let data  = ghAPI("repos/\(scope)/actions/jobs/\(cacheID)"),
                   let fresh = try? JSONDecoder().decode(JobPayload.self, from: data),
                   let rawSteps = fresh.steps,
                   !rawSteps.isEmpty
@@ -102,12 +123,12 @@ extension RunnerStore {
         }
     }
 
-    /// Assembles the ordered display list: in_progress → queued → cached done, capped at 3.
     private func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress = live.filter { $0.status == "in_progress" }
-        let queued = live.filter { $0.status == "queued" }
-        let cached = cache.values
-            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+        let queued     = live.filter { $0.status == "queued" }
+        let cached     = cache.values.sorted { lhs, rhs in
+            (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
+        }
         var display: [ActiveJob] = []
         for job in inProgress where display.count < 3 { display.append(job) }
         for job in queued     where display.count < 3 { display.append(job) }
@@ -131,38 +152,51 @@ extension RunnerStore {
         for scope in ScopeStore.shared.scopes {
             allFetched.append(contentsOf: fetchActionGroups(for: scope, cache: shaKeyedCache))
         }
+
         let liveGroups = allFetched.filter { $0.groupStatus != .completed }
         let doneGroups = allFetched.filter { $0.groupStatus == .completed }
-        let liveIDs = Set(liveGroups.map { $0.id })
-        let now = Date()
-        var newCache = evictFreshShas(from: snapGroupCache, freshGroups: allFetched)
+        let liveIDs    = Set(liveGroups.map { $0.id })
+        let now        = Date()
 
+        var newCache = evictFreshShas(from: snapGroupCache, freshGroups: allFetched)
         freezeVanishedGroups(snapPrev: snapPrevGroups, liveIDs: liveIDs, now: now, into: &newCache)
+
         for group in doneGroups {
             var dimmed = group
             dimmed.isDimmed = true
             newCache[group.id] = dimmed
         }
-        trimGroupCache(&newCache, limit: 5)
+        trimGroupCache(&newCache, limit: 30)
 
         let newPrevLive = Dictionary(uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
-        let display = buildGroupDisplay(live: liveGroups, cache: newCache)
+        let display     = buildGroupDisplay(live: liveGroups, cache: newCache)
+
         let inProgCount = liveGroups.filter { $0.groupStatus == .inProgress }.count
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
         log(
             "RunnerStore › groups: \(inProgCount) in_progress \(queuedCount) queued"
             + " | cache: \(newCache.count) | display: \(display.count)"
         )
-        let enriched = display.map { $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) }
-        let enrichedCache = newCache.mapValues {
-            $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache))
-        }
+
+        let enriched      = display.map({ $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) })
+        let enrichedCache = newCache.mapValues({ $0.withJobs(enrichGroupJobs($0.jobs, jobCache: jobCache)) })
+
         return GroupPollResult(
-            display: enriched, newGroupCache: enrichedCache, newPrevLiveGroups: newPrevLive
+            display: enriched,
+            newGroupCache: enrichedCache,
+            newPrevLiveGroups: newPrevLive
         )
     }
 
-    /// Rebuilds the cache keyed by head_sha for `fetchActionGroups`.
+    private func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
+        jobs.map { job in
+            guard let cached = jobCache[job.id] else { return job }
+            let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
+            let cacheHasMoreSteps  = cached.steps.count > job.steps.count
+            return (cacheHasConclusion || cacheHasMoreSteps) ? cached : job
+        }
+    }
+
     private func makeShaKeyedCache(_ cache: [String: ActionGroup]) -> [String: ActionGroup] {
         Dictionary(
             cache.values.map { ($0.headSha, $0) },
@@ -170,7 +204,6 @@ extension RunnerStore {
         )
     }
 
-    /// Removes cache entries whose head_sha appears in freshly-fetched groups.
     private func evictFreshShas(
         from cache: [String: ActionGroup],
         freshGroups: [ActionGroup]
@@ -179,7 +212,6 @@ extension RunnerStore {
         return cache.filter { !freshShas.contains($0.value.headSha) }
     }
 
-    /// Freezes groups that were live last poll but absent this poll.
     private func freezeVanishedGroups(
         snapPrev: [String: ActionGroup],
         liveIDs: Set<String>,
@@ -187,18 +219,23 @@ extension RunnerStore {
         into cache: inout [String: ActionGroup]
     ) {
         for (sha, group) in snapPrev where !liveIDs.contains(sha) {
-            if let existing = cache[sha],
-               existing.isDimmed,
-               existing.jobs.count >= group.jobs.count { continue }
+            if let existing = cache[sha], existing.isDimmed, existing.jobs.count >= group.jobs.count {
+                continue
+            }
             var frozen = group
             frozen.isDimmed = true
             if frozen.lastJobCompletedAt == nil {
                 frozen = ActionGroup(
-                    headSha: frozen.headSha, label: frozen.label,
-                    title: frozen.title, headBranch: frozen.headBranch,
-                    repo: frozen.repo, runs: frozen.runs, jobs: frozen.jobs,
+                    headSha: frozen.headSha,
+                    label: frozen.label,
+                    title: frozen.title,
+                    headBranch: frozen.headBranch,
+                    repo: frozen.repo,
+                    runs: frozen.runs,
+                    jobs: frozen.jobs,
                     firstJobStartedAt: frozen.firstJobStartedAt,
-                    lastJobCompletedAt: now, createdAt: frozen.createdAt,
+                    lastJobCompletedAt: now,
+                    createdAt: frozen.createdAt,
                     isDimmed: true
                 )
             }
@@ -206,34 +243,30 @@ extension RunnerStore {
         }
     }
 
-    /// Trims the group cache to the `limit` most-recently-completed entries.
     private func trimGroupCache(_ cache: inout [String: ActionGroup], limit: Int) {
         guard cache.count > limit else { return }
-        let sorted = cache.values.sorted {
-            ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
-            > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
-        }
+        let sorted = cache.values.sorted(by: { lhs, rhs in
+            (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
+            > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
+        })
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
-    /// Assembles the ordered group display list: in_progress → queued → cached done, capped at 5.
     private func buildGroupDisplay(
         live: [ActionGroup],
         cache: [String: ActionGroup]
     ) -> [ActionGroup] {
-        let inProgress = live.filter { $0.groupStatus == .inProgress }
-        let queued = live.filter { $0.groupStatus == .queued }
+        let inProgress     = live.filter { $0.groupStatus == .inProgress }
+        let queued         = live.filter { $0.groupStatus == .queued }
         let liveDisplayIDs = Set((inProgress + queued).map { $0.id })
-        let cached = cache.values.sorted {
-            ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
-            > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
-        }
+        let cached         = cache.values.sorted(by: { lhs, rhs in
+            (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
+            > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
+        })
         var display: [ActionGroup] = []
-        for grp in inProgress where display.count < 5 { display.append(grp) }
-        for grp in queued     where display.count < 5 { display.append(grp) }
-        for grp in cached where display.count < 5 && !liveDisplayIDs.contains(grp.id) {
-            display.append(grp)
-        }
+        for grp in inProgress where display.count < 30 { display.append(grp) }
+        for grp in queued     where display.count < 30 { display.append(grp) }
+        for grp in cached     where display.count < 30 && !liveDisplayIDs.contains(grp.id) { display.append(grp) }
         return display
     }
 }

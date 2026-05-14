@@ -22,6 +22,26 @@ import SwiftUI
 ///
 /// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
 /// live GitHub API status (online/offline/busy) after each local scan.
+///
+/// ⚠️ ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize (ref #377).
+/// AppDelegate KVO-observes preferredContentSize and calls NSPanel.setFrame().
+/// NSPanel.setFrame() has no anchor → zero side jump on any size change.
+///
+/// HEIGHT CONTRACT:
+/// NO ScrollView, NO frame(maxHeight:) cap.
+/// preferredContentSize reports the full natural VStack height.
+/// AppDelegate.resizeAndRepositionPanel() clamps to maxHeight = 85% screen.
+/// That is the only height cap — enforced at the AppDelegate level, not here.
+/// ❌ NEVER add a ScrollView or frame(maxHeight:) cap back to SettingsView.
+/// ❌ NEVER add idealHeight to the root frame.
+///
+/// WIDTH CONTRACT:
+/// .frame(idealWidth: 480) — only idealWidth needed. NSPanel handles bounds.
+/// ❌ NEVER remove idealWidth: 480.
+///
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
+/// is major major major.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -47,6 +67,8 @@ struct SettingsView: View {
     @State private var showAddRunnerSheet = false
     /// Surfaced when remove() returns false — cleared on next refresh.
     @State private var removeErrorMessage: String?
+    /// `true` while `gh auth logout` is in flight — disables the button to prevent double-tap.
+    @State private var isSigningOut = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -63,30 +85,37 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // NO ScrollView — NSPanel grows to show all content.
+        // AppDelegate clamps panel height to 85% screen visibleFrame.
+        // ❌ NEVER wrap in ScrollView or add frame(maxHeight:) here.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    localRunnersSection
-                    Divider()
-                    runnerSection
-                    Divider()
-                    notificationsSection
-                    Divider()
-                    generalSection
-                    Divider()
-                    accountSection
-                    Divider()
-                    legalSection
-                    Divider()
-                    aboutSection
-                }
-                .padding(.bottom, 16)
+            VStack(alignment: .leading, spacing: 0) {
+                localRunnersSection
+                Divider()
+                runnerSection
+                Divider()
+                notificationsSection
+                Divider()
+                generalSection
+                Divider()
+                accountSection
+                Divider()
+                legalSection
+                Divider()
+                aboutSection
             }
+            .padding(.bottom, 16)
         }
-        // ⚠️ REGRESSION GUARD: keep idealWidth: 420 — matches PopoverMainView (ref #52 #54 #57)
-        .frame(idealWidth: 420, maxWidth: .infinity, alignment: .top)
+        // idealWidth only — no idealHeight. NSPanel handles screen bounds.
+        // ❌ NEVER add idealHeight here.
+        // ❌ NEVER remove idealWidth: 480.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+        // UNDER ANY CIRCUMSTANCE.
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             ScopeStore.shared.onMutate = { [weak store] in
@@ -119,9 +148,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
             Button("Remove", role: .destructive) {
                 guard let runner = runnerPendingRemoval else { return }
-                // Gate on token: de-registration requires GitHub auth.
-                // Without a token svc.sh uninstall succeeds but config.sh remove
-                // fails, leaving a ghost registration on the GitHub side.
                 guard isAuthenticated else {
                     runnerPendingRemoval = nil
                     return
@@ -129,9 +155,6 @@ struct SettingsView: View {
                 runnerPendingRemoval = nil
                 removeErrorMessage = nil
                 DispatchQueue.global(qos: .userInitiated).async {
-                    // Capture result: @discardableResult on remove() must not be
-                    // silently dropped. A false return means config.sh remove
-                    // failed and the GitHub registration was NOT cleaned up.
                     let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
                     DispatchQueue.main.async {
                         if !succeeded {
@@ -349,16 +372,22 @@ struct SettingsView: View {
             Text("Notifications")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $notifications.notifyOnSuccess) {
+            HStack {
                 Text("Notify on success").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $notifications.notifyOnSuccess)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            Toggle(isOn: $notifications.notifyOnFailure) {
+            HStack {
                 Text("Notify on failure").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $notifications.notifyOnFailure)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
     }
@@ -368,18 +397,30 @@ struct SettingsView: View {
             Text("General")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle("Launch at login", isOn: $launchAtLogin)
-                .toggleStyle(.switch)
-                .font(.system(size: 12))
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
-            Divider().padding(.leading, 12)
-            Toggle(isOn: $settings.showDimmedRunners) {
-                Text("Show offline runners").font(.system(size: 12))
+            HStack {
+                Text("Launch at login").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $launchAtLogin)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
+            // ── Show offline runners ──────────────────────────────────────
+            HStack {
+                Text("Show offline runners").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $settings.showDimmedRunners)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
+            Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 6)
+            Divider().padding(.leading, 12)
+            // ── Polling interval ─────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -389,10 +430,24 @@ struct SettingsView: View {
                 Stepper("", value: $settings.pollingInterval, in: 10...300)
                     .labelsHidden()
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
+            Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
+                .font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 6)
         }
     }
 
+    // MARK: - Account section
+    //
+    // When authenticated, shows:
+    //   GitHub   ● Authenticated   [Sign out]
+    //
+    // Sign out runs `gh auth logout --hostname github.com` on a background
+    // thread, then re-checks githubToken() to refresh isAuthenticated.
+    // isSigningOut disables the button while the shell call is in flight.
+    //
+    // ❌ NEVER remove the `gh auth login` hint below — it is the only
+    //    recovery path shown to the user after signing out.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
@@ -402,9 +457,19 @@ struct SettingsView: View {
                 Text("GitHub").font(.system(size: 12))
                 Spacer()
                 if isAuthenticated {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 8, height: 8)
-                        Text("Authenticated").font(.caption).foregroundColor(.secondary)
+                    HStack(spacing: 8) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            Text("Authenticated").font(.caption).foregroundColor(.secondary)
+                        }
+                        Button(action: signOutOfGitHub) {
+                            Text("Sign out")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSigningOut)
+                        .help("Run gh auth logout and disconnect RunnerBar from GitHub")
                     }
                 } else {
                     Button(action: signInWithGitHub, label: {
@@ -425,10 +490,13 @@ struct SettingsView: View {
             Text("Legal")
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            Toggle(isOn: $legal.analyticsEnabled) {
+            HStack {
                 Text("Share analytics").font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: $legal.analyticsEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
             }
-            .toggleStyle(.switch)
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
             Divider().padding(.leading, 12)
@@ -502,6 +570,23 @@ struct SettingsView: View {
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Runs `gh auth logout --hostname github.com` on a background thread.
+    /// Updates `isAuthenticated` on the main thread when the call completes.
+    /// Uses `isSigningOut` to prevent double-tap.
+    ///
+    /// ❌ NEVER run shell calls on the main thread — they block the UI.
+    private func signOutOfGitHub() {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
+            DispatchQueue.main.async {
+                isAuthenticated = (githubToken() != nil)
+                isSigningOut = false
+            }
+        }
     }
 }
 // swiftlint:enable type_body_length

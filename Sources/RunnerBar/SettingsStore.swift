@@ -3,8 +3,7 @@ import Foundation
 
 // MARK: - SettingsStore
 
-/// Persists user preferences to UserDefaults.
-/// Provides `showDimmedRunners` and `pollingInterval` for the General section of SettingsView.
+/// Persists general app settings to UserDefaults.
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
@@ -13,35 +12,38 @@ final class SettingsStore: ObservableObject {
         static let showDimmedRunners = "settings.showDimmedRunners"
     }
 
-    /// Polling interval in seconds (default 30, range 10–300).
+    /// Valid range for the polling interval (seconds).
+    static let pollingRange: ClosedRange<Int> = 10 ... 300
+
+    /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
     @Published var pollingInterval: Int {
         didSet {
-            let clamped = min(max(pollingInterval, 10), 300)
-            // Always persist the clamped value; re-assign only if out of range.
-            // Re-assigning re-triggers didSet, but then clamped == pollingInterval so no recursion.
-            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
-            if clamped != pollingInterval { pollingInterval = clamped }
+            let clamped = pollingInterval.clamped(to: Self.pollingRange)
+            if clamped != pollingInterval {
+                pollingInterval = clamped
+                return
+            }
+            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
         }
     }
 
-    /// Whether dimmed (offline) runners are shown in the list (default true).
+    /// Whether offline/dimmed runners are shown in the list.
     @Published var showDimmedRunners: Bool {
         didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
     }
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
-        // clamp on read so a previously-stored out-of-range value is corrected immediately
-        let clamped = stored > 0 ? min(max(stored, 10), 300) : 30
-        pollingInterval = clamped
-        // didSet is not triggered during init, so explicitly repair the stored value if needed
-        if stored != clamped {
-            UserDefaults.standard.set(clamped, forKey: Key.pollingInterval)
-        }
-        if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
-            showDimmedRunners = true
-        } else {
-            showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
-        }
+        let raw = stored > 0 ? stored : 30
+        pollingInterval = raw.clamped(to: Self.pollingRange)
+        showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
+    }
+}
+
+// MARK: - Comparable+clamped
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

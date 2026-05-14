@@ -2,23 +2,41 @@ import AppKit
 import SwiftUI
 // swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️ REGRESSION GUARD — mirrors JobDetailView frame/layout contract
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
+// ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
+// ════════════════════════════════════════════════════════════════════════════════
 //
-// ── FRAME CONTRACT ──────────────────────────────────────────────────────────────────────────────────────
-//   Receives the same FIXED frame from AppDelegate as JobDetailView.
-//   Sized once at openPopover() from mainView()'s fittingSize; never changes.
-//   ScrollView absorbs overflow — do NOT fight the frame.
+// ARCHITECTURE: NSPanel (NOT NSPopover).
+// NSPanel has no anchor — setFrame() never causes a side-jump.
+// Width IS dynamic: AppDelegate KVO-observes preferredContentSize and calls
+// NSPanel.setFrame(), repositioning under the status button each time.
 //
-// ── LAYOUT RULES ────────────────────────────────────────────────────────────────────────────────────────
-//   ✔ Root: .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-//   ✔ Job list MUST be inside ScrollView
-//   ✔ Header (back button + title + Divider) MUST be OUTSIDE ScrollView
-//   ❌ NEVER put header inside ScrollView
-//   ❌ NEVER add .idealWidth or .frame(height:) to root
-//   ❌ NEVER call navigate() directly — use onBack / onSelectJob callbacks
-// ═══════════════════════════════════════════════════════════════════════════════
+// ROOT FRAME RULE:
+//   .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
+//   • minWidth: 560 — minimum panel width; content decides actual width.
+//   • maxWidth: .infinity — fills the panel width up to AppDelegate.maxWidth.
+//   • NO idealWidth — width is content-driven, not pinned to a fixed value.
+//   • NO idealHeight / maxHeight on the root frame.
+//
+// SCROLLVIEW HEIGHT CAP — REQUIRED:
+//   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+//   Prevents the panel growing taller than the screen.
+//   ❌ NEVER remove this modifier from the ScrollView.
+//   ❌ NEVER use a fixed constant — must adapt to screen size.
+//
+// ════════════════════════════════════════════════════════════════════════════════
+// HISTORY:
+//   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
+//   Job rows collapsed to single line: [#N][dot][name][time range]...[status][elapsed][›]
+//   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
+//   Side-jump is impossible with NSPanel — no anchor to re-calculate.
+//   Added #N order index badge to each job row (1-based display order).
+//   Replaced generic "X/N jobs concluded" with context-aware outcome label.
+//   Elapsed moved from header to timing row below branch label.
+//   SHA/PR label made tappable: opens commit or PR on GitHub.
+//   Time-range and elapsed columns hidden for queued jobs (no startedAt).
+//   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
+// ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
@@ -35,14 +53,30 @@ struct ActionDetailView: View {
 
     /// Drives the live elapsed timer every second.
     @State private var tick = 0
-    /// Held so we can invalidate on disappear and prevent timer accumulation
-    /// when the user navigates away and back (AppDelegate swaps rootView each time).
+    /// Held so we can invalidate on disappear and prevent timer accumulation.
     @State private var tickTimer: Timer?
+
+    // MARK: - Formatters
+
+    /// HH:mm formatter — used for group start/end labels in the header.
+    private static let timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// HH:mm:ss formatter — used for per-job time-range column.
+    /// Static so it is created once and reused on every 1 Hz tick × N job rows.
+    private static let jobTimeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header: OUTSIDE ScrollView — always visible at top
+            // ── Header ──────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -53,7 +87,7 @@ struct ActionDetailView: View {
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
-                Spacer()  // ⚠️ load-bearing — pushes elapsed to right edge
+                Spacer()
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
@@ -89,23 +123,26 @@ struct ActionDetailView: View {
                     },
                     isDisabled: false
                 )
-                Text(elapsedLive(tick: tick))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
+            // ── Group title block ──────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(group.label)
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                    Button(action: openLabelOnGitHub) {
+                        Text(group.label)
+                            .font(.caption.monospacedDigit())
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(labelLinkTooltip)
+
                     Text(group.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .truncationMode(.tail)
                 }
                 if let branch = group.headBranch {
                     Text(branch)
@@ -114,59 +151,36 @@ struct ActionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text("\(group.jobsDone)/\(group.jobsTotal) jobs concluded")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.secondary)
+                    Text(groupStartLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
+                    Text("→").font(.caption2).foregroundColor(.secondary)
+                    Text(groupEndLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
+                    Text("·").font(.caption2).foregroundColor(.secondary)
+                    Text(elapsedLive(tick: tick))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                }
+                Text(jobsSummaryLine).font(.caption).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
             Divider()
 
-            // ── Jobs list: INSIDE ScrollView
+            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
+            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if group.jobs.isEmpty {
                         Text("No jobs available")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .font(.caption).foregroundColor(.secondary)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
                     } else {
-                        ForEach(group.jobs) { job in
+                        ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
                             Button(action: { onSelectJob(job) }, label: {
-                                HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(jobDotColor(for: job))
-                                        .frame(width: 7, height: 7)
-                                    Text(job.name)
-                                        .font(.system(size: 12))
-                                        .foregroundColor(job.isDimmed ? .secondary : .primary)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                    Spacer()  // ⚠️ load-bearing
-                                    if let conclusion = job.conclusion {
-                                        Text(conclusionLabel(conclusion))
-                                            .font(.caption)
-                                            .foregroundColor(conclusionColor(conclusion))
-                                            .frame(width: 76, alignment: .trailing)
-                                    } else {
-                                        Text(jobStatusLabel(for: job))
-                                            .font(.caption)
-                                            .foregroundColor(jobStatusColor(for: job))
-                                            .frame(width: 76, alignment: .trailing)
-                                    }
-                                    Text(job.elapsed)
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 40, alignment: .trailing)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 3)
-                                .contentShape(Rectangle())
+                                jobRow(job, index: index + 1)
                             })
                             .buttonStyle(.plain)
                         }
@@ -174,8 +188,9 @@ struct ActionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
             tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
@@ -185,17 +200,114 @@ struct ActionDetailView: View {
             tickTimer = nil
         }
     }
+}
+// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-    private func elapsedLive(tick _: Int) -> String { group.elapsed }
+extension ActionDetailView { // swiftlint:disable:this missing_docs
+    /// Opens the SHA commit or PR associated with the group label on GitHub.
+    func openLabelOnGitHub() {
+        let urlString: String
+        if group.label.hasPrefix("#"),
+           let number = Int(group.label.dropFirst()) {
+            urlString = "https://github.com/\(group.repo)/pull/\(number)"
+        } else {
+            urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
+        }
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
 
-    // MARK: - Job row helpers
+    /// Tooltip text for the label link button, describing whether it links to a PR or commit.
+    var labelLinkTooltip: String {
+        group.label.hasPrefix("#")
+            ? "Open pull request on GitHub"
+            : "Open commit on GitHub"
+    }
 
-    private func jobDotColor(for job: ActiveJob) -> Color {
+    /// Formatted start time for the group (first job started or group created).
+    var groupStartLabel: String {
+        guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
+        return Self.timeFmt.string(from: date)
+    }
+
+    /// Formatted end time for the group, or "now" while in progress.
+    var groupEndLabel: String {
+        if let date = group.lastJobCompletedAt { return Self.timeFmt.string(from: date) }
+        if group.groupStatus == .inProgress { return "now" }
+        return "—"
+    }
+
+    /// Human-readable summary of job completion state for the group.
+    var jobsSummaryLine: String {
+        let done  = group.jobsDone
+        let total = group.jobsTotal
+        let conclusions = group.jobs.compactMap { $0.conclusion }
+        if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
+        if conclusions.contains("failure") { return "\(done)/\(total) jobs failed" }
+        if conclusions.contains("cancelled") { return "\(done)/\(total) jobs cancelled" }
+        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) { return "\(done)/\(total) jobs succeeded" }
+        return "\(done)/\(total) jobs completed"
+    }
+
+    /// Returns the group elapsed string; `tick` parameter triggers SwiftUI refresh every second.
+    func elapsedLive(tick _: Int) -> String { group.elapsed }
+
+    @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
+        HStack(spacing: 8) {
+            Text("#\(index)")
+                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .frame(width: 28, alignment: .leading)
+            Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
+            Text(job.name)
+                .font(.system(size: 12))
+                .foregroundColor(job.isDimmed ? .secondary : .primary)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            if job.startedAt != nil {
+                Text(jobTimeRange(job))
+                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                    .lineLimit(1).frame(width: 130, alignment: .leading)
+            } else {
+                Spacer().frame(width: 130)
+            }
+            Spacer(minLength: 0)
+            if let conclusion = job.conclusion {
+                Text(conclusionLabel(conclusion))
+                    .font(.caption).foregroundColor(conclusionColor(conclusion))
+                    .frame(width: 80, alignment: .trailing)
+            } else {
+                Text(jobStatusLabel(for: job))
+                    .font(.caption).foregroundColor(jobStatusColor(for: job))
+                    .frame(width: 80, alignment: .trailing)
+            }
+            if job.startedAt != nil {
+                Text(job.elapsed)
+                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+            } else {
+                Spacer().frame(width: 40)
+            }
+            Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
+    /// Formats start→end time range for a job row, using HH:mm:ss precision.
+    func jobTimeRange(_ job: ActiveJob) -> String {
+        guard let start = job.startedAt ?? job.createdAt else { return "" }
+        let startStr = Self.jobTimeFmt.string(from: start)
+        if let end = job.completedAt { return "\(startStr)→\(Self.jobTimeFmt.string(from: end))" }
+        return "\(startStr)→now"
+    }
+
+    /// Returns the status dot colour for a job row.
+    func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return .secondary }
         return job.status == "in_progress" ? .yellow : .gray
     }
 
-    private func jobStatusLabel(for job: ActiveJob) -> String {
+    /// Short status label shown when a job has no conclusion yet.
+    func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "In Progress"
         case "queued":      return "Queued"
@@ -203,26 +315,26 @@ struct ActionDetailView: View {
         }
     }
 
-    private func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? .yellow : .secondary
-    }
+    /// Text colour for a live (no-conclusion) job status label.
+    func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
 
-    private func conclusionLabel(_ c: String) -> String {
-        switch c {
+    /// Maps a raw conclusion string to a human-readable icon + label.
+    func conclusionLabel(_ conclusion: String) -> String {
+        switch conclusion {
         case "success":   return "✓ success"
         case "failure":   return "✗ failure"
         case "cancelled": return "⊗ cancelled"
         case "skipped":   return "− skipped"
-        default:          return c
+        default:          return conclusion
         }
     }
 
-    private func conclusionColor(_ c: String) -> Color {
-        switch c {
+    /// Maps a raw conclusion string to a display colour.
+    func conclusionColor(_ conclusion: String) -> Color {
+        switch conclusion {
         case "success": return .green
         case "failure": return .red
         default:        return .secondary
         }
     }
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command

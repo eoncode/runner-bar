@@ -33,38 +33,41 @@ struct RunnerConfigSheet: View {
             Text("Configure \"\(runner.runnerName)\"")
                 .font(.headline)
                 .padding(.bottom, 4)
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("Labels (comma-separated)").font(.caption).foregroundColor(.secondary)
                 TextField("e.g. self-hosted, macOS, arm64", text: $labelsText)
                     .textFieldStyle(.roundedBorder)
-                // Labels are written to .runner JSON. The scanner reads systemLabels
-                // (not customLabels) on the next scan, so the labels list shown in
-                // Settings may not reflect these changes until the runner is restarted
-                // and re-scanned with the updated agent config.
                 Text("Changes take effect after the next runner restart.")
                     .font(.caption2).foregroundColor(.secondary)
             }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("Work folder").font(.caption).foregroundColor(.secondary)
                 TextField("e.g. _work", text: $workFolderText)
                     .textFieldStyle(.roundedBorder)
             }
+
             if let msg = errorMessage {
                 Text(msg)
                     .font(.caption)
                     .foregroundColor(.red)
             }
+
             HStack {
                 Spacer()
                 Button(action: { isPresented = nil }, label: { Text("Cancel") })
                     .keyboardShortcut(.cancelAction)
-                Button(action: saveConfig, label: {
-                    if isSaving {
-                        ProgressView().scaleEffect(0.7)
-                    } else {
-                        Text("Save")
+                Button(
+                    action: saveConfig,
+                    label: {
+                        if isSaving {
+                            ProgressView().scaleEffect(0.7)
+                        } else {
+                            Text("Save")
+                        }
                     }
-                })
+                )
                 .keyboardShortcut(.defaultAction)
                 .disabled(isSaving)
             }

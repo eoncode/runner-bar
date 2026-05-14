@@ -1,12 +1,17 @@
 import SwiftUI
 
-// MARK: - ReRunButton
+// MARK: - ReRunFailedButton
 
-/// Top-bar re-run button.
-/// idle (arrow.clockwise + "Re-run") →
+/// Top-bar "Re-run failed jobs" button.
+/// Mirrors ReRunButton's phase-machine pattern but calls the
+/// GitHub "rerun-failed-jobs" endpoint instead of the full rerun endpoint.
+///
+/// GitHub API: POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
+///
+/// idle (exclamationmark.arrow.clockwise + "Re-run failed") →
 /// loading (spinner + "Running\u{2026}") →
 /// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
-struct ReRunButton: View {
+struct ReRunFailedButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
     /// When true the button is completely hidden and takes no layout space.
@@ -16,7 +21,7 @@ struct ReRunButton: View {
 
     // MARK: - Phase
 
-    /// Visual states of the re-run button lifecycle.
+    /// Visual states of the re-run-failed button lifecycle.
     enum Phase {
         /// Normal tappable state.
         case idle
@@ -37,15 +42,16 @@ struct ReRunButton: View {
                 if !isDisabled {
                     Button(action: startRerun) {
                         HStack(spacing: 4) {
-                            Image(systemName: "arrow.clockwise")
+                            Image(systemName: "exclamationmark.arrow.clockwise")
                                 .font(.caption)
-                            Text("Re-run")
+                            Text("Re-run failed")
                                 .font(.caption)
                                 .fixedSize()
                         }
                         .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .help("Re-run only the failed and cancelled jobs in this workflow run")
                 }
             case .loading:
                 ButtonPhaseView(phase: .loading)

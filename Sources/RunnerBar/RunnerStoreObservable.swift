@@ -1,34 +1,42 @@
+import Combine
+import Foundation
 import SwiftUI
 
 // MARK: - RunnerStoreObservable
 
-/// `ObservableObject` bridge that mirrors `RunnerStore` state into SwiftUI `@Published`
-/// properties. A single instance is owned by `AppDelegate` and passed into every view
-/// that needs live runner / job / action data.
+/// Observable bridge between the singleton `RunnerStore` and SwiftUI views.
+/// `PopoverMainView`, `SettingsView`, and `AppDelegate` hold one shared instance.
+/// Call `reload()` to pull the latest state from `RunnerStore.shared` onto the main thread.
 ///
-/// `reload()` is the ONE place where store state is copied into published properties.
-/// It always runs on the main thread and suppresses SwiftUI animations (ref #52 #54).
+/// ⚠️ NOT @MainActor: AppDelegate creates this as a stored property (`private let observable`)
+/// in a synchronous nonisolated context. @MainActor would make init() and reload() async
+/// from outside the actor and break AppDelegate.swift:40 and AppDelegate.swift:281.
+/// RunnerStore.onChange always fires on DispatchQueue.main so thread safety is preserved.
 final class RunnerStoreObservable: ObservableObject {
-    /// Action groups to display (live + recently completed, capped at 5).
-    @Published private(set) var actions: [ActionGroup] = []
-    /// Jobs to display (live + recently completed, capped at 3).
-    @Published private(set) var jobs: [ActiveJob] = []
-    /// All known self-hosted runners.
+    /// Mirrors `RunnerStore.shared.runners`.
     @Published private(set) var runners: [Runner] = []
-    /// `true` when the most recent poll hit a GitHub rate limit.
-    @Published private(set) var isRateLimited: Bool = false
+    /// Mirrors `RunnerStore.shared.jobs`.
+    @Published private(set) var jobs: [ActiveJob] = []
+    /// Mirrors `RunnerStore.shared.actions`.
+    @Published private(set) var actions: [ActionGroup] = []
+    /// Mirrors `RunnerStore.shared.isRateLimited`.
+    @Published private(set) var isRateLimited = false
 
-    // MARK: - Reload
+    init() {}
 
-    /// Copies current `RunnerStore.shared` state into the published properties.
-    /// Must be called on the main thread. Uses `withAnimation(nil)` to prevent
-    /// layout thrashing (RULE 5 — ref #52 #54 #57).
+    /// Pulls the current state from `RunnerStore.shared` with no animation
+    /// (see REGRESSION GUARD in PopoverMainView — NEVER add animation here).
+    /// ❌ NEVER add objectWillChange.send() here — double-publish causes flicker.
+    /// ❌ NEVER remove withAnimation(nil) — removing it re-enables SwiftUI spring animation on every poll.
+    /// ❌ NEVER make this async or move it off the main thread.
+    /// ❌ NEVER call this from popoverDidClose() — clobbers savedNavState.
+    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     func reload() {
         let store = RunnerStore.shared
         withAnimation(nil) {
-            actions = store.actions
-            jobs = store.jobs
             runners = store.runners
+            jobs = store.jobs
+            actions = store.actions
             isRateLimited = store.isRateLimited
         }
     }

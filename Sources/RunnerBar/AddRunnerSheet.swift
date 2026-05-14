@@ -188,11 +188,13 @@ struct AddRunnerSheet: View {
             // user's home directory before executing config.sh there.
             // A freeform path like ~/../../usr/local/bin could otherwise cause
             // an arbitrary executable to be launched with the user's privileges.
+            // ⚠️ Use == or hasPrefix(homeDir + "/") — plain hasPrefix(homeDir) is a
+            // string prefix match and would pass e.g. /Users/alice-evil for home /Users/alice.
             let homeDir = FileManager.default.homeDirectoryForCurrentUser
-                .resolvingSymlinksInPath.path
+                .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
-                .resolvingSymlinksInPath.path
-            guard resolvedDir.hasPrefix(homeDir) else {
+                .resolvingSymlinksInPath().path
+            guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
                     errorMessage = "Install directory must be inside your home folder (~/…)."
