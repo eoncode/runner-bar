@@ -36,6 +36,8 @@ import SwiftUI
 //   SHA/PR label made tappable: opens commit or PR on GitHub.
 //   Time-range and elapsed columns hidden for queued jobs (no startedAt).
 //   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
+//   Phase 5: PieProgressDot replaces plain Circle dot; StatusBadge chips;
+//            DesignTokens fonts + colours on all meta columns.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -76,7 +78,7 @@ struct ActionDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ──────────────────────────────────────────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -128,13 +130,13 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ──────────────────────────────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
                         Text(group.label)
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
                     }
                     .buttonStyle(.plain)
                     .help(labelLinkTooltip)
@@ -152,24 +154,38 @@ struct ActionDetailView: View {
                         .truncationMode(.middle)
                 }
                 HStack(spacing: 4) {
-                    Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.secondary)
-                    Text(groupStartLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
-                    Text("→").font(.caption2).foregroundColor(.secondary)
-                    Text(groupEndLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
-                    Text("·").font(.caption2).foregroundColor(.secondary)
+                    Image(systemName: "clock")
+                        .font(.system(size: 9))
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                    Text(groupStartLabel)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                        .fixedSize()
+                    Text("→")
+                        .font(.caption2)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                    Text(groupEndLabel)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                        .fixedSize()
+                    Text("·")
+                        .font(.caption2)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                     Text(elapsedLive(tick: tick))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                         .fixedSize()
                 }
-                Text(jobsSummaryLine).font(.caption).foregroundColor(.secondary)
+                Text(jobsSummaryLine)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
             Divider()
 
-            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
+            // ── Jobs list ───────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -217,14 +233,14 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         NSWorkspace.shared.open(url)
     }
 
-    /// Tooltip text for the label link button, describing whether it links to a PR or commit.
+    /// Tooltip text for the label link button.
     var labelLinkTooltip: String {
         group.label.hasPrefix("#")
             ? "Open pull request on GitHub"
             : "Open commit on GitHub"
     }
 
-    /// Formatted start time for the group (first job started or group created).
+    /// Formatted start time for the group.
     var groupStartLabel: String {
         guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
         return Self.timeFmt.string(from: date)
@@ -237,7 +253,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return "—"
     }
 
-    /// Human-readable summary of job completion state for the group.
+    /// Human-readable summary of job completion state.
     var jobsSummaryLine: String {
         let done  = group.jobsDone
         let total = group.jobsTotal
@@ -249,50 +265,97 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return "\(done)/\(total) jobs completed"
     }
 
-    /// Returns the group elapsed string; `tick` parameter triggers SwiftUI refresh every second.
+    /// Returns the group elapsed string; `tick` triggers SwiftUI refresh every second.
     func elapsedLive(tick _: Int) -> String { group.elapsed }
 
+    // MARK: - Job row
     @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
         HStack(spacing: 8) {
+            // Index badge
             Text("#\(index)")
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
                 .frame(width: 28, alignment: .leading)
-            Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
+
+            // Animated progress dot (PieProgressDot replaces plain Circle)
+            PieProgressDot(
+                progress: job.progressFraction,
+                color: jobDotColor(for: job),
+                size: 9
+            )
+
+            // Job name
             Text(job.name)
                 .font(.system(size: 12))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+
+            // Time range column (hidden for queued jobs)
             if job.startedAt != nil {
                 Text(jobTimeRange(job))
-                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                    .lineLimit(1).frame(width: 130, alignment: .leading)
+                    .font(DesignTokens.Font.monoXSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .lineLimit(1)
+                    .frame(width: 130, alignment: .leading)
             } else {
                 Spacer().frame(width: 130)
             }
+
             Spacer(minLength: 0)
+
+            // Conclusion / status chip (StatusBadge replaces plain Text)
             if let conclusion = job.conclusion {
-                Text(conclusionLabel(conclusion))
-                    .font(.caption).foregroundColor(conclusionColor(conclusion))
-                    .frame(width: 80, alignment: .trailing)
+                StatusBadge(
+                    label: conclusionLabel(conclusion),
+                    color: conclusionColor(conclusion)
+                )
+                .frame(width: 88, alignment: .trailing)
             } else {
-                Text(jobStatusLabel(for: job))
-                    .font(.caption).foregroundColor(jobStatusColor(for: job))
-                    .frame(width: 80, alignment: .trailing)
+                StatusBadge(
+                    label: jobStatusLabel(for: job),
+                    color: jobStatusColor(for: job)
+                )
+                .frame(width: 88, alignment: .trailing)
             }
+
+            // Elapsed column (hidden for queued jobs)
             if job.startedAt != nil {
                 Text(job.elapsed)
-                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                    .frame(width: 40, alignment: .trailing)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .frame(width: 44, alignment: .trailing)
             } else {
-                Spacer().frame(width: 40)
+                Spacer().frame(width: 44)
             }
-            Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
+
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
+        .background(
+            // Subtle tint per job status
+            Rectangle().fill(jobRowTint(for: job))
+        )
         .contentShape(Rectangle())
     }
 
-    /// Formats start→end time range for a job row, using HH:mm:ss precision.
+    /// Subtle background tint for each job row based on live status.
+    func jobRowTint(for job: ActiveJob) -> Color {
+        guard !job.isDimmed else { return .clear }
+        switch job.status {
+        case "in_progress": return DesignTokens.Color.statusBlue.opacity(0.04)
+        case "queued":      return DesignTokens.Color.statusBlue.opacity(0.02)
+        default:
+            switch job.conclusion {
+            case "success":   return DesignTokens.Color.statusGreen.opacity(0.03)
+            case "failure":   return DesignTokens.Color.statusRed.opacity(0.04)
+            default:          return .clear
+            }
+        }
+    }
+
+    /// Formats start→end time range for a job row.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
@@ -300,41 +363,50 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return "\(startStr)→now"
     }
 
-    /// Returns the status dot colour for a job row.
+    /// Status dot colour for a job row (used by PieProgressDot).
     func jobDotColor(for job: ActiveJob) -> Color {
-        if job.isDimmed { return .secondary }
-        return job.status == "in_progress" ? .yellow : .gray
+        if job.isDimmed { return DesignTokens.Color.labelTertiary }
+        switch job.status {
+        case "in_progress": return DesignTokens.Color.statusBlue
+        case "queued":      return DesignTokens.Color.statusBlue.opacity(0.5)
+        default:
+            return job.conclusion == "success"
+                ? DesignTokens.Color.statusGreen
+                : (job.conclusion == "failure" ? DesignTokens.Color.statusRed : .secondary)
+        }
     }
 
-    /// Short status label shown when a job has no conclusion yet.
+    /// Short status label for jobs without a conclusion.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
-        case "in_progress": return "In Progress"
-        case "queued":      return "Queued"
-        default:            return "Pending"
+        case "in_progress": return "IN PROGRESS"
+        case "queued":      return "QUEUED"
+        default:            return "PENDING"
         }
     }
 
-    /// Text colour for a live (no-conclusion) job status label.
-    func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
+    /// StatusBadge colour for a live (no-conclusion) job.
+    func jobStatusColor(for job: ActiveJob) -> Color {
+        job.status == "in_progress" ? DesignTokens.Color.statusBlue : DesignTokens.Color.labelSecondary
+    }
 
-    /// Maps a raw conclusion string to a human-readable icon + label.
+    /// Maps a raw conclusion string to an uppercase label for StatusBadge.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "cancelled": return "⊗ cancelled"
-        case "skipped":   return "− skipped"
-        default:          return conclusion
+        case "success":   return "SUCCESS"
+        case "failure":   return "FAILED"
+        case "cancelled": return "CANCELLED"
+        case "skipped":   return "SKIPPED"
+        default:          return conclusion.uppercased()
         }
     }
 
-    /// Maps a raw conclusion string to a display colour.
+    /// Maps a raw conclusion string to the appropriate DesignTokens colour.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
-        case "success": return .green
-        case "failure": return .red
-        default:        return .secondary
+        case "success":   return DesignTokens.Color.statusGreen
+        case "failure":   return DesignTokens.Color.statusRed
+        default:          return DesignTokens.Color.labelSecondary
         }
     }
 }
