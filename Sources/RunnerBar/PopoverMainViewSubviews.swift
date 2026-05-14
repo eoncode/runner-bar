@@ -23,8 +23,8 @@ struct PopoverHeaderView: View {
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
 
-    var cpuHistory:  [Double] = []
-    var memHistory:  [Double] = []
+    var cpuHistory: [Double] = []
+    var memHistory: [Double] = []
     var diskHistory: [Double] = []
 
     var body: some View {
@@ -83,13 +83,13 @@ struct PopoverHeaderView: View {
     }
 
     private var diskGroup: some View {
-        let total    = stats.diskTotalGB
-        let used     = stats.diskUsedGB
-        let free     = max(0, total - used)
-        let usedPct  = total > 0 ? (used / total) * 100 : 0
-        let freePct  = total > 0 ? (free / total) * 100 : 0
+        let total = stats.diskTotalGB
+        let used = stats.diskUsedGB
+        let free = max(0, total - used)
+        let usedPct = total > 0 ? (used / total) * 100 : 0
+        let freePct = total > 0 ? (free / total) * 100 : 0
         let valueStr = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-        let freeStr  = String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded()))
+        let freeStr = String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded()))
         return HStack(spacing: DesignTokens.Layout.statInnerGap) {
             Text("DISK")
                 .font(DesignTokens.Font.statLabel)
@@ -139,27 +139,8 @@ struct PopoverHeaderView: View {
     }
 }
 
-// MARK: - DesignTokens.Color helper
-extension DesignTokens.Color {
-    /// Returns the appropriate status colour for a 0–100 percentage.
-    static func statColor(for pct: Double) -> SwiftUI.Color {
-        if pct > 85 { return statusRed    }
-        if pct > 60 { return statusOrange }
-        return statusGreen
-    }
-
-    /// Returns the accent colour for a given GroupStatus + conclusion.
-    static func actionColor(status: GroupStatus, conclusion: String?) -> SwiftUI.Color {
-        switch status {
-        case .inProgress: return statusBlue
-        case .queued:     return statusBlue
-        case .completed:
-            return conclusion == "success" ? statusGreen : statusRed
-        }
-    }
-}
-
 // MARK: - SparklineView
+/// Renders a sparkline graph with gradient fill for a stat history array.
 struct SparklineView: View {
     let samples: [Double]
     let pct: Double
@@ -173,7 +154,7 @@ struct SparklineView: View {
 
             var fillPath = Path()
             fillPath.move(to: CGPoint(x: 0, y: size.height))
-            for pt in pts { fillPath.addLine(to: pt) }
+            for point in pts { fillPath.addLine(to: point) }
             fillPath.addLine(to: CGPoint(x: size.width, y: size.height))
             fillPath.closeSubpath()
             context.fill(
@@ -181,10 +162,10 @@ struct SparklineView: View {
                 with: .linearGradient(
                     Gradient(stops: [
                         .init(color: color.opacity(0.55), location: 0),
-                        .init(color: color.opacity(0),    location: 1)
+                        .init(color: color.opacity(0), location: 1)
                     ]),
                     startPoint: CGPoint(x: 0, y: 0),
-                    endPoint:   CGPoint(x: 0, y: size.height)
+                    endPoint: CGPoint(x: 0, y: size.height)
                 )
             )
 
@@ -196,7 +177,7 @@ struct SparklineView: View {
 
             var linePath = Path()
             linePath.move(to: pts[0])
-            for pt in pts.dropFirst() { linePath.addLine(to: pt) }
+            for point in pts.dropFirst() { linePath.addLine(to: point) }
             context.stroke(linePath, with: .color(color),
                            style: StrokeStyle(
                             lineWidth: DesignTokens.Layout.sparklineStroke,
@@ -209,11 +190,11 @@ struct SparklineView: View {
     }
 
     private func points(in size: CGSize) -> [CGPoint] {
-        let n = samples.count
+        let count = samples.count
         return samples.enumerated().map { idx, val in
-            let x = size.width * CGFloat(idx) / CGFloat(n - 1)
-            let y = size.height * (1 - CGFloat(min(max(val, 0), 1))) * 0.85 + 2
-            return CGPoint(x: x, y: y)
+            let xPos = size.width * CGFloat(idx) / CGFloat(count - 1)
+            let yPos = size.height * (1 - CGFloat(min(max(val, 0), 1))) * 0.85 + 2
+            return CGPoint(x: xPos, y: yPos)
         }
     }
 }
@@ -261,6 +242,7 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - RunnerCardRow
+/// Elevated card row for a single busy runner with CPU/MEM pill badges.
 struct RunnerCardRow: View {
     let runner: Runner
 
@@ -303,6 +285,7 @@ struct RunnerCardRow: View {
 }
 
 // MARK: - MetricPill
+/// Pill-shaped CPU/MEM metric badge for runner card rows.
 struct MetricPill: View {
     let label: String
     let value: String
@@ -347,20 +330,16 @@ struct ActionRowView: View {
         // ❌ NEVER remove this line.
         _ = tick
         return ZStack(alignment: .leading) {
-            // Faint per-row status tint
             Rectangle().fill(accentColor.opacity(0.06))
 
             HStack(spacing: 0) {
-                // Left vertical indicator — tappable as expand toggle
                 Button(action: onSelect) { leftIndicator }
                     .buttonStyle(.plain)
                     .help("Toggle details")
 
-                // Main tappable row content
                 Button(action: onSelect) { rowContent }
                     .buttonStyle(.plain)
 
-                // Chevron — always chevron.right (Phase 4 fix, was pointing down on in-progress)
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(DesignTokens.Color.labelSecondary)
@@ -370,17 +349,15 @@ struct ActionRowView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    // MARK: - Left vertical half-pill indicator bar
     private var leftIndicator: some View {
         accentColor
             .frame(width: DesignTokens.Layout.leftIndicatorWidth)
-            .clipShape(RoundedCorners(tl: 0, tr: 3, bl: 0, br: 3))
+            .clipShape(RoundedCorners(topLeft: 0, topRight: 3, bottomLeft: 0, bottomRight: 3))
             .padding(.vertical, 4)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
     }
 
-    // MARK: - Row content
     private var rowContent: some View {
         HStack(spacing: 8) {
             StatusDonutView(
@@ -408,7 +385,6 @@ struct ActionRowView: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: - Trailing meta labels
     @ViewBuilder
     private var metaTrailing: some View {
         if let start = group.firstJobStartedAt {
@@ -438,7 +414,6 @@ struct ActionRowView: View {
         statusChip
     }
 
-    // MARK: - Status chip
     @ViewBuilder
     private var statusChip: some View {
         switch group.groupStatus {
@@ -481,23 +456,43 @@ struct StatusBadge: View {
 /// Custom shape with per-corner independent radii.
 /// Used for the left indicator bar: right corners rounded (3pt), left flush (0pt).
 private struct RoundedCorners: Shape {
-    var tl, tr, bl, br: CGFloat
+    var topLeft, topRight, bottomLeft, bottomRight: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
-        path.addArc(center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr),
-                    radius: tr, startAngle: .degrees(-90), endAngle: .degrees(0),   clockwise: false)
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
-        path.addArc(center: CGPoint(x: rect.maxX - br, y: rect.maxY - br),
-                    radius: br, startAngle: .degrees(0),   endAngle: .degrees(90),  clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
-        path.addArc(center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl),
-                    radius: bl, startAngle: .degrees(90),  endAngle: .degrees(180), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
-        path.addArc(center: CGPoint(x: rect.minX + tl, y: rect.minY + tl),
-                    radius: tl, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        path.move(to: CGPoint(x: rect.minX + topLeft, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - topRight, y: rect.minY))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - topRight, y: rect.minY + topRight),
+            radius: topRight,
+            startAngle: .degrees(-90),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRight))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - bottomRight, y: rect.maxY - bottomRight),
+            radius: bottomRight,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY))
+        path.addArc(
+            center: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY - bottomLeft),
+            radius: bottomLeft,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topLeft))
+        path.addArc(
+            center: CGPoint(x: rect.minX + topLeft, y: rect.minY + topLeft),
+            radius: topLeft,
+            startAngle: .degrees(180),
+            endAngle: .degrees(270),
+            clockwise: false
+        )
         path.closeSubpath()
         return path
     }
@@ -558,8 +553,8 @@ struct InlineJobRowsView: View {
         // ❌ NEVER remove this line.
         _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
-        let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
-        let done  = job.steps.filter { $0.conclusion != nil }.count
+        let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+        let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
@@ -597,7 +592,7 @@ struct InlineJobRowsView: View {
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
-        case "queued":      return .blue
+        case "queued": return .blue
         default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
         }
     }
