@@ -301,9 +301,17 @@ struct InlineJobRowsView: View {
         let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
+        // Phase 5: step fraction drives the SubJobProgressBar
+        let stepFraction: Double? = total > 0 ? Double(done) / Double(total) : nil
         return HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
-            PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
+            // Phase 5: replace PieProgressDot with SubJobProgressBar
+            SubJobProgressBar(
+                fraction: job.status == "queued" ? nil : stepFraction,
+                color: jobBarColor(for: job),
+                width: 56,
+                height: 3
+            )
             Group {
                 if let name = stepName { Text(job.name + " · " + name) } else { Text(job.name) }
             }
@@ -326,10 +334,11 @@ struct InlineJobRowsView: View {
         .contentShape(Rectangle())
     }
 
-    private func jobDotColor(for job: ActiveJob) -> Color {
+    /// Phase 5: bar color replaces the old dot color helper.
+    private func jobBarColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return DesignTokens.Colors.statusBlue
-        case "queued":      return DesignTokens.Colors.statusBlue
+        case "queued":      return DesignTokens.Colors.statusBlue.opacity(0.5)
         default: return job.conclusion == "success"
             ? DesignTokens.Colors.statusGreen
             : (job.isDimmed ? .gray : DesignTokens.Colors.statusRed)

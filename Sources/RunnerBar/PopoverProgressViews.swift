@@ -254,6 +254,76 @@ private struct LeadingRoundedRect: Shape {
     }
 }
 
+// MARK: - SubJobProgressBar
+/// Phase 5: Thin horizontal Capsule progress bar for sub-job rows.
+///
+/// Renders a 90×3 pt track with a filled Capsule overlay driven by `fraction` (0–1).
+/// When `fraction` is nil (queued / indeterminate), the bar shows a shimmer sweep.
+///
+/// Color follows `DesignTokens.Colors`:
+///   - in-progress → statusBlue
+///   - success     → statusGreen
+///   - failed      → statusRed
+///   - queued      → statusBlue at 0.5 opacity
+///
+/// ❌ NEVER use a fixed pixel width for the fill — drive it from GeometryReader.
+/// ❌ NEVER remove the Capsule clip shape — it gives rounded end-caps.
+struct SubJobProgressBar: View {
+    /// Fill fraction 0–1. Nil = indeterminate shimmer.
+    let fraction: Double?
+    /// Bar accent color (use DesignTokens.Colors.status*).
+    let color: Color
+    /// Total bar width in points. Defaults to 90.
+    var width: CGFloat = 90
+    /// Bar height in points. Defaults to 3.
+    var height: CGFloat = 3
+
+    @State private var shimmerOffset: CGFloat = -1
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            // Track
+            Capsule()
+                .fill(color.opacity(0.15))
+                .frame(width: width, height: height)
+            if let frac = fraction {
+                // Determinate fill
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(height, CGFloat(frac) * width), height: height)
+                    .animation(.easeInOut(duration: 0.35), value: frac)
+            } else {
+                // Indeterminate: sliding shimmer block
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                color.opacity(0.0),
+                                color.opacity(0.7),
+                                color.opacity(0.0)
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: width * 0.4, height: height)
+                    .offset(x: shimmerOffset * width)
+                    .clipped()
+                    .onAppear {
+                        withAnimation(
+                            .linear(duration: 1.4)
+                            .repeatForever(autoreverses: false)
+                        ) {
+                            shimmerOffset = 1.2
+                        }
+                    }
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(Capsule())
+    }
+}
+
 // MARK: - RelativeTimeFormatter
 
 enum RelativeTimeFormatter {
