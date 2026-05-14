@@ -22,9 +22,6 @@ struct PopoverHeaderView: View {
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
-    /// Phase 2: history buffers passed from the view model
-    var cpuHistory: [Double] = []
-    var memHistory: [Double] = []
 
     var body: some View {
         HStack(spacing: 6) {
@@ -67,74 +64,56 @@ struct PopoverHeaderView: View {
         .padding(.bottom, 8)
     }
 
-    /// Phase 2: sparkline stat blocks separated by vertical dividers.
+    /// Inline CPU / MEM / DISK chips.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
     /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
-        HStack(spacing: 0) {
-            // CPU block
-            statBlock(
+        HStack(spacing: 8) {
+            statChip(
                 label: "CPU",
-                value: String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct,
-                history: cpuHistory
+                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
+                pct: stats.cpuPct
             )
-            divider
-            // MEM block
-            let memPct = stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
-            statBlock(
+            statChip(
                 label: "MEM",
-                value: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: memPct,
-                history: memHistory
+                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
+                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
+                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
             )
-            divider
-            // DISK block — pill style
-            diskBlock
+            diskChip
         }
     }
 
-    /// Vertical hairline divider between stat blocks.
-    private var divider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.1))
-            .frame(width: 0.5, height: 20)
-            .padding(.horizontal, 8)
+    private var diskChip: some View {
+        let total   = stats.diskTotalGB
+        let used    = stats.diskUsedGB
+        let free    = max(0, total - used)
+        let pct     = total > 0 ? (used / total) * 100 : 0
+        let freePct = total > 0 ? (free / total) * 100 : 0
+        let value   = blockBar(pct: pct)
+            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
+        return statChip(label: "DISK", value: value, pct: pct)
     }
 
-    /// Single stat block: label + sparkline + value.
-    private func statBlock(label: String, value: String, pct: Double, history: [Double]) -> some View {
-        HStack(spacing: 5) {
+    private func statChip(label: String, value: String, pct: Double) -> some View {
+        HStack(spacing: 3) {
             Text(label)
                 .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-            // Phase 2: sparkline replaces the block-bar glyph string
-            if history.count >= 2 {
-                SparklineView(history: history, currentPct: pct)
-                    .frame(width: 44, height: 18)
-            }
             Text(value)
                 .font(DesignTokens.Fonts.monoStat)
                 .foregroundColor(DesignTokens.Colors.usage(pct: pct))
                 .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
-    /// Phase 2: DISK pill view.
-    private var diskBlock: some View {
-        HStack(spacing: 5) {
-            Text("DISK")
-                .font(DesignTokens.Fonts.monoLabel)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            DiskPillView(
-                freePct: stats.diskFreePct,
-                usedGB: Int(stats.diskUsedGB.rounded()),
-                totalGB: Int(stats.diskTotalGB.rounded())
-            )
-        }
+    private func blockBar(pct: Double, width: Int = 3) -> String {
+        let raw         = Int((pct / 100.0 * Double(width)).rounded())
+        let filledCount = max(0, min(width, raw))
+        return String(repeating: "█", count: filledCount)
+             + String(repeating: "░", count: width - filledCount)
     }
 }
 
@@ -152,6 +131,35 @@ private struct RunnerTypeIcon: View {
     }
 }
 
+// MARK: - MetricPillView
+/// Small Capsule pill showing a CPU or MEM metric value.
+/// Phase 3 of the design redesign (#421).
+private struct MetricPillView: View {
+    let label: String
+    let value: String
+    let pct: Double
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(DesignTokens.Fonts.monoLabel)
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(DesignTokens.Fonts.mono)
+                .foregroundColor(DesignTokens.Colors.usage(pct: pct))
+        }
+        .padding(.horizontal, DesignTokens.Spacing.chipHPad)
+        .padding(.vertical, DesignTokens.Spacing.chipVPad)
+        .background(
+            Capsule().fill(DesignTokens.Colors.metricPill)
+        )
+        .overlay(
+            Capsule().strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 // MARK: - PopoverLocalRunnerRow
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
@@ -166,22 +174,7 @@ struct PopoverLocalRunnerRow: View {
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
         ForEach(busy.prefix(3)) { runner in
-            HStack(spacing: 8) {
-                Circle().fill(Color.yellow).frame(width: 8, height: 8)
-                Text(runner.name)
-                    .font(DesignTokens.Fonts.mono)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                Spacer()
-                if let metrics = runner.metrics {
-                    Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(DesignTokens.Fonts.mono)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .padding(.horizontal, DesignTokens.Spacing.rowHPad)
-            .padding(.vertical, 3)
+            runnerCard(runner)
         }
         if busy.count > 3 {
             Text("+ \(busy.count - 3) more…")
@@ -190,6 +183,52 @@ struct PopoverLocalRunnerRow: View {
                 .padding(.vertical, 2)
         }
         Divider()
+    }
+
+    /// Phase 3: bordered card row for each busy runner.
+    private func runnerCard(_ runner: Runner) -> some View {
+        HStack(spacing: 8) {
+            // Status dot
+            Circle()
+                .fill(DesignTokens.Colors.statusGreen)
+                .frame(width: 8, height: 8)
+            // Runner name
+            Text(runner.name)
+                .font(DesignTokens.Fonts.mono)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Spacer()
+            // CPU/MEM metric pills
+            if let metrics = runner.metrics {
+                MetricPillView(
+                    label: "CPU",
+                    value: String(format: "%.1f%%", metrics.cpu),
+                    pct: metrics.cpu
+                )
+                MetricPillView(
+                    label: "MEM",
+                    value: String(format: "%.1f%%", metrics.mem),
+                    pct: metrics.mem
+                )
+            }
+            // Chevron
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+        .padding(.vertical, DesignTokens.Spacing.rowVPad)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius)
+                .fill(DesignTokens.Colors.rowBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius)
+                .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+        )
+        .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+        .padding(.vertical, 2)
     }
 }
 
