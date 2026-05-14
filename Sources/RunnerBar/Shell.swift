@@ -9,7 +9,7 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     let pipe = Pipe()
     task.standardOutput = pipe
     task.standardError  = pipe
-    task.launchPath     = "/bin/zsh"
+    task.launchPath     = BinaryPaths.zsh
     task.arguments      = ["-c", command]
 
     // Drain pipe asynchronously — prevents pipe-buffer deadlock when the

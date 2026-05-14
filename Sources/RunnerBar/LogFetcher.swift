@@ -93,9 +93,10 @@ func fetchActionLogs(group: ActionGroup) -> String? {
         .joined(separator: "\n\n")
 }
 
-// MARK: - ZIP extraction (uses /usr/bin/unzip — always available on macOS)
+// MARK: - ZIP extraction
 
 /// Extracts all `.txt` files from a ZIP blob and returns `(name, text)` pairs.
+/// Uses `/usr/bin/unzip` which is always available on macOS.
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     let fileManager = FileManager.default
     let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -109,14 +110,14 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         return []
     }
     let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+    proc.executableURL = URL(fileURLWithPath: BinaryPaths.unzip)
     proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
     proc.standardOutput = FileHandle.nullDevice
     proc.standardError = FileHandle.nullDevice
     do {
         try proc.run()
     } catch {
-        log("unzipLogs › failed to launch /usr/bin/unzip: \(error)")
+        log("unzipLogs › failed to launch unzip: \(error)")
         return []
     }
     proc.waitUntilExit()
