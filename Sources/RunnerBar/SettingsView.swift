@@ -407,7 +407,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // ── Show offline runners ─────────────────────────────────────────────
+            // ── Show offline runners ────────────────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -420,7 +420,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
-            // ── Polling interval ─────────────────────────────────────────────────
+            // ── Polling interval ────────────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -580,6 +580,10 @@ struct SettingsView: View {
     /// Updates `isAuthenticated` on the main thread when the call completes.
     /// Uses `isSigningOut` to prevent double-tap.
     ///
+    /// ghPath is wrapped in double-quotes (with embedded quotes escaped) before
+    /// shell interpolation to prevent failures or injection if the path contains
+    /// spaces or shell-significant characters.
+    ///
     /// ❌ NEVER run shell calls on the main thread — they block the UI.
     private func signOutOfGitHub() {
         guard !isSigningOut else { return }
@@ -589,7 +593,8 @@ struct SettingsView: View {
         }
         isSigningOut = true
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = shell("\(ghPath) auth logout --hostname github.com")
+            let safeGhPath = "\"\(ghPath.replacingOccurrences(of: "\"", with: "\\\""))\""
+            _ = shell("\(safeGhPath) auth logout --hostname github.com")
             DispatchQueue.main.async {
                 isAuthenticated = (githubToken() != nil)
                 isSigningOut = false
