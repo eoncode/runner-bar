@@ -21,7 +21,7 @@ import SwiftUI
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from status button's window frame (screen coords):
+// 2. Position is computed from status button’s window frame (screen coords):
 //      statusItemRect = button.window!.frame   ← already in screen coords
 //      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
 //      panelTopY = statusItemRect.minY - gap       ← locked at open time
@@ -62,7 +62,7 @@ import SwiftUI
 // navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
 // and fires the preferredContentSize KVO — async on the main queue. Between the
 // navigate() call and the KVO fire there is at least one frame where arrowX still
-// holds the value computed for the *previous* view's panel frame. If the new view
+// holds the value computed for the *previous* view’s panel frame. If the new view
 // has a different width, resizeAndRepositionPanel() moves the panel, invalidating
 // the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
 // navigate(to:) immediately after swapping rootView, so arrowX is always
@@ -218,7 +218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - App lifecycle
 
-    /// S1172: `notification` is not used — renamed to `_`.
+    // `_` suppresses the S1172 unused-parameter warning: the notification object
+    // is not needed here; only the fact that launch completed matters.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -336,9 +337,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // We must reset the hosting view to a live mainView() so all navigation
         // callbacks (prefs button, action rows, inline job rows) are wired up for
         // the next open. However, mainView() sets savedNavState = nil, which would
-        // lose the user's position for the restore-on-reopen feature (#385).
+        // lose the user’s position for the restore-on-reopen feature (#385).
         // Fix: capture savedNavState before calling mainView(), then restore it
-        // afterwards. openPanel()'s validatedView(for: savedNavState) path works
+        // afterwards. openPanel()’s validatedView(for: savedNavState) path works
         // as before, and the main-screen path now has live callbacks instead of
         // dead no-op stubs.
         // ❌ NEVER replace this with a no-op stub PopoverMainView — that breaks
