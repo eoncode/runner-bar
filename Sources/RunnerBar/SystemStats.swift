@@ -69,6 +69,16 @@ private struct DiskStats {
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
+
+    /// Rolling history buffers for sparkline rendering.
+    /// Each array holds the last `historyCapacity` normalised values in [0, 1].
+    @Published var cpuHistory:  [Double] = []
+    @Published var memHistory:  [Double] = []
+    @Published var diskHistory: [Double] = []
+
+    /// Number of samples retained for the sparkline (matches `DesignTokens.Layout.sparklineSampleCount`).
+    private let historyCapacity = 15
+
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
@@ -197,6 +207,22 @@ final class SystemStatsViewModel: ObservableObject {
             diskFreeGB: disk.free,
             diskFreePct: disk.freePct
         )
-        DispatchQueue.main.async { self.stats = snapshot }
+        let cpuNorm  = cpu / 100.0
+        let memNorm  = mem.total > 0 ? mem.used / mem.total : 0
+        let diskNorm = disk.total > 0 ? disk.used / disk.total : 0
+        DispatchQueue.main.async {
+            self.stats = snapshot
+            self.appendHistory(value: cpuNorm,  to: &self.cpuHistory)
+            self.appendHistory(value: memNorm,  to: &self.memHistory)
+            self.appendHistory(value: diskNorm, to: &self.diskHistory)
+        }
+    }
+
+    /// Appends a normalised [0,1] sample, trimming the buffer to `historyCapacity`.
+    private func appendHistory(value: Double, to buffer: inout [Double]) {
+        buffer.append(value)
+        if buffer.count > historyCapacity {
+            buffer.removeFirst(buffer.count - historyCapacity)
+        }
     }
 }

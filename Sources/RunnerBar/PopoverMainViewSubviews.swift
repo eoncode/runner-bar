@@ -23,9 +23,28 @@ struct PopoverHeaderView: View {
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
 
+    // History arrays published by SystemStatsViewModel, passed in from PopoverMainView.
+    var cpuHistory:  [Double] = []
+    var memHistory:  [Double] = []
+    var diskHistory: [Double] = []
+
     var body: some View {
-        HStack(spacing: 6) {
-            systemStatsBadge
+        HStack(spacing: DesignTokens.Layout.statGroupGap) {
+            statGroup(
+                label: "CPU",
+                valueText: String(format: "%.1f%%", stats.cpuPct),
+                pct: stats.cpuPct,
+                history: cpuHistory
+            )
+            statDivider
+            statGroup(
+                label: "MEM",
+                valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
+                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0,
+                history: memHistory
+            )
+            statDivider
+            diskGroup
             Spacer()
             // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
@@ -60,65 +79,153 @@ struct PopoverHeaderView: View {
             )
             .buttonStyle(.plain).help("Quit RunnerBar")
         }
-        .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
+        .padding(.horizontal, DesignTokens.Layout.panelHPad)
+        .padding(.top, DesignTokens.Layout.panelVPad)
+        .padding(.bottom, 8)
     }
 
-    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
-    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
-    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
-    private var systemStatsBadge: some View {
-        HStack(spacing: 8) {
-            statChip(
-                label: "CPU",
-                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
+    // MARK: - Disk group (with free-space pill)
+    private var diskGroup: some View {
+        let total    = stats.diskTotalGB
+        let used     = stats.diskUsedGB
+        let free     = max(0, total - used)
+        let usedPct  = total > 0 ? (used / total) * 100 : 0
+        let freePct  = total > 0 ? (free / total) * 100 : 0
+        let valueStr = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+        let freeStr  = String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded()))
+        return HStack(spacing: DesignTokens.Layout.statInnerGap) {
+            Text("DISK")
+                .font(DesignTokens.Font.statLabel)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
+                .lineLimit(1)
+            SparklineView(
+                samples: diskHistory,
+                pct: usedPct
             )
-            statChip(
-                label: "MEM",
-                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
-            )
-            diskChip
+            Text(valueStr)
+                .font(DesignTokens.Font.statValue)
+                .foregroundColor(DesignTokens.Color.statColor(for: usedPct))
+                .lineLimit(1)
+            // Free-space pill badge
+            Text(freeStr)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.statColor(for: usedPct))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 1)
+                .background(
+                    Capsule()
+                        .fill(DesignTokens.Color.statColor(for: usedPct).opacity(0.15))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(DesignTokens.Color.statColor(for: usedPct).opacity(0.4), lineWidth: 1)
+                        )
+                )
+                .lineLimit(1)
         }
     }
 
-    private var diskChip: some View {
-        let total   = stats.diskTotalGB
-        let used    = stats.diskUsedGB
-        let free    = max(0, total - used)
-        let pct     = total > 0 ? (used / total) * 100 : 0
-        let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = blockBar(pct: pct)
-            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
-    }
-
-    private func statChip(label: String, value: String, pct: Double) -> some View {
-        HStack(spacing: 3) {
+    // MARK: - Generic stat group
+    private func statGroup(label: String, valueText: String, pct: Double, history: [Double]) -> some View {
+        HStack(spacing: DesignTokens.Layout.statInnerGap) {
             Text(label)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(.secondary)
+                .font(DesignTokens.Font.statLabel)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .lineLimit(1)
-            Text(value)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(usageColor(pct: pct))
+            SparklineView(samples: history, pct: pct)
+            Text(valueText)
+                .font(DesignTokens.Font.statValue)
+                .foregroundColor(DesignTokens.Color.statColor(for: pct))
                 .lineLimit(1)
         }
     }
 
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw         = Int((pct / 100.0 * Double(width)).rounded())
-        let filledCount = max(0, min(width, raw))
-        return String(repeating: "█", count: filledCount)
-             + String(repeating: "░", count: width - filledCount)
+    // MARK: - Vertical divider between stat groups
+    private var statDivider: some View {
+        Rectangle()
+            .fill(DesignTokens.Color.separator)
+            .frame(width: DesignTokens.Layout.separatorThickness, height: 16)
+    }
+}
+
+// MARK: - DesignTokens.Color helper
+extension DesignTokens.Color {
+    /// Returns the appropriate status colour for a 0–100 percentage.
+    static func statColor(for pct: Double) -> SwiftUI.Color {
+        if pct > 85 { return statusRed    }
+        if pct > 60 { return statusOrange }
+        return statusGreen
+    }
+}
+
+// MARK: - SparklineView
+/// A small inline sparkline chart rendered with SwiftUI Canvas.
+/// Shows a stroke polyline and a gradient fill below it.
+/// Colour adapts to the current `pct` value via `DesignTokens`.
+struct SparklineView: View {
+    /// Normalised [0, 1] historical samples, oldest first.
+    let samples: [Double]
+    /// Current percentage (0–100) used for colour selection.
+    let pct: Double
+
+    private var color: Color { DesignTokens.Color.statColor(for: pct) }
+
+    var body: some View {
+        Canvas { context, size in
+            guard samples.count > 1 else { return }
+            let pts = points(in: size)
+
+            // --- Gradient fill ---
+            var fillPath = Path()
+            fillPath.move(to: CGPoint(x: 0, y: size.height))
+            for pt in pts { fillPath.addLine(to: pt) }
+            fillPath.addLine(to: CGPoint(x: size.width, y: size.height))
+            fillPath.closeSubpath()
+            context.fill(
+                fillPath,
+                with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: color.opacity(0.55), location: 0),
+                        .init(color: color.opacity(0),    location: 1)
+                    ]),
+                    startPoint: CGPoint(x: 0, y: 0),
+                    endPoint:   CGPoint(x: 0, y: size.height)
+                )
+            )
+
+            // --- Baseline stroke ---
+            var basePath = Path()
+            basePath.move(to:    CGPoint(x: 0,          y: size.height))
+            basePath.addLine(to: CGPoint(x: size.width, y: size.height))
+            context.stroke(basePath, with: .color(color.opacity(0.25)),
+                           style: StrokeStyle(lineWidth: 0.5))
+
+            // --- Sparkline stroke ---
+            var linePath = Path()
+            linePath.move(to: pts[0])
+            for pt in pts.dropFirst() { linePath.addLine(to: pt) }
+            context.stroke(linePath, with: .color(color),
+                           style: StrokeStyle(
+                            lineWidth: DesignTokens.Layout.sparklineStroke,
+                            lineCap: .round,
+                            lineJoin: .round
+                           ))
+        }
+        .opacity(0.85)
+        .frame(
+            width:  DesignTokens.Layout.sparklineWidth,
+            height: DesignTokens.Layout.sparklineHeight
+        )
     }
 
-    private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .red    }
-        if pct > 60 { return .yellow }
-        return .green
+    /// Maps normalised sample values to canvas coordinates.
+    private func points(in size: CGSize) -> [CGPoint] {
+        let n = samples.count
+        return samples.enumerated().map { idx, val in
+            let x = size.width * CGFloat(idx) / CGFloat(n - 1)
+            // Invert y: value=1 → top, value=0 → bottom; add small padding
+            let y = size.height * (1 - CGFloat(min(max(val, 0), 1))) * 0.85 + 2
+            return CGPoint(x: x, y: y)
+        }
     }
 }
 
