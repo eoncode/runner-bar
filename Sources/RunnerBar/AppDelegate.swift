@@ -332,21 +332,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeEventMonitor()
         removeWorkspaceObserver()
         // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
-        // Reset the hosting view to a blank main view WITHOUT calling mainView(),
-        // which would set savedNavState = nil and lose the user's position.
-        // openPanel() calls validatedView(for: savedNavState) to restore the view.
-        // ❌ NEVER replace this with self.mainView() — that wipes savedNavState.
+        // We must reset the hosting view to a live mainView() so all navigation
+        // callbacks (prefs button, action rows, inline job rows) are wired up for
+        // the next open. However, mainView() sets savedNavState = nil, which would
+        // lose the user's position for the restore-on-reopen feature (#385).
+        // Fix: capture savedNavState before calling mainView(), then restore it
+        // afterwards. openPanel()'s validatedView(for: savedNavState) path works
+        // as before, and the main-screen path now has live callbacks instead of
+        // dead no-op stubs.
+        // ❌ NEVER replace this with a no-op stub PopoverMainView — that breaks
+        //    all button and row taps when the panel next opens on the main screen.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.hostingController?.rootView = self.wrapEnv(PopoverMainView(
-                store: self.observable,
-                onSelectJob: { _ in },
-                onSelectAction: { _ in },
-                onSelectSettings: {},
-                onSelectInlineJob: { _, _ in }
-            ))
+            let preserved = self.savedNavState   // save before mainView() wipes it
+            self.hostingController?.rootView = self.mainView()
+            self.savedNavState = preserved        // restore for openPanel() restore path
         }
     }
 
