@@ -85,9 +85,16 @@ struct LocalRunnerScanner {
             let owner = parts[0]
             let repo = parts[1]
             let runnerName = parts.count > 2 ? parts[2...].joined(separator: ".") : "runner"
-            // NOSONAR S1075 — constructed GitHub repo URL, not a configurable system path
+            // NOSONAR — user-facing GitHub repo URL, not a configurable service endpoint.
             let gitHubUrl = "https://github.com/\(owner)/\(repo)"
-            return RunnerModel(.fromLaunchAgent(runnerName: runnerName, gitHubUrl: gitHubUrl))
+            return RunnerModel.make(
+                runnerName: runnerName,
+                gitHubUrl: gitHubUrl,
+                agentId: nil,
+                workFolder: nil,
+                installPath: nil,
+                isRunning: false
+            )
         }
     }
 
@@ -137,13 +144,14 @@ struct LocalRunnerScanner {
                     return nil
                 }
                 let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
-                return RunnerModel(.fromJSON(
+                return RunnerModel.make(
                     runnerName: name,
                     gitHubUrl: json.gitHubUrl,
                     agentId: json.agentId,
                     workFolder: json.workFolder,
-                    installPath: url.deletingLastPathComponent().path
-                ))
+                    installPath: url.deletingLastPathComponent().path,
+                    isRunning: false
+                )
             }
     }
 

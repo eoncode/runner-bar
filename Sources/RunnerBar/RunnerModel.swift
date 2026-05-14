@@ -12,58 +12,39 @@ import Foundation
 struct RunnerModel: Identifiable, Hashable {
     // MARK: - Config
 
-    /// All constructor inputs bundled into a single value type.
-    /// Keeps `RunnerModel.init` under the S107 7-parameter limit.
+    /// Bundles all construction parameters for `RunnerModel` into a single value,
+    /// keeping the primary `init` under the S107 7-parameter limit.
     struct Config {
-        var runnerName: String
-        var gitHubUrl: String?
-        var agentId: Int?
-        var workFolder: String?
-        var labels: [String]
-        var installPath: String?
-        var isRunning: Bool
-        var githubStatus: String?
-        var isBusy: Bool
+        let runnerName: String
+        let gitHubUrl: String?
+        let agentId: Int?
+        let workFolder: String?
+        let labels: [String]
+        let installPath: String?
+        let isRunning: Bool
+        let githubStatus: String?
+        let isBusy: Bool
 
-        // MARK: Convenience factories
-
-        /// Builds a Config from a `.runner` JSON file parse result.
-        static func fromJSON(
+        init(
             runnerName: String,
             gitHubUrl: String?,
             agentId: Int?,
             workFolder: String?,
-            installPath: String?
-        ) -> Config {
-            Config(
-                runnerName: runnerName,
-                gitHubUrl: gitHubUrl,
-                agentId: agentId,
-                workFolder: workFolder,
-                labels: [],
-                installPath: installPath,
-                isRunning: false,
-                githubStatus: nil,
-                isBusy: false
-            )
-        }
-
-        /// Builds a Config from a LaunchAgent plist filename parse result.
-        static func fromLaunchAgent(
-            runnerName: String,
-            gitHubUrl: String
-        ) -> Config {
-            Config(
-                runnerName: runnerName,
-                gitHubUrl: gitHubUrl,
-                agentId: nil,
-                workFolder: nil,
-                labels: [],
-                installPath: nil,
-                isRunning: false,
-                githubStatus: nil,
-                isBusy: false
-            )
+            labels: [String] = [],
+            installPath: String?,
+            isRunning: Bool,
+            githubStatus: String? = nil,
+            isBusy: Bool = false
+        ) {
+            self.runnerName = runnerName
+            self.gitHubUrl = gitHubUrl
+            self.agentId = agentId
+            self.workFolder = workFolder
+            self.labels = labels
+            self.installPath = installPath
+            self.isRunning = isRunning
+            self.githubStatus = githubStatus
+            self.isBusy = isBusy
         }
     }
 
@@ -89,7 +70,7 @@ struct RunnerModel: Identifiable, Hashable {
     /// Read from the `gitHubUrl` field in `.runner`.
     let gitHubUrl: String?
 
-    /// GitHub's numeric agent identifier for this runner installation.
+    /// GitHub’s numeric agent identifier for this runner installation.
     /// Read from the `agentId` field in `.runner`. Used as the primary
     /// deduplication key across scan sources.
     let agentId: Int?
@@ -112,7 +93,7 @@ struct RunnerModel: Identifiable, Hashable {
 
     // MARK: Source: launchctl
 
-    /// `true` when a launchd service with this runner's label was found in
+    /// `true` when a launchd service with this runner’s label was found in
     /// `launchctl list` output at the last scan, indicating the runner is
     /// actively registered and running. Determined by `LocalRunnerScanner`
     /// using `launchctl list | grep actions.runner`.
@@ -121,7 +102,7 @@ struct RunnerModel: Identifiable, Hashable {
     // MARK: Source: Phase 4 — GitHub API enrichment
 
     /// Live status reported by the GitHub API: `"online"`, `"offline"`, or `nil`
-    /// when enrichment hasn't run yet. Set by `RunnerStatusEnricher` in Phase 4.
+    /// when enrichment hasn’t run yet. Set by `RunnerStatusEnricher` in Phase 4.
     var githubStatus: String?
 
     /// `true` when the GitHub API reports this runner is currently executing a job.
@@ -130,9 +111,8 @@ struct RunnerModel: Identifiable, Hashable {
 
     // MARK: - Init
 
-    /// Designated initialiser. Takes a `Config` to stay under the S107
-    /// 7-parameter limit while preserving all 9 stored fields.
-    init(_ config: Config) {
+    /// Primary init — accepts a `Config` to stay under the S107 parameter limit.
+    init(config: Config) {
         runnerName   = config.runnerName
         gitHubUrl    = config.gitHubUrl
         agentId      = config.agentId
@@ -147,6 +127,33 @@ struct RunnerModel: Identifiable, Hashable {
         } else {
             id = "\(config.runnerName)-\(config.gitHubUrl ?? "")"
         }
+    }
+
+    /// Convenience factory that preserves the original call-site signature so
+    /// existing callers (`LocalRunnerScanner`, `RunnerStatusEnricher`) require
+    /// no changes.
+    static func make(
+        runnerName: String,
+        gitHubUrl: String?,
+        agentId: Int?,
+        workFolder: String?,
+        labels: [String] = [],
+        installPath: String?,
+        isRunning: Bool,
+        githubStatus: String? = nil,
+        isBusy: Bool = false
+    ) -> RunnerModel {
+        RunnerModel(config: Config(
+            runnerName: runnerName,
+            gitHubUrl: gitHubUrl,
+            agentId: agentId,
+            workFolder: workFolder,
+            labels: labels,
+            installPath: installPath,
+            isRunning: isRunning,
+            githubStatus: githubStatus,
+            isBusy: isBusy
+        ))
     }
 
     // MARK: - Display helpers
