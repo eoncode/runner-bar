@@ -407,7 +407,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // ── Show offline runners ──────────────────────────────────────
+            // ── Show offline runners ───────────────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -420,7 +420,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
-            // ── Polling interval ─────────────────────────────────────────
+            // ── Polling interval ───────────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -500,9 +500,9 @@ struct SettingsView: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
             Divider().padding(.leading, 12)
-            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
+            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar") // NOSONAR S1075 — user-facing navigation URL
             Divider().padding(.leading, 12)
-            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar")
+            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar") // NOSONAR S1075 — user-facing navigation URL
 #endif
         }
     }
@@ -547,8 +547,11 @@ struct SettingsView: View {
         newScope = ""
     }
 
+    /// Returns the dot colour for an API-registered `Runner` row.
+    /// Flattened from a nested ternary to a guard+return for readability (S3358).
     private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+        guard runner.status == "online" else { return .gray }
+        return runner.busy ? .yellow : .green
     }
 
     private func linkRow(label: String, url: String) -> some View {
@@ -566,6 +569,7 @@ struct SettingsView: View {
     }
 
     private func signInWithGitHub() {
+        // NOSONAR S1075 — user-facing docs URL, not a configurable system path
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
@@ -581,7 +585,10 @@ struct SettingsView: View {
         guard !isSigningOut else { return }
         isSigningOut = true
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
+            // ghBinaryPath() avoids a hard-coded /opt/homebrew/bin/gh path (S1075).
+            if let ghPath = ghBinaryPath() {
+                _ = shell("\(ghPath) auth logout --hostname github.com")
+            }
             DispatchQueue.main.async {
                 isAuthenticated = (githubToken() != nil)
                 isSigningOut = false
