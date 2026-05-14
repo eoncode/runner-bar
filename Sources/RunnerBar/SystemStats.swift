@@ -35,6 +35,26 @@ struct SystemStats {
     )
 }
 
+// MARK: - SystemStatsHistory
+
+/// A fixed-size ring buffer that stores the last `capacity` samples for a metric.
+/// Used to drive `SparklineView` without growing unboundedly.
+struct RingBuffer {
+    private(set) var values: [Double] = []
+    let capacity: Int
+
+    init(capacity: Int = 20) {
+        self.capacity = capacity
+    }
+
+    mutating func append(_ value: Double) {
+        if values.count >= capacity {
+            values.removeFirst()
+        }
+        values.append(value)
+    }
+}
+
 private struct CPUTicks {
     var user: Double
     var system: Double
@@ -69,6 +89,12 @@ private struct DiskStats {
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
+
+    // MARK: - History ring buffers (20 samples @ 2 s = ~40 s window)
+    @Published var cpuHistory    = RingBuffer(capacity: 20)
+    @Published var memHistory    = RingBuffer(capacity: 20)
+    @Published var diskHistory   = RingBuffer(capacity: 20)
+
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
@@ -197,6 +223,14 @@ final class SystemStatsViewModel: ObservableObject {
             diskFreeGB: disk.free,
             diskFreePct: disk.freePct
         )
-        DispatchQueue.main.async { self.stats = snapshot }
+        // Compute mem% for the history buffer
+        let memPct = mem.total > 0 ? (mem.used / mem.total) * 100 : 0
+        let diskUsedPct = disk.total > 0 ? (disk.used / disk.total) * 100 : 0
+        DispatchQueue.main.async {
+            self.stats = snapshot
+            self.cpuHistory.append(cpu)
+            self.memHistory.append(memPct)
+            self.diskHistory.append(diskUsedPct)
+        }
     }
 }
