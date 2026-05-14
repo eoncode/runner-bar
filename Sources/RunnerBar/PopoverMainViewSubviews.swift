@@ -359,7 +359,9 @@ struct InlineJobRowsView: View {
         switch job.status {
         case "in_progress": return .yellow
         case "queued":      return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
+        default:
+            if job.conclusion == "success" { return .green }
+            return job.isDimmed ? .gray : .red
         }
     }
 }
