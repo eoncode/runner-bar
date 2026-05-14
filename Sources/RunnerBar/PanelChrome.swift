@@ -130,7 +130,7 @@ final class PanelChromeView: NSView {
         addSubview(vibrancyView)
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder _: NSCoder) { fatalError() }
 
     /// The rectangle occupied by the panel body (excluding the arrow tip area).
     var contentRect: NSRect {
