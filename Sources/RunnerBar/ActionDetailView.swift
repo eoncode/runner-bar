@@ -36,6 +36,7 @@ import SwiftUI
 //   SHA/PR label made tappable: opens commit or PR on GitHub.
 //   Time-range and elapsed columns hidden for queued jobs (no startedAt).
 //   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
+//   Phase 6: jobDotColor / jobStatusColor / conclusionColor use DesignTokens.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -259,7 +260,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
                 .frame(width: 28, alignment: .leading)
             Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
             Text(job.name)
-                .font(.system(size: 12))
+                .font(RBFont.mono)
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
             if job.startedAt != nil {
@@ -300,10 +301,14 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return "\(startStr)→now"
     }
 
-    /// Returns the status dot colour for a job row.
+    /// Returns the status dot colour for a job row — uses DesignTokens.
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return .secondary }
-        return job.status == "in_progress" ? .yellow : .gray
+        switch job.status {
+        case "in_progress": return .rbBlue
+        case "queued":      return .rbBlue.opacity(0.5)
+        default:            return .secondary
+        }
     }
 
     /// Short status label shown when a job has no conclusion yet.
@@ -315,8 +320,10 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
-    /// Text colour for a live (no-conclusion) job status label.
-    func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
+    /// Text colour for a live (no-conclusion) job status label — uses DesignTokens.
+    func jobStatusColor(for job: ActiveJob) -> Color {
+        job.status == "in_progress" ? .rbBlue : .secondary
+    }
 
     /// Maps a raw conclusion string to a human-readable icon + label.
     func conclusionLabel(_ conclusion: String) -> String {
@@ -329,11 +336,11 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
-    /// Maps a raw conclusion string to a display colour.
+    /// Maps a raw conclusion string to a display colour — uses DesignTokens.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
-        case "success": return .green
-        case "failure": return .red
+        case "success": return .rbSuccess
+        case "failure": return .rbDanger
         default:        return .secondary
         }
     }

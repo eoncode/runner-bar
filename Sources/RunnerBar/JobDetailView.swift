@@ -29,6 +29,7 @@ import SwiftUI
 //   Step number zero-padded to #01…#99 for equal-width alignment.
 //   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
 //     timing+metadata chips on row 2 — eliminates empty right-side dead space.
+//   Phase 6: stepColor / infoBar "running" label use DesignTokens (rbBlue/rbSuccess/rbDanger).
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -236,9 +237,10 @@ struct JobDetailView: View {
                         .font(.caption.monospacedDigit())
                         .foregroundColor(.secondary)
                 } else {
+                    // Phase 6: use rbBlue instead of .yellow for in-progress state
                     Text("running")
                         .font(.caption)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(.rbBlue)
                 }
                 Text("·")
                     .font(.caption)
@@ -330,7 +332,7 @@ struct JobDetailView: View {
                 .foregroundColor(stepColor(step))
                 .frame(width: 14, alignment: .center)
             Text(step.name)
-                .font(.system(size: 12))
+                .font(RBFont.mono)
                 .foregroundColor(step.status == "queued" ? .secondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -349,9 +351,10 @@ struct JobDetailView: View {
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                     } else {
+                        // Phase 6: use rbBlue instead of .yellow
                         Text("now")
                             .font(.caption)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.rbBlue)
                     }
                 }
                 .fixedSize()
@@ -373,11 +376,12 @@ struct JobDetailView: View {
     // MARK: - Helpers
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
+    /// Step icon/status colour — uses DesignTokens instead of raw .green/.red/.yellow.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
-        case "success": return .green
-        case "failure": return .red
-        default: return step.status == "in_progress" ? .yellow : .secondary
+        case "success": return .rbSuccess
+        case "failure": return .rbDanger
+        default: return step.status == "in_progress" ? .rbBlue : .secondary
         }
     }
 }
