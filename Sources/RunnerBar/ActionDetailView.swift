@@ -358,22 +358,23 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
             }
         }
         .background(
-            // Subtle tint per job status
+            // Subtle tint per job status — uses DesignTokens tint constants for consistency
             Rectangle().fill(jobRowTint(for: job))
         )
         .contentShape(Rectangle())
     }
 
     /// Subtle background tint for each job row based on live status.
+    /// Uses DesignTokens.Color tint constants (not raw .opacity values) for system-wide consistency.
     func jobRowTint(for job: ActiveJob) -> Color {
         guard !job.isDimmed else { return .clear }
         switch job.status {
-        case "in_progress": return DesignTokens.Color.statusBlue.opacity(0.04)
+        case "in_progress": return DesignTokens.Color.tintBlue
         case "queued":      return DesignTokens.Color.statusBlue.opacity(0.02)
         default:
             switch job.conclusion {
-            case "success":   return DesignTokens.Color.statusGreen.opacity(0.03)
-            case "failure":   return DesignTokens.Color.statusRed.opacity(0.04)
+            case "success":   return DesignTokens.Color.tintGreen
+            case "failure":   return DesignTokens.Color.tintRed
             default:          return .clear
             }
         }
