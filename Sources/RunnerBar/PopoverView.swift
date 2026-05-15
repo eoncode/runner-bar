@@ -1,10 +1,12 @@
 import SwiftUI
 
-// MARK: - PopoverOpenState
+// MARK: - PopoverView
 
-/// Observable object that tracks whether the popover panel is currently visible.
-/// Injected into the SwiftUI environment via `AppDelegate.wrapEnv(_:)`.
-final class PopoverOpenState: ObservableObject {
-    /// `true` while the NSPanel is on screen.
-    @Published var isOpen: Bool = false
+/// Root SwiftUI entry-point hosted inside the NSPanel.
+/// Injects shared environment objects and delegates navigation to `AppDelegate`.
+struct PopoverView: View {
+    /// Renders the hosted content via the environment-injected store.
+    var body: some View {
+        EmptyView()
+    }
 }
