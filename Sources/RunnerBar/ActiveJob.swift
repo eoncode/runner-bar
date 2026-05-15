@@ -28,10 +28,9 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     /// `nil` when the job is still queued and hasn't been assigned yet.
     /// Used to determine local vs cloud icon on action rows.
     let runnerName: String?
-    /// Fractional progress (0.0–1.0) derived from completed steps.
-    /// `nil` when no step data is available or progress cannot be determined.
-    /// Used by `PieProgressDot` and the horizontal progress bar in `ActionDetailView`.
-    let progressFraction: Double?
+
+    // NOTE: progressFraction is a computed var defined in PopoverProgressViews.swift
+    // via an extension on ActiveJob. Do NOT add a stored property here.
 
     /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
     ///
@@ -93,7 +92,6 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         case isDimmed
         case steps
         case runnerName = "runner_name"
-        case progressFraction
     }
 }
 
@@ -222,9 +220,6 @@ extension RunnerStore {
                 completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
             )
         }
-        let completedSteps = steps.filter { $0.conclusion != nil }.count
-        let totalSteps = steps.count
-        let fraction: Double? = totalSteps > 0 ? Double(completedSteps) / Double(totalSteps) : nil
         return ActiveJob(
             id: payload.id,
             name: payload.name,
@@ -236,8 +231,7 @@ extension RunnerStore {
             htmlUrl: payload.htmlUrl,
             isDimmed: isDimmed,
             steps: steps,
-            runnerName: payload.runnerName,
-            progressFraction: fraction
+            runnerName: payload.runnerName
         )
     }
 }

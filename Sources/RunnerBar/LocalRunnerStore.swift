@@ -34,7 +34,6 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
 
     // MARK: Private
 
-    private let scanner = LocalRunnerScanner()
     private let enricher = RunnerStatusEnricher.shared
     private let queue = DispatchQueue(
         label: "dev.eonist.runnerbar.localrunnerstore",
@@ -63,7 +62,7 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
         queue.async { [weak self] in
             guard let self else { return }
             // Phase 1: local scan
-            var result = self.scanner.scan()
+            var result = LocalRunnerScanner.scan()
             // Phase 4: enrich with live GitHub API status (skipped if no token)
             if githubToken() != nil {
                 result = self.enricher.enrich(runners: result)
