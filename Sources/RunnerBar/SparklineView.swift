@@ -44,55 +44,50 @@ struct SparklineView: View {
             var basePath = Path()
             basePath.move(to: CGPoint(x: 0, y: size.height))
             basePath.addLine(to: CGPoint(x: size.width, y: size.height))
-            ctx.stroke(basePath, with: .color(strokeColor.opacity(0.25)), lineWidth: 0.5)
-            ctx.stroke(linePath, with: .color(strokeColor), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+            ctx.stroke(linePath, with: .color(strokeColor), lineWidth: 1.5)
+            ctx.stroke(basePath, with: .color(strokeColor.opacity(0.2)), lineWidth: 0.5)
         }
-        .opacity(0.85) // Slight transparency so it blends with dark/light bg
     }
 
     private func points(in size: CGSize) -> [CGPoint] {
-        let count = history.count
-        return history.enumerated().map { idx, val in
-            let x = size.width * CGFloat(idx) / CGFloat(count - 1)
-            let y = size.height * CGFloat(1.0 - min(max(val, 0), 1))
-            return CGPoint(x: x, y: y)
+        let n = history.count
+        return history.enumerated().map { i, v in
+            CGPoint(
+                x: size.width * CGFloat(i) / CGFloat(n - 1),
+                y: size.height * (1 - CGFloat(v))
+            )
         }
     }
 }
 
 // MARK: - DiskPillView
-/// Pill-shaped badge showing disk free space percentage.
-/// Semi-transparent fill + hairline stroke, adapts colour to usage level.
-///
-/// Phase 2 of the design redesign (#421).
+/// A compact pill showing disk usage percentage.
+/// Issue #419 Phase 5: uses .ultraThinMaterial with a colour overlay instead of a flat fill.
 struct DiskPillView: View {
-    let freePct: Double
-    let usedGB: Int
-    let totalGB: Int
+    let usedPct: Double
 
-    private var usedPct: Double { 100 - freePct }
-    private var pillColor: Color { DesignTokens.Colors.usage(pct: usedPct) }
+    private var pillColor: Color {
+        DesignTokens.Colors.usage(pct: usedPct)
+    }
 
     var body: some View {
         HStack(spacing: 3) {
-            Text(String(format: "%d/%dGB", usedGB, totalGB))
-                .font(DesignTokens.Fonts.monoStat)
+            Image(systemName: "internaldrive")
+                .font(.system(size: 9, weight: .medium))
                 .foregroundColor(pillColor)
-                .lineLimit(1)
-            Text(String(format: "(%d%%)", Int(freePct.rounded())))
-                .font(DesignTokens.Fonts.mono)
-                .foregroundColor(pillColor.opacity(0.8))
-                .lineLimit(1)
+            Text(String(format: "%.0f%%", usedPct))
+                .font(RBFont.monoLabel)
+                .foregroundColor(pillColor)
         }
-        .padding(.horizontal, DesignTokens.Spacing.chipHPad)
-        .padding(.vertical, DesignTokens.Spacing.chipVPad)
+        .padding(.horizontal, RBSpacing.sm)
+        .padding(.vertical, 2)
         .background(
             Capsule()
-                .fill(pillColor.opacity(0.12))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Capsule()
+                        .fill(pillColor.opacity(0.10))
+                )
         )
     }
 }
