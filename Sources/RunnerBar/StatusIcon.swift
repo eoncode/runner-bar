@@ -1,6 +1,7 @@
 import AppKit
 
 // swiftlint:disable missing_docs
+// swiftlint:disable type_body_length
 
 /// Renders the coloured status icon shown in the menu bar and popover rows.
 struct StatusIcon {
@@ -71,4 +72,5 @@ struct StatusIcon {
         return img
     }
 }
+// swiftlint:enable type_body_length
 // swiftlint:enable missing_docs
