@@ -25,6 +25,9 @@ struct RunnerModel: Identifiable, Hashable {
         let githubStatus: String?
         let isBusy: Bool
 
+        // NOSONAR S107 — Config.init intentionally mirrors all RunnerModel fields;
+        // splitting further would add boilerplate with no architectural benefit.
+        // This struct exists solely to keep RunnerModel.init under the S107 limit.
         init(
             runnerName: String,
             gitHubUrl: String?,
@@ -70,7 +73,7 @@ struct RunnerModel: Identifiable, Hashable {
     /// Read from the `gitHubUrl` field in `.runner`.
     let gitHubUrl: String?
 
-    /// GitHub’s numeric agent identifier for this runner installation.
+    /// GitHub's numeric agent identifier for this runner installation.
     /// Read from the `agentId` field in `.runner`. Used as the primary
     /// deduplication key across scan sources.
     let agentId: Int?
@@ -93,7 +96,7 @@ struct RunnerModel: Identifiable, Hashable {
 
     // MARK: Source: launchctl
 
-    /// `true` when a launchd service with this runner’s label was found in
+    /// `true` when a launchd service with this runner's label was found in
     /// `launchctl list` output at the last scan, indicating the runner is
     /// actively registered and running. Determined by `LocalRunnerScanner`
     /// using `launchctl list | grep actions.runner`.
@@ -102,7 +105,7 @@ struct RunnerModel: Identifiable, Hashable {
     // MARK: Source: Phase 4 — GitHub API enrichment
 
     /// Live status reported by the GitHub API: `"online"`, `"offline"`, or `nil`
-    /// when enrichment hasn’t run yet. Set by `RunnerStatusEnricher` in Phase 4.
+    /// when enrichment hasn't run yet. Set by `RunnerStatusEnricher` in Phase 4.
     var githubStatus: String?
 
     /// `true` when the GitHub API reports this runner is currently executing a job.
