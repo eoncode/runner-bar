@@ -39,10 +39,10 @@ struct SettingsView: View {
     @ObservedObject var store: RunnerStoreObservable
 
     // MARK: - Observed stores (singletons, NOT injected props)
-    @ObservedObject private var settings          = SettingsStore.shared
-    @ObservedObject private var notifications     = NotificationPrefsStore.shared
-    @ObservedObject private var legal             = LegalPrefsStore.shared
-    @ObservedObject private var localRunnerStore  = LocalRunnerStore.shared
+    @ObservedObject private var settings         = SettingsStore.shared
+    @ObservedObject private var notifications    = NotificationPrefsStore.shared
+    @ObservedObject private var legal            = LegalPrefsStore.shared
+    @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     // MARK: - Local state
     @State private var newScope              = ""
@@ -59,7 +59,6 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Back button header
             HStack {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -108,20 +107,20 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = nil
         }
         .sheet(isPresented: $showAddRunnerSheet) {
-            AddRunnerSheet { model in
+            AddRunnerSheet(onAdd: { model in
                 localRunnerStore.add(model)
                 showAddRunnerSheet = false
-            } onCancel: {
+            }, onCancel: {
                 showAddRunnerSheet = false
-            }
+            })
         }
         .sheet(item: $runnerBeingConfigured) { runner in
-            RunnerConfigSheet(runner: runner) { updated in
+            RunnerConfigSheet(runner: runner, onSave: { updated in
                 localRunnerStore.update(updated)
                 runnerBeingConfigured = nil
-            } onCancel: {
+            }, onCancel: {
                 runnerBeingConfigured = nil
-            }
+            })
         }
         .sheet(isPresented: $isShowingLegal) {
             LegalPrefsView(legalPrefsStore: legal)
@@ -365,9 +364,9 @@ struct SettingsView: View {
 
     // MARK: - Helpers
     private func addScope() {
-        let s = newScope.trimmingCharacters(in: .whitespaces)
-        guard !s.isEmpty else { return }
-        ScopeStore.shared.add(s)
+        let scope = newScope.trimmingCharacters(in: .whitespaces)
+        guard !scope.isEmpty else { return }
+        ScopeStore.shared.add(scope)
         RunnerStore.shared.start()
         store.reload()
         newScope = ""
@@ -381,7 +380,7 @@ struct SettingsView: View {
 
     private func linkRow(label: String, url: String) -> some View {
         Button(action: {
-            if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+            if let dest = URL(string: url) { NSWorkspace.shared.open(dest) }
         }) {
             HStack {
                 Text(label).font(.system(size: 12))
@@ -394,7 +393,6 @@ struct SettingsView: View {
     }
 
     /// Runs `gh auth logout --hostname github.com` on a background thread.
-    /// Updates `isAuthenticated` on the main thread when complete.
     /// ❌ NEVER run shell calls on the main thread.
     private func signOutOfGitHub() {
         guard !isSigningOut else { return }
@@ -409,8 +407,8 @@ struct SettingsView: View {
     }
 
     private func signInWithGitHub() {
-        let urlString = "https://docs.github.com/en/authentication/" +
-            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        let urlString = "https://docs.github.com/en/authentication/"
+            + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
     }

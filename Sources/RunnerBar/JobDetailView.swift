@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+// swiftlint:disable vertical_whitespace_opening_braces
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️ NSPANEL SIZING GUARD — READ THIS BEFORE ANY EDIT ⚠️⚠️⚠️
@@ -27,119 +28,24 @@ import SwiftUI
 //   Restored: isDisabled guards on ReRunButton + ReRunFailedButton.
 // ════════════════════════════════════════════════════════════════════════════════
 
-// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
+/// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 struct JobDetailView: View {
+    /// The job whose steps are displayed.
     let job: ActiveJob
+    /// Display tick for live elapsed-time updates.
     let tick: Int
+    /// Called when the user taps the back button.
     let onBack: () -> Void
+    /// Called when the user taps a step row.
     let onSelectStep: (JobStep) -> Void
-
-    /// Shared HH:mm:ss formatter — `static let` so it is created once, not per render tick.
-    /// ❌ NEVER instantiate DateFormatter inline inside a @ViewBuilder or per-call function.
-    private static let stepTimeFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f
-    }()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
-            // ── Header ──────────────────────────────────────────────────────────────────────────────────────────
-            HStack(spacing: 6) {
-                Button(action: onBack) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "chevron.left").font(.caption)
-                        Text("Jobs").font(.caption)
-                    }
-                    .foregroundColor(.secondary)
-                    .fixedSize()
-                }
-                .buttonStyle(.plain)
-
-                Spacer(minLength: 8)
-
-                // ── Action cluster ──────────────────────────────────────────────────────────────────
-                // Restored isDisabled: buttons must be inactive while job is running/queued.
-                ReRunButton(
-                    action: { completion in
-                        let jobID    = job.id
-                        let repoSlug = self.repoSlug
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = GitHub.reRunJob(jobID: jobID, repoSlug: repoSlug)
-                            DispatchQueue.main.async { completion(ok) }
-                        }
-                    },
-                    isDisabled: job.status == "in_progress" || job.status == "queued",
-                    tooltip: "Re-run this job"
-                )
-                // Restored isDisabled: only enabled when job has failed or been cancelled.
-                ReRunFailedButton(
-                    action: { completion in
-                        let runID    = job.runId
-                        let repoSlug = self.repoSlug
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = GitHub.reRunFailed(runID: runID, repoSlug: repoSlug)
-                            DispatchQueue.main.async { completion(ok) }
-                        }
-                    },
-                    isDisabled: job.status == "in_progress"
-                        || job.status == "queued"
-                        || (job.conclusion != "failure" && job.conclusion != "cancelled"),
-                    tooltip: "Re-run failed jobs in this workflow run"
-                )
-                // Restored: CancelButton — spec mandates no behaviour regression.
-                CancelButton(
-                    action: { completion in
-                        let runID    = job.runId
-                        let repoSlug = self.repoSlug
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = GitHub.cancelRun(runID: runID, repoSlug: repoSlug)
-                            DispatchQueue.main.async { completion(ok) }
-                        }
-                    },
-                    isDisabled: job.status != "in_progress" && job.status != "queued"
-                )
-                // Restored: LogCopyButton — spec mandates no behaviour regression.
-                LogCopyButton(
-                    fetch: { completion in
-                        let jobID    = job.id
-                        let repoSlug = self.repoSlug
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchJobLog(jobID: jobID, scope: repoSlug))
-                        }
-                    },
-                    isDisabled: false
-                )
-
-                if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                    Button(
-                        action: { NSWorkspace.shared.open(url) },
-                        label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "safari").font(.caption)
-                                Text("GitHub").font(.caption)
-                            }
-                            .foregroundColor(.secondary)
-                            .fixedSize()
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .help("Open job on GitHub")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-
-            // ── Info bar ────────────────────────────────────────────────────────────────────────────────────────────────
+            headerBar
             infoBar
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
-
             Divider()
-
-            // ── Steps list ────────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -167,7 +73,96 @@ struct JobDetailView: View {
         .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
     }
 
+    // MARK: - Header bar
+    private var headerBar: some View {
+        HStack(spacing: 6) {
+            Button(action: onBack) {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.caption)
+                    Text("Jobs").font(.caption)
+                }
+                .foregroundColor(.secondary)
+                .fixedSize()
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 8)
+            actionCluster
+            if let urlString = job.htmlUrl, let url = URL(string: urlString) {
+                Button(
+                    action: { NSWorkspace.shared.open(url) },
+                    label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "safari").font(.caption)
+                            Text("GitHub").font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    }
+                )
+                .buttonStyle(.plain)
+                .help("Open job on GitHub")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Action cluster (extracted to fix function_body_length)
+    private var actionCluster: some View {
+        HStack(spacing: 4) {
+            ReRunButton(
+                action: { completion in
+                    let jobID    = job.id
+                    let slug     = self.repoSlug
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let succeeded = GitHub.reRunJob(jobID: jobID, repoSlug: slug)
+                        DispatchQueue.main.async { completion(succeeded) }
+                    }
+                },
+                isDisabled: job.status == "in_progress" || job.status == "queued",
+                tooltip: "Re-run this job"
+            )
+            ReRunFailedButton(
+                action: { completion in
+                    let runID = job.runId
+                    let slug  = self.repoSlug
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let succeeded = GitHub.reRunFailed(runID: runID, repoSlug: slug)
+                        DispatchQueue.main.async { completion(succeeded) }
+                    }
+                },
+                isDisabled: job.status == "in_progress"
+                    || job.status == "queued"
+                    || (job.conclusion != "failure" && job.conclusion != "cancelled"),
+                tooltip: "Re-run failed jobs in this workflow run"
+            )
+            CancelButton(
+                action: { completion in
+                    let runID = job.runId
+                    let slug  = self.repoSlug
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let succeeded = GitHub.cancelRun(runID: runID, repoSlug: slug)
+                        DispatchQueue.main.async { completion(succeeded) }
+                    }
+                },
+                isDisabled: job.status != "in_progress" && job.status != "queued"
+            )
+            LogCopyButton(
+                fetch: { completion in
+                    let jobID = job.id
+                    let slug  = self.repoSlug
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        completion(fetchJobLog(jobID: jobID, scope: slug))
+                    }
+                },
+                isDisabled: false
+            )
+        }
+    }
+
     // MARK: - Info bar
+    /// Issue #419 Phase 5: BranchTagPill for repo context; rbBlue for in-progress.
     @ViewBuilder private var infoBar: some View {
         _ = tick
         HStack(spacing: 6) {
@@ -175,7 +170,6 @@ struct JobDetailView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            // Issue #419 Phase 5: BranchTagPill shows repo slug context
             BranchTagPill(name: repoSlug)
             Spacer()
             if let conclusion = job.conclusion {
@@ -183,10 +177,8 @@ struct JobDetailView: View {
                     .font(.caption)
                     .foregroundColor(conclusionColor(conclusion))
                     .lineLimit(1).fixedSize()
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
             } else {
-                // Issue #419 Phase 5: use rbBlue instead of .yellow for in-progress state
+                // Issue #419 Phase 5: use rbBlue for in-progress
                 Text("running")
                     .font(.caption)
                     .foregroundColor(.rbBlue)
@@ -242,29 +234,10 @@ struct JobDetailView: View {
             Text(step.name)
                 .font(RBFont.mono)
                 .foregroundColor(step.status == "queued" ? .secondary : .primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(1)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
             Spacer()
             if step.startedAt != nil {
-                HStack(spacing: 3) {
-                    Text(startLabel(for: step))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
-                    Text("→")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    if let end = step.completedAt {
-                        Text(Self.stepTimeFmt.string(from: end))
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("now")
-                            .font(.caption)
-                            .foregroundColor(.rbBlue)
-                    }
-                }
-                .fixedSize()
+                stepTimeRange(step)
                 Text(step.elapsed)
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -287,12 +260,38 @@ struct JobDetailView: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: - Helpers
-    private func elapsedLive(tick _: Int) -> String { job.elapsed }
+    /// Extracted from stepRow to reduce its body length.
+    @ViewBuilder private func stepTimeRange(_ step: JobStep) -> some View {
+        HStack(spacing: 3) {
+            Text(startLabel(for: step))
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+            Text("→")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if let endDate = step.completedAt {
+                Text(Self.timeFormatter.string(from: endDate))
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+            } else {
+                Text("now")
+                    .font(.caption)
+                    .foregroundColor(.rbBlue)
+            }
+        }
+        .fixedSize()
+    }
+
+    /// Shared static formatter — avoids allocating a new DateFormatter on every row render.
+    private static let timeFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm:ss"
+        return fmt
+    }()
 
     private func startLabel(for step: JobStep) -> String {
-        guard let d = step.startedAt else { return "" }
-        return Self.stepTimeFmt.string(from: d)
+        guard let date = step.startedAt else { return "" }
+        return Self.timeFormatter.string(from: date)
     }
 
     private func stepIcon(_ step: JobStep) -> String {
@@ -312,3 +311,4 @@ struct JobDetailView: View {
         }
     }
 }
+// swiftlint:enable vertical_whitespace_opening_braces

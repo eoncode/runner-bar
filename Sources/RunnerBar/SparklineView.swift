@@ -24,7 +24,7 @@ struct SparklineView: View {
             // Gradient fill beneath the line
             var fillPath = Path()
             fillPath.move(to: CGPoint(x: 0, y: size.height))
-            for pt in pts { fillPath.addLine(to: pt) }
+            for point in pts { fillPath.addLine(to: point) }
             fillPath.addLine(to: CGPoint(x: size.width, y: size.height))
             fillPath.closeSubpath()
             ctx.fill(
@@ -39,7 +39,8 @@ struct SparklineView: View {
             // Stroke line on top
             var linePath = Path()
             linePath.move(to: pts[0])
-            for pt in pts.dropFirst() { linePath.addLine(to: pt) }
+            for point in pts.dropFirst() { linePath.addLine(to: point) }
+
             // Bottom baseline stroke
             var basePath = Path()
             basePath.move(to: CGPoint(x: 0, y: size.height))
@@ -50,11 +51,11 @@ struct SparklineView: View {
     }
 
     private func points(in size: CGSize) -> [CGPoint] {
-        let n = history.count
-        return history.enumerated().map { i, v in
+        let count = history.count
+        return history.enumerated().map { idx, val in
             CGPoint(
-                x: size.width * CGFloat(i) / CGFloat(n - 1),
-                y: size.height * (1 - CGFloat(v))
+                x: size.width * CGFloat(idx) / CGFloat(count - 1),
+                y: size.height * (1 - CGFloat(val))
             )
         }
     }

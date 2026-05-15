@@ -35,114 +35,20 @@ import SwiftUI
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 struct ActionDetailView: View {
+    /// The action group whose jobs are displayed.
     let group: ActionGroup
+    /// Display tick for live elapsed-time updates.
     let tick: Int
+    /// Called when the user taps the back button.
     let onBack: () -> Void
+    /// Called when the user taps a job row.
     let onSelectJob: (ActiveJob, ActionGroup) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
-            // ── Header ──
-            HStack(spacing: 6) {
-                Button(action: onBack) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "chevron.left").font(.caption)
-                        Text("Actions").font(.caption)
-                    }
-                    .foregroundColor(.secondary)
-                    .fixedSize()
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                ReRunButton(
-                    action: { completion in
-                        let scope = group.repo
-                        let runIDs = group.runs.map { $0.id }
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
-                                GitHub.reRunFailedJobs(runID: runID, repoSlug: scope)
-                            }
-                            DispatchQueue.main.async { completion(ok) }
-                        }
-                    },
-                    isDisabled: group.groupStatus == .inProgress
-                )
-                CancelButton(
-                    action: { completion in
-                        let scope = group.repo
-                        let runIDs = group.runs.map { $0.id }
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
-                                GitHub.cancelRun(runID: runID, repoSlug: scope)
-                            }
-                            DispatchQueue.main.async { completion(ok) }
-                        }
-                    },
-                    isDisabled: group.groupStatus != .inProgress
-                )
-                LogCopyButton(
-                    fetch: { completion in
-                        let g = group
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchActionLogs(group: g))
-                        }
-                    },
-                    isDisabled: false
-                )
-                if let urlString = group.htmlUrl, let url = URL(string: urlString) {
-                    Button(
-                        action: { NSWorkspace.shared.open(url) },
-                        label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "safari").font(.caption)
-                                Text("GitHub").font(.caption)
-                            }
-                            .foregroundColor(.secondary)
-                            .fixedSize()
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .help("Open on GitHub")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-
-            // ── Group title block ──
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Button(action: openLabelOnGitHub) {
-                        Text(group.label)
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Open on GitHub")
-                    BranchTagPill(name: repoSlug)
-                    Spacer()
-                    Text(group.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(group.isDimmed ? .secondary : .primary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let start = group.firstJobStartedAt {
-                    Text(RelativeTimeFormatter.string(from: start))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 4)
-
+            headerBar
+            groupTitleBlock
             Divider()
-
-            // ── Jobs list ──
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -168,6 +74,114 @@ struct ActionDetailView: View {
         .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
     }
 
+    // MARK: - Header bar
+    private var headerBar: some View {
+        HStack(spacing: 6) {
+            Button(action: onBack) {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.caption)
+                    Text("Actions").font(.caption)
+                }
+                .foregroundColor(.secondary)
+                .fixedSize()
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            actionCluster
+            if let urlString = group.htmlUrl, let url = URL(string: urlString) {
+                Button(
+                    action: { NSWorkspace.shared.open(url) },
+                    label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "safari").font(.caption)
+                            Text("GitHub").font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    }
+                )
+                .buttonStyle(.plain)
+                .help("Open on GitHub")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Action cluster (extracted to reduce body length)
+    private var actionCluster: some View {
+        HStack(spacing: 4) {
+            ReRunButton(
+                action: { completion in
+                    let scope = group.repo
+                    let runIDs = group.runs.map { $0.id }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let succeeded = runIDs.allSatisfy { runID in
+                            GitHub.reRunFailedJobs(runID: runID, repoSlug: scope)
+                        }
+                        DispatchQueue.main.async { completion(succeeded) }
+                    }
+                },
+                isDisabled: group.groupStatus == .inProgress
+            )
+            CancelButton(
+                action: { completion in
+                    let scope = group.repo
+                    let runIDs = group.runs.map { $0.id }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let succeeded = runIDs.allSatisfy { runID in
+                            GitHub.cancelRun(runID: runID, repoSlug: scope)
+                        }
+                        DispatchQueue.main.async { completion(succeeded) }
+                    }
+                },
+                isDisabled: group.groupStatus != .inProgress
+            )
+            LogCopyButton(
+                fetch: { completion in
+                    let grp = group
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        completion(fetchActionLogs(group: grp))
+                    }
+                },
+                isDisabled: false
+            )
+        }
+    }
+
+    // MARK: - Group title block
+    private var groupTitleBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Button(action: openLabelOnGitHub) {
+                    Text(group.label)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .buttonStyle(.plain)
+                .help("Open on GitHub")
+                BranchTagPill(name: repoSlug)
+                Spacer()
+                Text(group.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(group.isDimmed ? .secondary : .primary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let start = group.firstJobStartedAt {
+                Text(RelativeTimeFormatter.string(from: start))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 4)
+    }
+
     private func openLabelOnGitHub() {
         guard let urlString = group.htmlUrl, let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
@@ -186,11 +200,11 @@ struct ActionDetailView: View {
 // MARK: - Row builder
 extension ActionDetailView { // swiftlint:disable:this missing_docs
 
-    /// Shared formatter — instantiating DateFormatter per-call is expensive; use `static let`.
+    /// Shared static formatter — avoids allocating a new DateFormatter on every row render.
     private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm:ss"
+        return fmt
     }()
 
     @ViewBuilder
@@ -271,6 +285,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
+    /// Short status label shown when a job has no conclusion yet.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "IN PROGRESS"
@@ -279,10 +294,12 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
+    /// Text colour for a live (no-conclusion) job status label — uses DesignTokens.
     func jobStatusColor(for job: ActiveJob) -> Color {
         job.status == "in_progress" ? .rbBlue : .secondary
     }
 
+    /// Maps a raw conclusion string to a human-readable icon + label.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
         case "success":           return "✓ SUCCESS"
@@ -294,6 +311,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
+    /// Maps a raw conclusion string to a display colour — uses DesignTokens.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
         case "success": return .rbSuccess

@@ -70,11 +70,17 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
+/// Root popover view — hosts the header, runner row, and actions list.
 struct PopoverMainView: View {
+    /// Store binding for runners, jobs, and action groups.
     @ObservedObject var store: RunnerStoreObservable
+    /// Called when the user taps a job row to navigate to JobDetailView.
     let onSelectJob: (ActiveJob) -> Void
+    /// Called when the user taps an action row to navigate to ActionDetailView.
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when the user taps the settings gear.
     let onSelectSettings: () -> Void
+    /// Called when the user taps a job inside an inline-expanded action row.
     let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
@@ -106,25 +112,28 @@ struct PopoverMainView: View {
             actionsSection
         }
         // RULE 1: content-driven width, clamped 280–900.
-        // ❌ NEVER add idealWidth here.
-        // ❌ NEVER add idealHeight or maxHeight here.
-        // ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
-        .onAppear {
-            isAuthenticated = (githubToken() != nil)
-            if !popoverOpenState.isOpen { systemStats.start() }
-            startRunnerRefreshTimer()
-            startDisplayTickTimer()
-        }
-        .onDisappear {
-            systemStats.stop()
-            stopRunnerRefreshTimer()
-            stopDisplayTickTimer()
-        }
+        .onAppear(perform: handleAppear)
+        .onDisappear(perform: handleDisappear)
         .onChange(of: popoverOpenState.isOpen) { open in
             if open { systemStats.stop() } else { systemStats.start() }
         }
         .onChange(of: store.actions) { _ in visibleCount = 10 }
+    }
+
+    // MARK: - Lifecycle helpers (extracted to fix function_body_length)
+
+    private func handleAppear() {
+        isAuthenticated = (githubToken() != nil)
+        if !popoverOpenState.isOpen { systemStats.start() }
+        startRunnerRefreshTimer()
+        startDisplayTickTimer()
+    }
+
+    private func handleDisappear() {
+        systemStats.stop()
+        stopRunnerRefreshTimer()
+        stopDisplayTickTimer()
     }
 
     // MARK: - Runner refresh timer (RULE 7 — gated, 5s)
@@ -182,14 +191,12 @@ struct PopoverMainView: View {
                 SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
-                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(
-                            group: group,
-                            tick: displayTick,
-                            onSelectJob: onSelectInlineJob
-                        )
-                    }
+                    ActionRowView(
+                        group: group,
+                        tick: displayTick,
+                        onSelect: { onSelectAction(group) },
+                        onSelectJob: onSelectInlineJob
+                    )
                 }
                 loadMoreButton
             }
