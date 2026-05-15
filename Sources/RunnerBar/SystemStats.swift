@@ -43,6 +43,7 @@ struct RingBuffer {
     private(set) var values: [Double] = []
     let capacity: Int
 
+    /// Creates a ring buffer that retains the most recent `capacity` samples.
     init(capacity: Int = 20) {
         self.capacity = capacity
     }

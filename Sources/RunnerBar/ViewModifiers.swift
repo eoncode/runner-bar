@@ -9,6 +9,7 @@ struct CardRowModifier: ViewModifier {
     var status: RBStatus = .unknown
     var cornerRadius: CGFloat = RBRadius.card
 
+    /// Wraps `content` with an elevated card background tinted by `status`.
     func body(content: Content) -> some View {
         content
             .background(
@@ -46,6 +47,7 @@ struct PillBackgroundModifier: ViewModifier {
     var opacity: Double = 0.15
     var borderOpacity: Double = 0.35
 
+    /// Wraps `content` with a capsule fill and optional stroke border.
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, RBSpacing.sm)
@@ -79,6 +81,7 @@ struct MonoLabelModifier: ViewModifier {
     var size: Font = RBFont.mono
     var color: Color = .rbTextTertiary
 
+    /// Applies monospaced font and tertiary color to `content`.
     func body(content: Content) -> some View {
         content
             .font(size)
