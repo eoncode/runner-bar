@@ -88,7 +88,7 @@ struct PopoverMainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
-                stats: systemStats.stats,
+                statsVM: systemStats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub

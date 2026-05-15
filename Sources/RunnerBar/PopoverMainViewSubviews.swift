@@ -15,18 +15,23 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PopoverHeaderView
-/// Header row: system stats left, settings + close right.
+/// Header row: sparkline stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
+/// Phase 2: accepts the shared SystemStatsViewModel so sparkline histories are live.
 struct PopoverHeaderView: View {
-    let stats: SystemStats
+    @ObservedObject var statsVM: SystemStatsViewModel
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            systemStatsBadge
+            // Phase 2: HeaderStatsBar renders CPU/MEM/DISK sparklines.
+            // Receives the shared VM — no second sampler is created.
+            HeaderStatsBar(statsVM: statsVM)
+
             Spacer()
+
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -62,58 +67,6 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, DesignTokens.Spacing.rowHPad)
         .padding(.top, 10)
         .padding(.bottom, 8)
-    }
-
-    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
-    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
-    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
-    private var systemStatsBadge: some View {
-        HStack(spacing: 8) {
-            statChip(
-                label: "CPU",
-                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
-            )
-            statChip(
-                label: "MEM",
-                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
-            )
-            diskChip
-        }
-    }
-
-    private var diskChip: some View {
-        let total   = stats.diskTotalGB
-        let used    = stats.diskUsedGB
-        let free    = max(0, total - used)
-        let pct     = total > 0 ? (used / total) * 100 : 0
-        let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = blockBar(pct: pct)
-            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
-    }
-
-    private func statChip(label: String, value: String, pct: Double) -> some View {
-        HStack(spacing: 3) {
-            Text(label)
-                .font(DesignTokens.Fonts.monoLabel)   // Phase 1: mono font token
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            Text(value)
-                .font(DesignTokens.Fonts.monoStat)    // Phase 1: mono font token
-                .foregroundColor(DesignTokens.Colors.usage(pct: pct)) // Phase 1: colour token
-                .lineLimit(1)
-        }
-    }
-
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw         = Int((pct / 100.0 * Double(width)).rounded())
-        let filledCount = max(0, min(width, raw))
-        return String(repeating: "▓", count: filledCount)
-             + String(repeating: "░", count: width - filledCount)
     }
 }
 

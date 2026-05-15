@@ -100,63 +100,60 @@ struct DiskPillBadge: View {
 
 // MARK: - HeaderStatsBar
 /// The compact 3-column sparkline header used in the popover.
-/// Drop-in replacement for BlockBarView rows — call from PopoverMainView.
+/// Accepts an existing SystemStatsViewModel so it shares the sampler
+/// already running in PopoverMainView — no second timer is created.
 struct HeaderStatsBar: View {
-    @StateObject private var statsVM = SystemStatsViewModel()
+    @ObservedObject var statsVM: SystemStatsViewModel
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 0) {
-                SparklineMetricView(
-                    label: "CPU",
-                    value: String(format: "%.0f%%", statsVM.stats.cpuPct),
-                    history: statsVM.cpuHistory.values,
-                    currentPct: statsVM.stats.cpuPct
-                )
+        HStack(spacing: 0) {
+            SparklineMetricView(
+                label: "CPU",
+                value: String(format: "%.1f%%", statsVM.stats.cpuPct),
+                history: statsVM.cpuHistory.values,
+                currentPct: statsVM.stats.cpuPct
+            )
 
-                Divider()
-                    .frame(height: 36)
-                    .padding(.horizontal, 4)
+            Divider()
+                .frame(height: 36)
+                .padding(.horizontal, 4)
 
-                SparklineMetricView(
-                    label: "MEM",
-                    value: String(format: "%.1f GB", statsVM.stats.memUsedGB),
-                    history: statsVM.memHistory.values,
-                    currentPct: statsVM.stats.memTotalGB > 0
-                        ? (statsVM.stats.memUsedGB / statsVM.stats.memTotalGB) * 100
-                        : 0
-                )
+            SparklineMetricView(
+                label: "MEM",
+                value: String(format: "%.1f/%.1fGB",
+                               statsVM.stats.memUsedGB,
+                               statsVM.stats.memTotalGB),
+                history: statsVM.memHistory.values,
+                currentPct: statsVM.stats.memTotalGB > 0
+                    ? (statsVM.stats.memUsedGB / statsVM.stats.memTotalGB) * 100
+                    : 0
+            )
 
-                Divider()
-                    .frame(height: 36)
-                    .padding(.horizontal, 4)
+            Divider()
+                .frame(height: 36)
+                .padding(.horizontal, 4)
 
+            // DISK: show used/total + free-pct pill inline
+            HStack(spacing: 6) {
                 SparklineMetricView(
                     label: "DISK",
-                    value: String(format: "%.0f%%", statsVM.stats.diskTotalGB > 0
-                        ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
-                        : 0),
+                    value: String(format: "%d/%dGB",
+                                  Int(statsVM.stats.diskUsedGB.rounded()),
+                                  Int(statsVM.stats.diskTotalGB.rounded())),
                     history: statsVM.diskHistory.values,
                     currentPct: statsVM.stats.diskTotalGB > 0
                         ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
                         : 0
                 )
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: RBRadius.card))
 
-            HStack {
-                Spacer()
                 DiskPillBadge(
                     freeGB: statsVM.stats.diskFreeGB,
                     freePct: statsVM.stats.diskFreePct
                 )
             }
-            .padding(.horizontal, 8)
         }
-        .onAppear { statsVM.start() }
-        .onDisappear { statsVM.stop() }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 }
 
