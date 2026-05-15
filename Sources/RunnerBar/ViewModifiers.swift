@@ -6,12 +6,9 @@ import SwiftUI
 /// The optional `status` tint composites *beneath* the elevated surface so the
 /// very-faint status colour shows through on light and dark appearances.
 struct CardRowModifier: ViewModifier {
-    // swiftlint:disable:next missing_docs
     var status: RBStatus = .unknown
-    // swiftlint:disable:next missing_docs
     var cornerRadius: CGFloat = RBRadius.card
 
-    // swiftlint:disable:next missing_docs
     func body(content: Content) -> some View {
         content
             .background(
@@ -35,7 +32,7 @@ struct CardRowModifier: ViewModifier {
 }
 
 extension View {
-    // swiftlint:disable:next missing_docs
+    /// Applies `CardRowModifier` with the given status tint and corner radius.
     func cardRow(status: RBStatus = .unknown, cornerRadius: CGFloat = RBRadius.card) -> some View {
         modifier(CardRowModifier(status: status, cornerRadius: cornerRadius))
     }
@@ -45,14 +42,10 @@ extension View {
 
 /// Applies a pill-shaped semi-transparent background — used for disk badge, stat pills, branch tags.
 struct PillBackgroundModifier: ViewModifier {
-    // swiftlint:disable:next missing_docs
     var color: Color
-    // swiftlint:disable:next missing_docs
     var opacity: Double = 0.15
-    // swiftlint:disable:next missing_docs
     var borderOpacity: Double = 0.35
 
-    // swiftlint:disable:next missing_docs
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, RBSpacing.sm)
@@ -69,7 +62,7 @@ struct PillBackgroundModifier: ViewModifier {
 }
 
 extension View {
-    // swiftlint:disable:next missing_docs
+    /// Applies `PillBackgroundModifier` with the given fill color, opacity, and border opacity.
     func pillBackground(
         color: Color,
         opacity: Double = 0.15,
@@ -83,12 +76,9 @@ extension View {
 
 /// Applies monospaced font and secondary text color — used for hashes, timestamps, step counts.
 struct MonoLabelModifier: ViewModifier {
-    // swiftlint:disable:next missing_docs
     var size: Font = RBFont.mono
-    // swiftlint:disable:next missing_docs
     var color: Color = .rbTextTertiary
 
-    // swiftlint:disable:next missing_docs
     func body(content: Content) -> some View {
         content
             .font(size)
@@ -97,7 +87,7 @@ struct MonoLabelModifier: ViewModifier {
 }
 
 extension View {
-    // swiftlint:disable:next missing_docs
+    /// Applies `MonoLabelModifier` with the given font and color.
     func monoLabel(font: Font = RBFont.mono, color: Color = .rbTextTertiary) -> some View {
         modifier(MonoLabelModifier(size: font, color: color))
     }
@@ -107,14 +97,10 @@ extension View {
 
 /// The narrow left-side colored bar used to group and indicate status for action rows.
 struct LeftStatusIndicator: View {
-    // swiftlint:disable:next missing_docs
     var status: RBStatus
-    // swiftlint:disable:next missing_docs
     var width: CGFloat = 3
-    // swiftlint:disable:next missing_docs
     var cornerRadius: CGFloat = RBRadius.indicator
 
-    // swiftlint:disable:next missing_docs
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(status.color)
@@ -126,12 +112,9 @@ struct LeftStatusIndicator: View {
 
 /// Small pill-shaped background for runner CPU/MEM inline stats.
 struct StatPill: View {
-    // swiftlint:disable:next missing_docs
     let label: String
-    // swiftlint:disable:next missing_docs
     let value: String
 
-    // swiftlint:disable:next missing_docs
     var body: some View {
         HStack(spacing: RBSpacing.xxs) {
             Text(label)
@@ -162,7 +145,6 @@ struct BranchTagPill: View {
     /// The branch name to display.
     let name: String
 
-    // swiftlint:disable:next missing_docs
     var body: some View {
         Text(name)
             .font(RBFont.monoSmall)
@@ -180,7 +162,6 @@ struct StatusBadge: View {
     /// The text label rendered inside the badge.
     let text: String
 
-    // swiftlint:disable:next missing_docs
     var body: some View {
         Text(text)
             .font(.system(size: 11, weight: .bold))
