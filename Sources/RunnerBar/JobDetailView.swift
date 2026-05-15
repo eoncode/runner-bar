@@ -21,6 +21,7 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 //   Issue #419 Phase 5: stepColor / infoBar "running" label use DesignTokens.
 //   Issue #419 Phase 5: step rows wrapped in cardRow-style RoundedRectangle background.
+//   Issue #419 Phase 5: BranchTagPill wired into infoBar for repo/branch context.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -134,6 +135,8 @@ struct JobDetailView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            // Issue #419 Phase 5: BranchTagPill shows repo slug context
+            BranchTagPill(name: repoSlug)
             Spacer()
             if let conclusion = job.conclusion {
                 Text(conclusionLabel(conclusion))
@@ -155,8 +158,6 @@ struct JobDetailView: View {
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
                 .lineLimit(1).fixedSize()
-            Text(repoSlug)
-                .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
         }
     }
 
