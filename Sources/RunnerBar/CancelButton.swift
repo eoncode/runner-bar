@@ -2,12 +2,13 @@ import SwiftUI
 
 // MARK: - CancelButton
 
-/// Top-bar cancel button used in JobDetailView and StepLogView.
-/// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
+/// Top-bar "Cancel run" button.
+/// Shows a spinner while the cancel request is in-flight,
+/// then a brief ✓/✗ confirmation before returning to idle.
 struct CancelButton: View {
-    /// Called on tap. Must invoke completion(success: Bool) from any thread.
+    /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
-    /// When true the button is rendered at reduced opacity and cannot be tapped.
+    /// When true the button is hidden and takes no layout space.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
@@ -33,18 +34,20 @@ struct CancelButton: View {
         Group {
             switch phase {
             case .idle:
-                Button(action: startCancel) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "xmark.circle")
-                            .font(.caption)
-                        Text("Cancel")
-                            .font(.caption)
-                            .fixedSize()
+                if !isDisabled {
+                    Button(action: startCancel) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark.circle")
+                                .font(.caption)
+                            Text("Cancel")
+                                .font(.caption)
+                                .fixedSize()
+                        }
+                        .foregroundColor(.secondary)
                     }
-                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                    .buttonStyle(.plain)
+                    .help("Cancel this workflow run")
                 }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
             case .loading:
                 ButtonPhaseView(phase: .loading)
             case .done:
