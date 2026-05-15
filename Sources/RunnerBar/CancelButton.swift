@@ -30,8 +30,7 @@ struct CancelButton: View {
 
     var body: some View {
         Group {
-            switch phase {
-            case .idle:
+            if phase == .idle {
                 Button(action: startCancel) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle")
@@ -44,12 +43,8 @@ struct CancelButton: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
-            case .loading:
-                ButtonPhaseView(phase: .loading)
-            case .done:
-                ButtonPhaseView(phase: .done)
-            case .failed:
-                ButtonPhaseView(phase: .failed)
+            } else {
+                ButtonPhaseView(phase: phase)
             }
         }
     }
@@ -74,9 +69,10 @@ struct CancelButton: View {
 
 /// Renders the non-idle visual state of a `CancelButton` (loading, done, failed).
 struct ButtonPhaseView: View {
-    /// The phase to render; `.idle` is not used by this view.
+    /// The phase to render; `.idle` renders as `EmptyView`.
     let phase: CancelButton.Phase
 
+    /// The button visual for the current phase.
     var body: some View {
         Group {
             switch phase {
