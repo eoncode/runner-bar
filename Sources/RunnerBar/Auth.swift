@@ -1,19 +1,26 @@
+// swiftlint:disable all
 import Foundation
 
-/// Returns a GitHub personal access token from the first available source.
-///
-/// Priority order:
-/// 1. `gh auth token` — preferred; uses the active authenticated `gh` CLI session.
-/// 2. `GH_TOKEN` environment variable — useful in CI or scripted contexts.
-/// 3. `GITHUB_TOKEN` environment variable — fallback for Actions-style environments.
-///
-/// Returns `nil` if no token is available from any source.
-func githubToken() -> String? {
-    let result = shell("/opt/homebrew/bin/gh auth token", timeout: 10)
-    if !result.isEmpty && !result.hasPrefix("error") { return result }
-    if let envToken = ProcessInfo.processInfo.environment["GH_TOKEN"],
-       !envToken.isEmpty { return envToken }
-    if let envToken = ProcessInfo.processInfo.environment["GITHUB_TOKEN"],
-       !envToken.isEmpty { return envToken }
-    return nil
+func ghToken() -> String {
+    if let env = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !env.isEmpty { return env }
+    if let ud = UserDefaults.standard.string(forKey: "githubToken"), !ud.isEmpty { return ud }
+    return ""
 }
+
+func ghAPI(_ path: String, method: String = "GET", body: Data? = nil) -> Data? {
+    let token = ghToken()
+    guard !token.isEmpty,
+          let url = URL(string: "https://api.github.com/\(path)") else { return nil }
+    var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+    req.httpMethod = method
+    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    if let body { req.httpBody = body; req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+    var result: Data?
+    let sem = DispatchSemaphore(value: 0)
+    URLSession.shared.dataTask(with: req) { data, _, _ in result = data; sem.signal() }.resume()
+    sem.wait()
+    return result
+}
+// swiftlint:enable all

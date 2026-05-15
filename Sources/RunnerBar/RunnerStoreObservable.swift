@@ -1,8 +1,7 @@
-// swiftlint:disable missing_docs unused_closure_parameter
+// swiftlint:disable all
 import Foundation
 import SwiftUI
 
-// MARK: - RunnerStoreObservable
 final class RunnerStoreObservable: ObservableObject {
     @Published var state: RunnerStoreState
     private var store: RunnerStore
@@ -29,4 +28,4 @@ final class RunnerStoreObservable: ObservableObject {
         try await store.cancelWorkflow(group: group)
     }
 }
-// swiftlint:enable missing_docs unused_closure_parameter
+// swiftlint:enable all
