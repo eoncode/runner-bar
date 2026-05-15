@@ -3,6 +3,10 @@ import SwiftUI
 // MARK: - Card Row Modifier
 
 /// Applies the standard elevated card row background with a subtle border.
+/// Layer order (back to front):
+///   1. rbSurfaceElevated fill (base elevation)
+///   2. status.tint fill overlay (colour signal on top)
+///   3. strokeBorder (hairline edge)
 struct CardRowModifier: ViewModifier {
     var status: RBStatus = .unknown
     var cornerRadius: CGFloat = RBRadius.card
@@ -11,10 +15,11 @@ struct CardRowModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(status.tint)
+                    // Base elevated surface first, then tint on top so both are visible
+                    .fill(Color.rbSurfaceElevated)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(Color.rbSurfaceElevated)
+                            .fill(status.tint)
                     )
             )
             .overlay(
