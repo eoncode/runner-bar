@@ -14,30 +14,12 @@ struct SectionHeaderLabel: View {
     }
 }
 
-// MARK: - DiskUsagePill
-/// Compact orange pill showing disk-used percentage, displayed in the system
-/// stats header row. Mirrors the "14%" badge visible in the reference design.
-private struct DiskUsagePill: View {
-    /// Disk-used fraction 0–100 (e.g. 14.3 → displayed as "14%").
-    let usedPct: Double
-
-    var body: some View {
-        Text("\(Int(usedPct.rounded()))%")
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .foregroundColor(.rbWarning)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.rbWarning.opacity(0.18))
-            )
-    }
-}
-
 // MARK: - PopoverHeaderView
 /// Header row: sparkline stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 /// Phase 2: accepts the shared SystemStatsViewModel so sparkline histories are live.
+/// The disk-used percentage pill is rendered inside HeaderStatsBar (adjacent to the
+/// DISK sparkline). Do NOT add a second DiskUsagePill here.
 struct PopoverHeaderView: View {
     @ObservedObject var statsVM: SystemStatsViewModel
     let isAuthenticated: Bool
@@ -46,16 +28,9 @@ struct PopoverHeaderView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Phase 2: HeaderStatsBar renders CPU/MEM/DISK sparklines.
+            // Phase 2: HeaderStatsBar renders CPU/MEM/DISK sparklines + disk pill.
             // Receives the shared VM — no second sampler is created.
             HeaderStatsBar(statsVM: statsVM)
-
-            // fix(#419): disk-used percentage pill restored in the header row.
-            // Computed from diskUsedGB / diskTotalGB so no extra publisher is needed.
-            let diskPct = statsVM.stats.diskTotalGB > 0
-                ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
-                : 0
-            DiskUsagePill(usedPct: diskPct)
 
             Spacer()
 
