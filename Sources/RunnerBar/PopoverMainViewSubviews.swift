@@ -392,10 +392,11 @@ struct ActionRowView: View {
             .padding(.vertical, 4)
             .frame(maxHeight: .infinity)
             .overlay(
-                // Subtle chevron hint to indicate expand behaviour
+                // ⚠️ Use .primary.opacity() NOT .white.opacity() — .white is invisible
+                // in light mode. .primary is adaptive: near-black on light, near-white on dark.
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 5, weight: .bold))
-                    .foregroundColor(.white.opacity(expanded ? 0.9 : 0.45))
+                    .foregroundColor(.primary.opacity(expanded ? 0.7 : 0.35))
             )
             .contentShape(Rectangle())
     }
