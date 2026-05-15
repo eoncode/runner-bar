@@ -44,8 +44,8 @@ struct SparklineView: View {
             let points = normalised(in: size)
             guard !points.isEmpty else { return }
             path.move(to: points[0])
-            for pt in points.dropFirst() {
-                path.addLine(to: pt)
+            for point in points.dropFirst() {
+                path.addLine(to: point)
             }
         }
     }
@@ -57,8 +57,8 @@ struct SparklineView: View {
             guard !points.isEmpty else { return }
             path.move(to: CGPoint(x: points[0].x, y: size.height))
             path.addLine(to: points[0])
-            for pt in points.dropFirst() {
-                path.addLine(to: pt)
+            for point in points.dropFirst() {
+                path.addLine(to: point)
             }
             path.addLine(to: CGPoint(x: points.last!.x, y: size.height))
             path.closeSubpath()
@@ -69,17 +69,17 @@ struct SparklineView: View {
     private func normalised(in size: CGSize) -> [CGPoint] {
         guard history.count > 1 else {
             let val = history.first ?? 0
-            let y = size.height - CGFloat(val / 100.0) * size.height
+            let yPos = size.height - CGFloat(val / 100.0) * size.height
             return [
-                CGPoint(x: 0, y: y),
-                CGPoint(x: size.width, y: y)
+                CGPoint(x: 0, y: yPos),
+                CGPoint(x: size.width, y: yPos)
             ]
         }
         let count = history.count
         return history.enumerated().map { idx, val in
-            let x = CGFloat(idx) / CGFloat(count - 1) * size.width
-            let y = size.height - CGFloat(val / 100.0) * size.height
-            return CGPoint(x: x, y: y)
+            let xPos = CGFloat(idx) / CGFloat(count - 1) * size.width
+            let yPos = size.height - CGFloat(val / 100.0) * size.height
+            return CGPoint(x: xPos, y: yPos)
         }
     }
 }
