@@ -10,17 +10,17 @@ struct StatusIcon {
     /// Icon character for the current status/conclusion.
     var icon: String {
         switch conclusion {
-        case "success":            return "\u{2713}"
-        case "failure":            return "\u{2717}"
-        case "cancelled":          return "\u{2298}"
-        case "skipped":            return "\u{2298}"
-        case "timed_out":          return "\u{2717}"
-        case "action_required":    return "!"
+        case "success":          return "\u{2713}"
+        case "failure":          return "\u{2717}"
+        case "cancelled":        return "\u{2298}"
+        case "skipped":          return "\u{2298}"
+        case "timed_out":        return "\u{2717}"
+        case "action_required":  return "!"
         default:
             switch status {
-            case "in_progress":    return "\u{25B6}"
-            case "queued":         return "\u{00B7}"
-            default:               return "\u{00B7}"
+            case "in_progress":  return "\u{25B6}"
+            case "queued":       return "\u{00B7}"
+            default:             return "\u{00B7}"
             }
         }
     }
@@ -28,15 +28,15 @@ struct StatusIcon {
     /// Foreground colour for the icon.
     var color: NSColor {
         switch conclusion {
-        case "success":                    return .systemGreen
-        case "failure", "timed_out":       return .systemRed
-        case "action_required":            return .systemOrange
-        case "cancelled", "skipped":       return .secondaryLabelColor
+        case "success":                  return .systemGreen
+        case "failure", "timed_out":     return .systemRed
+        case "action_required":          return .systemOrange
+        case "cancelled", "skipped":     return .secondaryLabelColor
         default:
             switch status {
-            case "in_progress":            return .systemYellow
-            case "queued":                 return .secondaryLabelColor
-            default:                       return .secondaryLabelColor
+            case "in_progress":          return .systemYellow
+            case "queued":               return .secondaryLabelColor
+            default:                     return .secondaryLabelColor
             }
         }
     }
@@ -48,11 +48,9 @@ struct StatusIcon {
     func image(size: CGFloat = 18) -> NSImage {
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
-
         let bgPath = NSBezierPath(ovalIn: NSRect(x: 1, y: 1, width: size - 2, height: size - 2))
         color.withAlphaComponent(0.15).setFill()
         bgPath.fill()
-
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: size * 0.55, weight: .bold),
             .foregroundColor: color
@@ -63,7 +61,6 @@ struct StatusIcon {
             x: (size - strSize.width) / 2,
             y: (size - strSize.height) / 2
         ))
-
         img.unlockFocus()
         img.isTemplate = false
         return img
