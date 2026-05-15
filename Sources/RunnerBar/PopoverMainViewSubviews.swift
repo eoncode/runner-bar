@@ -231,14 +231,17 @@ struct ActionRowView: View {
             HStack(spacing: 0) {
                 // 4a: Left status indicator — toggle for expand/collapse (Phase 4 spec #420)
                 // Guard: allow toggle whenever the group has any jobs (not just in-progress)
-                Button(action: {
-                    if !group.jobs.isEmpty {
-                        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                Button(
+                    action: {
+                        if !group.jobs.isEmpty {
+                            withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                        }
+                    },
+                    label: {
+                        LeftStatusIndicator(status: rowStatus)
+                            .padding(.vertical, 6)
                     }
-                }) {
-                    LeftStatusIndicator(status: rowStatus)
-                        .padding(.vertical, 6)
-                }
+                )
                 .buttonStyle(.plain)
                 .help(expanded ? "Collapse jobs" : "Expand jobs")
 
@@ -351,9 +354,9 @@ struct ActionRowView: View {
             StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             switch group.conclusion {
-            case "success":  StatusBadge(status: .success,  text: "SUCCESS")
-            case "failure":  StatusBadge(status: .failed,   text: "FAILED")
-            default:         StatusBadge(status: .unknown,  text: "DONE")
+            case "success":  StatusBadge(status: .success, text: "SUCCESS")
+            case "failure":  StatusBadge(status: .failed, text: "FAILED")
+            default:         StatusBadge(status: .unknown, text: "DONE")
             }
         }
     }
