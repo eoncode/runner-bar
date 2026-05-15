@@ -181,7 +181,7 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// Phase 4: left indicator pill + StatusDonutView + row background tint.
+/// Phase 4: left indicator pill + DonutStatusView + row background tint.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -215,8 +215,8 @@ struct ActionRowView: View {
         // ❌ NEVER remove this line.
         _ = tick
         return HStack(spacing: 6) {
-            // Phase 4: StatusDonutView replaces PieProgressDot on action rows
-            StatusDonutView(
+            // Phase 4: DonutStatusView replaces PieProgressDot on action rows
+            DonutStatusView(
                 status: group.groupStatus,
                 conclusion: group.conclusion,
                 progress: group.progressFraction
