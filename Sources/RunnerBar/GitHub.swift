@@ -25,7 +25,7 @@ var ghIsRateLimited: Bool {
 ///
 /// - Parameters:
 ///   - arguments: Arguments passed directly to the `gh` binary.
-///   - timeout:   Kill timeout in seconds. Defaults to 20 s for API calls.
+///   - timeout: Kill timeout in seconds. Defaults to 20 s for API calls.
 /// - Returns: Raw stdout bytes, or `nil` on launch failure or empty output.
 // swiftlint:disable:next function_body_length
 private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Data? {
@@ -44,7 +44,9 @@ private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Da
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
         guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
+        lock.lock()
+        outputData.append(chunk)
+        lock.unlock()
     }
     do { try task.run() } catch {
         log("runGHProcess › launch error: \(error)")
@@ -57,7 +59,11 @@ private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Da
     timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    if !tail.isEmpty {
+        lock.lock()
+        outputData.append(tail)
+        lock.unlock()
+    }
     return outputData.isEmpty ? nil : outputData
 }
 
@@ -82,7 +88,10 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 // swiftlint:disable:next function_body_length
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard let ghPath = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
+    guard let ghPath = ghBinaryPath() else {
+        log("ghAPIPaginated › gh not found")
+        return nil
+    }
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -94,7 +103,9 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
         guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
+        lock.lock()
+        outputData.append(chunk)
+        lock.unlock()
     }
     do { try task.run() } catch {
         log("ghAPIPaginated › launch error: \(error)")
@@ -107,7 +118,11 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    if !tail.isEmpty {
+        lock.lock()
+        outputData.append(tail)
+        lock.unlock()
+    }
     log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     if task.terminationStatus != 0 {
         let raw = String(data: outputData, encoding: .utf8) ?? ""
@@ -246,7 +261,8 @@ func fetchRegistrationToken(scope: String) -> String? {
         endpoint = "orgs/\(scope)/actions/runners/registration-token"
     }
     let args = ["api", "--method", "POST",
-                "-H", "Accept: application/vnd.github+json", endpoint]
+                "-H", "Accept: application/vnd.github+json",
+                endpoint]
     guard let outputData = runGHProcess(arguments: args, timeout: 30) else {
         log("fetchRegistrationToken › no data for \(endpoint)")
         return nil
@@ -344,7 +360,8 @@ func ghPost(_ endpoint: String) -> Bool {
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
     task.arguments = ["api", "--method", "POST",
-                      "-H", "Accept: application/vnd.github+json", endpoint]
+                      "-H", "Accept: application/vnd.github+json",
+                      endpoint]
     task.standardOutput = Pipe()
     task.standardError = Pipe()
     do { try task.run() } catch {

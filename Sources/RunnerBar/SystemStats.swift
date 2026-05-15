@@ -1,4 +1,3 @@
-// swiftlint:disable missing_docs
 import Combine
 import Darwin
 import Foundation
@@ -69,12 +68,15 @@ private struct DiskStats {
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
+    /// Current system stats snapshot, published on the main thread.
     @Published var stats: SystemStats = .zero
 
     /// Rolling history buffers for sparkline rendering.
     /// Each array holds the last `historyCapacity` normalised values in [0, 1].
     @Published var cpuHistory:  [Double] = []
+    /// Rolling memory history for sparkline, normalised [0, 1].
     @Published var memHistory:  [Double] = []
+    /// Rolling disk history for sparkline, normalised [0, 1].
     @Published var diskHistory: [Double] = []
 
     /// Number of samples retained for the sparkline (matches `DesignTokens.Layout.sparklineSampleCount`).
@@ -83,11 +85,13 @@ final class SystemStatsViewModel: ObservableObject {
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
 
+    /// Initialises the view model with zeroed stats.
     init() {}
     deinit { timer?.invalidate() }
 
     // MARK: - Lifecycle
 
+    /// Starts the 2-second polling timer and fires an immediate background sample.
     func start() {
         timer?.invalidate()
         DispatchQueue.global(qos: .utility).async { self.sample() }
@@ -96,6 +100,7 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
+    /// Stops the polling timer and fires one final background sample.
     func stop() {
         timer?.invalidate()
         timer = nil
