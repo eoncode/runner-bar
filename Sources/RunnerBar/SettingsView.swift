@@ -201,12 +201,13 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Local runners")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(.caption)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Spacer()
                 Button(action: { showAddRunnerSheet = true }, label: {
                     Image(systemName: "plus")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                 })
                 .buttonStyle(.plain)
                 .help("Add a new runner")
@@ -222,7 +223,7 @@ struct SettingsView: View {
                     }, label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
                     })
                     .buttonStyle(.plain)
                     .help("Refresh local runner list")
@@ -232,14 +233,16 @@ struct SettingsView: View {
 
             if let errMsg = removeErrorMessage {
                 Text(errMsg)
-                    .font(.caption).foregroundColor(.red)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.statusRed)
                     .padding(.horizontal, 12).padding(.vertical, 4)
-                    .background(Color.red.opacity(0.07))
+                    .background(DesignTokens.Color.statusRed.opacity(0.07))
             }
 
             if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
                 Text("No local runners found")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
                 ForEach(localRunnerStore.runners) { runner in
@@ -256,15 +259,19 @@ struct SettingsView: View {
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(runner.runnerName)
-                    .font(.system(size: 13)).lineLimit(1)
+                    .font(DesignTokens.Font.monoBody)
+                    .lineLimit(1)
                 if let url = runner.gitHubUrl {
                     Text(url)
-                        .font(.caption2).foregroundColor(.secondary).lineLimit(1)
+                        .font(DesignTokens.Font.monoXSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                        .lineLimit(1)
                 }
             }
             Spacer()
             Text(runner.displayStatus)
-                .font(.caption).foregroundColor(.secondary)
+                .font(DesignTokens.Font.monoSmall)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .lineLimit(1).fixedSize()
             if runner.isRunning {
                 Button(
@@ -291,7 +298,9 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .help("Configure runner")
             Button(action: { runnerPendingRemoval = runner }, label: {
-                Image(systemName: "minus.circle").font(.caption2).foregroundColor(.red)
+                Image(systemName: "minus.circle")
+                    .font(.caption2)
+                    .foregroundColor(DesignTokens.Color.statusRed)
             })
             .buttonStyle(.plain)
             .help("Remove runner")
@@ -308,10 +317,10 @@ struct SettingsView: View {
 
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
-        case .running: return .green
-        case .busy: return .yellow
-        case .idle: return .gray
-        case .offline: return .red
+        case .running: return DesignTokens.Color.statusGreen
+        case .busy:    return DesignTokens.Color.statusOrange
+        case .idle:    return DesignTokens.Color.labelSecondary
+        case .offline: return DesignTokens.Color.statusRed
         }
     }
 
@@ -320,42 +329,53 @@ struct SettingsView: View {
     private var runnerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Runner management")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             if !store.runners.isEmpty {
                 ForEach(store.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
-                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
+                        Text(runner.name)
+                            .font(DesignTokens.Font.monoBody)
+                            .lineLimit(1)
                         Spacer()
                         Text(runner.displayStatus)
-                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
+                            .lineLimit(1).fixedSize()
                     }
                     .padding(.horizontal, 12).padding(.vertical, 5)
                 }
             } else {
                 Text("No runners configured")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             }
-            Text("Scopes").font(.caption).foregroundColor(.secondary)
+            Text("Scopes")
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
             ForEach(ScopeStore.shared.scopes, id: \.self) { scopeStr in
                 HStack {
-                    Text(scopeStr).font(.system(size: 12))
+                    Text(scopeStr)
+                        .font(DesignTokens.Font.monoSmall)
                     Spacer()
                     Button(action: {
                         ScopeStore.shared.remove(scopeStr)
                         RunnerStore.shared.start()
                     }, label: {
-                        Image(systemName: "minus.circle").foregroundColor(.red)
+                        Image(systemName: "minus.circle")
+                            .foregroundColor(DesignTokens.Color.statusRed)
                     }).buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 2)
             }
             HStack {
                 TextField("owner/repo or org", text: $newScope)
-                    .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    .textFieldStyle(.roundedBorder)
+                    .font(DesignTokens.Font.monoSmall)
                     .onSubmit { submitScope() }
                 Button(action: submitScope, label: {
                     Image(systemName: "plus.circle")
@@ -370,7 +390,8 @@ struct SettingsView: View {
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Notify on success").font(.system(size: 12))
@@ -395,7 +416,8 @@ struct SettingsView: View {
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Launch at login").font(.system(size: 12))
@@ -407,7 +429,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // ── Show offline runners ──────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -417,22 +438,24 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
             Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
-            // ── Polling interval ─────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
                 Text("\(settings.pollingInterval)s")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .frame(minWidth: 36, alignment: .trailing)
                 Stepper("", value: $settings.pollingInterval, in: 10...300)
                     .labelsHidden()
             }
             .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
             Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
         }
     }
@@ -451,7 +474,8 @@ struct SettingsView: View {
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("GitHub").font(.system(size: 12))
@@ -459,13 +483,17 @@ struct SettingsView: View {
                 if isAuthenticated {
                     HStack(spacing: 8) {
                         HStack(spacing: 4) {
-                            Circle().fill(Color.green).frame(width: 8, height: 8)
-                            Text("Authenticated").font(.caption).foregroundColor(.secondary)
+                            Circle()
+                                .fill(DesignTokens.Color.statusGreen)
+                                .frame(width: 8, height: 8)
+                            Text("Authenticated")
+                                .font(.caption)
+                                .foregroundColor(DesignTokens.Color.labelSecondary)
                         }
                         Button(action: signOutOfGitHub) {
                             Text("Sign out")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundColor(DesignTokens.Color.statusRed)
                         }
                         .buttonStyle(.plain)
                         .disabled(isSigningOut)
@@ -473,14 +501,17 @@ struct SettingsView: View {
                     }
                 } else {
                     Button(action: signInWithGitHub, label: {
-                        Text("Sign in").font(.caption).foregroundColor(.orange)
+                        Text("Sign in")
+                            .font(.caption)
+                            .foregroundColor(DesignTokens.Color.statusOrange)
                     }).buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             Divider().padding(.leading, 12)
             Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.vertical, 4)
         }
     }
@@ -488,7 +519,8 @@ struct SettingsView: View {
     private var legalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Legal")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Share analytics").font(.system(size: 12))
@@ -510,24 +542,28 @@ struct SettingsView: View {
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("About")
-                .font(.caption).foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
             HStack {
                 Text("Version").font(.system(size: 12))
                 Spacer()
                 Text("\(appVersion) (\(appBuild))")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 2)
             HStack {
                 Text("RunnerBar").font(.system(size: 12))
                 Spacer()
                 Text(Bundle.main.bundleIdentifier ?? "dev.eonist.runnerbar")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 2)
             Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
-                .font(.system(size: 11)).foregroundColor(.secondary)
+                .font(.system(size: 11))
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
         }
     }
@@ -548,7 +584,9 @@ struct SettingsView: View {
     }
 
     private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+        runner.status != "online"
+            ? DesignTokens.Color.labelSecondary
+            : (runner.busy ? DesignTokens.Color.statusOrange : DesignTokens.Color.statusGreen)
     }
 
     private func linkRow(label: String, url: String) -> some View {
@@ -558,7 +596,9 @@ struct SettingsView: View {
                 HStack {
                     Text(label).font(.system(size: 12)).foregroundColor(.primary)
                     Spacer()
-                    Image(systemName: "arrow.up.right").font(.caption).foregroundColor(.secondary)
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
             }
