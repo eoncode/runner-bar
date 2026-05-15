@@ -19,11 +19,11 @@ final class SettingsStore: ObservableObject {
     @Published var pollingInterval: Int {
         didSet {
             let clamped = pollingInterval.clamped(to: Self.pollingRange)
-            if clamped != pollingInterval {
-                pollingInterval = clamped
+            guard clamped != pollingInterval else {
+                UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
                 return
             }
-            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
+            pollingInterval = clamped
         }
     }
 
