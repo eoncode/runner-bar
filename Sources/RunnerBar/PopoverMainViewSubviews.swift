@@ -237,7 +237,8 @@ struct PopoverLocalRunnerRow: View {
             }
             if busy.count > 3 {
                 Text("+ \(busy.count - 3) more…")
-                    .font(.caption2).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoXSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, DesignTokens.Layout.panelHPad).padding(.vertical, 2)
             }
         }
@@ -547,7 +548,8 @@ struct InlineJobRowsView: View {
                 },
                 label: {
                     Text("+ \(activeJobs.count - cap) more jobs…")
-                        .font(.caption2).foregroundColor(.accentColor)
+                        .font(DesignTokens.Font.monoXSmall)
+                        .foregroundColor(.accentColor)
                         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
                 }
             )
