@@ -87,6 +87,14 @@ private struct DiskStats {
 /// ❌ NEVER remove the stop() pre-warm sample() call.
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
 /// ALLOWED UNDER ANY CIRCUMSTANCE.
+///
+/// ⚠️ SERIAL QUEUE CONTRACT — DO NOT REMOVE:
+/// samplingQueue is a PRIVATE SERIAL queue. cpuPercent() mutates prevTicks;
+/// if two samples overlap on a concurrent queue the delta calculations race
+/// and produce wildly wrong CPU readings. The serial queue prevents this.
+/// ❌ NEVER replace samplingQueue with DispatchQueue.global or any concurrent queue.
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+/// ALLOWED UNDER ANY CIRCUMSTANCE.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
 
@@ -97,6 +105,11 @@ final class SystemStatsViewModel: ObservableObject {
 
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
+    /// Private serial queue — ensures cpuPercent()'s prevTicks mutation is never concurrent.
+    private let samplingQueue = DispatchQueue(
+        label: "RunnerBar.SystemStatsViewModel.sampling",
+        qos: .utility
+    )
 
     init() {}
     deinit { timer?.invalidate() }
@@ -105,16 +118,16 @@ final class SystemStatsViewModel: ObservableObject {
 
     func start() {
         timer?.invalidate()
-        DispatchQueue.global(qos: .utility).async { self.sample() }
+        samplingQueue.async { self.sample() }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            DispatchQueue.global(qos: .utility).async { self?.sample() }
+            self?.samplingQueue.async { self?.sample() }
         }
     }
 
     func stop() {
         timer?.invalidate()
         timer = nil
-        DispatchQueue.global(qos: .utility).async { self.sample() }
+        samplingQueue.async { self.sample() }
     }
 
     // MARK: - CPU
