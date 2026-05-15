@@ -2,6 +2,29 @@ import AppKit
 import SwiftUI
 // swiftlint:disable identifier_name
 
+// MARK: - Hex Color Helper
+
+/// Initialises a SwiftUI `Color` from a 6-digit hex string (with or without leading `#`).
+/// Matches the `Color(hex:)` extension called out in the Phase 1 spec.
+///
+/// Usage:
+/// ```swift
+/// Color(hex: "#0A84FF")
+/// Color(hex: "30D158")
+/// ```
+extension Color {
+    /// Creates a `Color` from a 6-digit RGB hex string.
+    /// - Parameter hex: A 6-digit hex string, optionally prefixed with `#`.
+    init(hex: String) {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        let value = UInt64(cleaned, radix: 16) ?? 0
+        let r = Double((value >> 16) & 0xFF) / 255
+        let g = Double((value >> 8) & 0xFF) / 255
+        let b = Double(value & 0xFF) / 255
+        self.init(red: r, green: g, blue: b)
+    }
+}
+
 // MARK: - Adaptive Color Helper
 
 /// Creates adaptive colors that switch between light and dark appearances.
@@ -206,7 +229,7 @@ enum RBFont {
 enum DesignTokens {
     /// Font tokens exposed via legacy DesignTokens.Fonts namespace.
     enum Fonts {
-        /// Monospaced label font (chip labels: “CPU”, “MEM”, “DISK”).
+        /// Monospaced label font (chip labels: "CPU", "MEM", "DISK").
         static let monoLabel: Font = RBFont.monoSmall
         /// Monospaced value font (chip values and elapsed text).
         static let monoStat: Font = RBFont.monoSmall
