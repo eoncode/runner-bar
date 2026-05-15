@@ -3,7 +3,8 @@ import SwiftUI
 // MARK: - SparklineView
 /// A mini sparkline graph using Path: polyline stroke + gradient fill.
 /// Color shifts green → orange → red based on the current value threshold.
-/// Fill uses .opacity(0.85) so it blends in both light and dark mode.
+/// Fill uses .opacity(0.85) top → .opacity(0.05) bottom so it blends in both
+/// light and dark mode — satisfying Phase 2 transparency spec (#420).
 struct SparklineView: View {
     /// History ring buffer — ordered oldest→newest, values 0–100.
     let history: [Double]
@@ -13,7 +14,7 @@ struct SparklineView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Gradient fill
+                // Gradient fill — slight transparency blends with dark/light mode backgrounds (Phase 2 spec)
                 fillPath(in: geo.size)
                     .fill(
                         LinearGradient(
