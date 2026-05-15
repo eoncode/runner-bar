@@ -1,7 +1,6 @@
-// swiftlint:disable file_length
+// swiftlint:disable file_length type_body_length
 import ServiceManagement
 import SwiftUI
-// swiftlint:disable type_body_length
 // MARK: - SettingsView
 /// Settings view — complete implementation for all phases 1-6.
 ///
@@ -83,6 +82,7 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
+    // swiftlint:disable:next function_body_length
     var body: some View {
         // NO ScrollView — NSPanel grows to show all content.
         // AppDelegate clamps panel height to 85% screen visibleFrame.
@@ -142,22 +142,7 @@ struct SettingsView: View {
             ),
             isAuthenticated: isAuthenticated,
             onCancel: { runnerPendingRemoval = nil },
-            onConfirm: {
-                guard let runner = runnerPendingRemoval else { return }
-                guard isAuthenticated else { runnerPendingRemoval = nil; return }
-                runnerPendingRemoval = nil
-                removeErrorMessage = nil
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
-                    DispatchQueue.main.async {
-                        if !succeeded {
-                            removeErrorMessage = "De-registration failed — the runner may "
-                                + "still appear in GitHub. Check your token and try again."
-                        }
-                        localRunnerStore.refresh()
-                    }
-                }
-            }
+            onConfirm: performRemoval
         ))
     }
 
@@ -366,8 +351,7 @@ struct SettingsView: View {
                 Text("Notify on success").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $notifications.notifyOnSuccess)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)
@@ -375,8 +359,7 @@ struct SettingsView: View {
                 Text("Notify on failure").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $notifications.notifyOnFailure)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
         }
@@ -392,8 +375,7 @@ struct SettingsView: View {
                 Text("Launch at login").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $launchAtLogin)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
                     .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
@@ -402,8 +384,7 @@ struct SettingsView: View {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $settings.showDimmedRunners)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
             Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
@@ -416,8 +397,7 @@ struct SettingsView: View {
                 Text("\(settings.pollingInterval)s")
                     .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
                     .frame(minWidth: 36, alignment: .trailing)
-                Stepper("", value: $settings.pollingInterval, in: 10...300)
-                    .labelsHidden()
+                Stepper("", value: $settings.pollingInterval, in: 10...300).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
             Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
@@ -443,9 +423,7 @@ struct SettingsView: View {
                             Text("Authenticated").font(.caption).foregroundColor(Color.rbTextSecondary)
                         }
                         Button(action: signOutOfGitHub) {
-                            Text("Sign out")
-                                .font(.caption)
-                                .foregroundColor(Color.rbDanger)
+                            Text("Sign out").font(.caption).foregroundColor(Color.rbDanger)
                         }
                         .buttonStyle(.plain)
                         .disabled(isSigningOut)
@@ -475,8 +453,7 @@ struct SettingsView: View {
                 Text("Share analytics").font(.system(size: 12))
                 Spacer()
                 Toggle("", isOn: $legal.analyticsEnabled)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             #if DEBUG
@@ -532,9 +509,7 @@ struct SettingsView: View {
 
     private func linkRow(label: String, url: String) -> some View {
         Button(
-            action: {
-                if let dest = URL(string: url) { NSWorkspace.shared.open(dest) }
-            },
+            action: { if let dest = URL(string: url) { NSWorkspace.shared.open(dest) } },
             label: {
                 HStack {
                     Text(label).font(.system(size: 12)).foregroundColor(.primary)
@@ -555,8 +530,6 @@ struct SettingsView: View {
 
     /// Runs `gh auth logout --hostname github.com` on a background thread.
     /// Updates `isAuthenticated` on the main thread when the call completes.
-    /// Uses `isSigningOut` to prevent double-tap.
-    ///
     /// ❌ NEVER run shell calls on the main thread — they block the UI.
     private func signOutOfGitHub() {
         guard !isSigningOut else { return }
@@ -569,33 +542,23 @@ struct SettingsView: View {
             }
         }
     }
-}
-// swiftlint:enable type_body_length
-// swiftlint:enable file_length
 
-// MARK: - RemovalAlertModifier
-
-/// ViewModifier that encapsulates the runner-removal confirmation alert,
-/// extracted from SettingsView.body to satisfy function_body_length.
-private struct RemovalAlertModifier: ViewModifier {
-    let title: String
-    @Binding var isPresented: Bool
-    let isAuthenticated: Bool
-    let onCancel: () -> Void
-    let onConfirm: () -> Void
-
-    func body(content: Content) -> some View {
-        content.alert(title, isPresented: $isPresented) {
-            Button("Cancel", role: .cancel) { onCancel() }
-            Button("Remove", role: .destructive) { onConfirm() }
-        } message: {
-            if isAuthenticated {
-                Text("This will run ./svc.sh uninstall and ./config.sh remove. "
-                    + "A GitHub token is required for de-registration.")
-            } else {
-                Text("A GitHub token is required to de-register the runner from GitHub. "
-                    + "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
+    /// Executes the confirmed runner-removal flow on a background thread.
+    private func performRemoval() {
+        guard let runner = runnerPendingRemoval else { return }
+        guard isAuthenticated else { runnerPendingRemoval = nil; return }
+        runnerPendingRemoval = nil
+        removeErrorMessage = nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
+            DispatchQueue.main.async {
+                if !succeeded {
+                    removeErrorMessage = "De-registration failed — the runner may "
+                        + "still appear in GitHub. Check your token and try again."
+                }
+                localRunnerStore.refresh()
             }
         }
     }
 }
+// swiftlint:enable type_body_length file_length
