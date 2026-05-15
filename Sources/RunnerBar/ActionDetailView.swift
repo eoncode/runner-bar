@@ -37,6 +37,7 @@ import SwiftUI
 //   Time-range and elapsed columns hidden for queued jobs (no startedAt).
 //   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
 //   Phase 6: jobDotColor / jobStatusColor / conclusionColor use DesignTokens.
+//   Phase 5/6: job rows wrapped in cardRow-style RoundedRectangle background.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -77,7 +78,7 @@ struct ActionDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ──────────────────────────────────────────────────────────────────────────
+            // ── Header ────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -129,7 +130,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ──────────────────────────────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -170,10 +171,10 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
+            // ── Jobs list ────────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
                     if group.jobs.isEmpty {
                         Text("No jobs available")
                             .font(.caption).foregroundColor(.secondary)
@@ -187,6 +188,8 @@ struct ActionDetailView: View {
                         }
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
@@ -289,7 +292,16 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
             }
             Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
         }
+        // Phase 5/6: card row background
         .padding(.horizontal, 12).padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                .fill(DesignTokens.Colors.rowBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                        .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                )
+        )
         .contentShape(Rectangle())
     }
 

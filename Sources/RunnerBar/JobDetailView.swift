@@ -30,6 +30,7 @@ import SwiftUI
 //   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
 //     timing+metadata chips on row 2 — eliminates empty right-side dead space.
 //   Phase 6: stepColor / infoBar "running" label use DesignTokens (rbBlue/rbSuccess/rbDanger).
+//   Phase 5/6: step rows wrapped in cardRow-style RoundedRectangle background.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -71,7 +72,7 @@ struct JobDetailView: View {
 
                 Spacer(minLength: 8)
 
-                // ── Action cluster ──────────────────────────────────────────────────────
+                // ── Action cluster ──────────────────────────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
                         let jobID    = job.id
@@ -174,10 +175,10 @@ struct JobDetailView: View {
 
             Divider()
 
-            // ── Steps list ───────────────────────────────────────────────────────────────────────
+            // ── Steps list ────────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
                     if job.steps.isEmpty {
                         Text("No step data available")
                             .font(.caption)
@@ -194,6 +195,8 @@ struct JobDetailView: View {
                         }
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // ❌ NEVER remove this modifier.
@@ -320,6 +323,7 @@ struct JobDetailView: View {
     // MARK: - Step row
     /// Single-line step row:
     /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
+    /// Phase 5/6: wrapped in cardRow-style RoundedRectangle background.
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
             // Step number badge — zero-padded (#01…#99).
@@ -368,8 +372,17 @@ struct JobDetailView: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
+        // Phase 5/6: card row background
         .padding(.horizontal, 12)
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                .fill(DesignTokens.Colors.rowBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                        .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                )
+        )
         .contentShape(Rectangle())
     }
 
