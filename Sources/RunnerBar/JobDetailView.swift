@@ -1,3 +1,4 @@
+// swiftlint:disable colon missing_docs operator_usage_whitespace
 import AppKit
 import SwiftUI
 

@@ -364,4 +364,3 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
-// swiftlint:enable file_length function_body_length

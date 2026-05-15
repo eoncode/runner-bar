@@ -279,5 +279,3 @@ struct AddRunnerSheet: View {
         return task.terminationStatus
     }
 }
-// swiftlint:enable type_body_length
-// swiftlint:enable colon comma
