@@ -79,11 +79,12 @@ private func cpuUsage() -> Double {
         &numCpus, &cpuInfo, &numCpuInfo
     )
     guard result == KERN_SUCCESS, let info = cpuInfo else { return 0 }
-    var totalUser: Int32 = 0; var totalSystem: Int32 = 0
-    var totalIdle: Int32 = 0; var totalNice: Int32 = 0
-    for i in 0 ..< Int(numCpus) {
-        // swiftlint:disable:next identifier_name
-        let base = Int32(CPU_STATE_MAX) * Int32(i)
+    var totalUser: Int32 = 0
+    var totalSystem: Int32 = 0
+    var totalIdle: Int32 = 0
+    var totalNice: Int32 = 0
+    for idx in 0 ..< Int(numCpus) {
+        let base = Int32(CPU_STATE_MAX) * Int32(idx)
         totalUser   += info[Int(base + CPU_STATE_USER)]
         totalSystem += info[Int(base + CPU_STATE_SYSTEM)]
         totalIdle   += info[Int(base + CPU_STATE_IDLE)]
@@ -109,8 +110,8 @@ private func memUsage() -> MemUsage {
     }
     guard result == KERN_SUCCESS else { return MemUsage(used: 0, total: 0) }
     let pageSize = Double(vm_kernel_page_size)
-    let active   = Double(stats.active_count)   * pageSize
-    let wired    = Double(stats.wire_count)      * pageSize
+    let active     = Double(stats.active_count) * pageSize
+    let wired      = Double(stats.wire_count) * pageSize
     let compressed = Double(stats.compressor_page_count) * pageSize
     let used  = (active + wired + compressed) / 1_073_741_824
     let total = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
@@ -126,8 +127,8 @@ private func diskUsage() -> DiskUsage {
           let totalBytes = attrs[.systemSize] as? Int64,
           let freeBytes  = attrs[.systemFreeSize] as? Int64
     else { return DiskUsage(used: 0, total: 0) }
-    let gb: Double = 1_073_741_824
-    let total = Double(totalBytes) / gb
-    let free  = Double(freeBytes)  / gb
+    let gigabyte: Double = 1_073_741_824
+    let total = Double(totalBytes) / gigabyte
+    let free  = Double(freeBytes) / gigabyte
     return DiskUsage(used: total - free, total: total)
 }

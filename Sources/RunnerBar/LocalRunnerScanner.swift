@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import Foundation
 
 // MARK: - LocalRunnerScanner
@@ -30,14 +29,14 @@ enum LocalRunnerScanner {
         found: inout [RunnerModel],
         seenPaths: inout Set<String>
     ) {
-        let fm = FileManager.default
-        guard let items = try? fm.contentsOfDirectory(atPath: directory) else { return }
+        let fileManager = FileManager.default
+        guard let items = try? fileManager.contentsOfDirectory(atPath: directory) else { return }
         for item in items {
             let fullPath = "\(directory)/\(item)"
             var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: fullPath, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard fileManager.fileExists(atPath: fullPath, isDirectory: &isDir), isDir.boolValue else { continue }
             let runnerFile = "\(fullPath)/.runner"
-            if fm.fileExists(atPath: runnerFile) {
+            if fileManager.fileExists(atPath: runnerFile) {
                 if seenPaths.insert(fullPath).inserted {
                     if let model = parseRunner(at: fullPath) { found.append(model) }
                 }
@@ -76,4 +75,3 @@ enum LocalRunnerScanner {
         return "actions.runner.\(name)"
     }
 }
-// swiftlint:enable file_length
