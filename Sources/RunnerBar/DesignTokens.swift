@@ -46,7 +46,7 @@ extension Color {
 /// Design-token color extensions used throughout the app.
 extension Color {
     // Status colors — same in both appearances
-    /// Accent blue — in-progress, links (#0A84FF)
+    /// Accent blue — links, non-status UI accents (#0A84FF)
     static let rbBlue = Color(red: 0.04, green: 0.52, blue: 1.00)
     /// Success green (#30D158)
     static let rbSuccess = Color(red: 0.19, green: 0.82, blue: 0.35)
@@ -100,7 +100,9 @@ extension Color {
     )
 
     // Tinted row backgrounds (very faint, status-keyed)
-    /// Faint blue row tint for in-progress rows.
+    /// Faint yellow row tint for in-progress rows.
+    static let rbYellowTint = rbWarning.opacity(0.05)
+    /// Faint blue tint — kept for any non-status blue UI accents.
     static let rbBlueTint = rbBlue.opacity(0.05)
     /// Faint green row tint for success rows.
     static let rbGreenTint = rbSuccess.opacity(0.05)
@@ -128,10 +130,11 @@ enum RBStatus {
     /// The primary display color associated with this status.
     var color: Color {
         switch self {
-        case .inProgress: return .rbBlue
+        // fix(#419): in-progress uses yellow (rbWarning), matching the reference design.
+        // rbBlue is reserved for non-status UI accents (links, chevrons, etc.).
+        case .inProgress: return .rbWarning
         case .success: return .rbSuccess
         case .failed: return .rbDanger
-        // fix(#419): queued uses warning yellow, not secondary grey
         case .queued: return .rbWarning
         case .unknown: return .rbTextTertiary
         }
@@ -140,10 +143,10 @@ enum RBStatus {
     /// The faint row-background tint color associated with this status.
     var tint: Color {
         switch self {
-        case .inProgress: return .rbBlueTint
+        // fix(#419): in-progress and queued both tint with faint yellow
+        case .inProgress: return .rbYellowTint
         case .success: return .rbGreenTint
         case .failed: return .rbRedTint
-        // fix(#419): queued rows get a faint yellow tint
         case .queued: return .rbWarning.opacity(0.05)
         default: return .clear
         }
