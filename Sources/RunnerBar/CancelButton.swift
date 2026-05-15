@@ -16,14 +16,19 @@ struct CancelButton: View {
 
     /// Visual states of the cancel button lifecycle.
     enum Phase {
+        /// Normal tappable state.
         case idle
+        /// Spinner shown while the cancel request is in-flight.
         case loading
+        /// Green checkmark shown for 1.5 s after success.
         case done
+        /// Red cross shown for 1.5 s after failure.
         case failed
     }
 
     // MARK: - Body
 
+    /// Renders the button in its current phase.
     var body: some View {
         Group {
             switch phase {

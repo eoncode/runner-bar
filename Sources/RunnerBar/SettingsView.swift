@@ -1,4 +1,4 @@
-// swiftlint:disable file_length missing_docs operator_usage_whitespace colon
+// swiftlint:disable file_length
 import ServiceManagement
 import SwiftUI
 
@@ -84,6 +84,7 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
+    /// Root body: full settings panel with all sections.
     var body: some View {
         // NO ScrollView — NSPanel grows to show all content.
         // AppDelegate clamps panel height to 85% screen visibleFrame.
@@ -630,4 +631,4 @@ struct SettingsView: View {
     }
 }
 // swiftlint:enable type_body_length
-// swiftlint:enable file_length missing_docs operator_usage_whitespace colon
+// swiftlint:enable file_length
