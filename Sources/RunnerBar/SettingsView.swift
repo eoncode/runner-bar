@@ -180,47 +180,51 @@ struct SettingsView: View {
     }
 
     // MARK: Phase 1 + 2 + 4 — Local Runners
-    private var localRunnersSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Local runners")
-                    .font(RBFont.sectionHeader)
+
+    /// Header row for the Local Runners section (title + add + refresh controls).
+    private var localRunnersSectionHeader: some View {
+        HStack {
+            Text("Local runners")
+                .font(RBFont.sectionHeader)
+                .foregroundColor(Color.rbTextSecondary)
+            Spacer()
+            Button(action: { showAddRunnerSheet = true }, label: {
+                Image(systemName: "plus")
+                    .font(.caption)
                     .foregroundColor(Color.rbTextSecondary)
-                Spacer()
-                Button(action: { showAddRunnerSheet = true }, label: {
-                    Image(systemName: "plus")
+            })
+            .buttonStyle(.plain)
+            .help("Add a new runner")
+            .padding(.trailing, 4)
+            if localRunnerStore.isScanning {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 14, height: 14)
+            } else {
+                Button(action: {
+                    removeErrorMessage = nil
+                    localRunnerStore.refresh()
+                }, label: {
+                    Image(systemName: "arrow.clockwise")
                         .font(.caption)
                         .foregroundColor(Color.rbTextSecondary)
                 })
                 .buttonStyle(.plain)
-                .help("Add a new runner")
-                .padding(.trailing, 4)
-                if localRunnerStore.isScanning {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Button(action: {
-                        removeErrorMessage = nil
-                        localRunnerStore.refresh()
-                    }, label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption)
-                            .foregroundColor(Color.rbTextSecondary)
-                    })
-                    .buttonStyle(.plain)
-                    .help("Refresh local runner list")
-                }
+                .help("Refresh local runner list")
             }
-            .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+    }
 
+    private var localRunnersSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            localRunnersSectionHeader
             if let errMsg = removeErrorMessage {
                 Text(errMsg)
                     .font(.caption).foregroundColor(Color.rbDanger)
                     .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
                     .background(Color.rbDanger.opacity(0.07))
             }
-
             if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
                 Text("No local runners found")
                     .font(.caption).foregroundColor(Color.rbTextSecondary)
