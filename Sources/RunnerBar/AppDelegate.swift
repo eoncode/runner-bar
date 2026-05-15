@@ -659,7 +659,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             guard let self else { return }
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
-                self.closePanel()
+                Task { @MainActor in self.closePanel() }
             }
         }
     }
