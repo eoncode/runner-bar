@@ -279,64 +279,84 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         .contentShape(Rectangle())
     }
 
+    // Extracted into smaller @ViewBuilder helpers so the x86_64 type-checker
+    // does not ICE on a single large HStack with multiple conditional branches.
+
     @ViewBuilder func jobRowMainLine(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 8) {
-            Text("#\(index)")
-                .font(DesignTokens.Font.monoXSmall)
-                .foregroundColor(DesignTokens.Color.labelTertiary)
-                .frame(width: 28, alignment: .leading)
-
-            PieProgressDot(
-                progress: job.progressFraction,
-                color: jobDotColor(for: job),
-                size: 9
-            )
-
-            Text(job.name)
-                .font(.system(size: 12))
-                .foregroundColor(job.isDimmed ? .secondary : .primary)
-                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-
-            if job.startedAt != nil {
-                Text(jobTimeRange(job))
-                    .font(DesignTokens.Font.monoXSmall)
-                    .foregroundColor(DesignTokens.Color.labelSecondary)
-                    .lineLimit(1)
-                    .frame(width: 130, alignment: .leading)
-            } else {
-                Spacer().frame(width: 130)
-            }
-
+            jobRowIndexLabel(index)
+            jobRowDot(job)
+            jobRowNameLabel(job)
+            jobRowTimeRange(job)
             Spacer(minLength: 0)
-
-            if let conclusion = job.conclusion {
-                StatusBadge(
-                    label: conclusionLabel(conclusion),
-                    color: conclusionColor(conclusion)
-                )
-                .frame(width: 88, alignment: .trailing)
-            } else {
-                StatusBadge(
-                    label: jobStatusLabel(for: job),
-                    color: jobStatusColor(for: job)
-                )
-                .frame(width: 88, alignment: .trailing)
-            }
-
-            if job.startedAt != nil {
-                Text(job.elapsed)
-                    .font(DesignTokens.Font.monoSmall)
-                    .foregroundColor(DesignTokens.Color.labelSecondary)
-                    .frame(width: 44, alignment: .trailing)
-            } else {
-                Spacer().frame(width: 44)
-            }
-
+            jobRowStatusBadge(job)
+            jobRowElapsed(job)
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(DesignTokens.Color.labelTertiary)
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
+    }
+
+    @ViewBuilder private func jobRowIndexLabel(_ index: Int) -> some View {
+        Text("#\(index)")
+            .font(DesignTokens.Font.monoXSmall)
+            .foregroundColor(DesignTokens.Color.labelTertiary)
+            .frame(width: 28, alignment: .leading)
+    }
+
+    @ViewBuilder private func jobRowDot(_ job: ActiveJob) -> some View {
+        PieProgressDot(
+            progress: job.progressFraction,
+            color: jobDotColor(for: job),
+            size: 9
+        )
+    }
+
+    @ViewBuilder private func jobRowNameLabel(_ job: ActiveJob) -> some View {
+        Text(job.name)
+            .font(.system(size: 12))
+            .foregroundColor(job.isDimmed ? .secondary : .primary)
+            .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+    }
+
+    @ViewBuilder private func jobRowTimeRange(_ job: ActiveJob) -> some View {
+        if job.startedAt != nil {
+            Text(jobTimeRange(job))
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
+                .lineLimit(1)
+                .frame(width: 130, alignment: .leading)
+        } else {
+            Spacer().frame(width: 130)
+        }
+    }
+
+    @ViewBuilder private func jobRowStatusBadge(_ job: ActiveJob) -> some View {
+        if let conclusion = job.conclusion {
+            StatusBadge(
+                label: conclusionLabel(conclusion),
+                color: conclusionColor(conclusion)
+            )
+            .frame(width: 88, alignment: .trailing)
+        } else {
+            StatusBadge(
+                label: jobStatusLabel(for: job),
+                color: jobStatusColor(for: job)
+            )
+            .frame(width: 88, alignment: .trailing)
+        }
+    }
+
+    @ViewBuilder private func jobRowElapsed(_ job: ActiveJob) -> some View {
+        if job.startedAt != nil {
+            Text(job.elapsed)
+                .font(DesignTokens.Font.monoSmall)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
+                .frame(width: 44, alignment: .trailing)
+        } else {
+            Spacer().frame(width: 44)
+        }
     }
 
     @ViewBuilder func jobRowProgressBar(_ job: ActiveJob) -> some View {
@@ -388,9 +408,9 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         case "in_progress": return DesignTokens.Color.statusBlue
         case "queued":      return DesignTokens.Color.statusBlue.opacity(0.5)
         default:
-            return job.conclusion == "success"
-                ? DesignTokens.Color.statusGreen
-                : (job.conclusion == "failure" ? DesignTokens.Color.statusRed : .secondary)
+            if job.conclusion == "success" { return DesignTokens.Color.statusGreen }
+            if job.conclusion == "failure" { return DesignTokens.Color.statusRed }
+            return .secondary
         }
     }
 
