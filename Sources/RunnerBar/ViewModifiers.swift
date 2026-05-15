@@ -135,7 +135,9 @@ struct StatPill: View {
 
 // MARK: - Branch Tag Pill
 
+/// A pill-shaped tag displaying a branch name in blue monospaced text.
 struct BranchTagPill: View {
+    /// The branch name to display.
     let name: String
 
     var body: some View {
@@ -148,8 +150,11 @@ struct BranchTagPill: View {
 
 // MARK: - Status Badge
 
+/// A pill-shaped badge displaying a status label in the status’s theme color.
 struct StatusBadge: View {
+    /// The status whose color tints the badge.
     let status: RBStatus
+    /// The text label rendered inside the badge.
     let text: String
 
     var body: some View {
