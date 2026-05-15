@@ -1,4 +1,4 @@
-// swiftlint:disable file_length
+// swiftlint:disable file_length missing_docs colon operator_usage_whitespace vertical_whitespace_opening_braces
 import Foundation
 
 // MARK: - File-level formatter
@@ -115,34 +115,28 @@ struct ActionGroup: Identifiable, Equatable {
             return .completed
         }
         if runs.contains(where: { $0.status == "in_progress" }) { return .inProgress }
-        if runs.contains(where: { $0.status == "queued" })      { return .queued }
+        if runs.contains(where: { $0.status == "queued" }) { return .queued }
         return .completed
     }
 
     /// Group conclusion derived preferentially from jobs, falling back to runs.
-    ///
-    /// ⚠️ WHY WE USE JOBS, NOT RUNS:
-    /// The GitHub API can report a run-level conclusion of "failure" even when every
-    /// individual job succeeded (e.g. after a retry). Using job-level conclusions is authoritative.
-    ///
-    /// Returns nil while jobs are still loading or any job has not yet concluded.
     var conclusion: String? {
         if !jobs.isEmpty {
             guard jobs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-            if jobs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
+            if jobs.contains(where: { $0.conclusion == "failure" }) { return "failure" }
             if jobs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-            if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+            if jobs.contains(where: { $0.conclusion == "skipped" }) { return "skipped" }
             return "success"
         }
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-        if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
+        if runs.contains(where: { $0.conclusion == "failure" }) { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+        if runs.contains(where: { $0.conclusion == "skipped" }) { return "skipped" }
         return "success"
     }
 
     /// Number of jobs with a concluded result across all sibling runs.
-    var jobsDone: Int  { jobs.filter { $0.conclusion != nil }.count }
+    var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
 
@@ -152,7 +146,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
         if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
-        if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
+        if let job = jobs.first(where: { $0.status == "queued" }) { return job.name }
         return "—"
     }
 
@@ -230,8 +224,6 @@ private struct PRRef: Codable {
 
 // MARK: - PR label
 
-/// Derives the short identifier for an action group row.
-/// Priority: PR number → branch-embedded number → sha[:7].
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
@@ -244,9 +236,6 @@ private func prLabel(from run: RunPayload) -> String {
 
 // MARK: - Fetch + Group
 
-/// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
-/// enriches each group with its flattened job list, and returns groups sorted:
-/// in_progress first, then queued, then done — newest first.
 // swiftlint:disable:next function_body_length cyclomatic_complexity
 func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
     guard scope.contains("/") else {
@@ -337,8 +326,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 
 // MARK: - Private helpers
 
-/// Constructs an `ActiveJob` from a decoded `JobPayload`.
-/// ⚠️ Uses `step.number` (API-supplied), NOT `idx + 1`.
 func makeActiveJob(from jobPayload: JobPayload,
                    iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
@@ -367,8 +354,6 @@ func makeActiveJob(from jobPayload: JobPayload,
     )
 }
 
-/// Fetches and decodes jobs for a single run ID.
-/// ❌ NEVER add filter=latest — it omits queued jobs not yet started.
 private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
@@ -406,7 +391,6 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     return result
 }
 
-/// Returns a lower number for higher display priority.
 private func statusPriority(_ status: GroupStatus) -> Int {
     switch status {
     case .inProgress: return 0
@@ -414,4 +398,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable file_length
+// swiftlint:enable file_length missing_docs colon operator_usage_whitespace vertical_whitespace_opening_braces

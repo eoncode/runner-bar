@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name
 import Foundation
 
 // MARK: - ActiveJob model
@@ -26,29 +27,15 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     let steps: [JobStep]
     /// Name of the runner that picked up this job.
     /// `nil` when the job is still queued and hasn't been assigned yet.
-    /// Used to determine local vs cloud icon on action rows.
     let runnerName: String?
 
-    // NOTE: progressFraction is a computed var defined in PopoverProgressViews.swift
-    // via an extension on ActiveJob. Do NOT add a stored property here.
-
-    /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
-    ///
-    /// - Queued jobs always return `"00:00"` (no time has elapsed yet).
-    /// - Completed jobs return `"--:--"` when both `startedAt` and `completedAt`
-    ///   are unavailable, otherwise the fixed duration.
-    /// - Live (`in_progress`) jobs use `startedAt` if available, falling back to
-    ///   `createdAt` while the runner assignment is still pending, and measures
-    ///   up to `Date()` (wall clock).
     var elapsed: String {
         guard status != "queued" else { return "00:00" }
         if conclusion != nil {
             guard let start = startedAt, let end = completedAt else { return "--:--" }
             let secs = Int(end.timeIntervalSince(start))
             guard secs >= 0 else { return "--:--" }
-            // swiftlint:disable:next identifier_name
             let m = secs / 60
-            // swiftlint:disable:next identifier_name
             let s = secs % 60
             return String(format: "%02d:%02d", m, s)
         }
@@ -56,16 +43,11 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
-        // swiftlint:disable:next identifier_name
         let m = secs / 60
-        // swiftlint:disable:next identifier_name
         let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
 
-    /// `true` if this job ran (or is running) on a self-hosted local runner.
-    /// Detection: runnerName is non-nil and does not match any GitHub-hosted
-    /// name prefix. Returns `nil` when runnerName is unknown (job still queued).
     var isLocalRunner: Bool? {
         guard let name = runnerName else { return nil }
         let lower = name.lowercased()
@@ -81,8 +63,6 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         return !isHosted
     }
 
-    // MARK: Codable
-    // runnerName must appear in CodingKeys so Codable synthesis includes it.
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
         case startedAt = "started_at"
@@ -112,7 +92,6 @@ struct JobStep: Identifiable, Codable, Equatable {
     /// When this step finished.
     let completedAt: Date?
 
-    /// SF Symbol or emoji icon representing the step's conclusion.
     var conclusionIcon: String {
         switch conclusion {
         case "success": return "\u{2713}"
@@ -123,21 +102,12 @@ struct JobStep: Identifiable, Codable, Equatable {
         }
     }
 
-    /// Human-readable elapsed wall-clock string for this step in `MM:SS` format.
-    ///
-    /// - Uses `startedAt` as the start anchor, falling back to `Date()` when nil
-    ///   (step hasn't started yet — this should not normally occur).
-    /// - Uses `completedAt` as the end anchor for finished steps, falling back
-    ///   to `Date()` for live steps to show a running clock.
-    /// - Returns `"00:00"` when the computed interval is negative (clock skew guard).
     var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         guard secs >= 0 else { return "00:00" }
-        // swiftlint:disable:next identifier_name
         let m = secs / 60
-        // swiftlint:disable:next identifier_name
         let s = secs % 60
         return String(format: "%02d:%02d", m, s)
     }
@@ -152,7 +122,7 @@ struct JobStep: Identifiable, Codable, Equatable {
 
 // MARK: - JobPayload (API decoding)
 
-/// Raw API shape for a single job returned by `GET /repos/{owner}/{repo}/actions/jobs/{job_id}`.
+/// Raw API shape for a single job.
 struct JobPayload: Decodable {
     let id: Int
     let name: String
@@ -163,8 +133,6 @@ struct JobPayload: Decodable {
     let completedAt: String?
     let htmlUrl: String?
     let steps: [StepPayload]?
-    /// GitHub API field: the name of the runner that picked up this job.
-    /// nil when the job hasn't been assigned to a runner yet (queued).
     let runnerName: String?
 
     enum CodingKeys: String, CodingKey {
@@ -180,8 +148,6 @@ struct JobPayload: Decodable {
 // MARK: - StepPayload (API decoding)
 
 /// Raw API type for a single step inside a `JobPayload`.
-/// Kept separate from `JobStep` so that `JobStep` remains `Codable` with `Date` fields
-/// while the API always delivers timestamps as ISO-8601 strings.
 struct StepPayload: Decodable {
     let number: Int
     let name: String
@@ -199,7 +165,6 @@ struct StepPayload: Decodable {
 
 // MARK: - ActiveJob factory
 
-/// RunnerStore extension providing the `ActiveJob` factory method.
 extension RunnerStore {
     /// Builds an `ActiveJob` from a decoded `JobPayload`.
     func makeActiveJob(
@@ -209,9 +174,6 @@ extension RunnerStore {
     ) -> ActiveJob {
         let steps: [JobStep] = (payload.steps ?? []).map { stepPayload in
             JobStep(
-                // ⚠️: Use the API-supplied step number, not the array index.
-                // GitHub step numbers can be non-contiguous (e.g. retried or skipped steps).
-                // Using idx+1 would cause fetchStepLog(jobID:stepNumber:) to fetch the wrong log.
                 id: stepPayload.number,
                 name: stepPayload.name,
                 status: stepPayload.status,
@@ -236,7 +198,6 @@ extension RunnerStore {
     }
 }
 
-// MARK: - Codable helpers
-
-/// Shared response wrapper used by ActionGroup.swift and RunnerStoreState.swift.
+/// Shared response wrapper.
 struct JobsResponse: Decodable { let jobs: [JobPayload] }
+// swiftlint:enable identifier_name

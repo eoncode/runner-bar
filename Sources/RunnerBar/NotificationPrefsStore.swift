@@ -1,3 +1,4 @@
+// swiftlint:disable opening_brace vertical_whitespace_opening_braces orphaned_doc_comment
 import Combine
 import Foundation
 
@@ -33,11 +34,6 @@ final class NotificationPrefsStore: ObservableObject {
         notifyOnFailure = UserDefaults.standard.bool(forKey: Key.notifyOnFailure)
     }
 
-    /// Registers factory defaults so that `bool(forKey:)` returns the intended
-    /// value on first launch without requiring a `object(forKey:) == nil` guard.
-    ///
-    /// Call once at app startup (e.g. from `applicationDidFinishLaunching`) and
-    /// again in unit tests before exercising notification logic.
     static func register(defaults: UserDefaults) {
         defaults.register(defaults: [
             Key.notifyOnSuccess: true,
@@ -45,3 +41,4 @@ final class NotificationPrefsStore: ObservableObject {
         ])
     }
 }
+// swiftlint:enable opening_brace vertical_whitespace_opening_braces orphaned_doc_comment

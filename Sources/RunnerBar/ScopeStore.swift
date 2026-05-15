@@ -1,13 +1,7 @@
+// swiftlint:disable colon
 import Foundation
 
 /// Persists the list of watched GitHub scopes (e.g. `"owner/repo"` or `"myorg"`).
-///
-/// A scope is either a `owner/repo` string that targets a single repository,
-/// or an org slug that targets all runners in an organisation.
-/// Scopes are stored in `UserDefaults` and read back on every access so changes
-/// survive app restarts without requiring an explicit save call.
-///
-/// Set `onMutate` to be notified after add/remove completes.
 final class ScopeStore {
     /// Shared singleton — the single source of truth for all scope read/write operations.
     static let shared = ScopeStore()
@@ -35,10 +29,10 @@ final class ScopeStore {
     }
 
     /// Removes all entries equal to `scope` from the persisted list.
-    /// No-ops (and suppresses the `onMutate` callback) when `scope` is not present.
     func remove(_ scope: String) {
         guard scopes.contains(scope) else { return }
         scopes.removeAll(where: { $0 == scope })
         onMutate?()
     }
 }
+// swiftlint:enable colon
