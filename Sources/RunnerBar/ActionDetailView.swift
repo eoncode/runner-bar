@@ -39,6 +39,7 @@ import SwiftUI
 //   Phase 5: PieProgressDot replaces plain Circle dot; StatusBadge chips;
 //            DesignTokens fonts + colours on all meta columns.
 //   Gap fix: thin horizontal progress bar added beneath in_progress job rows.
+//   Gap fix: jobRowTint now uses DesignTokens.Color tint constants (not raw opacity).
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -358,19 +359,22 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
             }
         }
         .background(
-            // Subtle tint per job status — uses DesignTokens tint constants for consistency
+            // Subtle tint per job status — uses DesignTokens.Color tint constants.
+            // ❌ NEVER replace with raw .opacity() values — use the pre-defined tint tokens
+            // so all row tints come from the single source of truth in DesignTokens.
             Rectangle().fill(jobRowTint(for: job))
         )
         .contentShape(Rectangle())
     }
 
     /// Subtle background tint for each job row based on live status.
-    /// Uses DesignTokens.Color tint constants (not raw .opacity values) for system-wide consistency.
+    /// Uses DesignTokens.Color tint constants (tintBlue/tintGreen/tintRed) for
+    /// system-wide consistency — do not replace with raw .opacity() values.
     func jobRowTint(for job: ActiveJob) -> Color {
         guard !job.isDimmed else { return .clear }
         switch job.status {
         case "in_progress": return DesignTokens.Color.tintBlue
-        case "queued":      return DesignTokens.Color.statusBlue.opacity(0.02)
+        case "queued":      return DesignTokens.Color.tintBlue
         default:
             switch job.conclusion {
             case "success":   return DesignTokens.Color.tintGreen
