@@ -8,7 +8,7 @@ import SwiftUI
 // ║                                                                            ║
 // ║ LAYOUT RULES:                                                              ║
 // ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)      ║
-// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.        ║
+// ║ • idealWidth: 480 hints SwiftUI’s initial natural width measurement.        ║
 // ║   NSHostingController reads idealWidth as preferredContentSize.width        ║
 // ║   on the first layout pass (NSPanel architecture, not NSPopover).           ║
 // ║   The panel then resizes to content-driven width via KVO on                ║
@@ -72,7 +72,7 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ─────────────────────────────────────────────────────────────────────────────────────────
+            // ── Top bar ──────────────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -111,7 +111,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ──────────────────────────────────────────────────────────────────────────────────────
+            // ── Step name (large) ─────────────────────────────────────────────────────────────────────────────────────────────────────────
             Text(step.name)
                 .font(RBFont.mono)
                 .lineLimit(2)
@@ -119,7 +119,7 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────────────────────────────────────────
+            // ── Meta rows ──────────────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(.secondary)
                 Text(job.name).font(RBFont.mono).foregroundColor(.secondary)
@@ -133,7 +133,6 @@ struct StepLogView: View {
             }
             .padding(.horizontal, 12).padding(.bottom, 3)
             .cardRow()
-            .padding(.horizontal, 12).padding(.bottom, 3)
 
             HStack(spacing: 6) {
                 Image(systemName: "folder").font(.system(size: 10)).foregroundColor(.secondary)
@@ -147,7 +146,6 @@ struct StepLogView: View {
             }
             .padding(.horizontal, 12).padding(.bottom, 3)
             .cardRow()
-            .padding(.horizontal, 12).padding(.bottom, 3)
 
             HStack(spacing: 6) {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.secondary)
@@ -168,11 +166,10 @@ struct StepLogView: View {
             }
             .padding(.horizontal, 12).padding(.bottom, 6)
             .cardRow()
-            .padding(.horizontal, 12).padding(.bottom, 6)
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────────────────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -190,14 +187,12 @@ struct StepLogView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .cardRow()
-                        .padding(.horizontal, 12).padding(.vertical, 6)
                 } else {
                     Text("Log not available")
                         .font(.caption).foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12).padding(.vertical, 10)
                         .cardRow()
-                        .padding(.horizontal, 12).padding(.vertical, 10)
                 }
             }
             // ❌ NEVER remove this modifier.
