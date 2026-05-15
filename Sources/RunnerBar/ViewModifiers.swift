@@ -15,7 +15,6 @@ struct CardRowModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    // Base elevated surface first, then tint on top so both are visible
                     .fill(Color.rbSurfaceElevated)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -68,6 +67,7 @@ extension View {
 // MARK: - Mono Label Modifier
 
 /// Applies monospaced font and secondary text color — used for hashes, timestamps, step counts.
+/// Uses .foregroundColor (not .foregroundStyle) for macOS 13 compatibility.
 struct MonoLabelModifier: ViewModifier {
     var size: Font = RBFont.mono
     var color: Color = .rbTextTertiary
@@ -75,7 +75,7 @@ struct MonoLabelModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(size)
-            .foregroundStyle(color)
+            .foregroundColor(color) // macOS 13 compatible
     }
 }
 
@@ -103,6 +103,7 @@ struct LeftStatusIndicator: View {
 // MARK: - Stat Pill
 
 /// Small pill-shaped background for runner CPU/MEM inline stats.
+/// opacity(1.0) — previously was 1.4 (no-op above 1.0; fixed).
 struct StatPill: View {
     let label: String
     let value: String
@@ -111,17 +112,17 @@ struct StatPill: View {
         HStack(spacing: RBSpacing.xxs) {
             Text(label)
                 .font(RBFont.monoSmall)
-                .foregroundStyle(Color.rbTextTertiary)
+                .foregroundColor(Color.rbTextTertiary) // macOS 13 compatible
             Text(value)
                 .font(RBFont.monoSmall)
-                .foregroundStyle(Color.rbTextSecondary)
+                .foregroundColor(Color.rbTextSecondary) // macOS 13 compatible
                 .fontWeight(.medium)
         }
         .padding(.horizontal, RBSpacing.xs + 2)
         .padding(.vertical, RBSpacing.xxs + 1)
         .background(
             RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                .fill(Color.rbSurfaceElevated.opacity(1.4))
+                .fill(Color.rbSurfaceElevated.opacity(1.0)) // was 1.4 (no-op); corrected
                 .overlay(
                     RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
                         .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
@@ -138,7 +139,7 @@ struct BranchTagPill: View {
     var body: some View {
         Text(name)
             .font(RBFont.monoSmall)
-            .foregroundStyle(Color.rbBlue)
+            .foregroundColor(Color.rbBlue) // macOS 13 compatible
             .pillBackground(color: .rbBlue, opacity: 0.12, borderOpacity: 0.0)
     }
 }
@@ -152,7 +153,7 @@ struct StatusBadge: View {
     var body: some View {
         Text(text)
             .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(status.color)
+            .foregroundColor(status.color) // macOS 13 compatible
             .pillBackground(color: status.color, opacity: 0.18, borderOpacity: 0.0)
     }
 }
