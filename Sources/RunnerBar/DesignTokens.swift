@@ -54,6 +54,8 @@ extension Color {
     static let rbWarning = Color(red: 1.00, green: 0.62, blue: 0.04)
     /// Danger red (#FF453A)
     static let rbDanger = Color(red: 1.00, green: 0.27, blue: 0.23)
+    /// Primary accent — alias for rbBlue; used by sparklines and stat chips.
+    static let rbAccent = rbBlue
 
     // Neutral / surface — adaptive light/dark
     /// Base panel surface color.
@@ -228,6 +230,10 @@ enum RBFont {
     static let sectionHeader: Font = sectionKey
     /// Section caption — uppercase section headers in the popover (9pt semibold).
     static let sectionCaption: Font = .system(size: 9, weight: .semibold)
+    /// Stat chip label — tiny uppercase label for CPU / MEM / DISK chips (9pt semibold mono).
+    static let statLabel: Font = .system(size: 9, weight: .semibold, design: .monospaced)
+    /// Stat chip value — monospaced value text next to sparklines (10pt regular mono).
+    static let statValue: Font = .system(size: 10, weight: .regular, design: .monospaced)
 }
 
 // MARK: - DesignTokens namespace shim
