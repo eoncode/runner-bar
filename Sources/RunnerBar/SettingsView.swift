@@ -71,7 +71,6 @@ struct SettingsView: View {
     }
 
     // Root body: full settings panel with all sections.
-    // swiftlint:disable:next function_body_length
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -110,11 +109,14 @@ struct SettingsView: View {
         .sheet(isPresented: $showAddRunnerSheet, onDismiss: { localRunnerStore.refresh() }) {
             AddRunnerSheet()
         }
-        .sheet(item: $runnerBeingConfigured) { runner in
-            RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
-                localRunnerStore.refresh()
+        .sheet(
+            item: $runnerBeingConfigured,
+            content: { runner in
+                RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
+                    localRunnerStore.refresh()
+                }
             }
-        }
+        )
         .alert(removalAlertTitle, isPresented: Binding(
             get: { runnerPendingRemoval != nil },
             set: { if !$0 { runnerPendingRemoval = nil } }

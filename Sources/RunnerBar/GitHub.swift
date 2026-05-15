@@ -152,6 +152,7 @@ var ghIsRateLimited = false
 /// Extracts `owner/repo` from a GitHub HTML URL such as
 /// `https://github.com/owner/repo/actions/runs/123/job/456`.
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
+    // swiftlint:disable:next identifier_name
     guard
         let s = urlString,
         let url = URL(string: s),
@@ -165,6 +166,7 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
 func runIDFromHtmlUrl(_ url: String?) -> Int? {
     guard let url else { return nil }
     let parts = url.components(separatedBy: "/")
+    // swiftlint:disable:next identifier_name
     for (i, p) in parts.enumerated() where p == "runs" && i + 1 < parts.count {
         return Int(parts[i + 1])
     }
