@@ -38,6 +38,7 @@ import SwiftUI
 //   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
 //   Phase 5: PieProgressDot replaces plain Circle dot; StatusBadge chips;
 //            DesignTokens fonts + colours on all meta columns.
+//   Gap fix: thin horizontal progress bar added beneath in_progress job rows.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
@@ -78,7 +79,7 @@ struct ActionDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ──────────────────────────────────────────────────────
+            // ── Header ────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -130,7 +131,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -177,15 +178,15 @@ struct ActionDetailView: View {
                         .fixedSize()
                 }
                 Text(jobsSummaryLine)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
             Divider()
 
-            // ── Jobs list ───────────────────────────────────────────────────
+            // ── Jobs list ────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -270,69 +271,92 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
 
     // MARK: - Job row
     @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
-        HStack(spacing: 8) {
-            // Index badge
-            Text("#\(index)")
-                .font(DesignTokens.Font.monoXSmall)
-                .foregroundColor(DesignTokens.Color.labelTertiary)
-                .frame(width: 28, alignment: .leading)
-
-            // Animated progress dot (PieProgressDot replaces plain Circle)
-            PieProgressDot(
-                progress: job.progressFraction,
-                color: jobDotColor(for: job),
-                size: 9
-            )
-
-            // Job name
-            Text(job.name)
-                .font(.system(size: 12))
-                .foregroundColor(job.isDimmed ? .secondary : .primary)
-                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-
-            // Time range column (hidden for queued jobs)
-            if job.startedAt != nil {
-                Text(jobTimeRange(job))
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                // Index badge
+                Text("#\(index)")
                     .font(DesignTokens.Font.monoXSmall)
-                    .foregroundColor(DesignTokens.Color.labelSecondary)
-                    .lineLimit(1)
-                    .frame(width: 130, alignment: .leading)
-            } else {
-                Spacer().frame(width: 130)
-            }
+                    .foregroundColor(DesignTokens.Color.labelTertiary)
+                    .frame(width: 28, alignment: .leading)
 
-            Spacer(minLength: 0)
-
-            // Conclusion / status chip (StatusBadge replaces plain Text)
-            if let conclusion = job.conclusion {
-                StatusBadge(
-                    label: conclusionLabel(conclusion),
-                    color: conclusionColor(conclusion)
+                // Animated progress dot (PieProgressDot replaces plain Circle)
+                PieProgressDot(
+                    progress: job.progressFraction,
+                    color: jobDotColor(for: job),
+                    size: 9
                 )
-                .frame(width: 88, alignment: .trailing)
-            } else {
-                StatusBadge(
-                    label: jobStatusLabel(for: job),
-                    color: jobStatusColor(for: job)
-                )
-                .frame(width: 88, alignment: .trailing)
-            }
 
-            // Elapsed column (hidden for queued jobs)
-            if job.startedAt != nil {
-                Text(job.elapsed)
-                    .font(DesignTokens.Font.monoSmall)
-                    .foregroundColor(DesignTokens.Color.labelSecondary)
-                    .frame(width: 44, alignment: .trailing)
-            } else {
-                Spacer().frame(width: 44)
-            }
+                // Job name
+                Text(job.name)
+                    .font(.system(size: 12))
+                    .foregroundColor(job.isDimmed ? .secondary : .primary)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(1)
 
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundColor(DesignTokens.Color.labelTertiary)
+                // Time range column (hidden for queued jobs)
+                if job.startedAt != nil {
+                    Text(jobTimeRange(job))
+                        .font(DesignTokens.Font.monoXSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                        .lineLimit(1)
+                        .frame(width: 130, alignment: .leading)
+                } else {
+                    Spacer().frame(width: 130)
+                }
+
+                Spacer(minLength: 0)
+
+                // Conclusion / status chip (StatusBadge replaces plain Text)
+                if let conclusion = job.conclusion {
+                    StatusBadge(
+                        label: conclusionLabel(conclusion),
+                        color: conclusionColor(conclusion)
+                    )
+                    .frame(width: 88, alignment: .trailing)
+                } else {
+                    StatusBadge(
+                        label: jobStatusLabel(for: job),
+                        color: jobStatusColor(for: job)
+                    )
+                    .frame(width: 88, alignment: .trailing)
+                }
+
+                // Elapsed column (hidden for queued jobs)
+                if job.startedAt != nil {
+                    Text(job.elapsed)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                        .frame(width: 44, alignment: .trailing)
+                } else {
+                    Spacer().frame(width: 44)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(DesignTokens.Color.labelTertiary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 5)
+
+            // Horizontal progress bar — shown only for in_progress jobs with measurable progress
+            if job.status == "in_progress", job.progressFraction > 0 {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Rectangle()
+                            .fill(DesignTokens.Color.statusBlue.opacity(0.12))
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [DesignTokens.Color.statusBlue, DesignTokens.Color.statusBlue.opacity(0.6)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geo.size.width * CGFloat(job.progressFraction))
+                    }
+                }
+                .frame(height: 2)
+                .padding(.horizontal, 12)
+            }
         }
-        .padding(.horizontal, 12).padding(.vertical, 5)
         .background(
             // Subtle tint per job status
             Rectangle().fill(jobRowTint(for: job))
