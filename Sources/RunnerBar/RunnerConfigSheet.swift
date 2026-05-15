@@ -75,7 +75,6 @@ struct RunnerConfigSheet: View {
             .filter { !$0.isEmpty }
         let folder = workFolderText.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
-            // swiftlint:disable:next identifier_name
             let succeeded = RunnerLifecycleService.shared.updateConfig(
                 runner: runner,
                 labels: labels,

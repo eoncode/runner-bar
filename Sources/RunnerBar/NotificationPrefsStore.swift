@@ -1,4 +1,3 @@
-// swiftlint:disable opening_brace vertical_whitespace_opening_braces orphaned_doc_comment
 import Combine
 import Foundation
 
@@ -41,4 +40,3 @@ final class NotificationPrefsStore: ObservableObject {
         ])
     }
 }
-// swiftlint:enable opening_brace vertical_whitespace_opening_braces orphaned_doc_comment

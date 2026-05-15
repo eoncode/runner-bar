@@ -1,3 +1,4 @@
+// swiftlint:disable type_body_length
 import AppKit
 import SwiftUI
 
@@ -16,7 +17,6 @@ import SwiftUI
 //   ❌ NEVER use a fixed constant.
 //
 // ════════════════════════════════════════════════════════════════════════════════
-// swiftlint:disable:next type_body_length
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 /// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
 struct JobDetailView: View {
@@ -361,6 +361,7 @@ struct JobDetailView: View {
         }
     }
 }
+// swiftlint:enable type_body_length
 
 // MARK: - Wallclock formatter
 

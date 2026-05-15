@@ -62,12 +62,11 @@ func ghPost(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
 /// e.g. `https://github.com/owner/repo/actions/runs/123` → `"owner/repo"`
 /// Depended on by: AppDelegate.swift, JobDetailView.swift, RunnerStoreState.swift
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
-    guard
-        // swiftlint:disable:next identifier_name
-        let s = urlString,
-        let url = URL(string: s),
-        url.host == "github.com",
-        url.pathComponents.count >= 3
+    // swiftlint:disable:next identifier_name
+    guard let s = urlString,
+          let url = URL(string: s),
+          url.host == "github.com",
+          url.pathComponents.count >= 3
     else { return nil }
     let parts = url.pathComponents  // ["/", "owner", "repo", ...]
     return "\(parts[1])/\(parts[2])"
