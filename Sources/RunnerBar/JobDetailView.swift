@@ -28,6 +28,7 @@ import SwiftUI
 // Header collapsed from 4 rows to 2 rows.
 // Phase 5: DesignToken colour sweep — .yellow/.green/.red → rbWarning/rbSuccess/rbDanger;
 //          step rows wrapped in card-style RoundedRectangle.
+// Review item 3: step rows now use .cardRow() modifier for consistency.
 // ════════════════════════════════════════════════════════════════════════════════
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 // Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
@@ -65,7 +66,7 @@ struct JobDetailView: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
                 Spacer(minLength: 8)
-                // ── Action cluster ───────────────────────────────────────────────
+                // ── Action cluster ───────────────────────────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
                         let jobID = job.id
@@ -163,7 +164,7 @@ struct JobDetailView: View {
 
             Divider()
 
-            // ── Steps list ──────────────────────────────────────────────────────
+            // ── Steps list ──────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: RBSpacing.xxs) {
@@ -357,14 +358,8 @@ struct JobDetailView: View {
         }
         .padding(.horizontal, RBSpacing.sm)
         .padding(.vertical, 3)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-        )
+        // Use shared .cardRow() modifier for consistency (review item 3).
+        .cardRow(cornerRadius: RBRadius.small)
         .contentShape(Rectangle())
     }
 
