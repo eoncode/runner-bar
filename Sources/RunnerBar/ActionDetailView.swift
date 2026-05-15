@@ -26,6 +26,8 @@ import SwiftUI
 //
 // ════════════════════════════════════════════════════════════════════════════════
 
+// MARK: - ActionDetailView
+
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 struct ActionDetailView: View {
     let group: ActionGroup
@@ -61,7 +63,7 @@ struct ActionDetailView: View {
         }
     }
 
-    // MARK: - Body sub-views (split to avoid swift-frontend result-builder ICE)
+    // MARK: - Header
 
     @ViewBuilder private var actionDetailHeader: some View {
         HStack(spacing: 6) {
@@ -76,9 +78,6 @@ struct ActionDetailView: View {
         .padding(.bottom, 4)
     }
 
-    // Each button extracted to its own @ViewBuilder property so the constraint
-    // solver resolves captured-closure types independently, avoiding the ICE.
-
     @ViewBuilder private var actionDetailBackButton: some View {
         Button(action: onBack) {
             HStack(spacing: 3) {
@@ -92,127 +91,147 @@ struct ActionDetailView: View {
     }
 
     @ViewBuilder private var actionDetailReRunButton: some View {
-        ReRunButton(
-            action: reRunAction,
-            isDisabled: group.groupStatus == .inProgress
-        )
+        let disabled: Bool = group.groupStatus == .inProgress
+        ReRunButton(action: reRunAction, isDisabled: disabled)
     }
 
     @ViewBuilder private var actionDetailCancelButton: some View {
-        CancelButton(
-            action: cancelAction,
-            isDisabled: group.groupStatus != .inProgress
-        )
+        let disabled: Bool = group.groupStatus != .inProgress
+        CancelButton(action: cancelAction, isDisabled: disabled)
     }
 
     @ViewBuilder private var actionDetailLogCopyButton: some View {
-        LogCopyButton(
-            fetch: logFetchAction,
-            isDisabled: false
-        )
+        LogCopyButton(fetch: logFetchAction, isDisabled: false)
     }
+
+    // MARK: - Group info
 
     @ViewBuilder private var actionDetailGroupInfo: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Button(action: openLabelOnGitHub) {
-                    Text(group.label)
-                        .font(DesignTokens.Font.monoSmall)
-                        .foregroundColor(DesignTokens.Color.labelSecondary)
-                }
-                .buttonStyle(.plain)
-                .help(labelLinkTooltip)
-
-                Text(group.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-            }
-            if let branch = group.headBranch {
-                Text(branch)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            actionDetailGroupTitleRow
+            actionDetailBranchRow
             actionDetailTimingRow
-            Text(jobsSummaryLine)
-                .font(DesignTokens.Font.monoSmall)
-                .foregroundColor(DesignTokens.Color.labelSecondary)
+            actionDetailJobsSummary
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
 
+    @ViewBuilder private var actionDetailGroupTitleRow: some View {
+        HStack(spacing: 6) {
+            Button(action: openLabelOnGitHub) {
+                Text(group.label)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+            }
+            .buttonStyle(.plain)
+            .help(labelLinkTooltip)
+
+            Text(group.title)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(2)
+                .truncationMode(.tail)
+        }
+    }
+
+    @ViewBuilder private var actionDetailBranchRow: some View {
+        if let branch = group.headBranch {
+            Text(branch)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    @ViewBuilder private var actionDetailJobsSummary: some View {
+        Text(jobsSummaryLine)
+            .font(DesignTokens.Font.monoSmall)
+            .foregroundColor(DesignTokens.Color.labelSecondary)
+    }
+
     @ViewBuilder private var actionDetailTimingRow: some View {
+        let startLabel: String = groupStartLabel
+        let endLabel: String   = groupEndLabel
+        let elapsed: String    = elapsedLive(tick: tick)
         HStack(spacing: 4) {
             Image(systemName: "clock")
                 .font(.system(size: 9))
                 .foregroundColor(DesignTokens.Color.labelSecondary)
-            Text(groupStartLabel)
+            Text(startLabel)
                 .font(DesignTokens.Font.monoSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
             Text("→")
                 .font(.caption2)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
-            Text(groupEndLabel)
+            Text(endLabel)
                 .font(DesignTokens.Font.monoSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
             Text("·")
                 .font(.caption2)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
-            Text(elapsedLive(tick: tick))
+            Text(elapsed)
                 .font(DesignTokens.Font.monoSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
         }
     }
 
+    // MARK: - Job list
+
     @ViewBuilder private var actionDetailJobList: some View {
         // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
+        let maxH: CGFloat = NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
         ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 0) {
-                if group.jobs.isEmpty {
-                    Text("No jobs available")
-                        .font(.caption).foregroundColor(.secondary)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                } else {
-                    ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
-                        Button(action: { onSelectJob(job) }, label: {
-                            jobRow(job, index: index + 1)
-                        })
-                        .buttonStyle(.plain)
+            actionDetailJobListContent
+        }
+        .frame(maxHeight: maxH)
+    }
+
+    @ViewBuilder private var actionDetailJobListContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if group.jobs.isEmpty {
+                Text("No jobs available")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+            } else {
+                ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
+                    Button(action: { onSelectJob(job) }) {
+                        jobRow(job, index: index + 1)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 // swiftlint:enable file_length identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-extension ActionDetailView { // swiftlint:disable:this missing_docs
-    // MARK: - Button action helpers (extracted to avoid @ViewBuilder closure ICE)
+// MARK: - ActionDetailView + Actions
 
-    private func reRunAction(completion: @escaping (Bool) -> Void) -> Void {
-        let scope: String = group.repo
-        let runIDs: [Int] = group.runs.map { $0.id }
+extension ActionDetailView { // swiftlint:disable:this missing_docs
+
+    // Button action helpers — extracted from @ViewBuilder closures to avoid
+    // the x86_64 swift-frontend result-builder type-checker ICE.
+
+    private func reRunAction(completion: @escaping (Bool) -> Void) {
+        let scope: String  = group.repo
+        let runIDs: [Int]  = group.runs.map { $0.id }
         DispatchQueue.global(qos: .userInitiated).async {
             var ok = true
             for runID in runIDs {
-                let result: Bool = ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
-                if !result { ok = false }
+                if !ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs") { ok = false }
             }
             completion(ok)
         }
     }
 
     private func cancelAction(completion: @escaping (Bool) -> Void) {
-        let scope = group.repo
-        let runIDs = group.runs.map { $0.id }
+        let scope: String = group.repo
+        let runIDs: [Int] = group.runs.map { $0.id }
         DispatchQueue.global(qos: .userInitiated).async {
             let ok = runIDs.allSatisfy { runID in
                 cancelRun(runID: runID, scope: scope)
@@ -222,7 +241,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     }
 
     private func logFetchAction(completion: @escaping (String?) -> Void) {
-        let g = group
+        let g: ActionGroup = group
         DispatchQueue.global(qos: .userInitiated).async {
             completion(fetchActionLogs(group: g))
         }
@@ -230,8 +249,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
 
     func openLabelOnGitHub() {
         let urlString: String
-        if group.label.hasPrefix("#"),
-           let number = Int(group.label.dropFirst()) {
+        if group.label.hasPrefix("#"), let number = Int(group.label.dropFirst()) {
             urlString = "https://github.com/\(group.repo)/pull/\(number)"
         } else {
             urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
@@ -241,9 +259,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     }
 
     var labelLinkTooltip: String {
-        group.label.hasPrefix("#")
-            ? "Open pull request on GitHub"
-            : "Open commit on GitHub"
+        group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
     }
 
     var groupStartLabel: String {
@@ -258,19 +274,22 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     }
 
     var jobsSummaryLine: String {
-        let done  = group.jobsDone
-        let total = group.jobsTotal
+        let done        = group.jobsDone
+        let total       = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
         if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
-        if conclusions.contains("failure") { return "\(done)/\(total) jobs failed" }
+        if conclusions.contains("failure")   { return "\(done)/\(total) jobs failed" }
         if conclusions.contains("cancelled") { return "\(done)/\(total) jobs cancelled" }
         if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) { return "\(done)/\(total) jobs succeeded" }
         return "\(done)/\(total) jobs completed"
     }
 
     func elapsedLive(tick _: Int) -> String { group.elapsed }
+}
 
-    // MARK: - Job row
+// MARK: - ActionDetailView + Job rows
+
+extension ActionDetailView {
 
     @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
         VStack(spacing: 0) {
@@ -281,18 +300,27 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         .contentShape(Rectangle())
     }
 
-    // Extracted into smaller @ViewBuilder helpers so the x86_64 type-checker
-    // does not ICE on a single large HStack with multiple conditional branches.
-
     @ViewBuilder func jobRowMainLine(_ job: ActiveJob, index: Int) -> some View {
+        let indexText: String = "#\(index)"
+        let dotColor: Color   = jobDotColor(for: job)
+        let nameColor: Color  = job.isDimmed ? .secondary : .primary
+        let timeRange: String = jobTimeRange(job)
+        let hasStart: Bool    = job.startedAt != nil
+        let elapsed: String   = job.elapsed
         HStack(spacing: 8) {
-            jobRowIndexLabel(index)
-            jobRowDot(job)
-            jobRowNameLabel(job)
-            jobRowTimeRange(job)
+            Text(indexText)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
+                .frame(width: 28, alignment: .leading)
+            PieProgressDot(progress: job.progressFraction, color: dotColor, size: 9)
+            Text(job.name)
+                .font(.system(size: 12))
+                .foregroundColor(nameColor)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            jobRowTimeRangeView(hasStart: hasStart, timeRange: timeRange)
             Spacer(minLength: 0)
             jobRowStatusBadge(job)
-            jobRowElapsed(job)
+            jobRowElapsedView(hasStart: hasStart, elapsed: elapsed)
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(DesignTokens.Color.labelTertiary)
@@ -300,31 +328,9 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
 
-    @ViewBuilder private func jobRowIndexLabel(_ index: Int) -> some View {
-        Text("#\(index)")
-            .font(DesignTokens.Font.monoXSmall)
-            .foregroundColor(DesignTokens.Color.labelTertiary)
-            .frame(width: 28, alignment: .leading)
-    }
-
-    @ViewBuilder private func jobRowDot(_ job: ActiveJob) -> some View {
-        PieProgressDot(
-            progress: job.progressFraction,
-            color: jobDotColor(for: job),
-            size: 9
-        )
-    }
-
-    @ViewBuilder private func jobRowNameLabel(_ job: ActiveJob) -> some View {
-        Text(job.name)
-            .font(.system(size: 12))
-            .foregroundColor(job.isDimmed ? .secondary : .primary)
-            .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-    }
-
-    @ViewBuilder private func jobRowTimeRange(_ job: ActiveJob) -> some View {
-        if job.startedAt != nil {
-            Text(jobTimeRange(job))
+    @ViewBuilder private func jobRowTimeRangeView(hasStart: Bool, timeRange: String) -> some View {
+        if hasStart {
+            Text(timeRange)
                 .font(DesignTokens.Font.monoXSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .lineLimit(1)
@@ -334,25 +340,9 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
-    @ViewBuilder private func jobRowStatusBadge(_ job: ActiveJob) -> some View {
-        if let conclusion = job.conclusion {
-            StatusBadge(
-                label: conclusionLabel(conclusion),
-                color: conclusionColor(conclusion)
-            )
-            .frame(width: 88, alignment: .trailing)
-        } else {
-            StatusBadge(
-                label: jobStatusLabel(for: job),
-                color: jobStatusColor(for: job)
-            )
-            .frame(width: 88, alignment: .trailing)
-        }
-    }
-
-    @ViewBuilder private func jobRowElapsed(_ job: ActiveJob) -> some View {
-        if job.startedAt != nil {
-            Text(job.elapsed)
+    @ViewBuilder private func jobRowElapsedView(hasStart: Bool, elapsed: String) -> some View {
+        if hasStart {
+            Text(elapsed)
                 .font(DesignTokens.Font.monoSmall)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
                 .frame(width: 44, alignment: .trailing)
@@ -361,8 +351,24 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
+    @ViewBuilder private func jobRowStatusBadge(_ job: ActiveJob) -> some View {
+        let label: String
+        let color: Color
+        if let conclusion = job.conclusion {
+            label = conclusionLabel(conclusion)
+            color = conclusionColor(conclusion)
+        } else {
+            label = jobStatusLabel(for: job)
+            color = jobStatusColor(for: job)
+        }
+        StatusBadge(label: label, color: color)
+            .frame(width: 88, alignment: .trailing)
+    }
+
     @ViewBuilder func jobRowProgressBar(_ job: ActiveJob) -> some View {
-        if job.status == "in_progress", (job.progressFraction ?? 0) > 0 {
+        let fraction: CGFloat = CGFloat(job.progressFraction ?? 0)
+        let isActive: Bool    = job.status == "in_progress" && fraction > 0
+        if isActive {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Rectangle()
@@ -370,12 +376,13 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
                     Rectangle()
                         .fill(
                             LinearGradient(
-                                colors: [DesignTokens.Color.statusBlue, DesignTokens.Color.statusBlue.opacity(0.6)],
+                                colors: [DesignTokens.Color.statusBlue,
+                                         DesignTokens.Color.statusBlue.opacity(0.6)],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
-                        .frame(width: geo.size.width * CGFloat(job.progressFraction ?? 0))
+                        .frame(width: geo.size.width * fraction)
                 }
             }
             .frame(height: 2)
@@ -386,13 +393,12 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     func jobRowTint(for job: ActiveJob) -> Color {
         guard !job.isDimmed else { return .clear }
         switch job.status {
-        case "in_progress": return DesignTokens.Color.tintBlue
-        case "queued":      return DesignTokens.Color.tintBlue
+        case "in_progress", "queued": return DesignTokens.Color.tintBlue
         default:
             switch job.conclusion {
-            case "success":   return DesignTokens.Color.tintGreen
-            case "failure":   return DesignTokens.Color.tintRed
-            default:          return .clear
+            case "success": return DesignTokens.Color.tintGreen
+            case "failure": return DesignTokens.Color.tintRed
+            default:        return .clear
             }
         }
     }
@@ -435,13 +441,13 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
 
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":          return "SUCCESS"
-        case "failure":          return "FAILED"
-        case "cancelled":        return "CANCELLED"
-        case "skipped":          return "SKIPPED"
-        case "timed_out":        return "TIMED OUT"
-        case "action_required":  return "ACTION REQ"
-        default:                 return conclusion.uppercased()
+        case "success":         return "SUCCESS"
+        case "failure":         return "FAILED"
+        case "cancelled":       return "CANCELLED"
+        case "skipped":         return "SKIPPED"
+        case "timed_out":       return "TIMED OUT"
+        case "action_required": return "ACTION REQ"
+        default:                return conclusion.uppercased()
         }
     }
 
