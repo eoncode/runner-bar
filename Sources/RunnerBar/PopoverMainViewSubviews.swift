@@ -28,6 +28,9 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             // Phase 2: HeaderStatsBar renders CPU/MEM/DISK sparklines.
             // Receives the shared VM — no second sampler is created.
+            // fix(4): DiskPillBadge removed from header; HeaderStatsBar
+            // renders the DISK value inline as plain text, matching the
+            // reference design (compact single-row chip layout).
             HeaderStatsBar(statsVM: statsVM)
 
             Spacer()
@@ -166,21 +169,18 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 /// Phase 4 redesign:
-///  4a — Left-side status indicator bar (3pt wide RoundedRectangle) spans the FULL
-///       group height including expanded inline job rows (ZStack layout — see below).
-///       The indicator also acts as the expand/collapse toggle.
+///  4a — Left-side status indicator: a 3pt-wide Capsule clipped inside the card
+///       RoundedRectangle so it never bleeds past the card corner radius.
+///       Tapping the pill still toggles expand/collapse.
 ///  4b — DonutStatusView replaces PieProgressDot
 ///  4c — Subtle row background tint keyed to status
 ///  4d — chevron.right is now always used (was chevron.down in some paths)
 ///
-/// Layout:
-///   ZStack(alignment: .leading) {
-///     LeftStatusIndicator   ← stretches to full group height via .frame(maxHeight: .infinity)
-///     VStack {
-///       HStack { rowContent + chevron }
-///       InlineJobRowsView   ← only when expanded
-///     }
-///   }
+/// Layout (fix 2 + 3a):
+///   The whole card (group header + optional inline rows) is wrapped in a
+///   RoundedRectangle background. The Capsule indicator is overlaid at the
+///   leading edge using a ZStack with .clipped() on the card so the pill
+///   never extends beyond the card's corner radius.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -190,10 +190,24 @@ struct ActionRowView: View {
     @State private var expanded: Bool = false
 
     var body: some View {
+        // fix(3a): RoundedRectangle card wraps the full group (header + inline rows).
+        // .clipped() ensures the Capsule pill (fix 2) is cropped to card bounds.
         ZStack(alignment: .leading) {
-            // 4a: Full-height status indicator — sits behind content so it spans
-            // both the main row AND any expanded inline job rows.
-            // Button wraps it so tapping the bar toggles expand/collapse.
+            // fix(3a): card background — elevated surface + subtle border stroke
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+
+            // fix(3c): Status tint overlay at very low opacity
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(rowStatus.tint)
+
+            // fix(2): Left status indicator as a Capsule inside the card.
+            // Width fixed at 3pt; height unconstrained so it spans the full card.
+            // .clipped() on the outer ZStack clips it to the card's corner radius.
             Button(
                 action: {
                     if !group.jobs.isEmpty {
@@ -201,18 +215,21 @@ struct ActionRowView: View {
                     }
                 },
                 label: {
-                    LeftStatusIndicator(status: rowStatus)
+                    Capsule(style: .continuous)
+                        .fill(rowStatus.color)
+                        .frame(width: 3)
                         .frame(maxHeight: .infinity)
+                        .padding(.vertical, RBSpacing.xs)
                 }
             )
             .buttonStyle(.plain)
             .help(expanded ? "Collapse jobs" : "Expand jobs")
 
-            // Content column offset to the right of the indicator
+            // Content column offset to clear the 3pt Capsule pill
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
-                    // Left-indicator placeholder so row content doesn't underlap the bar
-                    Color.clear.frame(width: DesignTokens.Spacing.rowHPad)
+                    // Spacer clears the Capsule pill (3pt) + inner padding
+                    Color.clear.frame(width: RBSpacing.md)
 
                     Button(action: onSelect, label: { rowContent })
                         .buttonStyle(.plain)
@@ -230,11 +247,10 @@ struct ActionRowView: View {
                 }
             }
         }
-        // 4c: Subtle status tint on the row background
-        .background(
-            rowStatus.tint
-                .clipShape(RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous))
-        )
+        // fix(2): clip the ZStack so the Capsule pill is masked by the card radius
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xxs)
         .onAppear {
             // In-progress rows start expanded by default
             expanded = (rowStatus == .inProgress)
