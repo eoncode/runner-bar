@@ -1,3 +1,4 @@
+// swiftlint:disable colon
 import Foundation
 
 // MARK: - RunnerLifecycleService
@@ -46,13 +47,12 @@ struct RunnerLifecycleService {
     ///
     /// Falls back to the derived `serviceLabel(for:)` if no match is found.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
-        // Run /bin/launchctl list directly — no shell string, no pipe, no grep.
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         task.arguments = ["list"]
         let pipe = Pipe()
         task.standardOutput = pipe
-        task.standardError = Pipe() // discard stderr
+        task.standardError = Pipe()
         do { try task.run() } catch {
             log("RunnerLifecycle › resolvedLabel: launchctl list failed: \(error)")
             return serviceLabel(for: runner)
@@ -62,8 +62,6 @@ struct RunnerLifecycleService {
         task.waitUntilExit()
         timeoutItem.cancel()
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
-        // Filter in Swift: find a launchd label whose last component is exactly runnerName.
         let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
@@ -78,7 +76,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Start
 
-    /// Starts the runner's launchd service.
+    /// Starts the runner’s launchd service.
     /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
@@ -91,7 +89,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Stops the runner's launchd service.
+    /// Stops the runner’s launchd service.
     /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
@@ -106,9 +104,6 @@ struct RunnerLifecycleService {
 
     /// Invokes `/bin/launchctl <subcommand> <label>` via Process (no shell
     /// interpolation) and returns `true` iff the exit status is 0.
-    ///
-    /// launchctl exits 0 on success and non-zero with a descriptive error on
-    /// failure, so terminationStatus is the authoritative signal.
     @discardableResult
     private func runLaunchctl(_ subcommand: String, label: String) -> Bool {
         let task = Process()
@@ -135,7 +130,7 @@ struct RunnerLifecycleService {
     /// Uninstalls and de-registers the runner.
     ///
     /// Runs `./svc.sh uninstall` then `./config.sh remove --unattended` from the
-    /// runner's `installPath` using `Process.arguments` so the path is never
+    /// runner’s `installPath` using `Process.arguments` so the path is never
     /// interpolated into a shell string.
     ///
     /// If `svc.sh uninstall` fails, a warning is logged and the method still
@@ -153,23 +148,24 @@ struct RunnerLifecycleService {
             return false
         }
         let dir = URL(fileURLWithPath: path)
-        let svcOk = runScript(executableName: "svc.sh",
-                              arguments: ["uninstall"],
-                              workingDirectory: dir,
-                              timeout: 30,
-                              logTag: "svc.sh uninstall")
+        let svcOk = runScript(
+            executableName: "svc.sh",
+            arguments: ["uninstall"],
+            workingDirectory: dir,
+            timeout: 30,
+            logTag: "svc.sh uninstall"
+        )
         if !svcOk {
-            // Log a warning but continue: de-registering from GitHub is more
-            // important than the local service uninstall, since a failed
-            // svc.sh often means the service wasn't loaded (already stopped).
             log("RunnerLifecycle › remove: svc.sh uninstall failed for \(runner.runnerName)")
             log("RunnerLifecycle › remove: proceeding to config.sh remove")
         }
-        let cfgOk = runScript(executableName: "config.sh",
-                              arguments: ["remove", "--unattended"],
-                              workingDirectory: dir,
-                              timeout: 30,
-                              logTag: "config.sh remove")
+        let cfgOk = runScript(
+            executableName: "config.sh",
+            arguments: ["remove", "--unattended"],
+            workingDirectory: dir,
+            timeout: 30,
+            logTag: "config.sh remove"
+        )
         return svcOk && cfgOk
     }
 
@@ -199,7 +195,9 @@ struct RunnerLifecycleService {
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            lock.lock(); outputData.append(chunk); lock.unlock()
+            lock.lock()
+            outputData.append(chunk)
+            lock.unlock()
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
@@ -212,7 +210,11 @@ struct RunnerLifecycleService {
         timeoutItem.cancel()
         pipe.fileHandleForReading.readabilityHandler = nil
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-        if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+        if !tail.isEmpty {
+            lock.lock()
+            outputData.append(tail)
+            lock.unlock()
+        }
         let output = String(data: outputData, encoding: .utf8) ?? ""
         log("RunnerLifecycle › \(logTag) exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus == 0
@@ -220,12 +222,6 @@ struct RunnerLifecycleService {
 
     // MARK: - Rename
 
-    // Phase 2 — wired in follow-up.
-    // rename() currently only patches the local .runner JSON; it does not call
-    // config.sh remove + config.sh --name <newName> to re-register the runner
-    // with GitHub. Full rename requires a registration token and is deferred to
-    // the Phase 2 follow-up issue. Marked private to prevent accidental use
-    // until re-registration is implemented.
     /// Renames the runner by patching the `runnerName` field in the `.runner`
     /// JSON file at `installPath`.
     ///
@@ -268,9 +264,6 @@ struct RunnerLifecycleService {
     ///
     /// Note: the runner agent caches config in memory — changes take effect after
     /// the next runner restart.
-    ///
-    /// TODO: add `customLabels` to `RunnerJSON` in `LocalRunnerScanner` so labels
-    /// written here are re-read on the next scan and reflected in `RunnerModel.labels`.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {

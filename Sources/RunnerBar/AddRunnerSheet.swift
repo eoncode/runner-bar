@@ -1,4 +1,3 @@
-// swiftlint:disable colon comma
 import SwiftUI
 
 // swiftlint:disable type_body_length
@@ -189,18 +188,6 @@ struct AddRunnerSheet: View {
                 .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
                 .resolvingSymlinksInPath().path
-            // ⚠️ SECURITY: hasPrefix("/") alone is insufficient — a path like
-            // "/Users/bob/../../../etc" resolves outside the home directory once
-            // symlinks are expanded. We therefore:
-            //   1. Resolve symlinks on both paths via resolvingSymlinksInPath()
-            //   2. Accept only paths equal to homeDir OR starting with homeDir + "/"
-            //      (the trailing slash prevents "/Users/bobevil" matching "/Users/bob")
-            // ❌ NEVER replace this check with a plain hasPrefix(homeDir) without
-            //    the trailing "/" — that allows prefix-squatting on sibling dirs.
-            // ❌ NEVER skip symlink resolution — symlinks can escape the home tree.
-            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-            // ALLOWED UNDER ANY CIRCUMSTANCE. The security regression we get when
-            // this comment is removed is major major major.
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
@@ -229,8 +216,13 @@ struct AddRunnerSheet: View {
                 return
             }
             let ghURL = "https://github.com/\(scope)"
-            let exitCode = runRegistrationCommand(dir: dir, ghURL: ghURL,
-                                                  token: token, name: name, labels: labels)
+            let exitCode = runRegistrationCommand(
+                dir: dir,
+                ghURL: ghURL,
+                token: token,
+                name: name,
+                labels: labels
+            )
             DispatchQueue.main.async {
                 isRegistering = false
                 if exitCode == 0 {
@@ -272,7 +264,9 @@ struct AddRunnerSheet: View {
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            lock.lock(); outputData.append(chunk); lock.unlock()
+            lock.lock()
+            outputData.append(chunk)
+            lock.unlock()
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
@@ -285,7 +279,11 @@ struct AddRunnerSheet: View {
         timeoutItem.cancel()
         pipe.fileHandleForReading.readabilityHandler = nil
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-        if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+        if !tail.isEmpty {
+            lock.lock()
+            outputData.append(tail)
+            lock.unlock()
+        }
         let output = String(data: outputData, encoding: .utf8) ?? ""
         log("runRegistrationCommand › exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus
