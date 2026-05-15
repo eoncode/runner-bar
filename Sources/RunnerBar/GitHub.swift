@@ -251,8 +251,10 @@ func fetchRegistrationToken(scope: String) -> String? {
     log("fetchRegistrationToken › \(endpoint) \(outputData.count)b")
     struct TokenResponse: Decodable { let token: String }
     guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
-        log("fetchRegistrationToken › decode failed: "
-            + "\(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")")
+        log(
+            "fetchRegistrationToken › decode failed: "
+                + "\(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")"
+        )
         return nil
     }
     return resp.token
@@ -362,5 +364,36 @@ func ghPost(_ endpoint: String) -> Bool {
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
+    return result
+}
+
+// MARK: - Re-run job
+
+/// Re-runs a single job via POST `repos/{scope}/actions/jobs/{jobID}/rerun`.
+/// Called by `JobDetailView`'s `ReRunButton`.
+@discardableResult
+func reRunJob(jobID: Int, repoSlug: String) -> Bool {
+    guard repoSlug.contains("/") else {
+        log("reRunJob › invalid repoSlug: \(repoSlug)")
+        return false
+    }
+    let result = ghPost("repos/\(repoSlug)/actions/jobs/\(jobID)/rerun")
+    log("reRunJob › job=\(jobID) repo=\(repoSlug) success=\(result)")
+    return result
+}
+
+// MARK: - Re-run failed jobs
+
+/// Re-runs only the failed jobs in a workflow run via POST
+/// `repos/{scope}/actions/runs/{runID}/rerun-failed-jobs`.
+/// Called by `JobDetailView`'s `ReRunFailedButton`.
+@discardableResult
+func reRunFailedJobs(runID: Int, repoSlug: String) -> Bool {
+    guard repoSlug.contains("/") else {
+        log("reRunFailedJobs › invalid repoSlug: \(repoSlug)")
+        return false
+    }
+    let result = ghPost("repos/\(repoSlug)/actions/runs/\(runID)/rerun-failed-jobs")
+    log("reRunFailedJobs › run=\(runID) repo=\(repoSlug) success=\(result)")
     return result
 }

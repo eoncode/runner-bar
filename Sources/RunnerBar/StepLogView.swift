@@ -8,7 +8,7 @@ import SwiftUI
 // ║                                                                            ║
 // ║ LAYOUT RULES:                                                              ║
 // ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)      ║
-// ║ • idealWidth: 480 hints SwiftUI’s initial natural width measurement.        ║
+// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.        ║
 // ║   NSHostingController reads idealWidth as preferredContentSize.width        ║
 // ║   on the first layout pass (NSPanel architecture, not NSPopover).           ║
 // ║   The panel then resizes to content-driven width via KVO on                ║
@@ -37,7 +37,8 @@ import SwiftUI
 /// Issue #419 Phase 5: card-row grouping and monospaced metadata/log styling.
 ///
 /// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
-/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background thread.
+/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background thread
+/// using `fetchStepLog(jobID:stepNumber:scope:)` from GitHub.swift.
 struct StepLogView: View {
     /// The job that owns this step.
     let job: ActiveJob
@@ -201,10 +202,11 @@ struct StepLogView: View {
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             guard isLoading else { return }
-            let job = self.job
-            let step = self.step
+            let jobID      = job.id
+            let stepNumber = step.id
+            let scope      = scopeFromHtmlUrl(job.htmlUrl) ?? ""
             DispatchQueue.global(qos: .userInitiated).async {
-                let text = LogFetcher.fetchLog(job: job, step: step)
+                let text = fetchStepLog(jobID: jobID, stepNumber: stepNumber, scope: scope)
                 DispatchQueue.main.async {
                     self.logText = text
                     self.isLoading = false
