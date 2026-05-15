@@ -1,5 +1,5 @@
 // swiftlint:disable all
-// force-v2
+// force-v3
 import SwiftUI
 
 struct CancelButton: View {

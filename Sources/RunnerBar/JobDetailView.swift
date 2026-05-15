@@ -1,15 +1,12 @@
 // swiftlint:disable all
+// force-v3
 import AppKit
 import SwiftUI
 
 // ════════════════════════════════════════════════════════════════════════════════
-// ⚠️⚠️⚠️ NSPANEL SIZING GUARD — READ THIS BEFORE ANY EDIT ⚠️⚠️⚠️
-// ════════════════════════════════════════════════════════════════════════════════
-// ARCHITECTURE: NSPanel (NOT NSPopover). Width is dynamic.
+// ⚠️ NSPANEL SIZING GUARD — DO NOT REMOVE
 // ROOT FRAME RULE: .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
 // SCROLLVIEW HEIGHT CAP: .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-// ❌ NEVER remove these modifiers.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 // ════════════════════════════════════════════════════════════════════════════════
 
 struct JobDetailView: View {
