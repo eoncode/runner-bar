@@ -10,7 +10,7 @@ import SwiftUI
 /// Animation contract:
 ///   - In-progress background ring uses `@State rotationAngle` driven by
 ///     `.linear(duration: 2).repeatForever(autoreverses: false)` — reassures the
-///     user the row hasn’t frozen.
+///     user the row hasn't frozen.
 ///   - Progress arc uses `trim(from: 0, to: fraction)` animated with `.easeInOut`.
 ///   - Color transitions use `.easeInOut(duration: 0.35)`.
 ///
@@ -54,9 +54,11 @@ struct DonutStatusView: View {
                 rotationAngle = 360
             }
         }
-        .onChange(of: progress) { newValue in
+        // Single-argument form for macOS 13 compatibility.
+        // The `progress` property is captured directly from the current value.
+        .onChange(of: progress) { _ in
             withAnimation(.easeInOut(duration: 0.4)) {
-                displayProgress = newValue
+                displayProgress = progress
             }
         }
     }
