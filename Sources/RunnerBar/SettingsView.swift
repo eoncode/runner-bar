@@ -82,13 +82,46 @@ struct SettingsView: View {
         return "Remove runner \"\(name)\""
     }
 
-    // swiftlint:disable:next function_body_length
     var body: some View {
         // NO ScrollView — NSPanel grows to show all content.
         // AppDelegate clamps panel height to 85% screen visibleFrame.
         // ❌ NEVER wrap in ScrollView or add frame(maxHeight:) here.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
         // UNDER ANY CIRCUMSTANCE.
+        sectionsStack
+            .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+            .onAppear(perform: onAppearAction)
+            .onChange(of: localRunnerStore.isScanning) { if !$0 { hasLoadedOnce = true } }
+            .onDisappear { ScopeStore.shared.onMutate = nil }
+            .sheet(isPresented: $showAddRunnerSheet) {
+                AddRunnerSheet(isPresented: $showAddRunnerSheet) { localRunnerStore.refresh() }
+            }
+            .sheet(item: $runnerBeingConfigured) { runner in
+                RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
+                    localRunnerStore.refresh()
+                }
+            }
+            .modifier(RemovalAlertModifier(
+                title: removalAlertTitle,
+                isPresented: Binding(
+                    get: { runnerPendingRemoval != nil },
+                    set: { if !$0 { runnerPendingRemoval = nil } }
+                ),
+                isAuthenticated: isAuthenticated,
+                onCancel: { runnerPendingRemoval = nil },
+                onConfirm: performRemoval
+            ))
+    }
+
+    // MARK: - Body helpers
+
+    /// Root stack of all settings sections.
+    ///
+    /// ❌ NEVER add idealHeight here.
+    /// ❌ NEVER remove idealWidth: 480.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
+    private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
@@ -109,41 +142,12 @@ struct SettingsView: View {
             }
             .padding(.bottom, 16)
         }
-        // idealWidth only — no idealHeight. NSPanel handles screen bounds.
-        // ❌ NEVER add idealHeight here.
-        // ❌ NEVER remove idealWidth: 480.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-        .onAppear {
-            isAuthenticated = (githubToken() != nil)
-            ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
-            localRunnerStore.refresh()
-        }
-        .onChange(of: localRunnerStore.isScanning) { scanning in
-            if !scanning { hasLoadedOnce = true }
-        }
-        .onDisappear { ScopeStore.shared.onMutate = nil }
-        .sheet(isPresented: $showAddRunnerSheet) {
-            AddRunnerSheet(isPresented: $showAddRunnerSheet) {
-                localRunnerStore.refresh()
-            }
-        }
-        .sheet(item: $runnerBeingConfigured) { runner in
-            RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
-                localRunnerStore.refresh()
-            }
-        }
-        .modifier(RemovalAlertModifier(
-            title: removalAlertTitle,
-            isPresented: Binding(
-                get: { runnerPendingRemoval != nil },
-                set: { if !$0 { runnerPendingRemoval = nil } }
-            ),
-            isAuthenticated: isAuthenticated,
-            onCancel: { runnerPendingRemoval = nil },
-            onConfirm: performRemoval
-        ))
+    }
+
+    private func onAppearAction() {
+        isAuthenticated = (githubToken() != nil)
+        ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
+        localRunnerStore.refresh()
     }
 
     // MARK: - Sections
