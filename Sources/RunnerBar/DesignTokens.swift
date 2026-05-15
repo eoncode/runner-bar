@@ -6,10 +6,14 @@ import SwiftUI
 extension Color {
     /// Creates a SwiftUI Color from a CSS-style hex string (e.g. "#30D158" or "30D158").
     init(hex: String) {
-        let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
-        let scanner = Scanner(string: hex)
+        let raw = hex.trimmingCharacters(in: .init(charactersIn: "#"))
         var value: UInt64 = 0
-        scanner.scanHexInt64(&value)
+        let scanner = Scanner(string: raw)
+        guard raw.count == 6, scanner.scanHexInt64(&value) else {
+            assertionFailure("Invalid hex color: \(hex)")
+            self = .clear
+            return
+        }
         let r = Double((value & 0xFF0000) >> 16) / 255
         let g = Double((value & 0x00FF00) >> 8)  / 255
         let b = Double( value & 0x0000FF)         / 255
