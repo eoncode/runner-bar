@@ -43,6 +43,12 @@ enum DesignTokens {
         /// Subtle elevated background for card rows (light/dark adaptive).
         static let rowBackground: Color = Color.primary.opacity(0.04)
 
+        /// Elevated surface background used by RBCardModifier.
+        static let cardBackground: Color = Color.primary.opacity(0.05)
+
+        /// Tinted background for a selected / active row.
+        static let selectedRowBackground: Color = Color.accentColor.opacity(0.10)
+
         /// Hairline border for card rows.
         ///
         /// Issue #419 spec originally wrote `strokeBorder(Color.white.opacity(0.06))` which
@@ -114,8 +120,23 @@ enum DesignTokens {
         static let chipHPad: CGFloat = 6
         /// Horizontal padding for standard row content.
         static let rowHPad: CGFloat = 12
+        /// Vertical padding for standard row content.
+        static let rowVPad: CGFloat = 6
+        /// Inner padding for card surfaces.
+        static let cardPadding: CGFloat = 8
         /// Corner radius for card-row backgrounds.
         static let cardRadius: CGFloat = 7
+    }
+
+    // MARK: Shadow
+    /// Shadow tokens for elevated card surfaces.
+    enum Shadow {
+        /// Shadow colour for card elevation (light-adaptive).
+        static let cardColor: Color = Color.black.opacity(0.08)
+        /// Blur radius for card shadow.
+        static let cardRadius: CGFloat = 4
+        /// Vertical offset for card shadow.
+        static let cardY: CGFloat = 1
     }
 }
 
