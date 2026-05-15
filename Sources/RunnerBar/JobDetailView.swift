@@ -23,6 +23,7 @@ import SwiftUI
 //   Issue #419 Phase 5: step rows wrapped in cardRow-style RoundedRectangle background.
 //   Issue #419 Phase 5: BranchTagPill wired into infoBar for repo/branch context.
 //   Restored: CancelButton in action cluster (spec: no behaviour changes).
+//   Restored: LogCopyButton in action cluster (spec: no behaviour changes).
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -72,7 +73,7 @@ struct JobDetailView: View {
                     },
                     tooltip: "Re-run failed jobs in this workflow run"
                 )
-                // Restored: CancelButton removed during Phase 5 redesign — spec mandates no behaviour regression.
+                // Restored: CancelButton — spec mandates no behaviour regression.
                 CancelButton(
                     action: { completion in
                         let runID    = job.runId
@@ -83,6 +84,17 @@ struct JobDetailView: View {
                         }
                     },
                     isDisabled: job.status != "in_progress" && job.status != "queued"
+                )
+                // Restored: LogCopyButton — spec mandates no behaviour regression.
+                LogCopyButton(
+                    fetch: { completion in
+                        let jobID    = job.id
+                        let repoSlug = self.repoSlug
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            completion(fetchJobLog(jobID: jobID, scope: repoSlug))
+                        }
+                    },
+                    isDisabled: false
                 )
 
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
