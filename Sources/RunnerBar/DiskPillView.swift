@@ -1,27 +1,28 @@
 import SwiftUI
 
 // MARK: - DiskPillView
-/// Phase 2 (Issue #419): Disk usage pill shown in the popover header alongside CPU/MEM sparklines.
+/// Phase 2: Capsule-backed pill showing disk used/total or free percentage.
+/// Color: green → orange → red as free space drops below 30% / 10%.
 ///
-/// Design spec:
-/// - Background: `.ultraThinMaterial` for adaptive light/dark blending,
-///   overlaid with a subtle `pillColor` tint at low opacity.
-/// - Fill: `Capsule` stroke driven by `freePct` (green → orange → red threshold).
-/// - Label: "DISK" in `monoLabel` font + free-space value in `monoStat`.
+/// Defined here (separate file) so PopoverMainViewSubviews.swift and any
+/// future views can reference it without a forward-declaration issue.
 ///
-/// ❌ NEVER replace `.ultraThinMaterial` with a flat `.opacity()` fill —
-///    spec requires material blending (Issue #419 review comment, PR #435).
+/// Color thresholds:
+///   freePct >= 30  → statusGreen
+///   freePct >= 10  → statusOrange
+///   freePct <  10  → statusRed
 struct DiskPillView: View {
-    /// Percentage of disk space that is free (0–100).
+    /// Percentage of disk that is free (0–100).
     let freePct: Double
-    /// Rounded used GB.
+    /// Used gigabytes (rounded).
     let usedGB: Int
-    /// Rounded total GB.
+    /// Total gigabytes (rounded).
     let totalGB: Int
 
     private var pillColor: Color {
-        // Threshold is on *used* percentage, i.e. 100 - freePct
-        DesignTokens.Colors.usage(pct: 100 - freePct)
+        if freePct >= 30 { return DesignTokens.Colors.statusGreen }
+        if freePct >= 10 { return DesignTokens.Colors.statusOrange }
+        return DesignTokens.Colors.statusRed
     }
 
     var body: some View {
@@ -29,31 +30,20 @@ struct DiskPillView: View {
             Text("DISK")
                 .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
-                .lineLimit(1)
-            Text(freeLabel)
+            Text("\(usedGB)/\(totalGB)GB")
                 .font(DesignTokens.Fonts.monoStat)
                 .foregroundColor(pillColor)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+                .fixedSize()
         }
-        .padding(.horizontal, DesignTokens.Spacing.chipHPad)
+        .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
+            Capsule()
+                .fill(pillColor.opacity(0.12))
                 .overlay(
-                    Capsule(style: .continuous)
-                        .fill(pillColor.opacity(0.10))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(pillColor.opacity(0.28), lineWidth: 0.75)
+                    Capsule()
+                        .strokeBorder(pillColor.opacity(0.25), lineWidth: 0.5)
                 )
         )
-    }
-
-    private var freeLabel: String {
-        let freeGB = max(0, totalGB - usedGB)
-        return "\(freeGB)GB free"
     }
 }

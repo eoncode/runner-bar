@@ -71,9 +71,9 @@ struct PopoverHeaderView: View {
                 valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB)
             )
             Divider().frame(height: 16)
-            let total = stats.diskTotalGB
-            let used  = stats.diskUsedGB
-            let free  = max(0, total - used)
+            let total  = stats.diskTotalGB
+            let used   = stats.diskUsedGB
+            let free   = max(0, total - used)
             let freePct = total > 0 ? (free / total) * 100 : 0
             DiskPillView(
                 freePct: freePct,
@@ -177,12 +177,14 @@ struct PopoverLocalRunnerRow: View {
 /// Phase 4: left indicator pill + DonutStatusView + row background tint.
 /// `isExpanded` controls whether InlineJobRowsView is shown below this row.
 /// Tapping the LeftIndicatorPill toggles expansion; the pill color reflects status.
+/// In-progress groups auto-expand on appear so jobs are immediately visible.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
+    // Auto-expand in-progress groups on first render.
     @State private var isExpanded: Bool = false
 
     var body: some View {
@@ -215,6 +217,12 @@ struct ActionRowView: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.rowHPad)
         .padding(.vertical, 2)
+        .onAppear {
+            // Auto-expand in-progress rows so sub-jobs are visible immediately.
+            if group.groupStatus == .inProgress {
+                isExpanded = true
+            }
+        }
     }
 
     private var rowContent: some View {
@@ -262,19 +270,25 @@ struct ActionRowView: View {
         statusChip
     }
 
+    // MARK: - Status chip
+    /// IN PROGRESS and QUEUED render in a Capsule pill background.
+    /// QUEUED uses statusOrange (yellow) per spec.
+    /// SUCCESS / FAILED use statusGreen / statusRed with no pill background.
     @ViewBuilder
     private var statusChip: some View {
         switch group.groupStatus {
         case .inProgress:
-            Text("IN PROGRESS")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Colors.statusBlue)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusPill(
+                label: "IN PROGRESS",
+                foreground: DesignTokens.Colors.statusBlue,
+                background: DesignTokens.Colors.statusBlue.opacity(0.15)
+            )
         case .queued:
-            Text("QUEUED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Colors.statusBlue)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusPill(
+                label: "QUEUED",
+                foreground: DesignTokens.Colors.statusOrange,
+                background: DesignTokens.Colors.statusOrange.opacity(0.15)
+            )
         case .completed:
             let success = group.conclusion == "success"
             Text(success ? "SUCCESS" : "FAILED")
@@ -287,7 +301,7 @@ struct ActionRowView: View {
     private var indicatorColor: Color {
         switch group.groupStatus {
         case .inProgress: return DesignTokens.Colors.statusBlue
-        case .queued:     return DesignTokens.Colors.statusBlue.opacity(0.5)
+        case .queued:     return DesignTokens.Colors.statusOrange
         case .completed:
             if group.isDimmed { return .gray }
             return group.conclusion == "success" ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed
@@ -297,13 +311,35 @@ struct ActionRowView: View {
     private var rowTint: Color {
         switch group.groupStatus {
         case .inProgress: return DesignTokens.Colors.statusBlue.opacity(0.04)
-        case .queued:     return DesignTokens.Colors.statusBlue.opacity(0.02)
+        case .queued:     return DesignTokens.Colors.statusOrange.opacity(0.04)
         case .completed:
             if group.isDimmed { return Color.clear }
             return group.conclusion == "success"
                 ? DesignTokens.Colors.statusGreen.opacity(0.04)
                 : DesignTokens.Colors.statusRed.opacity(0.04)
         }
+    }
+}
+
+// MARK: - StatusPill
+/// Reusable pill label for action row status chips (IN PROGRESS, QUEUED).
+/// Capsule background with matching foreground color.
+private struct StatusPill: View {
+    let label: String
+    let foreground: Color
+    let background: Color
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(foreground)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(
+                Capsule().fill(background)
+            )
     }
 }
 
@@ -394,7 +430,7 @@ struct InlineJobRowsView: View {
     private func jobBarColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return DesignTokens.Colors.statusBlue
-        case "queued":      return DesignTokens.Colors.statusBlue.opacity(0.5)
+        case "queued":      return DesignTokens.Colors.statusOrange.opacity(0.5)
         default: return job.conclusion == "success"
             ? DesignTokens.Colors.statusGreen
             : (job.isDimmed ? .gray : DesignTokens.Colors.statusRed)
