@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length missing_docs
+// swiftlint:disable type_body_length file_length
 
 // MARK: - NavState
 
@@ -96,12 +96,19 @@ import SwiftUI
 
 /// Represents the currently visible navigation screen.
 private enum NavState {
+    /// Main runner/action list screen.
     case main
+    /// Job detail screen for a runner job.
     case jobDetail(ActiveJob)
+    /// Step log screen for a runner job step.
     case stepLog(ActiveJob, JobStep)
+    /// Action group detail screen.
     case actionDetail(ActionGroup)
+    /// Job detail screen reached from an action group.
     case actionJobDetail(ActiveJob, ActionGroup)
+    /// Step log screen reached from an action group.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
+    /// Settings screen.
     case settings
 }
 
@@ -126,6 +133,9 @@ private enum NavState {
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded or enrichGroupIfNeeded.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE.
+
+/// Application delegate: owns the NSPanel, status bar item, navigation stack,
+/// and all view factories for RunnerBar.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -176,6 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Environment injection
 
+    /// Wraps a view with the shared `PopoverOpenState` environment object.
     /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
@@ -195,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - App lifecycle
 
+    /// Configures the status bar item, hosting controller, NSPanel, and polling store.
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
@@ -261,6 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel resize
 
+    /// Resizes and repositions the panel based on SwiftUI's preferred content size.
     /// ❌ NEVER re-derive panelTopY here.
     /// ❌ NEVER call from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -290,6 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Navigation
 
+    /// Swaps the hosted root view and immediately repositions the panel.
     /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
@@ -300,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Dismiss
 
+    /// Closes the panel, resets navigation state, and removes all event monitors.
     private func closePanel() {
         guard panelIsOpen else { return }
         panel?.orderOut(nil)
@@ -323,16 +338,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let preserved = self.savedNavState   // save before mainView() wipes it
+            let preserved = self.savedNavState
             self.hostingController?.rootView = self.mainView()
-            self.savedNavState = preserved        // restore for openPanel() restore path
+            self.savedNavState = preserved
         }
     }
 
+    /// Removes the global mouse-event monitor if active.
     private func removeEventMonitor() {
         if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
     }
 
+    /// Removes the workspace app-switch observer if active.
     private func removeWorkspaceObserver() {
         if let opt = workspaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(opt)
@@ -403,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - View factories
 
+    /// Builds the main runner/action list view and resets saved nav state.
     private func mainView() -> AnyView {
         savedNavState = nil
         return wrapEnv(PopoverMainView(
@@ -446,6 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Builds the action group detail view.
     private func actionDetailView(group: ActionGroup) -> AnyView {
         savedNavState = .actionDetail(group)
         return wrapEnv(ActionDetailView(
@@ -467,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Builds a job detail view reached from an action group.
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
         savedNavState = .actionJobDetail(job, group)
         return wrapEnv(JobDetailView(
@@ -483,6 +503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Builds a step log view reached from an action group.
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
         return wrapEnv(StepLogView(
@@ -496,6 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Builds a minimal synthetic ActionGroup for jobs accessed from the runner list.
     private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
         let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
         return ActionGroup(
@@ -508,6 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// Builds a job detail view reached from the runner list.
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         let group = syntheticGroup(for: job)
@@ -525,6 +548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Builds the settings view.
     private func settingsView() -> AnyView {
         savedNavState = .settings
         return wrapEnv(SettingsView(
@@ -536,6 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Builds a step log view reached from the runner list.
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
         return wrapEnv(StepLogView(
@@ -549,6 +574,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Returns a validated live view for the given saved nav state, or nil for `.main`.
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -578,12 +604,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Toggle
 
+    /// Toggles the panel open or closed.
     @objc private func togglePanel() {
         if panelIsOpen { closePanel() } else { openPanel() }
     }
 
     // MARK: - Open
 
+    /// Opens the panel, positions it below the status bar button, and restores nav state.
     private func openPanel() {
         guard let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
@@ -636,4 +664,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length file_length missing_docs
+// swiftlint:enable type_body_length file_length

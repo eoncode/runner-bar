@@ -1,7 +1,5 @@
 import Foundation
 
-// swiftlint:disable missing_docs
-
 // MARK: - LocalRunnerScanner
 
 /// Discovers locally-installed GitHub Actions self-hosted runners without
@@ -33,6 +31,7 @@ struct LocalRunnerScanner {
 
     // MARK: - Public API
 
+    /// Scans all local sources and returns deduplicated `RunnerModel` values sorted by name.
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 
@@ -155,4 +154,3 @@ struct LocalRunnerScanner {
         return labels
     }
 }
-// swiftlint:enable missing_docs

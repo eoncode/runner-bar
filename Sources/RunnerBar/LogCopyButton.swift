@@ -23,6 +23,7 @@ struct LogCopyButton: View {
         case failed
     }
 
+    /// Renders the button in its current phase.
     var body: some View {
         Group {
             switch phase {
@@ -71,6 +72,7 @@ struct LogCopyButton: View {
         }
     }
 
+    /// Initiates the copy flow: sets phase to loading then calls `fetch`.
     private func startCopy() {
         guard phase == .idle else { return }
         phase = .loading
