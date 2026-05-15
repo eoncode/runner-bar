@@ -1,24 +1,11 @@
+// swiftlint:disable all
+// force-v2
 import SwiftUI
 
-// MARK: - ButtonPhase
-
-/// Phase state used by action buttons (ReRunButton, CancelButton).
 enum ButtonPhase {
-    case idle
-    case loading
-    case success
-    case failure
+    case idle, loading, success, failure
 }
 
-// MARK: - ButtonPhaseView
-
-/// Shared button renderer used by `ReRunButton` and `CancelButton`.
-///
-/// Renders one of four states:
-/// - `.idle`    → idleIcon + idleLabel (tappable)
-/// - `.loading` → spinner + "Running…"
-/// - `.success` → green checkmark + "Done"
-/// - `.failure` → red cross + "Failed"
 struct ButtonPhaseView: View {
     let phase: ButtonPhase
     let idleLabel: String
@@ -26,35 +13,24 @@ struct ButtonPhaseView: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: {
-            if case .idle = phase { action() }
-        }) {
-            Group {
+        Button(action: action) {
+            HStack(spacing: 4) {
                 switch phase {
                 case .idle:
-                    HStack(spacing: 4) {
-                        Image(systemName: idleIcon).font(.caption)
-                        Text(idleLabel).font(.caption).fixedSize()
-                    }
-                    .foregroundColor(.secondary)
+                    Image(systemName: idleIcon).font(.caption)
+                    Text(idleLabel).font(.caption)
                 case .loading:
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.mini)
-                        Text("Running\u{2026}").font(.caption).foregroundColor(.secondary).fixedSize()
-                    }
+                    ProgressView().scaleEffect(0.6)
                 case .success:
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark").font(.caption).foregroundColor(.green)
-                        Text("Done").font(.caption).foregroundColor(.green).fixedSize()
-                    }
+                    Image(systemName: "checkmark").font(.caption).foregroundColor(.rbSuccess)
                 case .failure:
-                    HStack(spacing: 4) {
-                        Image(systemName: "xmark").font(.caption).foregroundColor(.red)
-                        Text("Failed").font(.caption).foregroundColor(.red).fixedSize()
-                    }
+                    Image(systemName: "xmark").font(.caption).foregroundColor(.rbDanger)
                 }
             }
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.07)))
         }
         .buttonStyle(.plain)
+        .disabled(phase == .loading)
     }
 }

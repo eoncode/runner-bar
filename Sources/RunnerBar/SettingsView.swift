@@ -1,4 +1,5 @@
 // swiftlint:disable all
+// force-v2
 import SwiftUI
 
 struct SettingsView: View {
