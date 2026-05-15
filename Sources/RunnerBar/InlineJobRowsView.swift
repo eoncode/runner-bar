@@ -1,9 +1,7 @@
 import SwiftUI
 
 // MARK: - TreeLineLeader
-/// L-shaped tree-line with an arrowhead drawn with Canvas.
-/// A vertical bar runs from the top of the row to the mid-point, then a short
-/// horizontal elbow terminates with a filled arrowhead pointing right.
+/// L-shaped tree-line with a filled arrowhead drawn with Canvas.
 private struct TreeLineLeader: View {
     let isLast: Bool
 
@@ -16,21 +14,15 @@ private struct TreeLineLeader: View {
         Canvas { ctx, size in
             let midY = size.height / 2
             let barX: CGFloat = 0
-
-            // Vertical bar — stop at midY for last item, full height otherwise
             var vertPath = Path()
             vertPath.move(to: CGPoint(x: barX, y: 0))
             vertPath.addLine(to: CGPoint(x: barX, y: isLast ? midY : size.height))
             ctx.stroke(vertPath, with: .color(lineColor), lineWidth: barWidth)
-
-            // Horizontal elbow, stopping short of the arrowhead
             let arrowTip = CGPoint(x: barX + elbowWidth, y: midY)
             var elbowPath = Path()
             elbowPath.move(to: CGPoint(x: barX, y: midY))
             elbowPath.addLine(to: CGPoint(x: arrowTip.x - arrowSize, y: midY))
             ctx.stroke(elbowPath, with: .color(lineColor), lineWidth: barWidth)
-
-            // Filled arrowhead pointing right
             var arrow = Path()
             arrow.move(to: arrowTip)
             arrow.addLine(to: CGPoint(x: arrowTip.x - arrowSize, y: midY - arrowSize / 2))
@@ -38,8 +30,84 @@ private struct TreeLineLeader: View {
             arrow.closeSubpath()
             ctx.fill(arrow, with: .color(lineColor))
         }
-        // Width must accommodate elbow + arrowhead tip
         .frame(width: elbowWidth + 2)
+    }
+}
+
+// MARK: - JobInlineProgress
+/// Inline progress capsule rendered in the same HStack row as the job name.
+private struct JobInlineProgress: View {
+    let progress: Double
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.rbTextTertiary.opacity(0.22)).frame(height: 3)
+                Capsule()
+                    .fill(Color.rbWarning)
+                    .frame(width: max(3, geo.size.width * CGFloat(progress)), height: 3)
+            }
+        }
+        .frame(height: 3)
+    }
+}
+
+// MARK: - JobRowCard
+/// Single job row: tree-line leader + card background with status, name,
+/// optional inline progress, step count, and elapsed time.
+private struct JobRowCard: View {
+    let job: ActiveJob
+    let status: RBStatus
+    let isLast: Bool
+
+    private var completedSteps: Int {
+        job.steps.filter { $0.conclusion != nil || $0.status == "completed" }.count
+    }
+    private var totalSteps: Int { job.steps.count }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            TreeLineLeader(isLast: isLast).frame(height: 28)
+            cardContent
+        }
+        .padding(.vertical, 1)
+    }
+
+    private var cardContent: some View {
+        HStack(spacing: 6) {
+            DonutStatusView(status: status, progress: job.progressFraction ?? 0, size: 10)
+            Text(job.name)
+                .font(DesignTokens.Fonts.mono)
+                .foregroundColor(job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+            if job.status == "in_progress" {
+                JobInlineProgress(progress: job.progressFraction ?? 0)
+            }
+            Spacer(minLength: 4)
+            if totalSteps > 0 {
+                Text("\(completedSteps)/\(totalSteps)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(Color.rbTextTertiary)
+                    .fixedSize()
+            }
+            if job.startedAt != nil {
+                Text(job.elapsed)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(Color.rbTextTertiary)
+                    .fixedSize()
+            }
+        }
+        .padding(.horizontal, RBSpacing.sm)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        )
     }
 }
 
@@ -48,14 +116,6 @@ private struct TreeLineLeader: View {
 ///
 /// Phase 4 spec (#420): inline job rows are **read-only / passive context**.
 /// No `>` chevron and no tap handler — navigation lives in ActionDetailView only.
-///
-/// Fix list applied here:
-///  1. Each job card has its own RoundedRectangle background + stroke border.
-///  2. Progress bar is laid out inline in the same HStack as the text row.
-///  3. in_progress jobs use rbWarning (yellow) not rbBlue.
-///  4. "+ N more" button removed.
-///  5. Step count (e.g. "20/21") added at the trailing edge.
-///  6. Tree-line arrows added (filled arrowhead on elbow).
 ///
 /// ⚠️ REGRESSION GUARD #377 — DO NOT REMOVE `@EnvironmentObject popoverState`:
 /// This view must not render (or drive any cap/state mutations) while the
@@ -76,94 +136,17 @@ struct InlineJobRowsView: View {
         return AnyView(
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in
-                    jobRow(job, isLast: index == jobs.count - 1)
+                    JobRowCard(
+                        job: job,
+                        status: jobStatus(for: job),
+                        isLast: index == jobs.count - 1
+                    )
                 }
             }
             .padding(.leading, RBSpacing.md)
             .padding(.trailing, RBSpacing.xs)
             .padding(.bottom, RBSpacing.xs)
         )
-    }
-
-    // MARK: - Row
-
-    private func jobRow(_ job: ActiveJob, isLast: Bool) -> some View {
-        let status = jobStatus(for: job)
-        let progress = job.progressFraction ?? 0
-        let completedSteps = job.steps.filter { $0.conclusion != nil || $0.status == "completed" }.count
-        let totalSteps = job.steps.count
-
-        return HStack(alignment: .center, spacing: 4) {
-            // Tree-line leader with arrow
-            TreeLineLeader(isLast: isLast)
-                .frame(height: 28)
-
-            // Card content
-            HStack(spacing: 6) {
-                // Status donut
-                DonutStatusView(
-                    status: status,
-                    progress: progress,
-                    size: 10
-                )
-
-                // Job name
-                Text(job.name)
-                    .font(DesignTokens.Fonts.mono)
-                    .foregroundColor(
-                        job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary
-                    )
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-
-                // Inline progress bar — only for in_progress jobs
-                if job.status == "in_progress" {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.rbTextTertiary.opacity(0.22))
-                                .frame(height: 3)
-                            Capsule()
-                                // fix(4): yellow for in-progress, not blue
-                                .fill(Color.rbWarning)
-                                .frame(width: max(3, geo.size.width * CGFloat(progress)), height: 3)
-                        }
-                    }
-                    .frame(height: 3)
-                }
-
-                Spacer(minLength: 4)
-
-                // Step count (fix 6): e.g. "20/21" — only when steps are known
-                if totalSteps > 0 {
-                    Text("\(completedSteps)/\(totalSteps)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(Color.rbTextTertiary)
-                        .fixedSize()
-                }
-
-                // Elapsed time
-                if job.startedAt != nil {
-                    Text(job.elapsed)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundColor(Color.rbTextTertiary)
-                        .fixedSize()
-                }
-            }
-            .padding(.horizontal, RBSpacing.sm)
-            .padding(.vertical, 5)
-            // fix(1): individual card background + border stroke per job row
-            .background(
-                RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                    .fill(Color.rbSurfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                            .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                    )
-            )
-        }
-        .padding(.vertical, 1)
     }
 
     // MARK: - Helpers
@@ -178,8 +161,6 @@ struct InlineJobRowsView: View {
             }
         }
         switch job.status {
-        // fix(3): in_progress uses .inProgress whose color is rbWarning (yellow)
-        // after we update DesignTokens.swift below.
         case "in_progress": return .inProgress
         case "queued": return .queued
         default: return .queued
