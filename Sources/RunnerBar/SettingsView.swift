@@ -93,18 +93,24 @@ struct SettingsView: View {
             .onAppear(perform: onAppearAction)
             .onChange(of: localRunnerStore.isScanning) { if !$0 { hasLoadedOnce = true } }
             .onDisappear { ScopeStore.shared.onMutate = nil }
-            .sheet(isPresented: $showAddRunnerSheet) {
-                AddRunnerSheet(isPresented: $showAddRunnerSheet) { localRunnerStore.refresh() }
-            }
-            .sheet(item: $runnerBeingConfigured) { runner in
-                RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
-                    localRunnerStore.refresh()
-                }
-            }
+            .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
+            .sheet(item: $runnerBeingConfigured, content: configSheet)
             .modifier(removalAlertModifier)
     }
 
     // MARK: - Body helpers
+
+    /// Sheet content for adding a new runner.
+    private func addRunnerSheet() -> some View {
+        AddRunnerSheet(isPresented: $showAddRunnerSheet) { localRunnerStore.refresh() }
+    }
+
+    /// Sheet content for configuring an existing runner.
+    private func configSheet(_ runner: RunnerModel) -> some View {
+        RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
+            localRunnerStore.refresh()
+        }
+    }
 
     /// Removal alert modifier instance — extracted to keep `body` under the line limit.
     private var removalAlertModifier: RemovalAlertModifier {

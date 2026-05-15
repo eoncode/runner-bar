@@ -34,6 +34,7 @@ struct CardRowModifier: ViewModifier {
     }
 }
 
+/// View helpers for applying `CardRowModifier`.
 extension View {
     /// Applies `CardRowModifier` with the given status tint and corner radius.
     func cardRow(status: RBStatus = .unknown, cornerRadius: CGFloat = RBRadius.card) -> some View {
@@ -68,6 +69,7 @@ struct PillBackgroundModifier: ViewModifier {
     }
 }
 
+/// View helpers for applying `PillBackgroundModifier`.
 extension View {
     /// Applies `PillBackgroundModifier` with the given fill color, opacity, and border opacity.
     func pillBackground(
@@ -96,6 +98,7 @@ struct MonoLabelModifier: ViewModifier {
     }
 }
 
+/// View helpers for applying `MonoLabelModifier`.
 extension View {
     /// Applies `MonoLabelModifier` with the given font and color.
     func monoLabel(font: Font = RBFont.mono, color: Color = .rbTextTertiary) -> some View {
@@ -114,6 +117,7 @@ struct LeftStatusIndicator: View {
     /// Corner radius of the indicator bar.
     var cornerRadius: CGFloat = RBRadius.indicator
 
+    /// Renders a rounded rectangle filled with `status.color`.
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(status.color)
@@ -130,6 +134,7 @@ struct StatPill: View {
     /// Formatted metric value, e.g. "42%".
     let value: String
 
+    /// Renders the label and value in a pill-shaped card.
     var body: some View {
         HStack(spacing: RBSpacing.xxs) {
             Text(label)
@@ -160,6 +165,7 @@ struct BranchTagPill: View {
     /// The branch name to display.
     let name: String
 
+    /// Renders the branch name in a blue pill.
     var body: some View {
         Text(name)
             .font(RBFont.monoSmall)
@@ -177,6 +183,7 @@ struct StatusBadge: View {
     /// The text label rendered inside the badge.
     let text: String
 
+    /// Renders `text` in a pill tinted by `status.color`.
     var body: some View {
         Text(text)
             .font(.system(size: 11, weight: .bold))
