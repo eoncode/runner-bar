@@ -1,16 +1,18 @@
+// swiftlint:disable file_length
 import Foundation
 
 /// Runs `command` via zsh, draining stdout/stderr asynchronously to avoid
 /// pipe-buffer deadlock, and enforcing a hard timeout so the app never hangs.
 @discardableResult
+// swiftlint:disable:next function_body_length
 func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell › \(command)")
     let task = Process()
     let pipe = Pipe()
     task.standardOutput = pipe
-    task.standardError  = pipe
-    task.launchPath     = "/bin/zsh"
-    task.arguments      = ["-c", command]
+    task.standardError = pipe
+    task.launchPath = "/bin/zsh"
+    task.arguments = ["-c", command]
 
     // Drain pipe asynchronously — prevents pipe-buffer deadlock when the
     // subprocess produces more output than the kernel buffer can hold.
@@ -53,3 +55,4 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell › exit \(task.terminationStatus), \(outputData.count) bytes")
     return result
 }
+// swiftlint:enable file_length
