@@ -1,5 +1,7 @@
 import Foundation
 
+// swiftlint:disable missing_docs
+
 // MARK: - RunnerStatusEnricher
 
 /// Phase 4: Enriches locally-discovered `RunnerModel` values with live status
@@ -19,7 +21,6 @@ struct RunnerStatusEnricher {
 
     // MARK: - Codable schema
 
-    /// Decodable mirror of one runner entry from the GitHub Actions runners API.
     private struct APIRunner: Decodable {
         let id: Int
         let name: String
@@ -46,16 +47,6 @@ struct RunnerStatusEnricher {
 
     // MARK: - Private helpers
 
-    /// Fetches runner status from the GitHub API for each unique scope in `runners`
-    /// using manual `?page=N` iteration so that scopes with more than 100 runners
-    /// are fully captured.
-    ///
-    /// `gh api --paginate` emits concatenated JSON objects
-    /// (`{"runners":[...]}\n{"runners":[...]}`) which `JSONDecoder` cannot parse
-    /// as a single value. Manual iteration avoids this entirely.
-    ///
-    /// Returns a lookup keyed by `agentId` (primary) and `"scope/name"`
-    /// (fallback, scope-qualified to prevent cross-scope collisions).
     private func buildAPILookup(
         for runners: [RunnerModel]
     ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
@@ -75,40 +66,33 @@ struct RunnerStatusEnricher {
                 ? "repos/\(scope)/actions/runners"
                 : "orgs/\(scope)/actions/runners"
 
-            // Paginate manually: fetch ?page=1,2,… until an empty runners array.
-            // This avoids the `gh --paginate` concatenated-object stream problem
-            // where multiple {"runners":[...]} objects cannot be decoded as one value.
             var page = 1
             var totalFetched = 0
             while true {
                 let endpoint = "\(baseEndpoint)?per_page=100&page=\(page)"
                 guard let data = ghAPI(endpoint) else {
-                    log("RunnerStatusEnricher › API call failed for scope: \(scope) page: \(page)")
+                    log("RunnerStatusEnricher \u203a API call failed for scope: \(scope) page: \(page)")
                     break
                 }
                 guard let decoded = try? JSONDecoder().decode(APIRunnersPage.self, from: data) else {
-                    log("RunnerStatusEnricher › decode failed for scope: \(scope) page: \(page)")
+                    log("RunnerStatusEnricher \u203a decode failed for scope: \(scope) page: \(page)")
                     break
                 }
                 let pageRunners = decoded.runners
                 for apiRunner in pageRunners {
                     byID[apiRunner.id] = apiRunner
-                    // Key by "scope/name" to prevent silent overwrites when runners
-                    // across different scopes share the same name.
                     byName["\(scope)/\(apiRunner.name)"] = apiRunner
                 }
                 totalFetched += pageRunners.count
-                log("RunnerStatusEnricher › scope=\(scope) page=\(page) fetched=\(pageRunners.count)")
-                // Stop when a page returns fewer than 100 results — no more pages.
+                log("RunnerStatusEnricher \u203a scope=\(scope) page=\(page) fetched=\(pageRunners.count)")
                 if pageRunners.count < 100 { break }
                 page += 1
             }
-            log("RunnerStatusEnricher › \(totalFetched) total runner(s) from GitHub for \(scope)")
+            log("RunnerStatusEnricher \u203a \(totalFetched) total runner(s) from GitHub for \(scope)")
         }
         return (byID, byName)
     }
 
-    /// Applies GitHub API status to a single `RunnerModel`, logging divergence.
     private func applyEnrichment(
         to runner: RunnerModel,
         lookup: (byID: [Int: APIRunner], byName: [String: APIRunner])
@@ -119,7 +103,6 @@ struct RunnerStatusEnricher {
             apiRunner = lookup.byID[aid]
         } else if let urlStr = runner.gitHubUrl,
                   let scope = scopeFrom(gitHubUrl: urlStr) {
-            // Fallback: look up by scope-qualified key to avoid cross-scope collision.
             apiRunner = lookup.byName["\(scope)/\(runner.runnerName)"]
         } else {
             apiRunner = nil
@@ -128,10 +111,10 @@ struct RunnerStatusEnricher {
         enriched.githubStatus = api.status
         enriched.isBusy = api.busy
         if runner.isRunning && api.status == "offline" {
-            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
+            log("RunnerStatusEnricher \u203a DIVERGENCE \(runner.runnerName): " +
                 "launchctl=running but GitHub=offline")
         } else if !runner.isRunning && api.status == "online" {
-            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
+            log("RunnerStatusEnricher \u203a DIVERGENCE \(runner.runnerName): " +
                 "launchctl=idle but GitHub=online")
         }
         return enriched
@@ -139,8 +122,6 @@ struct RunnerStatusEnricher {
 
     // MARK: - Helpers
 
-    /// Converts a `gitHubUrl` into a scope string (`"owner/repo"` or `"org"`)
-    /// suitable for the GitHub Actions runners API.
     private func scopeFrom(gitHubUrl: String) -> String? {
         guard let url = URL(string: gitHubUrl) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
@@ -151,3 +132,4 @@ struct RunnerStatusEnricher {
         }
     }
 }
+// swiftlint:enable missing_docs

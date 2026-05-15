@@ -8,14 +8,6 @@ final class SettingsStore: ObservableObject {
     /// Shared singleton instance.
     static let shared = SettingsStore()
 
-    /// UserDefaults key constants for SettingsStore.
-    private enum Key {
-        /// Key for the polling interval setting.
-        static let pollingInterval = "settings.pollingInterval"
-        /// Key for the show-dimmed-runners setting.
-        static let showDimmedRunners = "settings.showDimmedRunners"
-    }
-
     /// Valid range for the polling interval (seconds).
     static let pollingRange: ClosedRange<Int> = 10 ... 300
 
@@ -27,20 +19,21 @@ final class SettingsStore: ObservableObject {
                 pollingInterval = clamped
                 return
             }
-            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
+            UserDefaults.standard.set(pollingInterval, forKey: "settings.pollingInterval")
         }
     }
 
     /// Whether offline/dimmed runners are shown in the list.
     @Published var showDimmedRunners: Bool {
-        didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
+        didSet { UserDefaults.standard.set(showDimmedRunners, forKey: "settings.showDimmedRunners") }
     }
 
-    private init() {
-        let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
+    /// Initialises from UserDefaults, clamping the stored polling interval.
+    init() {
+        let stored = UserDefaults.standard.integer(forKey: "settings.pollingInterval")
         let raw = stored > 0 ? stored : 30
         pollingInterval = raw.clamped(to: Self.pollingRange)
-        showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
+        showDimmedRunners = UserDefaults.standard.bool(forKey: "settings.showDimmedRunners")
     }
 }
 
