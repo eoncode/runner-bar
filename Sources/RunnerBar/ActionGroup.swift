@@ -1,5 +1,4 @@
 // swiftlint:disable all
-// force-v3
 import Foundation
 
 struct WorkflowRun: Identifiable, Equatable {
@@ -25,6 +24,9 @@ struct ActionGroup: Identifiable, Equatable {
     let htmlUrl: String?
     var jobs: [ActiveJob] { runs.flatMap(\.jobs) }
     var headSha: String { runs.first?.headSha ?? "" }
+
+    // MARK: - Computed status
+
     var overallStatus: String {
         if runs.contains(where: { $0.status == "in_progress" || $0.status == "queued" }) { return "in_progress" }
         if runs.contains(where: { $0.conclusion == "failure" }) { return "failure" }
@@ -37,7 +39,42 @@ struct ActionGroup: Identifiable, Equatable {
         if runs.allSatisfy({ $0.conclusion == "success" }) { return "success" }
         return runs.first?.conclusion
     }
+
+    // MARK: - Compatibility shims (call-site compat with old ActionGroup shape)
+
+    /// Maps to `overallStatus` for sites that still reference `.groupStatus`.
+    var groupStatus: String { overallStatus }
+
+    /// Maps to `overallConclusion` for sites that still reference `.conclusion`.
+    var conclusion: String? { overallConclusion }
+
+    /// Derived from the first run's HTML URL, e.g. "owner/repo".
+    var repo: String? {
+        guard let url = htmlUrl ?? runs.first?.htmlUrl,
+              let parsed = URL(string: url),
+              parsed.pathComponents.count >= 3 else { return nil }
+        return "\(parsed.pathComponents[1])/\(parsed.pathComponents[2])"
+    }
+
+    /// Human-readable label (same as title for new model).
+    var label: String { title }
+
+    /// Earliest job start time across all runs.
+    var firstJobStartedAt: Date? {
+        runs.compactMap(\.createdAt).min()
+    }
+
+    /// Latest job completion time across all runs.
+    var lastJobCompletedAt: Date? {
+        runs.compactMap(\.updatedAt).max()
+    }
+
+    /// Alias for `firstJobStartedAt` where old code used `.createdAt`.
+    var createdAt: Date? { firstJobStartedAt }
+
+    /// Whether this group should render dimmed.
     var isDimmed: Bool { overallConclusion == "skipped" || overallConclusion == "cancelled" }
+
     var jobProgress: String {
         let total = jobs.count; guard total > 0 else { return "" }
         let done  = jobs.filter { $0.conclusion != nil }.count
@@ -51,7 +88,43 @@ struct ActionGroup: Identifiable, Equatable {
         guard sec >= 0 else { return "0s" }
         return sec >= 60 ? String(format: "%dm%02ds", sec / 60, sec % 60) : "\(sec)s"
     }
+
+    /// Returns a copy of this group with a different jobs array (via rebuilt runs).
+    func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
+        // Rebuild first run with the new jobs; preserve other runs as-is.
+        guard var first = runs.first else { return self }
+        let rebuilt = WorkflowRun(
+            id: first.id, status: first.status, conclusion: first.conclusion,
+            headSha: first.headSha, createdAt: first.createdAt, updatedAt: first.updatedAt,
+            htmlUrl: first.htmlUrl, headBranch: first.headBranch, event: first.event,
+            name: first.name, runNumber: first.runNumber, jobs: newJobs
+        )
+        let newRuns = [rebuilt] + runs.dropFirst()
+        return ActionGroup(id: id, title: title, runs: newRuns,
+                           headBranch: headBranch, htmlUrl: htmlUrl)
+    }
 }
+
+// MARK: - GroupStatus type alias for legacy call sites
+
+/// Legacy enum used in DonutStatusView / PopoverProgressViews.
+/// Maps string-based overallStatus to typed cases.
+enum GroupStatus: String, Equatable {
+    case inProgress = "in_progress"
+    case queued
+    case completed
+    case failed = "failure"
+    case success
+    case unknown
+}
+
+extension ActionGroup {
+    var typedGroupStatus: GroupStatus {
+        GroupStatus(rawValue: overallStatus) ?? .unknown
+    }
+}
+
+// MARK: - Fetch helpers
 
 func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
     guard let data = ghAPI("repos/\(scope)/actions/runs?per_page=20"),
@@ -61,22 +134,22 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     var grouped: [String: [WorkflowRun]] = [:]
     var order:   [String] = []
     for r in runsArray {
-        guard let id   = r["id"]         as? Int,
-              let sha  = r["head_sha"]   as? String,
-              let stat = r["status"]     as? String else { continue }
-        let branch  = r["head_branch"]  as? String
-        let htmlUrl = r["html_url"]     as? String
-        let event   = r["event"]        as? String
-        let name    = r["name"]         as? String
-        let runNum  = r["run_number"]   as? Int ?? 0
-        let created = (r["created_at"]  as? String).flatMap { iso.date(from: $0) }
-        let updated = (r["updated_at"]  as? String).flatMap { iso.date(from: $0) }
-        let conclusion = r["conclusion"] as? String
-        let jobs = fetchJobs(runID: id, scope: scope)
-        let run  = WorkflowRun(id: id, status: stat, conclusion: conclusion,
-                               headSha: sha, createdAt: created, updatedAt: updated,
-                               htmlUrl: htmlUrl, headBranch: branch, event: event,
-                               name: name, runNumber: runNum, jobs: jobs)
+        guard let id   = r["id"]       as? Int,
+              let sha  = r["head_sha"] as? String,
+              let stat = r["status"]   as? String else { continue }
+        let branch     = r["head_branch"]  as? String
+        let htmlUrl    = r["html_url"]     as? String
+        let event      = r["event"]        as? String
+        let name       = r["name"]         as? String
+        let runNum     = r["run_number"]   as? Int ?? 0
+        let created    = (r["created_at"]  as? String).flatMap { iso.date(from: $0) }
+        let updated    = (r["updated_at"]  as? String).flatMap { iso.date(from: $0) }
+        let conclusion = r["conclusion"]   as? String
+        let jobs       = fetchJobsForRun(runID: id, scope: scope, iso: iso)
+        let run = WorkflowRun(id: id, status: stat, conclusion: conclusion,
+                              headSha: sha, createdAt: created, updatedAt: updated,
+                              htmlUrl: htmlUrl, headBranch: branch, event: event,
+                              name: name, runNumber: runNum, jobs: jobs)
         if grouped[sha] == nil { order.append(sha) }
         grouped[sha, default: []].append(run)
     }
@@ -90,48 +163,33 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     }
 }
 
-func fetchJobs(runID: Int, scope: String) -> [ActiveJob] {
+func fetchJobsForRun(runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
     guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=30"),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let jobsArr = json["jobs"] as? [[String: Any]] else { return [] }
-    let iso = ISO8601DateFormatter()
-    return jobsArr.compactMap { j -> ActiveJob? in
-        guard let id     = j["id"]         as? Int,
-              let name   = j["name"]       as? String,
-              let status = j["status"]     as? String else { return nil }
-        let conclusion  = j["conclusion"]  as? String
-        let htmlUrl     = j["html_url"]    as? String
-        let runnerName  = j["runner_name"] as? String
-        let startedAt   = (j["started_at"]   as? String).flatMap { iso.date(from: $0) }
-        let completedAt = (j["completed_at"] as? String).flatMap { iso.date(from: $0) }
-        let stepsRaw    = j["steps"] as? [[String: Any]] ?? []
-        let steps: [JobStep] = stepsRaw.compactMap { s in
-            guard let num  = s["number"] as? Int,
-                  let stat = s["status"] as? String else { return nil }
-            return JobStep(id: num, name: s["name"] as? String, status: stat,
-                           conclusion: s["conclusion"] as? String,
-                           startedAt:   (s["started_at"]   as? String).flatMap { iso.date(from: $0) },
-                           completedAt: (s["completed_at"] as? String).flatMap { iso.date(from: $0) })
-        }
-        return ActiveJob(id: id, name: name, status: status, conclusion: conclusion,
-                         htmlUrl: htmlUrl, runnerName: runnerName,
-                         startedAt: startedAt, completedAt: completedAt, steps: steps)
+          let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+    else { return [] }
+    // Use a temporary RunnerStore-like factory inline since makeActiveJob is on RunnerStore.
+    return resp.jobs.map { payload in
+        ActiveJob(
+            id: payload.id,
+            name: payload.name,
+            status: payload.status,
+            conclusion: payload.conclusion,
+            startedAt: payload.startedAt.flatMap { iso.date(from: $0) },
+            createdAt: payload.createdAt.flatMap { iso.date(from: $0) },
+            completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
+            htmlUrl: payload.htmlUrl,
+            isDimmed: false,
+            steps: (payload.steps ?? []).map { s in
+                JobStep(
+                    id: s.number,
+                    name: s.name,
+                    status: s.status,
+                    conclusion: s.conclusion,
+                    startedAt: s.startedAt.flatMap { iso.date(from: $0) },
+                    completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                )
+            },
+            runnerName: payload.runnerName
+        )
     }
-}
-
-func reRunJob(jobID: Int, repoSlug: String) -> Bool {
-    ghAPI("repos/\(repoSlug)/actions/jobs/\(jobID)/rerun", method: "POST") != nil
-}
-
-func reRunFailedJobs(runID: Int, repoSlug: String) -> Bool {
-    ghAPI("repos/\(repoSlug)/actions/runs/\(runID)/rerun-failed-jobs", method: "POST") != nil
-}
-
-func cancelRun(runID: Int, scope: String) -> Bool {
-    ghAPI("repos/\(scope)/actions/runs/\(runID)/cancel", method: "POST") != nil
-}
-
-func fetchJobLog(jobID: Int, scope: String) -> String {
-    guard let data = ghAPI("repos/\(scope)/actions/jobs/\(jobID)/logs") else { return "" }
-    return String(data: data, encoding: .utf8) ?? ""
 }
