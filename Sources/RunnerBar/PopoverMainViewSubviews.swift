@@ -352,51 +352,50 @@ struct ActionRowView: View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         // ❌ NEVER remove this line.
         _ = tick
-        return VStack(spacing: 0) {
-            ZStack(alignment: .leading) {
-                Rectangle().fill(accentColor.opacity(0.06))
+        return ZStack(alignment: .leading) {
+            // Continuous accent background spanning the full group height
+            accentColor.opacity(0.06)
 
-                HStack(spacing: 0) {
-                    Button(action: { expanded.toggle() }) { leftIndicator }
-                        .buttonStyle(.plain)
-                        .help(expanded ? "Collapse jobs" : "Expand all jobs")
+            HStack(spacing: 0) {
+                // Left indicator bar — spans full height of the group via the outer ZStack
+                Button(action: { expanded.toggle() }) {
+                    accentColor
+                        .frame(width: DesignTokens.Layout.leftIndicatorWidth)
+                        .clipShape(RoundedCorners(topLeft: 0, topRight: 3, bottomLeft: 0, bottomRight: 3))
+                        .frame(maxHeight: .infinity)
+                        .overlay(
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 5, weight: .bold))
+                                .foregroundColor(.primary.opacity(showAllJobs ? 0.7 : 0.35))
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Collapse jobs" : "Expand all jobs")
 
+                VStack(spacing: 0) {
                     Button(action: onSelect) { rowContent }
                         .buttonStyle(.plain)
 
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundColor(DesignTokens.Color.labelSecondary)
-                        .rotationEffect(.degrees(showAllJobs ? 90 : 0))
-                        .animation(.easeInOut(duration: 0.18), value: showAllJobs)
-                        .padding(.trailing, 12)
+                    if !group.jobs.isEmpty {
+                        InlineJobRowsView(
+                            group: group,
+                            tick: tick,
+                            onSelectJob: onSelectJob,
+                            showAll: showAllJobs
+                        )
+                    }
                 }
-            }
-            .fixedSize(horizontal: false, vertical: true)
 
-            if !group.jobs.isEmpty {
-                InlineJobRowsView(
-                    group: group,
-                    tick: tick,
-                    onSelectJob: onSelectJob,
-                    showAll: showAllJobs
-                )
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .rotationEffect(.degrees(showAllJobs ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.18), value: showAllJobs)
+                    .padding(.trailing, 12)
             }
         }
-    }
-
-    private var leftIndicator: some View {
-        accentColor
-            .frame(width: DesignTokens.Layout.leftIndicatorWidth)
-            .clipShape(RoundedCorners(topLeft: 0, topRight: 3, bottomLeft: 0, bottomRight: 3))
-            .padding(.vertical, 4)
-            .frame(maxHeight: .infinity)
-            .overlay(
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 5, weight: .bold))
-                    .foregroundColor(.primary.opacity(showAllJobs ? 0.7 : 0.35))
-            )
-            .contentShape(Rectangle())
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var rowContent: some View {
