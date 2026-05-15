@@ -18,6 +18,10 @@ struct SectionHeaderLabel: View {
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
     let stats: SystemStats
+    /// Phase 2: normalised (0–1) CPU history for sparkline, oldest first.
+    let cpuHistory: [Double]
+    /// Phase 2: normalised (0–1) MEM history for sparkline, oldest first.
+    let memHistory: [Double]
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
@@ -48,39 +52,60 @@ struct PopoverHeaderView: View {
         .padding(.top, 10).padding(.bottom, 8)
     }
 
+    /// Phase 2: CPU sparkline + MEM sparkline + DiskPillView, separated by Dividers.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` prevents multi-line wrapping that corrupts panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
-        HStack(spacing: 8) {
-            statChip(label: "CPU",
-                     value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                     pct: stats.cpuPct)
-            statChip(label: "MEM",
-                     value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                        + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                     pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-            diskChip
+        HStack(spacing: 6) {
+            // CPU sparkline chip
+            sparklineChip(
+                label: "CPU",
+                history: cpuHistory,
+                currentPct: stats.cpuPct,
+                valueText: String(format: "%.1f%%", stats.cpuPct)
+            )
+            Divider().frame(height: 16)
+            // MEM sparkline chip
+            let memPct = stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
+            sparklineChip(
+                label: "MEM",
+                history: memHistory,
+                currentPct: memPct,
+                valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB)
+            )
+            Divider().frame(height: 16)
+            // Disk pill badge
+            let total = stats.diskTotalGB
+            let used  = stats.diskUsedGB
+            let free  = max(0, total - used)
+            let freePct = total > 0 ? (free / total) * 100 : 0
+            DiskPillView(
+                freePct: freePct,
+                usedGB: Int(used.rounded()),
+                totalGB: Int(total.rounded())
+            )
         }
     }
 
-    private var diskChip: some View {
-        let total = stats.diskTotalGB; let used = stats.diskUsedGB
-        let free = max(0, total - used); let pct = total > 0 ? (used / total) * 100 : 0
-        let freePct = total > 0 ? (free / total) * 100 : 0
-        let value = blockBar(pct: pct)
-            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
-    }
-
-    private func statChip(label: String, value: String, pct: Double) -> some View {
-        HStack(spacing: 3) {
-            Text(label).font(DesignTokens.Fonts.monoLabel).foregroundColor(.secondary).lineLimit(1)
-            Text(value).font(DesignTokens.Fonts.monoStat).foregroundColor(DesignTokens.Colors.usage(pct: pct)).lineLimit(1)
+    /// A compact label + sparkline + value chip for a single metric.
+    private func sparklineChip(
+        label: String,
+        history: [Double],
+        currentPct: Double,
+        valueText: String
+    ) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(DesignTokens.Fonts.monoLabel)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            SparklineView(history: history, currentPct: currentPct)
+                .frame(width: 28, height: 14)
+            Text(valueText)
+                .font(DesignTokens.Fonts.monoStat)
+                .foregroundColor(DesignTokens.Colors.usage(pct: currentPct))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
-    }
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let filled = max(0, min(width, Int((pct / 100.0 * Double(width)).rounded())))
-        return String(repeating: "█", count: filled) + String(repeating: "░", count: width - filled)
     }
 }
 
