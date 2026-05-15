@@ -2,97 +2,6 @@ import Foundation
 import Combine
 import SwiftUI
 
-// MARK: - GitHub API compatibility shims
-// Bridges call-sites that still use the pre-refactor free-function API
-// to the new shell()-based helpers in GitHub.swift.
-
-/// Calls the GitHub API via `gh api` and returns the raw JSON data, or nil on error.
-func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    let output = shell("/opt/homebrew/bin/gh api \(endpoint)", timeout: timeout)
-    guard !output.isEmpty, !output.lowercased().hasPrefix("error") else { return nil }
-    return output.data(using: .utf8)
-}
-
-/// Calls the GitHub API via `gh api --method POST` and returns true on success.
-@discardableResult
-func ghPost(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
-    let output = shell("/opt/homebrew/bin/gh api --method POST \(endpoint)", timeout: timeout)
-    return output.isEmpty || !output.lowercased().contains("error")
-}
-
-/// Returns the path to the `gh` CLI binary, or nil if not found.
-func ghBinaryPath() -> String? {
-    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
-    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
-}
-
-/// Global flag set by RunnerStore when the GitHub API rate-limit is hit.
-var ghIsRateLimited = false
-
-/// Extracts "owner/repo" from a GitHub HTML URL such as
-/// https://github.com/owner/repo/actions/runs/123/jobs/456
-func scopeFromHtmlUrl(_ urlString: String?) -> String? {
-    guard let urlString,
-          let url = URL(string: urlString),
-          url.host == "github.com" else { return nil }
-    let parts = url.pathComponents.filter { $0 != "/" }
-    guard parts.count >= 2 else { return nil }
-    return "\(parts[0])/\(parts[1])"
-}
-
-/// Extracts the numeric run ID from a GitHub Actions HTML URL.
-func runIDFromHtmlUrl(_ urlString: String?) -> Int? {
-    guard let urlString else { return nil }
-    let parts = urlString.components(separatedBy: "/")
-    for (i, part) in parts.enumerated() where part == "runs" && i + 1 < parts.count {
-        return Int(parts[i + 1])
-    }
-    return nil
-}
-
-/// Fetches active (queued / in_progress) jobs for a scope using the GitHub API.
-func fetchActiveJobs(for scope: String) -> [ActiveJob] {
-    guard let data = ghAPI("repos/\(scope)/actions/runs?status=in_progress&per_page=100") else { return [] }
-    struct RunsEnvelope: Decodable {
-        let workflowRuns: [WorkflowRun]
-        enum CodingKeys: String, CodingKey { case workflowRuns = "workflow_runs" }
-    }
-    let runs = (try? JSONDecoder().decode(RunsEnvelope.self, from: data))?.workflowRuns ?? []
-    var jobs: [ActiveJob] = []
-    for run in runs {
-        guard let jobsData = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100") else { continue }
-        let jobList = (try? JSONDecoder().decode(WorkflowJobsResponse.self, from: jobsData))?.jobs ?? []
-        for job in jobList where job.status == "in_progress" || job.status == "queued" {
-            jobs.append(ActiveJob(workflowJob: job, scope: scope))
-        }
-    }
-    return jobs
-}
-
-/// Fetches self-hosted runners for a scope via the GitHub API.
-func fetchRunners(for scope: String) -> [Runner] {
-    let parts = scope.split(separator: "/")
-    let endpoint: String
-    if parts.count == 1 {
-        endpoint = "orgs/\(scope)/actions/runners"
-    } else {
-        endpoint = "repos/\(scope)/actions/runners"
-    }
-    guard let data = ghAPI(endpoint) else { return [] }
-    struct RunnersEnvelope: Decodable {
-        let runners: [Runner]
-    }
-    return (try? JSONDecoder().decode(RunnersEnvelope.self, from: data))?.runners ?? []
-}
-
-/// Fetches the log text for a single step using `gh run view`.
-func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
-    guard let ghPath = ghBinaryPath() else { return nil }
-    let output = shell("\(ghPath) api repos/\(scope)/actions/jobs/\(jobID)/logs", timeout: 30)
-    guard !output.isEmpty else { return nil }
-    return output
-}
-
 // MARK: - SystemStats compatibility shims
 // The views were written against a `SystemStats` struct + `SystemStatsViewModel`
 // ObservableObject. The new SystemStats.swift renamed these to
@@ -124,6 +33,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     private var observerToken: Int?
 
+    /// Starts polling system stats and forwarding updates to published properties.
     func start() {
         SystemStatsPoller.shared.start()
         observerToken = SystemStatsPoller.shared.addObserver { [weak self] snapshot in
@@ -137,6 +47,7 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
+    /// Stops polling (no-op — SystemStatsPoller runs indefinitely).
     func stop() {
         // SystemStatsPoller runs indefinitely; nothing to stop.
     }
