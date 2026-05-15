@@ -68,13 +68,13 @@ struct AddRunnerSheet: View {
             if isLoadingScopes {
                 HStack {
                     ProgressView().scaleEffect(0.7)
-                    Text("Loading…").font(.caption).foregroundColor(.secondary)
+                    Text("Loading\u{2026}").font(.caption).foregroundColor(.secondary)
                 }
             } else if scopeType == .repo {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Repository").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedRepo) {
-                        Text("— select —").tag("")
+                        Text("\u{2014} select \u{2014}").tag("")
                         ForEach(repos, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -87,7 +87,7 @@ struct AddRunnerSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Organisation").font(.caption).foregroundColor(.secondary)
                     Picker("", selection: $selectedOrg) {
-                        Text("— select —").tag("")
+                        Text("\u{2014} select \u{2014}").tag("")
                         ForEach(orgs, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
@@ -129,16 +129,19 @@ struct AddRunnerSheet: View {
                 Spacer()
                 Button(action: { isPresented = false }, label: { Text("Cancel") })
                     .keyboardShortcut(.cancelAction)
-                Button(action: register, label: {
-                    if isRegistering {
-                        HStack(spacing: 6) {
-                            ProgressView().scaleEffect(0.7)
-                            Text("Registering…")
+                Button(
+                    action: register,
+                    label: {
+                        if isRegistering {
+                            HStack(spacing: 6) {
+                                ProgressView().scaleEffect(0.7)
+                                Text("Registering\u{2026}")
+                            }
+                        } else {
+                            Text("Add Runner")
                         }
-                    } else {
-                        Text("Add Runner")
                     }
-                })
+                )
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canRegister || isRegistering)
             }
@@ -201,7 +204,7 @@ struct AddRunnerSheet: View {
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage = "Install directory must be inside your home folder (~/…)."
+                    errorMessage = "Install directory must be inside your home folder (~/\u{2026})."
                 }
                 return
             }
@@ -275,7 +278,7 @@ struct AddRunnerSheet: View {
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            log("runRegistrationCommand › launch error: \(error)")
+            log("runRegistrationCommand \u{203A} launch error: \(error)")
             return 1
         }
         let timeoutItem = DispatchWorkItem { task.terminate() }
@@ -290,7 +293,7 @@ struct AddRunnerSheet: View {
             lock.unlock()
         }
         let output = String(data: outputData, encoding: .utf8) ?? ""
-        log("runRegistrationCommand › exit=\(task.terminationStatus): \(output.prefix(120))")
+        log("runRegistrationCommand \u{203A} exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus
     }
 }

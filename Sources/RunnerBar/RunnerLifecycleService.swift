@@ -45,7 +45,7 @@ struct RunnerLifecycleService {
         task.standardOutput = pipe
         task.standardError = Pipe()
         do { try task.run() } catch {
-            log("RunnerLifecycle › resolvedLabel: launchctl list failed: \(error)")
+            log("RunnerLifecycle \u{203A} resolvedLabel: launchctl list failed: \(error)")
             return serviceLabel(for: runner)
         }
         let timeoutItem = DispatchWorkItem { task.terminate() }
@@ -75,7 +75,7 @@ struct RunnerLifecycleService {
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
-            log("RunnerLifecycle › start: no label for \(runner.runnerName)")
+            log("RunnerLifecycle \u{203A} start: no label for \(runner.runnerName)")
             return false
         }
         return runLaunchctl("start", label: label)
@@ -88,7 +88,7 @@ struct RunnerLifecycleService {
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
-            log("RunnerLifecycle › stop: no label for \(runner.runnerName)")
+            log("RunnerLifecycle \u{203A} stop: no label for \(runner.runnerName)")
             return false
         }
         return runLaunchctl("stop", label: label)
@@ -107,7 +107,7 @@ struct RunnerLifecycleService {
         task.standardOutput = pipe
         task.standardError = pipe
         do { try task.run() } catch {
-            log("RunnerLifecycle › launchctl \(subcommand) \(label) launch error: \(error)")
+            log("RunnerLifecycle \u{203A} launchctl \(subcommand) \(label) launch error: \(error)")
             return false
         }
         let timeoutItem = DispatchWorkItem { task.terminate() }
@@ -118,7 +118,7 @@ struct RunnerLifecycleService {
             data: pipe.fileHandleForReading.readDataToEndOfFile(),
             encoding: .utf8
         ) ?? ""
-        log("RunnerLifecycle › launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
+        log("RunnerLifecycle \u{203A} launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus == 0
     }
 
@@ -129,7 +129,7 @@ struct RunnerLifecycleService {
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         guard let path = runner.installPath else {
-            log("RunnerLifecycle › remove: no installPath for \(runner.runnerName)")
+            log("RunnerLifecycle \u{203A} remove: no installPath for \(runner.runnerName)")
             return false
         }
         let dir = URL(fileURLWithPath: path)
@@ -141,8 +141,8 @@ struct RunnerLifecycleService {
             logTag: "svc.sh uninstall"
         )
         if !svcOk {
-            log("RunnerLifecycle › remove: svc.sh uninstall failed for \(runner.runnerName)")
-            log("RunnerLifecycle › remove: proceeding to config.sh remove")
+            log("RunnerLifecycle \u{203A} remove: svc.sh uninstall failed for \(runner.runnerName)")
+            log("RunnerLifecycle \u{203A} remove: proceeding to config.sh remove")
         }
         let cfgOk = runScript(
             executableName: "config.sh",
@@ -182,7 +182,7 @@ struct RunnerLifecycleService {
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            log("RunnerLifecycle › \(logTag) launch error: \(error)")
+            log("RunnerLifecycle \u{203A} \(logTag) launch error: \(error)")
             return false
         }
         let timeoutItem = DispatchWorkItem { task.terminate() }
@@ -197,7 +197,7 @@ struct RunnerLifecycleService {
             lock.unlock()
         }
         let output = String(data: outputData, encoding: .utf8) ?? ""
-        log("RunnerLifecycle › \(logTag) exit=\(task.terminationStatus): \(output.prefix(120))")
+        log("RunnerLifecycle \u{203A} \(logTag) exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus == 0
     }
 
@@ -208,7 +208,7 @@ struct RunnerLifecycleService {
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
-            log("RunnerLifecycle › rename: no installPath for \(runner.runnerName)")
+            log("RunnerLifecycle \u{203A} rename: no installPath for \(runner.runnerName)")
             return false
         }
         let jsonPath = "\(path)/.runner"
@@ -216,7 +216,7 @@ struct RunnerLifecycleService {
         guard let data = try? Data(contentsOf: url),
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonPath)")
+            log("RunnerLifecycle \u{203A} rename: failed to read .runner JSON at \(jsonPath)")
             return false
         }
         json["runnerName"] = newName
@@ -224,15 +224,15 @@ struct RunnerLifecycleService {
             withJSONObject: json,
             options: .prettyPrinted
         ) else {
-            log("RunnerLifecycle › rename: failed to serialise updated JSON")
+            log("RunnerLifecycle \u{203A} rename: failed to serialise updated JSON")
             return false
         }
         do {
             try updated.write(to: url)
-            log("RunnerLifecycle › rename: \(runner.runnerName) → \(newName)")
+            log("RunnerLifecycle \u{203A} rename: \(runner.runnerName) \u{2192} \(newName)")
             return true
         } catch {
-            log("RunnerLifecycle › rename write error: \(error)")
+            log("RunnerLifecycle \u{203A} rename write error: \(error)")
             return false
         }
     }
@@ -243,7 +243,7 @@ struct RunnerLifecycleService {
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
-            log("RunnerLifecycle › updateConfig: no installPath for \(runner.runnerName)")
+            log("RunnerLifecycle \u{203A} updateConfig: no installPath for \(runner.runnerName)")
             return false
         }
         let jsonPath = "\(path)/.runner"
@@ -251,7 +251,7 @@ struct RunnerLifecycleService {
         guard let data = try? Data(contentsOf: url),
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonPath)")
+            log("RunnerLifecycle \u{203A} updateConfig: failed to read .runner at \(jsonPath)")
             return false
         }
         json["workFolder"] = workFolder
@@ -262,10 +262,10 @@ struct RunnerLifecycleService {
         ) else { return false }
         do {
             try updated.write(to: url)
-            log("RunnerLifecycle › updateConfig: labels=\(labels) workFolder=\(workFolder)")
+            log("RunnerLifecycle \u{203A} updateConfig: labels=\(labels) workFolder=\(workFolder)")
             return true
         } catch {
-            log("RunnerLifecycle › updateConfig write error: \(error)")
+            log("RunnerLifecycle \u{203A} updateConfig write error: \(error)")
             return false
         }
     }

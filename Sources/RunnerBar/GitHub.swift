@@ -29,7 +29,7 @@ var ghIsRateLimited: Bool {
 /// - Returns: Raw stdout bytes, or `nil` on launch failure or empty output.
 private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Data? {
     guard let ghPath = ghBinaryPath() else {
-        log("runGHProcess › gh not found")
+        log("runGHProcess \u{203A} gh not found")
         return nil
     }
     let task = Process()
@@ -48,7 +48,7 @@ private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Da
         lock.unlock()
     }
     do { try task.run() } catch {
-        log("runGHProcess › launch error: \(error)")
+        log("runGHProcess \u{203A} launch error: \(error)")
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
@@ -73,12 +73,12 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     guard let outputData = runGHProcess(arguments: ["api", endpoint], timeout: timeout) else {
         return nil
     }
-    log("ghAPI › \(endpoint) → \(outputData.count)b")
+    log("ghAPI \u{203A} \(endpoint) \u{2192} \(outputData.count)b")
     if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
        let status = json["status"] as? String,
        status == "403" || status == "429" {
         ghIsRateLimited = true
-        log("ghAPI › rate limit (\(status)): \(endpoint)")
+        log("ghAPI \u{203A} rate limit (\(status)): \(endpoint)")
         return nil
     }
     return outputData
@@ -87,7 +87,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     guard let ghPath = ghBinaryPath() else {
-        log("ghAPIPaginated › gh not found")
+        log("ghAPIPaginated \u{203A} gh not found")
         return nil
     }
     let task = Process()
@@ -106,7 +106,7 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
         lock.unlock()
     }
     do { try task.run() } catch {
-        log("ghAPIPaginated › launch error: \(error)")
+        log("ghAPIPaginated \u{203A} launch error: \(error)")
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
@@ -121,14 +121,14 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
         outputData.append(tail)
         lock.unlock()
     }
-    log("ghAPIPaginated › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
+    log("ghAPIPaginated \u{203A} \(endpoint) \u{2192} \(outputData.count)b exit \(task.terminationStatus)")
     if task.terminationStatus != 0 {
         let raw = String(data: outputData, encoding: .utf8) ?? ""
         if raw.contains("\"403\"") || raw.contains("\"429\"") || raw.contains("rate limit") {
             ghIsRateLimited = true
-            log("ghAPIPaginated › rate limit detected: \(endpoint)")
+            log("ghAPIPaginated \u{203A} rate limit detected: \(endpoint)")
         } else {
-            log("ghAPIPaginated › non-zero exit (\(task.terminationStatus)): \(endpoint)")
+            log("ghAPIPaginated \u{203A} non-zero exit (\(task.terminationStatus)): \(endpoint)")
         }
         return nil
     }
@@ -190,7 +190,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             jobs.append(makeActiveJob(from: payload, iso: iso, isDimmed: false))
         }
     }
-    log("fetchActiveJobs › \(jobs.count) job(s) for \(scope)")
+    log("fetchActiveJobs \u{203A} \(jobs.count) job(s) for \(scope)")
     return jobs
 }
 
@@ -212,16 +212,16 @@ func fetchRunners(for scope: String) -> [Runner] {
     } else {
         endpoint = "orgs/\(scope)/actions/runners"
     }
-    log("fetchRunners › \(endpoint)")
+    log("fetchRunners \u{203A} \(endpoint)")
     guard let data = ghAPI(endpoint) else {
-        log("fetchRunners › no data for scope: \(scope)")
+        log("fetchRunners \u{203A} no data for scope: \(scope)")
         return []
     }
     guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
-        log("fetchRunners › decode failed for scope: \(scope)")
+        log("fetchRunners \u{203A} decode failed for scope: \(scope)")
         return []
     }
-    log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
+    log("fetchRunners \u{203A} found \(response.runners.count) runner(s) for \(scope)")
     return response.runners
 }
 private struct RunnersResponse: Codable { let runners: [Runner] }
@@ -263,13 +263,13 @@ func fetchRegistrationToken(scope: String) -> String? {
         endpoint
     ]
     guard let outputData = runGHProcess(arguments: args, timeout: 30) else {
-        log("fetchRegistrationToken › no data for \(endpoint)")
+        log("fetchRegistrationToken \u{203A} no data for \(endpoint)")
         return nil
     }
-    log("fetchRegistrationToken › \(endpoint) \(outputData.count)b")
+    log("fetchRegistrationToken \u{203A} \(endpoint) \(outputData.count)b")
     struct TokenResponse: Decodable { let token: String }
     guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
-        log("fetchRegistrationToken › decode failed: "
+        log("fetchRegistrationToken \u{203A} decode failed: "
             + "\(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")")
         return nil
     }
@@ -281,21 +281,21 @@ func fetchRegistrationToken(scope: String) -> String? {
 /// Fetch and slice the raw log for a single step.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard scope.contains("/") else {
-        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
+        log("fetchStepLog \u{203A} skipped: org-scoped logs not supported (scope=\(scope))")
         return nil
     }
-    guard let ghPath = ghBinaryPath() else { log("fetchStepLog › gh not found"); return nil }
+    guard let ghPath = ghBinaryPath() else { log("fetchStepLog \u{203A} gh not found"); return nil }
     let endpoint = "repos/\(scope)/actions/jobs/\(jobID)/logs"
-    log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
+    log("fetchStepLog \u{203A} fetching \(endpoint) step=\(stepNumber)")
     let raw = shell(
         "\(ghPath) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\""
     )
     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        log("fetchStepLog › empty response for job \(jobID)")
+        log("fetchStepLog \u{203A} empty response for job \(jobID)")
         return nil
     }
     if raw.hasPrefix("{") {
-        log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
+        log("fetchStepLog \u{203A} error JSON returned: \(raw.prefix(120))")
         return nil
     }
     let cleaned = stripAnsi(raw)
@@ -311,21 +311,21 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         }
     }
     if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
-    log("fetchStepLog › parsed \(sections.count) section(s) from log")
+    log("fetchStepLog \u{203A} parsed \(sections.count) section(s) from log")
     if sections.isEmpty || (sections.count == 1 && !sections[0].contains("##[group]")) {
-        log("fetchStepLog › no group markers, returning full raw log")
+        log("fetchStepLog \u{203A} no group markers, returning full raw log")
         return cleaned
     }
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
         log(
-            "fetchStepLog › stepNumber \(stepNumber) out of range "
+            "fetchStepLog \u{203A} stepNumber \(stepNumber) out of range "
                 + "(sections=\(sections.count)), returning full log"
         )
         return cleaned
     }
     let section = sections[index]
-    log("fetchStepLog › step \(stepNumber) → \(section.count)ch")
+    log("fetchStepLog \u{203A} step \(stepNumber) \u{2192} \(section.count)ch")
     return section.isEmpty ? cleaned : section
 }
 
@@ -354,7 +354,7 @@ func ghBinaryPath() -> String? {
 /// Returns `true` if gh exits 0 (HTTP 2xx), `false` otherwise.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
-    guard let ghPath = ghBinaryPath() else { log("ghPost › gh not found"); return false }
+    guard let ghPath = ghBinaryPath() else { log("ghPost \u{203A} gh not found"); return false }
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
     task.arguments = [
@@ -365,14 +365,14 @@ func ghPost(_ endpoint: String) -> Bool {
     task.standardOutput = Pipe()
     task.standardError = Pipe()
     do { try task.run() } catch {
-        log("ghPost › launch error: \(error)")
+        log("ghPost \u{203A} launch error: \(error)")
         return false
     }
     let timeoutItem = DispatchWorkItem(block: { task.terminate() })
     DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
     task.waitUntilExit()
     timeoutItem.cancel()
-    log("ghPost › \(endpoint) exit \(task.terminationStatus)")
+    log("ghPost \u{203A} \(endpoint) exit \(task.terminationStatus)")
     return task.terminationStatus == 0
 }
 
@@ -382,7 +382,7 @@ func ghPost(_ endpoint: String) -> Bool {
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
-    log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
+    log("cancelRun \u{203A} run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
 // swiftlint:enable file_length
