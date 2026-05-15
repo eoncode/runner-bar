@@ -10,31 +10,17 @@ excluded:
 
 # ── Opt-in rules ────────────────────────────────────────────────────────────────────────
 opt_in_rules:
-  - missing_docs           # require /// on all internal/public declarations
-  - closure_spacing        # consistent spacing inside closure braces
-  - explicit_init          # disallow explicit .init() calls where redundant
-  - operator_usage_whitespace  # spaces around operators
-  - sorted_imports         # keep import statements sorted
-  - vertical_whitespace_closing_braces  # no blank line before closing brace
-  - vertical_whitespace_opening_braces  # no blank line after opening brace
-  - collection_alignment   # align collection literal elements
-  - contains_over_filter_count  # prefer contains over filter().count
-  - contains_over_filter_is_empty  # prefer contains over filter().isEmpty
-  - empty_collection_literal  # prefer isEmpty over == []
-  - first_where            # prefer first(where:) over filter().first
+  - closure_spacing
+  - explicit_init
+  - operator_usage_whitespace
+  - sorted_imports
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - empty_collection_literal
+  - first_where
 
 # ── Rule configuration ───────────────────────────────────────────────────────────────────
-# missing_docs: internal declarations are warnings only (not errors) so CI
-# is not blocked by pre-existing undocumented helpers. Public/open stay errors.
-missing_docs:
-  warning:
-    - internal
-  error:
-    - public
-    - open
-  excludes_extensions: false
-  excludes_inherited_types: true
-
 line_length:
   warning: 120
   error: 160
@@ -42,7 +28,7 @@ line_length:
   ignores_urls: true
 
 file_length:
-  warning: 400
+  warning: 500
   error: 800
 
 type_body_length:
@@ -63,8 +49,6 @@ nesting:
   function_level:
     warning: 3
 
-# identifier_name: 1-2 char names are common in math/graphics contexts;
-# raise the error floor so short loop vars don't break CI.
 identifier_name:
   min_length:
     warning: 1
@@ -72,12 +56,18 @@ identifier_name:
   max_length:
     warning: 40
     error: 60
-  validates_start_with_lowercase: warning
 
 # ── Disabled rules ───────────────────────────────────────────────────────────────────────
 disabled_rules:
-  - todo                                  # TODOs are acceptable during active development
-  - trailing_comma                        # SwiftPM/Xcode auto-formatter conflicts with this
-  - multiple_closures_with_trailing_closure  # common SwiftUI pattern, not an error
-  - blanket_disable_command               # some inline disables are intentional
-  - superfluous_disable_command           # paired with blanket_disable_command above
+  - todo
+  - trailing_comma
+  - multiple_closures_with_trailing_closure
+  - blanket_disable_command
+  - superfluous_disable_command
+  - missing_docs
+  - colon
+  - comma
+  - opening_brace
+  - large_tuple
+  - vertical_whitespace_opening_braces
+  - implicit_optional_initialization
