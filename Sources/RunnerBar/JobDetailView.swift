@@ -10,7 +10,7 @@ import SwiftUI
 //
 // ROOT FRAME RULE:
 //   .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-//   • idealWidth: 720 — hints SwiftUI's initial natural width measurement.
+//   • idealWidth: 720 — hints SwiftUI’s initial natural width measurement.
 //   • NO maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
@@ -30,6 +30,8 @@ import SwiftUI
 //   Step number zero-padded to #01…#99 for equal-width alignment.
 //   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
 //     timing+metadata chips on row 2 — eliminates empty right-side dead space.
+//   Phase 5: DesignTokens fonts + colours applied to infoBar, stepRow,
+//     metadataChip, and stepColor helper.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -57,7 +59,7 @@ struct JobDetailView: View {
                         Image(systemName: "chevron.left").font(.caption)
                         Text("Jobs").font(.caption)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
@@ -71,7 +73,7 @@ struct JobDetailView: View {
 
                 Spacer(minLength: 8)
 
-                // ── Action cluster ──────────────────────────────────────────────────────
+                // ── Action cluster ──────────────────────────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
                         let jobID    = job.id
@@ -141,7 +143,7 @@ struct JobDetailView: View {
                                 Image(systemName: "safari").font(.caption)
                                 Text("GitHub").font(.caption)
                             }
-                            .foregroundColor(.secondary)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
                             .fixedSize()
                         }
                     )
@@ -174,14 +176,14 @@ struct JobDetailView: View {
 
             Divider()
 
-            // ── Steps list ───────────────────────────────────────────────────────────────────────
+            // ── Steps list ──────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
                     if job.steps.isEmpty {
                         Text("No step data available")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                     } else {
@@ -225,32 +227,32 @@ struct JobDetailView: View {
             if let start = job.startedAt {
                 Image(systemName: "clock")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(wallTime(start))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Image(systemName: "arrow.right")
                     .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 if let end = job.completedAt {
                     Text(wallTime(end))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                 } else {
                     Text("running")
-                        .font(.caption)
-                        .foregroundColor(.yellow)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.statusBlue)
                 }
                 Text("·")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 // Separator before metadata chips
                 Text("·")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, 1)
             }
             // Metadata chips — repo, branch, origin
@@ -305,10 +307,10 @@ struct JobDetailView: View {
                     Image(systemName: icon)
                         .font(.system(size: 9))
                     Text(label)
-                        .font(.caption)
+                        .font(DesignTokens.Font.monoSmall)
                         .lineLimit(1)
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
             }
         )
@@ -323,8 +325,8 @@ struct JobDetailView: View {
         HStack(spacing: 6) {
             // Step number badge — zero-padded (#01…#99).
             Text(String(format: "#%02d", step.id))
-                .font(.caption2.monospacedDigit())
-                .foregroundColor(.secondary)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
                 .fixedSize(horizontal: true, vertical: false)
             Text(step.conclusionIcon)
                 .font(.system(size: 11))
@@ -332,7 +334,7 @@ struct JobDetailView: View {
                 .frame(width: 14, alignment: .center)
             Text(step.name)
                 .font(.system(size: 12))
-                .foregroundColor(step.status == "queued" ? .secondary : .primary)
+                .foregroundColor(step.status == "queued" ? DesignTokens.Color.labelSecondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
@@ -340,31 +342,31 @@ struct JobDetailView: View {
             if let start = step.startedAt {
                 HStack(spacing: 3) {
                     Text(wallTime(start))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                     Text("→")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                     if let end = step.completedAt {
                         Text(wallTime(end))
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
                     } else {
                         Text("now")
-                            .font(.caption)
-                            .foregroundColor(.yellow)
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.statusBlue)
                     }
                 }
                 .fixedSize()
             }
             Text(step.elapsed)
-                .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
+                .font(DesignTokens.Font.monoSmall)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
                 .frame(width: 40, alignment: .trailing)
             Image(systemName: "chevron.right")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 3)
@@ -376,9 +378,9 @@ struct JobDetailView: View {
 
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
-        case "success": return .green
-        case "failure": return .red
-        default: return step.status == "in_progress" ? .yellow : .secondary
+        case "success": return DesignTokens.Color.statusGreen
+        case "failure": return DesignTokens.Color.statusRed
+        default: return step.status == "in_progress" ? DesignTokens.Color.statusBlue : DesignTokens.Color.labelSecondary
         }
     }
 }
