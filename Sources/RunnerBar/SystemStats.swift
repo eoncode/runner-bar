@@ -76,6 +76,10 @@ final class SystemStatsViewModel: ObservableObject {
 
     private var timer: Timer?
     private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
+    /// Maximum number of data points kept in `cpuHistory` / `memHistory`.
+    /// 20 samples × 2-second interval = 40-second rolling window displayed by
+    /// `SparklineView`. Increasing this value will grow the sparkline window
+    /// without any other code changes required.
     private let historyCapacity = 20
 
     init() {}
