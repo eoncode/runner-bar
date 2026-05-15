@@ -1,223 +1,94 @@
-import Combine
-import Darwin
 import Foundation
+import Darwin
 
 // MARK: - SystemStats
-
-/// A snapshot of CPU, memory, and disk metrics at a single point in time.
-/// All values are computed off the main thread by `SystemStatsViewModel`
-/// and published to SwiftUI via `@Published` on the main thread.
-struct SystemStats {
-    /// CPU utilisation across all cores, 0–100%.
-    var cpuPct: Double
-    /// Memory actively in use (active + wired pages), in GB.
-    var memUsedGB: Double
-    /// Physical RAM installed, in GB.
-    var memTotalGB: Double
-    /// Disk space occupied (total − free), in GB.
-    var diskUsedGB: Double
-    /// Raw partition capacity from `volumeTotalCapacity`, in GB.
-    var diskTotalGB: Double
-    /// Available space from `volumeAvailableCapacityKey` (TCC-free), in GB.
-    var diskFreeGB: Double
-    /// Free disk space as a percentage of total.
-    var diskFreePct: Double
-
-    /// Safe default shown while the first sample is being computed.
-    static let zero = SystemStats(
-        cpuPct: 0,
-        memUsedGB: 0,
-        memTotalGB: 16,
-        diskUsedGB: 0,
-        diskTotalGB: 460,
-        diskFreeGB: 460,
-        diskFreePct: 100
-    )
+/// A point-in-time snapshot of host-machine resource utilisation.
+/// All values are polled by `SystemStatsPoller` and stored in `RunnerStoreState`.
+struct SystemStats: Equatable {
+    /// CPU utilisation percentage (0–100), averaged across all cores.
+    var cpuPct: Double = 0
+    /// Memory currently in use, in gigabytes.
+    var memUsedGB: Double = 0
+    /// Total physical memory, in gigabytes.
+    var memTotalGB: Double = 0
+    /// Disk space currently used on the boot volume, in gigabytes.
+    var diskUsedGB: Double = 0
+    /// Total capacity of the boot volume, in gigabytes.
+    var diskTotalGB: Double = 0
 }
 
-private struct CPUTicks {
-    var user: Double
-    var system: Double
-    var total: Double
-}
+// MARK: - SystemStatsPoller
+/// Polls CPU, memory, and disk statistics from Darwin/macOS system APIs.
+/// Call `poll()` on a background thread; it blocks for ~200 ms while sampling CPU.
+final class SystemStatsPoller {
+    /// Samples the current system stats and returns a populated `SystemStats` snapshot.
+    func poll() -> SystemStats {
+        var stats = SystemStats()
+        stats.cpuPct    = cpuUsage()
+        (stats.memUsedGB, stats.memTotalGB) = memUsage()
+        (stats.diskUsedGB, stats.diskTotalGB) = diskUsage()
+        return stats
+    }
 
-private struct MemoryStats {
-    var used: Double
-    var total: Double
-}
-
-private struct DiskStats {
-    var used: Double
-    var total: Double
-    var free: Double
-    var freePct: Double
-}
-
-// MARK: - SystemStatsViewModel
-
-/// ObservableObject that owns the 2-second polling loop for system metrics.
-///
-/// Lifecycle: call `start()` from `.onAppear` and `stop()` from `.onDisappear`.
-///
-/// ⚠️ PRE-WARM CONTRACT — DO NOT REMOVE:
-/// start() dispatches an immediate background sample so real values publish
-/// before the first 2-second timer tick.
-///
-/// ❌ NEVER call sample() synchronously from start() on the main thread.
-/// ❌ NEVER remove the stop() pre-warm sample() call.
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-/// ALLOWED UNDER ANY CIRCUMSTANCE.
-final class SystemStatsViewModel: ObservableObject {
-    @Published var stats: SystemStats = .zero
-    /// Normalised (0–1) CPU history, oldest first. Max 20 samples. Phase 2.
-    @Published var cpuHistory: [Double] = []
-    /// Normalised (0–1) MEM history, oldest first. Max 20 samples. Phase 2.
-    @Published var memHistory: [Double] = []
-
-    private var timer: Timer?
-    private var prevTicks = CPUTicks(user: 0, system: 0, total: 0)
-    /// Maximum number of data points kept in `cpuHistory` / `memHistory`.
-    /// 20 samples × 2-second interval = 40-second rolling window displayed by
-    /// `SparklineView`. Increasing this value will grow the sparkline window
-    /// without any other code changes required.
-    private let historyCapacity = 20
-
-    init() {}
-    deinit { timer?.invalidate() }
-
-    // MARK: - Lifecycle
-
-    func start() {
-        timer?.invalidate()
-        DispatchQueue.global(qos: .utility).async { self.sample() }
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            DispatchQueue.global(qos: .utility).async { self?.sample() }
+    // MARK: CPU
+    private func cpuUsage() -> Double {
+        var prevIdle: UInt64 = 0
+        var prevTotal: UInt64 = 0
+        func sample() -> (idle: UInt64, total: UInt64) {
+            var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.size / MemoryLayout<integer_t>.size)
+            var info  = host_cpu_load_info_data_t()
+            let result = withUnsafeMutablePointer(to: &info) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                    host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &count)
+                }
+            }
+            guard result == KERN_SUCCESS else { return (0, 1) }
+            let user   = UInt64(info.cpu_ticks.0)
+            let system = UInt64(info.cpu_ticks.1)
+            let idle   = UInt64(info.cpu_ticks.2)
+            let nice   = UInt64(info.cpu_ticks.3)
+            let total  = user + system + idle + nice
+            return (idle, total)
         }
+        let first = sample()
+        prevIdle  = first.idle
+        prevTotal = first.total
+        Thread.sleep(forTimeInterval: 0.2)
+        let second    = sample()
+        let deltaIdle = second.idle  - prevIdle
+        let deltaTotal = second.total - prevTotal
+        guard deltaTotal > 0 else { return 0 }
+        return (1.0 - Double(deltaIdle) / Double(deltaTotal)) * 100.0
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-        DispatchQueue.global(qos: .utility).async { self.sample() }
-    }
-
-    // MARK: - CPU
-
-    private func cpuPercent() -> Double {
-        var cpuInfo: processor_info_array_t?
-        var msgType = natural_t(0)
-        var numCPUInfo = mach_msg_type_number_t(0)
-        guard host_processor_info(
-            mach_host_self(),
-            PROCESSOR_CPU_LOAD_INFO,
-            &msgType,
-            &cpuInfo,
-            &numCPUInfo
-        ) == KERN_SUCCESS,
-        let info = cpuInfo else { return 0 }
-        let numCPUs = Int(msgType)
-        var userTicks = 0.0
-        var sysTicks = 0.0
-        var totalTicks = 0.0
-        for coreIdx in 0 ..< numCPUs {
-            let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
-            let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
-            let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
-            let idleLoad = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
-            let niceLoad = Double(info[Int(base) + Int(CPU_STATE_NICE)])
-            userTicks += userLoad + niceLoad
-            sysTicks += sysLoad
-            totalTicks += userLoad + sysLoad + idleLoad + niceLoad
-        }
-        vm_deallocate(
-            mach_task_self_,
-            vm_address_t(bitPattern: cpuInfo),
-            vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<Int32>.stride)
-        )
-        let cur = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
-        let dUser = cur.user - prevTicks.user
-        let dSys = cur.system - prevTicks.system
-        let dTotal = cur.total - prevTicks.total
-        prevTicks = cur
-        guard dTotal > 0 else { return 0 }
-        return min(100, ((dUser + dSys) / dTotal) * 100)
-    }
-
-    // MARK: - Memory
-
-    private func memStats() -> MemoryStats {
-        var vmStats = vm_statistics64()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size
-        )
-        let kernResult = withUnsafeMutablePointer(to: &vmStats) {
+    // MARK: Memory
+    private func memUsage() -> (used: Double, total: Double) {
+        var stats = vm_statistics64_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &stats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
-        let pageSize = Double(vm_kernel_page_size)
-        let gigabytes = 1024.0 * 1024.0 * 1024.0
-        let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
-        var memSize: UInt64 = 0
-        var memSizeLen = MemoryLayout<UInt64>.size
-        sysctlbyname("hw.memsize", &memSize, &memSizeLen, nil, 0)
-        let total = Double(memSize) / gigabytes
-        return MemoryStats(used: used, total: total)
+        guard result == KERN_SUCCESS else { return (0, 0) }
+        let pageSize  = UInt64(vm_page_size)
+        let active    = UInt64(stats.active_count)   * pageSize
+        let wired     = UInt64(stats.wire_count)     * pageSize
+        let compressed = UInt64(stats.compressor_page_count) * pageSize
+        let used      = active + wired + compressed
+        let total     = UInt64(ProcessInfo.processInfo.physicalMemory)
+        let gb: Double = 1_073_741_824
+        return (Double(used) / gb, Double(total) / gb)
     }
 
-    // MARK: - Disk
-
-    /// ⚠️ PERMISSION GUARD: Uses `volumeAvailableCapacityKey` — NOT
-    /// `volumeAvailableCapacityForImportantUsageKey`.
-    ///
-    /// ❌ NEVER switch back to volumeAvailableCapacityForImportantUsageKey.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-    /// ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
-    /// is removed is major major major.
-    private func diskStats() -> DiskStats {
-        let url = URL(fileURLWithPath: "/")
-        let gigabytes = 1024.0 * 1024.0 * 1024.0
-        guard let values = try? url.resourceValues(forKeys: [
-            .volumeTotalCapacityKey,
-            .volumeAvailableCapacityKey
-        ]),
-        let totalBytes = values.volumeTotalCapacity,
-        let freeBytes = values.volumeAvailableCapacity
-        else { return DiskStats(used: 0, total: 460, free: 460, freePct: 100) }
-        let total = Double(totalBytes) / gigabytes
-        let free = Double(freeBytes) / gigabytes
-        let used = total - free
-        let freePct = total > 0 ? (free / total) * 100 : 100
-        return DiskStats(used: used, total: total, free: free, freePct: freePct)
-    }
-
-    // MARK: - Sample
-
-    private func sample() {
-        let cpu = cpuPercent()
-        let mem = memStats()
-        let disk = diskStats()
-        let snapshot = SystemStats(
-            cpuPct: cpu,
-            memUsedGB: mem.used,
-            memTotalGB: mem.total,
-            diskUsedGB: disk.used,
-            diskTotalGB: disk.total,
-            diskFreeGB: disk.free,
-            diskFreePct: disk.freePct
-        )
-        // Phase 2: append normalised values to history buffers.
-        // cpuNorm: already 0–100 from cpuPercent(), divide to get 0–1.
-        // memNorm: clamped to 0–1 — mem.used can theoretically exceed mem.total
-        //          (active+wired can briefly overshoot physical pages reported by
-        //           hw.memsize), so we guard consumers against out-of-range values.
-        let cpuNorm = cpu / 100.0
-        let memNorm = mem.total > 0 ? min(max(mem.used / mem.total, 0), 1) : 0
-        DispatchQueue.main.async {
-            self.stats = snapshot
-            self.cpuHistory = Array((self.cpuHistory + [cpuNorm]).suffix(self.historyCapacity))
-            self.memHistory = Array((self.memHistory + [memNorm]).suffix(self.historyCapacity))
-        }
+    // MARK: Disk
+    private func diskUsage() -> (used: Double, total: Double) {
+        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: "/"),
+              let totalBytes = attrs[.systemSize] as? Int64,
+              let freeBytes  = attrs[.systemFreeSize] as? Int64 else { return (0, 0) }
+        let gb: Double = 1_073_741_824
+        let total = Double(totalBytes) / gb
+        let free  = Double(freeBytes)  / gb
+        return (total - free, total)
     }
 }

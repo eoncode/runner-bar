@@ -1,10 +1,14 @@
-// PopoverView.swift — unused, kept as empty placeholder.
-// Navigation is handled inside PopoverMainView via @State.
-// All content lives in PopoverMainView.swift and JobDetailView.swift.
 import SwiftUI
 
-/// Placeholder view — navigation is handled by `PopoverMainView`.
+// MARK: - PopoverView
+/// Root view injected into the status-bar popover.
+/// Resolves the active navigation destination and renders the correct child view.
 struct PopoverView: View {
-    /// Empty body; this file is a placeholder only.
-    var body: some View { EmptyView() }
+    /// The shared runner-store observable that drives all child views.
+    @EnvironmentObject var store: RunnerStoreObservable
+
+    var body: some View {
+        PopoverRootView()
+            .environmentObject(store)
+    }
 }
