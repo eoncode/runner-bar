@@ -105,27 +105,27 @@ private enum NavState {
     case main
 
     /// The step list for a single job, reached from the Jobs tab.
-    /// Created by `detailView(job:)`.
+    /// Created by `detailView(job:)`
     case jobDetail(ActiveJob)
 
     /// The raw log for a single step, reached from the Jobs path.
-    /// Created by `logView(job:step:)`.
+    /// Created by `logView(job:step:)`
     case stepLog(ActiveJob, JobStep)
 
     /// The flat job list for a commit/PR action group, reached from the Actions tab.
-    /// Created by `actionDetailView(group:)`.
+    /// Created by `actionDetailView(group:)`
     case actionDetail(ActionGroup)
 
     /// The step list for a single job reached via the Actions → job-row path.
-    /// Created by `detailViewFromAction(job:group:)`.
+    /// Created by `detailViewFromAction(job:group:)`
     case actionJobDetail(ActiveJob, ActionGroup)
 
     /// The raw log for a single step reached via the Actions → job → step path.
-    /// Created by `logViewFromAction(job:step:group:)`.
+    /// Created by `logViewFromAction(job:step:group:)`
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
 
     /// The Settings sheet.
-    /// Created by `settingsView()`.
+    /// Created by `settingsView()`
     case settings
 }
 
@@ -454,17 +454,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onSelectSettings: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
-            },
-            onSelectInlineJob: { [weak self] job, group in
-                guard let self else { return }
-                let latestGroup = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: latestGroup))
-                    }
-                }
             }
         ))
     }
