@@ -57,8 +57,8 @@ struct PopoverMainView: View {
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub,
-                cpuHistory:  systemStats.cpuHistory,
-                memHistory:  systemStats.memHistory,
+                cpuHistory: systemStats.cpuHistory,
+                memHistory: systemStats.memHistory,
                 diskHistory: systemStats.diskHistory
             )
             .onAppear { systemStats.start() }

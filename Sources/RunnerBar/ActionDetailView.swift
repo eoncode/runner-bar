@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable file_length vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:disable file_length vertical_whitespace_opening_braces
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
@@ -221,7 +221,7 @@ struct ActionDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-// swiftlint:enable file_length vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:enable file_length vertical_whitespace_opening_braces
 
 // MARK: - ActionDetailView + Actions
 
@@ -233,16 +233,19 @@ extension ActionDetailView {
     // even after rewriting `for x where` as `for x { if }`.
     // Fix: extract all loop logic into this standalone helper so the closure
     // body reduces to a single call expression — no inference needed inside it.
+    /// Re-runs each run ID in `runIDs` and returns `true` if all succeeded.
     private func reRunIDs(_ runIDs: [Int], scope: String) -> Bool {
         var succeeded = true
         for runID in runIDs {
             let endpoint: String = "repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs"
+            // swiftlint:disable:next identifier_name
             let ok: Bool = ghPost(endpoint)
             if !ok { succeeded = false }
         }
         return succeeded
     }
 
+    /// Triggers a re-run of all jobs in the group, calling `completion` with the result.
     func reRunAction(completion: @escaping (Bool) -> Void) {
         let scope: String = group.repo
         let runIDs: [Int] = group.runs.map { $0.id }
@@ -251,6 +254,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Cancels all runs in the group, calling `completion` with the result.
     func cancelAction(completion: @escaping (Bool) -> Void) {
         let scope: String = group.repo
         let runIDs: [Int] = group.runs.map { $0.id }
@@ -262,6 +266,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Fetches logs for all jobs in the group, calling `completion` with the result.
     func logFetchAction(completion: @escaping (String?) -> Void) {
         let grp: ActionGroup = group
         DispatchQueue.global(qos: .userInitiated).async {
@@ -269,6 +274,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Opens the PR or commit URL for this group's label in the default browser.
     func openLabelOnGitHub() {
         let urlStr: String
         if group.label.hasPrefix("#"), let number = Int(group.label.dropFirst()) {
@@ -280,21 +286,25 @@ extension ActionDetailView {
         NSWorkspace.shared.open(url)
     }
 
+    /// Tooltip text for the label link chip.
     var labelLinkTooltip: String {
         return group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
     }
 
+    /// Formatted start time label for the group timing row.
     var groupStartLabel: String {
         guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
         return Self.timeFmt.string(from: date)
     }
 
+    /// Formatted end time label for the group timing row.
     var groupEndLabel: String {
         if let date = group.lastJobCompletedAt { return Self.timeFmt.string(from: date) }
         if group.groupStatus == .inProgress { return "now" }
         return "—"
     }
 
+    /// Single-line summary of job completion state for the group.
     var jobsSummaryLine: String {
         let done = group.jobsDone
         let total = group.jobsTotal
@@ -310,6 +320,7 @@ extension ActionDetailView {
         return "\(done)/\(total) jobs completed"
     }
 
+    /// Returns the live elapsed string for the group, re-evaluated every tick.
     func elapsedLive(tick _: Int) -> String { return group.elapsed }
 }
 

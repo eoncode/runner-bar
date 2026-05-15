@@ -71,6 +71,7 @@ struct SettingsView: View {
     }
 
     // Root body: full settings panel with all sections.
+    // swiftlint:disable:next function_body_length
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar

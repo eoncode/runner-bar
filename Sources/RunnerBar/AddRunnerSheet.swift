@@ -52,6 +52,7 @@ struct AddRunnerSheet: View {
         let trimmedScope = scope.trimmingCharacters(in: .whitespaces)
         let trimmedLabel = label.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
+            // swiftlint:disable:next identifier_name
             let ok = RunnerLifecycleService.shared.register(
                 scope: trimmedScope,
                 label: trimmedLabel.isEmpty ? nil : trimmedLabel
