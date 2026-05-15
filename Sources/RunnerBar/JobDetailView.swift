@@ -113,36 +113,34 @@ struct JobDetailView: View {
         HStack(spacing: 4) {
             ReRunButton(
                 action: { completion in
-                    let jobID    = job.id
-                    let slug     = self.repoSlug
+                    let jobID = job.id
+                    let slug  = self.repoSlug
                     DispatchQueue.global(qos: .userInitiated).async {
-                        let succeeded = GitHub.reRunJob(jobID: jobID, repoSlug: slug)
+                        let succeeded = reRunJob(jobID: jobID, repoSlug: slug)
                         DispatchQueue.main.async { completion(succeeded) }
                     }
                 },
-                isDisabled: job.status == "in_progress" || job.status == "queued",
-                tooltip: "Re-run this job"
+                isDisabled: job.status == "in_progress" || job.status == "queued"
             )
             ReRunFailedButton(
                 action: { completion in
-                    let runID = job.runId
+                    let runID = self.runID
                     let slug  = self.repoSlug
                     DispatchQueue.global(qos: .userInitiated).async {
-                        let succeeded = GitHub.reRunFailed(runID: runID, repoSlug: slug)
+                        let succeeded = reRunFailedJobs(runID: runID, repoSlug: slug)
                         DispatchQueue.main.async { completion(succeeded) }
                     }
                 },
                 isDisabled: job.status == "in_progress"
                     || job.status == "queued"
-                    || (job.conclusion != "failure" && job.conclusion != "cancelled"),
-                tooltip: "Re-run failed jobs in this workflow run"
+                    || (job.conclusion != "failure" && job.conclusion != "cancelled")
             )
             CancelButton(
                 action: { completion in
-                    let runID = job.runId
+                    let runID = self.runID
                     let slug  = self.repoSlug
                     DispatchQueue.global(qos: .userInitiated).async {
-                        let succeeded = GitHub.cancelRun(runID: runID, repoSlug: slug)
+                        let succeeded = cancelRun(runID: runID, repoSlug: slug)
                         DispatchQueue.main.async { completion(succeeded) }
                     }
                 },
@@ -163,9 +161,10 @@ struct JobDetailView: View {
 
     // MARK: - Info bar
     /// Issue #419 Phase 5: BranchTagPill for repo context; rbBlue for in-progress.
-    @ViewBuilder private var infoBar: some View {
-        _ = tick
-        HStack(spacing: 6) {
+    /// `tick` is read here so SwiftUI re-renders elapsed time on every clock tick.
+    private var infoBar: some View {
+        let _ = tick
+        return HStack(spacing: 6) {
             Text(job.name)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
@@ -193,6 +192,8 @@ struct JobDetailView: View {
         }
     }
 
+    // MARK: - Derived helpers
+
     private var repoSlug: String {
         guard let url = job.htmlUrl else { return "" }
         let parts = url
@@ -200,6 +201,26 @@ struct JobDetailView: View {
             .components(separatedBy: "/")
         guard parts.count >= 2 else { return url }
         return parts[0] + "/" + parts[1]
+    }
+
+    /// Extracts the workflow run ID from the job's HTML URL.
+    ///
+    /// GitHub job URLs have the form:
+    ///   https://github.com/owner/repo/actions/runs/<runID>/job/<jobID>
+    /// We need the run ID for re-run-failed and cancel-run API calls.
+    /// `ActiveJob` has no `runId` field — the run ID lives in `ActionGroup.runs`,
+    /// but `JobDetailView` only receives the job. Parsing the URL is the
+    /// lightweight alternative to threading the run ID through the nav stack.
+    private var runID: Int {
+        guard let url = job.htmlUrl else { return 0 }
+        let parts = url.components(separatedBy: "/")
+        // URL parts: ["", "", "github.com", owner, repo, "actions", "runs", runID, "job", jobID]
+        if let runsIdx = parts.firstIndex(of: "runs"),
+           runsIdx + 1 < parts.count,
+           let id = Int(parts[runsIdx + 1]) {
+            return id
+        }
+        return 0
     }
 
     private func conclusionLabel(_ conclusion: String) -> String {
@@ -224,7 +245,8 @@ struct JobDetailView: View {
     // MARK: - Step row
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
-            Text("#\(String(format: "%02d", step.number))")
+            // step.id is the GitHub API step number (mapped from JSON "number" field)
+            Text("#\(String(format: "%02d", step.id))")
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)

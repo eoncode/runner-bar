@@ -50,12 +50,14 @@ struct SettingsView: View {
     /// Derived from keychain / env token — NOT injected as a prop.
     @State private var isAuthenticated       = (githubToken() != nil)
     @State private var hasLoadedOnce         = false
-    @State private var runnerPendingRemoval: RunnerModel?
-    @State private var runnerBeingConfigured: RunnerModel?
     @State private var showAddRunnerSheet    = false
     @State private var removeErrorMessage: String?
     @State private var isSigningOut          = false
     @State private var isShowingLegal        = false
+    /// Runner pending remove confirmation — also used as sheet binding for RunnerConfigSheet.
+    @State private var runnerPendingRemoval: RunnerModel?
+    /// Runner being configured via RunnerConfigSheet; nil = no sheet shown.
+    @State private var runnerBeingConfigured: RunnerModel?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -107,19 +109,19 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = nil
         }
         .sheet(isPresented: $showAddRunnerSheet) {
-            AddRunnerSheet(onAdd: { model in
-                localRunnerStore.add(model)
-                showAddRunnerSheet = false
-            }, onCancel: {
-                showAddRunnerSheet = false
+            AddRunnerSheet(isPresented: $showAddRunnerSheet, onComplete: {
+                Task { @MainActor in localRunnerStore.refresh() }
             })
         }
         .sheet(item: $runnerBeingConfigured) { runner in
-            RunnerConfigSheet(runner: runner, onSave: { updated in
-                localRunnerStore.update(updated)
-                runnerBeingConfigured = nil
-            }, onCancel: {
-                runnerBeingConfigured = nil
+            // RunnerConfigSheet manages its own dismiss via isPresented binding.
+            // On save, we re-scan so the updated runner name/URL is reflected.
+            let binding = Binding<RunnerModel?>(
+                get: { runnerBeingConfigured },
+                set: { runnerBeingConfigured = $0 }
+            )
+            RunnerConfigSheet(runner: runner, isPresented: binding, onSave: { _ in
+                Task { @MainActor in localRunnerStore.refresh() }
             })
         }
         .sheet(isPresented: $isShowingLegal) {
@@ -146,7 +148,7 @@ struct SettingsView: View {
         if localRunnerStore.isScanning {
             HStack {
                 ProgressView().controlSize(.mini)
-                Text("Scanning…").font(.caption).foregroundColor(.secondary)
+                Text("Scanning\u{2026}").font(.caption).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 4)
         }
@@ -175,9 +177,13 @@ struct SettingsView: View {
             HStack {
                 Button("Cancel") { runnerPendingRemoval = nil }
                     .font(.caption).buttonStyle(.plain).foregroundColor(.secondary)
+                // LocalRunnerStore is a scan-only store with no remove API.
+                // Dismissing the confirmation and re-scanning is the correct
+                // approach; removal of managed runners is handled by deregistering
+                // via the runner's own config.sh --remove command.
                 Button("Remove") {
-                    localRunnerStore.remove(runner)
                     runnerPendingRemoval = nil
+                    removeErrorMessage = "Remove via the runner directory (config.sh --remove)."
                 }
                 .font(.caption).buttonStyle(.plain).foregroundColor(.rbDanger)
             }
