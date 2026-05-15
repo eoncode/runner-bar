@@ -54,6 +54,7 @@ struct SparklineMetricView: View {
             Text(label)
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
+                .fixedSize()
 
             // Sparkline inline, constrained so it does not drive row height
             SparklineView(history: history, currentPct: currentPct)
@@ -64,7 +65,10 @@ struct SparklineMetricView: View {
                 .font(.system(size: 10, design: .monospaced))
                 .monospacedDigit()
                 .foregroundStyle(labelColor)
+                .fixedSize()
         }
+        // Prevent the entire chip from being squeezed by a Spacer or sibling views
+        .fixedSize()
     }
 
     private var labelColor: Color {
@@ -75,25 +79,28 @@ struct SparklineMetricView: View {
 }
 
 // MARK: - DiskPillBadge
-/// Pill-shaped badge showing disk usage percentage, placed inline next to the
+/// Compact pill showing disk-used percentage, placed inline next to the
 /// DISK sparkline in HeaderStatsBar.
+/// Always renders at its intrinsic size -- never truncates.
 struct DiskPillBadge: View {
-    let freeGB: Double
-    let freePct: Double
+    let usedPct: Double
 
     var body: some View {
-        Text(String(format: "%.0f%%", (1 - freePct / 100) * 100))
+        Text(String(format: "%.0f%%", usedPct))
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
             .foregroundStyle(pillColor)
+            .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(pillColor.opacity(0.15), in: Capsule())
             .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            // Never let the capsule be compressed
+            .fixedSize()
     }
 
     private var pillColor: Color {
-        if freePct < 10 { return .rbDanger }
-        if freePct < 20 { return .rbWarning }
+        if usedPct > 90 { return .rbDanger }
+        if usedPct > 75 { return .rbWarning }
         return .rbWarning
     }
 }
@@ -139,6 +146,7 @@ struct HeaderStatsBar: View {
                 .frame(width: 1, height: 14)
 
             // DISK chip + usage pill inline, before Spacer
+            // .fixedSize() on the HStack prevents either child from being squeezed
             HStack(spacing: 5) {
                 SparklineMetricView(
                     label: "DISK",
@@ -153,10 +161,10 @@ struct HeaderStatsBar: View {
 
                 if statsVM.stats.diskTotalGB > 0 {
                     let usedPct = (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
-                    let freeGB = statsVM.stats.diskTotalGB - statsVM.stats.diskUsedGB
-                    DiskPillBadge(freeGB: freeGB, freePct: 100 - usedPct)
+                    DiskPillBadge(usedPct: usedPct)
                 }
             }
+            .fixedSize()
 
             Spacer()
         }
