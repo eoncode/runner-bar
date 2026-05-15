@@ -1,16 +1,23 @@
+// swiftlint:disable missing_docs
 // swiftlint:disable all
-// force-v2
 import Darwin
 import Foundation
 
+/// System resource snapshot.
 struct SystemStats: Equatable {
+    /// CPU usage percentage.
     var cpuPct: Double = 0
+    /// Used RAM in GB.
     var memUsedGB: Double = 0
+    /// Total RAM in GB.
     var memTotalGB: Double = 0
+    /// Used disk in GB.
     var diskUsedGB: Double = 0
+    /// Total disk in GB.
     var diskTotalGB: Double = 0
 }
 
+/// Polls system resource metrics.
 final class SystemStatsPoller {
     func poll() -> SystemStats {
         var stats = SystemStats()

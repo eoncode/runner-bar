@@ -1,7 +1,8 @@
+// swiftlint:disable missing_docs
 // swiftlint:disable all
-// force-v2
 import SwiftUI
 
+/// Root settings view.
 struct SettingsView: View {
     @EnvironmentObject var store: RunnerStoreObservable
     @EnvironmentObject var settingsStore: SettingsStore
@@ -107,7 +108,7 @@ private struct AccountSettingsView: View {
                     TextField("e.g. my-org", text: $settingsStore.githubOrg).textFieldStyle(.roundedBorder)
                 }
                 LabeledContent("Personal Access Token") {
-                    SecureField("ghp_…", text: $settingsStore.githubToken).textFieldStyle(.roundedBorder)
+                    SecureField("ghp_\u2026", text: $settingsStore.githubToken).textFieldStyle(.roundedBorder)
                 }
             }
             Section { HStack { Spacer(); Button("Save & Reconnect") { store.applySettings(settingsStore) }.buttonStyle(.borderedProminent) } }
