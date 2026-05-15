@@ -197,12 +197,14 @@ struct ActionDetailView: View {
 extension ActionDetailView { // swiftlint:disable:this missing_docs
     // MARK: - Button action helpers (extracted to avoid @ViewBuilder closure ICE)
 
-    private func reRunAction(completion: @escaping (Bool) -> Void) {
-        let scope = group.repo
-        let runIDs = group.runs.map { $0.id }
+    private func reRunAction(completion: @escaping (Bool) -> Void) -> Void {
+        let scope: String = group.repo
+        let runIDs: [Int] = group.runs.map { $0.id }
         DispatchQueue.global(qos: .userInitiated).async {
-            let ok = runIDs.allSatisfy { runID in
-                ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
+            var ok = true
+            for runID in runIDs {
+                let result: Bool = ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
+                if !result { ok = false }
             }
             completion(ok)
         }
@@ -418,29 +420,40 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         switch job.status {
         case "in_progress": return "IN PROGRESS"
         case "queued":      return "QUEUED"
-        default:            return "PENDING"
+        case "waiting":     return "WAITING"
+        default:            return job.status.uppercased()
         }
     }
 
     func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? DesignTokens.Color.statusBlue : DesignTokens.Color.labelSecondary
+        switch job.status {
+        case "in_progress": return DesignTokens.Color.statusBlue
+        case "queued":      return DesignTokens.Color.statusBlue.opacity(0.6)
+        default:            return .secondary
+        }
     }
 
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":   return "SUCCESS"
-        case "failure":   return "FAILED"
-        case "cancelled": return "CANCELLED"
-        case "skipped":   return "SKIPPED"
-        default:          return conclusion.uppercased()
+        case "success":          return "SUCCESS"
+        case "failure":          return "FAILED"
+        case "cancelled":        return "CANCELLED"
+        case "skipped":          return "SKIPPED"
+        case "timed_out":        return "TIMED OUT"
+        case "action_required":  return "ACTION REQ"
+        default:                 return conclusion.uppercased()
         }
     }
 
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
-        case "success":   return DesignTokens.Color.statusGreen
-        case "failure":   return DesignTokens.Color.statusRed
-        default:          return DesignTokens.Color.labelSecondary
+        case "success":         return DesignTokens.Color.statusGreen
+        case "failure":         return DesignTokens.Color.statusRed
+        case "cancelled":       return .secondary
+        case "skipped":         return .secondary
+        case "timed_out":       return DesignTokens.Color.statusOrange
+        case "action_required": return DesignTokens.Color.statusOrange
+        default:                return .secondary
         }
     }
 }
