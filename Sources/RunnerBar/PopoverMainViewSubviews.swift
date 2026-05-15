@@ -255,10 +255,13 @@ struct RunnerCardRow: View {
 
     var body: some View {
         HStack(spacing: DesignTokens.Layout.runnerRowGap) {
+            // ⚠️ Use statusOrange (not .yellow) — consistent with DesignTokens color system.
+            // In-progress runners are "active/busy" which maps to the orange warning token,
+            // not the system yellow which is semantically undefined and not adaptive.
             Circle()
-                .fill(Color.yellow)
+                .fill(DesignTokens.Color.statusOrange)
                 .frame(width: 8, height: 8)
-                .shadow(color: Color.yellow.opacity(0.6), radius: 3)
+                .shadow(color: DesignTokens.Color.statusOrange.opacity(0.6), radius: 3)
             Text(runner.name)
                 .font(DesignTokens.Font.monoBody)
                 .foregroundColor(.primary)
