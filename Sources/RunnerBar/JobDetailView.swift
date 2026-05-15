@@ -198,31 +198,31 @@ struct JobDetailView: View {
             if let start = job.startedAt {
                 Image(systemName: "clock")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(wallTime(start))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Image(systemName: "arrow.right")
                     .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 if let end = job.completedAt {
                     Text(wallTime(end))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                 } else {
                     Text("running")
-                        .font(.caption)
-                        .foregroundColor(.yellow)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.statusBlue)
                 }
                 Text("·")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text("·")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, 1)
             }
             if let repoURL = URL(string: "https://github.com/\(group.repo)") {
@@ -281,10 +281,10 @@ struct JobDetailView: View {
                     Image(systemName: icon)
                         .font(.system(size: 9))
                     Text(label)
-                        .font(.caption)
+                        .font(DesignTokens.Font.monoSmall)
                         .lineLimit(1)
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
             }
         )
@@ -298,8 +298,8 @@ struct JobDetailView: View {
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
             Text(String(format: "#%02d", step.id))
-                .font(.caption2.monospacedDigit())
-                .foregroundColor(.secondary)
+                .font(DesignTokens.Font.monoXSmall)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
                 .fixedSize(horizontal: true, vertical: false)
             Text(step.conclusionIcon)
                 .font(.system(size: 11))
@@ -307,7 +307,7 @@ struct JobDetailView: View {
                 .frame(width: 14, alignment: .center)
             Text(step.name)
                 .font(.system(size: 12))
-                .foregroundColor(step.status == "queued" ? .secondary : .primary)
+                .foregroundColor(step.status == "queued" ? DesignTokens.Color.labelSecondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
@@ -315,31 +315,31 @@ struct JobDetailView: View {
             if let start = step.startedAt {
                 HStack(spacing: 3) {
                     Text(wallTime(start))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                     Text("→")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                     if let end = step.completedAt {
                         Text(wallTime(end))
-                            .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
                     } else {
                         Text("now")
-                            .font(.caption)
-                            .foregroundColor(.yellow)
+                            .font(DesignTokens.Font.monoSmall)
+                            .foregroundColor(DesignTokens.Color.statusBlue)
                     }
                 }
                 .fixedSize()
             }
             Text(step.elapsed)
-                .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
+                .font(DesignTokens.Font.monoSmall)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
                 .fixedSize()
                 .frame(width: 40, alignment: .trailing)
             Image(systemName: "chevron.right")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 3)
@@ -351,12 +351,14 @@ struct JobDetailView: View {
     /// Returns the live elapsed string, re-evaluated every tick.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
-    /// Maps a step's conclusion/status to a display colour.
+    /// Maps a step's conclusion/status to a DesignTokens display colour.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
-        case "success": return .green
-        case "failure": return .red
-        default: return step.status == "in_progress" ? .yellow : .secondary
+        case "success": return DesignTokens.Color.statusGreen
+        case "failure": return DesignTokens.Color.statusRed
+        default: return step.status == "in_progress"
+            ? DesignTokens.Color.statusBlue
+            : DesignTokens.Color.labelSecondary
         }
     }
 }
