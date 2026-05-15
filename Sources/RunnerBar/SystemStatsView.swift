@@ -11,25 +11,25 @@ struct SystemStatsView: View {
                 .font(.headline)
                 .padding(.bottom, 4)
 
-            statRow(label: "CPU", value: String(format: "%.1f%%", viewModel.stats.cpuPct))
-            statRow(label: "Memory Used", value: String(format: "%.1f GB", viewModel.stats.memUsedGB))
-            statRow(label: "Memory Total", value: String(format: "%.1f GB", viewModel.stats.memTotalGB))
-            statRow(label: "Disk Used", value: String(format: "%.1f GB", viewModel.stats.diskUsedGB))
-            statRow(label: "Disk Total", value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
+            statRow(label: "CPU",          value: String(format: "%.1f%%",    viewModel.stats.cpuPct))
+            statRow(label: "Memory Used",  value: String(format: "%.1f GB",   viewModel.stats.memUsedGB))
+            statRow(label: "Memory Total", value: String(format: "%.1f GB",   viewModel.stats.memTotalGB))
+            statRow(label: "Disk Used",    value: String(format: "%.1f GB",   viewModel.stats.diskUsedGB))
+            statRow(label: "Disk Total",   value: String(format: "%.1f GB",   viewModel.stats.diskTotalGB))
         }
         .padding()
-        .onAppear { viewModel.start() }
+        .onAppear  { viewModel.start() }
         .onDisappear { viewModel.stop() }
     }
 
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 12))
+                .font(DesignTokens.Fonts.monoLabel)   // Phase 1: mono font token
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .font(.system(size: 12, design: .monospaced))
+                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
         }
     }
 }
@@ -43,7 +43,7 @@ struct BlockBarView: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(DesignTokens.Fonts.monoLabel)   // Phase 1: mono font token
                 .foregroundColor(.secondary)
 
             GeometryReader { geo in
@@ -60,15 +60,13 @@ struct BlockBarView: View {
             .frame(height: 6)
 
             Text(String(format: "%.0f%%", pct))
-                .font(.system(size: 10, design: .monospaced))
+                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
                 .foregroundColor(usageColor)
                 .frame(width: 36, alignment: .trailing)
         }
     }
 
     private var usageColor: Color {
-        if pct > 85 { return .red }
-        if pct > 60 { return .yellow }
-        return .green
+        DesignTokens.Colors.usage(pct: pct)            // Phase 1: colour token
     }
 }
