@@ -43,7 +43,7 @@ struct ActionDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ────────────────────────────────────────────────────────────────────────────────────
+            // ── Header ─────────────────────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -55,6 +55,42 @@ struct ActionDetailView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
+                // Restored action buttons — spec mandates no behaviour regression
+                ReRunButton(
+                    action: { completion in
+                        let scope = group.repo
+                        let runIDs = group.runs.map { $0.id }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let ok = runIDs.allSatisfy { runID in
+                                GitHub.reRunFailedJobs(runID: runID, repoSlug: scope)
+                            }
+                            DispatchQueue.main.async { completion(ok) }
+                        }
+                    },
+                    isDisabled: group.groupStatus == .inProgress
+                )
+                CancelButton(
+                    action: { completion in
+                        let scope = group.repo
+                        let runIDs = group.runs.map { $0.id }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let ok = runIDs.allSatisfy { runID in
+                                GitHub.cancelRun(runID: runID, repoSlug: scope)
+                            }
+                            DispatchQueue.main.async { completion(ok) }
+                        }
+                    },
+                    isDisabled: group.groupStatus != .inProgress
+                )
+                LogCopyButton(
+                    fetch: { completion in
+                        let g = group
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            completion(fetchActionLogs(group: g))
+                        }
+                    },
+                    isDisabled: false
+                )
                 if let urlString = group.htmlUrl, let url = URL(string: urlString) {
                     Button(
                         action: { NSWorkspace.shared.open(url) },
@@ -75,7 +111,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ────────────────────────────────────────────────────────────────────────────────────
+            // ── Group title block ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -107,7 +143,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ────────────────────────────────────────────────────────────────────────────────────
+            // ── Jobs list ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
