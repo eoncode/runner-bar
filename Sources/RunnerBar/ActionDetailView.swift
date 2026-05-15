@@ -1,6 +1,7 @@
+// swiftlint:disable file_length
 import AppKit
 import SwiftUI
-// swiftlint:disable file_length vertical_whitespace_opening_braces
+// swiftlint:disable vertical_whitespace_opening_braces
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
@@ -221,18 +222,13 @@ struct ActionDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-// swiftlint:enable file_length vertical_whitespace_opening_braces
+// swiftlint:enable vertical_whitespace_opening_braces
 
 // MARK: - ActionDetailView + Actions
 
 extension ActionDetailView {
 
     // NOTE: Swift 6.3.2 ICE workaround.
-    // The type-checker crashes (SyntacticElementSolutionApplication) when a
-    // DispatchQueue.global().async closure contains a for-loop with ghPost calls,
-    // even after rewriting `for x where` as `for x { if }`.
-    // Fix: extract all loop logic into this standalone helper so the closure
-    // body reduces to a single call expression — no inference needed inside it.
     /// Re-runs each run ID in `runIDs` and returns `true` if all succeeded.
     private func reRunIDs(_ runIDs: [Int], scope: String) -> Bool {
         var succeeded = true
@@ -328,6 +324,7 @@ extension ActionDetailView {
 
 extension ActionDetailView {
 
+    /// Builds the full job row (main line + optional progress bar).
     @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View {
         VStack(spacing: 0) {
             jobRowMainLine(job, index: index)
@@ -337,6 +334,7 @@ extension ActionDetailView {
         .contentShape(Rectangle())
     }
 
+    /// Builds the main content line of a job row.
     @ViewBuilder func jobRowMainLine(_ job: ActiveJob, index: Int) -> some View {
         let indexText: String = "#\(index)"
         let dotColor: Color = jobDotColor(for: job)
@@ -399,6 +397,7 @@ extension ActionDetailView {
             .frame(width: 88, alignment: .trailing)
     }
 
+    /// Builds the thin progress bar shown beneath an in-progress job row.
     @ViewBuilder func jobRowProgressBar(_ job: ActiveJob) -> some View {
         let fraction: CGFloat = CGFloat(job.progressFraction ?? 0)
         let isActive: Bool = job.status == "in_progress" && fraction > 0
@@ -411,6 +410,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Returns the background tint color for a job row based on status/conclusion.
     func jobRowTint(for job: ActiveJob) -> Color {
         guard !job.isDimmed else { return Color.clear }
         if job.status == "in_progress" || job.status == "queued" {
@@ -421,6 +421,7 @@ extension ActionDetailView {
         return Color.clear
     }
 
+    /// Returns the formatted time-range string for a job row.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
@@ -430,6 +431,7 @@ extension ActionDetailView {
         return "\(startStr)→now"
     }
 
+    /// Returns the dot color for a job row based on status/conclusion.
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return DesignTokens.Color.labelTertiary }
         if job.status == "in_progress" { return DesignTokens.Color.statusBlue }
@@ -439,6 +441,7 @@ extension ActionDetailView {
         return Color.secondary
     }
 
+    /// Returns the status badge label string for a job that has no conclusion yet.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "running"
@@ -448,6 +451,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Returns the status badge color for a job that has no conclusion yet.
     func jobStatusColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return DesignTokens.Color.statusBlue
@@ -456,6 +460,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Returns the human-readable label for a job conclusion string.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
         case "success":   return "success"
@@ -467,6 +472,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Returns the badge color for a job conclusion string.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
         case "success":   return DesignTokens.Color.statusGreen
@@ -478,3 +484,4 @@ extension ActionDetailView {
         }
     }
 }
+// swiftlint:enable file_length

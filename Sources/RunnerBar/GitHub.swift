@@ -119,8 +119,6 @@ func rerunFailedJobs(runID: Int, scope: String) -> Bool {
 }
 
 // MARK: - Legacy compatibility shims
-// These bridge call sites that still use the old ghAPI/ghPost surface to the
-// new shell-based implementation. Remove once all call sites are migrated.
 
 /// Calls the GitHub API and returns raw JSON `Data`, or `nil` on error.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
@@ -152,13 +150,14 @@ var ghIsRateLimited = false
 /// Extracts `owner/repo` from a GitHub HTML URL such as
 /// `https://github.com/owner/repo/actions/runs/123/job/456`.
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
-    // swiftlint:disable:next identifier_name
+    // swiftlint:disable identifier_name
     guard
         let s = urlString,
         let url = URL(string: s),
         url.host == "github.com",
         url.pathComponents.count >= 3
     else { return nil }
+    // swiftlint:enable identifier_name
     return "\(url.pathComponents[1])/\(url.pathComponents[2])"
 }
 
@@ -166,10 +165,11 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
 func runIDFromHtmlUrl(_ url: String?) -> Int? {
     guard let url else { return nil }
     let parts = url.components(separatedBy: "/")
-    // swiftlint:disable:next identifier_name
+    // swiftlint:disable identifier_name
     for (i, p) in parts.enumerated() where p == "runs" && i + 1 < parts.count {
         return Int(parts[i + 1])
     }
+    // swiftlint:enable identifier_name
     return nil
 }
 
