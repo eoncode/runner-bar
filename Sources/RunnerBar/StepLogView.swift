@@ -1,35 +1,35 @@
 import AppKit
 import SwiftUI
 
-// ╔════════════════════════════════════════════════════════════════════════════╗
-// ║ ☹️  StepLogView — LAYOUT + SIZING CONTRACT ☹️                             ║
+// ╭────────────────────────────────────────────────────────────────────────────╮
+// ║ ☹️ StepLogView — LAYOUT + SIZING CONTRACT ☹️ ║
 // ╠════════════════════════════════════════════════════════════════════════════╣
-// ║ Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).       ║
-// ║                                                                            ║
-// ║ LAYOUT RULES:                                                              ║
-// ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)      ║
-// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.        ║
-// ║   NSHostingController reads idealWidth as preferredContentSize.width        ║
-// ║   on the first layout pass (NSPanel architecture, not NSPopover).           ║
-// ║   The panel then resizes to content-driven width via KVO on                ║
-// ║   preferredContentSize (see AppDelegate.sizeObservation).                  ║
-// ║ • Log content MUST be inside the ScrollView.                               ║
-// ║ • Header MUST be outside the ScrollView (always visible, not scrolled).   ║
-// ║ ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the      ║
-// ║    maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-     ║
-// ║    troller measures the view unconstrained (AppKit bug, see #375 #376)    ║
-// ║ ❌ NEVER omit idealWidth: 480 from the root frame                         ║
-// ║ ❌ NEVER add .frame(height:) here                                         ║
-// ║ ❌ NEVER add .fixedSize() here                                            ║
-// ║ ✔  ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap        ║
-// ║    Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
-// ║    reports the full log text height as preferredContentSize.height on     ║
-// ║    navigate → panel grows off-screen. (ref #370)                          ║
-// ║ ❌ NEVER remove the .frame(maxHeight:) from the ScrollView                ║
-// ║                                                                            ║
-// ║ If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
-// ║ ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
-// ║ is removed is major major major.                                           ║
+// ║ Navigation level 3 (PopoverMainView → JobDetailView → StepLogView). ║
+// ║ ║
+// ║ LAYOUT RULES: ║
+// ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top) ║
+// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement. ║
+// ║ NSHostingController reads idealWidth as preferredContentSize.width ║
+// ║ on the first layout pass (NSPanel architecture, not NSPopover). ║
+// ║ The panel then resizes to content-driven width via KVO on ║
+// ║ preferredContentSize (see AppDelegate.sizeObservation). ║
+// ║ • Log content MUST be inside the ScrollView. ║
+// ║ • Header MUST be outside the ScrollView (always visible, not scrolled). ║
+// ║ ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the ║
+// ║ maxHeight: .infinity corrupts fittingSize.width when NSHostingCon- ║
+// ║ troller measures the view unconstrained (AppKit bug, see #375 #376) ║
+// ║ ❌ NEVER omit idealWidth: 480 from the root frame ║
+// ║ ❌ NEVER add .frame(height:) here ║
+// ║ ❌ NEVER add .fixedSize() here ║
+// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap ║
+// ║ Without it, with sizingOptions=.preferredContentSize, SwiftUI ║
+// ║ reports the full log text height as preferredContentSize.height on ║
+// ║ navigate → panel grows off-screen. (ref #370) ║
+// ║ ❌ NEVER remove the .frame(maxHeight:) from the ScrollView ║
+// ║ ║
+// ║ If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ║
+// ║ ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment ║
+// ║ is removed is major major major. ║
 // ╙────────────────────────────────────────────────────────────────────────────╜
 
 /// Shows the raw log text for a single `JobStep`.
@@ -61,7 +61,6 @@ struct StepLogView: View {
         formatter.dateFormat = "HH:mm:ss"
         return formatter
     }()
-
     private static let dateFmt: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -70,7 +69,7 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ────────────────────────────────────────────────────────────────
+            // ── Top bar ──────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -100,7 +99,9 @@ struct StepLogView: View {
                 LogCopyButton(
                     fetch: { completion in
                         let text = logText
-                        DispatchQueue.global(qos: .userInitiated).async { completion(text) }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            completion(text)
+                        }
                     },
                     isDisabled: logText == nil || logText?.isEmpty == true
                 )
@@ -109,7 +110,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ─────────────────────────────────────────────────────
+            // ── Step name (large) ───────────────────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -117,7 +118,7 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────────────────
+            // ── Meta rows ───────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase")
                     .font(.system(size: 10))
@@ -204,7 +205,7 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ───────────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -225,7 +226,7 @@ struct StepLogView: View {
                         // Color.primary.opacity(0.05) is perceptually neutral on both
                         // light (near-white tint) and dark (near-black tint) surfaces.
                         // ❌ NEVER use Color.black.opacity() here — it is not adaptive
-                        //    and produces a muddy grey on light mode.
+                        // and produces a muddy grey on light mode.
                         .background(Color.primary.opacity(0.05))
                 } else {
                     Text("Log not available")
@@ -252,24 +253,27 @@ struct StepLogView: View {
     }
 
     // MARK: - Log loading
+
     private func loadLog() {
         isLoading = true
-        let jobID   = job.id
+        let jobID = job.id
         let stepNum = step.id
         let scope: String = {
             let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
             if parts.count >= 5 {
                 let owner = parts[3]
-                let repo  = parts[4]
-                if !owner.isEmpty && !repo.isEmpty { return "\(owner)/\(repo)" }
+                let repo = parts[4]
+                if !owner.isEmpty && !repo.isEmpty {
+                    return "\(owner)/\(repo)"
+                }
             }
             return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
         }()
         DispatchQueue.global(qos: .userInitiated).async {
             let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
             DispatchQueue.main.async {
-                logText    = text ?? ""
-                isLoading  = false
+                logText = text ?? ""
+                isLoading = false
                 onLogLoaded?()
             }
         }
@@ -277,13 +281,15 @@ struct StepLogView: View {
 }
 
 // MARK: - Derived helpers
+
 /// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
 extension StepLogView {
     /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
     var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
         guard parts.count >= 5 else { return "—" }
-        let owner = parts[3]; let repo = parts[4]
+        let owner = parts[3]
+        let repo = parts[4]
         return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
     }
 
@@ -301,8 +307,8 @@ extension StepLogView {
     /// Colour used to render `stepStatusLabel` based on conclusion or live status.
     var stepStatusColor: Color {
         switch step.conclusion {
-        case "success":              return DesignTokens.Color.statusGreen
-        case "failure":              return DesignTokens.Color.statusRed
+        case "success":            return DesignTokens.Color.statusGreen
+        case "failure":            return DesignTokens.Color.statusRed
         case "skipped", "cancelled": return DesignTokens.Color.labelSecondary
         default: return step.status == "in_progress"
             ? DesignTokens.Color.statusBlue
