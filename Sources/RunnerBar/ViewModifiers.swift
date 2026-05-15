@@ -116,7 +116,7 @@ struct StatPill: View {
         .padding(.vertical, RBSpacing.xxs + 1)
         .background(
             RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                .fill(Color.rbSurfaceElevated.opacity(1.4))
+                .fill(Color.rbSurfaceElevated.opacity(1.0))
                 .overlay(
                     RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
                         .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)

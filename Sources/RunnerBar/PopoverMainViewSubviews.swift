@@ -77,7 +77,7 @@ struct PopoverHeaderView: View {
             statChip(
                 label: "MEM",
                 value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                    + " " + String(format: "%.1/%.1GB", stats.memUsedGB, stats.memTotalGB),
+                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
                 pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
             )
             diskChip

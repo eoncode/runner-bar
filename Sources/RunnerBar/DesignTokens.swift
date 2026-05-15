@@ -10,16 +10,16 @@ extension Color {
     static let rbDanger  = Color(red: 1.00, green: 0.27, blue: 0.23)   // #FF453A
 
     // Neutral / surface
-    static let rbSurface        = Color(white: 0.11)                   // #1C1C1E
-    static let rbSurfaceElevated = Color(white: 0.14)                  // slightly lifted card
-    static let rbBorderSubtle   = Color(white: 1.0).opacity(0.06)
-    static let rbBorderMid      = Color(white: 1.0).opacity(0.10)
-    static let rbDivider        = Color(white: 1.0).opacity(0.08)
+    static let rbSurface         = Color(white: 0.11)                   // #1C1C1E
+    static let rbSurfaceElevated = Color(white: 0.14)                   // slightly lifted card
+    static let rbBorderSubtle    = Color(white: 1.0).opacity(0.06)
+    static let rbBorderMid       = Color(white: 1.0).opacity(0.10)
+    static let rbDivider         = Color(white: 1.0).opacity(0.08)
 
     // Text
-    static let rbTextPrimary    = Color.white
-    static let rbTextSecondary  = Color(white: 0.55)                   // #8C8C8E
-    static let rbTextTertiary   = Color(white: 0.39)                   // #636366
+    static let rbTextPrimary   = Color.white
+    static let rbTextSecondary = Color(white: 0.55)                     // #8C8C8E
+    static let rbTextTertiary  = Color(white: 0.39)                     // #636366
 
     // Tinted row backgrounds (very faint, status-keyed)
     static let rbBlueTint   = rbBlue.opacity(0.05)
@@ -76,15 +76,15 @@ enum RBSpacing {
 }
 
 enum RBRadius {
-    static let pill:   CGFloat = 20
-    static let card:   CGFloat = 8
-    static let small:  CGFloat = 5
-    static let badge:  CGFloat = 6
+    static let pill:      CGFloat = 20
+    static let card:      CGFloat = 8
+    static let small:     CGFloat = 5
+    static let badge:     CGFloat = 6
     static let indicator: CGFloat = 2
 }
 
 enum RBShadow {
-    static let cardOpacity: Double = 0.35
+    static let cardOpacity: Double  = 0.35
     static let cardRadius:  CGFloat = 12
     static let cardY:       CGFloat = 4
 }
@@ -93,13 +93,48 @@ enum RBShadow {
 
 enum RBFont {
     /// Monospaced caption — used for hashes, timestamps, step counts
-    static let mono:      Font = .system(.caption, design: .monospaced)
+    static let mono:       Font = .system(.caption, design: .monospaced)
     /// Monospaced small — used for runner CPU/MEM values
-    static let monoSmall: Font = .system(size: 11, weight: .regular, design: .monospaced)
+    static let monoSmall:  Font = .system(size: 11, weight: .regular, design: .monospaced)
     /// Monospaced medium bold — runner names, commit titles
-    static let monoBold:  Font = .system(size: 13, weight: .semibold, design: .monospaced)
+    static let monoBold:   Font = .system(size: 13, weight: .semibold, design: .monospaced)
     /// Standard label
-    static let label:     Font = .system(size: 13, weight: .medium)
+    static let label:      Font = .system(size: 13, weight: .medium)
+    /// Body text — job name in detail rows
+    static let body:       Font = .system(size: 12, weight: .regular)
     /// Section label / header key
     static let sectionKey: Font = .system(size: 12.5, weight: .regular)
+    /// Section header — alias for sectionKey (used in SettingsView)
+    static let sectionHeader: Font = sectionKey
+}
+
+// MARK: - DesignTokens namespace shim
+// Provides a DesignTokens.Fonts / DesignTokens.Spacing / DesignTokens.Colors
+// namespace expected by older call-sites in PopoverMainViewSubviews and ActionRowView.
+
+enum DesignTokens {
+    enum Fonts {
+        /// Monospaced label font (chip labels: "CPU", "MEM", "DISK")
+        static let monoLabel: Font = RBFont.monoSmall
+        /// Monospaced value font (chip values and elapsed text)
+        static let monoStat:  Font = RBFont.monoSmall
+        /// Standard mono caption (action row labels, job progress, elapsed)
+        static let mono:      Font = RBFont.mono
+    }
+
+    enum Spacing {
+        /// Standard horizontal padding for popover rows (= RBSpacing.md)
+        static let rowHPad: CGFloat = RBSpacing.md
+    }
+
+    enum Colors {
+        /// Returns a usage-keyed color: green below 60%, orange 60-85%, red above.
+        static func usage(pct: Double) -> Color {
+            switch pct {
+            case ..<60:  return .rbSuccess
+            case ..<85:  return .rbWarning
+            default:     return .rbDanger
+            }
+        }
+    }
 }
