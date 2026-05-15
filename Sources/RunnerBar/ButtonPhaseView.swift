@@ -1,9 +1,12 @@
 // swiftlint:disable all
-// force-v2
+// v4
 import SwiftUI
 
 enum ButtonPhase {
-    case idle, loading, success, failure
+    case idle
+    case loading
+    case success
+    case failure
 }
 
 struct ButtonPhaseView: View {

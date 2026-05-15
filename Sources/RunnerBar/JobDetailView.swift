@@ -1,13 +1,7 @@
 // swiftlint:disable all
-// force-v3
+// v4
 import AppKit
 import SwiftUI
-
-// ════════════════════════════════════════════════════════════════════════════════
-// ⚠️ NSPANEL SIZING GUARD — DO NOT REMOVE
-// ROOT FRAME RULE: .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-// SCROLLVIEW HEIGHT CAP: .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-// ════════════════════════════════════════════════════════════════════════════════
 
 struct JobDetailView: View {
     let job: ActiveJob
@@ -42,15 +36,19 @@ struct JobDetailView: View {
     private var headerBar: some View {
         HStack(spacing: 6) {
             Button(action: onBack) {
-                HStack(spacing: 3) { Image(systemName: "chevron.left").font(.caption); Text("Jobs").font(.caption) }
-                    .foregroundColor(.secondary).fixedSize()
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.caption)
+                    Text("Jobs").font(.caption)
+                }.foregroundColor(.secondary).fixedSize()
             }.buttonStyle(.plain)
             Spacer(minLength: 8)
             actionCluster
             if let urlString = job.htmlUrl, let url = URL(string: urlString) {
                 Button(action: { NSWorkspace.shared.open(url) }) {
-                    HStack(spacing: 3) { Image(systemName: "safari").font(.caption); Text("GitHub").font(.caption) }
-                        .foregroundColor(.secondary).fixedSize()
+                    HStack(spacing: 3) {
+                        Image(systemName: "safari").font(.caption)
+                        Text("GitHub").font(.caption)
+                    }.foregroundColor(.secondary).fixedSize()
                 }.buttonStyle(.plain).help("Open job on GitHub")
             }
         }
@@ -60,28 +58,32 @@ struct JobDetailView: View {
     private var actionCluster: some View {
         HStack(spacing: 4) {
             ReRunButton(action: { completion in
-                let jobID = job.id; let slug = self.repoSlug
+                let jobID = job.id
+                let slug = self.repoSlug
                 DispatchQueue.global(qos: .userInitiated).async {
                     let succeeded = reRunJob(jobID: jobID, repoSlug: slug)
                     DispatchQueue.main.async { completion(succeeded) }
                 }
             }, isDisabled: job.status == "in_progress" || job.status == "queued")
             ReRunFailedButton(action: { completion in
-                let runID = self.runID; let slug = self.repoSlug
+                let runID = self.runID
+                let slug = self.repoSlug
                 DispatchQueue.global(qos: .userInitiated).async {
                     let succeeded = reRunFailedJobs(runID: runID, repoSlug: slug)
                     DispatchQueue.main.async { completion(succeeded) }
                 }
             }, isDisabled: job.status == "in_progress" || job.status == "queued" || (job.conclusion != "failure" && job.conclusion != "cancelled"))
             CancelButton(action: { completion in
-                let runID = self.runID; let slug = self.repoSlug
+                let runID = self.runID
+                let slug = self.repoSlug
                 DispatchQueue.global(qos: .userInitiated).async {
                     let succeeded = cancelRun(runID: runID, scope: slug)
                     DispatchQueue.main.async { completion(succeeded) }
                 }
             }, isDisabled: job.status != "in_progress" && job.status != "queued")
             LogCopyButton(fetch: { completion in
-                let jobID = job.id; let slug = self.repoSlug
+                let jobID = job.id
+                let slug = self.repoSlug
                 DispatchQueue.global(qos: .userInitiated).async { completion(fetchJobLog(jobID: jobID, scope: slug)) }
             }, isDisabled: false)
         }
@@ -101,7 +103,7 @@ struct JobDetailView: View {
             } else {
                 Text("running").font(.caption).foregroundColor(.rbBlue)
             }
-            Text("·").font(.caption).foregroundColor(.secondary)
+            Text("\u00b7").font(.caption).foregroundColor(.secondary)
             Text(job.elapsed).font(.caption.monospacedDigit()).foregroundColor(.secondary).lineLimit(1).fixedSize()
         }
     }
@@ -116,20 +118,27 @@ struct JobDetailView: View {
     private var runID: Int {
         guard let url = job.htmlUrl else { return 0 }
         let parts = url.components(separatedBy: "/")
-        if let runsIdx = parts.firstIndex(of: "runs"), runsIdx + 1 < parts.count, let id = Int(parts[runsIdx + 1]) { return id }
+        if let idx = parts.firstIndex(of: "runs"), idx + 1 < parts.count, let id = Int(parts[idx + 1]) { return id }
         return 0
     }
 
     private func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success": return "✓ SUCCESS"; case "failure": return "✗ FAILED"
-        case "cancelled": return "⊘ CANCELLED"; case "skipped": return "⊘ SKIPPED"
-        case "action_required": return "! ACTION"; default: return conclusion.uppercased()
+        case "success": return "\u2713 SUCCESS"
+        case "failure": return "\u2717 FAILED"
+        case "cancelled": return "\u2298 CANCELLED"
+        case "skipped": return "\u2298 SKIPPED"
+        case "action_required": return "! ACTION"
+        default: return conclusion.uppercased()
         }
     }
 
     private func conclusionColor(_ conclusion: String) -> Color {
-        switch conclusion { case "success": return .rbSuccess; case "failure": return .rbDanger; default: return .secondary }
+        switch conclusion {
+        case "success": return .rbSuccess
+        case "failure": return .rbDanger
+        default: return .secondary
+        }
     }
 
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
@@ -147,32 +156,52 @@ struct JobDetailView: View {
             Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
-            .fill(DesignTokens.Colors.rowBackground)
-            .overlay(RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
-                .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)))
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                .fill(DesignTokens.Colors.rowBackground)
+                .overlay(RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                    .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5))
+        )
         .contentShape(Rectangle())
     }
 
     @ViewBuilder private func stepTimeRange(_ step: JobStep) -> some View {
         HStack(spacing: 3) {
             Text(startLabel(for: step)).font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            Text("→").font(.caption).foregroundColor(.secondary)
-            if let endDate = step.completedAt { Text(Self.timeFormatter.string(from: endDate)).font(.caption.monospacedDigit()).foregroundColor(.secondary) }
-            else { Text("now").font(.caption).foregroundColor(.rbBlue) }
+            Text("\u2192").font(.caption).foregroundColor(.secondary)
+            if let endDate = step.completedAt {
+                Text(Self.timeFormatter.string(from: endDate)).font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            } else {
+                Text("now").font(.caption).foregroundColor(.rbBlue)
+            }
         }.fixedSize()
     }
 
-    private static let timeFormatter: DateFormatter = { let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"; return fmt }()
-    private func startLabel(for step: JobStep) -> String { guard let date = step.startedAt else { return "" }; return Self.timeFormatter.string(from: date) }
+    private static let timeFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm:ss"
+        return fmt
+    }()
+
+    private func startLabel(for step: JobStep) -> String {
+        guard let date = step.startedAt else { return "" }
+        return Self.timeFormatter.string(from: date)
+    }
+
     private func stepIcon(_ step: JobStep) -> String {
         switch step.conclusion {
-        case "success": return "checkmark.circle.fill"; case "failure": return "xmark.circle.fill"
+        case "success": return "checkmark.circle.fill"
+        case "failure": return "xmark.circle.fill"
         case "skipped", "cancelled": return "minus.circle"
         default: return step.status == "in_progress" ? "circle.dotted" : "circle"
         }
     }
+
     private func stepColor(_ step: JobStep) -> Color {
-        switch step.conclusion { case "success": return .rbSuccess; case "failure": return .rbDanger; default: return step.status == "in_progress" ? .rbBlue : .secondary }
+        switch step.conclusion {
+        case "success": return .rbSuccess
+        case "failure": return .rbDanger
+        default: return step.status == "in_progress" ? .rbBlue : .secondary
+        }
     }
 }

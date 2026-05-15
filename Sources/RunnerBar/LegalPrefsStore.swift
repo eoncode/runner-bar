@@ -1,5 +1,5 @@
 // swiftlint:disable all
-// swiftlint:disable all
+// v4
 import Foundation
 
 final class LegalPrefsStore: ObservableObject {
@@ -11,10 +11,10 @@ final class LegalPrefsStore: ObservableObject {
     }
     init() {
         hasAcceptedPrivacy = UserDefaults.standard.bool(forKey: Key.privacy)
-        hasAcceptedTerms   = UserDefaults.standard.bool(forKey: Key.terms)
+        hasAcceptedTerms = UserDefaults.standard.bool(forKey: Key.terms)
     }
     private enum Key {
         static let privacy = "legalPrefs.hasAcceptedPrivacy"
-        static let terms   = "legalPrefs.hasAcceptedTerms"
+        static let terms = "legalPrefs.hasAcceptedTerms"
     }
 }
