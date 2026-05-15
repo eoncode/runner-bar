@@ -1,7 +1,9 @@
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
+/// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
 struct SectionHeaderLabel: View {
+    /// The title string to display in uppercase.
     let title: String
     var body: some View {
         Text(title.uppercased())
@@ -17,6 +19,7 @@ struct SectionHeaderLabel: View {
 /// Header row: system stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
+    /// Current system stats snapshot.
     let stats: SystemStats
     /// Phase 2: normalised (0–1) CPU history for sparkline, oldest first.
     let cpuHistory: [Double]
@@ -24,8 +27,11 @@ struct PopoverHeaderView: View {
     let memHistory: [Double]
     /// Phase 2: normalised (0–1) DISK-used history for sparkline, oldest first.
     let diskHistory: [Double]
+    /// Whether the user has a valid GitHub token.
     let isAuthenticated: Bool
+    /// Called when the user taps the settings button.
     let onSelectSettings: () -> Void
+    /// Called when the user taps the sign-in button.
     let onSignIn: () -> Void
 
     var body: some View {
@@ -73,9 +79,9 @@ struct PopoverHeaderView: View {
                 valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB)
             )
             Divider().frame(height: 16)
-            let total     = stats.diskTotalGB
-            let used      = stats.diskUsedGB
-            let free      = max(0, total - used)
+            let total = stats.diskTotalGB
+            let used = stats.diskUsedGB
+            let free = max(0, total - used)
             let diskUsedPct = total > 0 ? (used / total) * 100 : 0
             DiskPillView(
                 diskHistory: diskHistory,
@@ -121,7 +127,9 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
+/// Displays busy local runners at the top of the popover.
 struct PopoverLocalRunnerRow: View {
+    /// The full list of runners; only busy ones are displayed.
     let runners: [Runner]
     var body: some View {
         let busy = runners.filter { $0.busy }
@@ -182,9 +190,13 @@ struct PopoverLocalRunnerRow: View {
 /// Tapping the LeftIndicatorPill toggles expansion; the pill color reflects status.
 /// In-progress groups auto-expand on appear so jobs are immediately visible.
 struct ActionRowView: View {
+    /// The action group this row represents.
     let group: ActionGroup
+    /// Display tick used to force elapsed-time re-renders.
     let tick: Int
+    /// Called when the user taps the row content area.
     let onSelect: () -> Void
+    /// Optional callback for tapping an inline job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
     @State private var isExpanded: Bool = false
@@ -356,8 +368,11 @@ private struct StatusPill: View {
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
 struct InlineJobRowsView: View {
+    /// The action group whose in-progress jobs are shown.
     let group: ActionGroup
+    /// Display tick used to force elapsed-time re-renders.
     let tick: Int
+    /// Optional callback for tapping a job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
@@ -375,11 +390,14 @@ struct InlineJobRowsView: View {
                 HierarchyConnectorLine(jobCount: min(activeJobs.count, cap))
             }
             VStack(spacing: 2) {
-                ForEach(Array(activeJobs.prefix(cap).enumerated()), id: \.element.id) { idx, job in
+                ForEach(Array(activeJobs.prefix(cap).enumerated()), id: \.element.id) { _, job in
                     if let onSelectJob {
-                        Button(action: { onSelectJob(job, group) }, label: { jobRow(job, isLast: idx == min(activeJobs.count, cap) - 1) }).buttonStyle(.plain)
+                        Button(action: { onSelectJob(job, group) }) {
+                            jobRow(job)
+                        }
+                        .buttonStyle(.plain)
                     } else {
-                        jobRow(job, isLast: idx == min(activeJobs.count, cap) - 1)
+                        jobRow(job)
                     }
                 }
                 if activeJobs.count > cap {
@@ -400,12 +418,29 @@ struct InlineJobRowsView: View {
 
     /// Fix #5: row order → icon/connector | job name · step | Spacer | progress bar | done/total | elapsed | chevron
     /// Fix #6: each sub-job row gets a rounded card background.
-    private func jobRow(_ job: ActiveJob, isLast: Bool = false) -> some View {
+    private func jobRow(_ job: ActiveJob) -> some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         _ = tick
+        return jobRowContent(job)
+            .padding(.vertical, 3)
+            .padding(.trailing, DesignTokens.Spacing.rowHPad)
+            // Fix #6: rounded card background per sub-job row
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                    .fill(DesignTokens.Colors.rowBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                            .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                    )
+            )
+            .contentShape(Rectangle())
+    }
+
+    /// Builds the inner HStack content for a single inline job row.
+    private func jobRowContent(_ job: ActiveJob) -> some View {
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
-        let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
-        let done  = job.steps.filter { $0.conclusion != nil }.count
+        let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+        let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         let stepFraction: Double? = total > 0 ? Double(done) / Double(total) : nil
         let barColor = jobBarColor(for: job)
@@ -446,18 +481,6 @@ struct InlineJobRowsView: View {
                 Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 3)
-        .padding(.trailing, DesignTokens.Spacing.rowHPad)
-        // Fix #6: rounded card background per sub-job row
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
-                .fill(DesignTokens.Colors.rowBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
-                        .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
-                )
-        )
-        .contentShape(Rectangle())
     }
 
     private func jobBarColor(for job: ActiveJob) -> Color {
@@ -468,48 +491,5 @@ struct InlineJobRowsView: View {
             ? DesignTokens.Colors.statusGreen
             : (job.isDimmed ? .gray : DesignTokens.Colors.statusRed)
         }
-    }
-}
-
-// MARK: - HierarchyConnectorLine
-/// Fix #7: draws a clean L-shaped connector from the parent action row down through
-/// each sub-job row, matching the reference design.
-/// A vertical line runs down the left edge; a short horizontal tick branches right
-/// into each job row at its vertical midpoint.
-private struct HierarchyConnectorLine: View {
-    let jobCount: Int
-    /// Approximate height of each job row (padding + cap + card) in points.
-    private let rowHeight: CGFloat = 28
-    /// X position of the vertical line (left indent).
-    private let lineX: CGFloat = 12
-    /// Length of the horizontal tick into each row.
-    private let tickLen: CGFloat = 10
-
-    var body: some View {
-        Canvas { ctx, size in
-            var path = Path()
-            let topY: CGFloat = rowHeight / 2
-            let bottomY = topY + CGFloat(jobCount - 1) * rowHeight
-
-            // Vertical spine
-            path.move(to: CGPoint(x: lineX, y: topY))
-            path.addLine(to: CGPoint(x: lineX, y: bottomY))
-
-            // Horizontal ticks per row
-            for i in 0..<jobCount {
-                let midY = topY + CGFloat(i) * rowHeight
-                path.move(to: CGPoint(x: lineX, y: midY))
-                path.addLine(to: CGPoint(x: lineX + tickLen, y: midY))
-            }
-
-            ctx.stroke(
-                path,
-                with: .color(Color.secondary.opacity(0.3)),
-                style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round)
-            )
-        }
-        .frame(width: lineX + tickLen + 4,
-               height: CGFloat(jobCount) * rowHeight)
-        .allowsHitTesting(false)
     }
 }

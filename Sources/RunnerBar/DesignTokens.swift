@@ -15,8 +15,8 @@ extension Color {
             return
         }
         let r = Double((value & 0xFF0000) >> 16) / 255
-        let g = Double((value & 0x00FF00) >> 8)  / 255
-        let b = Double( value & 0x0000FF)         / 255
+        let g = Double((value & 0x00FF00) >> 8) / 255
+        let b = Double(value & 0x0000FF) / 255
         self.init(red: r, green: g, blue: b)
     }
 }
@@ -27,12 +27,17 @@ extension Color {
 enum DesignTokens {
 
     // MARK: Colors
+    /// Semantic colour constants used throughout the app.
     enum Colors {
         // Status
-        static let statusGreen:  Color = Color(hex: "#30D158")
+        /// Green used for success states.
+        static let statusGreen: Color = Color(hex: "#30D158")
+        /// Orange used for warning / queued states.
         static let statusOrange: Color = Color(hex: "#FF9F0A")
-        static let statusRed:    Color = Color(hex: "#FF453A")
-        static let statusBlue:   Color = Color(hex: "#0A84FF")
+        /// Red used for failure / danger states.
+        static let statusRed: Color = Color(hex: "#FF453A")
+        /// Blue used for in-progress states.
+        static let statusBlue: Color = Color(hex: "#0A84FF")
 
         // Row chrome
         /// Subtle elevated background for card rows (light/dark adaptive).
@@ -92,21 +97,23 @@ enum DesignTokens {
     }
 
     // MARK: Fonts
+    /// Semantic font constants used throughout the app.
     enum Fonts {
         /// Monospaced caption for hashes, metrics, elapsed times.
-        static let mono:      Font = .system(size: 11, design: .monospaced)
+        static let mono: Font = .system(size: 11, design: .monospaced)
         /// Slightly larger monospaced for primary stat values in the header.
-        static let monoStat:  Font = .system(size: 12, weight: .semibold, design: .monospaced)
+        static let monoStat: Font = .system(size: 12, weight: .semibold, design: .monospaced)
         /// Tiny monospaced label (e.g. "CPU", "MEM").
         static let monoLabel: Font = .system(size: 10, weight: .semibold, design: .monospaced)
     }
 
     // MARK: Spacing
+    /// Semantic spacing constants used throughout the app.
     enum Spacing {
         /// Horizontal padding inside chip / pill components.
-        static let chipHPad:   CGFloat = 6
+        static let chipHPad: CGFloat = 6
         /// Horizontal padding for standard row content.
-        static let rowHPad:    CGFloat = 12
+        static let rowHPad: CGFloat = 12
         /// Corner radius for card-row backgrounds.
         static let cardRadius: CGFloat = 7
     }
@@ -114,47 +121,76 @@ enum DesignTokens {
 
 // MARK: - Color Token Aliases
 extension Color {
-    static let rbBlue:            Color = DesignTokens.Colors.statusBlue
-    static let rbSuccess:         Color = DesignTokens.Colors.statusGreen
-    static let rbWarning:         Color = DesignTokens.Colors.statusOrange
-    static let rbDanger:          Color = DesignTokens.Colors.statusRed
+    /// Blue tint used for in-progress states.
+    static let rbBlue: Color = DesignTokens.Colors.statusBlue
+    /// Green tint used for success states.
+    static let rbSuccess: Color = DesignTokens.Colors.statusGreen
+    /// Orange tint used for warning states.
+    static let rbWarning: Color = DesignTokens.Colors.statusOrange
+    /// Red tint used for danger / failure states.
+    static let rbDanger: Color = DesignTokens.Colors.statusRed
+    /// Elevated surface background (card rows).
     static let rbSurfaceElevated: Color = Color.primary.opacity(0.04)
-    static let rbBorderSubtle:    Color = Color.primary.opacity(0.06)
-    static let rbTextTertiary:    Color = Color.secondary
-    static let rbTextSecondary:   Color = Color.secondary
+    /// Subtle border colour for card rows.
+    static let rbBorderSubtle: Color = Color.primary.opacity(0.06)
+    /// Tertiary text colour alias.
+    static let rbTextTertiary: Color = Color.secondary
+    /// Secondary text colour alias.
+    static let rbTextSecondary: Color = Color.secondary
 }
 
 // MARK: - Font Token Aliases
+/// Convenience font aliases matching the DesignTokens font scale.
 enum RBFont {
-    static let mono:      Font = DesignTokens.Fonts.mono
+    /// Standard monospaced caption font.
+    static let mono: Font = DesignTokens.Fonts.mono
+    /// Smaller monospaced font for dense labels.
     static let monoSmall: Font = .system(size: 10, design: .monospaced)
-    static let monoStat:  Font = DesignTokens.Fonts.monoStat
+    /// Semibold monospaced for stat values.
+    static let monoStat: Font = DesignTokens.Fonts.monoStat
+    /// Small semibold monospaced for axis labels.
     static let monoLabel: Font = DesignTokens.Fonts.monoLabel
 }
 
 // MARK: - Spacing Token Aliases
+/// Convenience spacing aliases matching the DesignTokens spacing scale.
 enum RBSpacing {
+    /// Extra-extra-small spacing (2 pt).
     static let xxs: CGFloat = 2
-    static let xs:  CGFloat = 4
-    static let sm:  CGFloat = DesignTokens.Spacing.chipHPad
-    static let md:  CGFloat = DesignTokens.Spacing.rowHPad
+    /// Extra-small spacing (4 pt).
+    static let xs: CGFloat = 4
+    /// Small spacing — matches chip horizontal padding.
+    static let sm: CGFloat = DesignTokens.Spacing.chipHPad
+    /// Medium spacing — matches row horizontal padding.
+    static let md: CGFloat = DesignTokens.Spacing.rowHPad
 }
 
 // MARK: - Radius Token Aliases
+/// Convenience corner-radius aliases.
 enum RBRadius {
-    static let small:     CGFloat = 5
-    static let card:      CGFloat = DesignTokens.Spacing.cardRadius
+    /// Small corner radius for inner elements.
+    static let small: CGFloat = 5
+    /// Standard card corner radius.
+    static let card: CGFloat = DesignTokens.Spacing.cardRadius
+    /// Narrow indicator bar radius.
     static let indicator: CGFloat = 3
 }
 
 // MARK: - Status Token Alias
+/// Semantic status enumeration with associated colour and tint.
 enum RBStatus {
+    /// Completed successfully.
     case success
+    /// Completed with failure.
     case failure
+    /// Currently running.
     case inProgress
+    /// Waiting to start.
     case queued
+    /// Status is unknown or unavailable.
     case unknown
 
+    /// Primary colour for this status.
     var color: Color {
         switch self {
         case .success:              return .rbSuccess
@@ -164,6 +200,7 @@ enum RBStatus {
         }
     }
 
+    /// Subtle background tint for row backgrounds in this status.
     var tint: Color {
         switch self {
         case .success:    return Color.rbSuccess.opacity(0.04)
