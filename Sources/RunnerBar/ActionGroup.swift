@@ -1,8 +1,6 @@
 // swiftlint:disable file_length
 import Foundation
 
-// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
-
 // MARK: - File-level formatter
 
 /// Shared ISO-8601 date formatter for this file.
@@ -11,6 +9,7 @@ import Foundation
 private let iso8601 = ISO8601DateFormatter()
 
 // MARK: - GroupStatus
+
 /// Type-safe status for a workflow run group (commit/PR trigger).
 /// Mirrors ci-dash.py's group status derivation logic.
 enum GroupStatus {
@@ -23,31 +22,43 @@ enum GroupStatus {
 }
 
 // MARK: - WorkflowRunRef
+
 /// Lightweight reference to a single workflow run inside an ActionGroup.
 /// Holds only the data needed for display and job fetching — deliberately
 /// minimal so the full job list lives on the parent ActionGroup instead.
 struct WorkflowRunRef: Identifiable {
+    /// GitHub-assigned run identifier.
     let id: Int
-    let name: String       // workflow file name, e.g. "SonarQube", "vitest"
+    /// Workflow file name, e.g. “SonarQube”, “vitest”.
+    let name: String
+    /// Lifecycle status of the run.
     let status: String
+    /// Final outcome once the run finishes.
     let conclusion: String?
+    /// Deep-link URL on github.com for this run.
     let htmlUrl: String?
 }
 
 // MARK: - ActionGroup
+
 /// Represents one **commit / PR trigger**: all GitHub Actions workflow runs
-/// that share the same `head_sha`. Mirrors ci-dash.py's "Group" concept from
+/// that share the same `head_sha`. Mirrors ci-dash.py’s “Group” concept from
 /// `group_runs()` + `enrich_group()`.
 ///
 /// Hierarchy: ActionGroup → jobs (flat across all sibling runs) → JobStep → log.
 /// `ActionDetailView` drills into the flat job list; `JobDetailView`/`StepLogView`
 /// are reused unchanged below that.
 struct ActionGroup: Identifiable, Equatable {
-    let headSha: String        // head_sha — kept as the underlying group identity
-    let label: String          // "#1270" if PR, else "d6281b" (sha[:7])
-    let title: String          // commit/PR message first line (≤40 chars)
+    /// The Git SHA shared by all sibling runs in this group.
+    let headSha: String
+    /// Short display label: “#1270” if PR, else “d6281b” (sha[:7]).
+    let label: String
+    /// Commit/PR message first line (≤40 chars).
+    let title: String
+    /// Branch name for the head commit, if available.
     let headBranch: String?
-    let repo: String           // owner/repo scope
+    /// Repository scope in `owner/repo` format.
+    let repo: String
 
     /// All sibling workflow runs sharing this `head_sha`.
     var runs: [WorkflowRunRef]
@@ -61,9 +72,9 @@ struct ActionGroup: Identifiable, Equatable {
     /// This is what `ActionDetailView` renders.
     var jobs: [ActiveJob] = []
 
-    /// Timestamps derived from job data, not run-level API fields.
-    /// Mirrors ci-dash.py's `first_job_started_at` / `last_job_completed_at`.
+    /// Timestamp of the earliest job start across all sibling runs.
     var firstJobStartedAt: Date?
+    /// Timestamp of the latest job completion across all sibling runs.
     var lastJobCompletedAt: Date?
 
     /// Fallback creation time from the representative run.
@@ -74,15 +85,11 @@ struct ActionGroup: Identifiable, Equatable {
 
     // MARK: Equatable
     // Identity-based equality: two groups are equal when their stable `id` matches.
-    // This satisfies the `onChange(of: store.actions)` requirement in PopoverMainView
-    // without deep-comparing mutable job arrays on every poll.
     static func == (lhs: ActionGroup, rhs: ActionGroup) -> Bool {
         lhs.id == rhs.id
     }
 
     /// Returns a copy of this group with a replacement jobs array.
-    /// Used in `RunnerStore` to enrich job data without reconstructing the
-    /// full struct at every call site.
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
         ActionGroup(
             headSha: headSha,
@@ -99,12 +106,10 @@ struct ActionGroup: Identifiable, Equatable {
         )
     }
 
-    // MARK: - Derived properties (match ci-dash.py enrich_group / status_icon)
+    // MARK: - Derived properties
 
     /// Group status: in_progress if any run is running; queued if any queued
     /// but none running; completed otherwise.
-    /// Also treats the group as completed if all jobs are done, even if the
-    /// run-level API status lags behind (mirrors ci-dash.py override).
     var groupStatus: GroupStatus {
         if jobsTotal > 0, jobs.filter({ $0.conclusion != nil }).count == jobsTotal {
             return .completed
@@ -117,36 +122,18 @@ struct ActionGroup: Identifiable, Equatable {
     /// Group conclusion derived preferentially from jobs, falling back to runs.
     ///
     /// ⚠️ WHY WE USE JOBS, NOT RUNS:
-    /// The GitHub API can report a run-level conclusion of "failure" even when every
-    /// individual job succeeded. This happens when a job was retried: the first
-    /// attempt creates a run whose conclusion is "failure", but the retry run's jobs
-    /// all show "success". Since we flatten all jobs from all sibling runs, using
-    /// job-level conclusions is authoritative.
+    /// The GitHub API can report a run-level conclusion of “failure” even when every
+    /// individual job succeeded (e.g. after a retry). Using job-level conclusions is authoritative.
     ///
-    /// Priority order: failure > cancelled > skipped > success.
-    ///
-    /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
-    /// has not yet concluded, to prevent a premature FAILED badge.
+    /// Returns nil while jobs are still loading or any job has not yet concluded.
     var conclusion: String? {
-        // ── Job-based conclusion (preferred) ──────────────────────────────────────────────────────
-        // Use job data when available and fully loaded.
         if !jobs.isEmpty {
-            // Only conclude when every single job has a conclusion.
-            // If even one is nil the run is still in progress — return nil.
             guard jobs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-            // All jobs are done. Derive group conclusion from their results.
-            // ⚠️ Do NOT change this to read from runs[].conclusion — run-level API
-            // conclusions are stale and can report "failure" even when all jobs pass
-            // (e.g. after a retry). This caused the spurious FAILED badge (issue #294).
             if jobs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
             if jobs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
             if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
             return "success"
         }
-        // ── Run-based conclusion (fallback when jobs haven't loaded yet) ────────────────────
-        // ⚠️ This path is only reached when jobs is empty (loading state).
-        // Once jobs are populated the block above takes over.
-        // Do NOT move the run-based logic back to be the primary path — see above.
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
@@ -155,15 +142,14 @@ struct ActionGroup: Identifiable, Equatable {
     }
 
     /// Number of jobs with a concluded result across all sibling runs.
-    /// Counts all jobs whose `conclusion` is non-nil, regardless of the specific outcome.
     var jobsDone: Int  { jobs.filter { $0.conclusion != nil }.count }
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
 
-    /// Human-readable job progress fraction, e.g. "3/5". Returns "—" while jobs load.
+    /// Human-readable job progress fraction, e.g. “3/5”. Returns “—” while jobs load.
     var jobProgress: String { jobs.isEmpty ? "—" : "\(jobsDone)/\(jobsTotal)" }
 
-    /// Name of the first in-progress job, or first queued, or "—".
+    /// Name of the first in-progress job, or first queued, or “—”.
     var currentJobName: String {
         if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
         if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
@@ -176,25 +162,26 @@ struct ActionGroup: Identifiable, Equatable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            let mins = sec / 60; let secs = sec % 60
+            // swiftlint:disable:next identifier_name
+            let mins = sec / 60
+            // swiftlint:disable:next identifier_name
+            let secs = sec % 60
             return String(format: "%02d:%02d", mins, secs)
         }
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        let mins = sec / 60; let secs = sec % 60
+        // swiftlint:disable:next identifier_name
+        let mins = sec / 60
+        // swiftlint:disable:next identifier_name
+        let secs = sec % 60
         return String(format: "%02d:%02d", mins, secs)
     }
 
     // MARK: - Runner type
 
     /// `true` if at least one job in this group ran on a local (self-hosted) runner.
-    /// `false` if all assigned jobs ran on GitHub-hosted runners.
-    /// `nil` if no job has been assigned to a runner yet (all still queued).
-    ///
-    /// Detection: any job with isLocalRunner == true → local; any job with
-    /// isLocalRunner == false → cloud; remaining nils are ignored.
-    /// Priority: local wins over cloud (mixed groups show the local icon).
+    /// `nil` if no job has been assigned to a runner yet.
     var isLocalGroup: Bool? {
         let known = jobs.compactMap { $0.isLocalRunner }
         guard !known.isEmpty else { return nil }
@@ -246,6 +233,7 @@ private struct PRRef: Codable {
 }
 
 // MARK: - PR label
+
 /// Derives the short identifier for an action group row.
 /// Priority: PR number → branch-embedded number → sha[:7].
 private func prLabel(from run: RunPayload) -> String {
@@ -259,6 +247,7 @@ private func prLabel(from run: RunPayload) -> String {
 }
 
 // MARK: - Fetch + Group
+
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
 /// in_progress first, then queued, then done — newest first.
@@ -271,7 +260,6 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     var runPayloads: [RunPayload] = []
     var seenIDs = Set<Int>()
 
-    // Phase 1: fetch in_progress and queued runs.
     for status in ["in_progress", "queued"] {
         let endpoint = "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
         guard let data = ghAPI(endpoint),
@@ -282,11 +270,9 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         }
     }
 
-    // Group by head_sha.
     var bySha: [String: [RunPayload]] = [:]
     for run in runPayloads { bySha[run.headSha, default: []].append(run) }
 
-    // Phase 2: merge recently completed runs into EXISTING groups only.
     if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
@@ -354,10 +340,9 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
 }
 
 // MARK: - Private helpers
+
 /// Constructs an `ActiveJob` from a decoded `JobPayload`.
-/// ⚠️ Uses `step.number` (the API-supplied step sequence number), NOT `idx + 1`.
-/// GitHub step numbers can be non-contiguous (e.g. after retries or skipped steps);
-/// using the array index would cause `fetchStepLog(jobID:stepNumber:)` to fetch the wrong log.
+/// ⚠️ Uses `step.number` (API-supplied), NOT `idx + 1`.
 func makeActiveJob(from jobPayload: JobPayload,
                    iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
@@ -386,10 +371,8 @@ func makeActiveJob(from jobPayload: JobPayload,
     )
 }
 
-/// Fetch and decode jobs for a single run ID.
-/// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
-/// causing the main row to show a lower jobsTotal than the detail view.
-/// per_page=100 is the GitHub API maximum and covers all realistic job counts.
+/// Fetches and decodes jobs for a single run ID.
+/// ❌ NEVER add filter=latest — it omits queued jobs not yet started.
 private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
@@ -427,7 +410,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     return result
 }
 
-/// Lower number = higher display priority for sort.
+/// Returns a lower number for higher display priority.
 private func statusPriority(_ status: GroupStatus) -> Int {
     switch status {
     case .inProgress: return 0
@@ -435,6 +418,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-
-// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment
 // swiftlint:enable file_length
