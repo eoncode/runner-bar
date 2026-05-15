@@ -327,12 +327,15 @@ struct MetricPill: View {
 /// - Tapping the row body navigates to ActionDetailView as before
 /// - StatusDonutView replaces PieProgressDot
 /// - Faint per-row status tint background
-/// - chevron.right always points right; rotates when expanded
+/// - chevron.right always points right; rotates 90° when expanded
 /// - Meta text in monospaced font
+/// - InlineJobRowsView is rendered inside this view so `expanded` can be
+///   passed directly as `showAll:` — keeping the toggle wired end-to-end.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
+    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     /// Controls whether the inline job list shows all jobs (true) or only in-progress (false).
     /// Toggled exclusively by tapping the left indicator bar.
@@ -346,26 +349,40 @@ struct ActionRowView: View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         // ❌ NEVER remove this line.
         _ = tick
-        return ZStack(alignment: .leading) {
-            Rectangle().fill(accentColor.opacity(0.06))
+        return VStack(spacing: 0) {
+            ZStack(alignment: .leading) {
+                Rectangle().fill(accentColor.opacity(0.06))
 
-            HStack(spacing: 0) {
-                Button(action: { expanded.toggle() }) { leftIndicator }
-                    .buttonStyle(.plain)
-                    .help(expanded ? "Collapse jobs" : "Expand all jobs")
+                HStack(spacing: 0) {
+                    Button(action: { expanded.toggle() }) { leftIndicator }
+                        .buttonStyle(.plain)
+                        .help(expanded ? "Collapse jobs" : "Expand all jobs")
 
-                Button(action: onSelect) { rowContent }
-                    .buttonStyle(.plain)
+                    Button(action: onSelect) { rowContent }
+                        .buttonStyle(.plain)
 
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundColor(DesignTokens.Color.labelSecondary)
-                    .rotationEffect(.degrees(expanded ? 90 : 0))
-                    .animation(.easeInOut(duration: 0.18), value: expanded)
-                    .padding(.trailing, 12)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .animation(.easeInOut(duration: 0.18), value: expanded)
+                        .padding(.trailing, 12)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+            // ── Inline job rows — shown for in-progress groups;
+            //    showAll is wired directly to `expanded` so the left-indicator
+            //    toggle actually controls the content.
+            if group.groupStatus == .inProgress && !group.jobs.isEmpty {
+                InlineJobRowsView(
+                    group: group,
+                    tick: tick,
+                    onSelectJob: onSelectJob,
+                    showAll: expanded
+                )
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var leftIndicator: some View {
@@ -375,13 +392,10 @@ struct ActionRowView: View {
             .padding(.vertical, 4)
             .frame(maxHeight: .infinity)
             .overlay(
-                // Adaptive chevron hint — uses .primary.opacity so it renders correctly in both
-                // dark mode (near-white) and light mode (near-black).
-                // ❌ NEVER use .white.opacity here — white overlays are invisible on the light
-                // macOS popover background.
+                // Subtle chevron hint to indicate expand behaviour
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 5, weight: .bold))
-                    .foregroundColor(Color.primary.opacity(expanded ? 0.6 : 0.28))
+                    .foregroundColor(.white.opacity(expanded ? 0.9 : 0.45))
             )
             .contentShape(Rectangle())
     }
@@ -545,6 +559,7 @@ struct InlineJobRowsView: View {
     let tick: Int
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
     /// When true, all jobs are shown; when false, only in_progress jobs are shown.
+    /// Pass `expanded` from ActionRowView directly — do NOT default this to true at the call site.
     var showAll: Bool = false
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
