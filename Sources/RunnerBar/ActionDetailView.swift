@@ -65,55 +65,51 @@ struct ActionDetailView: View {
 
     @ViewBuilder private var actionDetailHeader: some View {
         HStack(spacing: 6) {
-            Button(action: onBack) {
-                HStack(spacing: 3) {
-                    Image(systemName: "chevron.left").font(.caption)
-                    Text("Actions").font(.caption)
-                }
-                .foregroundColor(.secondary)
-                .fixedSize()
-            }
-            .buttonStyle(.plain)
+            actionDetailBackButton
             Spacer()
-            ReRunButton(
-                action: { completion in
-                    let scope = group.repo
-                    let runIDs = group.runs.map { $0.id }
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let ok = runIDs.allSatisfy { runID in
-                            ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
-                        }
-                        completion(ok)
-                    }
-                },
-                isDisabled: group.groupStatus == .inProgress
-            )
-            CancelButton(
-                action: { completion in
-                    let scope = group.repo
-                    let runIDs = group.runs.map { $0.id }
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let ok = runIDs.allSatisfy { runID in
-                            cancelRun(runID: runID, scope: scope)
-                        }
-                        completion(ok)
-                    }
-                },
-                isDisabled: group.groupStatus != .inProgress
-            )
-            LogCopyButton(
-                fetch: { completion in
-                    let g = group
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        completion(fetchActionLogs(group: g))
-                    }
-                },
-                isDisabled: false
-            )
+            actionDetailReRunButton
+            actionDetailCancelButton
+            actionDetailLogCopyButton
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 4)
+    }
+
+    // Each button extracted to its own @ViewBuilder property so the constraint
+    // solver resolves captured-closure types independently, avoiding the ICE.
+
+    @ViewBuilder private var actionDetailBackButton: some View {
+        Button(action: onBack) {
+            HStack(spacing: 3) {
+                Image(systemName: "chevron.left").font(.caption)
+                Text("Actions").font(.caption)
+            }
+            .foregroundColor(.secondary)
+            .fixedSize()
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var actionDetailReRunButton: some View {
+        ReRunButton(
+            action: reRunAction,
+            isDisabled: group.groupStatus == .inProgress
+        )
+    }
+
+    @ViewBuilder private var actionDetailCancelButton: some View {
+        CancelButton(
+            action: cancelAction,
+            isDisabled: group.groupStatus != .inProgress
+        )
+    }
+
+    @ViewBuilder private var actionDetailLogCopyButton: some View {
+        LogCopyButton(
+            fetch: logFetchAction,
+            isDisabled: false
+        )
     }
 
     @ViewBuilder private var actionDetailGroupInfo: some View {
@@ -199,6 +195,37 @@ struct ActionDetailView: View {
 // swiftlint:enable file_length identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 extension ActionDetailView { // swiftlint:disable:this missing_docs
+    // MARK: - Button action helpers (extracted to avoid @ViewBuilder closure ICE)
+
+    private func reRunAction(completion: @escaping (Bool) -> Void) {
+        let scope = group.repo
+        let runIDs = group.runs.map { $0.id }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let ok = runIDs.allSatisfy { runID in
+                ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
+            }
+            completion(ok)
+        }
+    }
+
+    private func cancelAction(completion: @escaping (Bool) -> Void) {
+        let scope = group.repo
+        let runIDs = group.runs.map { $0.id }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let ok = runIDs.allSatisfy { runID in
+                cancelRun(runID: runID, scope: scope)
+            }
+            completion(ok)
+        }
+    }
+
+    private func logFetchAction(completion: @escaping (String?) -> Void) {
+        let g = group
+        DispatchQueue.global(qos: .userInitiated).async {
+            completion(fetchActionLogs(group: g))
+        }
+    }
+
     func openLabelOnGitHub() {
         let urlString: String
         if group.label.hasPrefix("#"),
