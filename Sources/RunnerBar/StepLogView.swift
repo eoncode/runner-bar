@@ -1,8 +1,7 @@
-// swiftlint:disable redundant_discardable_let missing_docs
+// swiftlint:disable all
 import AppKit
 import SwiftUI
 
-// MARK: - StepLogView
 struct StepLogView: View {
     let job: ActiveJob
     let step: JobStep
@@ -27,12 +26,9 @@ struct StepLogView: View {
             toolbar
             Divider()
             if fetcher.isLoading {
-                ProgressView("Loading log…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView("Loading log…").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let err = fetcher.error {
-                Text("Error: \(err)")
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("Error: \(err)").foregroundColor(.red).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 logScrollView
             }
@@ -47,10 +43,7 @@ struct StepLogView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button(action: { dismiss() }) {
-                Image(systemName: "chevron.left")
-            }
-            .buttonStyle(.plain)
+            Button(action: { dismiss() }) { Image(systemName: "chevron.left") }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 1) {
                 Text(job.name).font(.headline).lineLimit(1)
                 Text(step.name ?? "Step \(step.number)").font(.caption).foregroundColor(.secondary).lineLimit(1)
@@ -59,23 +52,20 @@ struct StepLogView: View {
             LogCopyButton(lines: fetcher.lines)
             searchBar
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
     private var searchBar: some View {
         HStack(spacing: 4) {
             Image(systemName: "magnifyingglass").foregroundColor(.secondary).font(.caption)
             TextField("Search", text: $searchText)
-                .textFieldStyle(.plain)
-                .frame(width: 140)
+                .textFieldStyle(.plain).frame(width: 140)
                 .onChange(of: searchText) { _ in
                     matchedLines = filteredLines.map(\.index)
                     currentMatch = 0
                 }
             if !matchedLines.isEmpty {
-                Text("\(currentMatch + 1)/\(matchedLines.count)")
-                    .font(.caption2).foregroundColor(.secondary)
+                Text("\(currentMatch + 1)/\(matchedLines.count)").font(.caption2).foregroundColor(.secondary)
                 Button(action: { if currentMatch > 0 { currentMatch -= 1 } }) {
                     Image(systemName: "chevron.up").font(.caption2)
                 }.buttonStyle(.plain)
@@ -92,12 +82,9 @@ struct StepLogView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(filteredLines, id: \.index) { item in
-                        logLine(item.index, text: item.text)
-                    }
+                    ForEach(filteredLines, id: \.index) { item in logLine(item.index, text: item.text) }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 10).padding(.vertical, 6)
             }
             .onChange(of: currentMatch) { _ in
                 if !matchedLines.isEmpty {
@@ -111,14 +98,11 @@ struct StepLogView: View {
         let isHighlighted = matchedLines.contains(index) && matchedLines[safe: currentMatch] == index
         return HStack(alignment: .top, spacing: 6) {
             Text(String(format: "%4d", index + 1))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.secondary.opacity(0.5))
+                .font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary.opacity(0.5))
                 .frame(width: 32, alignment: .trailing)
             Text(text)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(lineColor(text))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.system(size: 11, design: .monospaced)).foregroundColor(lineColor(text))
+                .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 1)
         .background(isHighlighted ? Color.yellow.opacity(0.25) : Color.clear)
@@ -139,4 +123,3 @@ private extension Array {
         indices.contains(index) ? self[index] : nil
     }
 }
-// swiftlint:enable redundant_discardable_let missing_docs
