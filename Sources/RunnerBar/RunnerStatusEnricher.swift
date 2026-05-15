@@ -45,17 +45,6 @@ struct RunnerStatusEnricher {
 
     // MARK: - Private helpers
 
-    /// Fetches runner status from the GitHub API for each unique scope in `runners`
-    /// using manual `?page=N` iteration so that scopes with more than 100 runners
-    /// are fully captured.
-    ///
-    /// `gh api --paginate` emits concatenated JSON objects
-    /// (`{"runners":[...]}\n{"runners":[...]}`) which `JSONDecoder` cannot parse
-    /// as a single value. Manual iteration avoids this entirely.
-    ///
-    /// Returns a lookup keyed by `agentId` (primary) and `"scope/name"`
-    /// (fallback, scope-qualified to prevent cross-scope collisions).
-    // swiftlint:disable:next identifier_name
     private func buildAPILookup(
         for runners: [RunnerModel]
     ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
