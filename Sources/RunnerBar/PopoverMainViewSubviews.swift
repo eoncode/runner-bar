@@ -15,6 +15,37 @@ struct SectionHeaderLabel: View {
     }
 }
 
+// MARK: - StatusBadge
+/// A small pill-shaped label used to display job status/conclusion.
+struct StatusBadge: View {
+    let label: String
+    let color: Color
+    var body: some View {
+        Text(label)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+// MARK: - JobProgressBarView
+/// A thin horizontal progress bar for in-progress job rows.
+struct JobProgressBarView: View {
+    let fraction: CGFloat
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.15))
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(width: geo.size.width * max(0, min(1, fraction)))
+            }
+        }
+    }
+}
+
 // MARK: - PopoverHeaderView
 /// Header row: system stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
