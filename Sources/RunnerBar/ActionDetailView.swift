@@ -30,21 +30,29 @@ import SwiftUI
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 struct ActionDetailView: View {
+    /// The action group whose jobs are displayed.
     let group: ActionGroup
+    /// Called when the user taps the back button.
     let onBack: () -> Void
+    /// Called when the user selects a job row.
     let onSelectJob: (ActiveJob) -> Void
 
     @State private var tick = 0
     @State private var tickTimer: Timer?
 
     private static let timeFmt: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "HH:mm"; return f
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
     }()
 
     private static let jobTimeFmt: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
     }()
 
+    /// Root body.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             actionDetailHeader
@@ -55,7 +63,10 @@ struct ActionDetailView: View {
         .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
         .onAppear {
             tickTimer?.invalidate()
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
+            tickTimer = Timer.scheduledTimer(
+                withTimeInterval: 1,
+                repeats: true
+            ) { _ in tick += 1 }
         }
         .onDisappear {
             tickTimer?.invalidate()
@@ -154,8 +165,8 @@ struct ActionDetailView: View {
 
     @ViewBuilder private var actionDetailTimingRow: some View {
         let startLabel: String = groupStartLabel
-        let endLabel: String   = groupEndLabel
-        let elapsed: String    = elapsedLive(tick: tick)
+        let endLabel: String = groupEndLabel
+        let elapsed: String = elapsedLive(tick: tick)
         HStack(spacing: 4) {
             Image(systemName: "clock")
                 .font(.system(size: 9))
@@ -199,9 +210,9 @@ struct ActionDetailView: View {
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
-                ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
+                ForEach(Array(group.jobs.enumerated()), id: \.element.id) { idx, job in
                     Button(action: { onSelectJob(job) }) {
-                        jobRow(job, index: index + 1)
+                        jobRow(job, index: idx + 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -214,78 +225,91 @@ struct ActionDetailView: View {
 
 // MARK: - ActionDetailView + Actions
 
-extension ActionDetailView { // swiftlint:disable:this missing_docs
+extension ActionDetailView {
 
     // Button action helpers — extracted from @ViewBuilder closures to avoid
     // the x86_64 swift-frontend result-builder type-checker ICE.
 
-    private func reRunAction(completion: @escaping (Bool) -> Void) {
-        let scope: String  = group.repo
-        let runIDs: [Int]  = group.runs.map { $0.id }
-        DispatchQueue.global(qos: .userInitiated).async {
-            var ok = true
-            for runID in runIDs {
-                if !ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs") { ok = false }
-            }
-            completion(ok)
-        }
-    }
-
-    private func cancelAction(completion: @escaping (Bool) -> Void) {
+    /// Triggers a re-run of all failed jobs in the group.
+    func reRunAction(completion: @escaping (Bool) -> Void) {
         let scope: String = group.repo
         let runIDs: [Int] = group.runs.map { $0.id }
         DispatchQueue.global(qos: .userInitiated).async {
-            let ok = runIDs.allSatisfy { runID in
+            var succeeded = true
+            for runID in runIDs where !ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs") {
+                succeeded = false
+            }
+            completion(succeeded)
+        }
+    }
+
+    /// Triggers cancellation of all in-progress runs in the group.
+    func cancelAction(completion: @escaping (Bool) -> Void) {
+        let scope: String = group.repo
+        let runIDs: [Int] = group.runs.map { $0.id }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let allCancelled = runIDs.allSatisfy { runID in
                 cancelRun(runID: runID, scope: scope)
             }
-            completion(ok)
+            completion(allCancelled)
         }
     }
 
-    private func logFetchAction(completion: @escaping (String?) -> Void) {
-        let g: ActionGroup = group
+    /// Fetches the combined log text for the group.
+    func logFetchAction(completion: @escaping (String?) -> Void) {
+        let grp: ActionGroup = group
         DispatchQueue.global(qos: .userInitiated).async {
-            completion(fetchActionLogs(group: g))
+            completion(fetchActionLogs(group: grp))
         }
     }
 
+    /// Opens the commit or pull-request URL in the default browser.
     func openLabelOnGitHub() {
-        let urlString: String
+        let urlStr: String
         if group.label.hasPrefix("#"), let number = Int(group.label.dropFirst()) {
-            urlString = "https://github.com/\(group.repo)/pull/\(number)"
+            urlStr = "https://github.com/\(group.repo)/pull/\(number)"
         } else {
-            urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
+            urlStr = "https://github.com/\(group.repo)/commit/\(group.headSha)"
         }
-        guard let url = URL(string: urlString) else { return }
+        guard let url = URL(string: urlStr) else { return }
         NSWorkspace.shared.open(url)
     }
 
+    /// Tooltip text for the label button.
     var labelLinkTooltip: String {
         return group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
     }
 
+    /// Formatted start time string for the group.
     var groupStartLabel: String {
         guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
         return Self.timeFmt.string(from: date)
     }
 
+    /// Formatted end time string for the group.
     var groupEndLabel: String {
         if let date = group.lastJobCompletedAt { return Self.timeFmt.string(from: date) }
         if group.groupStatus == .inProgress { return "now" }
         return "—"
     }
 
+    /// Summary line describing job completion state.
     var jobsSummaryLine: String {
-        let done        = group.jobsDone
-        let total       = group.jobsTotal
+        let done = group.jobsDone
+        let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
-        if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
+        if group.groupStatus == .inProgress || conclusions.count < total {
+            return "\(done)/\(total) jobs running"
+        }
         if conclusions.contains("failure")   { return "\(done)/\(total) jobs failed" }
         if conclusions.contains("cancelled") { return "\(done)/\(total) jobs cancelled" }
-        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) { return "\(done)/\(total) jobs succeeded" }
+        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) {
+            return "\(done)/\(total) jobs succeeded"
+        }
         return "\(done)/\(total) jobs completed"
     }
 
+    /// Returns the live elapsed string; tick parameter drives re-evaluation.
     func elapsedLive(tick _: Int) -> String { return group.elapsed }
 }
 
@@ -293,7 +317,8 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
 
 extension ActionDetailView {
 
-    @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
+    /// Full job row: main line + optional progress bar.
+    @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View {
         VStack(spacing: 0) {
             jobRowMainLine(job, index: index)
             jobRowProgressBar(job)
@@ -302,13 +327,14 @@ extension ActionDetailView {
         .contentShape(Rectangle())
     }
 
+    /// Main horizontal line for a job row.
     @ViewBuilder func jobRowMainLine(_ job: ActiveJob, index: Int) -> some View {
         let indexText: String = "#\(index)"
-        let dotColor: Color   = jobDotColor(for: job)
-        let nameColor: Color  = job.isDimmed ? Color.secondary : Color.primary
+        let dotColor: Color = jobDotColor(for: job)
+        let nameColor: Color = job.isDimmed ? Color.secondary : Color.primary
         let timeRange: String = jobTimeRange(job)
-        let hasStart: Bool    = job.startedAt != nil
-        let elapsed: String   = job.elapsed
+        let hasStart: Bool = job.startedAt != nil
+        let elapsed: String = job.elapsed
         HStack(spacing: 8) {
             Text(indexText)
                 .font(DesignTokens.Font.monoXSmall)
@@ -359,14 +385,15 @@ extension ActionDetailView {
 
     @ViewBuilder private func jobRowStatusBadge(_ job: ActiveJob) -> some View {
         let label: String = job.conclusion.map { conclusionLabel($0) } ?? jobStatusLabel(for: job)
-        let color: Color  = job.conclusion.map { conclusionColor($0) } ?? jobStatusColor(for: job)
+        let color: Color = job.conclusion.map { conclusionColor($0) } ?? jobStatusColor(for: job)
         StatusBadge(label: label, color: color)
             .frame(width: 88, alignment: .trailing)
     }
 
+    /// Thin progress bar shown under a running job row.
     @ViewBuilder func jobRowProgressBar(_ job: ActiveJob) -> some View {
         let fraction: CGFloat = CGFloat(job.progressFraction ?? 0)
-        let isActive: Bool    = job.status == "in_progress" && fraction > 0
+        let isActive: Bool = job.status == "in_progress" && fraction > 0
         Group {
             if isActive {
                 JobProgressBarView(fraction: fraction)
@@ -376,6 +403,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Background tint color for a job row based on status/conclusion.
     func jobRowTint(for job: ActiveJob) -> Color {
         guard !job.isDimmed else { return Color.clear }
         if job.status == "in_progress" || job.status == "queued" {
@@ -386,22 +414,27 @@ extension ActionDetailView {
         return Color.clear
     }
 
+    /// Formats a job's time range as a string.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
-        if let end = job.completedAt { return "\(startStr)→\(Self.jobTimeFmt.string(from: end))" }
+        if let end = job.completedAt {
+            return "\(startStr)→\(Self.jobTimeFmt.string(from: end))"
+        }
         return "\(startStr)→now"
     }
 
+    /// Dot color for a job's status indicator.
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return DesignTokens.Color.labelTertiary }
         if job.status == "in_progress" { return DesignTokens.Color.statusBlue }
-        if job.status == "queued"      { return DesignTokens.Color.statusBlue.opacity(0.5) }
+        if job.status == "queued" { return DesignTokens.Color.statusBlue.opacity(0.5) }
         if job.conclusion == "success" { return DesignTokens.Color.statusGreen }
         if job.conclusion == "failure" { return DesignTokens.Color.statusRed }
         return Color.secondary
     }
 
+    /// Human-readable status label for an in-progress/queued job.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "IN PROGRESS"
@@ -411,6 +444,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Color for a status label.
     func jobStatusColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return DesignTokens.Color.statusBlue
@@ -419,6 +453,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Human-readable label for a job conclusion string.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
         case "success":         return "SUCCESS"
@@ -431,6 +466,7 @@ extension ActionDetailView {
         }
     }
 
+    /// Color for a job conclusion.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
         case "success":         return DesignTokens.Color.statusGreen
@@ -449,6 +485,7 @@ extension ActionDetailView {
 /// Extracted from ActionDetailView.jobRowProgressBar to break GeometryReader
 /// type-inference chain inside @ViewBuilder and avoid swift-frontend ICE.
 private struct JobProgressBarView: View {
+    /// Filled fraction of the progress bar (0.0–1.0).
     let fraction: CGFloat
 
     var body: some View {
@@ -459,8 +496,10 @@ private struct JobProgressBarView: View {
                 Rectangle()
                     .fill(
                         LinearGradient(
-                            colors: [DesignTokens.Color.statusBlue,
-                                     DesignTokens.Color.statusBlue.opacity(0.6)],
+                            colors: [
+                                DesignTokens.Color.statusBlue,
+                                DesignTokens.Color.statusBlue.opacity(0.6)
+                            ],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
