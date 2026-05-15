@@ -11,7 +11,7 @@ import SwiftUI
 // The outer scroll is required to accommodate variable content height on
 // smaller screens. The onBack closure MUST remain as a parameter prop —
 // it is wired by AppDelegate and must not be removed or replaced with
-// environment routing. Phase 5 retained @EnvironmentObject for stores ONLY.
+// environment routing.
 //
 // ❌ NEVER remove onBack from the prop list.
 // ❌ NEVER replace onBack with an environment-based dismiss mechanism.
@@ -32,28 +32,30 @@ import SwiftUI
 ///   Preferences — polling interval, offline-runner visibility, startup.
 ///   Legal — privacy & legal links.
 struct SettingsView: View {
-    // MARK: - Environment / State
-    @EnvironmentObject var localRunnerStore: LocalRunnerStore
-    @EnvironmentObject var runnerStore: RunnerStoreObservable
-    @EnvironmentObject var settingsStore: SettingsStore
-    @EnvironmentObject var legalPrefsStore: LegalPrefsStore
-    @EnvironmentObject var notificationPrefsStore: NotificationPrefsStore
-    @EnvironmentObject var scopeStore: ScopeStore
-
-    // Restored: onBack must remain a prop — wired by AppDelegate, not dismissable via environment.
+    // MARK: - Props
+    /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
-    var isAuthenticated: Bool
-    var onSignOut: (() -> Void)?
-    var onSignIn: (() -> Void)?
+    /// The observable that bridges RunnerStore state into SwiftUI.
+    @ObservedObject var store: RunnerStoreObservable
 
-    @State private var isSigningOut = false
-    @State private var newScope = ""
+    // MARK: - Observed stores (singletons, NOT injected props)
+    @ObservedObject private var settings          = SettingsStore.shared
+    @ObservedObject private var notifications     = NotificationPrefsStore.shared
+    @ObservedObject private var legal             = LegalPrefsStore.shared
+    @ObservedObject private var localRunnerStore  = LocalRunnerStore.shared
+
+    // MARK: - Local state
+    @State private var newScope              = ""
+    @State private var launchAtLogin         = LoginItem.isEnabled
+    /// Derived from keychain / env token — NOT injected as a prop.
+    @State private var isAuthenticated       = (githubToken() != nil)
+    @State private var hasLoadedOnce         = false
     @State private var runnerPendingRemoval: RunnerModel?
+    @State private var runnerBeingConfigured: RunnerModel?
+    @State private var showAddRunnerSheet    = false
     @State private var removeErrorMessage: String?
-    @State private var hasLoadedOnce = false
-    @State private var isAddingRunner = false
-    @State private var runnerPendingConfig: RunnerModel?
-    @State private var isShowingLegal = false
+    @State private var isSigningOut          = false
+    @State private var isShowingLegal        = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -93,32 +95,43 @@ struct SettingsView: View {
             }
         }
         .frame(idealWidth: 320, maxWidth: .infinity, alignment: .top)
-        .onAppear { hasLoadedOnce = true }
-        .sheet(isPresented: $isAddingRunner) {
+        .onAppear {
+            isAuthenticated = (githubToken() != nil)
+            ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
+            localRunnerStore.refresh()
+        }
+        // Single-parameter onChange — macOS 13 compatible.
+        .onChange(of: localRunnerStore.isScanning) { scanning in
+            if !scanning { hasLoadedOnce = true }
+        }
+        .onDisappear {
+            ScopeStore.shared.onMutate = nil
+        }
+        .sheet(isPresented: $showAddRunnerSheet) {
             AddRunnerSheet { model in
                 localRunnerStore.add(model)
-                isAddingRunner = false
+                showAddRunnerSheet = false
             } onCancel: {
-                isAddingRunner = false
+                showAddRunnerSheet = false
             }
         }
-        .sheet(item: $runnerPendingConfig) { runner in
+        .sheet(item: $runnerBeingConfigured) { runner in
             RunnerConfigSheet(runner: runner) { updated in
                 localRunnerStore.update(updated)
-                runnerPendingConfig = nil
+                runnerBeingConfigured = nil
             } onCancel: {
-                runnerPendingConfig = nil
+                runnerBeingConfigured = nil
             }
         }
         .sheet(isPresented: $isShowingLegal) {
-            LegalPrefsView(legalPrefsStore: legalPrefsStore)
+            LegalPrefsView(legalPrefsStore: legal)
         }
     }
 
     // MARK: - Local Runners
     @ViewBuilder private var localRunnersSection: some View {
         SectionHeaderLabel(title: "Local Runners")
-        Button(action: { isAddingRunner = true }) {
+        Button(action: { showAddRunnerSheet = true }) {
             HStack {
                 Image(systemName: "plus.circle")
                     .font(.system(size: 11))
@@ -155,6 +168,7 @@ struct SettingsView: View {
                 localRunnerRow(runner)
             }
         }
+
         if let runner = runnerPendingRemoval {
             Text("Remove \"\(runner.runnerName)\"?")
                 .font(.caption).foregroundColor(.secondary)
@@ -186,7 +200,7 @@ struct SettingsView: View {
                 }
             }
             Spacer()
-            Button(action: { runnerPendingConfig = runner }, label: {
+            Button(action: { runnerBeingConfigured = runner }, label: {
                 Image(systemName: "gear").font(.caption2).foregroundColor(.secondary)
             })
             .buttonStyle(.plain)
@@ -200,7 +214,7 @@ struct SettingsView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
 
-    /// Local runner status dot — Issue #419 Phase 5: uses DesignTokens instead of raw system colors.
+    /// Issue #419 Phase 5: uses DesignTokens instead of raw system colors.
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
         case .running: return .rbSuccess
@@ -213,7 +227,6 @@ struct SettingsView: View {
     // MARK: - GitHub Runners
     @ViewBuilder private var githubRunnersSection: some View {
         SectionHeaderLabel(title: "GitHub Runners")
-        let store = runnerStore.store
         ForEach(store.runners, id: \.id) { runner in
             HStack(spacing: 8) {
                 Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
@@ -252,6 +265,7 @@ struct SettingsView: View {
                 Button(action: {
                     ScopeStore.shared.remove(scopeStr)
                     RunnerStore.shared.start()
+                    store.reload()
                 }, label: {
                     Image(systemName: "minus.circle").foregroundColor(.rbDanger)
                 }).buttonStyle(.plain)
@@ -282,23 +296,26 @@ struct SettingsView: View {
                     .help("Run gh auth logout and disconnect RunnerBar from GitHub")
                 }
             } else {
-                Button(action: signInWithGitHub, label: {
+                Button(action: signInWithGitHub) {
                     // Issue #419 Phase 5: use rbWarning instead of .orange
                     Text("Sign in").font(.caption).foregroundColor(.rbWarning)
-                }).buttonStyle(.plain)
+                }.buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
+        Divider().padding(.leading, 12)
+        Text("Run `gh auth login` in Terminal, or set GH_TOKEN / GITHUB_TOKEN env var.")
+            .font(.caption).foregroundColor(.secondary)
+            .padding(.horizontal, 12).padding(.vertical, 4)
     }
 
     // MARK: - Preferences
     @ViewBuilder private var preferencesSection: some View {
         SectionHeaderLabel(title: "Preferences")
-        // ── Show offline runners ────────────────────────────────────────────────────────────────────────────────────
         HStack {
             Text("Show offline runners").font(.system(size: 12))
             Spacer()
-            Toggle("", isOn: $settingsStore.showOfflineRunners)
+            Toggle("", isOn: $settings.showOfflineRunners)
                 .toggleStyle(.switch).labelsHidden().controlSize(.mini)
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
@@ -306,11 +323,10 @@ struct SettingsView: View {
             .font(.caption).foregroundColor(.secondary)
             .padding(.horizontal, 12).padding(.bottom, 6)
         Divider().padding(.leading, 12)
-        // ── Polling interval ──────────────────────────────────────────────────────────────────────────────────────────
         HStack {
             Text("Polling interval").font(.system(size: 12))
             Spacer()
-            Picker("", selection: $settingsStore.pollingInterval) {
+            Picker("", selection: $settings.pollingInterval) {
                 Text("15s").tag(15)
                 Text("30s").tag(30)
                 Text("60s").tag(60)
@@ -321,7 +337,6 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         Divider().padding(.leading, 12)
-        // ── Launch at login ──────────────────────────────────────────────────────────────────────────────────
         HStack {
             Text("Launch at login").font(.system(size: 12))
             Spacer()
@@ -354,10 +369,11 @@ struct SettingsView: View {
         guard !s.isEmpty else { return }
         ScopeStore.shared.add(s)
         RunnerStore.shared.start()
+        store.reload()
         newScope = ""
     }
 
-    /// API runner status dot — Issue #419 Phase 5: uses DesignTokens instead of raw system colors.
+    /// Issue #419 Phase 5: uses DesignTokens instead of raw system colors.
     private func runnerDotColor(for runner: Runner) -> Color {
         if runner.status != "online" { return .secondary }
         return runner.busy ? .rbBlue : .rbSuccess
@@ -377,15 +393,27 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
+    /// Runs `gh auth logout --hostname github.com` on a background thread.
+    /// Updates `isAuthenticated` on the main thread when complete.
+    /// ❌ NEVER run shell calls on the main thread.
     private func signOutOfGitHub() {
+        guard !isSigningOut else { return }
         isSigningOut = true
         DispatchQueue.global(qos: .userInitiated).async {
-            onSignOut?()
-            DispatchQueue.main.async { isSigningOut = false }
+            _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
+            DispatchQueue.main.async {
+                isAuthenticated = (githubToken() != nil)
+                isSigningOut = false
+            }
         }
     }
 
     private func signInWithGitHub() {
-        onSignIn?()
+        let urlString = "https://docs.github.com/en/authentication/" +
+            "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
+// swiftlint:enable type_body_length
+// swiftlint:enable file_length
