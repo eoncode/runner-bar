@@ -7,28 +7,39 @@ import SwiftUI
 /// They have no `>` chevron and no tap handler — navigation to a job detail view
 /// happens only from ActionDetailView, not from the popover inline rows.
 /// Therefore this view intentionally has no `onSelectJob` callback.
+///
+/// ⚠️ REGRESSION GUARD #377 — DO NOT REMOVE `@EnvironmentObject popoverState`:
+/// This view must not render (and must not drive any cap/state mutations) while
+/// the popover is hidden. Removing the `isOpen` guard re-introduces the
+/// cap-mutation-while-hidden bug fixed in #377.
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
 
+    @EnvironmentObject private var popoverState: PopoverOpenState
+
     var body: some View {
+        // ⚠️ REGRESSION GUARD #377 — do not remove this check.
+        guard popoverState.isOpen else { return AnyView(EmptyView()) }
         // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
         _ = tick
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(group.jobs.prefix(5)) { job in
-                jobRow(job)
+        return AnyView(
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(group.jobs.prefix(5)) { job in
+                    jobRow(job)
+                }
+                if group.jobs.count > 5 {
+                    Text("+ \(group.jobs.count - 5) more…")
+                        .font(.caption2)
+                        .foregroundColor(Color.rbTextTertiary)
+                        .padding(.leading, RBSpacing.xl)
+                        .padding(.vertical, 2)
+                }
             }
-            if group.jobs.count > 5 {
-                Text("+ \(group.jobs.count - 5) more…")
-                    .font(.caption2)
-                    .foregroundColor(Color.rbTextTertiary)
-                    .padding(.leading, RBSpacing.xl)
-                    .padding(.vertical, 2)
-            }
-        }
-        .padding(.leading, RBSpacing.sm)
-        .padding(.trailing, RBSpacing.xs)
-        .padding(.bottom, RBSpacing.xs)
+            .padding(.leading, RBSpacing.sm)
+            .padding(.trailing, RBSpacing.xs)
+            .padding(.bottom, RBSpacing.xs)
+        )
     }
 
     // MARK: - Row
