@@ -57,9 +57,11 @@ struct ActionDetailView: View {
                             .font(.caption).foregroundColor(.secondary)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                     } else {
-                        ForEach(group.jobs) { job in
+                        // Use enumerated() so the badge shows 1-based display order
+                        // (#01, #02, …) rather than the GitHub workflow run number.
+                        ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
                             Button(action: { onSelectJob(job, group) }) {
-                                jobRow(job)
+                                jobRow(job, index: index + 1)
                             }
                             .buttonStyle(.plain)
                         }
@@ -207,10 +209,15 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return fmt
     }()
 
+    /// Renders a single job row.
+    /// - Parameters:
+    ///   - job: The job to render.
+    ///   - index: 1-based display-order position within this group's job list.
     @ViewBuilder
-    private func jobRow(_ job: ActiveJob) -> some View {
+    private func jobRow(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 6) {
-            Text("#\(String(format: "%02d", job.runNumber ?? 0))")
+            // 1-based index within the group, zero-padded — NOT the GitHub run number.
+            Text(String(format: "#%02d", index))
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
