@@ -11,25 +11,25 @@ struct SystemStatsView: View {
                 .font(.headline)
                 .padding(.bottom, 4)
 
-            statRow(label: "CPU",          value: String(format: "%.1f%%",    viewModel.stats.cpuPct))
-            statRow(label: "Memory Used",  value: String(format: "%.1f GB",   viewModel.stats.memUsedGB))
-            statRow(label: "Memory Total", value: String(format: "%.1f GB",   viewModel.stats.memTotalGB))
-            statRow(label: "Disk Used",    value: String(format: "%.1f GB",   viewModel.stats.diskUsedGB))
-            statRow(label: "Disk Total",   value: String(format: "%.1f GB",   viewModel.stats.diskTotalGB))
+            statRow(label: "CPU", value: String(format: "%.1f%%", viewModel.stats.cpuPct))
+            statRow(label: "Memory Used", value: String(format: "%.1f GB", viewModel.stats.memUsedGB))
+            statRow(label: "Memory Total", value: String(format: "%.1f GB", viewModel.stats.memTotalGB))
+            statRow(label: "Disk Used", value: String(format: "%.1f GB", viewModel.stats.diskUsedGB))
+            statRow(label: "Disk Total", value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
         }
         .padding()
-        .onAppear  { viewModel.start() }
+        .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
     }
 
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(DesignTokens.Fonts.monoLabel)   // Phase 1: mono font token
+                .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
         }
     }
 }
@@ -114,7 +114,6 @@ struct HeaderStatsBar: View {
                     currentPct: vm.stats.cpuPct
                 )
 
-                // Phase 2 spec: vertical spacer divider between stat groups
                 Divider()
                     .frame(height: 36)
                     .padding(.horizontal, 4)
@@ -128,7 +127,6 @@ struct HeaderStatsBar: View {
                         : 0
                 )
 
-                // Phase 2 spec: vertical spacer divider between stat groups
                 Divider()
                     .frame(height: 36)
                     .padding(.horizontal, 4)
@@ -172,7 +170,7 @@ struct BlockBarView: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(DesignTokens.Fonts.monoLabel)   // Phase 1: mono font token
+                .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
 
             GeometryReader { geo in
@@ -189,13 +187,13 @@ struct BlockBarView: View {
             .frame(height: 6)
 
             Text(String(format: "%.0f%%", pct))
-                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(usageColor)
                 .frame(width: 36, alignment: .trailing)
         }
     }
 
     private var usageColor: Color {
-        DesignTokens.Colors.usage(pct: pct)            // Phase 1: colour token
+        DesignTokens.Colors.usage(pct: pct)
     }
 }
