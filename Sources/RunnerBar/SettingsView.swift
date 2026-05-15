@@ -120,7 +120,6 @@ struct SettingsView: View {
             ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
             localRunnerStore.refresh()
         }
-        // Single-parameter form: compatible with macOS 13+.
         .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
         }
@@ -135,12 +134,15 @@ struct SettingsView: View {
                 localRunnerStore.refresh()
             }
         }
-        .alert(removalAlertTitle, isPresented: Binding(
-            get: { runnerPendingRemoval != nil },
-            set: { if !$0 { runnerPendingRemoval = nil } }
-        )) {
-            Button("Cancel", role: .cancel) { runnerPendingRemoval = nil }
-            Button("Remove", role: .destructive) {
+        .modifier(RemovalAlertModifier(
+            title: removalAlertTitle,
+            isPresented: Binding(
+                get: { runnerPendingRemoval != nil },
+                set: { if !$0 { runnerPendingRemoval = nil } }
+            ),
+            isAuthenticated: isAuthenticated,
+            onCancel: { runnerPendingRemoval = nil },
+            onConfirm: {
                 guard let runner = runnerPendingRemoval else { return }
                 guard isAuthenticated else { runnerPendingRemoval = nil; return }
                 runnerPendingRemoval = nil
@@ -156,15 +158,7 @@ struct SettingsView: View {
                     }
                 }
             }
-        } message: {
-            if isAuthenticated {
-                Text("This will run ./svc.sh uninstall and ./config.sh remove. "
-                    + "A GitHub token is required for de-registration.")
-            } else {
-                Text("A GitHub token is required to de-register the runner from GitHub. "
-                    + "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
-            }
-        }
+        ))
     }
 
     // MARK: - Sections
@@ -404,7 +398,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)
-            // ── Show offline runners ─────────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -417,7 +410,6 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
             Divider().padding(.leading, RBSpacing.md)
-            // ── Polling interval ────────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -435,16 +427,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Account section
-    //
-    // When authenticated, shows:
-    // GitHub ● Authenticated [Sign out]
-    //
-    // Sign out runs `gh auth logout --hostname github.com` on a background
-    // thread, then re-checks githubToken() to refresh isAuthenticated.
-    // isSigningOut disables the button while the shell call is in flight.
-    //
-    // ❌ NEVER remove the `gh auth login` hint below — it is the only
-    // recovery path shown to the user after signing out.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
@@ -590,3 +572,30 @@ struct SettingsView: View {
 }
 // swiftlint:enable type_body_length
 // swiftlint:enable file_length
+
+// MARK: - RemovalAlertModifier
+
+/// ViewModifier that encapsulates the runner-removal confirmation alert,
+/// extracted from SettingsView.body to satisfy function_body_length.
+private struct RemovalAlertModifier: ViewModifier {
+    let title: String
+    @Binding var isPresented: Bool
+    let isAuthenticated: Bool
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(title, isPresented: $isPresented) {
+            Button("Cancel", role: .cancel) { onCancel() }
+            Button("Remove", role: .destructive) { onConfirm() }
+        } message: {
+            if isAuthenticated {
+                Text("This will run ./svc.sh uninstall and ./config.sh remove. "
+                    + "A GitHub token is required for de-registration.")
+            } else {
+                Text("A GitHub token is required to de-register the runner from GitHub. "
+                    + "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
+            }
+        }
+    }
+}
