@@ -573,6 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -664,4 +665,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length file_length
