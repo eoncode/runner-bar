@@ -38,6 +38,7 @@ import SwiftUI
 // Phase 5: DesignToken colour sweep — all hardcoded .yellow/.green/.red replaced
 //          with Color.rbWarning / rbSuccess / rbDanger; job rows card-styled.
 // Review item 3: job rows now use .cardRow() modifier for consistency.
+// Review item 4: headBranch label replaced with BranchTagPill.
 // ════════════════════════════════════════════════════════════════════════════════
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
@@ -141,10 +142,9 @@ struct ActionDetailView: View {
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
+                // Phase 5 spec: branch label uses BranchTagPill for pill-style blue tag.
                 if let branch = group.headBranch {
-                    Text(branch)
-                        .font(.caption)
-                        .foregroundColor(Color.rbTextSecondary)
+                    BranchTagPill(name: branch)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
