@@ -1,4 +1,4 @@
-// swiftlint:disable file_length function_body_length
+// swiftlint:disable file_length
 import Foundation
 import os
 
@@ -27,6 +27,7 @@ var ghIsRateLimited: Bool {
 ///   - arguments: Arguments passed directly to the `gh` binary.
 ///   - timeout:   Kill timeout in seconds. Defaults to 20 s for API calls.
 /// - Returns: Raw stdout bytes, or `nil` on launch failure or empty output.
+// swiftlint:disable:next function_body_length
 private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Data? {
     guard let ghPath = ghBinaryPath() else {
         log("runGHProcess › gh not found")
@@ -79,6 +80,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 }
 
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
+// swiftlint:disable:next function_body_length
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     guard let ghPath = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
     let task = Process()
@@ -144,6 +146,7 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 // MARK: - Fetch all jobs from active runs
 
 /// Fetches all active (in_progress + queued) jobs across all runs for the given scope.
+// swiftlint:disable:next function_body_length
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
@@ -261,6 +264,7 @@ func fetchRegistrationToken(scope: String) -> String? {
 // MARK: - Step log
 
 /// Fetch and slice the raw log for a single step.
+// swiftlint:disable:next function_body_length
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard scope.contains("/") else {
         log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
@@ -364,3 +368,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+// swiftlint:enable file_length
