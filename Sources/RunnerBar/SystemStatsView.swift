@@ -1,4 +1,3 @@
-// swiftlint:disable type_body_length
 import SwiftUI
 
 // MARK: - SystemStatsView
@@ -27,8 +26,7 @@ struct SystemStatsView: View {
         .padding(.vertical, 6)
     }
 
-    @ViewBuilder
-    private func statPill(icon: String, label: String, value: Double, color: Color) -> some View {
+    @ViewBuilder private func statPill(icon: String, label: String, value: Double, color: Color) -> some View {
         HStack(spacing: 3) {
             Image(systemName: icon)
                 .font(.system(size: 9))
@@ -42,4 +40,3 @@ struct SystemStatsView: View {
         }
     }
 }
-// swiftlint:enable type_body_length

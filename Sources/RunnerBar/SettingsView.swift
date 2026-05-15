@@ -106,9 +106,11 @@ struct SettingsView: View {
         .onDisappear {
             ScopeStore.shared.onMutate = nil
         }
-        .sheet(isPresented: $showAddRunnerSheet, onDismiss: { localRunnerStore.refresh() }) {
-            AddRunnerSheet()
-        }
+        .sheet(
+            isPresented: $showAddRunnerSheet,
+            onDismiss: { localRunnerStore.refresh() },
+            content: { AddRunnerSheet() }
+        )
         .sheet(
             item: $runnerBeingConfigured,
             content: { runner in
@@ -156,15 +158,18 @@ struct SettingsView: View {
 
     private var headerBar: some View {
         HStack {
-            Button(action: onBack, label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .medium))
-                    Text("Settings")
-                        .font(.headline)
+            Button(
+                action: onBack,
+                label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Settings")
+                            .font(.headline)
+                    }
+                    .foregroundColor(.primary)
                 }
-                .foregroundColor(.primary)
-            })
+            )
             .buttonStyle(.plain)
             Spacer()
         }
@@ -180,11 +185,14 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(DesignTokens.Color.labelSecondary)
                 Spacer()
-                Button(action: { showAddRunnerSheet = true }, label: {
-                    Image(systemName: "plus")
-                        .font(.caption)
-                        .foregroundColor(DesignTokens.Color.labelSecondary)
-                })
+                Button(
+                    action: { showAddRunnerSheet = true },
+                    label: {
+                        Image(systemName: "plus")
+                            .font(.caption)
+                            .foregroundColor(DesignTokens.Color.labelSecondary)
+                    }
+                )
                 .buttonStyle(.plain)
                 .help("Add a new runner")
                 .padding(.trailing, 4)
@@ -193,14 +201,17 @@ struct SettingsView: View {
                         .scaleEffect(0.6)
                         .frame(width: 14, height: 14)
                 } else {
-                    Button(action: {
-                        removeErrorMessage = nil
-                        localRunnerStore.refresh()
-                    }, label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption)
-                            .foregroundColor(DesignTokens.Color.labelSecondary)
-                    })
+                    Button(
+                        action: {
+                            removeErrorMessage = nil
+                            localRunnerStore.refresh()
+                        },
+                        label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption)
+                                .foregroundColor(DesignTokens.Color.labelSecondary)
+                        }
+                    )
                     .buttonStyle(.plain)
                     .help("Refresh local runner list")
                 }
@@ -264,16 +275,20 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .help("Start runner service")
             }
-            Button(action: { runnerBeingConfigured = runner }, label: {
-                Image(systemName: "gearshape").font(.caption2)
-            })
+            Button(
+                action: { runnerBeingConfigured = runner },
+                label: { Image(systemName: "gearshape").font(.caption2) }
+            )
             .buttonStyle(.plain)
             .help("Configure runner")
-            Button(action: { runnerPendingRemoval = runner }, label: {
-                Image(systemName: "minus.circle")
-                    .font(.caption2)
-                    .foregroundColor(DesignTokens.Color.statusRed)
-            })
+            Button(
+                action: { runnerPendingRemoval = runner },
+                label: {
+                    Image(systemName: "minus.circle")
+                        .font(.caption2)
+                        .foregroundColor(DesignTokens.Color.statusRed)
+                }
+            )
             .buttonStyle(.plain)
             .help("Remove runner")
         }
@@ -334,13 +349,16 @@ struct SettingsView: View {
                     Text(scopeStr)
                         .font(DesignTokens.Font.monoSmall)
                     Spacer()
-                    Button(action: {
-                        ScopeStore.shared.remove(scopeStr)
-                        RunnerStore.shared.start()
-                    }, label: {
-                        Image(systemName: "minus.circle")
-                            .foregroundColor(DesignTokens.Color.statusRed)
-                    }).buttonStyle(.plain)
+                    Button(
+                        action: {
+                            ScopeStore.shared.remove(scopeStr)
+                            RunnerStore.shared.start()
+                        },
+                        label: {
+                            Image(systemName: "minus.circle")
+                                .foregroundColor(DesignTokens.Color.statusRed)
+                        }
+                    ).buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 2)
             }
@@ -349,9 +367,10 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(DesignTokens.Font.monoSmall)
                     .onSubmit { submitScope() }
-                Button(action: submitScope, label: {
-                    Image(systemName: "plus.circle")
-                })
+                Button(
+                    action: submitScope,
+                    label: { Image(systemName: "plus.circle") }
+                )
                 .buttonStyle(.plain)
                 .disabled(newScope.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -452,21 +471,27 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(DesignTokens.Color.labelSecondary)
                         }
-                        Button(action: signOutOfGitHub, label: {
-                            Text("Sign out")
-                                .font(.caption)
-                                .foregroundColor(DesignTokens.Color.statusRed)
-                        })
+                        Button(
+                            action: signOutOfGitHub,
+                            label: {
+                                Text("Sign out")
+                                    .font(.caption)
+                                    .foregroundColor(DesignTokens.Color.statusRed)
+                            }
+                        )
                         .buttonStyle(.plain)
                         .disabled(isSigningOut)
                         .help("Run gh auth logout and disconnect RunnerBar from GitHub")
                     }
                 } else {
-                    Button(action: signInWithGitHub, label: {
-                        Text("Sign in")
-                            .font(.caption)
-                            .foregroundColor(DesignTokens.Color.statusOrange)
-                    }).buttonStyle(.plain)
+                    Button(
+                        action: signInWithGitHub,
+                        label: {
+                            Text("Sign in")
+                                .font(.caption)
+                                .foregroundColor(DesignTokens.Color.statusOrange)
+                        }
+                    ).buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)

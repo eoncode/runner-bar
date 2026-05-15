@@ -26,7 +26,6 @@ final class SystemStatsPoller {
 
     func addObserver(_ block: @escaping (SystemStatsSnapshot) -> Void) -> Int {
         lock.lock(); defer { lock.unlock() }
-        // swiftlint:disable:next identifier_name
         let id = nextID; nextID += 1
         observers[id] = block
         return id
@@ -79,7 +78,6 @@ final class SystemStatsPoller {
         var pagesInactive = 0.0
         var pagesWired = 0.0
         for line in output.components(separatedBy: "\n") {
-            // swiftlint:disable:next identifier_name
             func extract(_ key: String) -> Double? {
                 guard line.contains(key),
                       let val = line.components(separatedBy: ":").last?
@@ -88,10 +86,10 @@ final class SystemStatsPoller {
                 else { return nil }
                 return Double(val)
             }
-            if let val = extract("Pages free") { pagesFree = val }
-            if let val = extract("Pages active") { pagesActive = val }
-            if let val = extract("Pages inactive") { pagesInactive = val }
-            if let val = extract("Pages wired down") { pagesWired = val }
+            if let val = extract("Pages free")        { pagesFree = val }
+            if let val = extract("Pages active")      { pagesActive = val }
+            if let val = extract("Pages inactive")    { pagesInactive = val }
+            if let val = extract("Pages wired down")  { pagesWired = val }
         }
         let total = pagesFree + pagesActive + pagesInactive + pagesWired
         guard total > 0 else { return 0 }

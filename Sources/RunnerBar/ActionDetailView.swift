@@ -1,7 +1,6 @@
 // swiftlint:disable file_length
 import AppKit
 import SwiftUI
-// swiftlint:disable vertical_whitespace_opening_braces
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
@@ -195,6 +194,7 @@ struct ActionDetailView: View {
 
     // MARK: - Job list
 
+    /// Scrollable job list capped to 75% of screen height.
     @ViewBuilder private var actionDetailJobList: some View {
         // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
         let maxH: CGFloat = NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600
@@ -204,6 +204,7 @@ struct ActionDetailView: View {
         .frame(maxHeight: maxH)
     }
 
+    /// Inner content VStack of the job list.
     @ViewBuilder private var actionDetailJobListContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             if group.jobs.isEmpty {
@@ -212,9 +213,10 @@ struct ActionDetailView: View {
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
                 ForEach(Array(group.jobs.enumerated()), id: \.element.id) { idx, job in
-                    Button(action: { onSelectJob(job) }) {
-                        jobRow(job, index: idx + 1)
-                    }
+                    Button(
+                        action: { onSelectJob(job) },
+                        label: { jobRow(job, index: idx + 1) }
+                    )
                     .buttonStyle(.plain)
                 }
             }
@@ -222,7 +224,6 @@ struct ActionDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-// swiftlint:enable vertical_whitespace_opening_braces
 
 // MARK: - ActionDetailView + Actions
 
