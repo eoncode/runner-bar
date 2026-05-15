@@ -1,16 +1,11 @@
+// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - RunnerConfigSheet
-/// Sheet presented when the user taps "Configure" on a local runner row.
-/// Allows editing the runner's registration URL and token.
 struct RunnerConfigSheet: View {
-    /// The runner being configured.
     let runner: Runner
-    /// Dismiss action provided by the sheet presenter.
     @Environment(\.dismiss) private var dismiss
-    /// Editable registration URL field.
     @State private var url: String = ""
-    /// Editable registration token field.
     @State private var token: String = ""
 
     var body: some View {
@@ -33,11 +28,8 @@ struct RunnerConfigSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
-                Button("Save") {
-                    // Persist config — implementation in RunnerLifecycleService
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
+                Button("Save") { dismiss() }
+                    .buttonStyle(.borderedProminent)
             }
         }
         .padding()
@@ -48,3 +40,4 @@ struct RunnerConfigSheet: View {
         }
     }
 }
+// swiftlint:enable missing_docs

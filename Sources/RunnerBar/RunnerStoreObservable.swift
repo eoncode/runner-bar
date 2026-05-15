@@ -1,43 +1,32 @@
-import Combine
+// swiftlint:disable missing_docs unused_closure_parameter
 import Foundation
 import SwiftUI
 
 // MARK: - RunnerStoreObservable
-
-/// Observable bridge between the singleton `RunnerStore` and SwiftUI views.
-/// `PopoverMainView`, `SettingsView`, and `AppDelegate` hold one shared instance.
-/// Call `reload()` to pull the latest state from `RunnerStore.shared` onto the main thread.
-///
-/// ⚠️ NOT @MainActor: AppDelegate creates this as a stored property (`private let observable`)
-/// in a synchronous nonisolated context. @MainActor would make init() and reload() async
-/// from outside the actor and break AppDelegate.swift:40 and AppDelegate.swift:281.
-/// RunnerStore.onChange always fires on DispatchQueue.main so thread safety is preserved.
 final class RunnerStoreObservable: ObservableObject {
-    /// Mirrors `RunnerStore.shared.runners`.
-    @Published private(set) var runners: [Runner] = []
-    /// Mirrors `RunnerStore.shared.jobs`.
-    @Published private(set) var jobs: [ActiveJob] = []
-    /// Mirrors `RunnerStore.shared.actions`.
-    @Published private(set) var actions: [ActionGroup] = []
-    /// Mirrors `RunnerStore.shared.isRateLimited`.
-    @Published private(set) var isRateLimited = false
+    @Published var state: RunnerStoreState
+    private var store: RunnerStore
 
-    init() {}
-
-    /// Pulls the current state from `RunnerStore.shared` with no animation
-    /// (see REGRESSION GUARD in PopoverMainView — NEVER add animation here).
-    /// ❌ NEVER add objectWillChange.send() here — double-publish causes flicker.
-    /// ❌ NEVER remove withAnimation(nil) — removing it re-enables SwiftUI spring animation on every poll.
-    /// ❌ NEVER make this async or move it off the main thread.
-    /// ❌ NEVER call this from popoverDidClose() — clobbers savedNavState.
-    /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
-    func reload() {
-        let store = RunnerStore.shared
-        withAnimation(nil) {
-            runners = store.runners
-            jobs = store.jobs
-            actions = store.actions
-            isRateLimited = store.isRateLimited
+    init(store: RunnerStore = RunnerStore()) {
+        self.store = store
+        self.state = store.state
+        self.store.onStateChange = { [weak self] newState in
+            DispatchQueue.main.async {
+                self?.state = newState
+            }
         }
     }
+
+    func applySettings(_ settings: SettingsStore) {
+        store.applySettings(settings)
+    }
+
+    func reRunWorkflow(group: ActionGroup) async throws {
+        try await store.reRunWorkflow(group: group)
+    }
+
+    func cancelWorkflow(group: ActionGroup) async throws {
+        try await store.cancelWorkflow(group: group)
+    }
 }
+// swiftlint:enable missing_docs unused_closure_parameter

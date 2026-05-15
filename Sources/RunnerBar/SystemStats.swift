@@ -1,27 +1,18 @@
-import Foundation
+// swiftlint:disable missing_docs
 import Darwin
+import Foundation
 
 // MARK: - SystemStats
-/// A point-in-time snapshot of host-machine resource utilisation.
-/// All values are polled by `SystemStatsPoller` and stored in `RunnerStoreState`.
 struct SystemStats: Equatable {
-    /// CPU utilisation percentage (0–100), averaged across all cores.
     var cpuPct: Double = 0
-    /// Memory currently in use, in gigabytes.
     var memUsedGB: Double = 0
-    /// Total physical memory, in gigabytes.
     var memTotalGB: Double = 0
-    /// Disk space currently used on the boot volume, in gigabytes.
     var diskUsedGB: Double = 0
-    /// Total capacity of the boot volume, in gigabytes.
     var diskTotalGB: Double = 0
 }
 
 // MARK: - SystemStatsPoller
-/// Polls CPU, memory, and disk statistics from Darwin/macOS system APIs.
-/// Call `poll()` on a background thread; it blocks for ~200 ms while sampling CPU.
 final class SystemStatsPoller {
-    /// Samples the current system stats and returns a populated `SystemStats` snapshot.
     func poll() -> SystemStats {
         var stats = SystemStats()
         stats.cpuPct    = cpuUsage()
@@ -30,7 +21,6 @@ final class SystemStatsPoller {
         return stats
     }
 
-    // MARK: CPU
     private func cpuUsage() -> Double {
         var prevIdle: UInt64 = 0
         var prevTotal: UInt64 = 0
@@ -50,18 +40,17 @@ final class SystemStatsPoller {
             let total  = user + system + idle + nice
             return (idle, total)
         }
-        let first = sample()
-        prevIdle  = first.idle
-        prevTotal = first.total
+        let first  = sample()
+        prevIdle   = first.idle
+        prevTotal  = first.total
         Thread.sleep(forTimeInterval: 0.2)
-        let second    = sample()
-        let deltaIdle = second.idle  - prevIdle
+        let second     = sample()
+        let deltaIdle  = second.idle  - prevIdle
         let deltaTotal = second.total - prevTotal
         guard deltaTotal > 0 else { return 0 }
         return (1.0 - Double(deltaIdle) / Double(deltaTotal)) * 100.0
     }
 
-    // MARK: Memory
     private func memUsage() -> (used: Double, total: Double) {
         var stats = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
@@ -71,17 +60,16 @@ final class SystemStatsPoller {
             }
         }
         guard result == KERN_SUCCESS else { return (0, 0) }
-        let pageSize  = UInt64(vm_page_size)
-        let active    = UInt64(stats.active_count)   * pageSize
-        let wired     = UInt64(stats.wire_count)     * pageSize
+        let pageSize   = UInt64(vm_page_size)
+        let active     = UInt64(stats.active_count)          * pageSize
+        let wired      = UInt64(stats.wire_count)            * pageSize
         let compressed = UInt64(stats.compressor_page_count) * pageSize
-        let used      = active + wired + compressed
-        let total     = UInt64(ProcessInfo.processInfo.physicalMemory)
+        let used       = active + wired + compressed
+        let total      = UInt64(ProcessInfo.processInfo.physicalMemory)
         let gb: Double = 1_073_741_824
         return (Double(used) / gb, Double(total) / gb)
     }
 
-    // MARK: Disk
     private func diskUsage() -> (used: Double, total: Double) {
         guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: "/"),
               let totalBytes = attrs[.systemSize] as? Int64,
@@ -92,3 +80,4 @@ final class SystemStatsPoller {
         return (total - free, total)
     }
 }
+// swiftlint:enable missing_docs

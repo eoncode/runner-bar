@@ -1,8 +1,6 @@
 // swiftlint:disable missing_docs
 import SwiftUI
 
-// MARK: - SettingsView
-/// Top-level settings sheet split into tab sections.
 struct SettingsView: View {
     @EnvironmentObject var store: RunnerStoreObservable
     @EnvironmentObject var settingsStore: SettingsStore
@@ -54,7 +52,6 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - SettingsTab
 private enum SettingsTab: String, CaseIterable, Identifiable {
     case general, account, notifications, runners, advanced
     var id: String { rawValue }
@@ -78,7 +75,6 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - SettingsTabButton
 private struct SettingsTabButton: View {
     let tab: SettingsTab
     let selected: Bool
@@ -86,8 +82,7 @@ private struct SettingsTabButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: tab.icon)
-                    .frame(width: 16)
+                Image(systemName: tab.icon).frame(width: 16)
                 Text(tab.label)
                 Spacer()
             }
@@ -105,7 +100,6 @@ private struct SettingsTabButton: View {
     }
 }
 
-// MARK: - GeneralSettingsView
 private struct GeneralSettingsView: View {
     @EnvironmentObject var settingsStore: SettingsStore
     var body: some View {
@@ -113,11 +107,7 @@ private struct GeneralSettingsView: View {
             Section("Polling") {
                 Slider(value: $settingsStore.pollingInterval, in: 10...120, step: 5) {
                     Text("Interval")
-                } minimumValueLabel: {
-                    Text("10s")
-                } maximumValueLabel: {
-                    Text("2m")
-                }
+                } minimumValueLabel: { Text("10s") } maximumValueLabel: { Text("2m") }
                 Text("Every \(Int(settingsStore.pollingInterval))s")
                     .font(.caption).foregroundColor(.secondary)
             }
@@ -128,12 +118,10 @@ private struct GeneralSettingsView: View {
                 Toggle("Launch at login", isOn: $settingsStore.launchAtLogin)
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .formStyle(.grouped).padding()
     }
 }
 
-// MARK: - AccountSettingsView
 private struct AccountSettingsView: View {
     @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var store: RunnerStoreObservable
@@ -152,21 +140,16 @@ private struct AccountSettingsView: View {
             Section {
                 HStack {
                     Spacer()
-                    Button("Save & Reconnect") {
-                        store.applySettings(settingsStore)
-                    }
-                    .buttonStyle(.borderedProminent)
+                    Button("Save & Reconnect") { store.applySettings(settingsStore) }
+                        .buttonStyle(.borderedProminent)
                 }
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .formStyle(.grouped).padding()
     }
 }
 
-// MARK: - NotificationSettingsView
 private struct NotificationSettingsView: View {
-    @EnvironmentObject var store: RunnerStoreObservable
     var body: some View {
         Form {
             Section("Alerts") {
@@ -174,12 +157,10 @@ private struct NotificationSettingsView: View {
                 Toggle("Notify on job success", isOn: .constant(false))
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .formStyle(.grouped).padding()
     }
 }
 
-// MARK: - RunnerSettingsView
 private struct RunnerSettingsView: View {
     @EnvironmentObject var store: RunnerStoreObservable
     var body: some View {
@@ -189,29 +170,23 @@ private struct RunnerSettingsView: View {
                     HStack {
                         Text(runner.name)
                         Spacer()
-                        Text(runner.status)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Text(runner.status).font(.caption).foregroundColor(.secondary)
                     }
                 }
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .formStyle(.grouped).padding()
     }
 }
 
-// MARK: - AdvancedSettingsView
 private struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section("Debug") {
-                Text("Advanced options coming soon.")
-                    .foregroundColor(.secondary)
+                Text("Advanced options coming soon.").foregroundColor(.secondary)
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .formStyle(.grouped).padding()
     }
 }
 // swiftlint:enable missing_docs
