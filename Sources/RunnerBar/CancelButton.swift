@@ -61,10 +61,38 @@ struct CancelButton: View {
         phase = .loading
         action { success in
             DispatchQueue.main.async {
-                phase = success ? .done : .failed
+                self.phase = success ? .done : .failed
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    phase = .idle
+                    self.phase = .idle
                 }
+            }
+        }
+    }
+}
+
+// MARK: - ButtonPhaseView
+
+/// Renders the non-idle visual state of a `CancelButton` (loading, done, failed).
+struct ButtonPhaseView: View {
+    /// The phase to render; `.idle` is not used by this view.
+    let phase: CancelButton.Phase
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .loading:
+                ProgressView()
+                    .scaleEffect(0.6)
+            case .done:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.caption)
+            case .failed:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.red)
+                    .font(.caption)
+            case .idle:
+                EmptyView()
             }
         }
     }
