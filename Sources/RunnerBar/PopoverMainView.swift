@@ -179,13 +179,11 @@ struct PopoverMainView: View {
                 SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
+                    // ⚠️ BUG FIX: Do NOT render InlineJobRowsView here.
+                    // ActionRowView already renders InlineJobRowsView internally
+                    // when expanded=true. Rendering it here too caused duplicate
+                    // job rows for in-progress groups.
                     ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
-                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(
-                            group: group,
-                            tick: displayTick
-                        )
-                    }
                 }
                 loadMoreButton
             }

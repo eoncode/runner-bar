@@ -166,11 +166,21 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 /// Phase 4 redesign:
-///  4a — Left-side elong status indicator bar (3pt wide RoundedRectangle)
-///       NOW also acts as expand/collapse toggle for inline job rows (spec #420 Phase 4).
+///  4a — Left-side status indicator bar (3pt wide RoundedRectangle) spans the FULL
+///       group height including expanded inline job rows (ZStack layout — see below).
+///       The indicator also acts as the expand/collapse toggle.
 ///  4b — DonutStatusView replaces PieProgressDot
 ///  4c — Subtle row background tint keyed to status
 ///  4d — chevron.right is now always used (was chevron.down in some paths)
+///
+/// Layout:
+///   ZStack(alignment: .leading) {
+///     LeftStatusIndicator   ← stretches to full group height via .frame(maxHeight: .infinity)
+///     VStack {
+///       HStack { rowContent + chevron }
+///       InlineJobRowsView   ← only when expanded
+///     }
+///   }
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -180,36 +190,44 @@ struct ActionRowView: View {
     @State private var expanded: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 0) {
-                // 4a: Left status indicator — toggle for expand/collapse (Phase 4 spec #420)
-                // Guard: allow toggle whenever the group has any jobs (not just in-progress)
-                Button(
-                    action: {
-                        if !group.jobs.isEmpty {
-                            withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
-                        }
-                    },
-                    label: {
-                        LeftStatusIndicator(status: rowStatus)
-                            .padding(.vertical, 6)
+        ZStack(alignment: .leading) {
+            // 4a: Full-height status indicator — sits behind content so it spans
+            // both the main row AND any expanded inline job rows.
+            // Button wraps it so tapping the bar toggles expand/collapse.
+            Button(
+                action: {
+                    if !group.jobs.isEmpty {
+                        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
                     }
-                )
-                .buttonStyle(.plain)
-                .help(expanded ? "Collapse jobs" : "Expand jobs")
+                },
+                label: {
+                    LeftStatusIndicator(status: rowStatus)
+                        .frame(maxHeight: .infinity)
+                }
+            )
+            .buttonStyle(.plain)
+            .help(expanded ? "Collapse jobs" : "Expand jobs")
 
-                Button(action: onSelect, label: { rowContent })
-                    .buttonStyle(.plain)
+            // Content column offset to the right of the indicator
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    // Left-indicator placeholder so row content doesn't underlap the bar
+                    Color.clear.frame(width: DesignTokens.Spacing.rowHPad)
 
-                // 4d: Always chevron.right (fixed — was chevron.down in some states)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.trailing, 12)
-            }
-            // Inline job rows -- only when expanded
-            if expanded {
-                InlineJobRowsView(group: group, tick: tick)
+                    Button(action: onSelect, label: { rowContent })
+                        .buttonStyle(.plain)
+
+                    // 4d: Always chevron.right
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.trailing, 12)
+                }
+
+                // Inline job rows — only when expanded
+                if expanded {
+                    InlineJobRowsView(group: group, tick: tick)
+                }
             }
         }
         // 4c: Subtle status tint on the row background
