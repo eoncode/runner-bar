@@ -16,10 +16,18 @@ enum DesignTokens {
         // Row chrome
         /// Subtle elevated background for card rows (light/dark adaptive).
         static let rowBackground: Color = Color.primary.opacity(0.04)
-        /// Hairline border on card rows.
-        static let rowBorder:     Color = Color.primary.opacity(0.06)
+
+        /// Hairline border for card rows.
+        ///
+        /// Issue #419 spec originally wrote `strokeBorder(Color.white.opacity(0.06))` which
+        /// is correct only in dark mode. This token uses `Color.primary.opacity(0.06)` instead
+        /// so it adapts correctly to both light and dark appearances — `primary` is white in
+        /// dark mode and black in light mode, giving an equivalent visual weight in both.
+        /// ❌ Do NOT revert this to a hardcoded `Color.white` — it will look wrong in light mode.
+        static let rowBorder: Color = Color.primary.opacity(0.06)
+
         /// Pill background for CPU/MEM metric badges inside runner rows.
-        static let metricPill:    Color = Color.primary.opacity(0.07)
+        static let metricPill: Color = Color.primary.opacity(0.07)
 
         /// Returns a colour that transitions continuously green → orange → red as `pct` rises
         /// from 0 to 100. Uses linear interpolation in RGB space across two segments:
