@@ -135,12 +135,14 @@ struct ActionDetailView: View {
     }
 
     @ViewBuilder private var actionDetailBranchRow: some View {
-        if let branch = group.headBranch {
-            Text(branch)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        Group {
+            if let branch = group.headBranch {
+                Text(branch)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
     }
 
@@ -259,7 +261,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     }
 
     var labelLinkTooltip: String {
-        group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
+        return group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
     }
 
     var groupStartLabel: String {
@@ -284,7 +286,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return "\(done)/\(total) jobs completed"
     }
 
-    func elapsedLive(tick _: Int) -> String { group.elapsed }
+    func elapsedLive(tick _: Int) -> String { return group.elapsed }
 }
 
 // MARK: - ActionDetailView + Job rows
@@ -303,7 +305,7 @@ extension ActionDetailView {
     @ViewBuilder func jobRowMainLine(_ job: ActiveJob, index: Int) -> some View {
         let indexText: String = "#\(index)"
         let dotColor: Color   = jobDotColor(for: job)
-        let nameColor: Color  = job.isDimmed ? .secondary : .primary
+        let nameColor: Color  = job.isDimmed ? Color.secondary : Color.primary
         let timeRange: String = jobTimeRange(job)
         let hasStart: Bool    = job.startedAt != nil
         let elapsed: String   = job.elapsed
@@ -329,38 +331,35 @@ extension ActionDetailView {
     }
 
     @ViewBuilder private func jobRowTimeRangeView(hasStart: Bool, timeRange: String) -> some View {
-        if hasStart {
-            Text(timeRange)
-                .font(DesignTokens.Font.monoXSmall)
-                .foregroundColor(DesignTokens.Color.labelSecondary)
-                .lineLimit(1)
-                .frame(width: 130, alignment: .leading)
-        } else {
-            Spacer().frame(width: 130)
+        Group {
+            if hasStart {
+                Text(timeRange)
+                    .font(DesignTokens.Font.monoXSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .lineLimit(1)
+                    .frame(width: 130, alignment: .leading)
+            } else {
+                Spacer().frame(width: 130)
+            }
         }
     }
 
     @ViewBuilder private func jobRowElapsedView(hasStart: Bool, elapsed: String) -> some View {
-        if hasStart {
-            Text(elapsed)
-                .font(DesignTokens.Font.monoSmall)
-                .foregroundColor(DesignTokens.Color.labelSecondary)
-                .frame(width: 44, alignment: .trailing)
-        } else {
-            Spacer().frame(width: 44)
+        Group {
+            if hasStart {
+                Text(elapsed)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .frame(width: 44, alignment: .trailing)
+            } else {
+                Spacer().frame(width: 44)
+            }
         }
     }
 
     @ViewBuilder private func jobRowStatusBadge(_ job: ActiveJob) -> some View {
-        let label: String
-        let color: Color
-        if let conclusion = job.conclusion {
-            label = conclusionLabel(conclusion)
-            color = conclusionColor(conclusion)
-        } else {
-            label = jobStatusLabel(for: job)
-            color = jobStatusColor(for: job)
-        }
+        let label: String = job.conclusion.map { conclusionLabel($0) } ?? jobStatusLabel(for: job)
+        let color: Color  = job.conclusion.map { conclusionColor($0) } ?? jobStatusColor(for: job)
         StatusBadge(label: label, color: color)
             .frame(width: 88, alignment: .trailing)
     }
@@ -368,39 +367,23 @@ extension ActionDetailView {
     @ViewBuilder func jobRowProgressBar(_ job: ActiveJob) -> some View {
         let fraction: CGFloat = CGFloat(job.progressFraction ?? 0)
         let isActive: Bool    = job.status == "in_progress" && fraction > 0
-        if isActive {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(DesignTokens.Color.statusBlue.opacity(0.12))
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [DesignTokens.Color.statusBlue,
-                                         DesignTokens.Color.statusBlue.opacity(0.6)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geo.size.width * fraction)
-                }
+        Group {
+            if isActive {
+                JobProgressBarView(fraction: fraction)
+                    .frame(height: 2)
+                    .padding(.horizontal, 12)
             }
-            .frame(height: 2)
-            .padding(.horizontal, 12)
         }
     }
 
     func jobRowTint(for job: ActiveJob) -> Color {
-        guard !job.isDimmed else { return .clear }
-        switch job.status {
-        case "in_progress", "queued": return DesignTokens.Color.tintBlue
-        default:
-            switch job.conclusion {
-            case "success": return DesignTokens.Color.tintGreen
-            case "failure": return DesignTokens.Color.tintRed
-            default:        return .clear
-            }
+        guard !job.isDimmed else { return Color.clear }
+        if job.status == "in_progress" || job.status == "queued" {
+            return DesignTokens.Color.tintBlue
         }
+        if job.conclusion == "success" { return DesignTokens.Color.tintGreen }
+        if job.conclusion == "failure" { return DesignTokens.Color.tintRed }
+        return Color.clear
     }
 
     func jobTimeRange(_ job: ActiveJob) -> String {
@@ -412,14 +395,11 @@ extension ActionDetailView {
 
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return DesignTokens.Color.labelTertiary }
-        switch job.status {
-        case "in_progress": return DesignTokens.Color.statusBlue
-        case "queued":      return DesignTokens.Color.statusBlue.opacity(0.5)
-        default:
-            if job.conclusion == "success" { return DesignTokens.Color.statusGreen }
-            if job.conclusion == "failure" { return DesignTokens.Color.statusRed }
-            return .secondary
-        }
+        if job.status == "in_progress" { return DesignTokens.Color.statusBlue }
+        if job.status == "queued"      { return DesignTokens.Color.statusBlue.opacity(0.5) }
+        if job.conclusion == "success" { return DesignTokens.Color.statusGreen }
+        if job.conclusion == "failure" { return DesignTokens.Color.statusRed }
+        return Color.secondary
     }
 
     func jobStatusLabel(for job: ActiveJob) -> String {
@@ -435,7 +415,7 @@ extension ActionDetailView {
         switch job.status {
         case "in_progress": return DesignTokens.Color.statusBlue
         case "queued":      return DesignTokens.Color.statusBlue.opacity(0.6)
-        default:            return .secondary
+        default:            return Color.secondary
         }
     }
 
@@ -455,11 +435,38 @@ extension ActionDetailView {
         switch conclusion {
         case "success":         return DesignTokens.Color.statusGreen
         case "failure":         return DesignTokens.Color.statusRed
-        case "cancelled":       return .secondary
-        case "skipped":         return .secondary
+        case "cancelled":       return Color.secondary
+        case "skipped":         return Color.secondary
         case "timed_out":       return DesignTokens.Color.statusOrange
         case "action_required": return DesignTokens.Color.statusOrange
-        default:                return .secondary
+        default:                return Color.secondary
+        }
+    }
+}
+
+// MARK: - JobProgressBarView
+
+/// Extracted from ActionDetailView.jobRowProgressBar to break GeometryReader
+/// type-inference chain inside @ViewBuilder and avoid swift-frontend ICE.
+private struct JobProgressBarView: View {
+    let fraction: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(DesignTokens.Color.statusBlue.opacity(0.12))
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [DesignTokens.Color.statusBlue,
+                                     DesignTokens.Color.statusBlue.opacity(0.6)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: geo.size.width * fraction)
+            }
         }
     }
 }
