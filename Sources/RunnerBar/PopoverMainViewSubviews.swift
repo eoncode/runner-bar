@@ -131,20 +131,49 @@ struct PopoverLocalRunnerRow: View {
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
         ForEach(busy.prefix(3)) { runner in
+            // Phase 3: card wrapper — RoundedRectangle with stroke + fill
             HStack(spacing: 8) {
                 Circle().fill(Color.yellow).frame(width: 8, height: 8)
-                Text(runner.name).font(DesignTokens.Fonts.mono).foregroundColor(.primary).lineLimit(1)
+                Text(runner.name)
+                    .font(DesignTokens.Fonts.mono)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
                 Spacer()
                 if let metrics = runner.metrics {
-                    Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(DesignTokens.Fonts.mono).foregroundColor(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                    // Phase 3: StatPill replaces plain text for CPU/MEM
+                    HStack(spacing: 4) {
+                        StatPill(
+                            label: "CPU",
+                            value: String(format: "%.1f%%", metrics.cpu)
+                        )
+                        StatPill(
+                            label: "MEM",
+                            value: String(format: "%.1f%%", metrics.mem)
+                        )
+                    }
                 }
+                // Phase 3: trailing chevron
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 3)
+            .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                    .fill(DesignTokens.Colors.rowBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                            .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                    )
+            )
+            .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+            .padding(.vertical, 2)
         }
         if busy.count > 3 {
-            Text("+ \(busy.count - 3) more…").font(.caption2).foregroundColor(.secondary)
+            Text("+ \(busy.count - 3) more…")
+                .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
         }
         Divider()
