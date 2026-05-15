@@ -2,9 +2,11 @@ import SwiftUI
 
 // MARK: - InlineJobRowsView
 /// Collapsed sub-row list shown beneath an ActionRowView when expanded.
-/// Phase 4 spec (#420): each job row must retain a progress indicator.
-/// Fix: DonutStatusView (10 pt) replaces the removed PieProgressDot,
-/// preserving the horizontal progress bar requirement from the spec.
+///
+/// Phase 4 spec (#420): inline `↳` job rows are **read-only / passive context**.
+/// They have no `>` chevron and no tap handler — navigation to a job detail view
+/// happens only from ActionDetailView, not from the popover inline rows.
+/// Therefore this view intentionally has no `onSelectJob` callback.
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
@@ -32,29 +34,42 @@ struct InlineJobRowsView: View {
     // MARK: - Row
 
     private func jobRow(_ job: ActiveJob) -> some View {
-        HStack(spacing: 6) {
-            // Phase 4 spec #420: keep progress indicator in job sub-rows.
-            // DonutStatusView replaces the old PieProgressDot at 10 pt.
-            DonutStatusView(
-                status: jobStatus(for: job),
-                progress: job.progressFraction ?? 0,
-                size: 10
-            )
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                // Phase 4 spec #420: keep progress indicator in job sub-rows.
+                // DonutStatusView replaces the old PieProgressDot at 10 pt.
+                DonutStatusView(
+                    status: jobStatus(for: job),
+                    progress: job.progressFraction ?? 0,
+                    size: 10
+                )
 
-            Text(job.name)
-                .font(DesignTokens.Fonts.mono)
-                .foregroundColor(job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(1)
+                Text(job.name)
+                    .font(DesignTokens.Fonts.mono)
+                    .foregroundColor(job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
 
-            Spacer()
+                Spacer()
 
-            if job.startedAt != nil {
-                Text(job.elapsed)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundColor(Color.rbTextTertiary)
-                    .fixedSize()
+                if job.startedAt != nil {
+                    Text(job.elapsed)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(Color.rbTextTertiary)
+                        .fixedSize()
+                }
+            }
+            // Phase 4 spec (#420): "Keep horizontal progress bar in job sub-rows."
+            // Shows a thin ProgressView bar reflecting step-completion fraction.
+            if job.status == "in_progress" {
+                let progress = job.progressFraction ?? 0
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(Color.rbBlue)
+                    .frame(height: 2)
+                    .padding(.leading, 16)
+                    .padding(.trailing, RBSpacing.xs)
             }
         }
         .padding(.vertical, 2)
