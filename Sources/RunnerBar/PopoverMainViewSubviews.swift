@@ -23,6 +23,12 @@ struct PopoverHeaderView: View {
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
+    /// CPU utilisation history (0.0–1.0 per sample) for sparkline display.
+    var cpuHistory: [Double] = []
+    /// Memory utilisation history (0.0–1.0 per sample) for sparkline display.
+    var memHistory: [Double] = []
+    /// Disk utilisation history (0.0–1.0 per sample) for sparkline display.
+    var diskHistory: [Double] = []
 
     var body: some View {
         HStack(spacing: 6) {
@@ -178,12 +184,16 @@ struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
+    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
             Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
             Image(systemName: "chevron.right")
                 .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+        }
+        if group.groupStatus == .inProgress {
+            InlineJobRowsView(group: group, tick: tick, onSelectJob: onSelectJob)
         }
     }
 
