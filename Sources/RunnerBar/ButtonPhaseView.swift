@@ -1,62 +1,60 @@
 import SwiftUI
 
+// MARK: - ButtonPhase
+
+/// Phase state used by action buttons (ReRunButton, CancelButton).
+enum ButtonPhase {
+    case idle
+    case loading
+    case success
+    case failure
+}
+
 // MARK: - ButtonPhaseView
 
-/// Shared non-idle phase renderer used by `ReRunButton`, `ReRunFailedButton`,
-/// and `CancelButton`.
+/// Shared button renderer used by `ReRunButton` and `CancelButton`.
 ///
-/// Renders one of three states:
-/// - `.loading` → spinner + label
-/// - `.done`    → green checkmark + "Done" (shown for 1.5 s)
-/// - `.failed`  → red cross + "Failed" (shown for 1.5 s)
-///
-/// The `.idle` state is intentionally excluded; each button owns its own
-/// idle appearance and action.
+/// Renders one of four states:
+/// - `.idle`    → idleIcon + idleLabel (tappable)
+/// - `.loading` → spinner + "Running…"
+/// - `.success` → green checkmark + "Done"
+/// - `.failure` → red cross + "Failed"
 struct ButtonPhaseView: View {
-    /// The active non-idle phase to render.
-    enum Phase {
-        /// Spinner shown while the async request is in-flight.
-        case loading
-        /// Green checkmark shown for 1.5 s after success.
-        case done
-        /// Red cross shown for 1.5 s after failure.
-        case failed
-    }
-
-    /// Phase to render. Must be `.loading`, `.done`, or `.failed`.
-    let phase: Phase
+    let phase: ButtonPhase
+    let idleLabel: String
+    let idleIcon: String
+    let action: () -> Void
 
     var body: some View {
-        switch phase {
-        case .loading:
-            HStack(spacing: 4) {
-                ProgressView()
-                    .controlSize(.mini)
-                Text("Running\u{2026}")
-                    .font(.caption)
+        Button(action: {
+            if case .idle = phase { action() }
+        }) {
+            Group {
+                switch phase {
+                case .idle:
+                    HStack(spacing: 4) {
+                        Image(systemName: idleIcon).font(.caption)
+                        Text(idleLabel).font(.caption).fixedSize()
+                    }
                     .foregroundColor(.secondary)
-                    .fixedSize()
-            }
-        case .done:
-            HStack(spacing: 4) {
-                Image(systemName: "checkmark")
-                    .font(.caption)
-                    .foregroundColor(.green)
-                Text("Done")
-                    .font(.caption)
-                    .foregroundColor(.green)
-                    .fixedSize()
-            }
-        case .failed:
-            HStack(spacing: 4) {
-                Image(systemName: "xmark")
-                    .font(.caption)
-                    .foregroundColor(.red)
-                Text("Failed")
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .fixedSize()
+                case .loading:
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.mini)
+                        Text("Running\u{2026}").font(.caption).foregroundColor(.secondary).fixedSize()
+                    }
+                case .success:
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark").font(.caption).foregroundColor(.green)
+                        Text("Done").font(.caption).foregroundColor(.green).fixedSize()
+                    }
+                case .failure:
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark").font(.caption).foregroundColor(.red)
+                        Text("Failed").font(.caption).foregroundColor(.red).fixedSize()
+                    }
+                }
             }
         }
+        .buttonStyle(.plain)
     }
 }

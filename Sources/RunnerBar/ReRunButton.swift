@@ -1,7 +1,12 @@
 // swiftlint:disable missing_docs
 import SwiftUI
 
+// MARK: - ReRunButton
+
+/// A button that re-runs failed jobs for an action group.
+/// Uses a closure-based action so callers control the async work.
 struct ReRunButton: View {
+    /// Called when tapped. Caller invokes the completion with `true` on success.
     let action: (@escaping (Bool) -> Void) -> Void
     let isDisabled: Bool
     @State private var phase: ButtonPhase = .idle

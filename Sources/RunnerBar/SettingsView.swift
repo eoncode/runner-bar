@@ -133,7 +133,7 @@ private struct AccountSettingsView: View {
                         .textFieldStyle(.roundedBorder)
                 }
                 LabeledContent("Personal Access Token") {
-                    SecureField("ghp_…", text: $settingsStore.githubToken)
+                    SecureField("ghp_\u{2026}", text: $settingsStore.githubToken)
                         .textFieldStyle(.roundedBorder)
                 }
             }
