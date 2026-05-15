@@ -323,15 +323,20 @@ struct MetricPill: View {
 
 // MARK: - ActionRowView
 /// Action group row — Phase 4 redesign:
-/// - Left vertical indicator bar (colour = status)
+/// - Left vertical indicator bar toggles expand/collapse of inline job rows
+/// - Tapping the row body navigates to ActionDetailView as before
 /// - StatusDonutView replaces PieProgressDot
 /// - Faint per-row status tint background
-/// - chevron.right always points right
+/// - chevron.right always points right; rotates when expanded
 /// - Meta text in monospaced font
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
+
+    /// Controls whether the inline job list shows all jobs (true) or only in-progress (false).
+    /// Toggled exclusively by tapping the left indicator bar.
+    @State private var expanded = false
 
     private var accentColor: Color {
         DesignTokens.Color.actionColor(status: group.groupStatus, conclusion: group.conclusion)
@@ -345,9 +350,9 @@ struct ActionRowView: View {
             Rectangle().fill(accentColor.opacity(0.06))
 
             HStack(spacing: 0) {
-                Button(action: onSelect) { leftIndicator }
+                Button(action: { expanded.toggle() }) { leftIndicator }
                     .buttonStyle(.plain)
-                    .help("Toggle details")
+                    .help(expanded ? "Collapse jobs" : "Expand all jobs")
 
                 Button(action: onSelect) { rowContent }
                     .buttonStyle(.plain)
@@ -355,6 +360,8 @@ struct ActionRowView: View {
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.18), value: expanded)
                     .padding(.trailing, 12)
             }
         }
@@ -367,6 +374,12 @@ struct ActionRowView: View {
             .clipShape(RoundedCorners(topLeft: 0, topRight: 3, bottomLeft: 0, bottomRight: 3))
             .padding(.vertical, 4)
             .frame(maxHeight: .infinity)
+            .overlay(
+                // Subtle chevron hint to indicate expand behaviour
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 5, weight: .bold))
+                    .foregroundColor(.white.opacity(expanded ? 0.9 : 0.45))
+            )
             .contentShape(Rectangle())
     }
 
@@ -511,8 +524,9 @@ private struct RoundedCorners: Shape {
 }
 
 // MARK: - InlineJobRowsView
-/// Passive read-only ↳ job rows shown beneath every in-progress action group.
-/// Only shows jobs that are currently `in_progress`.
+/// Passive read-only ↳ job rows shown beneath every action group.
+/// Default: shows only `in_progress` jobs.
+/// When `showAll == true` (triggered by the left indicator expand toggle): shows all jobs.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
@@ -527,16 +541,18 @@ struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
+    /// When true, all jobs are shown; when false, only in_progress jobs are shown.
+    var showAll: Bool = false
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
-    private var activeJobs: [ActiveJob] {
-        group.jobs.filter { $0.status == "in_progress" }
+    private var visibleJobs: [ActiveJob] {
+        showAll ? group.jobs : group.jobs.filter { $0.status == "in_progress" }
     }
 
     var body: some View {
-        ForEach(activeJobs.prefix(cap)) { job in
+        ForEach(visibleJobs.prefix(cap)) { job in
             if let onSelectJob {
                 Button(action: { onSelectJob(job, group) }, label: { jobRow(job) })
                     .buttonStyle(.plain)
@@ -544,13 +560,13 @@ struct InlineJobRowsView: View {
                 jobRow(job)
             }
         }
-        if activeJobs.count > cap {
+        if visibleJobs.count > cap {
             Button(
                 action: {
                     if !popoverOpenState.isOpen { cap += 4 }
                 },
                 label: {
-                    Text("+ \(activeJobs.count - cap) more jobs…")
+                    Text("+ \(visibleJobs.count - cap) more jobs…")
                         .font(DesignTokens.Font.monoXSmall)
                         .foregroundColor(.accentColor)
                         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
