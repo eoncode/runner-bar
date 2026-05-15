@@ -114,6 +114,7 @@ struct HeaderStatsBar: View {
                     currentPct: vm.stats.cpuPct
                 )
 
+                // Phase 2 spec: vertical spacer divider between stat groups
                 Divider()
                     .frame(height: 36)
                     .padding(.horizontal, 4)
@@ -127,6 +128,7 @@ struct HeaderStatsBar: View {
                         : 0
                 )
 
+                // Phase 2 spec: vertical spacer divider between stat groups
                 Divider()
                     .frame(height: 36)
                     .padding(.horizontal, 4)
