@@ -8,8 +8,11 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
     private enum Key {
-        static let pollingInterval = "settings.pollingInterval"
+        static let pollingInterval   = "settings.pollingInterval"
+        // Legacy key — kept so existing UserDefaults values are not lost on upgrade.
         static let showDimmedRunners = "settings.showDimmedRunners"
+        // New canonical key introduced in Issue #419 Phase 5 / SettingsView rename.
+        static let showOfflineRunners = "settings.showOfflineRunners"
     }
 
     /// Valid range for the polling interval (seconds).
@@ -27,16 +30,36 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    /// Whether offline/dimmed runners are shown in the list.
-    @Published var showDimmedRunners: Bool {
-        didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
+    /// Whether offline / dimmed runners are shown in the list.
+    /// `showOfflineRunners` is the canonical name used by SettingsView (Issue #419 Phase 5).
+    /// `showDimmedRunners` is retained as a computed alias so existing call-sites compile
+    /// without a breaking change until they are migrated.
+    @Published var showOfflineRunners: Bool {
+        didSet {
+            UserDefaults.standard.set(showOfflineRunners, forKey: Key.showOfflineRunners)
+            // Keep legacy key in sync so a downgrade still reads the right value.
+            UserDefaults.standard.set(showOfflineRunners, forKey: Key.showDimmedRunners)
+        }
+    }
+
+    /// Deprecated alias — mirrors `showOfflineRunners`. Kept for source compatibility.
+    var showDimmedRunners: Bool {
+        get { showOfflineRunners }
+        set { showOfflineRunners = newValue }
     }
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
         let raw = stored > 0 ? stored : 30
         pollingInterval = raw.clamped(to: Self.pollingRange)
-        showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
+
+        // Migrate: prefer new key; fall back to legacy key if new key has never been written.
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Key.showOfflineRunners) != nil {
+            showOfflineRunners = defaults.bool(forKey: Key.showOfflineRunners)
+        } else {
+            showOfflineRunners = defaults.bool(forKey: Key.showDimmedRunners)
+        }
     }
 }
 
