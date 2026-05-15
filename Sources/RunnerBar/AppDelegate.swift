@@ -95,56 +95,19 @@ import SwiftUI
 // is major major major.
 
 /// Represents the currently visible navigation screen.
-///
-/// Persisted in `AppDelegate.savedNavState` so the panel can restore the user's
-/// position when it is re-opened after being dismissed. Each case maps 1-to-1 to
-/// a view factory method on `AppDelegate`.
 private enum NavState {
-    /// The root popover showing runners and the recent-actions list.
-    /// Created by `mainView()`. `savedNavState` is set to `nil` here (no restore needed).
     case main
-
-    /// The step list for a single job, reached from the Jobs tab.
-    /// Created by `detailView(job:)`.
     case jobDetail(ActiveJob)
-
-    /// The raw log for a single step, reached from the Jobs path.
-    /// Created by `logView(job:step:)`.
     case stepLog(ActiveJob, JobStep)
-
-    /// The flat job list for a commit/PR action group, reached from the Actions tab.
-    /// Created by `actionDetailView(group:)`.
     case actionDetail(ActionGroup)
-
-    /// The step list for a single job reached via the Actions → job-row path.
-    /// Created by `detailViewFromAction(job:group:)`.
     case actionJobDetail(ActiveJob, ActionGroup)
-
-    /// The raw log for a single step reached via the Actions → job → step path.
-    /// Created by `logViewFromAction(job:step:group:)`.
     case actionStepLog(ActiveJob, JobStep, ActionGroup)
-
-    /// The Settings sheet.
-    /// Created by `settingsView()`.
     case settings
 }
 
 // MARK: - AppDelegate
 
 // ⚠️ @MainActor ISOLATION CONTRACT — DO NOT REMOVE THIS ANNOTATION.
-// AppDelegate runs entirely on the main thread. @MainActor gives the Swift 6
-// compiler static proof of this so every method and stored property is verified
-// as main-thread-only without any runtime assertion.
-//
-// The two nonisolated blocking helpers (enrichStepsIfNeeded, enrichGroupIfNeeded)
-// are intentionally exempt — they perform blocking network I/O and are always
-// dispatched onto DispatchQueue.global() by their callers. nonisolated opts them
-// out of the class-level @MainActor domain.
-//
-// The entry point in main.swift wraps the NSApplicationMain call in
-// MainActor.assumeIsolated { }, completing the isolation chain:
-//   main.swift (assumeIsolated) → @MainActor AppDelegate → nonisolated helpers
-//
 // ❌ NEVER remove @MainActor from this class declaration.
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded or enrichGroupIfNeeded.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -174,9 +137,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
-    /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
-    /// Views declare their own, larger minWidth/idealWidth — this is the AppDelegate floor only.
-    /// ❌ NEVER change from 280 without also reviewing each view's own minWidth/idealWidth.
     private static let minWidth: CGFloat = 280
 
     private var maxWidth: CGFloat {
@@ -189,12 +149,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static let gap: CGFloat = 2
-
-    /// Initial panel width used before SwiftUI has measured content.
-    /// Does NOT need to match any idealWidth (there are none — width is content-driven).
-    /// 320 is a compact default; the panel resizes to actual content on the first KVO fire.
-    /// ❌ NEVER set above maxWidth.
-    /// ❌ NEVER restore to 600 or 720 — those were the old over-wide defaults.
     private static let initPanelWidth: CGFloat = 320
 
     // MARK: - Environment injection
@@ -208,8 +162,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Status icon helpers
 
-    /// Builds the menu bar NSImage from an AggregateStatus using its SF Symbol name.
-    /// ❌ NEVER call makeStatusIcon() — it no longer exists. Use this method instead.
     private func menuBarImage(for status: AggregateStatus) -> NSImage {
         NSImage(systemSymbolName: status.symbolName, accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
@@ -271,8 +223,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Status icon
 
-    /// Sets the menu bar icon from `RunnerStore.shared.aggregateStatus`.
-    ///
     /// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
     /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
     /// ❌ NEVER call makeStatusIcon() — it no longer exists; use menuBarImage(for:).
@@ -297,17 +247,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let topY = panelTopY else { return }
 
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
-
         let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
         let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH = contentH + arrowHeight
-
         let posX = statusItemRect.midX - contentW / 2
         let posY = topY - totalH
 
         panel.setFrame(NSRect(x: posX, y: posY, width: contentW, height: totalH),
                        display: true, animate: false)
-
         chrome.arrowX = statusItemRect.midX - panel.frame.minX
     }
 
@@ -332,23 +279,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeEventMonitor()
         removeWorkspaceObserver()
         // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
-        // We must reset the hosting view to a live mainView() so all navigation
-        // callbacks (prefs button, action rows, inline job rows) are wired up for
-        // the next open. However, mainView() sets savedNavState = nil, which would
-        // lose the user's position for the restore-on-reopen feature (#385).
-        // Fix: capture savedNavState before calling mainView(), then restore it
-        // afterwards. openPanel()'s validatedView(for: savedNavState) path works
-        // as before, and the main-screen path now has live callbacks instead of
-        // dead no-op stubs.
-        // ❌ NEVER replace this with a no-op stub PopoverMainView — that breaks
-        //    all button and row taps when the panel next opens on the main screen.
+        // ❌ NEVER replace this with a no-op stub PopoverMainView.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let preserved = self.savedNavState   // save before mainView() wipes it
+            let preserved = self.savedNavState
             self.hostingController?.rootView = self.mainView()
-            self.savedNavState = preserved        // restore for openPanel() restore path
+            self.savedNavState = preserved
         }
     }
 
@@ -365,8 +303,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Enrichment helpers
 
-    /// Re-fetches steps for a single job when they are missing or still in-progress.
-    /// Blocking — always call from a background queue.
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
@@ -377,17 +313,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    /// Re-fetches job data for a group when any run has an empty or incomplete job list.
-    ///
-    /// Called on a background queue from onSelectAction before navigating to
-    /// ActionDetailView. Prevents the detail view opening with a blank job list on
-    /// first tap or after a cache miss.
-    ///
-    /// Strategy: if every job in the group already has a conclusion AND none have
-    /// in-progress steps, the group is considered fully enriched and returned as-is.
-    /// Otherwise, we re-fetch jobs for all runs in the group and return an enriched copy.
-    ///
-    /// Blocking — always call from a background queue.
     nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
         let fullyEnriched = !group.jobs.isEmpty
             && group.jobs.allSatisfy { $0.conclusion != nil }
@@ -602,11 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Toggle
 
     @objc private func togglePanel() {
-        if panelIsOpen {
-            closePanel()
-        } else {
-            openPanel()
-        }
+        if panelIsOpen { closePanel() } else { openPanel() }
     }
 
     // MARK: - Open
@@ -617,7 +538,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let panel else { return }
 
         observable.reload()
-
         panelIsOpen = true
         popoverOpenState.isOpen = true
         panelTopY = statusItemRect.minY - Self.gap
@@ -631,7 +551,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSRect(x: posX, y: posY, width: initW, height: initH),
             display: false, animate: false
         )
-
         chrome?.arrowX = statusItemRect.midX - posX
         panel.orderFront(nil)
         resizeAndRepositionPanel()
@@ -663,4 +582,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length

@@ -48,4 +48,3 @@ private extension Comparable {
         min(max(self, range.lowerBound), range.upperBound)
     }
 }
-// swiftlint:enable missing_docs
