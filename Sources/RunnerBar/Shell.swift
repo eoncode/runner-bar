@@ -37,9 +37,8 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     let deadline = Date().addingTimeInterval(timeout)
     while task.isRunning {
         if Date() > deadline {
-            log(
-                "shell › timeout (\(Int(timeout))s) — terminating: \(command)"
-            )
+            let msg = "shell › timeout (\(Int(timeout))s) — terminating: \(command)"
+            log(msg)
             task.terminate()
             break
         }
