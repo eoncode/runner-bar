@@ -56,7 +56,6 @@ struct PopoverHeaderView: View {
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` prevents multi-line wrapping that corrupts panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 6) {
-            // CPU sparkline chip
             sparklineChip(
                 label: "CPU",
                 history: cpuHistory,
@@ -64,7 +63,6 @@ struct PopoverHeaderView: View {
                 valueText: String(format: "%.1f%%", stats.cpuPct)
             )
             Divider().frame(height: 16)
-            // MEM sparkline chip
             let memPct = stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
             sparklineChip(
                 label: "MEM",
@@ -73,7 +71,6 @@ struct PopoverHeaderView: View {
                 valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB)
             )
             Divider().frame(height: 16)
-            // Disk pill badge
             let total = stats.diskTotalGB
             let used  = stats.diskUsedGB
             let free  = max(0, total - used)
@@ -86,7 +83,6 @@ struct PopoverHeaderView: View {
         }
     }
 
-    /// A compact label + sparkline + value chip for a single metric.
     private func sparklineChip(
         label: String,
         history: [Double],
@@ -131,7 +127,6 @@ struct PopoverLocalRunnerRow: View {
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
         ForEach(busy.prefix(3)) { runner in
-            // Phase 3: card wrapper — RoundedRectangle with stroke + fill
             HStack(spacing: 8) {
                 Circle().fill(Color.yellow).frame(width: 8, height: 8)
                 Text(runner.name)
@@ -141,7 +136,6 @@ struct PopoverLocalRunnerRow: View {
                     .layoutPriority(1)
                 Spacer()
                 if let metrics = runner.metrics {
-                    // Phase 3: StatPill replaces plain text for CPU/MEM
                     HStack(spacing: 4) {
                         StatPill(
                             label: "CPU",
@@ -153,7 +147,6 @@ struct PopoverLocalRunnerRow: View {
                         )
                     }
                 }
-                // Phase 3: trailing chevron
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -182,40 +175,52 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 /// Phase 4: left indicator pill + DonutStatusView + row background tint.
+/// `isExpanded` controls whether InlineJobRowsView is shown below this row.
+/// Tapping the LeftIndicatorPill toggles expansion; the pill color reflects status.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
+    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
     @State private var isExpanded: Bool = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Phase 4: left indicator pill — tap toggles expansion
-            LeftIndicatorPill(color: indicatorColor, isExpanded: isExpanded) {
-                isExpanded.toggle()
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                // Phase 4: left indicator pill — tap toggles inline job expansion
+                LeftIndicatorPill(color: indicatorColor, isExpanded: isExpanded) {
+                    withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+                }
+                Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.trailing, 8)
             }
-            Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-            // Phase 4d (spec): chevron always points right — rotation removed per spec requirement.
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .padding(.trailing, 8)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius)
+                    .fill(rowTint)
+            )
+
+            // — Inline job rows: shown when pill is tapped and group is in-progress
+            if isExpanded && group.groupStatus == .inProgress {
+                InlineJobRowsView(
+                    group: group,
+                    tick: tick,
+                    onSelectJob: onSelectJob
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius)
-                .fill(rowTint)
-        )
         .padding(.horizontal, DesignTokens.Spacing.rowHPad)
         .padding(.vertical, 2)
     }
 
     private var rowContent: some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ❌ NEVER remove this line.
         _ = tick
         return HStack(spacing: 6) {
-            // Phase 4: DonutStatusView replaces PieProgressDot on action rows
             DonutStatusView(
                 status: group.groupStatus,
                 conclusion: group.conclusion,
@@ -279,7 +284,6 @@ struct ActionRowView: View {
         }
     }
 
-    /// Phase 4: colour of the left indicator pill.
     private var indicatorColor: Color {
         switch group.groupStatus {
         case .inProgress: return DesignTokens.Colors.statusBlue
@@ -290,7 +294,6 @@ struct ActionRowView: View {
         }
     }
 
-    /// Phase 4: subtle background tint per status.
     private var rowTint: Color {
         switch group.groupStatus {
         case .inProgress: return DesignTokens.Colors.statusBlue.opacity(0.04)
@@ -352,17 +355,14 @@ struct InlineJobRowsView: View {
 
     private func jobRow(_ job: ActiveJob) -> some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ❌ NEVER remove this line.
         _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
         let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
-        // Phase 5: step fraction drives the SubJobProgressBar
         let stepFraction: Double? = total > 0 ? Double(done) / Double(total) : nil
         return HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
-            // Phase 5: replace PieProgressDot with SubJobProgressBar
             SubJobProgressBar(
                 fraction: job.status == "queued" ? nil : stepFraction,
                 color: jobBarColor(for: job),
@@ -391,7 +391,6 @@ struct InlineJobRowsView: View {
         .contentShape(Rectangle())
     }
 
-    /// Phase 5: bar color replaces the old dot color helper.
     private func jobBarColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return DesignTokens.Colors.statusBlue
