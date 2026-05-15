@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import Foundation
 
 // MARK: - File-level formatter
@@ -42,7 +41,7 @@ struct WorkflowRunRef: Identifiable {
 // MARK: - ActionGroup
 
 /// Represents one **commit / PR trigger**: all GitHub Actions workflow runs
-/// that share the same `head_sha`. Mirrors ci-dash.py’s “Group” concept from
+/// that share the same `head_sha`. Mirrors ci-dash.py's “Group” concept from
 /// `group_runs()` + `enrich_group()`.
 ///
 /// Hierarchy: ActionGroup → jobs (flat across all sibling runs) → JobStep → log.
@@ -142,7 +141,7 @@ struct ActionGroup: Identifiable, Equatable {
     }
 
     /// Number of jobs with a concluded result across all sibling runs.
-    var jobsDone: Int  { jobs.filter { $0.conclusion != nil }.count }
+    var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
 
@@ -418,4 +417,3 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable file_length
