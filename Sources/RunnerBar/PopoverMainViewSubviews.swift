@@ -371,10 +371,13 @@ struct ActionRowView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            // ── Inline job rows — shown for in-progress groups;
-            //    showAll is wired directly to `expanded` so the left-indicator
-            //    toggle actually controls the content.
-            if group.groupStatus == .inProgress && !group.jobs.isEmpty {
+            // ── Inline job rows — shown for all groups that have jobs.
+            // Default (expanded == false): in-progress groups show only in_progress jobs;
+            //   completed/failed groups show nothing (collapsed).
+            // When expanded == true: all jobs are shown regardless of status.
+            // This satisfies the spec requirement that failed/succeeded rows can also
+            // expand to reveal their jobs via the left indicator tap.
+            if !group.jobs.isEmpty {
                 InlineJobRowsView(
                     group: group,
                     tick: tick,
