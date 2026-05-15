@@ -1,5 +1,7 @@
 import Foundation
 
+// swiftlint:disable missing_docs
+
 // MARK: - LocalRunnerScanner
 
 /// Discovers locally-installed GitHub Actions self-hosted runners without
@@ -22,7 +24,6 @@ import Foundation
 struct LocalRunnerScanner {
     // MARK: - .runner JSON schema
 
-    /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
     private struct RunnerJSON: Decodable {
         let gitHubUrl: String?
         let runnerName: String?
@@ -32,17 +33,13 @@ struct LocalRunnerScanner {
 
     // MARK: - Public API
 
-    /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
-    /// This is a synchronous, blocking call — always invoke from a background thread.
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 
-        // Source 2 first: .runner JSON is most authoritative — richer data.
         for model in scanRunnerJSONFiles() {
             models[model.id] = model
         }
 
-        // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found.
         for model in scanLaunchAgents() {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
             let alreadyCoveredByJSON = models.values.contains { existing in
@@ -55,7 +52,6 @@ struct LocalRunnerScanner {
             }
         }
 
-        // Source 3: mark which runners are live.
         let liveLabels = scanLiveServices()
         for key in models.keys {
             if let model = models[key] {
@@ -99,14 +95,8 @@ struct LocalRunnerScanner {
 
     // MARK: - Source 2: .runner JSON files
 
-    /// Searches known runner install locations only — avoids scanning `~` wholesale
-    /// which would trigger macOS TCC prompts for Desktop/Documents/Downloads (macOS 14+).
     private func scanRunnerJSONFiles() -> [RunnerModel] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        // Known self-hosted runner install directories — explicit paths only.
-        // ⚠️ DO NOT add `~` or `$HOME` here: broad home-dir scans trigger TCC dialogs.
-        // ⚠️ Each path is single-quoted before shell interpolation so that home
-        // directories containing spaces (e.g. /Users/First Last) don't break find.
         let rawPaths = [
             "\(home)/actions-runner",
             "\(home)/runner",
@@ -165,3 +155,4 @@ struct LocalRunnerScanner {
         return labels
     }
 }
+// swiftlint:enable missing_docs

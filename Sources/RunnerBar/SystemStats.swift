@@ -35,21 +35,33 @@ struct SystemStats {
     )
 }
 
+/// Raw CPU tick counters from `host_processor_info`.
 private struct CPUTicks {
+    /// User-mode ticks (including nice).
     var user: Double
+    /// System-mode ticks.
     var system: Double
+    /// Total ticks across all states.
     var total: Double
 }
 
+/// Raw memory usage stats in gigabytes.
 private struct MemoryStats {
+    /// Memory actively in use (active + wired), in GB.
     var used: Double
+    /// Total physical RAM installed, in GB.
     var total: Double
 }
 
+/// Raw disk usage stats in gigabytes.
 private struct DiskStats {
+    /// Disk space in use (total − free), in GB.
     var used: Double
+    /// Raw partition capacity, in GB.
     var total: Double
+    /// Available free space, in GB.
     var free: Double
+    /// Free space as a percentage of total.
     var freePct: Double
 }
 
@@ -109,6 +121,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - CPU
 
+    /// Returns the current CPU utilisation percentage (0–100) across all cores.
     private func cpuPercent() -> Double {
         var cpuInfo: processor_info_array_t?
         var msgType = natural_t(0)
@@ -151,6 +164,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Memory
 
+    /// Returns current memory usage stats in gigabytes.
     private func memStats() -> MemoryStats {
         var vmStats = vm_statistics64()
         var count = mach_msg_type_number_t(
@@ -174,6 +188,8 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Disk
 
+    /// Returns current disk usage stats in gigabytes.
+    ///
     /// ⚠️ PERMISSION GUARD: Uses `volumeAvailableCapacityKey` — NOT
     /// `volumeAvailableCapacityForImportantUsageKey`.
     ///
@@ -200,6 +216,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: - Sample
 
+    /// Collects one CPU/memory/disk sample and publishes it on the main thread.
     private func sample() {
         let cpu = cpuPercent()
         let mem = memStats()

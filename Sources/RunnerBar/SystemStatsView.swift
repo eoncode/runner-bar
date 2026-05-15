@@ -1,10 +1,12 @@
 import SwiftUI
 
 // MARK: - SystemStatsView
+
 /// Full-page system stats view shown in the settings panel.
 struct SystemStatsView: View {
     @StateObject private var viewModel = SystemStatsViewModel()
 
+    /// Main body: stacked stat rows with start/stop lifecycle hooks.
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("System Stats")
@@ -22,6 +24,7 @@ struct SystemStatsView: View {
         .onDisappear { viewModel.stop() }
     }
 
+    /// Renders a single label/value row.
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
@@ -35,11 +38,15 @@ struct SystemStatsView: View {
 }
 
 // MARK: - BlockBarView
+
 /// Renders a coloured block-bar and percentage label for a given metric.
 struct BlockBarView: View {
+    /// Metric label shown to the left of the bar.
     let label: String
+    /// Current usage percentage (0–100).
     let pct: Double
 
+    /// Main body: label, bar, and percentage readout.
     var body: some View {
         HStack(spacing: 6) {
             Text(label)
@@ -66,6 +73,7 @@ struct BlockBarView: View {
         }
     }
 
+    /// Color for the bar fill and percentage label, based on usage level.
     private var usageColor: Color {
         if pct > 85 { return .red }
         if pct > 60 { return .yellow }
