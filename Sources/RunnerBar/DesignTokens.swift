@@ -189,17 +189,17 @@ extension SwiftUI.Color {
 // MARK: - Convenience View Modifiers
 extension View {
     /// Apply the standard monospaced body font used across RunnerBar.
-    func monoBody() -> some View {
+    func fontMonoBody() -> some View {
         self.font(DesignTokens.Font.monoBody)
     }
 
     /// Apply the small monospaced font used for meta labels.
-    func monoSmall() -> some View {
+    func fontMonoSmall() -> some View {
         self.font(DesignTokens.Font.monoSmall)
     }
 
     /// Apply the extra-small monospaced font used for pills and badges.
-    func monoXSmall() -> some View {
+    func fontMonoXSmall() -> some View {
         self.font(DesignTokens.Font.monoXSmall)
     }
 }
