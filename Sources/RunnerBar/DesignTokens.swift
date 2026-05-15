@@ -4,6 +4,7 @@ import SwiftUI
 
 // MARK: - Adaptive Color Helper
 
+/// Creates adaptive colors that switch between light and dark appearances.
 extension Color {
     /// Creates a color that adapts between light and dark appearance.
     /// Uses NSColor with light/dark appearance variants so SwiftUI picks
@@ -19,6 +20,7 @@ extension Color {
 
 // MARK: - Color Tokens
 
+/// Design-token color extensions used throughout the app.
 extension Color {
     // Status colors — same in both appearances
     /// Accent blue — in-progress, links (#0A84FF)
@@ -222,11 +224,9 @@ enum DesignTokens {
     enum Colors {
         /// Returns a usage-keyed color: green below 60 %, orange 60–85 %, red above.
         static func usage(pct: Double) -> Color {
-            switch pct {
-            case ..< 60: return .rbSuccess
-            case ..< 85: return .rbWarning
-            default: return .rbDanger
-            }
+            if pct < 60 { return .rbSuccess }
+            if pct < 85 { return .rbWarning }
+            return .rbDanger
         }
     }
 }
