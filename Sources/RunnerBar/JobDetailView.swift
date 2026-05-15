@@ -351,7 +351,7 @@ struct JobDetailView: View {
     /// Returns the live elapsed string, re-evaluated every tick.
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
-    /// Maps a step’s conclusion/status to a display colour.
+    /// Maps a step's conclusion/status to a display colour.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .green
