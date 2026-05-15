@@ -54,7 +54,6 @@ final class SystemStatsViewModel: ObservableObject {
         let output = shell("df / | tail -1", timeout: 3)
         let cols = output.split(separator: " ").map(String.init)
         if let cap = cols.first(where: { $0.hasSuffix("%") }),
-           // swiftlint:disable:next identifier_name
            let val = Double(cap.dropLast()) {
             return val
         }

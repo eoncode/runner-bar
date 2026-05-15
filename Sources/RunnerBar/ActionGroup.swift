@@ -1,4 +1,4 @@
-// swiftlint:disable file_length missing_docs colon operator_usage_whitespace vertical_whitespace_opening_braces
+// swiftlint:disable file_length missing_docs
 import Foundation
 
 // MARK: - File-level formatter
@@ -225,7 +225,7 @@ private struct PRRef: Codable {
 // MARK: - PR label
 
 private func prLabel(from run: RunPayload) -> String {
-    if let pr = run.pullRequests?.first { return "#\(pr.number)" }
+    if let prRef = run.pullRequests?.first { return "#\(prRef.number)" }
     if let branch = run.headBranch,
        let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
         let digits = branch[range].filter { $0.isNumber }
@@ -398,4 +398,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable file_length missing_docs colon operator_usage_whitespace vertical_whitespace_opening_braces
+// swiftlint:enable file_length missing_docs

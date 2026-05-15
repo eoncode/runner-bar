@@ -493,11 +493,11 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(DesignTokens.Color.labelSecondary)
                         }
-                        Button(action: signOutOfGitHub) {
+                        Button(action: signOutOfGitHub, label: {
                             Text("Sign out")
                                 .font(.caption)
                                 .foregroundColor(DesignTokens.Color.statusRed)
-                        }
+                        })
                         .buttonStyle(.plain)
                         .disabled(isSigningOut)
                         .help("Run gh auth logout and disconnect RunnerBar from GitHub")
@@ -592,6 +592,7 @@ struct SettingsView: View {
             : (runner.busy ? DesignTokens.Color.statusOrange : DesignTokens.Color.statusGreen)
     }
 
+    // swiftlint:disable:next function_body_length
     private func linkRow(label: String, url: String) -> some View {
         Button(
             action: { if let dest = URL(string: url) { NSWorkspace.shared.open(dest) } },
