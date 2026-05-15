@@ -237,6 +237,7 @@ enum RelativeTimeFormatter {
 
 // MARK: - ActionGroup + progressFraction
 
+/// Progress fraction helpers for `ActionGroup` display.
 extension ActionGroup {
     /// Progress fraction (0–1) derived from completed vs total jobs, or nil when queued.
     var progressFraction: Double? {
@@ -252,6 +253,7 @@ extension ActionGroup {
 
 // MARK: - ActiveJob + progressFraction
 
+/// Progress fraction helpers for `ActiveJob` display.
 extension ActiveJob {
     /// Progress fraction (0–1) derived from completed steps, or nil when queued.
     var progressFraction: Double? {

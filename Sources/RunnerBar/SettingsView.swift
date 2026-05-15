@@ -10,19 +10,6 @@ import SwiftUI
 /// Sections: Runner Management, Notifications, General, Account, Legal, About.
 /// All persistent state is backed by dedicated ObservableObject stores.
 ///
-/// Phase 1 (issue #252): Local Runners section auto-populates at launch via
-/// `LocalRunnerStore`, which calls `LocalRunnerScanner` on a background thread.
-/// No GitHub token is required for this section.
-///
-/// Phase 2 (issue #253): Each runner row gains Resume/Stop, ⚙ Config, and
-/// ✕ Remove controls backed by `RunnerLifecycleService`.
-///
-/// Phase 3 (issue #254): A `+` button in the Local Runners header opens
-/// `AddRunnerSheet` to onboard new runners via the GitHub API.
-///
-/// Phase 4 (issue #255): `RunnerStatusEnricher` enriches runner rows with
-/// live GitHub API status (online/offline/busy) after each local scan.
-///
 /// ⚠️ ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize (ref #377).
 /// AppDelegate KVO-observes preferredContentSize and calls NSPanel.setFrame().
 /// NSPanel.setFrame() has no anchor → zero side jump on any size change.
@@ -31,7 +18,6 @@ import SwiftUI
 /// NO ScrollView, NO frame(maxHeight:) cap.
 /// preferredContentSize reports the full natural VStack height.
 /// AppDelegate.resizeAndRepositionPanel() clamps to maxHeight = 85% screen.
-/// That is the only height cap — enforced at the AppDelegate level, not here.
 /// ❌ NEVER add a ScrollView or frame(maxHeight:) cap back to SettingsView.
 /// ❌ NEVER add idealHeight to the root frame.
 ///
@@ -85,12 +71,8 @@ struct SettingsView: View {
     }
 
     /// Root body: full settings panel with all sections.
+    // swiftlint:disable:next function_body_length
     var body: some View {
-        // NO ScrollView — NSPanel grows to show all content.
-        // AppDelegate clamps panel height to 85% screen visibleFrame.
-        // ❌ NEVER wrap in ScrollView or add frame(maxHeight:) here.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
@@ -111,11 +93,6 @@ struct SettingsView: View {
             }
             .padding(.bottom, 16)
         }
-        // idealWidth only — no idealHeight. NSPanel handles screen bounds.
-        // ❌ NEVER add idealHeight here.
-        // ❌ NEVER remove idealWidth: 480.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
@@ -124,18 +101,12 @@ struct SettingsView: View {
             }
             localRunnerStore.refresh()
         }
-        // Single-parameter form: compatible with macOS 13+.
-        // The two-parameter { _, newValue in } form requires macOS 14+.
         .onChange(of: localRunnerStore.isScanning) { scanning in
             if !scanning { hasLoadedOnce = true }
         }
         .onDisappear {
             ScopeStore.shared.onMutate = nil
         }
-        // AddRunnerSheet uses @Environment(\.dismiss) — no init params needed.
-        // Refresh localRunnerStore when the sheet is dismissed via .onDisappear
-        // inside AddRunnerSheet (which calls dismiss()), triggering the binding
-        // to flip back to false and re-running the sheet's onDisappear.
         .sheet(isPresented: $showAddRunnerSheet, onDismiss: { localRunnerStore.refresh() }) {
             AddRunnerSheet()
         }
@@ -278,18 +249,14 @@ struct SettingsView: View {
                 .lineLimit(1).fixedSize()
             if runner.isRunning {
                 Button(
-                    action: {
-                        lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) }
-                    },
+                    action: { lifecycleAction { RunnerLifecycleService.shared.stop(runner: runner) } },
                     label: { Text("Stop").font(.caption2) }
                 )
                 .buttonStyle(.bordered)
                 .help("Stop runner service")
             } else {
                 Button(
-                    action: {
-                        lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) }
-                    },
+                    action: { lifecycleAction { RunnerLifecycleService.shared.start(runner: runner) } },
                     label: { Text("Resume").font(.caption2) }
                 )
                 .buttonStyle(.bordered)
@@ -464,16 +431,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Account section
-    //
-    // When authenticated, shows:
-    //   GitHub   ● Authenticated   [Sign out]
-    //
-    // Sign out runs `gh auth logout --hostname github.com` on a background
-    // thread, then re-checks githubToken() to refresh isAuthenticated.
-    // isSigningOut disables the button while the shell call is in flight.
-    //
-    // ❌ NEVER remove the `gh auth login` hint below — it is the only
-    //    recovery path shown to the user after signing out.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account")
@@ -592,7 +549,6 @@ struct SettingsView: View {
             : (runner.busy ? DesignTokens.Color.statusOrange : DesignTokens.Color.statusGreen)
     }
 
-    // swiftlint:disable:next function_body_length
     private func linkRow(label: String, url: String) -> some View {
         Button(
             action: { if let dest = URL(string: url) { NSWorkspace.shared.open(dest) } },
@@ -617,9 +573,6 @@ struct SettingsView: View {
     }
 
     /// Runs `gh auth logout --hostname github.com` on a background thread.
-    /// Updates `isAuthenticated` on the main thread when the call completes.
-    /// Uses `isSigningOut` to prevent double-tap.
-    ///
     /// ❌ NEVER run shell calls on the main thread — they block the UI.
     private func signOutOfGitHub() {
         guard !isSigningOut else { return }

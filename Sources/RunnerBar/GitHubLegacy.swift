@@ -63,6 +63,7 @@ func ghPost(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
 /// Depended on by: AppDelegate.swift, JobDetailView.swift, RunnerStoreState.swift
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     guard
+        // swiftlint:disable:next identifier_name
         let s = urlString,
         let url = URL(string: s),
         url.host == "github.com",
@@ -78,6 +79,7 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
 func runIDFromHtmlUrl(_ urlString: String?) -> Int? {
     guard let s = urlString else { return nil }
     let parts = s.components(separatedBy: "/")
+    // swiftlint:disable:next identifier_name
     for (i, part) in parts.enumerated() where part == "runs" && i + 1 < parts.count {
         return Int(parts[i + 1])
     }
@@ -146,6 +148,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     _ = shell("unzip -q '\(zipPath)' -d '\(tmpDir)'", timeout: 15)
     // Step files are named like "1_<step_name>.txt" (1-based index).
     let prefix = String(format: "%d_", stepNumber)
+    // swiftlint:disable:next identifier_name
     let fm = FileManager.default
     if let files = try? fm.contentsOfDirectory(atPath: tmpDir),
        let match = files.first(where: { $0.hasPrefix(prefix) && $0.hasSuffix(".txt") }) {

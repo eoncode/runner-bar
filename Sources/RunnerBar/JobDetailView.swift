@@ -16,10 +16,9 @@ import SwiftUI
 //   ❌ NEVER use a fixed constant.
 //
 // ════════════════════════════════════════════════════════════════════════════════
-
+// swiftlint:disable:next type_body_length
 /// Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
 /// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
-// swiftlint:disable:next type_body_length
 struct JobDetailView: View {
     /// The job whose steps are displayed.
     let job: ActiveJob
