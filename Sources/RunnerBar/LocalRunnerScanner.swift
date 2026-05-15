@@ -1,5 +1,6 @@
 import Foundation
 
+// swiftlint:disable function_parameter_count
 // MARK: - LocalRunnerScanner
 
 /// Discovers locally-installed GitHub Actions self-hosted runners without
@@ -177,3 +178,4 @@ struct LocalRunnerScanner {
         return labels
     }
 }
+// swiftlint:enable function_parameter_count
