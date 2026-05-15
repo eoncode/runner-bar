@@ -1,4 +1,4 @@
-// swiftlint:disable identifier_name vertical_whitespace_opening_braces missing_docs opening_brace
+// swiftlint:disable vertical_whitespace_opening_braces opening_brace
 import Foundation
 
 // MARK: - GitHub API client
@@ -265,4 +265,4 @@ func fetchRunners(for scope: String) -> [Runner] {
     else { return [] }
     return decoded.runners
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces missing_docs opening_brace
+// swiftlint:enable vertical_whitespace_opening_braces opening_brace

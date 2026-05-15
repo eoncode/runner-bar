@@ -1,4 +1,3 @@
-// swiftlint:disable colon
 import Foundation
 
 /// Persists the list of watched GitHub scopes (e.g. `"owner/repo"` or `"myorg"`).
@@ -35,4 +34,3 @@ final class ScopeStore {
         onMutate?()
     }
 }
-// swiftlint:enable colon

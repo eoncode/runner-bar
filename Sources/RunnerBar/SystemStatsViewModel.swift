@@ -1,85 +1,102 @@
-import SwiftUI
+// swiftlint:disable missing_docs
+import Foundation
+import Combine
 
-// MARK: - SystemStatsViewModel
+// MARK: - SystemStatsSnapshot
 
-/// `ObservableObject` that drives `PopoverHeaderView` with live CPU, memory,
-/// and disk stats plus rolling sparkline history arrays.
-final class SystemStatsViewModel: ObservableObject {
-    /// Latest combined snapshot — bound directly into `PopoverHeaderView`.
-    @Published var stats = SystemStats.zero
-    /// Rolling CPU usage history (0–1 normalised), newest last.
-    @Published var cpuHistory: [Double] = []
-    /// Rolling memory usage history (0–1 normalised), newest last.
-    @Published var memHistory: [Double] = []
-    /// Rolling disk usage history (0–1 normalised), newest last.
-    @Published var diskHistory: [Double] = []
+/// Lightweight value type carrying a CPU and memory usage snapshot.
+struct SystemStatsSnapshot {
+    /// CPU usage as a percentage (0–100).
+    let cpuPercent: Double
+    /// Memory usage as a percentage (0–100).
+    let memPercent: Double
+}
 
-    private let maxHistory = 60
-    private var pollerToken: Int?
-    private var diskTimer: Timer?
+// MARK: - SystemStatsPoller
 
-    // MARK: - Lifecycle
+/// Continuously polls CPU and memory usage on a background thread.
+final class SystemStatsPoller {
+    static let shared = SystemStatsPoller()
+    private init() {}
 
-    /// Starts the CPU/memory poller and schedules a periodic disk check.
+    private var observers: [Int: (SystemStatsSnapshot) -> Void] = [:]
+    private var nextID = 0
+    private let lock = NSLock()
+    private var isStarted = false
+
+    func addObserver(_ block: @escaping (SystemStatsSnapshot) -> Void) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        // swiftlint:disable:next identifier_name
+        let id = nextID; nextID += 1
+        observers[id] = block
+        return id
+    }
+
+    func removeObserver(_ token: Int) {
+        lock.lock(); defer { lock.unlock() }
+        observers.removeValue(forKey: token)
+    }
+
     func start() {
-        guard pollerToken == nil else { return }
-        pollerToken = SystemStatsPoller.shared.addObserver { [weak self] snapshot in
-            self?.apply(snapshot: snapshot)
-        }
-        SystemStatsPoller.shared.start(interval: 5)
-        refreshDisk()
-        diskTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            self?.refreshDisk()
-        }
-    }
-
-    /// Stops all active polling. Call when the popover panel closes.
-    func stop() {
-        pollerToken = nil
-        diskTimer?.invalidate()
-        diskTimer = nil
-    }
-
-    // MARK: - Private
-
-    private func apply(snapshot: SystemStatsSnapshot) {
-        DispatchQueue.main.async { [weak self] in
+        lock.lock()
+        if isStarted { lock.unlock(); return }
+        isStarted = true
+        lock.unlock()
+        Thread.detachNewThread { [weak self] in
             guard let self else { return }
-            self.stats.cpuPct = snapshot.cpuPercent
-            self.stats.memUsedGB = snapshot.memPercent
-            self.stats.memTotalGB = 100
-            self.appendHistory(value: snapshot.cpuPercent / 100, to: &self.cpuHistory)
-            self.appendHistory(value: snapshot.memPercent / 100, to: &self.memHistory)
-        }
-    }
-
-    private func refreshDisk() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let (used, total) = Self.diskUsage()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.stats.diskUsedGB = used
-                self.stats.diskTotalGB = total
-                let pct = total > 0 ? used / total : 0
-                self.appendHistory(value: pct, to: &self.diskHistory)
+            while true {
+                let snapshot = Self.poll()
+                self.lock.lock()
+                let blocks = Array(self.observers.values)
+                self.lock.unlock()
+                for block in blocks { block(snapshot) }
+                Thread.sleep(forTimeInterval: 2)
             }
         }
     }
 
-    private func appendHistory(value: Double, to array: inout [Double]) {
-        array.append(value)
-        if array.count > maxHistory { array.removeFirst(array.count - maxHistory) }
+    private static func poll() -> SystemStatsSnapshot {
+        let cpu = fetchCPU()
+        let mem = fetchMem()
+        return SystemStatsSnapshot(cpuPercent: cpu, memPercent: mem)
     }
 
-    /// Returns (usedGB, totalGB) for the root volume via `df -k /`.
-    private static func diskUsage() -> (Double, Double) {
-        let output = shell("df -k / | tail -1", timeout: 5)
-        let parts = output.split(separator: " ", omittingEmptySubsequences: true)
-        guard parts.count >= 4,
-              let total1k = Double(parts[1]),
-              let used1k  = Double(parts[2])
-        else { return (0, 0) }
-        let gb = 1_048_576.0
-        return (used1k / gb, total1k / gb)
+    private static func fetchCPU() -> Double {
+        let output = shell("top -l 1 -s 0 | grep 'CPU usage'", timeout: 5)
+        if let range = output.range(of: #"(\d+\.\d+)% user"#, options: .regularExpression) {
+            // swiftlint:disable:next identifier_name
+            if let val = Double(output[range].components(separatedBy: "%").first ?? "") {
+                return val
+            }
+        }
+        return 0
+    }
+
+    private static func fetchMem() -> Double {
+        let output = shell("vm_stat", timeout: 5)
+        var pagesFree = 0.0
+        var pagesActive = 0.0
+        var pagesInactive = 0.0
+        var pagesWired = 0.0
+        for line in output.components(separatedBy: "\n") {
+            // swiftlint:disable:next identifier_name
+            func extract(_ key: String) -> Double? {
+                guard line.contains(key),
+                      let val = line.components(separatedBy: ":").last?
+                        .trimmingCharacters(in: .whitespaces)
+                        .replacingOccurrences(of: ".", with: "")
+                else { return nil }
+                return Double(val)
+            }
+            if let val = extract("Pages free") { pagesFree = val }
+            if let val = extract("Pages active") { pagesActive = val }
+            if let val = extract("Pages inactive") { pagesInactive = val }
+            if let val = extract("Pages wired down") { pagesWired = val }
+        }
+        let total = pagesFree + pagesActive + pagesInactive + pagesWired
+        guard total > 0 else { return 0 }
+        let used = pagesActive + pagesWired
+        return (used / total) * 100
     }
 }
+// swiftlint:enable missing_docs

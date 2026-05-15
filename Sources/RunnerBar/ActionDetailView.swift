@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable file_length identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:disable file_length vertical_whitespace_opening_braces superfluous_disable_command
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
@@ -221,16 +221,12 @@ struct ActionDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-// swiftlint:enable file_length identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:enable file_length vertical_whitespace_opening_braces superfluous_disable_command
 
 // MARK: - ActionDetailView + Actions
 
 extension ActionDetailView {
 
-    // Button action helpers — extracted from @ViewBuilder closures to avoid
-    // the x86_64 swift-frontend result-builder type-checker ICE.
-
-    /// Triggers a re-run of all failed jobs in the group.
     func reRunAction(completion: @escaping (Bool) -> Void) {
         let scope: String = group.repo
         let runIDs: [Int] = group.runs.map { $0.id }
@@ -243,7 +239,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Triggers cancellation of all in-progress runs in the group.
     func cancelAction(completion: @escaping (Bool) -> Void) {
         let scope: String = group.repo
         let runIDs: [Int] = group.runs.map { $0.id }
@@ -255,7 +250,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Fetches the combined log text for the group.
     func logFetchAction(completion: @escaping (String?) -> Void) {
         let grp: ActionGroup = group
         DispatchQueue.global(qos: .userInitiated).async {
@@ -263,7 +257,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Opens the commit or pull-request URL in the default browser.
     func openLabelOnGitHub() {
         let urlStr: String
         if group.label.hasPrefix("#"), let number = Int(group.label.dropFirst()) {
@@ -275,25 +268,21 @@ extension ActionDetailView {
         NSWorkspace.shared.open(url)
     }
 
-    /// Tooltip text for the label button.
     var labelLinkTooltip: String {
         return group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
     }
 
-    /// Formatted start time string for the group.
     var groupStartLabel: String {
         guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
         return Self.timeFmt.string(from: date)
     }
 
-    /// Formatted end time string for the group.
     var groupEndLabel: String {
         if let date = group.lastJobCompletedAt { return Self.timeFmt.string(from: date) }
         if group.groupStatus == .inProgress { return "now" }
         return "—"
     }
 
-    /// Summary line describing job completion state.
     var jobsSummaryLine: String {
         let done = group.jobsDone
         let total = group.jobsTotal
@@ -309,7 +298,6 @@ extension ActionDetailView {
         return "\(done)/\(total) jobs completed"
     }
 
-    /// Returns the live elapsed string; tick parameter drives re-evaluation.
     func elapsedLive(tick _: Int) -> String { return group.elapsed }
 }
 
@@ -317,7 +305,6 @@ extension ActionDetailView {
 
 extension ActionDetailView {
 
-    /// Full job row: main line + optional progress bar.
     @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View {
         VStack(spacing: 0) {
             jobRowMainLine(job, index: index)
@@ -327,7 +314,6 @@ extension ActionDetailView {
         .contentShape(Rectangle())
     }
 
-    /// Main horizontal line for a job row.
     @ViewBuilder func jobRowMainLine(_ job: ActiveJob, index: Int) -> some View {
         let indexText: String = "#\(index)"
         let dotColor: Color = jobDotColor(for: job)
@@ -390,7 +376,6 @@ extension ActionDetailView {
             .frame(width: 88, alignment: .trailing)
     }
 
-    /// Thin progress bar shown under a running job row.
     @ViewBuilder func jobRowProgressBar(_ job: ActiveJob) -> some View {
         let fraction: CGFloat = CGFloat(job.progressFraction ?? 0)
         let isActive: Bool = job.status == "in_progress" && fraction > 0
@@ -403,7 +388,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Background tint color for a job row based on status/conclusion.
     func jobRowTint(for job: ActiveJob) -> Color {
         guard !job.isDimmed else { return Color.clear }
         if job.status == "in_progress" || job.status == "queued" {
@@ -414,7 +398,6 @@ extension ActionDetailView {
         return Color.clear
     }
 
-    /// Formats a job's time range as a string.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
@@ -424,7 +407,6 @@ extension ActionDetailView {
         return "\(startStr)→now"
     }
 
-    /// Dot color for a job's status indicator.
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return DesignTokens.Color.labelTertiary }
         if job.status == "in_progress" { return DesignTokens.Color.statusBlue }
@@ -434,7 +416,6 @@ extension ActionDetailView {
         return Color.secondary
     }
 
-    /// Human-readable status label for an in-progress/queued job.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "IN PROGRESS"
@@ -444,7 +425,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Color for a status label.
     func jobStatusColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return DesignTokens.Color.statusBlue
@@ -453,7 +433,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Human-readable label for a job conclusion string.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
         case "success":         return "SUCCESS"
@@ -466,7 +445,6 @@ extension ActionDetailView {
         }
     }
 
-    /// Color for a job conclusion.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
         case "success":         return DesignTokens.Color.statusGreen

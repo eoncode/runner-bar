@@ -1,4 +1,3 @@
-// swiftlint:disable colon missing_docs identifier_name
 import SwiftUI
 
 // MARK: - AddRunnerSheet
@@ -65,4 +64,3 @@ struct AddRunnerSheet: View {
         }
     }
 }
-// swiftlint:enable colon missing_docs identifier_name

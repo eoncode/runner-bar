@@ -1,4 +1,3 @@
-// swiftlint:disable identifier_name missing_docs
 import SwiftUI
 
 // MARK: - RunnerConfigSheet
@@ -46,9 +45,7 @@ struct RunnerConfigSheet: View {
             }
 
             if let msg = errorMessage {
-                Text(msg)
-                    .font(.caption)
-                    .foregroundColor(.red)
+                Text(msg).font(.caption).foregroundColor(.red)
             }
 
             HStack {
@@ -58,11 +55,7 @@ struct RunnerConfigSheet: View {
                 Button(
                     action: saveConfig,
                     label: {
-                        if isSaving {
-                            ProgressView().scaleEffect(0.7)
-                        } else {
-                            Text("Save")
-                        }
+                        if isSaving { ProgressView().scaleEffect(0.7) } else { Text("Save") }
                     }
                 )
                 .keyboardShortcut(.defaultAction)
@@ -82,6 +75,7 @@ struct RunnerConfigSheet: View {
             .filter { !$0.isEmpty }
         let folder = workFolderText.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
+            // swiftlint:disable:next identifier_name
             let succeeded = RunnerLifecycleService.shared.updateConfig(
                 runner: runner,
                 labels: labels,
@@ -93,10 +87,9 @@ struct RunnerConfigSheet: View {
                     isPresented = nil
                     onSave()
                 } else {
-                    errorMessage = "Failed to save — check that the runner's .runner file exists and is writable."
+                    errorMessage = "Failed to save — check runner's .runner file exists and is writable."
                 }
             }
         }
     }
 }
-// swiftlint:enable identifier_name missing_docs

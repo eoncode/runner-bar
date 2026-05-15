@@ -1,11 +1,12 @@
-// swiftlint:disable identifier_name missing_docs
 import SwiftUI
 
 // MARK: - ButtonPhaseView
 
 /// Shared loading/done/failed phase indicator used by action buttons.
 struct ButtonPhaseView: View {
+    /// The visual phase to display.
     enum Phase { case loading, done, failed }
+    /// The phase currently being rendered.
     let phase: Phase
 
     var body: some View {
@@ -24,4 +25,3 @@ struct ButtonPhaseView: View {
         }
     }
 }
-// swiftlint:enable identifier_name missing_docs
