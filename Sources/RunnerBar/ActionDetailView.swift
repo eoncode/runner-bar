@@ -37,6 +37,7 @@ import SwiftUI
 // Switched from idealWidth (fixed) to minWidth (content-driven) width model.
 // Phase 5: DesignToken colour sweep — all hardcoded .yellow/.green/.red replaced
 //          with Color.rbWarning / rbSuccess / rbDanger; job rows card-styled.
+// Review item 3: job rows now use .cardRow() modifier for consistency.
 // ════════════════════════════════════════════════════════════════════════════════
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
@@ -73,7 +74,7 @@ struct ActionDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header ──────────────────────────────────────────────────────────────
+            // ── Header ───────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -125,7 +126,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ────────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -165,7 +166,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ────────────────────────────────────────────────────────
+            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: RBSpacing.xxs) {
@@ -284,14 +285,8 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
         .padding(.horizontal, RBSpacing.sm)
         .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-        )
+        // Use shared .cardRow() modifier for consistency (review item 3).
+        .cardRow(cornerRadius: RBRadius.small)
         .contentShape(Rectangle())
     }
 
