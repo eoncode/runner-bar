@@ -73,9 +73,9 @@ final class SystemStatsViewModel: ObservableObject {
 
     /// Rolling history buffers for sparkline rendering.
     /// Each array holds the last `historyCapacity` normalised values in [0, 1].
-    @Published var cpuHistory:  [Double] = []
+    @Published var cpuHistory: [Double] = []
     /// Rolling memory history for sparkline, normalised [0, 1].
-    @Published var memHistory:  [Double] = []
+    @Published var memHistory: [Double] = []
     /// Rolling disk history for sparkline, normalised [0, 1].
     @Published var diskHistory: [Double] = []
 
@@ -213,13 +213,13 @@ final class SystemStatsViewModel: ObservableObject {
             diskFreeGB: disk.free,
             diskFreePct: disk.freePct
         )
-        let cpuNorm  = cpu / 100.0
-        let memNorm  = mem.total > 0 ? mem.used / mem.total : 0
+        let cpuNorm = cpu / 100.0
+        let memNorm = mem.total > 0 ? mem.used / mem.total : 0
         let diskNorm = disk.total > 0 ? disk.used / disk.total : 0
         DispatchQueue.main.async {
             self.stats = snapshot
-            self.appendHistory(value: cpuNorm,  to: &self.cpuHistory)
-            self.appendHistory(value: memNorm,  to: &self.memHistory)
+            self.appendHistory(value: cpuNorm, to: &self.cpuHistory)
+            self.appendHistory(value: memNorm, to: &self.memHistory)
             self.appendHistory(value: diskNorm, to: &self.diskHistory)
         }
     }
