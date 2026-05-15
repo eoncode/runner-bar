@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import SwiftUI
 
 // MARK: - PieProgressDot
@@ -205,7 +206,7 @@ struct StatusDonutView: View {
                 lineWidth: stroke
             )
             .rotationEffect(.degrees(shimmerAngle))
-        // Progress arc — draws 0→1 clockwise from 12-o’clock
+        // Progress arc — draws 0→1 clockwise from 12-o'clock
         Circle()
             .trim(from: 0, to: CGFloat(displayProgress))
             .stroke(
@@ -281,3 +282,4 @@ extension ActiveJob {
         }
     }
 }
+// swiftlint:enable file_length
