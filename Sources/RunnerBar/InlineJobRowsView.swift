@@ -13,7 +13,9 @@ import SwiftUI
 /// the popover is hidden. Removing the `isOpen` guard re-introduces the
 /// cap-mutation-while-hidden bug fixed in #377.
 struct InlineJobRowsView: View {
+    /// The action group whose jobs are rendered as inline sub-rows.
     let group: ActionGroup
+    /// A monotonically-increasing tick value used to refresh elapsed timers.
     let tick: Int
 
     @EnvironmentObject private var popoverState: PopoverOpenState
