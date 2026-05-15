@@ -203,9 +203,13 @@ final class SystemStatsViewModel: ObservableObject {
             diskFreeGB: disk.free,
             diskFreePct: disk.freePct
         )
-        // Phase 2: append normalised values to history buffers
+        // Phase 2: append normalised values to history buffers.
+        // cpuNorm: already 0–100 from cpuPercent(), divide to get 0–1.
+        // memNorm: clamped to 0–1 — mem.used can theoretically exceed mem.total
+        //          (active+wired can briefly overshoot physical pages reported by
+        //           hw.memsize), so we guard consumers against out-of-range values.
         let cpuNorm = cpu / 100.0
-        let memNorm = mem.total > 0 ? mem.used / mem.total : 0
+        let memNorm = mem.total > 0 ? min(max(mem.used / mem.total, 0), 1) : 0
         DispatchQueue.main.async {
             self.stats = snapshot
             self.cpuHistory = Array((self.cpuHistory + [cpuNorm]).suffix(self.historyCapacity))
