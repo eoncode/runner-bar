@@ -3,7 +3,6 @@ import Foundation
 /// Runs `command` via zsh, draining stdout/stderr asynchronously to avoid
 /// pipe-buffer deadlock, and enforcing a hard timeout so the app never hangs.
 @discardableResult
-// swiftlint:disable:next function_body_length
 func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell › \(command)")
     let task = Process()

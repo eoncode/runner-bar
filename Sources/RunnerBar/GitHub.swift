@@ -1,4 +1,3 @@
-// swiftlint:disable vertical_whitespace_opening_braces opening_brace
 import Foundation
 
 // MARK: - GitHub API client
@@ -118,4 +117,3 @@ func rerunFailedJobs(runID: Int, scope: String) -> Bool {
     let output = shell(cmd)
     return output.isEmpty || !output.lowercased().contains("error")
 }
-// swiftlint:enable vertical_whitespace_opening_braces opening_brace
