@@ -27,9 +27,9 @@ enum BinaryPaths {
 /// paths are checked here.
 func ghBinaryPath() -> String? {
     let candidates = [
-        "/opt/homebrew/bin/gh",  // Apple Silicon Homebrew (default prefix)
-        "/usr/local/bin/gh",     // Intel Homebrew (legacy prefix)
-        "/usr/bin/gh"            // System-level install
+        "/opt/homebrew/bin/gh",  // NOSONAR S1075 — allowlisted Apple Silicon Homebrew path
+        "/usr/local/bin/gh",     // NOSONAR S1075 — allowlisted Intel Homebrew path
+        "/usr/bin/gh"            // NOSONAR S1075 — allowlisted system-level path
     ]
     return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
 }
