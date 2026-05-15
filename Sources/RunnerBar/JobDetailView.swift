@@ -24,6 +24,7 @@ import SwiftUI
 //   Issue #419 Phase 5: BranchTagPill wired into infoBar for repo/branch context.
 //   Restored: CancelButton in action cluster (spec: no behaviour changes).
 //   Restored: LogCopyButton in action cluster (spec: no behaviour changes).
+//   Restored: isDisabled guards on ReRunButton + ReRunFailedButton.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -51,6 +52,7 @@ struct JobDetailView: View {
                 Spacer(minLength: 8)
 
                 // ── Action cluster ──────────────────────────────────────────────────────────────────
+                // Restored isDisabled: buttons must be inactive while job is running/queued.
                 ReRunButton(
                     action: { completion in
                         let jobID    = job.id
@@ -60,8 +62,10 @@ struct JobDetailView: View {
                             DispatchQueue.main.async { completion(ok) }
                         }
                     },
+                    isDisabled: job.status == "in_progress" || job.status == "queued",
                     tooltip: "Re-run this job"
                 )
+                // Restored isDisabled: only enabled when job has failed or been cancelled.
                 ReRunFailedButton(
                     action: { completion in
                         let runID    = job.runId
@@ -71,6 +75,9 @@ struct JobDetailView: View {
                             DispatchQueue.main.async { completion(ok) }
                         }
                     },
+                    isDisabled: job.status == "in_progress"
+                        || job.status == "queued"
+                        || (job.conclusion != "failure" && job.conclusion != "cancelled"),
                     tooltip: "Re-run failed jobs in this workflow run"
                 )
                 // Restored: CancelButton — spec mandates no behaviour regression.
@@ -215,12 +222,8 @@ struct JobDetailView: View {
     }
 
     // MARK: - Step row
-    /// Single-line step row:
-    /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
-    /// Issue #419 Phase 5: wrapped in cardRow-style RoundedRectangle background.
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
-            // Step number badge — zero-padded (#01…#99).
             Text("#\(String(format: "%02d", step.number))")
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
@@ -249,7 +252,6 @@ struct JobDetailView: View {
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                     } else {
-                        // Issue #419 Phase 5: use rbBlue instead of .yellow
                         Text("now")
                             .font(.caption)
                             .foregroundColor(.rbBlue)
@@ -265,7 +267,6 @@ struct JobDetailView: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
-        // Issue #419 Phase 5: card row background
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .background(
@@ -297,7 +298,6 @@ struct JobDetailView: View {
         }
     }
 
-    /// Step icon/status colour — uses DesignTokens instead of raw .green/.red/.yellow.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
         case "success": return .rbSuccess
