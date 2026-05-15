@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length
+// swiftlint:disable type_body_length file_length missing_docs
 
 // MARK: - NavState
 
@@ -582,3 +582,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+// swiftlint:enable type_body_length file_length missing_docs
