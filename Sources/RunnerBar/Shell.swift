@@ -8,9 +8,9 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     let task = Process()
     let pipe = Pipe()
     task.standardOutput = pipe
-    task.standardError  = pipe
-    task.launchPath     = "/bin/zsh"
-    task.arguments      = ["-c", command]
+    task.standardError = pipe
+    task.launchPath = "/bin/zsh"
+    task.arguments = ["-c", command]
 
     // Drain pipe asynchronously — prevents pipe-buffer deadlock when the
     // subprocess produces more output than the kernel buffer can hold.
@@ -19,7 +19,9 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
         guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
+        lock.lock()
+        outputData.append(chunk)
+        lock.unlock()
     }
 
     do {
@@ -46,7 +48,11 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     // last readabilityHandler call and the process exiting.
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+    if !tail.isEmpty {
+        lock.lock()
+        outputData.append(tail)
+        lock.unlock()
+    }
 
     let result = String(data: outputData, encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
