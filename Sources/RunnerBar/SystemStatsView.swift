@@ -102,16 +102,16 @@ struct DiskPillBadge: View {
 /// The compact 3-column sparkline header used in the popover.
 /// Drop-in replacement for BlockBarView rows — call from PopoverMainView.
 struct HeaderStatsBar: View {
-    @StateObject private var vm = SystemStatsViewModel()
+    @StateObject private var statsVM = SystemStatsViewModel()
 
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 0) {
                 SparklineMetricView(
                     label: "CPU",
-                    value: String(format: "%.0f%%", vm.stats.cpuPct),
-                    history: vm.cpuHistory.values,
-                    currentPct: vm.stats.cpuPct
+                    value: String(format: "%.0f%%", statsVM.stats.cpuPct),
+                    history: statsVM.cpuHistory.values,
+                    currentPct: statsVM.stats.cpuPct
                 )
 
                 Divider()
@@ -120,10 +120,10 @@ struct HeaderStatsBar: View {
 
                 SparklineMetricView(
                     label: "MEM",
-                    value: String(format: "%.1f GB", vm.stats.memUsedGB),
-                    history: vm.memHistory.values,
-                    currentPct: vm.stats.memTotalGB > 0
-                        ? (vm.stats.memUsedGB / vm.stats.memTotalGB) * 100
+                    value: String(format: "%.1f GB", statsVM.stats.memUsedGB),
+                    history: statsVM.memHistory.values,
+                    currentPct: statsVM.stats.memTotalGB > 0
+                        ? (statsVM.stats.memUsedGB / statsVM.stats.memTotalGB) * 100
                         : 0
                 )
 
@@ -133,12 +133,12 @@ struct HeaderStatsBar: View {
 
                 SparklineMetricView(
                     label: "DISK",
-                    value: String(format: "%.0f%%", vm.stats.diskTotalGB > 0
-                        ? (vm.stats.diskUsedGB / vm.stats.diskTotalGB) * 100
+                    value: String(format: "%.0f%%", statsVM.stats.diskTotalGB > 0
+                        ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
                         : 0),
-                    history: vm.diskHistory.values,
-                    currentPct: vm.stats.diskTotalGB > 0
-                        ? (vm.stats.diskUsedGB / vm.stats.diskTotalGB) * 100
+                    history: statsVM.diskHistory.values,
+                    currentPct: statsVM.stats.diskTotalGB > 0
+                        ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
                         : 0
                 )
             }
@@ -149,14 +149,14 @@ struct HeaderStatsBar: View {
             HStack {
                 Spacer()
                 DiskPillBadge(
-                    freeGB: vm.stats.diskFreeGB,
-                    freePct: vm.stats.diskFreePct
+                    freeGB: statsVM.stats.diskFreeGB,
+                    freePct: statsVM.stats.diskFreePct
                 )
             }
             .padding(.horizontal, 8)
         }
-        .onAppear { vm.start() }
-        .onDisappear { vm.stop() }
+        .onAppear { statsVM.start() }
+        .onDisappear { statsVM.stop() }
     }
 }
 
