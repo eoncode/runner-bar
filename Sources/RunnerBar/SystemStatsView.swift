@@ -75,48 +75,39 @@ struct SparklineMetricView: View {
 }
 
 // MARK: - DiskPillBadge
-/// Pill-shaped badge showing free disk space. Kept for potential use outside the header
-/// (e.g. settings panel disk section). Do not re-add to HeaderStatsBar -- it inflates
-/// the DISK tile height and breaks the compact row layout.
+/// Pill-shaped badge showing disk usage percentage, placed inline next to the
+/// DISK sparkline in HeaderStatsBar.
 struct DiskPillBadge: View {
     let freeGB: Double
     let freePct: Double
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "internaldrive")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(String(format: "%.0f GB free", freeGB))
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundStyle(pillColor)
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(pillColor.opacity(0.3), lineWidth: 0.5)
-        )
+        Text(String(format: "%.0f%%", (1 - freePct / 100) * 100))
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundStyle(pillColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(pillColor.opacity(0.15), in: Capsule())
+            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
     }
 
     private var pillColor: Color {
         if freePct < 10 { return .rbDanger }
         if freePct < 20 { return .rbWarning }
-        return .rbSuccess
+        return .rbWarning
     }
 }
 
 // MARK: - HeaderStatsBar
-/// Compact single-row stats header: CPU | MEM | DISK as inline chips.
+/// Compact single-row stats header: CPU | MEM | DISK [pill] as inline chips.
 ///
-/// Design reference: each chip is `label [sparkline] value` all on one line,
-/// total header height ~28-32pt.
+/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [87%]  →  ⚙ ✕
+///
+/// The DiskPillBadge sits immediately after the DISK SparklineMetricView,
+/// before the Spacer, so it stays adjacent to the disk graph.
 ///
 /// Accepts an existing SystemStatsViewModel so it shares the sampler
 /// already running in PopoverMainView -- no second timer is created.
-///
-/// Do NOT add DiskPillBadge inside this view -- it inflates the DISK tile.
 struct HeaderStatsBar: View {
     @ObservedObject var statsVM: SystemStatsViewModel
 
@@ -147,16 +138,25 @@ struct HeaderStatsBar: View {
             Color.secondary.opacity(0.3)
                 .frame(width: 1, height: 14)
 
-            SparklineMetricView(
-                label: "DISK",
-                value: String(format: "%d/%dGB",
-                              Int(statsVM.stats.diskUsedGB.rounded()),
-                              Int(statsVM.stats.diskTotalGB.rounded())),
-                history: statsVM.diskHistory.values,
-                currentPct: statsVM.stats.diskTotalGB > 0
-                    ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
-                    : 0
-            )
+            // DISK chip + usage pill inline, before Spacer
+            HStack(spacing: 5) {
+                SparklineMetricView(
+                    label: "DISK",
+                    value: String(format: "%d/%dGB",
+                                  Int(statsVM.stats.diskUsedGB.rounded()),
+                                  Int(statsVM.stats.diskTotalGB.rounded())),
+                    history: statsVM.diskHistory.values,
+                    currentPct: statsVM.stats.diskTotalGB > 0
+                        ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
+                        : 0
+                )
+
+                if statsVM.stats.diskTotalGB > 0 {
+                    let usedPct = (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
+                    let freeGB = statsVM.stats.diskTotalGB - statsVM.stats.diskUsedGB
+                    DiskPillBadge(freeGB: freeGB, freePct: 100 - usedPct)
+                }
+            }
 
             Spacer()
         }
