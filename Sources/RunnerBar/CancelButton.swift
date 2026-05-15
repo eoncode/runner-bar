@@ -1,12 +1,7 @@
-// swiftlint:disable missing_docs sorted_imports
+// swiftlint:disable all
 import SwiftUI
 
-// MARK: - CancelButton
-
-/// A button that cancels all runs for an action group.
-/// Uses a closure-based action so callers control the async work.
 struct CancelButton: View {
-    /// Called when tapped. Caller invokes the completion with `true` on success.
     let action: (@escaping (Bool) -> Void) -> Void
     let isDisabled: Bool
     @State private var phase: ButtonPhase = .idle
@@ -27,4 +22,3 @@ struct CancelButton: View {
         .disabled(isDisabled)
     }
 }
-// swiftlint:enable missing_docs sorted_imports

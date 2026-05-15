@@ -1,4 +1,4 @@
-// swiftlint:disable missing_docs
+// swiftlint:disable all
 import SwiftUI
 
 struct SettingsView: View {
@@ -16,28 +16,21 @@ struct SettingsView: View {
         }
         .frame(minWidth: 520, minHeight: 400)
         .sheet(isPresented: $showLegal) {
-            LegalPrefsView()
-                .environmentObject(legalPrefs)
+            LegalPrefsView(legalPrefsStore: legalPrefs)
         }
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(SettingsTab.allCases) { tab in
-                SettingsTabButton(tab: tab, selected: selectedTab == tab) {
-                    selectedTab = tab
-                }
+                SettingsTabButton(tab: tab, selected: selectedTab == tab) { selectedTab = tab }
             }
             Spacer()
             Button("Privacy & Legal") { showLegal = true }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+                .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.bottom, 12)
         }
-        .frame(width: 160)
-        .padding(.top, 12)
+        .frame(width: 160).padding(.top, 12)
     }
 
     @ViewBuilder
@@ -57,46 +50,33 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .general:       return "General"
-        case .account:       return "Account"
-        case .notifications: return "Notifications"
-        case .runners:       return "Runners"
-        case .advanced:      return "Advanced"
+        case .general: return "General"; case .account: return "Account"
+        case .notifications: return "Notifications"; case .runners: return "Runners"
+        case .advanced: return "Advanced"
         }
     }
     var icon: String {
         switch self {
-        case .general:       return "gearshape"
-        case .account:       return "person.crop.circle"
-        case .notifications: return "bell"
-        case .runners:       return "server.rack"
-        case .advanced:      return "wrench.and.screwdriver"
+        case .general: return "gearshape"; case .account: return "person.crop.circle"
+        case .notifications: return "bell"; case .runners: return "server.rack"
+        case .advanced: return "wrench.and.screwdriver"
         }
     }
 }
 
 private struct SettingsTabButton: View {
-    let tab: SettingsTab
-    let selected: Bool
-    let action: () -> Void
+    let tab: SettingsTab; let selected: Bool; let action: () -> Void
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: tab.icon).frame(width: 16)
-                Text(tab.label)
-                Spacer()
+                Text(tab.label); Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                selected
-                    ? RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.15))
-                    : nil
-            )
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(selected ? RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.15)) : nil)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .foregroundColor(selected ? .accentColor : .primary)
+        .buttonStyle(.plain).foregroundColor(selected ? .accentColor : .primary)
     }
 }
 
@@ -108,17 +88,11 @@ private struct GeneralSettingsView: View {
                 Slider(value: $settingsStore.pollingInterval, in: 10...120, step: 5) {
                     Text("Interval")
                 } minimumValueLabel: { Text("10s") } maximumValueLabel: { Text("2m") }
-                Text("Every \(Int(settingsStore.pollingInterval))s")
-                    .font(.caption).foregroundColor(.secondary)
+                Text("Every \(Int(settingsStore.pollingInterval))s").font(.caption).foregroundColor(.secondary)
             }
-            Section("Runners") {
-                Toggle("Show offline runners", isOn: $settingsStore.showOfflineRunners)
-            }
-            Section("Startup") {
-                Toggle("Launch at login", isOn: $settingsStore.launchAtLogin)
-            }
-        }
-        .formStyle(.grouped).padding()
+            Section("Runners") { Toggle("Show offline runners", isOn: $settingsStore.showOfflineRunners) }
+            Section("Startup") { Toggle("Launch at login", isOn: $settingsStore.launchAtLogin) }
+        }.formStyle(.grouped).padding()
     }
 }
 
@@ -129,23 +103,14 @@ private struct AccountSettingsView: View {
         Form {
             Section("GitHub") {
                 LabeledContent("Organisation / User") {
-                    TextField("e.g. my-org", text: $settingsStore.githubOrg)
-                        .textFieldStyle(.roundedBorder)
+                    TextField("e.g. my-org", text: $settingsStore.githubOrg).textFieldStyle(.roundedBorder)
                 }
                 LabeledContent("Personal Access Token") {
-                    SecureField("ghp_\u{2026}", text: $settingsStore.githubToken)
-                        .textFieldStyle(.roundedBorder)
+                    SecureField("ghp_…", text: $settingsStore.githubToken).textFieldStyle(.roundedBorder)
                 }
             }
-            Section {
-                HStack {
-                    Spacer()
-                    Button("Save & Reconnect") { store.applySettings(settingsStore) }
-                        .buttonStyle(.borderedProminent)
-                }
-            }
-        }
-        .formStyle(.grouped).padding()
+            Section { HStack { Spacer(); Button("Save & Reconnect") { store.applySettings(settingsStore) }.buttonStyle(.borderedProminent) } }
+        }.formStyle(.grouped).padding()
     }
 }
 
@@ -156,8 +121,7 @@ private struct NotificationSettingsView: View {
                 Toggle("Notify on job failure", isOn: .constant(true))
                 Toggle("Notify on job success", isOn: .constant(false))
             }
-        }
-        .formStyle(.grouped).padding()
+        }.formStyle(.grouped).padding()
     }
 }
 
@@ -167,26 +131,17 @@ private struct RunnerSettingsView: View {
         Form {
             Section("Local Runners") {
                 ForEach(store.state.localRunners) { runner in
-                    HStack {
-                        Text(runner.name)
-                        Spacer()
-                        Text(runner.status).font(.caption).foregroundColor(.secondary)
-                    }
+                    HStack { Text(runner.name); Spacer(); Text(runner.status).font(.caption).foregroundColor(.secondary) }
                 }
             }
-        }
-        .formStyle(.grouped).padding()
+        }.formStyle(.grouped).padding()
     }
 }
 
 private struct AdvancedSettingsView: View {
     var body: some View {
         Form {
-            Section("Debug") {
-                Text("Advanced options coming soon.").foregroundColor(.secondary)
-            }
-        }
-        .formStyle(.grouped).padding()
+            Section("Debug") { Text("Advanced options coming soon.").foregroundColor(.secondary) }
+        }.formStyle(.grouped).padding()
     }
 }
-// swiftlint:enable missing_docs

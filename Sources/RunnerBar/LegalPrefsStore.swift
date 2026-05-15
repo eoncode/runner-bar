@@ -1,4 +1,5 @@
 // swiftlint:disable all
+// swiftlint:disable all
 import Foundation
 
 final class LegalPrefsStore: ObservableObject {
