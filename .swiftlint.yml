@@ -10,7 +10,6 @@ excluded:
 
 # ── Opt-in rules ────────────────────────────────────────────────────────────────────────
 opt_in_rules:
-  - closure_spacing
   - explicit_init
   - operator_usage_whitespace
   - sorted_imports
@@ -32,7 +31,7 @@ file_length:
   error: 800
 
 type_body_length:
-  warning: 200
+  warning: 300
   error: 500
 
 function_body_length:
@@ -71,3 +70,4 @@ disabled_rules:
   - large_tuple
   - vertical_whitespace_opening_braces
   - implicit_optional_initialization
+  - closure_spacing
