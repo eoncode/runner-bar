@@ -119,7 +119,10 @@ final class SystemStatsViewModel: ObservableObject {
     func start() {
         timer?.invalidate()
         samplingQueue.async { self.sample() }
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(
+            withTimeInterval: 2,
+            repeats: true
+        ) { [weak self] _ in
             self?.samplingQueue.async { self?.sample() }
         }
     }
@@ -179,9 +182,12 @@ final class SystemStatsViewModel: ObservableObject {
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size
         )
-        let kernResult = withUnsafeMutablePointer(to: &vmInfo) { vmPtr in
-            vmPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, intPtr, &count)
+        let kernResult = withUnsafeMutablePointer(to: &vmInfo) { ptr in
+            ptr.withMemoryRebound(
+                to: integer_t.self,
+                capacity: Int(count)
+            ) { reboundPtr in
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, reboundPtr, &count)
             }
         }
         guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
