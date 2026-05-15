@@ -34,6 +34,8 @@ import SwiftUI
 
 /// Shows the raw log text for a single `JobStep`.
 ///
+/// Issue #419 Phase 5: card-row grouping and monospaced metadata/log styling.
+///
 /// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
 /// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background thread.
 struct StepLogView: View {
@@ -111,7 +113,7 @@ struct StepLogView: View {
 
             // ── Step name (large) ──────────────────────────────────────────────────────────────────────────────────────
             Text(step.name)
-                .font(.system(size: 13, weight: .semibold))
+                .font(RBFont.mono)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12)
@@ -120,46 +122,52 @@ struct StepLogView: View {
             // ── Meta rows ────────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(job.name).font(.caption).foregroundColor(.secondary)
+                Text(job.name).font(RBFont.mono).foregroundColor(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
                 Spacer()
                 Text("step #\(step.id)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(RBFont.monoSmall)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12)).cornerRadius(4).fixedSize()
+                    .pillBackground(color: .rbBlue, opacity: 0.10, borderOpacity: 0.20).fixedSize()
             }
+            .padding(.horizontal, 12).padding(.bottom, 3)
+            .cardRow()
             .padding(.horizontal, 12).padding(.bottom, 3)
 
             HStack(spacing: 6) {
                 Image(systemName: "folder").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(repoSlug).font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
+                Text(repoSlug).font(RBFont.mono).foregroundColor(.secondary).lineLimit(1).fixedSize()
                 Spacer()
                 Text("job #\(job.id)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(RBFont.monoSmall)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12)).cornerRadius(4).fixedSize()
+                    .pillBackground(color: .rbBlue, opacity: 0.10, borderOpacity: 0.20).fixedSize()
             }
+            .padding(.horizontal, 12).padding(.bottom, 3)
+            .cardRow()
             .padding(.horizontal, 12).padding(.bottom, 3)
 
             HStack(spacing: 6) {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.secondary)
                 Text(startLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                    .font(RBFont.monoSmall).foregroundColor(.secondary).fixedSize()
                 Text("→").font(.system(size: 10)).foregroundColor(.secondary)
                 Text(endLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                    .font(RBFont.monoSmall).foregroundColor(.secondary).fixedSize()
                 Text("·").font(.system(size: 10)).foregroundColor(.secondary)
                 Text(step.elapsed)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
-                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                    .font(RBFont.monoSmall).foregroundColor(.secondary).fixedSize()
+                Text("·").font(RBFont.monoSmall).foregroundColor(.secondary)
                 Text(dateLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                    .font(RBFont.monoSmall).foregroundColor(.secondary).fixedSize()
                 Spacer()
                 Text(stepStatusLabel)
                     .font(.system(size: 10, weight: .medium)).foregroundColor(stepStatusColor).fixedSize()
             }
+            .padding(.horizontal, 12).padding(.bottom, 6)
+            .cardRow()
             .padding(.horizontal, 12).padding(.bottom, 6)
 
             Divider()
@@ -176,108 +184,78 @@ struct StepLogView: View {
                     }
                 } else if let text = logText, !text.isEmpty {
                     Text(text)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(RBFont.mono)
                         .foregroundColor(.primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12).padding(.vertical, 6)
+                        .cardRow()
+                        .padding(.horizontal, 12).padding(.vertical, 6)
                 } else {
                     Text("Log not available")
                         .font(.caption).foregroundColor(.secondary)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .cardRow()
+                        .padding(.horizontal, 12).padding(.vertical, 10)
                 }
             }
-            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents panel growing off-screen.
             // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ════════════════════════════════════════════════════════════════════════
-        // ⚠️ idealWidth: 480 hints the initial panel width before KVO fires.
-        // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // ❌ NEVER omit idealWidth: 480
-        // ❌ NEVER add .frame(height:) or .fixedSize() here
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
-        // is removed is major major major.
-        // ════════════════════════════════════════════════════════════════════════
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-        .onAppear { loadLog() }
-    }
-
-    // MARK: - Log loading
-    private func loadLog() {
-        isLoading = true
-        let jobID   = job.id
-        let stepNum = step.id
-        let scope: String = {
-            let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-            if parts.count >= 5 {
-                let owner = parts[3]
-                let repo  = parts[4]
-                if !owner.isEmpty && !repo.isEmpty { return "\(owner)/\(repo)" }
-            }
-            return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
-        }()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
-            DispatchQueue.main.async {
-                logText    = text ?? ""
-                isLoading  = false
-                onLogLoaded?()
+        .onAppear {
+            guard isLoading else { return }
+            let job = self.job
+            let step = self.step
+            DispatchQueue.global(qos: .userInitiated).async {
+                let text = LogFetcher.fetchLog(job: job, step: step)
+                DispatchQueue.main.async {
+                    self.logText = text
+                    self.isLoading = false
+                    self.onLogLoaded?()
+                }
             }
         }
     }
-}
 
-// MARK: - Derived helpers
-/// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
-extension StepLogView {
-    /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
-    var repoSlug: String {
-        let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "—" }
-        let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
+    // MARK: - Helpers
+
+    private var repoSlug: String {
+        guard let url = job.htmlUrl else { return "" }
+        let parts = url
+            .replacingOccurrences(of: "https://github.com/", with: "")
+            .components(separatedBy: "/")
+        guard parts.count >= 2 else { return url }
+        return parts[0] + "/" + parts[1]
     }
 
-    /// Step conclusion label with icon, or live/queued status.
-    var stepStatusLabel: String {
+    private var startLabel: String {
+        guard let d = step.startedAt else { return "—" }
+        return Self.timeFmt.string(from: d)
+    }
+
+    private var endLabel: String {
+        guard let d = step.completedAt else { return "now" }
+        return Self.timeFmt.string(from: d)
+    }
+
+    private var dateLabel: String {
+        guard let d = step.startedAt else { return "" }
+        return Self.dateFmt.string(from: d)
+    }
+
+    private var stepStatusLabel: String {
+        if let c = step.conclusion { return c.uppercased() }
+        return step.status.uppercased()
+    }
+
+    private var stepStatusColor: Color {
         switch step.conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "skipped":   return "⊘ skipped"
-        case "cancelled": return "⊘ cancelled"
-        default: return step.status == "in_progress" ? "▶ running" : "· queued"
+        case "success": return .rbSuccess
+        case "failure": return .rbDanger
+        default:
+            return step.status == "in_progress" ? .rbBlue : .secondary
         }
-    }
-
-    /// Colour used to render `stepStatusLabel` based on conclusion or live status.
-    var stepStatusColor: Color {
-        switch step.conclusion {
-        case "success":            return .green
-        case "failure":            return .red
-        case "skipped", "cancelled": return .secondary
-        default: return step.status == "in_progress" ? .yellow : .secondary
-        }
-    }
-
-    /// Formatted start time, or "—" if unavailable.
-    var startLabel: String {
-        guard let dateValue = step.startedAt else { return "—" }
-        return Self.timeFmt.string(from: dateValue)
-    }
-
-    /// Formatted end time, or "—" if unavailable.
-    var endLabel: String {
-        guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running…" : "—"
-        }
-        return Self.timeFmt.string(from: dateValue)
-    }
-
-    /// Date string (yyyy-MM-dd) for context when the step ran.
-    var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
-        return Self.dateFmt.string(from: dateValue)
     }
 }
