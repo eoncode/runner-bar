@@ -40,14 +40,17 @@ struct SystemStats {
 /// A fixed-size ring buffer that stores the last `capacity` samples for a metric.
 /// Used to drive `SparklineView` without growing unboundedly.
 struct RingBuffer {
+    /// The collected sample values, oldest-first.
     private(set) var values: [Double] = []
+    /// Maximum number of samples retained before the oldest is evicted.
     let capacity: Int
 
-    /// Creates a ring buffer that retains the most recent `capacity` samples.
+    /// Creates a ring buffer retaining the most recent `capacity` samples.
     init(capacity: Int = 20) {
         self.capacity = capacity
     }
 
+    /// Appends `value`, evicting the oldest sample when at capacity.
     mutating func append(_ value: Double) {
         if values.count >= capacity {
             values.removeFirst()

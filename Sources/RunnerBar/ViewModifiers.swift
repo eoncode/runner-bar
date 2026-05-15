@@ -6,7 +6,9 @@ import SwiftUI
 /// The optional `status` tint composites *beneath* the elevated surface so the
 /// very-faint status colour shows through on light and dark appearances.
 struct CardRowModifier: ViewModifier {
+    /// Status tint applied beneath the elevated surface.
     var status: RBStatus = .unknown
+    /// Corner radius for the card shape.
     var cornerRadius: CGFloat = RBRadius.card
 
     /// Wraps `content` with an elevated card background tinted by `status`.
@@ -43,8 +45,11 @@ extension View {
 
 /// Applies a pill-shaped semi-transparent background — used for disk badge, stat pills, branch tags.
 struct PillBackgroundModifier: ViewModifier {
+    /// Fill color for the pill.
     var color: Color
+    /// Opacity of the pill fill.
     var opacity: Double = 0.15
+    /// Opacity of the pill border stroke.
     var borderOpacity: Double = 0.35
 
     /// Wraps `content` with a capsule fill and optional stroke border.
@@ -78,7 +83,9 @@ extension View {
 
 /// Applies monospaced font and secondary text color — used for hashes, timestamps, step counts.
 struct MonoLabelModifier: ViewModifier {
+    /// Font applied to content.
     var size: Font = RBFont.mono
+    /// Foreground color applied to content.
     var color: Color = .rbTextTertiary
 
     /// Applies monospaced font and tertiary color to `content`.
@@ -100,8 +107,11 @@ extension View {
 
 /// The narrow left-side colored bar used to group and indicate status for action rows.
 struct LeftStatusIndicator: View {
+    /// Status whose color fills the indicator bar.
     var status: RBStatus
+    /// Width of the indicator bar in points.
     var width: CGFloat = 3
+    /// Corner radius of the indicator bar.
     var cornerRadius: CGFloat = RBRadius.indicator
 
     var body: some View {
@@ -115,7 +125,9 @@ struct LeftStatusIndicator: View {
 
 /// Small pill-shaped background for runner CPU/MEM inline stats.
 struct StatPill: View {
+    /// Short metric label, e.g. "CPU" or "MEM".
     let label: String
+    /// Formatted metric value, e.g. "42%".
     let value: String
 
     var body: some View {

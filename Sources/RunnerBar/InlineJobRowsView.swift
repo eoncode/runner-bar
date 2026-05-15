@@ -1,4 +1,3 @@
-// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - InlineJobRowsView
@@ -21,6 +20,7 @@ struct InlineJobRowsView: View {
 
     @EnvironmentObject private var popoverState: PopoverOpenState
 
+    /// Renders job sub-rows, guarded by `popoverState.isOpen` to prevent cap mutations while hidden.
     var body: some View {
         // ⚠️ REGRESSION GUARD #377 — do not remove this check.
         guard popoverState.isOpen else { return AnyView(EmptyView()) }

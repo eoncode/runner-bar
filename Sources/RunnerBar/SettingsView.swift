@@ -101,19 +101,24 @@ struct SettingsView: View {
                     localRunnerStore.refresh()
                 }
             }
-            .modifier(RemovalAlertModifier(
-                title: removalAlertTitle,
-                isPresented: Binding(
-                    get: { runnerPendingRemoval != nil },
-                    set: { if !$0 { runnerPendingRemoval = nil } }
-                ),
-                isAuthenticated: isAuthenticated,
-                onCancel: { runnerPendingRemoval = nil },
-                onConfirm: performRemoval
-            ))
+            .modifier(removalAlertModifier)
     }
 
     // MARK: - Body helpers
+
+    /// Removal alert modifier instance — extracted to keep `body` under the line limit.
+    private var removalAlertModifier: RemovalAlertModifier {
+        RemovalAlertModifier(
+            title: removalAlertTitle,
+            isPresented: Binding(
+                get: { runnerPendingRemoval != nil },
+                set: { if !$0 { runnerPendingRemoval = nil } }
+            ),
+            isAuthenticated: isAuthenticated,
+            onCancel: { runnerPendingRemoval = nil },
+            onConfirm: performRemoval
+        )
+    }
 
     /// Root stack of all settings sections.
     ///
@@ -354,16 +359,14 @@ struct SettingsView: View {
             HStack {
                 Text("Notify on success").font(.system(size: 12))
                 Spacer()
-                Toggle("", isOn: $notifications.notifyOnSuccess)
-                    .toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $notifications.notifyOnSuccess).toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Notify on failure").font(.system(size: 12))
                 Spacer()
-                Toggle("", isOn: $notifications.notifyOnFailure)
-                    .toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $notifications.notifyOnFailure).toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
         }
@@ -378,8 +381,7 @@ struct SettingsView: View {
             HStack {
                 Text("Launch at login").font(.system(size: 12))
                 Spacer()
-                Toggle("", isOn: $launchAtLogin)
-                    .toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $launchAtLogin).toggleStyle(.switch).labelsHidden()
                     .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
@@ -387,8 +389,7 @@ struct SettingsView: View {
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
-                Toggle("", isOn: $settings.showDimmedRunners)
-                    .toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $settings.showDimmedRunners).toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
             Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
@@ -429,8 +430,7 @@ struct SettingsView: View {
                         Button(action: signOutOfGitHub) {
                             Text("Sign out").font(.caption).foregroundColor(Color.rbDanger)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(isSigningOut)
+                        .buttonStyle(.plain).disabled(isSigningOut)
                         .help("Run gh auth logout and disconnect RunnerBar from GitHub")
                     }
                 } else {
@@ -456,8 +456,7 @@ struct SettingsView: View {
             HStack {
                 Text("Share analytics").font(.system(size: 12))
                 Spacer()
-                Toggle("", isOn: $legal.analyticsEnabled)
-                    .toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $legal.analyticsEnabled).toggleStyle(.switch).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             #if DEBUG
