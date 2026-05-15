@@ -220,6 +220,8 @@ enum RBFont {
     static let sectionKey: Font = .system(size: 12.5, weight: .regular)
     /// Section header — alias for sectionKey (used in SettingsView).
     static let sectionHeader: Font = sectionKey
+    /// Section caption — uppercase section headers in the popover (9pt semibold).
+    static let sectionCaption: Font = .system(size: 9, weight: .semibold)
 }
 
 // MARK: - DesignTokens namespace shim

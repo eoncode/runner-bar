@@ -6,7 +6,7 @@ struct SectionHeaderLabel: View {
     let title: String
     var body: some View {
         Text(title.uppercased())
-            .font(.system(size: 9, weight: .semibold))
+            .font(RBFont.sectionCaption)
             .foregroundColor(.secondary)
             .padding(.horizontal, DesignTokens.Spacing.rowHPad)
             .padding(.top, 6)
@@ -240,8 +240,9 @@ struct ActionRowView: View {
 
     private var rowContent: some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ☞ NEVER remove this line.
-        _ = tick
+        // ☞ NEVER remove this line. tickSnapshot forces SwiftUI to invalidate
+        //   this view on every 1-second displayTick so elapsed strings stay live.
+        let tickSnapshot = tick
         return HStack(spacing: 6) {
             // 4b: DonutStatusView replaces PieProgressDot
             DonutStatusView(
@@ -261,7 +262,7 @@ struct ActionRowView: View {
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
             Spacer()
-            metaTrailing
+            metaTrailing(tick: tickSnapshot)
         }
         .padding(.leading, RBSpacing.sm)
         .padding(.trailing, RBSpacing.xs)
@@ -269,7 +270,9 @@ struct ActionRowView: View {
     }
 
     @ViewBuilder
-    private var metaTrailing: some View {
+    private func metaTrailing(tick tickSnapshot: Int) -> some View {
+        // tickSnapshot is read here to satisfy the compiler that the value is used.
+        let _ = tickSnapshot
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
                 .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
