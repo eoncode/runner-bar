@@ -227,4 +227,3 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 }
-// swiftlint:enable missing_docs

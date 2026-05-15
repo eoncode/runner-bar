@@ -70,4 +70,3 @@ struct CancelButton: View {
         }
     }
 }
-// swiftlint:enable file_length
