@@ -1,4 +1,4 @@
-// swiftlint:disable file_length missing_docs
+// swiftlint:disable file_length
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
@@ -643,4 +643,4 @@ struct InlineJobRowsView: View {
         }
     }
 }
-// swiftlint:enable file_length missing_docs
+// swiftlint:enable file_length
