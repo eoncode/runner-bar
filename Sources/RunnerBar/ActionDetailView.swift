@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:disable file_length identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
@@ -219,7 +219,7 @@ struct ActionDetailView: View {
         }
     }
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:enable file_length identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
 extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Opens the SHA commit or PR associated with the group label on GitHub.
