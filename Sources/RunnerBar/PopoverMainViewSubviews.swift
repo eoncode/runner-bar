@@ -27,7 +27,6 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
-            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -213,6 +212,11 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
+/// Phase 4 redesign:
+///  4a — Left-side elongated status indicator bar (3pt wide RoundedRectangle)
+///  4b — DonutStatusView replaces PieProgressDot
+///  4c — Subtle row background tint keyed to status
+///  4d — chevron.right is now always used (was chevron.down in some paths)
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -220,9 +224,38 @@ struct ActionRowView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+            // 4a: Left status indicator
+            LeftStatusIndicator(status: rowStatus)
+                .padding(.vertical, 6)
+
+            Button(action: onSelect, label: { rowContent })
+                .buttonStyle(.plain)
+
+            // 4d: Always chevron.right (fixed — was chevron.down in some states)
             Image(systemName: "chevron.right")
-                .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .padding(.trailing, 12)
+        }
+        // 4c: Subtle status tint on the row background
+        .background(
+            rowStatus.tint
+                .clipShape(RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous))
+        )
+    }
+
+    // MARK: - Helpers
+
+    private var rowStatus: RBStatus {
+        switch group.groupStatus {
+        case .inProgress: return .inProgress
+        case .queued:     return .queued
+        case .completed:
+            switch group.conclusion {
+            case "success":  return .success
+            case "failure":  return .failed
+            default:         return .unknown
+            }
         }
     }
 
@@ -231,7 +264,12 @@ struct ActionRowView: View {
         // ❌ NEVER remove this line.
         _ = tick
         return HStack(spacing: 6) {
-            PieProgressDot(progress: group.progressFraction, color: dotColor)
+            // 4b: DonutStatusView replaces PieProgressDot
+            DonutStatusView(
+                status: rowStatus,
+                progress: group.progressFraction ?? 0,
+                size: 14
+            )
             RunnerTypeIcon(isLocal: group.isLocalGroup)
             Text(group.label)
                 .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
@@ -246,9 +284,9 @@ struct ActionRowView: View {
             Spacer()
             metaTrailing
         }
-        .padding(.leading, DesignTokens.Spacing.rowHPad)
-        .padding(.trailing, 4)
-        .padding(.vertical, 3)
+        .padding(.leading, RBSpacing.sm)
+        .padding(.trailing, RBSpacing.xs)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -276,42 +314,24 @@ struct ActionRowView: View {
             .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-        statusChip
+        statusBadge
     }
 
+    /// Phase 4: Status badge uses `StatusBadge` component from Phase 1 ViewModifiers
+    /// instead of raw Text with hardcoded colors.
     @ViewBuilder
-    private var statusChip: some View {
+    private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress:
-            Text("IN PROGRESS")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Colors.statusBlue) // Phase 1: colour token
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(status: .inProgress, text: "IN PROGRESS")
         case .queued:
-            Text("QUEUED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(DesignTokens.Colors.statusBlue) // Phase 1: colour token
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             let success = group.conclusion == "success"
-            Text(success ? "SUCCESS" : "FAILED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(success
-                    ? DesignTokens.Colors.statusGreen  // Phase 1: colour token
-                    : DesignTokens.Colors.statusRed)   // Phase 1: colour token
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-        }
-    }
-
-    private var dotColor: Color {
-        switch group.groupStatus {
-        case .inProgress: return DesignTokens.Colors.statusBlue   // Phase 1: colour token
-        case .queued:     return DesignTokens.Colors.statusBlue   // Phase 1: colour token
-        case .completed:
-            if group.isDimmed { return .gray }
-            return group.conclusion == "success"
-                ? DesignTokens.Colors.statusGreen                  // Phase 1: colour token
-                : DesignTokens.Colors.statusRed                    // Phase 1: colour token
+            StatusBadge(
+                status: success ? .success : .failed,
+                text: success ? "SUCCESS" : "FAILED"
+            )
         }
     }
 }
