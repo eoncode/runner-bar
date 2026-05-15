@@ -8,8 +8,11 @@ final class SettingsStore: ObservableObject {
     /// Shared singleton instance.
     static let shared = SettingsStore()
 
+    /// UserDefaults key constants for SettingsStore.
     private enum Key {
+        /// Key for the polling interval setting.
         static let pollingInterval = "settings.pollingInterval"
+        /// Key for the show-dimmed-runners setting.
         static let showDimmedRunners = "settings.showDimmedRunners"
     }
 
@@ -43,7 +46,9 @@ final class SettingsStore: ObservableObject {
 
 // MARK: - Comparable+clamped
 
+/// Clamps a `Comparable` value to the given closed range.
 private extension Comparable {
+    /// Returns this value clamped to `range`.
     func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
     }

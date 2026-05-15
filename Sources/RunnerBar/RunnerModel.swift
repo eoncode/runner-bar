@@ -73,6 +73,7 @@ struct RunnerModel: Identifiable, Hashable {
 
     // MARK: - Init
 
+    /// Creates a new `RunnerModel` with the given properties.
     init(
         runnerName: String,
         gitHubUrl: String?,
