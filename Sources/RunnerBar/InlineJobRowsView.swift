@@ -71,8 +71,7 @@ struct InlineJobRowsView: View {
                         .fixedSize()
                 }
             }
-            // Phase 4 spec (#420): "Keep horizontal progress bar in job sub-rows."
-            // Shows a thin ProgressView bar reflecting step-completion fraction.
+            // Phase 4 spec (#420): keep horizontal progress bar in job sub-rows.
             if job.status == "in_progress" {
                 let progress = job.progressFraction ?? 0
                 ProgressView(value: progress)
@@ -91,17 +90,17 @@ struct InlineJobRowsView: View {
     private func jobStatus(for job: ActiveJob) -> RBStatus {
         if let conclusion = job.conclusion {
             switch conclusion {
-            case "success":   return .success
-            case "failure":   return .failed
+            case "success": return .success
+            case "failure": return .failed
             case "cancelled": return .unknown
-            case "skipped":   return .unknown
-            default:          return .unknown
+            case "skipped": return .unknown
+            default: return .unknown
             }
         }
         switch job.status {
         case "in_progress": return .inProgress
-        case "queued":      return .queued
-        default:            return .queued
+        case "queued": return .queued
+        default: return .queued
         }
     }
 }
