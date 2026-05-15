@@ -227,21 +227,27 @@ struct ActionDetailView: View {
 
 extension ActionDetailView {
 
+    // NOTE: Swift 6.3.2 ICE workaround.
+    // The type-checker crashes (SyntacticElementSolutionApplication) when a
+    // DispatchQueue.global().async closure contains a for-loop with ghPost calls,
+    // even after rewriting `for x where` as `for x { if }`.
+    // Fix: extract all loop logic into this standalone helper so the closure
+    // body reduces to a single call expression — no inference needed inside it.
+    private func reRunIDs(_ runIDs: [Int], scope: String) -> Bool {
+        var succeeded = true
+        for runID in runIDs {
+            let endpoint: String = "repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs"
+            let ok: Bool = ghPost(endpoint)
+            if !ok { succeeded = false }
+        }
+        return succeeded
+    }
+
     func reRunAction(completion: @escaping (Bool) -> Void) {
         let scope: String = group.repo
         let runIDs: [Int] = group.runs.map { $0.id }
         DispatchQueue.global(qos: .userInitiated).async {
-            var succeeded = true
-            // NOTE: `for runID in runIDs where !ghPost(...)` triggers a Swift 6.3.2
-            // compiler ICE (type-checker crash during solution application).
-            // Rewritten as an explicit `if` inside a plain `for` loop to work around it.
-            for runID in runIDs {
-                let endpoint = "repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs"
-                if !ghPost(endpoint) {
-                    succeeded = false
-                }
-            }
-            completion(succeeded)
+            completion(reRunIDs(runIDs, scope: scope))
         }
     }
 
@@ -424,10 +430,10 @@ extension ActionDetailView {
 
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
-        case "in_progress": return "IN PROGRESS"
-        case "queued":      return "QUEUED"
-        case "waiting":     return "WAITING"
-        default:            return job.status.uppercased()
+        case "in_progress": return "running"
+        case "queued":      return "queued"
+        case "waiting":     return "waiting"
+        default:            return job.status
         }
     }
 
@@ -441,55 +447,23 @@ extension ActionDetailView {
 
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":         return "SUCCESS"
-        case "failure":         return "FAILED"
-        case "cancelled":       return "CANCELLED"
-        case "skipped":         return "SKIPPED"
-        case "timed_out":       return "TIMED OUT"
-        case "action_required": return "ACTION REQ"
-        default:                return conclusion.uppercased()
+        case "success":   return "success"
+        case "failure":   return "failed"
+        case "cancelled": return "cancelled"
+        case "skipped":   return "skipped"
+        case "timed_out": return "timed out"
+        default:          return conclusion
         }
     }
 
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
-        case "success":         return DesignTokens.Color.statusGreen
-        case "failure":         return DesignTokens.Color.statusRed
-        case "cancelled":       return Color.secondary
-        case "skipped":         return Color.secondary
-        case "timed_out":       return DesignTokens.Color.statusOrange
-        case "action_required": return DesignTokens.Color.statusOrange
-        default:                return Color.secondary
-        }
-    }
-}
-
-// MARK: - JobProgressBarView
-
-/// Extracted from ActionDetailView.jobRowProgressBar to break GeometryReader
-/// type-inference chain inside @ViewBuilder and avoid swift-frontend ICE.
-private struct JobProgressBarView: View {
-    /// Filled fraction of the progress bar (0.0–1.0).
-    let fraction: CGFloat
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Rectangle()
-                    .fill(DesignTokens.Color.statusBlue.opacity(0.12))
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                DesignTokens.Color.statusBlue,
-                                DesignTokens.Color.statusBlue.opacity(0.6)
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: geo.size.width * fraction)
-            }
+        case "success":   return DesignTokens.Color.statusGreen
+        case "failure":   return DesignTokens.Color.statusRed
+        case "cancelled": return Color.secondary
+        case "skipped":   return Color.secondary
+        case "timed_out": return DesignTokens.Color.statusRed
+        default:          return Color.secondary
         }
     }
 }
