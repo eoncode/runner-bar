@@ -1,6 +1,6 @@
-// swiftlint:disable missing_docs identifier_name
-import Foundation
+// swiftlint:disable missing_docs
 import Combine
+import Foundation
 import SwiftUI
 
 // MARK: - SystemStats compatibility shims
@@ -54,6 +54,7 @@ final class SystemStatsViewModel: ObservableObject {
         let output = shell("df / | tail -1", timeout: 3)
         let cols = output.split(separator: " ").map(String.init)
         if let cap = cols.first(where: { $0.hasSuffix("%") }),
+           // swiftlint:disable:next identifier_name
            let val = Double(cap.dropLast()) {
             return val
         }
@@ -66,4 +67,4 @@ final class SystemStatsViewModel: ObservableObject {
         return 0
     }
 }
-// swiftlint:enable missing_docs identifier_name
+// swiftlint:enable missing_docs

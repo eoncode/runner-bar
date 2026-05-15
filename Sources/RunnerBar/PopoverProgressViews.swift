@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import SwiftUI
 
 // MARK: - PieProgressDot
@@ -11,15 +10,6 @@ import SwiftUI
 /// - `0 < progress < 1`  → Filled wedge sweeping clockwise, animated on change
 /// - `progress == 1`     → Full fill + brief spring scale pulse
 /// - `progress == 0`     → Background ring only
-///
-/// Animation contract:
-/// - `displayProgress` shadows `progress` with `.easeInOut(duration:0.4)` —
-///   wedge angle interpolates every frame.
-/// - `displayColor` shadows `color` with `.easeInOut(duration:0.35)` —
-///   color crossfades on state transitions (queued→in-progress→success/fail).
-/// - `spinAngle` drives the indeterminate arc via a `.linear(duration:1.2)`
-///   repeating animation started in `.onAppear`.
-/// - `completionScale` gives a spring pulse when progress reaches 1.0.
 ///
 /// ❌ NEVER change onChange to two-argument form — macOS 13 only supports single-value.
 /// ❌ NEVER set displayProgress directly without withAnimation — breaks interpolation.
@@ -123,7 +113,6 @@ struct PieProgressDot: View {
 // MARK: - StatusDonutView
 
 /// New design-system status indicator for action rows.
-/// Replaces PieProgressDot at the action-row level (PieProgressDot is kept for inline job rows).
 ///
 /// Three visual states:
 /// - `.success`    — solid green donut ring + checkmark SF Symbol
@@ -131,12 +120,11 @@ struct PieProgressDot: View {
 /// - `.inProgress` — blue arc (0→1 fraction) + animated shimmer background ring
 /// - `.queued`     — pulsing semi-transparent blue full ring (no arc fill)
 ///
-/// Size is driven by `DesignTokens.Layout.donutSize` (20pt) and
-/// `DesignTokens.Layout.donutStroke` (2pt).
-///
 /// ❌ NEVER change onChange to two-argument form — macOS 13 compat.
 struct StatusDonutView: View {
+    /// Status of the action group driving the donut state.
     let status: GroupStatus
+    /// Conclusion string once the group has completed (e.g. `"success"`, `"failure"`).
     let conclusion: String?
     /// Progress fraction 0–1 for in-progress state. Nil = indeterminate.
     let progress: Double?
@@ -145,7 +133,7 @@ struct StatusDonutView: View {
     @State private var pulseOpacity: Double = 0.35
     @State private var displayProgress: Double = 0
 
-    private let size:   CGFloat = DesignTokens.Layout.donutSize
+    private let size: CGFloat = DesignTokens.Layout.donutSize
     private let stroke: CGFloat = DesignTokens.Layout.donutStroke
 
     var body: some View {
@@ -162,9 +150,7 @@ struct StatusDonutView: View {
         .frame(width: size, height: size)
         .onAppear {
             displayProgress = progress ?? 0
-            // Shimmer: slow continuous rotation on the background arc
             withAnimation(DesignTokens.Animation.donutSpin) { shimmerAngle = 360 }
-            // Pulse: opacity breathe for queued state
             withAnimation(DesignTokens.Animation.donutPulse) { pulseOpacity = 0.7 }
         }
         .onChange(of: progress) { newValue in
@@ -172,27 +158,24 @@ struct StatusDonutView: View {
         }
     }
 
-    // MARK: - Completed donut (success / failure / other)
+    // MARK: - Completed donut
     @ViewBuilder
     private var completedDonut: some View {
         let isSuccess = conclusion == "success"
         let color: Color = isSuccess ? DesignTokens.Color.statusGreen : DesignTokens.Color.statusRed
-        let icon  = isSuccess ? "checkmark" : "xmark"
-        // Outer solid ring
+        let icon = isSuccess ? "checkmark" : "xmark"
         Circle()
             .strokeBorder(color, lineWidth: stroke)
             .background(Circle().fill(color.opacity(0.12)))
-        // SF Symbol icon centred
         Image(systemName: icon)
             .font(.system(size: size * 0.44, weight: .bold))
             .foregroundColor(color)
     }
 
-    // MARK: - In-progress donut (animated arc + shimmer)
+    // MARK: - In-progress donut
     @ViewBuilder
     private var inProgressDonut: some View {
         let color = DesignTokens.Color.statusBlue
-        // Shimmer background track — slow rotating angular gradient
         Circle()
             .strokeBorder(
                 AngularGradient(
@@ -206,7 +189,6 @@ struct StatusDonutView: View {
                 lineWidth: stroke
             )
             .rotationEffect(.degrees(shimmerAngle))
-        // Progress arc — draws 0→1 clockwise from 12-o'clock
         Circle()
             .trim(from: 0, to: CGFloat(displayProgress))
             .stroke(
@@ -214,20 +196,18 @@ struct StatusDonutView: View {
                 style: StrokeStyle(lineWidth: stroke, lineCap: .round)
             )
             .rotationEffect(.degrees(-90))
-        // Central fraction label when progress is meaningful
         if displayProgress > 0.04 {
             Text(String(format: "%.0f", displayProgress * 100))
                 .font(.system(size: size * 0.32, weight: .semibold, design: .monospaced))
                 .foregroundColor(color)
         } else {
-            // No progress yet — show a small activity dot
             Circle()
                 .fill(color.opacity(0.6))
                 .frame(width: size * 0.25, height: size * 0.25)
         }
     }
 
-    // MARK: - Queued donut (pulsing ring)
+    // MARK: - Queued donut
     @ViewBuilder
     private var queuedDonut: some View {
         let color = DesignTokens.Color.statusBlue
@@ -243,6 +223,7 @@ struct StatusDonutView: View {
 
 /// Formats a `Date` into a compact relative string like `"3m ago"`, `"1h ago"`, `"2d ago"`.
 enum RelativeTimeFormatter {
+    /// Returns a compact human-readable relative time string.
     static func string(from date: Date, relativeTo now: Date = Date()) -> String {
         let seconds = max(0, now.timeIntervalSince(date))
         switch seconds {
@@ -257,6 +238,7 @@ enum RelativeTimeFormatter {
 // MARK: - ActionGroup + progressFraction
 
 extension ActionGroup {
+    /// Progress fraction (0–1) derived from completed vs total jobs, or nil when queued.
     var progressFraction: Double? {
         switch groupStatus {
         case .queued:     return nil
@@ -271,6 +253,7 @@ extension ActionGroup {
 // MARK: - ActiveJob + progressFraction
 
 extension ActiveJob {
+    /// Progress fraction (0–1) derived from completed steps, or nil when queued.
     var progressFraction: Double? {
         switch status {
         case "queued":    return nil
@@ -282,4 +265,3 @@ extension ActiveJob {
         }
     }
 }
-// swiftlint:enable file_length
