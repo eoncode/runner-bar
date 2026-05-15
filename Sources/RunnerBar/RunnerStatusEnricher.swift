@@ -1,7 +1,5 @@
 import Foundation
 
-// swiftlint:disable missing_docs
-
 // MARK: - RunnerStatusEnricher
 
 /// Phase 4: Enriches locally-discovered `RunnerModel` values with live status
@@ -71,11 +69,11 @@ struct RunnerStatusEnricher {
             while true {
                 let endpoint = "\(baseEndpoint)?per_page=100&page=\(page)"
                 guard let data = ghAPI(endpoint) else {
-                    log("RunnerStatusEnricher \u203a API call failed for scope: \(scope) page: \(page)")
+                    log("RunnerStatusEnricher › API call failed for scope: \(scope) page: \(page)")
                     break
                 }
                 guard let decoded = try? JSONDecoder().decode(APIRunnersPage.self, from: data) else {
-                    log("RunnerStatusEnricher \u203a decode failed for scope: \(scope) page: \(page)")
+                    log("RunnerStatusEnricher › decode failed for scope: \(scope) page: \(page)")
                     break
                 }
                 let pageRunners = decoded.runners
@@ -84,11 +82,11 @@ struct RunnerStatusEnricher {
                     byName["\(scope)/\(apiRunner.name)"] = apiRunner
                 }
                 totalFetched += pageRunners.count
-                log("RunnerStatusEnricher \u203a scope=\(scope) page=\(page) fetched=\(pageRunners.count)")
+                log("RunnerStatusEnricher › scope=\(scope) page=\(page) fetched=\(pageRunners.count)")
                 if pageRunners.count < 100 { break }
                 page += 1
             }
-            log("RunnerStatusEnricher \u203a \(totalFetched) total runner(s) from GitHub for \(scope)")
+            log("RunnerStatusEnricher › \(totalFetched) total runner(s) from GitHub for \(scope)")
         }
         return (byID, byName)
     }
@@ -111,10 +109,10 @@ struct RunnerStatusEnricher {
         enriched.githubStatus = api.status
         enriched.isBusy = api.busy
         if runner.isRunning && api.status == "offline" {
-            log("RunnerStatusEnricher \u203a DIVERGENCE \(runner.runnerName): " +
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
                 "launchctl=running but GitHub=offline")
         } else if !runner.isRunning && api.status == "online" {
-            log("RunnerStatusEnricher \u203a DIVERGENCE \(runner.runnerName): " +
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
                 "launchctl=idle but GitHub=online")
         }
         return enriched
@@ -132,4 +130,3 @@ struct RunnerStatusEnricher {
         }
     }
 }
-// swiftlint:enable missing_docs
