@@ -27,7 +27,7 @@ struct StepLogView: View {
             toolbar
             Divider()
             if fetcher.isLoading {
-                ProgressView("Loading log\u2026")
+                ProgressView("Loading log…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let err = fetcher.error {
                 Text("Error: \(err)")
