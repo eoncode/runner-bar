@@ -237,7 +237,27 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Local runner row (split for function_body_length)
+
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
+        localRunnerRowContent(runner)
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
+            .background(localRunnerRowCard)
+    }
+
+    /// Card background shape for a local runner row.
+    private var localRunnerRowCard: some View {
+        RoundedRectangle(cornerRadius: RBRadius.small)
+            .fill(Color.rbSurfaceElevated)
+            .overlay(
+                RoundedRectangle(cornerRadius: RBRadius.small)
+                    .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+            )
+            .padding(.horizontal, RBSpacing.xs)
+    }
+
+    /// Inner HStack content for a local runner row.
+    private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(localRunnerDotColor(for: runner))
@@ -280,16 +300,6 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .help("Remove runner")
         }
-        .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-                .padding(.horizontal, RBSpacing.xs)
-        )
     }
 
     private func lifecycleAction(_ action: @escaping () -> Void) {
