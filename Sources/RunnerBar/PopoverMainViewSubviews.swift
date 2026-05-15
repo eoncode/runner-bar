@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
@@ -236,7 +237,7 @@ struct PopoverLocalRunnerRow: View {
                 RunnerCardRow(runner: runner)
             }
             if busy.count > 3 {
-                Text("+ \(busy.count - 3) more…")
+                Text("+ \(busy.count - 3) more\u{2026}")
                     .font(DesignTokens.Font.monoXSmall)
                     .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, DesignTokens.Layout.panelHPad).padding(.vertical, 2)
@@ -256,8 +257,6 @@ struct RunnerCardRow: View {
     var body: some View {
         HStack(spacing: DesignTokens.Layout.runnerRowGap) {
             // ⚠️ Use statusOrange (not .yellow) — consistent with DesignTokens color system.
-            // In-progress runners are "active/busy" which maps to the orange warning token,
-            // not the system yellow which is semantically undefined and not adaptive.
             Circle()
                 .fill(DesignTokens.Color.statusOrange)
                 .frame(width: 8, height: 8)
@@ -272,8 +271,8 @@ struct RunnerCardRow: View {
                 MetricPill(label: "CPU", value: String(format: "%.1f%%", metrics.cpu))
                 MetricPill(label: "MEM", value: String(format: "%.1f%%", metrics.mem))
             } else {
-                MetricPill(label: "CPU", value: "—")
-                MetricPill(label: "MEM", value: "—")
+                MetricPill(label: "CPU", value: "\u{2014}")
+                MetricPill(label: "MEM", value: "\u{2014}")
             }
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .medium))
@@ -322,15 +321,7 @@ struct MetricPill: View {
 }
 
 // MARK: - ActionRowView
-/// Action group row — Phase 4 redesign:
-/// - Left vertical indicator bar toggles expand/collapse of inline job rows
-/// - Tapping the row body navigates to ActionDetailView as before
-/// - StatusDonutView replaces PieProgressDot
-/// - Faint per-row status tint background
-/// - chevron.right always points right; rotates 90° when expanded
-/// - Meta text in monospaced font
-/// - InlineJobRowsView is rendered inside this view so `expanded` can be
-///   passed directly as `showAll:` — keeping the toggle wired end-to-end.
+/// Action group row with expand/collapse inline jobs, StatusDonutView, and DesignTokens styling.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -371,12 +362,6 @@ struct ActionRowView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            // ── Inline job rows — shown for all groups that have jobs.
-            // Default (expanded == false): in-progress groups show only in_progress jobs;
-            //   completed/failed groups show nothing (collapsed).
-            // When expanded == true: all jobs are shown regardless of status.
-            // This satisfies the spec requirement that failed/succeeded rows can also
-            // expand to reveal their jobs via the left indicator tap.
             if !group.jobs.isEmpty {
                 InlineJobRowsView(
                     group: group,
@@ -395,8 +380,6 @@ struct ActionRowView: View {
             .padding(.vertical, 4)
             .frame(maxHeight: .infinity)
             .overlay(
-                // ⚠️ Use .primary.opacity() NOT .white.opacity() — .white is invisible
-                // in light mode. .primary is adaptive: near-black on light, near-white on dark.
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 5, weight: .bold))
                     .foregroundColor(.primary.opacity(expanded ? 0.7 : 0.35))
@@ -478,7 +461,7 @@ struct ActionRowView: View {
 }
 
 // MARK: - StatusBadge
-/// Pill-shaped status label for action rows. Replaces the plain coloured Text chip.
+/// Pill-shaped status label for action rows.
 struct StatusBadge: View {
     let label: String
     let color: Color
@@ -500,7 +483,6 @@ struct StatusBadge: View {
 
 // MARK: - RoundedCorners
 /// Custom shape with per-corner independent radii.
-/// Used for the left indicator bar: right corners rounded (3pt), left flush (0pt).
 private struct RoundedCorners: Shape {
     var topLeft, topRight, bottomLeft, bottomRight: CGFloat
 
@@ -547,11 +529,10 @@ private struct RoundedCorners: Shape {
 // MARK: - InlineJobRowsView
 /// Passive read-only ↳ job rows shown beneath every action group.
 /// Default: shows only `in_progress` jobs.
-/// When `showAll == true` (triggered by the left indicator expand toggle): shows all jobs.
+/// When `showAll == true`: shows all jobs.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
-/// isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NOT from a plain Bool prop.
 /// ❌ NEVER add `var isPopoverOpen: Bool` prop back.
 /// ❌ NEVER mutate cap while popoverOpenState.isOpen == true.
 /// ❌ NEVER remove .disabled(popoverOpenState.isOpen) from the expand button.
@@ -563,7 +544,7 @@ struct InlineJobRowsView: View {
     let tick: Int
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
     /// When true, all jobs are shown; when false, only in_progress jobs are shown.
-    /// Pass `expanded` from ActionRowView directly — do NOT default this to true at the call site.
+    /// Pass `expanded` from ActionRowView directly.
     var showAll: Bool = false
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
@@ -588,7 +569,7 @@ struct InlineJobRowsView: View {
                     if !popoverOpenState.isOpen { cap += 4 }
                 },
                 label: {
-                    Text("+ \(visibleJobs.count - cap) more jobs…")
+                    Text("+ \(visibleJobs.count - cap) more jobs\u{2026}")
                         .font(DesignTokens.Font.monoXSmall)
                         .foregroundColor(.accentColor)
                         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
@@ -608,11 +589,11 @@ struct InlineJobRowsView: View {
         let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
-            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
+            Text("\u{21B3}").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Group {
                 if let name = stepName {
-                    Text(job.name + " · " + name)
+                    Text(job.name + " \u{00B7} " + name)
                 } else {
                     Text(job.name)
                 }
@@ -650,3 +631,4 @@ struct InlineJobRowsView: View {
         }
     }
 }
+// swiftlint:enable file_length
