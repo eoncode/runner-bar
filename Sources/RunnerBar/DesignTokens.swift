@@ -86,7 +86,11 @@ enum DesignTokens {
         /// Header stat value (CPU %, MEM GB)
         static let statValue: SwiftUI.Font = .system(size: 12.5, weight: .semibold, design: .monospaced)
         /// Header stat label ("CPU", "MEM", "DISK")
-        static let statLabel: SwiftUI.Font = .system(size: 12.5, design: .default)
+        // ⚠️ Must be .monospaced (not .default) so it visually aligns with the adjacent
+        // sparkline value text rendered in .monospaced. Using .default (proportional)
+        // misaligns the label column relative to the value column in the header bar.
+        // ❌ NEVER change back to .default.
+        static let statLabel: SwiftUI.Font = .system(size: 12.5, design: .monospaced)
     }
 
     // MARK: - Layout
