@@ -1,4 +1,3 @@
-// swiftlint:disable colon
 import Foundation
 
 // MARK: - RunnerLifecycleService
@@ -20,9 +19,7 @@ struct RunnerLifecycleService {
     // MARK: - launchctl label helper
 
     /// Derives the launchd service label for a runner from its name and
-    /// gitHubUrl. The label format used by the runner agent installer is:
-    /// `actions.runner.<owner>.<repo>.<runnerName>` for repo-scoped runners, or
-    /// `actions.runner.<org>.<runnerName>` for org-scoped runners.
+    /// gitHubUrl.
     func serviceLabel(for runner: RunnerModel) -> String? {
         guard let urlStr = runner.gitHubUrl,
               let url = URL(string: urlStr)
@@ -40,12 +37,6 @@ struct RunnerLifecycleService {
     /// Looks up the exact launchd label for this runner by running
     /// `/bin/launchctl list` via Process (no shell, no grep) and filtering
     /// the output lines in Swift.
-    ///
-    /// Uses `hasSuffix("." + runnerName)` rather than `contains(runnerName)`
-    /// to prevent a runner named "ci-runner" from matching
-    /// "actions.runner.org.repo.ci-runner-backup" or similar.
-    ///
-    /// Falls back to the derived `serviceLabel(for:)` if no match is found.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
@@ -61,7 +52,10 @@ struct RunnerLifecycleService {
         DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutItem)
         task.waitUntilExit()
         timeoutItem.cancel()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let output = String(
+            data: pipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
         let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
@@ -77,7 +71,7 @@ struct RunnerLifecycleService {
     // MARK: - Start
 
     /// Starts the runner’s launchd service.
-    /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
+    /// Returns `true` when `launchctl start` exits with status 0.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -90,7 +84,7 @@ struct RunnerLifecycleService {
     // MARK: - Stop
 
     /// Stops the runner’s launchd service.
-    /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
+    /// Returns `true` when `launchctl stop` exits with status 0.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -102,8 +96,8 @@ struct RunnerLifecycleService {
 
     // MARK: - launchctl runner
 
-    /// Invokes `/bin/launchctl <subcommand> <label>` via Process (no shell
-    /// interpolation) and returns `true` iff the exit status is 0.
+    /// Invokes `/bin/launchctl <subcommand> <label>` via Process and returns
+    /// `true` iff the exit status is 0.
     @discardableResult
     private func runLaunchctl(_ subcommand: String, label: String) -> Bool {
         let task = Process()
@@ -120,7 +114,10 @@ struct RunnerLifecycleService {
         DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: timeoutItem)
         task.waitUntilExit()
         timeoutItem.cancel()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let output = String(
+            data: pipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
         log("RunnerLifecycle › launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
         return task.terminationStatus == 0
     }
@@ -128,19 +125,7 @@ struct RunnerLifecycleService {
     // MARK: - Remove
 
     /// Uninstalls and de-registers the runner.
-    ///
-    /// Runs `./svc.sh uninstall` then `./config.sh remove --unattended` from the
-    /// runner’s `installPath` using `Process.arguments` so the path is never
-    /// interpolated into a shell string.
-    ///
-    /// If `svc.sh uninstall` fails, a warning is logged and the method still
-    /// proceeds to `config.sh remove` to avoid leaving a ghost registration on
-    /// the GitHub side. The return value reflects whether both steps succeeded.
-    ///
-    /// ⚠️ Blocking — must only be called from a background thread.
-    /// Requires a GitHub token (gh auth login, GH_TOKEN, or GITHUB_TOKEN).
-    ///
-    /// Returns `true` when both scripts exit with status 0.
+    /// Returns `true` when both `svc.sh uninstall` and `config.sh remove` exit 0.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         guard let path = runner.installPath else {
@@ -169,11 +154,7 @@ struct RunnerLifecycleService {
         return svcOk && cfgOk
     }
 
-    /// Launches `<workingDirectory>/<executableName>` via `Process.arguments`
-    /// (no shell interpolation). Waits up to `timeout` seconds.
-    ///
-    /// ⚠️ Blocking — must only be called from a background thread.
-    ///
+    /// Launches an executable via `Process.arguments` (no shell interpolation).
     /// Returns `true` when the process exits with status 0.
     private func runScript(
         executableName: String,
@@ -222,12 +203,8 @@ struct RunnerLifecycleService {
 
     // MARK: - Rename
 
-    /// Renames the runner by patching the `runnerName` field in the `.runner`
-    /// JSON file at `installPath`.
-    ///
-    /// ⚠️ Incomplete — does NOT re-register the runner with GitHub.
-    /// Local state and GitHub state will diverge silently if called.
-    /// Deferred to Phase 2 follow-up issue. Do not expose via UI.
+    /// Renames the runner by patching the `runnerName` field in the `.runner` JSON.
+    /// ⚠️ Incomplete — does NOT re-register with GitHub. Deferred to Phase 2.
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
@@ -243,8 +220,10 @@ struct RunnerLifecycleService {
             return false
         }
         json["runnerName"] = newName
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-        else {
+        guard let updated = try? JSONSerialization.data(
+            withJSONObject: json,
+            options: .prettyPrinted
+        ) else {
             log("RunnerLifecycle › rename: failed to serialise updated JSON")
             return false
         }
@@ -258,12 +237,9 @@ struct RunnerLifecycleService {
         }
     }
 
-    // MARK: - Update config (labels / workFolder)
+    // MARK: - Update config
 
     /// Writes updated labels and workFolder to the `.runner` JSON at `installPath`.
-    ///
-    /// Note: the runner agent caches config in memory — changes take effect after
-    /// the next runner restart.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
@@ -280,8 +256,10 @@ struct RunnerLifecycleService {
         }
         json["workFolder"] = workFolder
         json["customLabels"] = labels
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-        else { return false }
+        guard let updated = try? JSONSerialization.data(
+            withJSONObject: json,
+            options: .prettyPrinted
+        ) else { return false }
         do {
             try updated.write(to: url)
             log("RunnerLifecycle › updateConfig: labels=\(labels) workFolder=\(workFolder)")

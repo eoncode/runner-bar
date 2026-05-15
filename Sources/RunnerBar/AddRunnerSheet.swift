@@ -20,13 +20,13 @@ struct AddRunnerSheet: View {
 
     // MARK: Scope state
 
-    /// Scope type selection for the new runner: a specific repository or an organisation.
+    /// Scope type selection for the new runner.
     enum ScopeType: String, CaseIterable, Identifiable {
         /// Register the runner under a specific repository (owner/repo).
         case repo = "Repository"
         /// Register the runner under an entire organisation.
         case org = "Organisation"
-        /// Stable identifier for `ForEach` — uses the raw string value.
+        /// Stable identifier for `ForEach`.
         var id: String { rawValue }
     }
 
@@ -52,7 +52,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Body
 
-    /// The sheet's root view: scope picker, runner name/labels/dir fields, and Add/Cancel buttons.
+    /// The sheet’s root view.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner")
@@ -150,15 +150,18 @@ struct AddRunnerSheet: View {
 
     // MARK: - Helpers
 
+    /// The effective scope string (repo or org) for registration.
     private var effectiveScope: String {
         scopeType == .repo ? selectedRepo : selectedOrg
     }
 
+    /// `true` when the form has enough data to attempt registration.
     private var canRegister: Bool {
         !runnerName.trimmingCharacters(in: .whitespaces).isEmpty
             && !effectiveScope.isEmpty
     }
 
+    /// Fetches available repos and orgs in the background.
     private func loadScopes() {
         isLoadingScopes = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -236,12 +239,7 @@ struct AddRunnerSheet: View {
         }
     }
 
-    /// Runs `config.sh` via `Process.arguments` so token/name/url are never
-    /// shell-interpolated. Arguments are passed as discrete array entries.
-    ///
-    /// ⚠️ Blocking — must only be called from a background thread.
-    ///
-    /// Returns the process exit code (0 = success).
+    /// Runs `config.sh` via `Process.arguments`; returns the exit code.
     private func runRegistrationCommand(
         dir: String,
         ghURL: String,
