@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - RunnerModel
 
@@ -26,31 +27,36 @@ struct RunnerModel: Identifiable {
     var githubStatus: String?
     /// `true` when the GitHub API reports this runner is executing a job.
     var isBusy: Bool = false
+    /// Labels configured for this runner (from `.runner` JSON `customLabels`).
+    var labels: [String] = []
 
     /// `true` when the runner is considered non-primary (hidden by default).
     var isDimmed: Bool = false
-}
 
-// MARK: - AggregateStatus
+    // MARK: - Derived display helpers
 
-/// Summarises the overall health of all known runners for the menu bar icon.
-enum AggregateStatus {
-    /// All runners are offline.
-    case allOffline
-    /// At least one runner is online and idle.
-    case someOnline
-    /// At least one runner is currently executing a job.
-    case busy
-    /// At least one runner is in an error or unknown state.
-    case error
+    /// Semantic colour state for the status dot in `SettingsView`.
+    enum StatusColor {
+        case running
+        case busy
+        case idle
+        case offline
+    }
 
-    /// SF Symbol name used for the menu bar status icon.
-    var symbolName: String {
-        switch self {
-        case .allOffline: return "circle"
-        case .someOnline: return "circle.fill"
-        case .busy:       return "circle.badge.checkmark.fill"
-        case .error:      return "exclamationmark.circle.fill"
-        }
+    /// Colour state derived from `isRunning`, `githubStatus`, and `isBusy`.
+    var statusColor: StatusColor {
+        guard isRunning else { return .offline }
+        guard githubStatus == "online" else { return .idle }
+        return isBusy ? .busy : .running
+    }
+
+    /// Single-line status string displayed in the local runners row.
+    var displayStatus: String {
+        guard isRunning else { return "offline" }
+        guard let apiStatus = githubStatus else { return "running" }
+        if apiStatus == "offline" { return "offline" }
+        return isBusy ? "active" : "idle"
     }
 }
+
+// NOTE: AggregateStatus is defined in RunnerStore.swift — do not redeclare here.

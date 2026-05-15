@@ -28,6 +28,10 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     /// `nil` when the job is still queued and hasn't been assigned yet.
     /// Used to determine local vs cloud icon on action rows.
     let runnerName: String?
+    /// Fractional progress (0.0–1.0) derived from completed steps.
+    /// `nil` when no step data is available or progress cannot be determined.
+    /// Used by `PieProgressDot` and the horizontal progress bar in `ActionDetailView`.
+    let progressFraction: Double?
 
     /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
     ///
@@ -89,6 +93,7 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         case isDimmed
         case steps
         case runnerName = "runner_name"
+        case progressFraction
     }
 }
 
@@ -204,7 +209,23 @@ extension RunnerStore {
         iso: ISO8601DateFormatter,
         isDimmed: Bool
     ) -> ActiveJob {
-        ActiveJob(
+        let steps: [JobStep] = (payload.steps ?? []).map { stepPayload in
+            JobStep(
+                // ⚠️: Use the API-supplied step number, not the array index.
+                // GitHub step numbers can be non-contiguous (e.g. retried or skipped steps).
+                // Using idx+1 would cause fetchStepLog(jobID:stepNumber:) to fetch the wrong log.
+                id: stepPayload.number,
+                name: stepPayload.name,
+                status: stepPayload.status,
+                conclusion: stepPayload.conclusion,
+                startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
+                completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
+            )
+        }
+        let completedSteps = steps.filter { $0.conclusion != nil }.count
+        let totalSteps = steps.count
+        let fraction: Double? = totalSteps > 0 ? Double(completedSteps) / Double(totalSteps) : nil
+        return ActiveJob(
             id: payload.id,
             name: payload.name,
             status: payload.status,
@@ -214,20 +235,9 @@ extension RunnerStore {
             completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
             htmlUrl: payload.htmlUrl,
             isDimmed: isDimmed,
-            steps: (payload.steps ?? []).map { stepPayload in
-                JobStep(
-                    // ⚠️: Use the API-supplied step number, not the array index.
-                    // GitHub step numbers can be non-contiguous (e.g. retried or skipped steps).
-                    // Using idx+1 would cause fetchStepLog(jobID:stepNumber:) to fetch the wrong log.
-                    id: stepPayload.number,
-                    name: stepPayload.name,
-                    status: stepPayload.status,
-                    conclusion: stepPayload.conclusion,
-                    startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
-                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
-                )
-            },
-            runnerName: payload.runnerName
+            steps: steps,
+            runnerName: payload.runnerName,
+            progressFraction: fraction
         )
     }
 }
