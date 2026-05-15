@@ -189,6 +189,18 @@ struct AddRunnerSheet: View {
                 .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
                 .resolvingSymlinksInPath().path
+            // ⚠️ SECURITY: hasPrefix("/") alone is insufficient — a path like
+            // "/Users/bob/../../../etc" resolves outside the home directory once
+            // symlinks are expanded. We therefore:
+            //   1. Resolve symlinks on both paths via resolvingSymlinksInPath()
+            //   2. Accept only paths equal to homeDir OR starting with homeDir + "/"
+            //      (the trailing slash prevents "/Users/bobevil" matching "/Users/bob")
+            // ❌ NEVER replace this check with a plain hasPrefix(homeDir) without
+            //    the trailing "/" — that allows prefix-squatting on sibling dirs.
+            // ❌ NEVER skip symlink resolution — symlinks can escape the home tree.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+            // ALLOWED UNDER ANY CIRCUMSTANCE. The security regression we get when
+            // this comment is removed is major major major.
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
