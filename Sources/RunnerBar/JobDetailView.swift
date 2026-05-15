@@ -34,6 +34,14 @@ struct JobDetailView: View {
     let onBack: () -> Void
     let onSelectStep: (JobStep) -> Void
 
+    /// Shared HH:mm:ss formatter — `static let` so it is created once, not per render tick.
+    /// ❌ NEVER instantiate DateFormatter inline inside a @ViewBuilder or per-call function.
+    private static let stepTimeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
@@ -247,8 +255,7 @@ struct JobDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     if let end = step.completedAt {
-                        let fmt = DateFormatter(); _ = { fmt.dateFormat = "HH:mm:ss" }()
-                        Text(fmt.string(from: end))
+                        Text(Self.stepTimeFmt.string(from: end))
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                     } else {
@@ -285,8 +292,7 @@ struct JobDetailView: View {
 
     private func startLabel(for step: JobStep) -> String {
         guard let d = step.startedAt else { return "" }
-        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"
-        return fmt.string(from: d)
+        return Self.stepTimeFmt.string(from: d)
     }
 
     private func stepIcon(_ step: JobStep) -> String {
