@@ -1,27 +1,67 @@
+import AppKit
 import SwiftUI
+
+// MARK: - Adaptive Color Helper
+
+extension Color {
+    /// Creates a color that adapts between light and dark appearance.
+    /// Uses NSColor with light/dark appearance variants so SwiftUI picks
+    /// the correct value automatically regardless of system appearance.
+    static func adaptive(light: Color, dark: Color) -> Color {
+        Color(NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                ? NSColor(dark)
+                : NSColor(light)
+        })
+    }
+}
 
 // MARK: - Color Tokens
 
 extension Color {
-    // Status colors
+    // Status colors — same in both appearances
     static let rbBlue    = Color(red: 0.04, green: 0.52, blue: 1.00)   // #0A84FF
     static let rbSuccess = Color(red: 0.19, green: 0.82, blue: 0.35)   // #30D158
     static let rbWarning = Color(red: 1.00, green: 0.62, blue: 0.04)   // #FF9F0A
     static let rbDanger  = Color(red: 1.00, green: 0.27, blue: 0.23)   // #FF453A
 
-    // Neutral / surface
-    static let rbSurface         = Color(white: 0.11)                   // #1C1C1E
-    static let rbSurfaceElevated = Color(white: 0.14)                   // slightly lifted card
-    static let rbBorderSubtle    = Color(white: 1.0).opacity(0.06)
-    static let rbBorderMid       = Color(white: 1.0).opacity(0.10)
-    static let rbDivider         = Color(white: 1.0).opacity(0.08)
+    // Neutral / surface — adaptive light/dark
+    static let rbSurface         = Color.adaptive(
+        light: Color(white: 0.96),   // near-white panel
+        dark:  Color(white: 0.11)    // #1C1C1E
+    )
+    static let rbSurfaceElevated = Color.adaptive(
+        light: Color(white: 0.92),   // slightly lifted card in light
+        dark:  Color(white: 0.14)    // slightly lifted card in dark
+    )
+    static let rbBorderSubtle    = Color.adaptive(
+        light: Color(white: 0.0).opacity(0.08),
+        dark:  Color(white: 1.0).opacity(0.06)
+    )
+    static let rbBorderMid       = Color.adaptive(
+        light: Color(white: 0.0).opacity(0.12),
+        dark:  Color(white: 1.0).opacity(0.10)
+    )
+    static let rbDivider         = Color.adaptive(
+        light: Color(white: 0.0).opacity(0.08),
+        dark:  Color(white: 1.0).opacity(0.08)
+    )
 
-    // Text
-    static let rbTextPrimary   = Color.white
-    static let rbTextSecondary = Color(white: 0.55)                     // #8C8C8E
-    static let rbTextTertiary  = Color(white: 0.39)                     // #636366
+    // Text — adaptive
+    static let rbTextPrimary   = Color.adaptive(
+        light: .black,
+        dark:  .white
+    )
+    static let rbTextSecondary = Color.adaptive(
+        light: Color(white: 0.40),   // medium grey on white
+        dark:  Color(white: 0.55)    // #8C8C8E on black
+    )
+    static let rbTextTertiary  = Color.adaptive(
+        light: Color(white: 0.58),
+        dark:  Color(white: 0.39)    // #636366 on black
+    )
 
-    // Tinted row backgrounds (very faint, status-keyed)
+    // Tinted row backgrounds (very faint, status-keyed) — same in both appearances
     static let rbBlueTint   = rbBlue.opacity(0.05)
     static let rbGreenTint  = rbSuccess.opacity(0.05)
     static let rbRedTint    = rbDanger.opacity(0.05)
