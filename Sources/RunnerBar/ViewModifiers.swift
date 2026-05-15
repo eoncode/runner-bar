@@ -16,14 +16,10 @@ struct CardRowModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(
-                        AnyShapeStyle(
-                            ZStack {
-                                Color.rbSurfaceElevated
-                                status.tint
-                            }
-                            .compositingGroup()
-                        )
+                    .fill(Color.rbSurfaceElevated)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(status.tint)
                     )
             )
             .overlay(
