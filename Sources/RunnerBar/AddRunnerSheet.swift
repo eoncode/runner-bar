@@ -1,6 +1,5 @@
 import SwiftUI
 
-// swiftlint:disable type_body_length
 // MARK: - AddRunnerSheet
 
 /// Phase 3: Sheet view for onboarding a new self-hosted runner.
@@ -12,6 +11,7 @@ import SwiftUI
 /// so the caller can re-scan and show the new runner.
 ///
 /// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
+// swiftlint:disable:next type_body_length
 struct AddRunnerSheet: View {
     /// Binding that controls sheet presentation; set to `false` to dismiss.
     @Binding var isPresented: Bool
