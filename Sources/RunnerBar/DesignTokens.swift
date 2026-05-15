@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Design Tokens
 /// Central source of truth for all visual constants used across RunnerBar views.
 /// Introduced as part of the new design system (Issue #420 / #403).
+// swiftlint:disable:next type_body_length
 enum DesignTokens {
     // MARK: - Status Colors
     /// Colour tokens for status states and UI chrome.
