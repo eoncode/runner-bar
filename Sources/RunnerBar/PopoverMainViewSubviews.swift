@@ -538,7 +538,6 @@ private struct RoundedCorners: Shape {
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
-// swiftlint:disable:next file_length
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
