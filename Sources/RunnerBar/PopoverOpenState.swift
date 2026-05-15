@@ -64,4 +64,8 @@ final class PopoverOpenState: ObservableObject {
     /// Set by AppDelegate before show(). Calls popover.setContentSize().
     /// ❌ NEVER call more than once per open.
     var onHeightReady: ((CGFloat) -> Void)?
+
+    /// Creates a new PopoverOpenState with default closed state.
+    init() {
+    }
 }

@@ -22,7 +22,9 @@ final class RunnerStoreObservable: ObservableObject {
     /// Mirrors `RunnerStore.shared.isRateLimited`.
     @Published private(set) var isRateLimited = false
 
-    init() {}
+    /// Creates a new observable bridge; initial state is empty until `reload()` is called.
+    init() {
+    }
 
     /// Pulls the current state from `RunnerStore.shared` with no animation
     /// (see REGRESSION GUARD in PopoverMainView — NEVER add animation here).
