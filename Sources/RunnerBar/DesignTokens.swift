@@ -21,11 +21,44 @@ enum DesignTokens {
         /// Pill background for CPU/MEM metric badges inside runner rows.
         static let metricPill:    Color = Color.primary.opacity(0.07)
 
-        // Usage thresholds — mirrors legacy usageColor logic
+        /// Returns a colour that transitions continuously green → orange → red as `pct` rises
+        /// from 0 to 100. Uses linear interpolation in RGB space across two segments:
+        ///   0–60 %  → green  → orange
+        ///   60–100 % → orange → red
+        /// This replaces the previous step-function that jumped at 60 / 85.
         static func usage(pct: Double) -> Color {
-            if pct > 85 { return statusRed    }
-            if pct > 60 { return statusOrange }
-            return statusGreen
+            let t = max(0, min(100, pct)) / 100.0  // normalise to 0–1
+            if t <= 0.6 {
+                // green → orange over the first 60 %
+                let s = t / 0.6
+                return lerp(statusGreen, statusOrange, t: s)
+            } else {
+                // orange → red over the remaining 40 %
+                let s = (t - 0.6) / 0.4
+                return lerp(statusOrange, statusRed, t: s)
+            }
+        }
+
+        /// Linear interpolation between two SwiftUI Colors in sRGB space.
+        private static func lerp(_ a: Color, _ b: Color, t: Double) -> Color {
+            let u = max(0, min(1, t))
+#if canImport(AppKit)
+            let ca = NSColor(a).usingColorSpace(.sRGB) ?? .black
+            let cb = NSColor(b).usingColorSpace(.sRGB) ?? .black
+            var (ar, ag, ab, aa): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+            var (br, bg, bb, ba): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+            ca.getRed(&ar, green: &ag, blue: &ab, alpha: &aa)
+            cb.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+            return Color(
+                red:   Double(ar) + (Double(br) - Double(ar)) * u,
+                green: Double(ag) + (Double(bg) - Double(ag)) * u,
+                blue:  Double(ab) + (Double(bb) - Double(ab)) * u,
+                opacity: Double(aa) + (Double(ba) - Double(aa)) * u
+            )
+#else
+            // Fallback: step function (non-macOS targets)
+            return u < 0.5 ? a : b
+#endif
         }
     }
 
