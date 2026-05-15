@@ -338,7 +338,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
             .padding(.horizontal, 12).padding(.vertical, 5)
 
             // Horizontal progress bar — shown only for in_progress jobs with measurable progress
-            if job.status == "in_progress", job.progressFraction > 0 {
+            if job.status == "in_progress", (job.progressFraction ?? 0) > 0 {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Rectangle()
@@ -351,7 +351,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
                                     endPoint: .trailing
                                 )
                             )
-                            .frame(width: geo.size.width * CGFloat(job.progressFraction))
+                            .frame(width: geo.size.width * CGFloat(job.progressFraction ?? 0))
                     }
                 }
                 .frame(height: 2)
