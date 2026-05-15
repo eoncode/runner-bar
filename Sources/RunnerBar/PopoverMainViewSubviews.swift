@@ -375,10 +375,13 @@ struct ActionRowView: View {
             .padding(.vertical, 4)
             .frame(maxHeight: .infinity)
             .overlay(
-                // Subtle chevron hint to indicate expand behaviour
+                // Adaptive chevron hint — uses .primary.opacity so it renders correctly in both
+                // dark mode (near-white) and light mode (near-black).
+                // ❌ NEVER use .white.opacity here — white overlays are invisible on the light
+                // macOS popover background.
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 5, weight: .bold))
-                    .foregroundColor(.white.opacity(expanded ? 0.9 : 0.45))
+                    .foregroundColor(Color.primary.opacity(expanded ? 0.6 : 0.28))
             )
             .contentShape(Rectangle())
     }
