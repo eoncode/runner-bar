@@ -196,12 +196,10 @@ struct ActionRowView: View {
                 isExpanded.toggle()
             }
             Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-            // Phase 4d: chevron rotates 90° when row is expanded
+            // Phase 4d (spec): chevron always points right — rotation removed per spec requirement.
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(.secondary)
-                .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                .animation(.easeInOut(duration: 0.15), value: isExpanded)
                 .padding(.trailing, 8)
         }
         .background(
