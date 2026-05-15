@@ -132,10 +132,12 @@ struct SettingsView: View {
         .onDisappear {
             ScopeStore.shared.onMutate = nil
         }
-        .sheet(isPresented: $showAddRunnerSheet) {
-            AddRunnerSheet(isPresented: $showAddRunnerSheet) {
-                localRunnerStore.refresh()
-            }
+        // AddRunnerSheet uses @Environment(\.dismiss) — no init params needed.
+        // Refresh localRunnerStore when the sheet is dismissed via .onDisappear
+        // inside AddRunnerSheet (which calls dismiss()), triggering the binding
+        // to flip back to false and re-running the sheet's onDisappear.
+        .sheet(isPresented: $showAddRunnerSheet, onDismiss: { localRunnerStore.refresh() }) {
+            AddRunnerSheet()
         }
         .sheet(item: $runnerBeingConfigured) { runner in
             RunnerConfigSheet(runner: runner, isPresented: $runnerBeingConfigured) {
