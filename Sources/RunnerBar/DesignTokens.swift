@@ -1,5 +1,22 @@
 import SwiftUI
 
+// MARK: - Color(hex:) initializer
+// Required by DesignTokens.Colors status constants.
+// SwiftUI does not provide a built-in hex string initializer.
+extension Color {
+    /// Creates a SwiftUI Color from a CSS-style hex string (e.g. "#30D158" or "30D158").
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
+        let scanner = Scanner(string: hex)
+        var value: UInt64 = 0
+        scanner.scanHexInt64(&value)
+        let r = Double((value & 0xFF0000) >> 16) / 255
+        let g = Double((value & 0x00FF00) >> 8)  / 255
+        let b = Double( value & 0x0000FF)         / 255
+        self.init(red: r, green: g, blue: b)
+    }
+}
+
 // MARK: - DesignTokens
 /// Central style constants for the RunnerBar redesign (#421).
 /// All phases source colours, fonts and spacing from here — never hardcode.

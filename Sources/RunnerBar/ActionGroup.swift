@@ -72,6 +72,20 @@ struct ActionGroup: Identifiable, Equatable {
     /// Set to `true` when frozen into `actionGroupCache` after completion.
     var isDimmed: Bool = false
 
+    /// The GitHub web URL for this group, derived from the representative run.
+    /// Trimmed to the repo root (owner/repo) so it points to the repo, not a
+    /// specific run. Used by ActionDetailView to open GitHub in the browser and
+    /// to derive the repo slug for display.
+    var htmlUrl: String? {
+        guard let raw = runs.compactMap({ $0.htmlUrl }).first else { return nil }
+        // Raw URL is typically https://github.com/owner/repo/actions/runs/12345
+        // We want https://github.com/owner/repo
+        let components = raw.components(separatedBy: "/")
+        // components: ["", "", "github.com", "owner", "repo", ...]
+        guard components.count >= 5 else { return raw }
+        return components.prefix(5).joined(separator: "/")
+    }
+
     // MARK: Equatable
     // Identity-based equality: two groups are equal when their stable `id` matches.
     // This satisfies the `onChange(of: store.actions)` requirement in PopoverMainView
