@@ -35,14 +35,22 @@ enum DesignTokens {
         static let sparkFillRed = statusRed.opacity(0.55)
 
         // MARK: UI chrome
+        // ⚠️ These tokens use SwiftUI.Color.primary (adaptive) rather than a
+        // hardcoded Color.white so they render correctly in both dark and light mode.
+        // In dark mode .primary resolves to near-white; in light mode to near-black.
+        // The low opacity keeps the tint subtle in both appearances.
+        //
+        // ❌ NEVER replace .primary with a hardcoded Color.white or Color.black —
+        // white overlays are invisible on the light macOS popover background.
+
         /// Separator / border lines
-        static let separator = SwiftUI.Color.white.opacity(0.08)
+        static let separator = SwiftUI.Color.primary.opacity(0.08)
         /// Runner / action card border
-        static let cardBorder = SwiftUI.Color.white.opacity(0.06)
+        static let cardBorder = SwiftUI.Color.primary.opacity(0.08)
         /// Pill badge background (CPU/MEM on runner rows)
-        static let pillBg = SwiftUI.Color.white.opacity(0.08)
+        static let pillBg = SwiftUI.Color.primary.opacity(0.07)
         /// Pill badge border
-        static let pillBorder = SwiftUI.Color.white.opacity(0.12)
+        static let pillBorder = SwiftUI.Color.primary.opacity(0.14)
         /// Secondary label text
         static let labelSecondary = SwiftUI.Color(hex: "#636366")
         /// Tertiary label / chevron
