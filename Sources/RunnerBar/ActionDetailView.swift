@@ -37,12 +37,10 @@ import SwiftUI
 struct ActionDetailView: View {
     /// The action group whose jobs are displayed.
     let group: ActionGroup
-    /// Display tick for live elapsed-time updates.
-    let tick: Int
     /// Called when the user taps the back button.
     let onBack: () -> Void
     /// Called when the user taps a job row.
-    let onSelectJob: (ActiveJob, ActionGroup) -> Void
+    let onSelectJob: (ActiveJob) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -60,7 +58,7 @@ struct ActionDetailView: View {
                         // Use enumerated() so the badge shows 1-based display order
                         // (#01, #02, …) rather than the GitHub workflow run number.
                         ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
-                            Button(action: { onSelectJob(job, group) }) {
+                            Button(action: { onSelectJob(job) }) {
                                 jobRow(job, index: index + 1)
                             }
                             .buttonStyle(.plain)
@@ -120,7 +118,7 @@ struct ActionDetailView: View {
                     let runIDs = group.runs.map { $0.id }
                     DispatchQueue.global(qos: .userInitiated).async {
                         let succeeded = runIDs.allSatisfy { runID in
-                            GitHub.reRunFailedJobs(runID: runID, repoSlug: scope)
+                            reRunFailedJobs(runID: runID, repoSlug: scope)
                         }
                         DispatchQueue.main.async { completion(succeeded) }
                     }
@@ -133,7 +131,7 @@ struct ActionDetailView: View {
                     let runIDs = group.runs.map { $0.id }
                     DispatchQueue.global(qos: .userInitiated).async {
                         let succeeded = runIDs.allSatisfy { runID in
-                            GitHub.cancelRun(runID: runID, repoSlug: scope)
+                            cancelRun(runID: runID, repoSlug: scope)
                         }
                         DispatchQueue.main.async { completion(succeeded) }
                     }
