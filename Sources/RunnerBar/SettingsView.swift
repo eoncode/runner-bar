@@ -3,6 +3,21 @@ import ServiceManagement
 import SwiftUI
 
 // Issue #419 Phase 5 (settings styling): tokenized settings polish is tracked here.
+//
+// ════════════════════════════════════════════════════════════════════════════════
+// SCROLLVIEW / LAYOUT CONTRACT — DO NOT CHANGE STRUCTURE
+// ════════════════════════════════════════════════════════════════════════════════
+// SettingsView is wrapped in ScrollView — this is intentional for Phase 5.
+// The outer scroll is required to accommodate variable content height on
+// smaller screens. The onBack closure MUST remain as a parameter prop —
+// it is wired by AppDelegate and must not be removed or replaced with
+// environment routing. Phase 5 retained @EnvironmentObject for stores ONLY.
+//
+// ❌ NEVER remove onBack from the prop list.
+// ❌ NEVER replace onBack with an environment-based dismiss mechanism.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+// ALLOWED UNDER ANY CIRCUMSTANCE.
+// ════════════════════════════════════════════════════════════════════════════════
 
 // swiftlint:disable type_body_length
 // MARK: - SettingsView
@@ -25,6 +40,8 @@ struct SettingsView: View {
     @EnvironmentObject var notificationPrefsStore: NotificationPrefsStore
     @EnvironmentObject var scopeStore: ScopeStore
 
+    // Restored: onBack must remain a prop — wired by AppDelegate, not dismissable via environment.
+    let onBack: () -> Void
     var isAuthenticated: Bool
     var onSignOut: (() -> Void)?
     var onSignIn: (() -> Void)?
@@ -39,19 +56,40 @@ struct SettingsView: View {
     @State private var isShowingLegal = false
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 0) {
-                localRunnersSection
-                Divider().padding(.leading, 12)
-                githubRunnersSection
-                Divider().padding(.leading, 12)
-                scopesSection
-                Divider().padding(.leading, 12)
-                accountSection
-                Divider().padding(.leading, 12)
-                preferencesSection
-                Divider().padding(.leading, 12)
-                legalSection
+        VStack(alignment: .leading, spacing: 0) {
+            // Back button header
+            HStack {
+                Button(action: onBack) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left").font(.caption)
+                        Text("Back").font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                    .fixedSize()
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
+            Divider()
+
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    localRunnersSection
+                    Divider().padding(.leading, 12)
+                    githubRunnersSection
+                    Divider().padding(.leading, 12)
+                    scopesSection
+                    Divider().padding(.leading, 12)
+                    accountSection
+                    Divider().padding(.leading, 12)
+                    preferencesSection
+                    Divider().padding(.leading, 12)
+                    legalSection
+                }
             }
         }
         .frame(idealWidth: 320, maxWidth: .infinity, alignment: .top)
@@ -256,7 +294,7 @@ struct SettingsView: View {
     // MARK: - Preferences
     @ViewBuilder private var preferencesSection: some View {
         SectionHeaderLabel(title: "Preferences")
-        // ── Show offline runners ───────────────────────────────────────────────────────────
+        // ── Show offline runners ────────────────────────────────────────────────────────────────────────────────────
         HStack {
             Text("Show offline runners").font(.system(size: 12))
             Spacer()
@@ -268,7 +306,7 @@ struct SettingsView: View {
             .font(.caption).foregroundColor(.secondary)
             .padding(.horizontal, 12).padding(.bottom, 6)
         Divider().padding(.leading, 12)
-        // ── Polling interval ────────────────────────────────────────────────────────────────────────────
+        // ── Polling interval ──────────────────────────────────────────────────────────────────────────────────────────
         HStack {
             Text("Polling interval").font(.system(size: 12))
             Spacer()
@@ -283,7 +321,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         Divider().padding(.leading, 12)
-        // ── Launch at login ──────────────────────────────────────────────────────────────
+        // ── Launch at login ──────────────────────────────────────────────────────────────────────────────────
         HStack {
             Text("Launch at login").font(.system(size: 12))
             Spacer()
