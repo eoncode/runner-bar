@@ -51,10 +51,10 @@ enum DesignTokens {
         static let pillBg = SwiftUI.Color.primary.opacity(0.07)
         /// Pill badge border
         static let pillBorder = SwiftUI.Color.primary.opacity(0.14)
-        /// Secondary label text
-        static let labelSecondary = SwiftUI.Color(hex: "#636366")
-        /// Tertiary label / chevron
-        static let labelTertiary = SwiftUI.Color(hex: "#3a3a3c")
+        /// Secondary label text — adaptive (resolves to near-black in light, near-white in dark)
+        static let labelSecondary = SwiftUI.Color.primary.opacity(0.50)
+        /// Tertiary label / chevron — adaptive (resolves to near-black in light, near-white in dark)
+        static let labelTertiary = SwiftUI.Color.primary.opacity(0.28)
 
         /// Returns the appropriate status colour for a 0–100 percentage.
         static func statColor(for pct: Double) -> SwiftUI.Color {
