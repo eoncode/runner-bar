@@ -52,7 +52,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Body
 
-    /// The sheet’s root view.
+    /// The sheet's root view.
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add runner")
@@ -191,6 +191,13 @@ struct AddRunnerSheet: View {
                 .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir)
                 .resolvingSymlinksInPath().path
+            // ⚠️ SECURITY: use `homeDir + "/"` as the prefix, NOT bare `homeDir`.
+            // Checking `hasPrefix(homeDir)` alone would allow a path like
+            // `/Users/alice-evil` to match against a home dir of `/Users/alice`,
+            // enabling a directory-traversal attack. The trailing slash ensures
+            // the match is a true path prefix (a child directory), not just a
+            // string prefix of the home path.
+            // ❌ NEVER simplify this to `hasPrefix(homeDir)` — it is a security bug.
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
@@ -287,4 +294,3 @@ struct AddRunnerSheet: View {
         return task.terminationStatus
     }
 }
-// swiftlint:enable type_body_length
