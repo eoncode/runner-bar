@@ -14,45 +14,27 @@ import SwiftUI
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
 //   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-//   ❌ NEVER remove this modifier from the ScrollView.
-//   ❌ NEVER use a fixed constant.
+//   ❌ NEVER remove this modifier.
 //
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+// ALLOWED UNDER ANY CIRCUMSTANCE.
 // ════════════════════════════════════════════════════════════════════════════════
-// HISTORY:
-//   idealWidth bumped 480 → 560 to accommodate step timing columns.
-//   idealWidth bumped 560 → 720 to accommodate action cluster width.
-//   Step number badge (#N) added to step rows (step.id is 1-based and comes from
-//     the GitHub API step number field, not from a local enumerated index).
-//   Pressable repo / branch / SHA-origin labels added to header metadata row.
-//   Elapsed moved from top action bar to beside start→end timestamps (infoBar only).
-//   ReRunFailedButton added after ReRunButton.
-//   Step number zero-padded to #01…#99 for equal-width alignment.
-//   Header collapsed from 4 rows to 2 rows: title+actions on row 1,
-//     timing+metadata chips on row 2 — eliminates empty right-side dead space.
-//   Phase 6: stepColor / infoBar "running" label use DesignTokens (rbBlue/rbSuccess/rbDanger).
-//   Phase 5/6: step rows wrapped in cardRow-style RoundedRectangle background.
+//   Issue #419 Phase 5: stepColor / infoBar "running" label use DesignTokens.
+//   Issue #419 Phase 5: step rows wrapped in cardRow-style RoundedRectangle background.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
-// Drill-down chain: PopoverMainView → JobDetailView → StepLogView.
-// swiftlint:disable:next type_body_length
 struct JobDetailView: View {
     let job: ActiveJob
-    let group: ActionGroup
+    let tick: Int
     let onBack: () -> Void
     let onSelectStep: (JobStep) -> Void
 
-    @State private var tick = 0
-    @State private var tickTimer: Timer?
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Row 1: [‹ Jobs] [title — flex] [Re-run][Re-run failed][Cancel][GitHub][Copy log]
-            //
-            // ⚠️ Elapsed is in infoBar (row 2) ONLY.
-            // ❌ NEVER add elapsed back to this row.
+
+            // ── Header ──────────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
-                // Back
                 Button(action: onBack) {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left").font(.caption)
@@ -63,75 +45,30 @@ struct JobDetailView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Job title — flex, truncates when the panel is very narrow
-                Text(job.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-
                 Spacer(minLength: 8)
 
                 // ── Action cluster ──────────────────────────────────────────────────────────────────
                 ReRunButton(
                     action: { completion in
                         let jobID    = job.id
-                        let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        if scopeStr.isEmpty {
-                            log(
-                                "ReRunButton › could not derive scope from htmlUrl: "
-                                + "\(String(describing: job.htmlUrl))"
-                            )
-                        }
+                        let repoSlug = self.repoSlug
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let isOk = scopeStr.contains("/")
-                                && ghPost("repos/\(scopeStr)/actions/jobs/\(jobID)/rerun")
-                            completion(isOk)
+                            let ok = GitHub.reRunJob(jobID: jobID, repoSlug: repoSlug)
+                            DispatchQueue.main.async { completion(ok) }
                         }
                     },
-                    isDisabled: job.status == "in_progress" || job.status == "queued"
+                    tooltip: "Re-run this job"
                 )
-
                 ReRunFailedButton(
                     action: { completion in
-                        let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        let runID    = runIDFromHtmlUrl(job.htmlUrl)
-                        guard scopeStr.contains("/"), let runID else {
-                            log(
-                                "ReRunFailedButton › could not derive scope/runID from htmlUrl: "
-                                + "\(String(describing: job.htmlUrl))"
-                            )
-                            completion(false)
-                            return
-                        }
+                        let runID    = job.runId
+                        let repoSlug = self.repoSlug
                         DispatchQueue.global(qos: .userInitiated).async {
-                            completion(
-                                ghPost("repos/\(scopeStr)/actions/runs/\(runID)/rerun-failed-jobs")
-                            )
+                            let ok = GitHub.reRunFailed(runID: runID, repoSlug: repoSlug)
+                            DispatchQueue.main.async { completion(ok) }
                         }
                     },
-                    isDisabled: job.status == "in_progress"
-                        || job.status == "queued"
-                        || (job.conclusion != "failure" && job.conclusion != "cancelled")
-                )
-
-                CancelButton(
-                    action: { completion in
-                        let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        let runID    = runIDFromHtmlUrl(job.htmlUrl)
-                        guard scopeStr.contains("/"), let runID else {
-                            log(
-                                "CancelButton › could not derive scope/runID from htmlUrl: "
-                                + "\(String(describing: job.htmlUrl))"
-                            )
-                            completion(false)
-                            return
-                        }
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(cancelRun(runID: runID, scope: scopeStr))
-                        }
-                    },
-                    isDisabled: job.status != "in_progress" && job.status != "queued"
+                    tooltip: "Re-run failed jobs in this workflow run"
                 )
 
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
@@ -149,29 +86,15 @@ struct JobDetailView: View {
                     .buttonStyle(.plain)
                     .help("Open job on GitHub")
                 }
-
-                LogCopyButton(
-                    fetch: { completion in
-                        let jobID    = job.id
-                        let scopeStr = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchJobLog(jobID: jobID, scope: scopeStr))
-                        }
-                    },
-                    isDisabled: false
-                )
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
-            .padding(.bottom, 3)
+            .padding(.bottom, 4)
 
-            // ── Row 2: [🕓 start→end · elapsed] [· repo · branch · origin]
-            //
-            // Elapsed lives here and ONLY here.
-            // ❌ NEVER move elapsed back to row 1.
+            // ── Info bar ────────────────────────────────────────────────────────────────────────────────────────────────
             infoBar
                 .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                .padding(.bottom, 6)
 
             Divider()
 
@@ -183,14 +106,12 @@ struct JobDetailView: View {
                         Text("No step data available")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
                     } else {
                         ForEach(job.steps) { step in
-                            Button(
-                                action: { onSelectStep(step) },
-                                label: { stepRow(step) }
-                            )
+                            Button(action: { onSelectStep(step) }) {
+                                stepRow(step)
+                            }
                             .buttonStyle(.plain)
                         }
                     }
@@ -203,136 +124,82 @@ struct JobDetailView: View {
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-        .onAppear {
-            tickTimer = Timer.scheduledTimer(
-                withTimeInterval: 1,
-                repeats: true,
-                block: { _ in tick += 1 }
-            )
-        }
-        .onDisappear {
-            tickTimer?.invalidate()
-            tickTimer = nil
-        }
     }
 
-    // MARK: - Info bar (row 2)
-    /// Single caption-height line combining timing + metadata chips.
-    /// Layout: 🕓 start→end · elapsed · [repo] [branch] [origin]
-    ///
-    /// ❌ NEVER split this back into separate timing and metadata rows.
-    /// ❌ NEVER move elapsed out of this view and into row 1.
+    // MARK: - Info bar
     @ViewBuilder private var infoBar: some View {
-        HStack(spacing: 4) {
-            // Timing
-            if let start = job.startedAt {
-                Image(systemName: "clock")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text(wallTime(start))
+        _ = tick
+        HStack(spacing: 6) {
+            Text(job.name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(job.isDimmed ? .secondary : .primary)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            Spacer()
+            if let conclusion = job.conclusion {
+                Text(conclusionLabel(conclusion))
+                    .font(.caption)
+                    .foregroundColor(conclusionColor(conclusion))
+                    .lineLimit(1).fixedSize()
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
-                if let end = job.completedAt {
-                    Text(wallTime(end))
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
-                } else {
-                    // Phase 6: use rbBlue instead of .yellow for in-progress state
-                    Text("running")
-                        .font(.caption)
-                        .foregroundColor(.rbBlue)
-                }
-                Text("·")
+            } else {
+                // Issue #419 Phase 5: use rbBlue instead of .yellow for in-progress state
+                Text("running")
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(job.isDimmed ? job.elapsed : elapsedLive(tick: tick))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
-                // Separator before metadata chips
-                Text("·")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 1)
+                    .foregroundColor(.rbBlue)
             }
-            // Metadata chips — repo, branch, origin
-            if let repoURL = URL(string: "https://github.com/\(group.repo)") {
-                let repoName = group.repo.components(separatedBy: "/").last ?? group.repo
-                metadataChip(icon: "folder", label: repoName, url: repoURL, tooltip: group.repo)
-            }
-            if let branch = group.headBranch,
-               let branchURL = URL(
-                    string: "https://github.com/\(group.repo)/tree/"
-                        + (branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)
-               ) {
-                metadataChip(
-                    icon: "arrow.triangle.branch",
-                    label: branch,
-                    url: branchURL,
-                    tooltip: "Branch: \(branch)"
-                )
-            }
-            let originURL: URL? = {
-                let lbl = group.label
-                if lbl.hasPrefix("#"),
-                   let num = lbl.dropFirst()
-                        .components(separatedBy: CharacterSet.decimalDigits.inverted).first,
-                   !num.isEmpty {
-                    return URL(string: "https://github.com/\(group.repo)/pull/\(num)")
-                } else {
-                    return URL(string: "https://github.com/\(group.repo)/commit/\(group.headSha)")
-                }
-            }()
-            if let url = originURL {
-                let isPR = group.label.hasPrefix("#")
-                metadataChip(
-                    icon: isPR ? "arrow.triangle.pull" : "chevron.left.forwardslash.chevron.right",
-                    label: group.label,
-                    url: url,
-                    tooltip: isPR
-                        ? "Pull request \(group.label)"
-                        : "Commit \(group.headSha.prefix(7))"
-                )
-            }
-            Spacer(minLength: 0)
+            Text("·")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(job.elapsed)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .lineLimit(1).fixedSize()
+            Text(repoSlug)
+                .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
         }
     }
 
-    /// A small pressable label chip: [icon] [text], opens `url` on click.
-    @ViewBuilder private func metadataChip(icon: String, label: String, url: URL, tooltip: String) -> some View {
-        Button(
-            action: { NSWorkspace.shared.open(url) },
-            label: {
-                HStack(spacing: 3) {
-                    Image(systemName: icon)
-                        .font(.system(size: 9))
-                    Text(label)
-                        .font(.caption)
-                        .lineLimit(1)
-                }
-                .foregroundColor(.secondary)
-                .fixedSize()
-            }
-        )
-        .buttonStyle(.plain)
-        .help(tooltip)
+    private var repoSlug: String {
+        guard let url = job.htmlUrl else { return "" }
+        let parts = url
+            .replacingOccurrences(of: "https://github.com/", with: "")
+            .components(separatedBy: "/")
+        guard parts.count >= 2 else { return url }
+        return parts[0] + "/" + parts[1]
+    }
+
+    private func conclusionLabel(_ conclusion: String) -> String {
+        switch conclusion {
+        case "success":           return "✓ SUCCESS"
+        case "failure":           return "✗ FAILED"
+        case "cancelled":         return "⊘ CANCELLED"
+        case "skipped":           return "⊘ SKIPPED"
+        case "action_required":   return "! ACTION"
+        default:                  return conclusion.uppercased()
+        }
+    }
+
+    private func conclusionColor(_ conclusion: String) -> Color {
+        switch conclusion {
+        case "success": return .rbSuccess
+        case "failure": return .rbDanger
+        default:        return .secondary
+        }
     }
 
     // MARK: - Step row
     /// Single-line step row:
     /// [#01] [icon] [name …truncated] [HH:mm:ss → HH:mm:ss] [elapsed] [›]
-    /// Phase 5/6: wrapped in cardRow-style RoundedRectangle background.
+    /// Issue #419 Phase 5: wrapped in cardRow-style RoundedRectangle background.
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
             // Step number badge — zero-padded (#01…#99).
-            Text(String(format: "#%02d", step.id))
+            Text("#\(String(format: "%02d", step.number))")
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
-            Text(step.conclusionIcon)
-                .font(.system(size: 11))
+                .frame(width: 28, alignment: .leading)
+            Image(systemName: stepIcon(step))
                 .foregroundColor(stepColor(step))
                 .frame(width: 14, alignment: .center)
             Text(step.name)
@@ -341,38 +208,38 @@ struct JobDetailView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
-            Spacer(minLength: 4)
-            if let start = step.startedAt {
+            Spacer()
+            if step.startedAt != nil {
                 HStack(spacing: 3) {
-                    Text(wallTime(start))
+                    Text(startLabel(for: step))
                         .font(.caption.monospacedDigit())
                         .foregroundColor(.secondary)
                     Text("→")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     if let end = step.completedAt {
-                        Text(wallTime(end))
+                        let fmt = DateFormatter(); _ = { fmt.dateFormat = "HH:mm:ss" }()
+                        Text(fmt.string(from: end))
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
                     } else {
-                        // Phase 6: use rbBlue instead of .yellow
+                        // Issue #419 Phase 5: use rbBlue instead of .yellow
                         Text("now")
                             .font(.caption)
                             .foregroundColor(.rbBlue)
                     }
                 }
                 .fixedSize()
+                Text(step.elapsed)
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .fixedSize()
             }
-            Text(step.elapsed)
-                .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
-                .fixedSize()
-                .frame(width: 40, alignment: .trailing)
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
-        // Phase 5/6: card row background
+        // Issue #419 Phase 5: card row background
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .background(
@@ -389,6 +256,21 @@ struct JobDetailView: View {
     // MARK: - Helpers
     private func elapsedLive(tick _: Int) -> String { job.elapsed }
 
+    private func startLabel(for step: JobStep) -> String {
+        guard let d = step.startedAt else { return "" }
+        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"
+        return fmt.string(from: d)
+    }
+
+    private func stepIcon(_ step: JobStep) -> String {
+        switch step.conclusion {
+        case "success": return "checkmark.circle.fill"
+        case "failure": return "xmark.circle.fill"
+        case "skipped", "cancelled": return "minus.circle"
+        default: return step.status == "in_progress" ? "circle.dotted" : "circle"
+        }
+    }
+
     /// Step icon/status colour — uses DesignTokens instead of raw .green/.red/.yellow.
     private func stepColor(_ step: JobStep) -> Color {
         switch step.conclusion {
@@ -397,15 +279,4 @@ struct JobDetailView: View {
         default: return step.status == "in_progress" ? .rbBlue : .secondary
         }
     }
-}
-
-// MARK: - Wallclock formatter
-private let _wallTimeFmt: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm:ss"
-    return formatter
-}()
-
-private func wallTime(_ date: Date) -> String {
-    _wallTimeFmt.string(from: date)
 }

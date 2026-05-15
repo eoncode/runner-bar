@@ -15,65 +15,30 @@ import SwiftUI
 //   .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
 //   • minWidth: 560 — minimum panel width; content decides actual width.
 //   • maxWidth: .infinity — fills the panel width up to AppDelegate.maxWidth.
-//   • NO idealWidth — width is content-driven, not pinned to a fixed value.
-//   • NO idealHeight / maxHeight on the root frame.
+//   • NO idealWidth here (set on sub-VStack if needed for measurement).
+//   • NO maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
 //   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-//   Prevents the panel growing taller than the screen.
-//   ❌ NEVER remove this modifier from the ScrollView.
-//   ❌ NEVER use a fixed constant — must adapt to screen size.
+//   • Prevents the panel from growing off-screen with tall job lists.
+//   • Without this, preferredContentSize.height == full content height on
+//     navigate → NSPanel.setFrame() stretches the window off-screen.
+//   ❌ NEVER remove this modifier from either ScrollView below.
 //
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+// ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
+// is removed is major major major.
 // ════════════════════════════════════════════════════════════════════════════════
-// HISTORY:
-//   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
-//   Job rows collapsed to single line: [#N][dot][name][time range]...[status][elapsed][›]
-//   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
-//   Side-jump is impossible with NSPanel — no anchor to re-calculate.
-//   Added #N order index badge to each job row (1-based display order).
-//   Replaced generic "X/N jobs concluded" with context-aware outcome label.
-//   Elapsed moved from header to timing row below branch label.
-//   SHA/PR label made tappable: opens commit or PR on GitHub.
-//   Time-range and elapsed columns hidden for queued jobs (no startedAt).
-//   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
-//   Phase 6: jobDotColor / jobStatusColor / conclusionColor use DesignTokens.
-//   Phase 5/6: job rows wrapped in cardRow-style RoundedRectangle background.
+//   Issue #419 Phase 5: jobDotColor / jobStatusColor / conclusionColor use DesignTokens.
+//   Issue #419 Phase 5: job rows wrapped in cardRow-style RoundedRectangle background.
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
-///
-/// Drill-down chain:
-///   PopoverMainView (action row tap)
-///   → ActionDetailView            ← this view
-///   → JobDetailView (step list)   ← existing, unchanged
-///   → StepLogView (log)           ← existing, unchanged
 struct ActionDetailView: View {
     let group: ActionGroup
+    let tick: Int
     let onBack: () -> Void
-    /// Called when user taps a job row. AppDelegate wires this to detailViewFromAction(job:group:).
-    let onSelectJob: (ActiveJob) -> Void
-
-    /// Drives the live elapsed timer every second.
-    @State private var tick = 0
-    /// Held so we can invalidate on disappear and prevent timer accumulation.
-    @State private var tickTimer: Timer?
-
-    // MARK: - Formatters
-
-    /// HH:mm formatter — used for group start/end labels in the header.
-    private static let timeFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-
-    /// HH:mm:ss formatter — used for per-job time-range column.
-    /// Static so it is created once and reused on every 1 Hz tick × N job rows.
-    private static let jobTimeFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f
-    }()
+    let onSelectJob: (ActiveJob, ActionGroup) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -90,41 +55,21 @@ struct ActionDetailView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                ReRunButton(
-                    action: { completion in
-                        let scope = group.repo
-                        let runIDs = group.runs.map { $0.id }
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
-                                ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
+                if let urlString = group.htmlUrl, let url = URL(string: urlString) {
+                    Button(
+                        action: { NSWorkspace.shared.open(url) },
+                        label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "safari").font(.caption)
+                                Text("GitHub").font(.caption)
                             }
-                            completion(ok)
+                            .foregroundColor(.secondary)
+                            .fixedSize()
                         }
-                    },
-                    isDisabled: group.groupStatus == .inProgress
-                )
-                CancelButton(
-                    action: { completion in
-                        let scope = group.repo
-                        let runIDs = group.runs.map { $0.id }
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let ok = runIDs.allSatisfy { runID in
-                                cancelRun(runID: runID, scope: scope)
-                            }
-                            completion(ok)
-                        }
-                    },
-                    isDisabled: group.groupStatus != .inProgress
-                )
-                LogCopyButton(
-                    fetch: { completion in
-                        let g = group
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(fetchActionLogs(group: g))
-                        }
-                    },
-                    isDisabled: false
-                )
+                    )
+                    .buttonStyle(.plain)
+                    .help("Open on GitHub")
+                }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -137,37 +82,28 @@ struct ActionDetailView: View {
                         Text(group.label)
                             .font(.caption.monospacedDigit())
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     .buttonStyle(.plain)
-                    .help(labelLinkTooltip)
-
+                    .help("Open on GitHub")
+                    BranchTagPill(name: repoSlug)
+                    Spacer()
                     Text(group.title)
                         .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(group.isDimmed ? .secondary : .primary)
                         .lineLimit(2)
-                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                if let branch = group.headBranch {
-                    Text(branch)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                HStack(spacing: 4) {
-                    Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.secondary)
-                    Text(groupStartLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
-                    Text("→").font(.caption2).foregroundColor(.secondary)
-                    Text(groupEndLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
-                    Text("·").font(.caption2).foregroundColor(.secondary)
-                    Text(elapsedLive(tick: tick))
+                if let start = group.firstJobStartedAt {
+                    Text(RelativeTimeFormatter.string(from: start))
                         .font(.caption2.monospacedDigit())
                         .foregroundColor(.secondary)
-                        .fixedSize()
                 }
-                Text(jobsSummaryLine).font(.caption).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 4)
 
             Divider()
 
@@ -180,10 +116,10 @@ struct ActionDetailView: View {
                             .font(.caption).foregroundColor(.secondary)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                     } else {
-                        ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
-                            Button(action: { onSelectJob(job) }, label: {
-                                jobRow(job, index: index + 1)
-                            })
+                        ForEach(group.jobs) { job in
+                            Button(action: { onSelectJob(job, group) }) {
+                                jobRow(job)
+                            }
                             .buttonStyle(.plain)
                         }
                     }
@@ -195,71 +131,32 @@ struct ActionDetailView: View {
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
-        .onAppear {
-            tickTimer?.invalidate()
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick += 1 }
-        }
-        .onDisappear {
-            tickTimer?.invalidate()
-            tickTimer = nil
-        }
     }
-}
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
 
-extension ActionDetailView { // swiftlint:disable:this missing_docs
-    /// Opens the SHA commit or PR associated with the group label on GitHub.
-    func openLabelOnGitHub() {
-        let urlString: String
-        if group.label.hasPrefix("#"),
-           let number = Int(group.label.dropFirst()) {
-            urlString = "https://github.com/\(group.repo)/pull/\(number)"
-        } else {
-            urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
-        }
-        guard let url = URL(string: urlString) else { return }
+    private func openLabelOnGitHub() {
+        guard let urlString = group.htmlUrl, let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
     }
 
-    /// Tooltip text for the label link button, describing whether it links to a PR or commit.
-    var labelLinkTooltip: String {
-        group.label.hasPrefix("#")
-            ? "Open pull request on GitHub"
-            : "Open commit on GitHub"
+    private var repoSlug: String {
+        guard let url = group.htmlUrl else { return "" }
+        let parts = url
+            .replacingOccurrences(of: "https://github.com/", with: "")
+            .components(separatedBy: "/")
+        guard parts.count >= 2 else { return url }
+        return parts[0] + "/" + parts[1]
     }
+}
 
-    /// Formatted start time for the group (first job started or group created).
-    var groupStartLabel: String {
-        guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
-        return Self.timeFmt.string(from: date)
-    }
+// MARK: - Row builder
+extension ActionDetailView { // swiftlint:disable:this missing_docs
 
-    /// Formatted end time for the group, or "now" while in progress.
-    var groupEndLabel: String {
-        if let date = group.lastJobCompletedAt { return Self.timeFmt.string(from: date) }
-        if group.groupStatus == .inProgress { return "now" }
-        return "—"
-    }
-
-    /// Human-readable summary of job completion state for the group.
-    var jobsSummaryLine: String {
-        let done  = group.jobsDone
-        let total = group.jobsTotal
-        let conclusions = group.jobs.compactMap { $0.conclusion }
-        if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
-        if conclusions.contains("failure") { return "\(done)/\(total) jobs failed" }
-        if conclusions.contains("cancelled") { return "\(done)/\(total) jobs cancelled" }
-        if conclusions.allSatisfy({ $0 == "success" || $0 == "skipped" }) { return "\(done)/\(total) jobs succeeded" }
-        return "\(done)/\(total) jobs completed"
-    }
-
-    /// Returns the group elapsed string; `tick` parameter triggers SwiftUI refresh every second.
-    func elapsedLive(tick _: Int) -> String { group.elapsed }
-
-    @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
-        HStack(spacing: 8) {
-            Text("#\(index)")
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+    @ViewBuilder
+    private func jobRow(_ job: ActiveJob) -> some View {
+        HStack(spacing: 6) {
+            Text("#\(String(format: "%02d", job.runNumber ?? 0))")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
             Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
             Text(job.name)
@@ -267,32 +164,24 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
                 .foregroundColor(job.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
             if job.startedAt != nil {
-                Text(jobTimeRange(job))
-                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                    .lineLimit(1).frame(width: 130, alignment: .leading)
-            } else {
-                Spacer().frame(width: 130)
-            }
-            Spacer(minLength: 0)
-            if let conclusion = job.conclusion {
-                Text(conclusionLabel(conclusion))
-                    .font(.caption).foregroundColor(conclusionColor(conclusion))
-                    .frame(width: 80, alignment: .trailing)
-            } else {
-                Text(jobStatusLabel(for: job))
-                    .font(.caption).foregroundColor(jobStatusColor(for: job))
-                    .frame(width: 80, alignment: .trailing)
-            }
-            if job.startedAt != nil {
+                Spacer()
+                Text(timeRange(for: job))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Text(job.elapsed)
-                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                    .frame(width: 40, alignment: .trailing)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             } else {
-                Spacer().frame(width: 40)
+                Spacer()
             }
+            jobStatusView(for: job)
             Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
         }
-        // Phase 5/6: card row background
+        // Issue #419 Phase 5: card row background
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
@@ -305,11 +194,28 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         .contentShape(Rectangle())
     }
 
-    /// Formats start→end time range for a job row, using HH:mm:ss precision.
-    func jobTimeRange(_ job: ActiveJob) -> String {
-        guard let start = job.startedAt ?? job.createdAt else { return "" }
-        let startStr = Self.jobTimeFmt.string(from: start)
-        if let end = job.completedAt { return "\(startStr)→\(Self.jobTimeFmt.string(from: end))" }
+    @ViewBuilder
+    private func jobStatusView(for job: ActiveJob) -> some View {
+        if let conclusion = job.conclusion {
+            Text(conclusionLabel(conclusion))
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(conclusionColor(conclusion))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        } else {
+            Text(jobStatusLabel(for: job))
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(jobStatusColor(for: job))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private func timeRange(for job: ActiveJob) -> String {
+        guard let start = job.startedAt else { return "" }
+        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"
+        let startStr = fmt.string(from: start)
+        if let end = job.completedAt { return "\(startStr)→\(fmt.string(from: end))" }
         return "\(startStr)→now"
     }
 
@@ -326,9 +232,9 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Short status label shown when a job has no conclusion yet.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
-        case "in_progress": return "In Progress"
-        case "queued":      return "Queued"
-        default:            return "Pending"
+        case "in_progress": return "IN PROGRESS"
+        case "queued":      return "QUEUED"
+        default:            return job.status.uppercased()
         }
     }
 
@@ -340,11 +246,12 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Maps a raw conclusion string to a human-readable icon + label.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "cancelled": return "⊗ cancelled"
-        case "skipped":   return "− skipped"
-        default:          return conclusion
+        case "success":           return "✓ SUCCESS"
+        case "failure":           return "✗ FAILED"
+        case "cancelled":         return "⊘ CANCELLED"
+        case "skipped":           return "⊘ SKIPPED"
+        case "action_required":   return "! ACTION"
+        default:                  return conclusion.uppercased()
         }
     }
 
