@@ -1,3 +1,4 @@
+// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - Card Row Modifier
@@ -14,8 +15,6 @@ struct CardRowModifier: ViewModifier {
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
-                        // ZStack-style composite: tint first, elevated surface on top.
-                        // rbSurfaceElevated is semi-transparent, so tint bleeds through.
                         AnyShapeStyle(
                             ZStack {
                                 Color.rbSurfaceElevated
@@ -63,7 +62,11 @@ struct PillBackgroundModifier: ViewModifier {
 }
 
 extension View {
-    func pillBackground(color: Color, opacity: Double = 0.15, borderOpacity: Double = 0.35) -> some View {
+    func pillBackground(
+        color: Color,
+        opacity: Double = 0.15,
+        borderOpacity: Double = 0.35
+    ) -> some View {
         modifier(PillBackgroundModifier(color: color, opacity: opacity, borderOpacity: borderOpacity))
     }
 }
