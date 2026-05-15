@@ -70,7 +70,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Start
 
-    /// Starts the runner’s launchd service.
+    /// Starts the runner's launchd service.
     /// Returns `true` when `launchctl start` exits with status 0.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
@@ -83,7 +83,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Stops the runner’s launchd service.
+    /// Stops the runner's launchd service.
     /// Returns `true` when `launchctl stop` exits with status 0.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
