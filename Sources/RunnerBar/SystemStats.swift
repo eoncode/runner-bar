@@ -175,19 +175,19 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - Memory
 
     private func memStats() -> MemoryStats {
-        var vmStats = vm_statistics64()
+        var vmInfo = vm_statistics64()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size
         )
-        let kernResult = withUnsafeMutablePointer(to: &vmStats) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+        let kernResult = withUnsafeMutablePointer(to: &vmInfo) { vmPtr in
+            vmPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, intPtr, &count)
             }
         }
         guard kernResult == KERN_SUCCESS else { return MemoryStats(used: 0, total: 16) }
         let pageSize = Double(vm_kernel_page_size)
         let gigabytes = 1024.0 * 1024.0 * 1024.0
-        let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
+        let used = Double(vmInfo.active_count + vmInfo.wire_count) * pageSize / gigabytes
         var memSize: UInt64 = 0
         var memSizeLen = MemoryLayout<UInt64>.size
         sysctlbyname("hw.memsize", &memSize, &memSizeLen, nil, 0)
