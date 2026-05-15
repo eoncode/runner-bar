@@ -599,9 +599,11 @@ struct InlineJobRowsView: View {
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
-        case "in_progress": return .yellow
-        case "queued": return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
+        case "in_progress": return DesignTokens.Color.statusBlue
+        case "queued":      return DesignTokens.Color.statusBlue.opacity(0.5)
+        default: return job.conclusion == "success"
+            ? DesignTokens.Color.statusGreen
+            : (job.isDimmed ? DesignTokens.Color.labelTertiary : DesignTokens.Color.statusRed)
         }
     }
 }
