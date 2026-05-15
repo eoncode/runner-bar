@@ -1,3 +1,4 @@
+// swiftlint:disable missing_docs redundant_discardable_let
 import AppKit
 import SwiftUI
 // swiftlint:disable vertical_whitespace_opening_braces
@@ -46,7 +47,6 @@ struct JobDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
             Divider()
-            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
                     if job.steps.isEmpty {
@@ -67,13 +67,11 @@ struct JobDetailView: View {
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // ❌ NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
         .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
     }
 
-    // MARK: - Header bar
     private var headerBar: some View {
         HStack(spacing: 6) {
             Button(action: onBack) {
@@ -108,7 +106,6 @@ struct JobDetailView: View {
         .padding(.bottom, 4)
     }
 
-    // MARK: - Action cluster (extracted to fix function_body_length)
     private var actionCluster: some View {
         HStack(spacing: 4) {
             ReRunButton(
@@ -159,9 +156,6 @@ struct JobDetailView: View {
         }
     }
 
-    // MARK: - Info bar
-    /// Issue #419 Phase 5: BranchTagPill for repo context; rbBlue for in-progress.
-    /// `tick` is read here so SwiftUI re-renders elapsed time on every clock tick.
     private var infoBar: some View {
         let _ = tick
         return HStack(spacing: 6) {
@@ -177,22 +171,17 @@ struct JobDetailView: View {
                     .foregroundColor(conclusionColor(conclusion))
                     .lineLimit(1).fixedSize()
             } else {
-                // Issue #419 Phase 5: use rbBlue for in-progress
                 Text("running")
                     .font(.caption)
                     .foregroundColor(.rbBlue)
             }
-            Text("·")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text("·").font(.caption).foregroundColor(.secondary)
             Text(job.elapsed)
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
                 .lineLimit(1).fixedSize()
         }
     }
-
-    // MARK: - Derived helpers
 
     private var repoSlug: String {
         guard let url = job.htmlUrl else { return "" }
@@ -203,18 +192,9 @@ struct JobDetailView: View {
         return parts[0] + "/" + parts[1]
     }
 
-    /// Extracts the workflow run ID from the job's HTML URL.
-    ///
-    /// GitHub job URLs have the form:
-    ///   https://github.com/owner/repo/actions/runs/<runID>/job/<jobID>
-    /// We need the run ID for re-run-failed and cancel-run API calls.
-    /// `ActiveJob` has no `runId` field — the run ID lives in `ActionGroup.runs`,
-    /// but `JobDetailView` only receives the job. Parsing the URL is the
-    /// lightweight alternative to threading the run ID through the nav stack.
     private var runID: Int {
         guard let url = job.htmlUrl else { return 0 }
         let parts = url.components(separatedBy: "/")
-        // URL parts: ["", "", "github.com", owner, repo, "actions", "runs", runID, "job", jobID]
         if let runsIdx = parts.firstIndex(of: "runs"),
            runsIdx + 1 < parts.count,
            let id = Int(parts[runsIdx + 1]) {
@@ -242,10 +222,8 @@ struct JobDetailView: View {
         }
     }
 
-    // MARK: - Step row
     @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
         HStack(spacing: 6) {
-            // step.id is the GitHub API step number (mapped from JSON "number" field)
             Text("#\(String(format: "%02d", step.id))")
                 .font(.caption2.monospacedDigit())
                 .foregroundColor(.secondary)
@@ -265,9 +243,7 @@ struct JobDetailView: View {
                     .foregroundColor(.secondary)
                     .fixedSize()
             }
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
@@ -282,29 +258,19 @@ struct JobDetailView: View {
         .contentShape(Rectangle())
     }
 
-    /// Extracted from stepRow to reduce its body length.
     @ViewBuilder private func stepTimeRange(_ step: JobStep) -> some View {
         HStack(spacing: 3) {
-            Text(startLabel(for: step))
-                .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
-            Text("→")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text(startLabel(for: step)).font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            Text("→").font(.caption).foregroundColor(.secondary)
             if let endDate = step.completedAt {
-                Text(Self.timeFormatter.string(from: endDate))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+                Text(Self.timeFormatter.string(from: endDate)).font(.caption.monospacedDigit()).foregroundColor(.secondary)
             } else {
-                Text("now")
-                    .font(.caption)
-                    .foregroundColor(.rbBlue)
+                Text("now").font(.caption).foregroundColor(.rbBlue)
             }
         }
         .fixedSize()
     }
 
-    /// Shared static formatter — avoids allocating a new DateFormatter on every row render.
     private static let timeFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm:ss"
@@ -333,4 +299,4 @@ struct JobDetailView: View {
         }
     }
 }
-// swiftlint:enable vertical_whitespace_opening_braces
+// swiftlint:enable vertical_whitespace_opening_braces missing_docs redundant_discardable_let

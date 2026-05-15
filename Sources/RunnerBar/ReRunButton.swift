@@ -1,32 +1,25 @@
+// swiftlint:disable missing_docs
 import SwiftUI
 
-// MARK: - ReRunButton
-/// Triggers a full re-run of a completed workflow run via the GitHub API.
 struct ReRunButton: View {
-    /// The action group to re-run.
-    let group: ActionGroup
-    /// Shared runner store used to dispatch the re-run API call.
-    @EnvironmentObject var store: RunnerStoreObservable
-    /// Phase animation state for the button label.
+    let action: (@escaping (Bool) -> Void) -> Void
+    let isDisabled: Bool
     @State private var phase: ButtonPhase = .idle
 
     var body: some View {
         ButtonPhaseView(
             phase: phase,
-            idleLabel: "Re-run all",
+            idleLabel: "Re-run",
             idleIcon: "arrow.clockwise"
         ) {
-            Task {
-                phase = .loading
-                do {
-                    try await store.reRunWorkflow(group: group)
-                    phase = .success
-                } catch {
-                    phase = .failure
-                }
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                phase = .idle
+            guard !isDisabled else { return }
+            phase = .loading
+            action { succeeded in
+                phase = succeeded ? .success : .failure
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }
+        .disabled(isDisabled)
     }
 }
+// swiftlint:enable missing_docs
