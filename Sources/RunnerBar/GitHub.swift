@@ -260,9 +260,11 @@ func fetchRegistrationToken(scope: String) -> String? {
     } else {
         endpoint = "orgs/\(scope)/actions/runners/registration-token"
     }
-    let args = ["api", "--method", "POST",
-                "-H", "Accept: application/vnd.github+json",
-                endpoint]
+    let args = [
+        "api", "--method", "POST",
+        "-H", "Accept: application/vnd.github+json",
+        endpoint
+    ]
     guard let outputData = runGHProcess(arguments: args, timeout: 30) else {
         log("fetchRegistrationToken › no data for \(endpoint)")
         return nil
@@ -359,9 +361,11 @@ func ghPost(_ endpoint: String) -> Bool {
     guard let ghPath = ghBinaryPath() else { log("ghPost › gh not found"); return false }
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST",
-                      "-H", "Accept: application/vnd.github+json",
-                      endpoint]
+    task.arguments = [
+        "api", "--method", "POST",
+        "-H", "Accept: application/vnd.github+json",
+        endpoint
+    ]
     task.standardOutput = Pipe()
     task.standardError = Pipe()
     do { try task.run() } catch {

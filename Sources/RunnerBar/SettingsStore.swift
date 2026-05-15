@@ -1,4 +1,3 @@
-// swiftlint:disable missing_docs
 import Combine
 import Foundation
 
@@ -6,6 +5,7 @@ import Foundation
 
 /// Persists general app settings to UserDefaults.
 final class SettingsStore: ObservableObject {
+    /// Shared singleton instance.
     static let shared = SettingsStore()
 
     private enum Key {
