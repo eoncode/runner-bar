@@ -3,6 +3,8 @@ import SwiftUI
 // MARK: - Card Row Modifier
 
 /// Applies the standard elevated card row background with a subtle border.
+/// The optional `status` tint composites *beneath* the elevated surface so the
+/// very-faint status colour shows through on light and dark appearances.
 struct CardRowModifier: ViewModifier {
     var status: RBStatus = .unknown
     var cornerRadius: CGFloat = RBRadius.card
@@ -11,10 +13,16 @@ struct CardRowModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(status.tint)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(Color.rbSurfaceElevated)
+                    .fill(
+                        // ZStack-style composite: tint first, elevated surface on top.
+                        // rbSurfaceElevated is semi-transparent, so tint bleeds through.
+                        AnyShapeStyle(
+                            ZStack {
+                                Color.rbSurfaceElevated
+                                status.tint
+                            }
+                            .compositingGroup()
+                        )
                     )
             )
             .overlay(
