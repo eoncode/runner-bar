@@ -70,7 +70,7 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ──────────────────────────────────────────────────────
+            // ── Top bar ────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -109,7 +109,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ─────────────────────────────────────────────
+            // ── Step name (large) ─────────────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -117,7 +117,7 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────
+            // ── Meta rows ────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase")
                     .font(.system(size: 10))
@@ -204,7 +204,7 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ───────────────────────────────────────
+            // ── Log — INSIDE ScrollView ───────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -221,7 +221,12 @@ struct StepLogView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.black.opacity(0.18))
+                        // ⚠️ Adaptive log background.
+                        // Color.primary.opacity(0.05) is perceptually neutral on both
+                        // light (near-white tint) and dark (near-black tint) surfaces.
+                        // ❌ NEVER use Color.black.opacity() here — it is not adaptive
+                        //    and produces a muddy grey on light mode.
+                        .background(Color.primary.opacity(0.05))
                 } else {
                     Text("Log not available")
                         .font(DesignTokens.Font.monoSmall)
