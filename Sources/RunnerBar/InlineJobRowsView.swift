@@ -17,18 +17,18 @@ private struct TreeLineLeader: View {
     var body: some View {
         Canvas { ctx, size in
             let midY = size.height / 2
-            let x = size.width / 2
+            let barX = size.width / 2
 
             // Vertical segment: top → midY (or full height for non-last rows)
             var vertPath = Path()
-            vertPath.move(to: CGPoint(x: x, y: 0))
-            vertPath.addLine(to: CGPoint(x: x, y: isLast ? midY : size.height))
+            vertPath.move(to: CGPoint(x: barX, y: 0))
+            vertPath.addLine(to: CGPoint(x: barX, y: isLast ? midY : size.height))
             ctx.stroke(vertPath, with: .color(lineColor), lineWidth: barWidth)
 
             // Horizontal elbow at midY
             var elbowPath = Path()
-            elbowPath.move(to: CGPoint(x: x, y: midY))
-            elbowPath.addLine(to: CGPoint(x: x + elbowWidth, y: midY))
+            elbowPath.move(to: CGPoint(x: barX, y: midY))
+            elbowPath.addLine(to: CGPoint(x: barX + elbowWidth, y: midY))
             ctx.stroke(elbowPath, with: .color(lineColor), lineWidth: barWidth)
         }
         .frame(width: elbowWidth + 2)
