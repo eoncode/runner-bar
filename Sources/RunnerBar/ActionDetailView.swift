@@ -25,7 +25,7 @@ struct ActionDetailView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
                     if group.jobs.isEmpty {
-                        Text("Loading jobs\u2026")
+                        Text("Loading jobs…")
                             .font(.caption).foregroundColor(.secondary)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                     } else {
@@ -74,7 +74,7 @@ struct ActionDetailView: View {
             if let branch = group.headBranch { BranchTagPill(name: branch) }
             Spacer()
             Text(group.jobProgress).font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
-            Text("\u00b7").font(.caption).foregroundColor(.secondary)
+            Text("·").font(.caption).foregroundColor(.secondary)
             Text(group.elapsed).font(.caption.monospacedDigit()).foregroundColor(.secondary).lineLimit(1).fixedSize()
         }
     }
