@@ -39,27 +39,14 @@ struct RunnerLifecycleService {
     }
 
     /// Looks up the exact launchd label for this runner by running
-    /// `launchctl list` via Process (no shell, no grep) and filtering
+    /// `launchctl list` via the shared shell() helper and filtering
     /// the output lines in Swift.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: BinaryPaths.launchctl)
-        task.arguments = ["list"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe()
-        do { try task.run() } catch {
-            log("RunnerLifecycle › resolvedLabel: launchctl list failed: \(error)")
+        let output = shell("\(BinaryPaths.launchctl) list", timeout: 5)
+        guard !output.isEmpty else {
+            log("RunnerLifecycle › resolvedLabel: launchctl list returned empty output")
             return serviceLabel(for: runner)
         }
-        let timeoutItem = DispatchWorkItem { task.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        let output = String(
-            data: pipe.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
         let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
@@ -75,7 +62,8 @@ struct RunnerLifecycleService {
     // MARK: - Start
 
     /// Starts the runner's launchd service.
-    /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// Returns `true` when `launchctl start` exits cleanly, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -88,7 +76,8 @@ struct RunnerLifecycleService {
     // MARK: - Stop
 
     /// Stops the runner's launchd service.
-    /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// Returns `true` when `launchctl stop` exits cleanly, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -100,30 +89,14 @@ struct RunnerLifecycleService {
 
     // MARK: - launchctl runner
 
-    /// Invokes `launchctl <subcommand> <label>` via Process (no shell
-    /// interpolation) and returns `true` iff the exit status is 0.
+    /// Invokes `launchctl <subcommand> <label>` via the shared shell() helper
+    /// and returns `true` iff stdout is empty (no error output).
     @discardableResult
     private func runLaunchctl(_ subcommand: String, label: String) -> Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: BinaryPaths.launchctl)
-        task.arguments = [subcommand, label]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
-        do { try task.run() } catch {
-            log("RunnerLifecycle › launchctl \(subcommand) \(label) launch error: \(error)")
-            return false
-        }
-        let timeoutItem = DispatchWorkItem { task.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        let output = String(
-            data: pipe.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
-        log("RunnerLifecycle › launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
-        return task.terminationStatus == 0
+        let output = shell("\(BinaryPaths.launchctl) \(subcommand) \(label)", timeout: 10)
+        log("RunnerLifecycle › launchctl \(subcommand) \(label): \(output.prefix(120))")
+        // launchctl exits 0 silently on success; any output typically means an error.
+        return output.isEmpty
     }
 
     // MARK: - Remove
@@ -161,7 +134,7 @@ struct RunnerLifecycleService {
     }
 
     /// Launches `<workingDirectory>/<executableName>` via `Process.arguments`.
-    /// Blocking — always call from a background thread.
+    /// ⚠️ Blocking — always call from a background thread.
     private func runScript(
         executableName: String,
         arguments: [String],
