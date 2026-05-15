@@ -1,3 +1,4 @@
+// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - InlineJobRowsView
@@ -49,23 +50,18 @@ struct InlineJobRowsView: View {
     private func jobRow(_ job: ActiveJob) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                // Phase 4 spec #420: keep progress indicator in job sub-rows.
-                // DonutStatusView replaces the old PieProgressDot at 10 pt.
                 DonutStatusView(
                     status: jobStatus(for: job),
                     progress: job.progressFraction ?? 0,
                     size: 10
                 )
-
                 Text(job.name)
                     .font(DesignTokens.Fonts.mono)
                     .foregroundColor(job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
-
                 Spacer()
-
                 if job.startedAt != nil {
                     Text(job.elapsed)
                         .font(.caption2.monospacedDigit())
@@ -73,7 +69,6 @@ struct InlineJobRowsView: View {
                         .fixedSize()
                 }
             }
-            // Phase 4 spec (#420): keep horizontal progress bar in job sub-rows.
             if job.status == "in_progress" {
                 let progress = job.progressFraction ?? 0
                 ProgressView(value: progress)
@@ -94,8 +89,7 @@ struct InlineJobRowsView: View {
             switch conclusion {
             case "success": return .success
             case "failure": return .failed
-            case "cancelled": return .unknown
-            case "skipped": return .unknown
+            case "cancelled", "skipped": return .unknown
             default: return .unknown
             }
         }
