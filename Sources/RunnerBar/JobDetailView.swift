@@ -22,6 +22,7 @@ import SwiftUI
 //   Issue #419 Phase 5: stepColor / infoBar "running" label use DesignTokens.
 //   Issue #419 Phase 5: step rows wrapped in cardRow-style RoundedRectangle background.
 //   Issue #419 Phase 5: BranchTagPill wired into infoBar for repo/branch context.
+//   Restored: CancelButton in action cluster (spec: no behaviour changes).
 // ════════════════════════════════════════════════════════════════════════════════
 
 // Navigation level 2 (Jobs path): step list for a single `ActiveJob`.
@@ -70,6 +71,18 @@ struct JobDetailView: View {
                         }
                     },
                     tooltip: "Re-run failed jobs in this workflow run"
+                )
+                // Restored: CancelButton removed during Phase 5 redesign — spec mandates no behaviour regression.
+                CancelButton(
+                    action: { completion in
+                        let runID    = job.runId
+                        let repoSlug = self.repoSlug
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let ok = GitHub.cancelRun(runID: runID, repoSlug: repoSlug)
+                            DispatchQueue.main.async { completion(ok) }
+                        }
+                    },
+                    isDisabled: job.status != "in_progress" && job.status != "queued"
                 )
 
                 if let urlString = job.htmlUrl, let url = URL(string: urlString) {
