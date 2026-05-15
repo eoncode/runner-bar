@@ -96,7 +96,8 @@ func fetchActionLogs(group: ActionGroup) -> String? {
 // MARK: - ZIP extraction
 
 /// Extracts all `.txt` files from a ZIP blob and returns `(name, text)` pairs.
-/// Uses `BinaryPaths.unzip` (/usr/bin/unzip) which is always available on macOS.
+/// Uses the shared `shell()` helper with `BinaryPaths.unzip` (/usr/bin/unzip)
+/// so all CLI invocations go through the centralised subprocess orchestrator.
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     let fileManager = FileManager.default
     let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -109,19 +110,16 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         log("unzipLogs › failed to write ZIP to tmp: \(error)")
         return []
     }
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: BinaryPaths.unzip)
-    proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
-    proc.standardOutput = FileHandle.nullDevice
-    proc.standardError = FileHandle.nullDevice
-    do {
-        try proc.run()
-    } catch {
-        log("unzipLogs › failed to launch unzip: \(error)")
+    // Use the shared shell() helper for CLI consistency (S1075 / CodeRabbit).
+    // Arguments are quoted; both paths come from controlled sources (UUID tmp dir).
+    let output = shell(
+        "\(BinaryPaths.unzip) -q \"\(zipFile.path)\" -d \"\(tmp.path)\"",
+        timeout: 30
+    )
+    guard output.isEmpty || !output.lowercased().contains("error") else {
+        log("unzipLogs › failed: \(output.prefix(120))")
         return []
     }
-    proc.waitUntilExit()
-    guard proc.terminationStatus == 0 else { return [] }
     guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else {
         return []
     }
