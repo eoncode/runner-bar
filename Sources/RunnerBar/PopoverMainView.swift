@@ -66,6 +66,11 @@ import SwiftUI
 //   ❌ NEVER gate displayTick behind !popoverOpenState.isOpen.
 //   ❌ NEVER merge with runnerRefreshTimer (that one IS gated and fires at 5s).
 //
+// RULE 10: InlineJobRowsView is now owned by ActionRowView (not this file).
+//   ActionRowView accepts an `onSelectJob` closure and passes it + its own
+//   `expanded` @State as `showAll:` to InlineJobRowsView internally.
+//   ❌ NEVER add a separate InlineJobRowsView site back into actionsSection.
+//
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -171,7 +176,7 @@ struct PopoverMainView: View {
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
 
-    // MARK: - Actions section (RULE 5: no height cap)
+    // MARK: - Actions section (RULE 5: no height cap, RULE 10: no InlineJobRowsView here)
 
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -183,14 +188,13 @@ struct PopoverMainView: View {
                 SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
-                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(
-                            group: group,
-                            tick: displayTick,
-                            onSelectJob: onSelectInlineJob
-                        )
-                    }
+                    // InlineJobRowsView is rendered inside ActionRowView — see RULE 10.
+                    ActionRowView(
+                        group: group,
+                        tick: displayTick,
+                        onSelect: { onSelectAction(group) },
+                        onSelectJob: onSelectInlineJob
+                    )
                 }
                 loadMoreButton
             }
