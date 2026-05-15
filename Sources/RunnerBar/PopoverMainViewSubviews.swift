@@ -14,6 +14,26 @@ struct SectionHeaderLabel: View {
     }
 }
 
+// MARK: - DiskUsagePill
+/// Compact orange pill showing disk-used percentage, displayed in the system
+/// stats header row. Mirrors the "14%" badge visible in the reference design.
+private struct DiskUsagePill: View {
+    /// Disk-used fraction 0–100 (e.g. 14.3 → displayed as "14%").
+    let usedPct: Double
+
+    var body: some View {
+        Text("\(Int(usedPct.rounded()))%")
+            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .foregroundColor(.rbWarning)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.rbWarning.opacity(0.18))
+            )
+    }
+}
+
 // MARK: - PopoverHeaderView
 /// Header row: sparkline stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
@@ -28,10 +48,14 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             // Phase 2: HeaderStatsBar renders CPU/MEM/DISK sparklines.
             // Receives the shared VM — no second sampler is created.
-            // fix(4): DiskPillBadge removed from header; HeaderStatsBar
-            // renders the DISK value inline as plain text, matching the
-            // reference design (compact single-row chip layout).
             HeaderStatsBar(statsVM: statsVM)
+
+            // fix(#419): disk-used percentage pill restored in the header row.
+            // Computed from diskUsedGB / diskTotalGB so no extra publisher is needed.
+            let diskPct = statsVM.stats.diskTotalGB > 0
+                ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
+                : 0
+            DiskUsagePill(usedPct: diskPct)
 
             Spacer()
 
@@ -191,7 +215,7 @@ struct ActionRowView: View {
 
     var body: some View {
         // fix(3a): RoundedRectangle card wraps the full group (header + inline rows).
-        // .clipped() ensures the Capsule pill (fix 2) is cropped to card bounds.
+        // .clipped() ensures the Capsule pill (fix 2) is masked to card bounds.
         ZStack(alignment: .leading) {
             // fix(3a): card background — elevated surface + subtle border stroke
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)

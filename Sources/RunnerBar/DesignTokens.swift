@@ -131,7 +131,8 @@ enum RBStatus {
         case .inProgress: return .rbBlue
         case .success: return .rbSuccess
         case .failed: return .rbDanger
-        case .queued: return .rbTextSecondary
+        // fix(#419): queued uses warning yellow, not secondary grey
+        case .queued: return .rbWarning
         case .unknown: return .rbTextTertiary
         }
     }
@@ -142,6 +143,8 @@ enum RBStatus {
         case .inProgress: return .rbBlueTint
         case .success: return .rbGreenTint
         case .failed: return .rbRedTint
+        // fix(#419): queued rows get a faint yellow tint
+        case .queued: return .rbWarning.opacity(0.05)
         default: return .clear
         }
     }

@@ -10,18 +10,18 @@ private struct TreeLineLeader: View {
     /// Whether this is the last job in the list (draws a corner, not a T).
     let isLast: Bool
 
-    private let lineColor = Color.secondary.opacity(0.35)
+    private let lineColor = Color.secondary.opacity(0.3)
     private let barWidth: CGFloat = 1
-    private let elbowWidth: CGFloat = 8
+    // fix(#419): wider elbow so the └─ character reads clearly
+    private let elbowWidth: CGFloat = 12
 
     var body: some View {
         Canvas { ctx, size in
             let midY = size.height / 2
-            // fix(1): barX pinned to 0 so the vertical line is left-aligned
-            // inside its frame instead of floating at size.width/2.
+            // Vertical line left-aligned inside frame.
+            // Non-last rows: full height so lines connect continuously across rows.
+            // Last row: only to midY (creates the └ corner).
             let barX: CGFloat = 0
-
-            // Vertical segment: top → midY (or full height for non-last rows)
             var vertPath = Path()
             vertPath.move(to: CGPoint(x: barX, y: 0))
             vertPath.addLine(to: CGPoint(x: barX, y: isLast ? midY : size.height))
@@ -82,7 +82,7 @@ struct InlineJobRowsView: View {
                     .padding(.vertical, 2)
                 }
             }
-            // fix(3b): subtle inner rounded background that visually nests
+            // fix(#419): subtle inner rounded background that visually nests
             // the job rows inside the parent group card.
             .background(
                 RoundedRectangle(cornerRadius: RBRadius.small - 2, style: .continuous)
@@ -127,15 +127,34 @@ struct InlineJobRowsView: View {
                     }
                     if job.status == "in_progress" {
                         let progress = job.progressFraction ?? 0
-                        ProgressView(value: progress)
-                            .progressViewStyle(.linear)
-                            .tint(Color.rbBlue)
-                            .frame(height: 2)
-                            .padding(.leading, 16)
-                            .padding(.trailing, RBSpacing.xs)
+                        // fix(#419): custom capsule progress bar matching reference design —
+                        // dark muted track with a colored fill, not the stock ProgressView.
+                        GeometryReader { barGeo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.rbTextTertiary.opacity(0.22))
+                                    .frame(height: 3)
+                                Capsule()
+                                    .fill(Color.rbBlue)
+                                    .frame(
+                                        width: max(3, barGeo.size.width * CGFloat(progress)),
+                                        height: 3
+                                    )
+                            }
+                        }
+                        .frame(height: 3)
+                        .padding(.leading, 16)
+                        .padding(.trailing, RBSpacing.xs)
                     }
                 }
             }
+            // fix(#419): per-row rounded background so each job row reads as
+            // a distinct item inside the expanded card, matching the reference.
+            .background(
+                RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                    .fill(Color.rbSurfaceElevated.opacity(0.55))
+            )
+            .padding(.horizontal, RBSpacing.xs)
         }
         // Fixed height per row so GeometryReader reports a stable value
         .frame(height: 28)
