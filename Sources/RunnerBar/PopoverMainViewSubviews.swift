@@ -271,14 +271,15 @@ struct ActionRowView: View {
 
     @ViewBuilder
     private func metaTrailing(tick tickSnapshot: Int) -> some View {
-        // tickSnapshot is read here to satisfy the compiler that the value is used.
-        let _ = tickSnapshot
+        // tickSnapshot is consumed via .id() on the elapsed Text to force
+        // SwiftUI invalidation every display tick — DO NOT REMOVE.
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
                 .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                .id(tickSnapshot)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.currentJobName)
