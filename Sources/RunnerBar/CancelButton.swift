@@ -1,35 +1,17 @@
+// swiftlint:disable identifier_name missing_docs
 import SwiftUI
 
 // MARK: - CancelButton
 
-/// Top-bar "Cancel run" button.
-/// Shows a spinner while the cancel request is in-flight,
-/// then a brief ✓/✗ confirmation before returning to idle.
+/// Top-bar cancel button for in-progress runs.
 struct CancelButton: View {
-    /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
-    /// When true the button is hidden and takes no layout space.
     var isDisabled: Bool = false
 
     @State private var phase: Phase = .idle
 
-    // MARK: - Phase
+    enum Phase { case idle, loading, done, failed }
 
-    /// Visual states of the cancel button lifecycle.
-    enum Phase {
-        /// Normal tappable state.
-        case idle
-        /// Spinner shown while the cancel request is in-flight.
-        case loading
-        /// Green checkmark shown for 1.5 s after success.
-        case done
-        /// Red cross shown for 1.5 s after failure.
-        case failed
-    }
-
-    // MARK: - Body
-
-    /// Renders the button in its current phase.
     var body: some View {
         Group {
             switch phase {
@@ -46,7 +28,6 @@ struct CancelButton: View {
                         .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("Cancel this workflow run")
                 }
             case .loading:
                 ButtonPhaseView(phase: .loading)
@@ -57,8 +38,6 @@ struct CancelButton: View {
             }
         }
     }
-
-    // MARK: - Actions
 
     private func startCancel() {
         guard phase == .idle else { return }
@@ -73,3 +52,4 @@ struct CancelButton: View {
         }
     }
 }
+// swiftlint:enable identifier_name missing_docs

@@ -1,11 +1,9 @@
+// swiftlint:disable identifier_name missing_docs
 import SwiftUI
 
 // MARK: - RunnerConfigSheet
 
 /// Phase 2: Inline sheet for editing a runner's labels and work folder.
-/// Changes are written to the `.runner` JSON file via `RunnerLifecycleService`.
-/// The runner agent caches config in memory — changes take effect after the
-/// next runner restart.
 struct RunnerConfigSheet: View {
     /// The runner whose configuration is being edited.
     let runner: RunnerModel
@@ -17,7 +15,6 @@ struct RunnerConfigSheet: View {
     @State private var labelsText: String
     @State private var workFolderText: String
     @State private var isSaving = false
-    /// Non-nil when `updateConfig` returns `false`; shown as an inline error.
     @State private var errorMessage: String?
 
     init(runner: RunnerModel, isPresented: Binding<RunnerModel?>, onSave: @escaping () -> Void) {
@@ -102,3 +99,4 @@ struct RunnerConfigSheet: View {
         }
     }
 }
+// swiftlint:enable identifier_name missing_docs

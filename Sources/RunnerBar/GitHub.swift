@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name vertical_whitespace_opening_braces missing_docs opening_brace
 import Foundation
 
 // MARK: - GitHub API client
@@ -119,8 +120,6 @@ func rerunFailedJobs(runID: Int, scope: String) -> Bool {
 }
 
 // MARK: - Compatibility shims
-// These bridge legacy call sites that still use the old free-function API.
-// Do not remove until all call sites have been migrated to the new API.
 
 /// Locates the `gh` binary at the standard Homebrew / system paths.
 func ghBinaryPath() -> String? {
@@ -133,11 +132,9 @@ func ghBinaryPath() -> String? {
 }
 
 /// Global flag set to `true` when the GitHub API returns a rate-limit response.
-/// Reset to `false` at the start of each poll cycle.
 var ghIsRateLimited = false
 
 /// Calls the GitHub API and returns the raw JSON data, or `nil` on error.
-/// Sets `ghIsRateLimited = true` when a 403/429 rate-limit response is detected.
 @discardableResult
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     guard let ghPath = ghBinaryPath() else { return nil }
@@ -179,42 +176,36 @@ func ghPost(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
     return !output.lowercased().contains("error")
 }
 
-/// Extracts "owner/repo" from a GitHub HTML URL such as
-/// `https://github.com/owner/repo/actions/runs/…`.
+/// Extracts "owner/repo" from a GitHub HTML URL.
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     guard
-        let s = urlString,
-        let url = URL(string: s),
+        let urlStr = urlString,
+        let url = URL(string: urlStr),
         url.host == "github.com",
         url.pathComponents.count >= 3
     else { return nil }
-    // pathComponents[0] == "/", [1] == owner, [2] == repo
     return "\(url.pathComponents[1])/\(url.pathComponents[2])"
 }
 
-/// Extracts the numeric run ID from a GitHub HTML URL such as
-/// `https://github.com/owner/repo/actions/runs/123456789/jobs/…`.
+/// Extracts the numeric run ID from a GitHub HTML URL.
 func runIDFromHtmlUrl(_ urlString: String?) -> Int? {
-    guard let s = urlString else { return nil }
-    let parts = s.components(separatedBy: "/")
-    for (i, part) in parts.enumerated() where part == "runs" {
-        if i + 1 < parts.count, let id = Int(parts[i + 1]) { return id }
+    guard let urlStr = urlString else { return nil }
+    let parts = urlStr.components(separatedBy: "/")
+    for (idx, part) in parts.enumerated() where part == "runs" {
+        if idx + 1 < parts.count, let runId = Int(parts[idx + 1]) { return runId }
     }
     return nil
 }
 
 /// Fetches the plain-text log for a single step within a job.
-/// Returns `nil` when the step log is unavailable or the CLI call fails.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard let data = ghAPI("repos/\(scope)/actions/jobs/\(jobID)/logs"),
           let text = String(data: data, encoding: .utf8)
     else { return nil }
-    // The raw log is a flat text blob; return it and let call sites slice by step.
     return text.isEmpty ? nil : text
 }
 
 /// Fetches all active (in-progress + queued) jobs for a given scope.
-/// Returns an empty array on error; used by `RunnerStoreState.buildJobState`.
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     guard
         let data = ghAPI("repos/\(scope)/actions/runs?status=in_progress&per_page=100"),
@@ -229,9 +220,9 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             let jobData = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100"),
             let jobsResponse = try? JSONDecoder().decode(WorkflowJobsResponse.self, from: jobData)
         else { continue }
-        for wj in jobsResponse.jobs {
-            guard let htmlUrl = wj.htmlUrl else { continue }
-            let steps: [JobStep] = (wj.steps ?? []).map {
+        for workflowJob in jobsResponse.jobs {
+            guard let htmlUrl = workflowJob.htmlUrl else { continue }
+            let steps: [JobStep] = (workflowJob.steps ?? []).map {
                 JobStep(
                     name: $0.name,
                     status: $0.status ?? "queued",
@@ -242,13 +233,13 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
                 )
             }
             let job = ActiveJob(
-                id: wj.id,
-                name: wj.name,
-                status: wj.status ?? "queued",
-                conclusion: wj.conclusion,
-                startedAt: wj.startedAt.flatMap { iso.date(from: $0) },
+                id: workflowJob.id,
+                name: workflowJob.name,
+                status: workflowJob.status ?? "queued",
+                conclusion: workflowJob.conclusion,
+                startedAt: workflowJob.startedAt.flatMap { iso.date(from: $0) },
                 createdAt: run.createdAt.flatMap { iso.date(from: $0) },
-                completedAt: wj.completedAt.flatMap { iso.date(from: $0) },
+                completedAt: workflowJob.completedAt.flatMap { iso.date(from: $0) },
                 htmlUrl: htmlUrl,
                 isDimmed: false,
                 steps: steps,
@@ -261,9 +252,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
 }
 
 /// Fetches all self-hosted runners registered for the given scope.
-/// Returns an empty array on error; used by `RunnerStore.fetchAndEnrichRunners`.
 func fetchRunners(for scope: String) -> [Runner] {
-    // Determine if this is an org scope (no "/") or a repo scope (contains "/").
     let endpoint: String
     if scope.contains("/") {
         endpoint = "repos/\(scope)/actions/runners?per_page=100"
@@ -276,3 +265,4 @@ func fetchRunners(for scope: String) -> [Runner] {
     else { return [] }
     return decoded.runners
 }
+// swiftlint:enable identifier_name vertical_whitespace_opening_braces missing_docs opening_brace

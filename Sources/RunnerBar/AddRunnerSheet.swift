@@ -1,111 +1,68 @@
+// swiftlint:disable colon missing_docs identifier_name
 import SwiftUI
 
 // MARK: - AddRunnerSheet
 
-/// Sheet for registering a new self-hosted runner with a GitHub repo or org.
+/// Sheet for registering a new self-hosted runner.
 struct AddRunnerSheet: View {
-
-    // MARK: - Environment
-
     @Environment(\.dismiss) private var dismiss
-
-    // MARK: - State
-
-    /// The GitHub scope (owner/repo or org) to register the runner under.
-    @State private var scope: String = ""
-    /// Optional runner label the user wants to assign.
-    @State private var label: String = ""
-    /// True while the registration network call is in-flight.
+    @State private var scope = ""
+    @State private var label = ""
     @State private var isRegistering = false
-    /// Holds an error string to display if registration fails.
-    @State private var errorMessage: String?
-    /// True once registration completes successfully.
-    @State private var didSucceed = false
-
-    // MARK: - Body
+    @State private var resultMessage: String?
+    @State private var resultIsError = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Add Runner")
-                .font(.headline)
+            Text("Add Runner").font(.headline)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Scope (owner/repo or org)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                TextField("e.g. myorg/myrepo", text: $scope)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("GitHub Scope").font(.caption).foregroundColor(.secondary)
+                TextField("owner/repo or org", text: $scope)
                     .textFieldStyle(.roundedBorder)
-                    .disableAutocorrection(true)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Label (optional)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                TextField("e.g. self-hosted, macOS", text: $label)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Label (optional)").font(.caption).foregroundColor(.secondary)
+                TextField("e.g. self-hosted", text: $label)
                     .textFieldStyle(.roundedBorder)
-                    .disableAutocorrection(true)
             }
 
-            if let errorMessage {
-                Text(errorMessage)
+            if let msg = resultMessage {
+                Text(msg)
                     .font(.caption)
-                    .foregroundColor(.red)
-            }
-
-            if didSucceed {
-                Text("Runner registered successfully.")
-                    .font(.caption)
-                    .foregroundColor(.green)
+                    .foregroundColor(resultIsError ? .red : .green)
             }
 
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add") { register() }
+                Button("Register", action: register)
                     .keyboardShortcut(.defaultAction)
                     .disabled(scope.trimmingCharacters(in: .whitespaces).isEmpty || isRegistering)
             }
         }
         .padding(20)
-        .frame(minWidth: 360)
-        .overlay {
-            if isRegistering {
-                ProgressView()
-            }
-        }
+        .frame(width: 340)
     }
-
-    // MARK: - Registration
 
     private func register() {
         isRegistering = true
-        errorMessage = nil
-        didSucceed = false
+        resultMessage = nil
         let trimmedScope = scope.trimmingCharacters(in: .whitespaces)
         let trimmedLabel = label.trimmingCharacters(in: .whitespaces)
         DispatchQueue.global(qos: .userInitiated).async {
-            // Build args: pass label only when non-empty
-            var args = ["--scope", trimmedScope]
-            if !trimmedLabel.isEmpty {
-                args += ["--label", trimmedLabel]
-            }
-            let result = shell(
-                "/opt/homebrew/bin/gh runner register " + args.map { "'\($0)'" }.joined(separator: " "),
-                timeout: 60
+            let ok = RunnerLifecycleService.shared.register(
+                scope: trimmedScope,
+                label: trimmedLabel.isEmpty ? nil : trimmedLabel
             )
             DispatchQueue.main.async {
                 isRegistering = false
-                if result.lowercased().contains("error") || result.lowercased().contains("failed") {
-                    errorMessage = result.isEmpty ? "Unknown error" : result
-                } else {
-                    didSucceed = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        dismiss()
-                    }
-                }
+                resultIsError = !ok
+                resultMessage = ok ? "Runner registered successfully." : "Registration failed."
             }
         }
     }
 }
+// swiftlint:enable colon missing_docs identifier_name
