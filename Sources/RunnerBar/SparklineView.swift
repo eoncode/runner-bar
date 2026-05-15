@@ -59,35 +59,3 @@ struct SparklineView: View {
         }
     }
 }
-
-// MARK: - DiskPillView
-/// A compact pill showing disk usage percentage.
-/// Issue #419 Phase 5: uses .ultraThinMaterial with a colour overlay instead of a flat fill.
-struct DiskPillView: View {
-    let usedPct: Double
-
-    private var pillColor: Color {
-        DesignTokens.Colors.usage(pct: usedPct)
-    }
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "internaldrive")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(pillColor)
-            Text(String(format: "%.0f%%", usedPct))
-                .font(RBFont.monoLabel)
-                .foregroundColor(pillColor)
-        }
-        .padding(.horizontal, RBSpacing.sm)
-        .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    Capsule()
-                        .fill(pillColor.opacity(0.10))
-                )
-        )
-    }
-}
