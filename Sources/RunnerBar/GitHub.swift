@@ -117,3 +117,71 @@ func rerunFailedJobs(runID: Int, scope: String) -> Bool {
     let output = shell(cmd)
     return output.isEmpty || !output.lowercased().contains("error")
 }
+
+// MARK: - Legacy compatibility shims
+// These bridge call sites that still use the old ghAPI/ghPost surface to the
+// new shell-based implementation. Remove once all call sites are migrated.
+
+/// Calls the GitHub API and returns raw JSON `Data`, or `nil` on error.
+func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    let output = shell("/opt/homebrew/bin/gh api \(endpoint)", timeout: timeout)
+    guard !output.isEmpty else { return nil }
+    let lower = output.lowercased()
+    if lower.hasPrefix("error") || lower.contains("\"message\"") && lower.contains("not found") {
+        return nil
+    }
+    return output.data(using: .utf8)
+}
+
+/// Performs a POST via the GitHub API. Returns `true` on apparent success.
+@discardableResult
+func ghPost(_ endpoint: String) -> Bool {
+    let output = shell("/opt/homebrew/bin/gh api --method POST \(endpoint)", timeout: 30)
+    return !output.lowercased().contains("error")
+}
+
+/// Returns the path to the `gh` CLI binary, or `nil` if not found.
+func ghBinaryPath() -> String? {
+    ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
+        .first { FileManager.default.isExecutableFile(atPath: $0) }
+}
+
+/// Global rate-limit flag. Set `true` when the API returns a 403/rate-limit response.
+var ghIsRateLimited = false
+
+/// Extracts `owner/repo` from a GitHub HTML URL such as
+/// `https://github.com/owner/repo/actions/runs/123/job/456`.
+func scopeFromHtmlUrl(_ urlString: String?) -> String? {
+    guard
+        let s = urlString,
+        let url = URL(string: s),
+        url.host == "github.com",
+        url.pathComponents.count >= 3
+    else { return nil }
+    return "\(url.pathComponents[1])/\(url.pathComponents[2])"
+}
+
+/// Extracts the numeric workflow run ID from a GitHub HTML URL.
+func runIDFromHtmlUrl(_ url: String?) -> Int? {
+    guard let url else { return nil }
+    let parts = url.components(separatedBy: "/")
+    for (i, p) in parts.enumerated() where p == "runs" && i + 1 < parts.count {
+        return Int(parts[i + 1])
+    }
+    return nil
+}
+
+/// Fetches active/queued jobs for a repo scope.
+/// Stub — returns empty array until full call-site migration is complete.
+func fetchActiveJobs(for scope: String) -> [ActiveJob] { [] }
+
+/// Fetches self-hosted runners for a repo scope.
+/// Stub — returns empty array until full call-site migration is complete.
+func fetchRunners(for scope: String) -> [Runner] { [] }
+
+/// Fetches the log text for a single step using the `gh` CLI.
+func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
+    guard let ghPath = ghBinaryPath() else { return nil }
+    let output = shell("\(ghPath) api repos/\(scope)/actions/jobs/\(jobID)/logs", timeout: 30)
+    return output.isEmpty ? nil : output
+}
