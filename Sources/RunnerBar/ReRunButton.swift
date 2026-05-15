@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Top-bar re-run button.
 /// idle (arrow.clockwise + "Re-run") →
-/// loading (spinner + "Running\u{2026}") →
+/// loading (spinner + "Running…") →
 /// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
 struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
@@ -30,6 +30,7 @@ struct ReRunButton: View {
 
     // MARK: - Body
 
+    /// Renders the button in its current phase.
     var body: some View {
         Group {
             switch phase {

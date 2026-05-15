@@ -5,6 +5,7 @@ import Foundation
 
 /// Persists notification preferences to UserDefaults.
 final class NotificationPrefsStore: ObservableObject {
+    /// Shared singleton instance.
     static let shared = NotificationPrefsStore()
 
     private enum Key {
@@ -14,12 +15,16 @@ final class NotificationPrefsStore: ObservableObject {
 
     /// Whether the user wants a notification when a job succeeds.
     @Published var notifyOnSuccess: Bool {
-        didSet { UserDefaults.standard.set(notifyOnSuccess, forKey: Key.notifyOnSuccess) }
+        didSet {
+            UserDefaults.standard.set(notifyOnSuccess, forKey: Key.notifyOnSuccess)
+        }
     }
 
     /// Whether the user wants a notification when a job fails.
     @Published var notifyOnFailure: Bool {
-        didSet { UserDefaults.standard.set(notifyOnFailure, forKey: Key.notifyOnFailure) }
+        didSet {
+            UserDefaults.standard.set(notifyOnFailure, forKey: Key.notifyOnFailure)
+        }
     }
 
     private init() {

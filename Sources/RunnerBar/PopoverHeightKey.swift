@@ -12,7 +12,10 @@ import SwiftUI
 
 // Retained for source compatibility. Not used in the current NSPanel architecture.
 struct PopoverHeightKey: PreferenceKey {
+    /// Default accumulated height value.
     static let defaultValue: CGFloat = 0
+
+    /// Accumulates preference values by taking the maximum.
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }
