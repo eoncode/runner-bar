@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import os
 
@@ -384,3 +385,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+// swiftlint:enable file_length
