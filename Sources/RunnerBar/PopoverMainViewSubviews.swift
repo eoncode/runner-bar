@@ -340,6 +340,9 @@ struct ActionRowView: View {
 /// Passive read-only ↳ job rows shown beneath every in-progress action group.
 /// Only shows jobs that are currently `in_progress`.
 ///
+/// Per spec (#178, #324 Gap 2): ↳ rows are NOT independently tappable — they
+/// have no > chevron and no Button wrapper. They are passive context rows only.
+///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
 /// isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NOT from a plain Bool prop.
@@ -352,7 +355,6 @@ struct ActionRowView: View {
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
-    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
@@ -363,12 +365,7 @@ struct InlineJobRowsView: View {
 
     var body: some View {
         ForEach(activeJobs.prefix(cap)) { job in
-            if let onSelectJob {
-                Button(action: { onSelectJob(job, group) }, label: { jobRow(job) })
-                    .buttonStyle(.plain)
-            } else {
-                jobRow(job)
-            }
+            jobRow(job)
         }
         if activeJobs.count > cap {
             Button(
@@ -420,10 +417,6 @@ struct InlineJobRowsView: View {
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            if onSelectJob != nil {
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
-            }
         }
         .padding(.leading, 24)
         .padding(.trailing, DesignTokens.Spacing.rowHPad)

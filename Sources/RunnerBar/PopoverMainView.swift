@@ -75,7 +75,6 @@ struct PopoverMainView: View {
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
-    let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
@@ -184,8 +183,7 @@ struct PopoverMainView: View {
                     if group.groupStatus == .inProgress && !group.jobs.isEmpty {
                         InlineJobRowsView(
                             group: group,
-                            tick: displayTick,
-                            onSelectJob: onSelectInlineJob
+                            tick: displayTick
                         )
                     }
                 }
