@@ -70,7 +70,7 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ─────────────────────────────────────────────────────────────────────────────────────────
+            // ── Top bar ──────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -109,7 +109,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ──────────────────────────────────────────────────────────────────────────────────────
+            // ── Step name (large) ─────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -117,54 +117,94 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────────────────────────────────────────
+            // ── Meta rows ────────────────────────────────────────────────────
             HStack(spacing: 6) {
-                Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(job.name).font(.caption).foregroundColor(.secondary)
+                Image(systemName: "briefcase")
+                    .font(.system(size: 10))
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                Text(job.name)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
                 Spacer()
                 Text("step #\(step.id)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoXSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12)).cornerRadius(4).fixedSize()
+                    .background(
+                        RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
+                            .fill(DesignTokens.Color.pillBg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
+                                    .strokeBorder(DesignTokens.Color.pillBorder, lineWidth: 0.75)
+                            )
+                    )
+                    .fixedSize()
             }
             .padding(.horizontal, 12).padding(.bottom, 3)
 
             HStack(spacing: 6) {
-                Image(systemName: "folder").font(.system(size: 10)).foregroundColor(.secondary)
-                Text(repoSlug).font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
+                Image(systemName: "folder")
+                    .font(.system(size: 10))
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                Text(repoSlug)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .lineLimit(1).fixedSize()
                 Spacer()
                 Text("job #\(job.id)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoXSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12)).cornerRadius(4).fixedSize()
+                    .background(
+                        RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
+                            .fill(DesignTokens.Color.pillBg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DesignTokens.Layout.badgeRadius)
+                                    .strokeBorder(DesignTokens.Color.pillBorder, lineWidth: 0.75)
+                            )
+                    )
+                    .fixedSize()
             }
             .padding(.horizontal, 12).padding(.bottom, 3)
 
             HStack(spacing: 6) {
-                Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.secondary)
+                Image(systemName: "clock")
+                    .font(.system(size: 10))
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(startLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
-                Text("→").font(.system(size: 10)).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .fixedSize()
+                Text("→")
+                    .font(.system(size: 10))
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(endLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
-                Text("·").font(.system(size: 10)).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .fixedSize()
+                Text("·")
+                    .font(.system(size: 10))
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(step.elapsed)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
-                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .fixedSize()
+                Text("·")
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
                 Text(dateLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary).fixedSize()
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .fixedSize()
                 Spacer()
-                Text(stepStatusLabel)
-                    .font(.system(size: 10, weight: .medium)).foregroundColor(stepStatusColor).fixedSize()
+                StatusBadge(label: stepStatusLabel, color: stepStatusColor)
             }
             .padding(.horizontal, 12).padding(.bottom, 6)
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ───────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -176,14 +216,16 @@ struct StepLogView: View {
                     }
                 } else if let text = logText, !text.isEmpty {
                     Text(text)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.primary)
+                        .font(DesignTokens.Font.monoXSmall)
+                        .foregroundColor(.primary.opacity(0.85))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color.black.opacity(0.18))
                 } else {
                     Text("Log not available")
-                        .font(.caption).foregroundColor(.secondary)
+                        .font(DesignTokens.Font.monoSmall)
+                        .foregroundColor(DesignTokens.Color.labelSecondary)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                 }
             }
@@ -240,24 +282,26 @@ extension StepLogView {
         return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
     }
 
-    /// Step conclusion label with icon, or live/queued status.
+    /// Step conclusion label (uppercased for StatusBadge), or live/queued status.
     var stepStatusLabel: String {
         switch step.conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
-        case "skipped":   return "⊘ skipped"
-        case "cancelled": return "⊘ cancelled"
-        default: return step.status == "in_progress" ? "▶ running" : "· queued"
+        case "success":   return "SUCCESS"
+        case "failure":   return "FAILED"
+        case "skipped":   return "SKIPPED"
+        case "cancelled": return "CANCELLED"
+        default: return step.status == "in_progress" ? "RUNNING" : "QUEUED"
         }
     }
 
     /// Colour used to render `stepStatusLabel` based on conclusion or live status.
     var stepStatusColor: Color {
         switch step.conclusion {
-        case "success":            return .green
-        case "failure":            return .red
-        case "skipped", "cancelled": return .secondary
-        default: return step.status == "in_progress" ? .yellow : .secondary
+        case "success":              return DesignTokens.Color.statusGreen
+        case "failure":              return DesignTokens.Color.statusRed
+        case "skipped", "cancelled": return DesignTokens.Color.labelSecondary
+        default: return step.status == "in_progress"
+            ? DesignTokens.Color.statusBlue
+            : DesignTokens.Color.labelSecondary
         }
     }
 
