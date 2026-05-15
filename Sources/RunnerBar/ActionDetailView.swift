@@ -232,8 +232,14 @@ extension ActionDetailView {
         let runIDs: [Int] = group.runs.map { $0.id }
         DispatchQueue.global(qos: .userInitiated).async {
             var succeeded = true
-            for runID in runIDs where !ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs") {
-                succeeded = false
+            // NOTE: `for runID in runIDs where !ghPost(...)` triggers a Swift 6.3.2
+            // compiler ICE (type-checker crash during solution application).
+            // Rewritten as an explicit `if` inside a plain `for` loop to work around it.
+            for runID in runIDs {
+                let endpoint = "repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs"
+                if !ghPost(endpoint) {
+                    succeeded = false
+                }
             }
             completion(succeeded)
         }
