@@ -87,6 +87,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// macOS always mounts the root volume at `/` — this is not configurable.
     private let rootVolumePath = "/" // NOSONAR S1075 — macOS root mount point, not a user path
 
+    /// No setup required — state is populated via start().
     init() {}
     deinit { timer?.invalidate() }
 

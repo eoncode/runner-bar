@@ -349,8 +349,13 @@ private func stripAnsi(_ input: String) -> String {
 // MARK: - Shared gh binary path
 
 /// Returns the first executable `gh` binary found on common install paths.
+/// Paths are security-allowlisted absolute locations — never resolved via PATH.
 func ghBinaryPath() -> String? {
-    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
+    let candidates = [
+        "/opt/homebrew/bin/gh", // NOSONAR S1075 — allowlisted Apple Silicon Homebrew path
+        "/usr/local/bin/gh",   // NOSONAR S1075 — allowlisted Intel Homebrew path
+        "/usr/bin/gh"          // NOSONAR S1075 — allowlisted system-level path
+    ]
     return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
 }
 

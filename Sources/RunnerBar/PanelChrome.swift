@@ -156,7 +156,8 @@ final class PanelChromeView: NSView {
         vibrancyView.layer?.mask = maskLayer
     }
 
-    override func draw(_ dirtyRect: NSRect) {
+    /// S1172: `dirtyRect` is not referenced — `bounds` is used directly for drawing.
+    override func draw(_ _: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let fill: NSColor = isDark ? NSColor(white: 0.18, alpha: 0.01) : NSColor(white: 0.95, alpha: 0.01)
