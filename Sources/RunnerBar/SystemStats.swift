@@ -84,7 +84,8 @@ final class SystemStatsViewModel: ObservableObject {
     private let statsPollingInterval: TimeInterval = 2
 
     /// Root volume path used for disk capacity queries.
-    private let rootVolumePath = "/"
+    /// macOS always mounts the root volume at `/` — this is not configurable.
+    private let rootVolumePath = "/" // NOSONAR S1075 — macOS root mount point, not a user path
 
     init() {}
     deinit { timer?.invalidate() }
