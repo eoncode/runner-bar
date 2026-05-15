@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import AppKit
 import Combine
 import Foundation
@@ -172,4 +171,3 @@ final class RunnerStore {
         return busyRunners + idleRunners
     }
 }
-// swiftlint:enable file_length

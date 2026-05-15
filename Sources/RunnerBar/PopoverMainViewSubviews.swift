@@ -237,7 +237,7 @@ struct PopoverLocalRunnerRow: View {
                 RunnerCardRow(runner: runner)
             }
             if busy.count > 3 {
-                Text("+ \(busy.count - 3) more\u{2026}")
+                Text("+ \(busy.count - 3) more…")
                     .font(DesignTokens.Font.monoXSmall)
                     .foregroundColor(DesignTokens.Color.labelSecondary)
                     .padding(.horizontal, DesignTokens.Layout.panelHPad).padding(.vertical, 2)
@@ -271,8 +271,8 @@ struct RunnerCardRow: View {
                 MetricPill(label: "CPU", value: String(format: "%.1f%%", metrics.cpu))
                 MetricPill(label: "MEM", value: String(format: "%.1f%%", metrics.mem))
             } else {
-                MetricPill(label: "CPU", value: "\u{2014}")
-                MetricPill(label: "MEM", value: "\u{2014}")
+                MetricPill(label: "CPU", value: "—")
+                MetricPill(label: "MEM", value: "—")
             }
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .medium))
@@ -580,7 +580,7 @@ struct InlineJobRowsView: View {
                     if !popoverOpenState.isOpen { cap += 4 }
                 },
                 label: {
-                    Text("+ \(visibleJobs.count - cap) more jobs\u{2026}")
+                    Text("+ \(visibleJobs.count - cap) more jobs…")
                         .font(DesignTokens.Font.monoXSmall)
                         .foregroundColor(.accentColor)
                         .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
@@ -600,11 +600,11 @@ struct InlineJobRowsView: View {
         let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
-            Text("\u{21B3}").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
+            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
             PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
             Group {
                 if let name = stepName {
-                    Text(job.name + " \u{00B7} " + name)
+                    Text(job.name + " · " + name)
                 } else {
                     Text(job.name)
                 }
