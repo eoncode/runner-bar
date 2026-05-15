@@ -43,7 +43,7 @@ struct ActionDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Header ─────────────────────────────────────────────────────────────────────────────────────────────────────
+            // ── Header ──
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -55,7 +55,6 @@ struct ActionDetailView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                // Restored action buttons — spec mandates no behaviour regression
                 ReRunButton(
                     action: { completion in
                         let scope = group.repo
@@ -111,7 +110,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+            // ── Group title block ──
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -143,7 +142,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+            // ── Jobs list ──
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -186,6 +185,13 @@ struct ActionDetailView: View {
 
 // MARK: - Row builder
 extension ActionDetailView { // swiftlint:disable:this missing_docs
+
+    /// Shared formatter — instantiating DateFormatter per-call is expensive; use `static let`.
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 
     @ViewBuilder
     private func jobRow(_ job: ActiveJob) -> some View {
@@ -249,7 +255,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
 
     private func timeRange(for job: ActiveJob) -> String {
         guard let start = job.startedAt else { return "" }
-        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss"
+        let fmt = Self.timeFormatter
         let startStr = fmt.string(from: start)
         if let end = job.completedAt { return "\(startStr)→\(fmt.string(from: end))" }
         return "\(startStr)→now"
@@ -265,7 +271,6 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
-    /// Short status label shown when a job has no conclusion yet.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "IN PROGRESS"
@@ -274,12 +279,10 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
-    /// Text colour for a live (no-conclusion) job status label — uses DesignTokens.
     func jobStatusColor(for job: ActiveJob) -> Color {
         job.status == "in_progress" ? .rbBlue : .secondary
     }
 
-    /// Maps a raw conclusion string to a human-readable icon + label.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
         case "success":           return "✓ SUCCESS"
@@ -291,7 +294,6 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
     }
 
-    /// Maps a raw conclusion string to a display colour — uses DesignTokens.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
         case "success": return .rbSuccess
