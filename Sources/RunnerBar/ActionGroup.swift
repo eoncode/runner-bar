@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 
 // MARK: - File-level formatter
@@ -28,7 +29,7 @@ enum GroupStatus {
 struct WorkflowRunRef: Identifiable {
     /// GitHub-assigned run identifier.
     let id: Int
-    /// Workflow file name, e.g. “SonarQube”, “vitest”.
+    /// Workflow file name, e.g. "SonarQube", "vitest".
     let name: String
     /// Lifecycle status of the run.
     let status: String
@@ -41,7 +42,7 @@ struct WorkflowRunRef: Identifiable {
 // MARK: - ActionGroup
 
 /// Represents one **commit / PR trigger**: all GitHub Actions workflow runs
-/// that share the same `head_sha`. Mirrors ci-dash.py's “Group” concept from
+/// that share the same `head_sha`. Mirrors ci-dash.py's "Group" concept from
 /// `group_runs()` + `enrich_group()`.
 ///
 /// Hierarchy: ActionGroup → jobs (flat across all sibling runs) → JobStep → log.
@@ -50,7 +51,7 @@ struct WorkflowRunRef: Identifiable {
 struct ActionGroup: Identifiable, Equatable {
     /// The Git SHA shared by all sibling runs in this group.
     let headSha: String
-    /// Short display label: “#1270” if PR, else “d6281b” (sha[:7]).
+    /// Short display label: "#1270" if PR, else "d6281b" (sha[:7]).
     let label: String
     /// Commit/PR message first line (≤40 chars).
     let title: String
@@ -121,7 +122,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Group conclusion derived preferentially from jobs, falling back to runs.
     ///
     /// ⚠️ WHY WE USE JOBS, NOT RUNS:
-    /// The GitHub API can report a run-level conclusion of “failure” even when every
+    /// The GitHub API can report a run-level conclusion of "failure" even when every
     /// individual job succeeded (e.g. after a retry). Using job-level conclusions is authoritative.
     ///
     /// Returns nil while jobs are still loading or any job has not yet concluded.
@@ -141,14 +142,14 @@ struct ActionGroup: Identifiable, Equatable {
     }
 
     /// Number of jobs with a concluded result across all sibling runs.
-    var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
+    var jobsDone: Int  { jobs.filter { $0.conclusion != nil }.count }
     /// Total job count across all sibling runs.
     var jobsTotal: Int { jobs.count }
 
-    /// Human-readable job progress fraction, e.g. “3/5”. Returns “—” while jobs load.
+    /// Human-readable job progress fraction, e.g. "3/5". Returns "—" while jobs load.
     var jobProgress: String { jobs.isEmpty ? "—" : "\(jobsDone)/\(jobsTotal)" }
 
-    /// Name of the first in-progress job, or first queued, or “—”.
+    /// Name of the first in-progress job, or first queued, or "—".
     var currentJobName: String {
         if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
         if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
@@ -161,18 +162,14 @@ struct ActionGroup: Identifiable, Equatable {
             let end = lastJobCompletedAt ?? Date()
             let sec = Int(end.timeIntervalSince(start))
             guard sec >= 0 else { return "00:00" }
-            // swiftlint:disable:next identifier_name
             let mins = sec / 60
-            // swiftlint:disable:next identifier_name
             let secs = sec % 60
             return String(format: "%02d:%02d", mins, secs)
         }
         guard let start = createdAt else { return "00:00" }
         let sec = Int(Date().timeIntervalSince(start))
         guard sec >= 0 else { return "00:00" }
-        // swiftlint:disable:next identifier_name
         let mins = sec / 60
-        // swiftlint:disable:next identifier_name
         let secs = sec % 60
         return String(format: "%02d:%02d", mins, secs)
     }
@@ -417,3 +414,4 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
+// swiftlint:enable file_length
