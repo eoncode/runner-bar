@@ -10,6 +10,25 @@ struct SystemStatsSnapshot {
     let memPercent: Double
 }
 
+// MARK: - SystemStats
+
+/// Snapshot of system resource utilisation used by the popover header.
+struct SystemStats {
+    /// CPU utilisation percentage (0–100).
+    var cpuPct: Double = 0
+    /// Memory currently in use, in GB.
+    var memUsedGB: Double = 0
+    /// Total physical memory, in GB.
+    var memTotalGB: Double = 0
+    /// Disk space currently used on the boot volume, in GB.
+    var diskUsedGB: Double = 0
+    /// Total disk capacity of the boot volume, in GB.
+    var diskTotalGB: Double = 0
+
+    /// Constructs a zero-value snapshot.
+    static let zero = SystemStats()
+}
+
 // MARK: - SystemStatsPoller
 
 /// Polls CPU and memory usage on a background thread and publishes snapshots.
@@ -64,7 +83,6 @@ final class SystemStatsPoller {
     /// Returns overall CPU utilisation via `top -l 1`.
     private func cpuUsage() -> Double {
         let output = shell("top -l 1 -n 0 | grep 'CPU usage'", timeout: 5)
-        // e.g. "CPU usage: 4.54% user, 8.18% sys, 87.27% idle"
         let parts = output.components(separatedBy: ",")
         var used = 0.0
         for part in parts {
@@ -81,7 +99,6 @@ final class SystemStatsPoller {
     /// Returns memory pressure percentage via `memory_pressure`.
     private func memUsage() -> Double {
         let output = shell("memory_pressure | grep 'System memory pressure'", timeout: 5)
-        // e.g. "System memory pressure: 23%"
         let nums = output.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         return Double(nums) ?? 0
     }
