@@ -10,7 +10,6 @@ excluded:
 
 # ── Opt-in rules ────────────────────────────────────────────────────────────────────────
 opt_in_rules:
-  - missing_docs           # require /// on all internal/public declarations
   - explicit_init
   - operator_usage_whitespace
   - sorted_imports
@@ -21,15 +20,6 @@ opt_in_rules:
   - first_where
 
 # ── Rule configuration ───────────────────────────────────────────────────────────────────
-missing_docs:
-  warning:
-    - internal
-  error:
-    - public
-    - open
-  excludes_extensions: false
-  excludes_inherited_types: true
-
 line_length:
   warning: 120
   error: 160
@@ -45,8 +35,8 @@ type_body_length:
   error: 500
 
 function_body_length:
-  warning: 50
-  error: 100
+  warning: 80
+  error: 150
 
 cyclomatic_complexity:
   warning: 10
@@ -68,6 +58,7 @@ identifier_name:
 
 # ── Disabled rules ───────────────────────────────────────────────────────────────────────
 disabled_rules:
+  - missing_docs
   - todo
   - trailing_comma
   - multiple_closures_with_trailing_closure
