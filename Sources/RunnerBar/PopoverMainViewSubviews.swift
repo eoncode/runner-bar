@@ -22,6 +22,8 @@ struct PopoverHeaderView: View {
     let cpuHistory: [Double]
     /// Phase 2: normalised (0–1) MEM history for sparkline, oldest first.
     let memHistory: [Double]
+    /// Phase 2: normalised (0–1) DISK-used history for sparkline, oldest first.
+    let diskHistory: [Double]
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
@@ -52,7 +54,7 @@ struct PopoverHeaderView: View {
         .padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Phase 2: CPU sparkline + MEM sparkline + DiskPillView, separated by Dividers.
+    /// Phase 2: CPU sparkline + MEM sparkline + DISK sparkline+pill, separated by Dividers.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` prevents multi-line wrapping that corrupts panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 6) {
@@ -71,13 +73,14 @@ struct PopoverHeaderView: View {
                 valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB)
             )
             Divider().frame(height: 16)
-            let total  = stats.diskTotalGB
-            let used   = stats.diskUsedGB
-            let free   = max(0, total - used)
-            let freePct = total > 0 ? (free / total) * 100 : 0
+            let total     = stats.diskTotalGB
+            let used      = stats.diskUsedGB
+            let free      = max(0, total - used)
+            let diskUsedPct = total > 0 ? (used / total) * 100 : 0
             DiskPillView(
-                freePct: freePct,
-                usedGB: Int(used.rounded()),
+                diskHistory: diskHistory,
+                diskUsedPct: diskUsedPct,
+                freeGB: Int(free.rounded()),
                 totalGB: Int(total.rounded())
             )
         }
@@ -184,29 +187,29 @@ struct ActionRowView: View {
     let onSelect: () -> Void
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
-    // Auto-expand in-progress groups on first render.
     @State private var isExpanded: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                // Phase 4: left indicator pill — tap toggles inline job expansion
+                // Fix #2: LeftIndicatorPill must stretch full row height, not collapse to a dot.
                 LeftIndicatorPill(color: indicatorColor, isExpanded: isExpanded) {
                     withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
                 }
+                .frame(maxHeight: .infinity)
                 Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .padding(.trailing, 8)
             }
+            .fixedSize(horizontal: false, vertical: true)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius)
                     .fill(rowTint)
             )
 
-            // — Inline job rows: shown when pill is tapped and group is in-progress
-            if isExpanded && group.groupStatus == .inProgress {
+            if isExpanded {
                 InlineJobRowsView(
                     group: group,
                     tick: tick,
@@ -218,7 +221,6 @@ struct ActionRowView: View {
         .padding(.horizontal, DesignTokens.Spacing.rowHPad)
         .padding(.vertical, 2)
         .onAppear {
-            // Auto-expand in-progress rows so sub-jobs are visible immediately.
             if group.groupStatus == .inProgress {
                 isExpanded = true
             }
@@ -271,30 +273,21 @@ struct ActionRowView: View {
     }
 
     // MARK: - Status chip
-    /// IN PROGRESS and QUEUED render in a Capsule pill background.
-    /// QUEUED uses statusOrange (yellow) per spec.
-    /// SUCCESS / FAILED use statusGreen / statusRed with no pill background.
+    /// Fix #3: IN PROGRESS / QUEUED pill now has both fill AND stroke border.
+    /// Fix #4: SUCCESS/FAILED also wrapped in stroked pill (green/red).
     @ViewBuilder
     private var statusChip: some View {
         switch group.groupStatus {
         case .inProgress:
-            StatusPill(
-                label: "IN PROGRESS",
-                foreground: DesignTokens.Colors.statusBlue,
-                background: DesignTokens.Colors.statusBlue.opacity(0.15)
-            )
+            StatusPill(label: "IN PROGRESS", color: DesignTokens.Colors.statusBlue)
         case .queued:
-            StatusPill(
-                label: "QUEUED",
-                foreground: DesignTokens.Colors.statusOrange,
-                background: DesignTokens.Colors.statusOrange.opacity(0.15)
-            )
+            StatusPill(label: "QUEUED", color: DesignTokens.Colors.statusOrange)
         case .completed:
-            let success = group.conclusion == "success"
-            Text(success ? "SUCCESS" : "FAILED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(success ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            let color = group.conclusion == "success"
+                ? DesignTokens.Colors.statusGreen
+                : DesignTokens.Colors.statusRed
+            let label = group.conclusion == "success" ? "SUCCESS" : "FAILED"
+            StatusPill(label: label, color: color)
         }
     }
 
@@ -303,8 +296,10 @@ struct ActionRowView: View {
         case .inProgress: return DesignTokens.Colors.statusBlue
         case .queued:     return DesignTokens.Colors.statusOrange
         case .completed:
-            if group.isDimmed { return .gray }
-            return group.conclusion == "success" ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed
+            // Fix #4: always green or red, never gray regardless of isDimmed
+            return group.conclusion == "success"
+                ? DesignTokens.Colors.statusGreen
+                : DesignTokens.Colors.statusRed
         }
     }
 
@@ -322,23 +317,27 @@ struct ActionRowView: View {
 }
 
 // MARK: - StatusPill
-/// Reusable pill label for action row status chips (IN PROGRESS, QUEUED).
-/// Capsule background with matching foreground color.
+/// Fix #3: stroked pill for all action-row status labels.
+/// Uses the status color for text, a semi-transparent fill, and a matching stroke border.
 private struct StatusPill: View {
     let label: String
-    let foreground: Color
-    let background: Color
+    let color: Color
 
     var body: some View {
         Text(label)
             .font(.system(size: 9, weight: .bold))
-            .foregroundColor(foreground)
+            .foregroundColor(color)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(
-                Capsule().fill(background)
+                Capsule()
+                    .fill(color.opacity(0.12))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(color.opacity(0.45), lineWidth: 0.5)
+                    )
             )
     }
 }
@@ -369,27 +368,39 @@ struct InlineJobRowsView: View {
     }
 
     var body: some View {
-        ForEach(activeJobs.prefix(cap)) { job in
-            if let onSelectJob {
-                Button(action: { onSelectJob(job, group) }, label: { jobRow(job) }).buttonStyle(.plain)
-            } else {
-                jobRow(job)
+        // Fix #7: wrap all sub-job rows in a ZStack with a drawn connector line on the left.
+        ZStack(alignment: .topLeading) {
+            // Vertical connector line from top to bottom of the job list
+            if !activeJobs.isEmpty {
+                HierarchyConnectorLine(jobCount: min(activeJobs.count, cap))
+            }
+            VStack(spacing: 2) {
+                ForEach(Array(activeJobs.prefix(cap).enumerated()), id: \.element.id) { idx, job in
+                    if let onSelectJob {
+                        Button(action: { onSelectJob(job, group) }, label: { jobRow(job, isLast: idx == min(activeJobs.count, cap) - 1) }).buttonStyle(.plain)
+                    } else {
+                        jobRow(job, isLast: idx == min(activeJobs.count, cap) - 1)
+                    }
+                }
+                if activeJobs.count > cap {
+                    Button(
+                        action: { if !popoverOpenState.isOpen { cap += 4 } },
+                        label: {
+                            Text("+ \(activeJobs.count - cap) more jobs…")
+                                .font(.caption2).foregroundColor(.accentColor)
+                                .padding(.leading, 28).padding(.trailing, 12).padding(.vertical, 2)
+                        }
+                    )
+                    .buttonStyle(.plain).disabled(popoverOpenState.isOpen)
+                }
             }
         }
-        if activeJobs.count > cap {
-            Button(
-                action: { if !popoverOpenState.isOpen { cap += 4 } },
-                label: {
-                    Text("+ \(activeJobs.count - cap) more jobs…")
-                        .font(.caption2).foregroundColor(.accentColor)
-                        .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
-                }
-            )
-            .buttonStyle(.plain).disabled(popoverOpenState.isOpen)
-        }
+        .padding(.top, 2)
     }
 
-    private func jobRow(_ job: ActiveJob) -> some View {
+    /// Fix #5: row order → icon/connector | job name · step | Spacer | progress bar | done/total | elapsed | chevron
+    /// Fix #6: each sub-job row gets a rounded card background.
+    private func jobRow(_ job: ActiveJob, isLast: Bool = false) -> some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
@@ -397,20 +408,32 @@ struct InlineJobRowsView: View {
         let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         let stepFraction: Double? = total > 0 ? Double(done) / Double(total) : nil
+        let barColor = jobBarColor(for: job)
+
         return HStack(spacing: 6) {
-            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
+            // 28 pt left indent to clear the hierarchy connector
+            Spacer().frame(width: 28)
+            // Job name · current step  (fix #5: name comes before progress bar)
+            Group {
+                if let name = stepName {
+                    Text(job.name + " · " + name)
+                } else {
+                    Text(job.name)
+                }
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .layoutPriority(1)
+            Spacer()
+            // Progress bar — after the name (fix #5)
             SubJobProgressBar(
                 fraction: job.status == "queued" ? nil : stepFraction,
-                color: jobBarColor(for: job),
+                color: barColor,
                 width: 56,
                 height: 3
             )
-            Group {
-                if let name = stepName { Text(job.name + " · " + name) } else { Text(job.name) }
-            }
-            .font(.caption).foregroundColor(.secondary)
-            .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            Spacer()
             if total > 0 {
                 Text("\(done)/\(total)")
                     .font(DesignTokens.Fonts.mono).foregroundColor(.secondary)
@@ -423,7 +446,17 @@ struct InlineJobRowsView: View {
                 Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
             }
         }
-        .padding(.leading, 24).padding(.trailing, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
+        .padding(.vertical, 3)
+        .padding(.trailing, DesignTokens.Spacing.rowHPad)
+        // Fix #6: rounded card background per sub-job row
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                .fill(DesignTokens.Colors.rowBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                        .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                )
+        )
         .contentShape(Rectangle())
     }
 
@@ -435,5 +468,48 @@ struct InlineJobRowsView: View {
             ? DesignTokens.Colors.statusGreen
             : (job.isDimmed ? .gray : DesignTokens.Colors.statusRed)
         }
+    }
+}
+
+// MARK: - HierarchyConnectorLine
+/// Fix #7: draws a clean L-shaped connector from the parent action row down through
+/// each sub-job row, matching the reference design.
+/// A vertical line runs down the left edge; a short horizontal tick branches right
+/// into each job row at its vertical midpoint.
+private struct HierarchyConnectorLine: View {
+    let jobCount: Int
+    /// Approximate height of each job row (padding + cap + card) in points.
+    private let rowHeight: CGFloat = 28
+    /// X position of the vertical line (left indent).
+    private let lineX: CGFloat = 12
+    /// Length of the horizontal tick into each row.
+    private let tickLen: CGFloat = 10
+
+    var body: some View {
+        Canvas { ctx, size in
+            var path = Path()
+            let topY: CGFloat = rowHeight / 2
+            let bottomY = topY + CGFloat(jobCount - 1) * rowHeight
+
+            // Vertical spine
+            path.move(to: CGPoint(x: lineX, y: topY))
+            path.addLine(to: CGPoint(x: lineX, y: bottomY))
+
+            // Horizontal ticks per row
+            for i in 0..<jobCount {
+                let midY = topY + CGFloat(i) * rowHeight
+                path.move(to: CGPoint(x: lineX, y: midY))
+                path.addLine(to: CGPoint(x: lineX + tickLen, y: midY))
+            }
+
+            ctx.stroke(
+                path,
+                with: .color(Color.secondary.opacity(0.3)),
+                style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .frame(width: lineX + tickLen + 4,
+               height: CGFloat(jobCount) * rowHeight)
+        .allowsHitTesting(false)
     }
 }

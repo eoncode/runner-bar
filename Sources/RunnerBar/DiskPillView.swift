@@ -1,49 +1,53 @@
 import SwiftUI
 
 // MARK: - DiskPillView
-/// Phase 2: Capsule-backed pill showing disk used/total or free percentage.
-/// Color: green → orange → red as free space drops below 30% / 10%.
+/// Phase 2: DISK section of the header stat badge.
+/// Spec (#403 comment): disk has a sparkline graph (same as CPU/MEM) plus a free-space
+/// pill showing the percentage remaining. Graph color transitions green→orange→red.
 ///
-/// Defined here (separate file) so PopoverMainViewSubviews.swift and any
-/// future views can reference it without a forward-declaration issue.
-///
-/// Color thresholds:
-///   freePct >= 30  → statusGreen
-///   freePct >= 10  → statusOrange
-///   freePct <  10  → statusRed
+/// diskHistory  — normalised 0–1 values, oldest first (driven by RunnerMetrics rolling buffer)
+/// diskUsedPct  — current used percentage (0–100) used for graph colour and pill colour
+/// freeGB       — free gigabytes shown in the pill
+/// totalGB      — total gigabytes shown in the pill
 struct DiskPillView: View {
-    /// Percentage of disk that is free (0–100).
-    let freePct: Double
-    /// Used gigabytes (rounded).
-    let usedGB: Int
-    /// Total gigabytes (rounded).
+    let diskHistory: [Double]
+    let diskUsedPct: Double
+    let freeGB: Int
     let totalGB: Int
 
     private var pillColor: Color {
-        if freePct >= 30 { return DesignTokens.Colors.statusGreen }
-        if freePct >= 10 { return DesignTokens.Colors.statusOrange }
-        return DesignTokens.Colors.statusRed
+        // free space thresholds: <10 % free = red, <30 % free = orange, else green
+        let freePct = totalGB > 0 ? (Double(freeGB) / Double(totalGB)) * 100 : 100
+        if freePct < 10 { return DesignTokens.Colors.statusRed }
+        if freePct < 30 { return DesignTokens.Colors.statusOrange }
+        return DesignTokens.Colors.statusGreen
     }
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Text("DISK")
                 .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
-            Text("\(usedGB)/\(totalGB)GB")
+                .lineLimit(1)
+            SparklineView(history: diskHistory, currentPct: diskUsedPct)
+                .frame(width: 28, height: 14)
+            // Free-space pill — e.g. "14%"
+            let freePct = totalGB > 0 ? Int((Double(freeGB) / Double(totalGB)) * 100) : 0
+            Text("\(freePct)%")
                 .font(DesignTokens.Fonts.monoStat)
                 .foregroundColor(pillColor)
-                .fixedSize()
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .fill(pillColor.opacity(0.12))
-                .overlay(
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(
                     Capsule()
-                        .strokeBorder(pillColor.opacity(0.25), lineWidth: 0.5)
+                        .fill(pillColor.opacity(0.12))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5)
+                        )
                 )
-        )
+        }
     }
 }
