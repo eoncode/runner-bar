@@ -41,25 +41,74 @@ enum DesignTokens {
 
     // MARK: Spacing
     enum Spacing {
-        static let rowHPad:   CGFloat = 12
-        static let rowVPad:   CGFloat = 8
-        static let chipHPad:  CGFloat = 8
-        static let chipVPad:  CGFloat = 3
-        static let cardRadius: CGFloat = 8
+        /// Horizontal padding inside chip / pill components.
+        static let chipHPad:   CGFloat = 6
+        /// Horizontal padding for standard row content.
+        static let rowHPad:    CGFloat = 12
+        /// Corner radius for card-row backgrounds.
+        static let cardRadius: CGFloat = 7
     }
 }
 
-// MARK: - Color hex init
+// MARK: - Color Token Aliases
 extension Color {
-    /// Convenience initialiser for 6-digit hex strings ("#RRGGBB" or "RRGGBB").
-    init(hex: String) {
-        let raw = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        let scanner = Scanner(string: raw)
-        var value: UInt64 = 0
-        scanner.scanHexInt64(&value)
-        let r = Double((value >> 16) & 0xFF) / 255
-        let g = Double((value >>  8) & 0xFF) / 255
-        let b = Double( value        & 0xFF) / 255
-        self.init(red: r, green: g, blue: b)
+    static let rbBlue:            Color = DesignTokens.Colors.statusBlue
+    static let rbSuccess:         Color = DesignTokens.Colors.statusGreen
+    static let rbWarning:         Color = DesignTokens.Colors.statusOrange
+    static let rbDanger:          Color = DesignTokens.Colors.statusRed
+    static let rbSurfaceElevated: Color = Color.primary.opacity(0.04)
+    static let rbBorderSubtle:    Color = Color.primary.opacity(0.06)
+    static let rbTextTertiary:    Color = Color.secondary
+    static let rbTextSecondary:   Color = Color.secondary
+}
+
+// MARK: - Font Token Aliases
+enum RBFont {
+    static let mono:      Font = DesignTokens.Fonts.mono
+    static let monoSmall: Font = .system(size: 10, design: .monospaced)
+    static let monoStat:  Font = DesignTokens.Fonts.monoStat
+    static let monoLabel: Font = DesignTokens.Fonts.monoLabel
+}
+
+// MARK: - Spacing Token Aliases
+enum RBSpacing {
+    static let xxs: CGFloat = 2
+    static let xs:  CGFloat = 4
+    static let sm:  CGFloat = DesignTokens.Spacing.chipHPad
+    static let md:  CGFloat = DesignTokens.Spacing.rowHPad
+}
+
+// MARK: - Radius Token Aliases
+enum RBRadius {
+    static let small:     CGFloat = 5
+    static let card:      CGFloat = DesignTokens.Spacing.cardRadius
+    static let indicator: CGFloat = 3
+}
+
+// MARK: - Status Token Alias
+enum RBStatus {
+    case success
+    case failure
+    case inProgress
+    case queued
+    case unknown
+
+    var color: Color {
+        switch self {
+        case .success:              return .rbSuccess
+        case .failure:              return .rbDanger
+        case .inProgress, .queued:  return .rbBlue
+        case .unknown:              return .secondary
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .success:    return Color.rbSuccess.opacity(0.04)
+        case .failure:    return Color.rbDanger.opacity(0.04)
+        case .inProgress: return Color.rbBlue.opacity(0.04)
+        case .queued:     return Color.rbBlue.opacity(0.02)
+        case .unknown:    return Color.clear
+        }
     }
 }
