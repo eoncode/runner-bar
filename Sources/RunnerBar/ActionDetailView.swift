@@ -131,7 +131,7 @@ struct ActionDetailView: View {
                     let runIDs = group.runs.map { $0.id }
                     DispatchQueue.global(qos: .userInitiated).async {
                         let succeeded = runIDs.allSatisfy { runID in
-                            cancelRun(runID: runID, repoSlug: scope)
+                            cancelRun(runID: runID, scope: scope)
                         }
                         DispatchQueue.main.async { completion(succeeded) }
                     }

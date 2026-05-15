@@ -323,6 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Dismiss
 
+    @MainActor
     private func closePanel() {
         guard panelIsOpen else { return }
         panel?.orderOut(nil)
@@ -494,7 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = .actionJobDetail(job, group)
         return wrapEnv(JobDetailView(
             job: job,
-            group: group,
+            tick: 0,
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.actionDetailView(group: group))
@@ -533,10 +534,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
-        let group = syntheticGroup(for: job)
         return wrapEnv(JobDetailView(
             job: job,
-            group: group,
+            tick: 0,
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())

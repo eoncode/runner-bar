@@ -140,7 +140,7 @@ struct JobDetailView: View {
                     let runID = self.runID
                     let slug  = self.repoSlug
                     DispatchQueue.global(qos: .userInitiated).async {
-                        let succeeded = cancelRun(runID: runID, repoSlug: slug)
+                        let succeeded = cancelRun(runID: runID, scope: slug)
                         DispatchQueue.main.async { completion(succeeded) }
                     }
                 },

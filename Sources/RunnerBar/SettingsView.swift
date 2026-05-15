@@ -120,7 +120,7 @@ struct SettingsView: View {
                 get: { runnerBeingConfigured },
                 set: { runnerBeingConfigured = $0 }
             )
-            RunnerConfigSheet(runner: runner, isPresented: binding, onSave: { _ in
+            RunnerConfigSheet(runner: runner, isPresented: binding, onSave: {
                 Task { @MainActor in localRunnerStore.refresh() }
             })
         }
