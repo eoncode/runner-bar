@@ -1,207 +1,172 @@
-// swiftlint:disable all
-// v4
-import AppKit
 import SwiftUI
 
+// MARK: - Job Detail View
 struct JobDetailView: View {
-    let job: ActiveJob
-    let tick: Int
-    let onBack: () -> Void
-    let onSelectStep: (JobStep) -> Void
+    let job: WorkflowJob
+    @EnvironmentObject var runnerModel: RunnerModel
+    @State private var isExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            headerBar
-            infoBar.padding(.horizontal, 12).padding(.bottom, 6)
-            Divider()
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 4) {
-                    if job.steps.isEmpty {
-                        Text("No step data available").font(.caption).foregroundColor(.secondary)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                    } else {
-                        ForEach(job.steps) { step in
-                            Button(action: { onSelectStep(step) }) { stepRow(step) }.buttonStyle(.plain)
-                        }
+            jobHeader
+            if isExpanded {
+                stepsSection
+            }
+        }
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+    }
+
+    // MARK: - Header
+    private var jobHeader: some View {
+        HStack(spacing: 8) {
+            statusIcon
+            VStack(alignment: .leading, spacing: 2) {
+                Text(job.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(statusLabel)
+                        .font(.system(size: 10))
+                        .foregroundColor(statusColor)
+                    Text("\u{00b7}").font(.caption).foregroundColor(.secondary)
+                    if let duration = job.durationString {
+                        Text(duration)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
                     }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-        }
-        .frame(idealWidth: 720, maxWidth: .infinity, alignment: .top)
-    }
-
-    private var headerBar: some View {
-        HStack(spacing: 6) {
-            Button(action: onBack) {
-                HStack(spacing: 3) {
-                    Image(systemName: "chevron.left").font(.caption)
-                    Text("Jobs").font(.caption)
-                }.foregroundColor(.secondary).fixedSize()
-            }.buttonStyle(.plain)
-            Spacer(minLength: 8)
-            actionCluster
-            if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                Button(action: { NSWorkspace.shared.open(url) }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "safari").font(.caption)
-                        Text("GitHub").font(.caption)
-                    }.foregroundColor(.secondary).fixedSize()
-                }.buttonStyle(.plain).help("Open job on GitHub")
-            }
-        }
-        .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
-    }
-
-    private var actionCluster: some View {
-        HStack(spacing: 4) {
-            ReRunButton(action: { completion in
-                let jobID = job.id
-                let slug = self.repoSlug
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let succeeded = reRunJob(jobID: jobID, repoSlug: slug)
-                    DispatchQueue.main.async { completion(succeeded) }
-                }
-            }, isDisabled: job.status == "in_progress" || job.status == "queued")
-            ReRunFailedButton(action: { completion in
-                let runID = self.runID
-                let slug = self.repoSlug
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let succeeded = reRunFailedJobs(runID: runID, repoSlug: slug)
-                    DispatchQueue.main.async { completion(succeeded) }
-                }
-            }, isDisabled: job.status == "in_progress" || job.status == "queued" || (job.conclusion != "failure" && job.conclusion != "cancelled"))
-            CancelButton(action: { completion in
-                let runID = self.runID
-                let slug = self.repoSlug
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let succeeded = cancelRun(runID: runID, scope: slug)
-                    DispatchQueue.main.async { completion(succeeded) }
-                }
-            }, isDisabled: job.status != "in_progress" && job.status != "queued")
-            LogCopyButton(fetch: { completion in
-                let jobID = job.id
-                let slug = self.repoSlug
-                DispatchQueue.global(qos: .userInitiated).async { completion(fetchJobLog(jobID: jobID, scope: slug)) }
-            }, isDisabled: false)
-        }
-    }
-
-    private var infoBar: some View {
-        let _ = tick
-        return HStack(spacing: 6) {
-            Text(job.name).font(.system(size: 13, weight: .semibold))
-                .foregroundColor(job.isDimmed ? .secondary : .primary)
-                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            BranchTagPill(name: repoSlug)
             Spacer()
-            if let conclusion = job.conclusion {
-                Text(conclusionLabel(conclusion)).font(.caption).foregroundColor(conclusionColor(conclusion))
-                    .lineLimit(1).fixedSize()
-            } else {
-                Text("running").font(.caption).foregroundColor(.rbBlue)
+            if !job.steps.isEmpty {
+                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            Text("\u00b7").font(.caption).foregroundColor(.secondary)
-            Text(job.elapsed).font(.caption.monospacedDigit()).foregroundColor(.secondary).lineLimit(1).fixedSize()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !job.steps.isEmpty {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            }
         }
     }
 
-    private var repoSlug: String {
-        guard let url = job.htmlUrl else { return "" }
-        let parts = url.replacingOccurrences(of: "https://github.com/", with: "").components(separatedBy: "/")
-        guard parts.count >= 2 else { return url }
-        return parts[0] + "/" + parts[1]
-    }
-
-    private var runID: Int {
-        guard let url = job.htmlUrl else { return 0 }
-        let parts = url.components(separatedBy: "/")
-        if let idx = parts.firstIndex(of: "runs"), idx + 1 < parts.count, let id = Int(parts[idx + 1]) { return id }
-        return 0
-    }
-
-    private func conclusionLabel(_ conclusion: String) -> String {
-        switch conclusion {
-        case "success": return "\u2713 SUCCESS"
-        case "failure": return "\u2717 FAILED"
-        case "cancelled": return "\u2298 CANCELLED"
-        case "skipped": return "\u2298 SKIPPED"
-        case "action_required": return "! ACTION"
-        default: return conclusion.uppercased()
+    // MARK: - Steps
+    private var stepsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider().padding(.horizontal, 10)
+            ForEach(job.steps, id: \.number) { step in
+                StepRow(step: step)
+            }
         }
     }
 
-    private func conclusionColor(_ conclusion: String) -> Color {
-        switch conclusion {
-        case "success": return .rbSuccess
-        case "failure": return .rbDanger
+    // MARK: - Helpers
+    private var statusLabel: String {
+        switch job.conclusion ?? job.status {
+        case "success": return "\u{2713} SUCCESS"
+        case "failure": return "\u{2717} FAILED"
+        case "cancelled": return "\u{2298} CANCELLED"
+        case "skipped": return "\u{2298} SKIPPED"
+        case "in_progress": return "IN PROGRESS"
+        default: return (job.conclusion ?? job.status).uppercased()
+        }
+    }
+
+    private var statusColor: Color {
+        switch job.conclusion ?? job.status {
+        case "success": return .green
+        case "failure": return .red
+        case "cancelled", "skipped": return .secondary
+        case "in_progress": return .blue
         default: return .secondary
         }
     }
 
-    @ViewBuilder private func stepRow(_ step: JobStep) -> some View {
+    private var statusIcon: some View {
+        Circle()
+            .fill(statusColor)
+            .frame(width: 8, height: 8)
+    }
+}
+
+// MARK: - Step Row
+struct StepRow: View {
+    let step: WorkflowStep
+
+    var body: some View {
         HStack(spacing: 6) {
-            Text("#\(String(format: "%02d", step.id))").font(.caption2.monospacedDigit()).foregroundColor(.secondary).frame(width: 28, alignment: .leading)
-            Image(systemName: stepIcon(step)).foregroundColor(stepColor(step)).frame(width: 14, alignment: .center)
-            Text(step.name ?? "").font(RBFont.mono)
-                .foregroundColor(step.status == "queued" ? .secondary : .primary)
-                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            stepIcon
+            Text(step.name)
+                .font(.system(size: 11))
+                .lineLimit(1)
+                .foregroundColor(stepTextColor)
             Spacer()
-            if step.startedAt != nil {
-                stepTimeRange(step)
-                Text(step.elapsed).font(.caption.monospacedDigit()).foregroundColor(.secondary).fixedSize()
+            HStack(spacing: 4) {
+                if let duration = step.durationString {
+                    Text(duration)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                Text("\u{2192}").font(.caption).foregroundColor(.secondary)
+                Text(stepStatusLabel)
+                    .font(.system(size: 10))
+                    .foregroundColor(stepStatusColor)
             }
-            Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
         }
-        .padding(.horizontal, 12).padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
-                .fill(DesignTokens.Colors.rowBackground)
-                .overlay(RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
-                    .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5))
-        )
-        .contentShape(Rectangle())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
     }
 
-    @ViewBuilder private func stepTimeRange(_ step: JobStep) -> some View {
-        HStack(spacing: 3) {
-            Text(startLabel(for: step)).font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            Text("\u2192").font(.caption).foregroundColor(.secondary)
-            if let endDate = step.completedAt {
-                Text(Self.timeFormatter.string(from: endDate)).font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            } else {
-                Text("now").font(.caption).foregroundColor(.rbBlue)
+    private var stepStatusLabel: String {
+        switch step.conclusion ?? step.status {
+        case "success": return "\u{2713}"
+        case "failure": return "\u{2717}"
+        case "skipped": return "\u{2298}"
+        case "in_progress": return "..."
+        default: return "\u{2298}"
+        }
+    }
+
+    private var stepStatusColor: Color {
+        switch step.conclusion ?? step.status {
+        case "success": return .green
+        case "failure": return .red
+        case "skipped": return .secondary
+        case "in_progress": return .blue
+        default: return .secondary
+        }
+    }
+
+    private var stepTextColor: Color {
+        switch step.conclusion ?? step.status {
+        case "skipped": return .secondary
+        case "failure": return .red
+        default: return .primary
+        }
+    }
+
+    private var stepIcon: some View {
+        Group {
+            switch step.conclusion ?? step.status {
+            case "success":
+                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            case "failure":
+                Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+            case "skipped":
+                Image(systemName: "minus.circle").foregroundColor(.secondary)
+            case "in_progress":
+                Image(systemName: "circle.dotted").foregroundColor(.blue)
+            default:
+                Image(systemName: "circle").foregroundColor(.secondary)
             }
-        }.fixedSize()
-    }
-
-    private static let timeFormatter: DateFormatter = {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm:ss"
-        return fmt
-    }()
-
-    private func startLabel(for step: JobStep) -> String {
-        guard let date = step.startedAt else { return "" }
-        return Self.timeFormatter.string(from: date)
-    }
-
-    private func stepIcon(_ step: JobStep) -> String {
-        switch step.conclusion {
-        case "success": return "checkmark.circle.fill"
-        case "failure": return "xmark.circle.fill"
-        case "skipped", "cancelled": return "minus.circle"
-        default: return step.status == "in_progress" ? "circle.dotted" : "circle"
         }
-    }
-
-    private func stepColor(_ step: JobStep) -> Color {
-        switch step.conclusion {
-        case "success": return .rbSuccess
-        case "failure": return .rbDanger
-        default: return step.status == "in_progress" ? .rbBlue : .secondary
-        }
+        .font(.system(size: 10))
     }
 }
