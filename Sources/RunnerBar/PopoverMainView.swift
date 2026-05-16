@@ -1,9 +1,6 @@
 import SwiftUI
 
 /// Root view for the main popover panel.
-///
-/// Reads callbacks from the `NavigationCallbacks` environment object injected
-/// by AppDelegate via `wrapEnv`, so no init parameters are needed.
 struct PopoverMainView: View {
     @EnvironmentObject private var callbacks: NavigationCallbacks
 
@@ -22,6 +19,9 @@ struct PopoverMainView: View {
 /// Layout shell that wires store data into the popover scroll view.
 /// Separated from `PopoverMainView` so `PopoverView` can also instantiate it
 /// directly without re-injecting all environment objects.
+///
+/// ⚠️ SystemStatsViewModel is NOT injected by AppDelegate.wrapEnv() — it must
+/// be owned here as a @StateObject. Do NOT change to @EnvironmentObject.
 struct PopoverMainViewSubviews: View {
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
@@ -29,8 +29,10 @@ struct PopoverMainViewSubviews: View {
     let onSelectInlineJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var store: RunnerStoreObservable
-    @EnvironmentObject private var statsVM: SystemStatsViewModel
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
+
+    // SystemStatsViewModel is never in the environment — own it here.
+    @StateObject private var statsVM = SystemStatsViewModel()
 
     @State private var tick: Int = 0
     private let tickTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -103,6 +105,8 @@ struct PopoverMainViewSubviews: View {
                 }
             }
         }
+        .onAppear { statsVM.start() }
+        .onDisappear { statsVM.stop() }
         .onReceive(tickTimer) { _ in tick &+= 1 }
     }
 
