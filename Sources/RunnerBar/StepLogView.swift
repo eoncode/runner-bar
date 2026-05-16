@@ -31,7 +31,7 @@ struct StepLogView: View {
     // MARK: - Derived
 
     /// The step being displayed, resolved from `job.steps` by index.
-    private var step: ActiveJob.Step? { job.steps?[safe: stepIndex] }
+    private var step: JobStep? { job.steps[safe: stepIndex] }
 
     /// Display title: step name if available, otherwise a fallback label.
     private var stepTitle: String {
@@ -115,7 +115,7 @@ struct StepLogView: View {
             // ── Content
             if isLoading {
                 VStack {
-                    ProgressView("Loading log…")
+                    ProgressView("Loading log\u{2026}")
                         .padding()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

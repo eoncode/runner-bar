@@ -12,7 +12,7 @@ struct InlineJobRowsView: View {
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @State private var cap = 4
-    @Environment(\.popoverOpenState) private var popoverOpenState
+    @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     private var activeJobs: [ActiveJob] {
         group.jobs.filter { $0.status == "in_progress" || $0.status == "queued" }
