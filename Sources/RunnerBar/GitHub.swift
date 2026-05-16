@@ -121,13 +121,17 @@ func rerunFailedJobs(runID: Int, scope: String) -> Bool {
 // MARK: - Legacy compatibility shims
 
 /// Calls the GitHub API and returns raw JSON `Data`, or `nil` on error.
+///
+/// Returns `nil` for any response that contains a top-level `"message"` key,
+/// which is how GitHub signals all API errors (404, 403, 401, rate-limit, etc.).
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let output = shell("/opt/homebrew/bin/gh api \(endpoint)", timeout: timeout)
     guard !output.isEmpty else { return nil }
     let lower = output.lowercased()
-    if lower.hasPrefix("error") || lower.contains("\"message\"") && lower.contains("not found") {
-        return nil
-    }
+    if lower.hasPrefix("error") { return nil }
+    // GitHub wraps every API error in {"message":"..."} — reject any such response
+    // regardless of the specific message text (covers 404, 403, 401, rate-limit, etc.)
+    if lower.contains("\"message\"") { return nil }
     return output.data(using: .utf8)
 }
 
