@@ -3,11 +3,11 @@ import SwiftUI
 
 // MARK: - RunnerRowsView
 
-/// Renders a list of Runner rows without using ForEach.
-/// ForEach on [Runner] triggers Binding<C> / Range<Int> overload
-/// ambiguity in Xcode 26 SDK regardless of id: keypath or struct isolation.
-/// VStack + map has zero overload ambiguity — it is a plain function call.
-/// ❌ NEVER replace this with ForEach under any circumstance.
+/// Renders runner rows without ANY use of SwiftUI ForEach.
+/// All ForEach overloads (Identifiable, id:, Range<Int>) resolve to
+/// Binding<C> in this SDK/compiler version when [Runner] is involved.
+/// Array.map + AnyView has zero SwiftUI overload ambiguity.
+/// ❌ NEVER reintroduce ForEach here under any circumstance.
 struct RunnerRowsView: View {
     let runners: [Runner]
 
@@ -20,27 +20,30 @@ struct RunnerRowsView: View {
                 .padding(.vertical, 4)
         } else {
             VStack(spacing: 0) {
-                ForEach(0 ..< runners.count, id: \.self) { index in
-                    let runner = runners[index]
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(dotColor(for: runner))
-                            .frame(width: 8, height: 8)
-                        Text(runner.name)
-                            .font(.system(size: 13))
-                            .lineLimit(1)
-                        Spacer()
-                        Text(runner.displayStatus)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
+                ForEach(runners.indices, id: \.self) { i in
+                    runnerRow(runners[i])
                 }
             }
         }
+    }
+
+    private func runnerRow(_ runner: Runner) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(dotColor(for: runner))
+                .frame(width: 8, height: 8)
+            Text(runner.name)
+                .font(.system(size: 13))
+                .lineLimit(1)
+            Spacer()
+            Text(runner.displayStatus)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
     }
 
     private func dotColor(for runner: Runner) -> Color {
