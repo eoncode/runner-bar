@@ -1,1 +1,178 @@
-aW1wb3J0IFN3aWZ0VUkKCi8vIFJFR1JFU1NJT04gR1VBUkQgLS0gRE8gTk9UIFJFTU9WRSAtIHNlZSByZWdyZXNzaW9uIGhpc3RvcnkgKHJlZiAjNTIgIzU0ICM1NyAjMzc1ICMzNzYgIzM3NykKLy8KLy8gQVJDSElURUNUVVJFOiBOU1BhbmVsICsgc2l6aW5nT3B0aW9ucz0ucHJlZmVycmVkQ29udGVudFNpemUKLy8gRHluYW1pYyBoZWlnaHQgaXMgYWNoaWV2ZWQgdmlhIEtWTyBvbiBOU0hvc3RpbmdDb250cm9sbGVyLnByZWZlcnJlZENvbnRlbnRTaXplLgovLyBBcHBEZWxlZ2F0ZSBvYnNlcnZlcyBpdCBhbmQgY2FsbHMgTlNQYW5lbC5zZXRGcmFtZSgpIC0tIHplcm8ganVtcCAobm8gYW5jaG9yKS4KLy8gU3dpZnRVSSB2aWV3cyByZXBvcnQgdGhlaXIgbmF0dXJhbCBpZGVhbCBzaXplLiBObyBoZWlnaHQgY2FwcyBuZWVkZWQgaGVyZS4KLy8KLy8gUlVMRSAxOiBSb290IFZTdGFjayB1c2VzIC5mcmFtZShtaW5XaWR0aDogMjgwLCBtYXhXaWR0aDogOTAwLCBhbGlnbm1lbnQ6IC50b3ApCi8vCi8vIFJVTEUgMjogQUxMIHJvd3MgdXNlIC5wYWRkaW5nKC5ob3Jpem9udGFsLCAxMikKLy8gUlVMRSAzOiBKb2Igcm93IEhTdGFjayBTcGFjZXIoKSBpcyBMT0FELUJFQVJJTkcuCi8vIFJVTEUgNDogUnVubmVyU3RvcmVPYnNlcnZhYmxlLnJlbG9hZCgpIHVzZXMgd2l0aEFuaW1hdGlvbihuaWwpLgovLwovLyBSVUxFIDU6IGFjdGlvbnNTZWN0aW9uIGlzIHdyYXBwZWQgaW4gYSBTY3JvbGxWaWV3IGNhcHBlZCBhdCBzY3JlZW5TY3JvbGxNYXhIZWlnaHQuCi8vICAgc2NyZWVuU2Nyb2xsTWF4SGVpZ2h0ID0gTlNTY3JlZW4ubWFpbi52aXNpYmxlRnJhbWUuaGVpZ2h0ICogMC44MC4KLy8gICBUaGlzIG1pcnJvcnMgQXBwRGVsZWdhdGUncyA4NSUgcGFuZWwgY2VpbGluZyBtaW51cyBoZWFkcm9vbSBmb3IgdGhlIGhlYWRlcgovLyAgIGFuZCBydW5uZXIgcm93cyBhYm92ZSB0aGUgbGlzdC4gVGhlIFNjcm9sbFZpZXcgaXMgdHJhbnNwYXJlbnQgZm9yIHNob3J0IGxpc3RzCi8vICAgKGNvbnRlbnQgZml0cywgbm8gc2Nyb2xsIGluZGljYXRvcikgYW5kIGFjdGl2YXRlcyBvbmx5IHdoZW4gZXhwYW5kZWQgcm93cwoKLy8gICB3b3VsZCBwdXNoIGNvbnRlbnQgb2ZmIHNjcmVlbi4KLy8gICDinYwgTkVWRVIgcmVtb3ZlIHRoZSBTY3JvbGxWaWV3IGZyb20gYWN0aW9uc1NlY3Rpb24uCi8vICAg4p2MIE5FVkVSIHVzZSBhIEdlb21ldHJ5UmVhZGVyIG9yIHByZWZlcmVuY2Uga2V5IGZvciB0aGlzIGNhcC4KLy8gICDinYwgTkVWRVIgYWRkIC5mcmFtZShtYXhIZWlnaHQ6KSB0byB0aGUgcm9vdCBWU3RhY2sgaW5zdGVhZC4KLy8KLy8gUlVMRSA2OiBzeXN0ZW1TdGF0cyBNVVNUIGJlIHN0b3BwZWQgd2hpbGUgdGhlIHBhbmVsIGlzIG9wZW4uCi8vIFJVTEUgNmI6IHN5c3RlbVN0YXRzIG11c3QgUkVTVEFSVCB3aGVuIHRoZSBtYWluIHZpZXcgYmVjb21lcyB2aXNpYmxlIGFnYWluLgovLwovLyBSVUxFIDc6IFJ1bm5lclN0b3JlIHNlbGYtc2NoZWR1bGVzIHZpYSBpdHMgb3duIGFkYXB0aXZlIHRpbWVyIGFmdGVyIGVhY2ggZmV0Y2goKS4KLy8gICDinYwgTkVWRVIgYWRkIGEgc2Vjb25kIHJlcGVhdGluZyB0aW1lciBpbiBQb3BvdmVyTWFpblZpZXcgdGhhdCBjYWxscwovLyAgICAgIHN0b3JlLnJlbG9hZCgpIC0tIGl0IGRvdWJsZXMgQVBJIGNhbGxzIGFuZCBkcmFpbnMgR2l0SHViIHF1b3RhLgovLyAgIExvY2FsUnVubmVyU3RvcmUucmVmcmVzaCgpIChsb2NhbC1vbmx5LCBubyBBUEkpIG1heSBiZSBjYWxsZWQgZnJvbSBvbkFwcGVhci4KLy8KLy8gUlVMRSA4OiBBcHBEZWxlZ2F0ZS5pbml0UGFuZWxXaWR0aCBpcyAzMjAuCi8vIFJVTEUgOTogZGlzcGxheVRpY2sgZmlyZXMgZXZlcnkgMSBzZWNvbmQgQUxXQVlTIChubyBvcGVuLXN0YXRlIGdhdGUpLgoKLy8vIFJvb3QgcG9wb3ZlciB2aWV3IHJlbmRlcmVkIGluc2lkZSB0aGUgTlNQYW5lbC4KLy8vIE93bnMgdGhlIGRpc3BsYXktdGljayB0aW1lciBhbmQgc3lzdGVtLXN0YXRzIGxpZmVjeWNsZS4KLy8vIEFQSSBwb2xsaW5nIGlzIG93bmVkIGVudGlyZWx5IGJ5IFJ1bm5lclN0b3JlJ3MgYWRhcHRpdmUgc2VsZi1zY2hlZHVsaW5nIHRpbWVyLgpzdHJ1Y3QgUG9wb3Zlck1haW5WaWV3OiBWaWV3IHsKICAgIEBPYnNlcnZlZE9iamVjdCB2YXIgc3RvcmU6IFJ1bm5lclN0b3JlT2JzZXJ2YWJsZQogICAgbGV0IG9uU2VsZWN0Sm9iOiAoQWN0aXZlSm9iKSAtPiBWb2lkCiAgICBsZXQgb25TZWxlY3RBY3Rpb246IChBY3Rpb25Hcm91cCkgLT4gVm9pZAogICAgbGV0IG9uU2VsZWN0U2V0dGluZ3M6ICgpIC0+IFZvaWQKCiAgICBARW52aXJvbm1lbnRPYmplY3QgcHJpdmF0ZSB2YXIgcG9wb3Zlck9wZW5TdGF0ZTogUG9wb3Zlck9wZW5TdGF0ZQoKICAgIEBTdGF0ZSBwcml2YXRlIHZhciBpc0F1dGhlbnRpY2F0ZWQgPSAoZ2l0aHViVG9rZW4oKSAhPSBuaWwpCiAgICBAU3RhdGVPYmplY3QgcHJpdmF0ZSB2YXIgc3lzdGVtU3RhdHMgPSBTeXN0ZW1TdGF0c1ZpZXdNb2RlbCgpCiAgICBAU3RhdGUgcHJpdmF0ZSB2YXIgdmlzaWJsZUNvdW50OiBJbnQgPSAxMAogICAgQFN0YXRlIHByaXZhdGUgdmFyIGRpc3BsYXlUaWNrOiBJbnQgPSAwCiAgICBAU3RhdGUgcHJpdmF0ZSB2YXIgZGlzcGxheVRpY2tUaW1lcjogVGltZXI/CgogICAgLy8vIE1heGltdW0gaGVpZ2h0IGZvciB0aGUgc2Nyb2xsYWJsZSBhY3Rpb25zIGxpc3QuCiAgICAvLy8gODAlIG9mIHRoZSB2aXNpYmxlIHNjcmVlbiBoZWlnaHQgLS0gbWF0Y2hlcyBBcHBEZWxlZ2F0ZSdzIDg1JSBwYW5lbCBjYXAKICAgIC8vLyBtaW51cyB+NSUgaGVhZHJvb20gZm9yIHRoZSBmaXhlZCBoZWFkZXIgKyBydW5uZXIgcm93cyBhYm92ZSB0aGUgbGlzdC4KICAgIC8vLyBDb21wdXRlZCBmcmVzaCBvbiBlYWNoIGJvZHkgZXZhbHVhdGlvbiBzbyBpdCBhbHdheXMgcmVmbGVjdHMgY3VycmVudCBzY3JlZW4uCiAgICAvLy8g4p2MIE5FVkVSIHJlcGxhY2Ugd2l0aCBhIEdlb21ldHJ5UmVhZGVyL3ByZWZlcmVuY2UgYXBwcm9hY2ggLS0gaXQgZnJlZXplcwogICAgLy8vICAgIGF0IGluaXRpYWwgbGF5b3V0IGhlaWdodCBhbmQgYnJlYWtzIHNjcm9sbGluZyBmb3IgZXhwYW5kZWQgcm93cy4KICAgIHByaXZhdGUgdmFyIHNjcmVlblNjcm9sbE1heEhlaWdodDogQ0dGbG9hdCB7CiAgICAgICAgKE5TU2NyZWVuLm1haW4/LnZpc2libGVGcmFtZS5oZWlnaHQgPz8gODAwKSAqIDAuODAKICAgIH0KCiAgICB2YXIgYm9keTogc29tZSBWaWV3IHsKICAgICAgICBWU3RhY2soYWxpZ25tZW50OiAubGVhZGluZywgc3BhY2luZzogMCkgewogICAgICAgICAgICBQb3BvdmVySGVhZGVyVmlldygKICAgICAgICAgICAgICAgIHN0YXRzVk06IHN5c3RlbVN0YXRzLAogICAgICAgICAgICAgICAgaXNBdXRoZW50aWNhdGVkOiBpc0F1dGhlbnRpY2F0ZWQsCiAgICAgICAgICAgICAgICBvblNlbGVjdFNldHRpbmdzOiBvblNlbGVjdFNldHRpbmdzLAogICAgICAgICAgICAgICAgb25TaWduSW46IHNpZ25JbldpdGhHaXRIdWIKICAgICAgICAgICAgKQogICAgICAgICAgICAub25BcHBlYXIgeyBzeXN0ZW1TdGF0cy5zdGFydCgpIH0KICAgICAgICAgICAgRGl2aWRlcigpCiAgICAgICAgICAgIGlmIHN0b3JlLmlzUmF0ZUxpbWl0ZWQgeyByYXRlTGltaXRCYW5uZXI7IERpdmlkZXIoKSB9CiAgICAgICAgICAgIFBvcG92ZXJMb2NhbFJ1bm5lclJvdyhyb3ducmVyczogc3RvcmUucnVubmVycykKICAgICAgICAgICAgICAgIC5vbkFwcGVhciB7CiAgICAgICAgICAgICAgICAgICAgVGFzayB7IGF3YWl0IE1haW5BY3Rvci5ydW4geyBMb2NhbFJ1bm5lclN0b3JlLnNoYXJlZC5yZWZyZXNoKCkgfSB9CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIC8vIFJVTEUgNTogc2Nyb2xsYWJsZSBhY3Rpb25zIGxpc3QsIGNhcHBlZCBhdCBzY3JlZW5TY3JvbGxNYXhIZWlnaHQuCiAgICAgICAgICAgIGFjdGlvbnNTZWN0aW9uU2Nyb2xsYWJsZQogICAgICAgIH0KICAgICAgICAuZnJhbWUobWluV2lkdGg6IDI4MCwgbWF4V2lkdGg6IDkwMCwgYWxpZ25tZW50OiAudG9wKQogICAgICAgIC5vbkFwcGVhciB7CiAgICAgICAgICAgIGlzQXV0aGVudGljYXRlZCA9IChnaXRodWJUb2tlbigpICE9IG5pbCkKICAgICAgICAgICAgaWYgIXBvcG92ZXJPcGVuU3RhdGUuaXNPcGVuIHsgc3lzdGVtU3RhdHMuc3RhcnQoKSB9CiAgICAgICAgICAgIHN0YXJ0RGlzcGxheVRpY2tUaW1lcigpCiAgICAgICAgfQogICAgICAgIC5vbkRpc2FwcGVhciB7CiAgICAgICAgICAgIHN5c3RlbVN0YXRzLnN0b3AoKQogICAgICAgICAgICBzdG9wRGlzcGxheVRpY2tUaW1lcigpCiAgICAgICAgfQogICAgICAgIC8vIFJVTEUgNjogc3RvcCBzdGF0cyBwb2xsaW5nIHdoaWxlIHBhbmVsIGlzIG9wZW4gdG8gcHJldmVudAogICAgICAgIC8vIEtWTyBzdG9ybSAoc3lzdGVtU3RhdHMgZmlyZXMgZXZlcnkgMnMg4oaSIHByZWZlcnJlZENvbnRlbnRTaXplCiAgICAgICAgLy8gY2hhbmdlcyDihpIgcmVzaXplQW5kUmVwb3NpdGlvblBhbmVsKCkgY2FsbGVkIG9uIGV2ZXJ5IHRpY2spLgogICAgICAgIC5vbkNoYW5nZShvZjogcG9wb3Zlck9wZW5TdGF0ZS5pc09wZW4pIHsgb3BlbiBpbgogICAgICAgICAgICBpZiBvcGVuIHsgc3lzdGVtU3RhdHMuc3RvcCgpIH0gZWxzZSB7IHN5c3RlbVN0YXRzLnN0YXJ0KCkgfQogICAgICAgIH0KICAgICAgICAub25DaGFuZ2Uob2Y6IHN0b3JlLmFjdGlvbnMpIHsgXyBpbiB2aXNpYmxlQ291bnQgPSAxMCB9CiAgICB9CgogICAgLy8gTUFSSzogLSBTY3JvbGxhYmxlIGFjdGlvbnMgc2VjdGlvbiAoUlVMRSA1KQoKICAgIHByaXZhdGUgdmFyIGFjdGlvbnNTZWN0aW9uU2Nyb2xsYWJsZTogc29tZSBWaWV3IHsKICAgICAgICBTY3JvbGxWaWV3KC52ZXJ0aWNhbCwgc2hvd0luZGljYXRvcnM6IHRydWUpIHsKICAgICAgICAgICAgYWN0aW9uc1NlY3Rpb25Db250ZW50CiAgICAgICAgfQogICAgICAgIC5mcmFtZShtYXhIZWlnaHQ6IHNjcmVlblNjcm9sbE1heEhlaWdodCkKICAgIH0KCiAgICBwcml2YXRlIHZhciBhY3Rpb25zU2VjdGlvbkNvbnRlbnQ6IHNvbWUgVmlldyB7CiAgICAgICAgVlN0YWNrKGFsaWdubWVudDogLmxlYWRpbmcsIHNwYWNpbmc6IDApIHsKICAgICAgICAgICAgaWYgc3RvcmUuYWN0aW9ucy5pc0VtcHR5IHsKICAgICAgICAgICAgICAgIFRleHQoIk5vIHJlY2VudCBhY3Rpb25zIikKICAgICAgICAgICAgICAgICAgICAuZm9udCguY2FwdGlvbikuZm9yZWdyb3VuZENvbG9yKC5zZWNvbmRhcnkpCiAgICAgICAgICAgICAgICAgICAgLnBhZGRpbmcoLmhvcml6b250YWwsIDEyKS5wYWRkaW5nKC52ZXJ0aWNhbCwgOCkKICAgICAgICAgICAgfSBlbHNlIHsKICAgICAgICAgICAgICAgIFNlY3Rpb25IZWFkZXJMYWJlbCh0aXRsZTogIkFjdGlvbnMiKQogICAgICAgICAgICAgICAgbGV0IHZpc2libGUgPSBBcnJheShzdG9yZS5hY3Rpb25zLnByZWZpeCh2aXNpYmxlQ291bnQpKQogICAgICAgICAgICAgICAgRm9yRWFjaCh2aXNpYmxlKSB7IGdyb3VwIGluCiAgICAgICAgICAgICAgICAgICAgQWN0aW9uUm93Vmlldyhncm91cDogZ3JvdXAsIHRpY2s6IGRpc3BsYXlUaWNrLCBvblNlbGVjdDogeyBvblNlbGVjdEFjdGlvbihncm91cCkgfSkKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIGxvYWRNb3JlQnV0dG9uCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgLnBhZGRpbmcoLnZlcnRpY2FsLCA0KQogICAgfQoKICAgIEBWaWV3QnVpbGRlcgogICAgcHJpdmF0ZSB2YXIgbG9hZE1vcmVCdXR0b246IHNvbWUgVmlldyB7CiAgICAgICAgbGV0IG5leHRCYXRjaCA9IG1pbigxMCwgc3RvcmUuYWN0aW9ucy5jb3VudCAtIHZpc2libGVDb3VudCkKICAgICAgICBpZiBuZXh0QmF0Y2ggPiAwIHsKICAgICAgICAgICAgQnV0dG9uKAogICAgICAgICAgICAgICAgYWN0aW9uOiB7IHZpc2libGVDb3VudCArPSBuZXh0QmF0Y2ggfSwKICAgICAgICAgICAgICAgIGxhYmVsOiB7CiAgICAgICAgICAgICAgICAgICAgVGV4dCgiTG9hZCBcKG5leHRCYXRjaCkgbW9yZSBhY3Rpb25zXHUwMDJke1x1MDAyNn0iKQogICAgICAgICAgICAgICAgICAgICAgICAuZm9udCguY2FwdGlvbikuZm9yZWdyb3VuZENvbG9yKC5zZWNvbmRhcnkpCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICkKICAgICAgICAgICAgLmJ1dHRvblN0eWxlKC5wbGFpbikKICAgICAgICAgICAgLnBhZGRpbmcoLmhvcml6b250YWwsIDEyKS5wYWRkaW5nKC52ZXJ0aWNhbCwgNikKICAgICAgICB9CiAgICB9CgogICAgLy8gTUFSSzogLSBEaXNwbGF5IHRpY2sgdGltZXIgKFJVTEUgOSAtLSB1bmchdGVkLCAxcykKCiAgICBwcml2YXRlIGZ1bmMgc3RhcnREaXNwbGF5VGlja1RpbWVyKCkgewogICAgICAgIHN0b3BEaXNwbGF5VGlja1RpbWVyKCkKICAgICAgICBkaXNwbGF5VGlja1RpbWVyID0gVGltZXIuc2NoZWR1bGVkVGltZXIod2l0aFRpbWVJbnRlcnZhbDogMSwgcmVwZWF0czogdHJ1ZSkgeyBbCnNlbGZdIF8gaW4KICAgICAgICAgICAgc2VsZi5kaXNwbGF5VGljayAmKz0gMQogICAgICAgIH0KICAgIH0KCiAgICBwcml2YXRlIGZ1bmMgc3RvcERpc3BsYXlUaWNrVGltZXIoKSB7CiAgICAgICAgZGlzcGxheVRpY2tUaW1lcj8uaW52YWxpZGF0ZSgpCiAgICAgICAgZGlzcGxheVRpY2tUaW1lciA9IG5pbAogICAgfQoKICAgIC8vIE1BUks6IC0gUmF0ZSBsaW1pdCBiYW5uZXIKCiAgICBwcml2YXRlIHZhciByYXRlTGltaXRCYW5uZXI6IHNvbWUgVmlldyB7CiAgICAgICAgSFN0YWNrKHNwYWNpbmc6IDYpIHsKICAgICAgICAgICAgSW1hZ2Uoc3lzdGVtTmFtZTogImV4Y2xhbWF0aW9ubWFyay50cmlhbmdsZS5maWxsIikKICAgICAgICAgICAgICAgIC5mb3JlZ3JvdW5kQ29sb3IoLnllbGxvdykuZm9udCguY2FwdGlvbikKICAgICAgICAgICAgVGV4dCgiR2l0SHViIHJhdGUgbGltaXQgcmVhY2hlZCAtLSBwYXVzaW5nIHBvbGxzIikKICAgICAgICAgICAgICAgIC5mb250KC5jYXB0aW9uKS5mb3JlZ3JvdW5kQ29sb3IoLnNlY29uZGFyeSkKICAgICAgICB9CiAgICAgICAgLnBhZGRpbmcoLmhvcml6b250YWwsIDEyKS5wYWRkaW5nKC52ZXJ0aWNhbCwgNCkKICAgIH0KCiAgICAvLyBNQVJLOiAtIEhlbHBlcnMKCiAgICBwcml2YXRlIGZ1bmMgc2lnbkluV2l0aEdpdEh1YigpIHsKICAgICAgICBsZXQgdXJsU3RyaW5nID0gImh0dHBzOi8vZG9jcy5naXRodWIuY29tL2VuL2F1dGhlbnRpY2F0aW9uLyIKICAgICAgICAgICAgKyAia2VlcGluZy15b3VyLWFjY291bnQtYW5kLWRhdGEtc2VjdXJlL21hbmFnaW5nLXlvdXItcGVyc29uYWwtYWNjZXNzLXRva2VucyIKICAgICAgICBndWFyZCBsZXQgdXJsID0gVVJMKHN0cmluZzogdXJsU3RyaW5nKSBlbHNlIHsgcmV0dXJuIH0KICAgICAgICBOU1dvcmtzcGFjZS5zaGFyZWQub3Blbih1cmwpCiAgICB9Cn0K
+import SwiftUI
+
+// REGRESSION GUARD -- DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
+//
+// ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize
+// Dynamic height is achieved via KVO on NSHostingController.preferredContentSize.
+// AppDelegate observes it and calls NSPanel.setFrame() -- zero jump (no anchor).
+// SwiftUI views report their natural ideal size. No height caps needed here.
+//
+// RULE 1: Root VStack uses .frame(minWidth: 280, maxWidth: 900, alignment: .top)
+//
+// RULE 2: ALL rows use .padding(.horizontal, 12)
+// RULE 3: Job row HStack Spacer() is LOAD-BEARING.
+// RULE 4: RunnerStoreObservable.reload() uses withAnimation(nil).
+//
+// RULE 5: actionsSection is wrapped in a ScrollView capped at screenScrollMaxHeight.
+//   screenScrollMaxHeight = NSScreen.main.visibleFrame.height * 0.80.
+//   This mirrors AppDelegate's 85% panel ceiling minus headroom for the header
+//   and runner rows above the list. The ScrollView is transparent for short lists
+//   (content fits, no scroll indicator) and activates only when expanded rows
+//   would push content off screen.
+//   ❌ NEVER remove the ScrollView from actionsSection.
+//   ❌ NEVER use a GeometryReader or preference key for this cap.
+//   ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
+//
+// RULE 6: systemStats MUST be stopped while the panel is open.
+// RULE 6b: systemStats must RESTART when the main view becomes visible again.
+//
+// RULE 7: RunnerStore self-schedules via its own adaptive timer after each fetch().
+//   ❌ NEVER add a second repeating timer in PopoverMainView that calls
+//      store.reload() -- it doubles API calls and drains GitHub quota.
+//   LocalRunnerStore.refresh() (local-only, no API) may be called from onAppear.
+//
+// RULE 8: AppDelegate.initPanelWidth is 320.
+// RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
+
+/// Root popover view rendered inside the NSPanel.
+/// Owns the display-tick timer and system-stats lifecycle.
+/// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
+struct PopoverMainView: View {
+    @ObservedObject var store: RunnerStoreObservable
+    let onSelectJob: (ActiveJob) -> Void
+    let onSelectAction: (ActionGroup) -> Void
+    let onSelectSettings: () -> Void
+
+    @EnvironmentObject private var popoverOpenState: PopoverOpenState
+
+    @State private var isAuthenticated = (githubToken() != nil)
+    @StateObject private var systemStats = SystemStatsViewModel()
+    @State private var visibleCount: Int = 10
+    @State private var displayTick: Int = 0
+    @State private var displayTickTimer: Timer?
+
+    /// Maximum height for the scrollable actions list.
+    /// 80% of the visible screen height -- matches AppDelegate's 85% panel cap
+    /// minus ~5% headroom for the fixed header + runner rows above the list.
+    /// Computed fresh on each body evaluation so it always reflects current screen.
+    /// ❌ NEVER replace with a GeometryReader/preference approach -- it freezes
+    ///    at initial layout height and breaks scrolling for expanded rows.
+    private var screenScrollMaxHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PopoverHeaderView(
+                statsVM: systemStats,
+                isAuthenticated: isAuthenticated,
+                onSelectSettings: onSelectSettings,
+                onSignIn: signInWithGitHub
+            )
+            .onAppear { systemStats.start() }
+            Divider()
+            if store.isRateLimited { rateLimitBanner; Divider() }
+            PopoverLocalRunnerRow(runners: store.runners)
+                .onAppear {
+                    Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
+                }
+            // RULE 5: scrollable actions list, capped at screenScrollMaxHeight.
+            actionsSectionScrollable
+        }
+        .frame(minWidth: 280, maxWidth: 900, alignment: .top)
+        .onAppear {
+            isAuthenticated = (githubToken() != nil)
+            if !popoverOpenState.isOpen { systemStats.start() }
+            startDisplayTickTimer()
+        }
+        .onDisappear {
+            systemStats.stop()
+            stopDisplayTickTimer()
+        }
+        // RULE 6: stop stats polling while panel is open to prevent
+        // KVO storm (systemStats fires every 2s → preferredContentSize
+        // changes → resizeAndRepositionPanel() called on every tick).
+        .onChange(of: popoverOpenState.isOpen) { open in
+            if open { systemStats.stop() } else { systemStats.start() }
+        }
+        .onChange(of: store.actions) { _ in visibleCount = 10 }
+    }
+
+    // MARK: - Scrollable actions section (RULE 5)
+
+    private var actionsSectionScrollable: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            actionsSectionContent
+        }
+        .frame(maxHeight: screenScrollMaxHeight)
+    }
+
+    private var actionsSectionContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if store.actions.isEmpty {
+                Text("No recent actions")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+            } else {
+                SectionHeaderLabel(title: "Actions")
+                let visible = Array(store.actions.prefix(visibleCount))
+                ForEach(visible) { group in
+                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
+                }
+                loadMoreButton
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var loadMoreButton: some View {
+        let nextBatch = min(10, store.actions.count - visibleCount)
+        if nextBatch > 0 {
+            Button(
+                action: { visibleCount += nextBatch },
+                label: {
+                    Text("Load \(nextBatch) more actions\u{2026}")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            )
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+        }
+    }
+
+    // MARK: - Display tick timer (RULE 9 -- ungated, 1s)
+
+    private func startDisplayTickTimer() {
+        stopDisplayTickTimer()
+        displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            self.displayTick &+= 1
+        }
+    }
+
+    private func stopDisplayTickTimer() {
+        displayTickTimer?.invalidate()
+        displayTickTimer = nil
+    }
+
+    // MARK: - Rate limit banner
+
+    private var rateLimitBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.yellow).font(.caption)
+            Text("GitHub rate limit reached -- pausing polls")
+                .font(.caption).foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+    }
+
+    // MARK: - Helpers
+
+    private func signInWithGitHub() {
+        let urlString = "https://docs.github.com/en/authentication/"
+            + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
