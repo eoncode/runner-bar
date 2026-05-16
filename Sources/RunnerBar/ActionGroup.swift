@@ -75,10 +75,15 @@ struct ActionGroup: Identifiable, Equatable {
     /// Whether this group should render dimmed.
     var isDimmed: Bool { overallConclusion == "skipped" || overallConclusion == "cancelled" }
 
+    /// Total number of jobs across all runs.
+    var jobsTotal: Int { jobs.count }
+
+    /// Number of completed jobs (those with a non-nil conclusion) across all runs.
+    var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
+
     var jobProgress: String {
-        let total = jobs.count; guard total > 0 else { return "" }
-        let done  = jobs.filter { $0.conclusion != nil }.count
-        return "\(done)/\(total) jobs"
+        guard jobsTotal > 0 else { return "" }
+        return "\(jobsDone)/\(jobsTotal) jobs"
     }
     var elapsed: String {
         let start = runs.compactMap(\.createdAt).min()
@@ -89,10 +94,23 @@ struct ActionGroup: Identifiable, Equatable {
         return sec >= 60 ? String(format: "%dm%02ds", sec / 60, sec % 60) : "\(sec)s"
     }
 
+    /// Name of the currently running job, for display in the action row trailing area.
+    var currentJobName: String {
+        jobs.first(where: { $0.status == "in_progress" })?.name ?? ""
+    }
+
+    /// True when all runs originate from a local runner (runner name does not contain "/").
+    /// Falls back to false when runner info is unavailable.
+    var isLocalGroup: Bool {
+        let runnerNames = jobs.compactMap(\.runnerName)
+        guard !runnerNames.isEmpty else { return false }
+        return runnerNames.allSatisfy { !$0.contains("/") }
+    }
+
     /// Returns a copy of this group with a different jobs array (via rebuilt runs).
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
         // Rebuild first run with the new jobs; preserve other runs as-is.
-        guard var first = runs.first else { return self }
+        guard let first = runs.first else { return self }
         let rebuilt = WorkflowRun(
             id: first.id, status: first.status, conclusion: first.conclusion,
             headSha: first.headSha, createdAt: first.createdAt, updatedAt: first.updatedAt,
