@@ -413,7 +413,10 @@ struct SettingsView: View {
 /// Isolated struct so ForEach receives a plain [Runner] value — no
 /// @EnvironmentObject / @ObservedObject in scope — defeating the
 /// Binding<C> and Range<Int> overload resolution paths entirely.
+/// Uses explicit id: \.id keypath to guarantee the correct ForEach
+/// overload is selected regardless of Swift toolchain version.
 /// ❌ NEVER inline this back into SettingsView.runnerSection.
+/// ❌ NEVER change ForEach(runners, id: \.id) back to ForEach(runners).
 private struct RunnerRowsView: View {
     let runners: [Runner]
 
@@ -422,7 +425,7 @@ private struct RunnerRowsView: View {
             Text("No runners configured").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.vertical, 4)
         } else {
-            ForEach(runners) { runner in
+            ForEach(runners, id: \.id) { runner in
                 HStack(spacing: 8) {
                     Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
                     Text(runner.name).font(.system(size: 13)).lineLimit(1)
