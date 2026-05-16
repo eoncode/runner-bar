@@ -1,10 +1,10 @@
 import SwiftUI
 
-// REGRESSION GUARD -- DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
+// REGRESSION GUARD — DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
 //
 // ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize
 // Dynamic height is achieved via KVO on NSHostingController.preferredContentSize.
-// AppDelegate observes it and calls NSPanel.setFrame() -- zero jump (no anchor).
+// AppDelegate observes it and calls NSPanel.setFrame() — zero jump (no anchor).
 // SwiftUI views report their natural ideal size. No height caps needed here.
 //
 // RULE 1: Root VStack uses .frame(minWidth: 280, maxWidth: 900, alignment: .top)
@@ -20,7 +20,8 @@ import SwiftUI
 //   (content fits, no scroll indicator) and activates only when expanded rows
 //   would push content off screen.
 //   ❌ NEVER remove the ScrollView from actionsSection.
-//   ❌ NEVER use a GeometryReader or preference key for this cap.
+//   ❌ NEVER use a GeometryReader or preference key for this cap — it freezes
+//      at the initial layout height and prevents scrolling to expanded content.
 //   ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
 //
 // RULE 6: systemStats MUST be stopped while the panel is open.
@@ -28,7 +29,7 @@ import SwiftUI
 //
 // RULE 7: RunnerStore self-schedules via its own adaptive timer after each fetch().
 //   ❌ NEVER add a second repeating timer in PopoverMainView that calls
-//      store.reload() -- it doubles API calls and drains GitHub quota.
+//      store.reload() — it doubles API calls and drains GitHub quota.
 //   LocalRunnerStore.refresh() (local-only, no API) may be called from onAppear.
 //
 // RULE 8: AppDelegate.initPanelWidth is 320.
@@ -46,16 +47,19 @@ struct PopoverMainView: View {
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     @State private var isAuthenticated = (githubToken() != nil)
-    @StateObject private var systemStats = SystemStatsViewModel()
+    // ⚠️ SINGLETON — SystemStatsViewModel.init() is private.
+    // History must survive popover close/reopen so sparklines show immediately.
+    // ❌ NEVER use @StateObject with SystemStatsViewModel() — init() is private.
+    @ObservedObject private var systemStats = SystemStatsViewModel.shared
     @State private var visibleCount: Int = 10
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
     /// Maximum height for the scrollable actions list.
-    /// 80% of the visible screen height -- matches AppDelegate's 85% panel cap
+    /// 80% of the visible screen height — matches AppDelegate's 85% panel cap
     /// minus ~5% headroom for the fixed header + runner rows above the list.
     /// Computed fresh on each body evaluation so it always reflects current screen.
-    /// ❌ NEVER replace with a GeometryReader/preference approach -- it freezes
+    /// ❌ NEVER replace with a GeometryReader/preference approach — it freezes
     ///    at initial layout height and breaks scrolling for expanded rows.
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
@@ -64,7 +68,7 @@ struct PopoverMainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
-                statsVM: systemStats,
+                stats: systemStats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
@@ -141,7 +145,7 @@ struct PopoverMainView: View {
         }
     }
 
-    // MARK: - Display tick timer (RULE 9 -- ungated, 1s)
+    // MARK: - Display tick timer (RULE 9 — ungated, 1s)
 
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
@@ -161,7 +165,7 @@ struct PopoverMainView: View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.yellow).font(.caption)
-            Text("GitHub rate limit reached -- pausing polls")
+            Text("GitHub rate limit reached — pausing polls")
                 .font(.caption).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
