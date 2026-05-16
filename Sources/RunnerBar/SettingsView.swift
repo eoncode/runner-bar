@@ -146,19 +146,23 @@ private struct RunnerSettingsView: View {
                 } else if localRunnerStore.runners.isEmpty {
                     Text("No local runners found.").foregroundColor(.secondary)
                 } else {
-                    let runners = localRunnerStore.runners
-                    ForEach(runners) { runner in
-                        HStack {
-                            Text(runner.name)
-                            Spacer()
-                            Text(runner.status).font(.caption).foregroundColor(.secondary)
-                        }
-                    }
+                    runnerList
                 }
             }
         }
         .formStyle(.grouped).padding()
         .onAppear { localRunnerStore.refresh() }
+    }
+
+    @ViewBuilder private var runnerList: some View {
+        let models: [RunnerModel] = localRunnerStore.runners
+        ForEach(models, id: \.id) { runner in
+            HStack {
+                Text(runner.name)
+                Spacer()
+                Text(runner.status).font(.caption).foregroundColor(.secondary)
+            }
+        }
     }
 }
 

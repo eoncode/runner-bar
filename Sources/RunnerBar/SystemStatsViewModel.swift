@@ -9,6 +9,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     private var timer: Timer?
     private let maxHistory = 30
+    private let poller = SystemStatsPoller()
 
     func start() {
         sample()
@@ -24,9 +25,9 @@ final class SystemStatsViewModel: ObservableObject {
 
     private func sample() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let s = SystemStats.current()
+            guard let self else { return }
+            let s = self.poller.poll()
             DispatchQueue.main.async {
-                guard let self else { return }
                 self.stats = s
                 self.cpuHistory.append(s.cpuPct / 100.0)
                 self.memHistory.append(s.memTotalGB > 0 ? s.memUsedGB / s.memTotalGB : 0)
