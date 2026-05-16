@@ -70,6 +70,8 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
+/// Root popover view rendered inside the NSPanel.
+/// Owns the runner-refresh timer, display-tick timer, and system-stats lifecycle.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
