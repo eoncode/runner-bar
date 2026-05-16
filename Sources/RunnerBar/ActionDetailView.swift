@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable identifier_name vertical_whitespace_opening_braces
+// swiftlint:disable identifier_name
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️ NSPANEL SIZING GUARD — READ BEFORE ANY EDIT ⚠️⚠️⚠️
 // ════════════════════════════════════════════════════════════════════════════════
@@ -207,9 +207,9 @@ struct ActionDetailView: View {
         }
     }
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces
+// swiftlint:enable identifier_name
 
-extension ActionDetailView { // swiftlint:disable:this missing_docs
+extension ActionDetailView {
     /// Opens the SHA commit or PR associated with the group label on GitHub.
     func openLabelOnGitHub() {
         let urlString: String
@@ -255,8 +255,9 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Returns the group elapsed string; `tick` triggers SwiftUI refresh every second.
     func elapsedLive(tick _: Int) -> String { group.elapsed }
 
+    /// Job row view builder — renders a single-line card for a job inside the list.
     @ViewBuilder
-    func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
+    func jobRow(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 8) {
             Text("#\(index)")
                 .font(.caption2.monospacedDigit()).foregroundColor(Color.rbTextTertiary)
@@ -326,7 +327,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         job.status == "in_progress" ? Color.rbWarning : Color.rbTextSecondary
     }
 
-    /// Maps a raw conclusion string to a human-readable icon + label.
+    /// Maps a raw conclusion string to a human-readable label.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
         case "success": return "checkmark success"
