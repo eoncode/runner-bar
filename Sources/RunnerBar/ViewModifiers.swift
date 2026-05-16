@@ -9,6 +9,7 @@ struct StatPill: View {
     /// The formatted metric value (e.g. "3.6%").
     let value: String
 
+    /// Lays out the label and value side-by-side inside a material capsule.
     var body: some View {
         HStack(spacing: 3) {
             Text(label)
@@ -34,6 +35,7 @@ struct StatusBadge: View {
     /// The text displayed inside the badge.
     let text: String
 
+    /// Renders the status text inside a colour-matched capsule stroke.
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .semibold))
@@ -54,6 +56,7 @@ struct BranchTagPill: View {
     /// The branch or tag name to display.
     let name: String
 
+    /// Renders the branch icon and name inside a tinted capsule stroke.
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "arrow.triangle.branch")
@@ -80,6 +83,7 @@ private struct CardRowModifier: ViewModifier {
     /// Corner radius applied to the background rectangle.
     let cornerRadius: CGFloat
 
+    /// Wraps content in a rounded-rect card background with a subtle stroke.
     func body(content: Content) -> some View {
         content
             .background(
