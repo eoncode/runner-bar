@@ -3,6 +3,9 @@ import Combine
 import Foundation
 
 final class ScopeStore: ObservableObject {
+    /// Shared singleton — consumed by RunnerStore, RunnerStoreState, and SwiftUI views.
+    static let shared = ScopeStore()
+
     @Published var scopes: [String] {
         didSet { save() }
     }

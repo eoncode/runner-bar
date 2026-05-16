@@ -1,24 +1,17 @@
-// swiftlint:disable missing_docs
 // swiftlint:disable all
 import Foundation
+import SwiftUI
 
-/// Legal preferences storage.
+/// Stores legal/privacy preferences and exposes a shared singleton for
+/// AppDelegate environment injection.
 final class LegalPrefsStore: ObservableObject {
-    /// Whether privacy policy has been accepted.
-    @Published var hasAcceptedPrivacy: Bool {
-        didSet { UserDefaults.standard.set(hasAcceptedPrivacy, forKey: Key.privacy) }
-    }
-    /// Whether terms have been accepted.
+    static let shared = LegalPrefsStore()
+
     @Published var hasAcceptedTerms: Bool {
-        didSet { UserDefaults.standard.set(hasAcceptedTerms, forKey: Key.terms) }
+        didSet { UserDefaults.standard.set(hasAcceptedTerms, forKey: "legalPrefs.hasAcceptedTerms") }
     }
-    /// Initialises from UserDefaults.
+
     init() {
-        hasAcceptedPrivacy = UserDefaults.standard.bool(forKey: Key.privacy)
-        hasAcceptedTerms = UserDefaults.standard.bool(forKey: Key.terms)
-    }
-    private enum Key {
-        static let privacy = "legalPrefs.hasAcceptedPrivacy"
-        static let terms = "legalPrefs.hasAcceptedTerms"
+        hasAcceptedTerms = UserDefaults.standard.bool(forKey: "legalPrefs.hasAcceptedTerms")
     }
 }

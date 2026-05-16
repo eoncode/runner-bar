@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Root settings view.
 struct SettingsView: View {
+    let onBack: () -> Void
     @EnvironmentObject var store: RunnerStoreObservable
     @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var legalPrefs: LegalPrefsStore
@@ -28,6 +29,9 @@ struct SettingsView: View {
                 SettingsTabButton(tab: tab, selected: selectedTab == tab) { selectedTab = tab }
             }
             Spacer()
+            Button("Back") { onBack() }
+                .buttonStyle(.plain).font(.caption).foregroundColor(.accentColor)
+                .padding(.horizontal, 12).padding(.bottom, 4)
             Button("Privacy & Legal") { showLegal = true }
                 .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 12)
@@ -128,15 +132,26 @@ private struct NotificationSettingsView: View {
 }
 
 private struct RunnerSettingsView: View {
-    @EnvironmentObject var store: RunnerStoreObservable
+    @EnvironmentObject var localRunnerStore: LocalRunnerStore
     var body: some View {
         Form {
             Section("Local Runners") {
-                ForEach(store.state.localRunners) { runner in
-                    HStack { Text(runner.name); Spacer(); Text(runner.status).font(.caption).foregroundColor(.secondary) }
+                if localRunnerStore.runners.isEmpty {
+                    Text(localRunnerStore.isScanning ? "Scanning…" : "No local runners found.")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(localRunnerStore.runners) { runner in
+                        HStack {
+                            Text(runner.name)
+                            Spacer()
+                            Text(runner.status).font(.caption).foregroundColor(.secondary)
+                        }
+                    }
                 }
             }
-        }.formStyle(.grouped).padding()
+        }
+        .formStyle(.grouped).padding()
+        .onAppear { localRunnerStore.refresh() }
     }
 }
 

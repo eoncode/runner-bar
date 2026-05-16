@@ -174,6 +174,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ALLOWED UNDER ANY CIRCUMSTANCE.
     private let popoverOpenState = PopoverOpenState()
 
+    /// Navigation callbacks stored so child views can trigger AppDelegate routing.
+    /// Set once in mainView() and reused across navigation events.
+    private var onSelectJobCallback: ((ActiveJob) -> Void)?
+    private var onSelectActionCallback: ((ActionGroup) -> Void)?
+    private var onSelectSettingsCallback: (() -> Void)?
+    private var onSelectInlineJobCallback: ((ActiveJob, ActionGroup) -> Void)?
+
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     /// Views declare their own, larger minWidth/idealWidth — this is the AppDelegate floor only.
     /// ❌ NEVER change from 280 without also reviewing each view's own minWidth/idealWidth.
@@ -199,11 +206,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Environment injection
 
+    /// Wraps a view with all required environment objects.
+    ///
+    /// Every view pushed onto the panel hosting controller must go through this
+    /// wrapper so that @EnvironmentObject dependencies resolve at every navigation level.
+    ///
     /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
     private func wrapEnv<V: View>(_ view: V) -> AnyView {
-        AnyView(view.environmentObject(popoverOpenState))
+        AnyView(
+            view
+                .environmentObject(popoverOpenState)
+                .environmentObject(observable)
+                .environmentObject(SettingsStore.shared)
+                .environmentObject(ScopeStore.shared)
+                .environmentObject(LocalRunnerStore.shared)
+                .environmentObject(LegalPrefsStore.shared)
+        )
     }
 
     // MARK: - Status icon helpers
@@ -399,7 +419,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var fetched: [ActiveJob] = []
         var seenIDs = Set<Int>()
         for run in group.runs {
-            guard let data = ghAPI("repos/\(group.repo)/actions/runs/\(run.id)/jobs?per_page=100"),
+            guard let data = ghAPI("repos/\(group.repo ?? "")/actions/runs/\(run.id)/jobs?per_page=100"),
                   let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
             else { continue }
             for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
@@ -411,17 +431,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let starts = fetched.compactMap { $0.startedAt }
         let ends = fetched.compactMap { $0.completedAt }
         return ActionGroup(
-            headSha: group.headSha,
-            label: group.label,
+            id: group.id,
             title: group.title,
+            runs: group.runs.map { run in
+                WorkflowRun(
+                    id: run.id, status: run.status, conclusion: run.conclusion,
+                    headSha: run.headSha, createdAt: run.createdAt, updatedAt: run.updatedAt,
+                    htmlUrl: run.htmlUrl, headBranch: run.headBranch, event: run.event,
+                    name: run.name, runNumber: run.runNumber,
+                    jobs: fetched.filter { _ in run == group.runs.first } // jobs go on first run only
+                )
+            },
             headBranch: group.headBranch,
-            repo: group.repo,
-            runs: group.runs,
-            jobs: fetched,
-            firstJobStartedAt: starts.min() ?? group.firstJobStartedAt,
-            lastJobCompletedAt: ends.max() ?? group.lastJobCompletedAt,
-            createdAt: group.createdAt,
-            isDimmed: group.isDimmed
+            htmlUrl: group.htmlUrl
         )
     }
 
@@ -429,8 +451,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func mainView() -> AnyView {
         savedNavState = nil
-        return wrapEnv(PopoverMainView(
-            store: observable,
+        // Store navigation callbacks so PopoverMainView can reach AppDelegate routing
+        // via NavigationCallbacks environment object.
+        let callbacks = NavigationCallbacks(
             onSelectJob: { [weak self] job in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
@@ -467,7 +490,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
-        ))
+        )
+        return wrapEnv(PopoverMainView().environmentObject(callbacks))
     }
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
@@ -520,18 +544,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
-        let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-        return ActionGroup(
-            headSha: "",
-            label: "",
-            title: "",
-            headBranch: nil,
-            repo: scope,
-            runs: []
-        )
-    }
-
     private func detailView(job: ActiveJob) -> AnyView {
         savedNavState = .jobDetail(job)
         return wrapEnv(JobDetailView(
@@ -550,13 +562,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func settingsView() -> AnyView {
         savedNavState = .settings
-        return wrapEnv(SettingsView(
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            store: observable
-        ))
+        let onBack: () -> Void = { [weak self] in
+            guard let self else { return }
+            self.navigate(to: self.mainView())
+        }
+        return wrapEnv(SettingsView(onBack: onBack))
     }
 
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {

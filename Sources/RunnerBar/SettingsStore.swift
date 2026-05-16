@@ -4,6 +4,10 @@ import Foundation
 
 // MARK: - SettingsStore
 final class SettingsStore: ObservableObject {
+    /// Shared singleton — consumed by RunnerStore (Combine subscription + polling interval)
+    /// and injected into the SwiftUI environment by AppDelegate.
+    static let shared = SettingsStore()
+
     @Published var githubToken: String {
         didSet { UserDefaults.standard.set(githubToken, forKey: Keys.githubToken) }
     }
