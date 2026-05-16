@@ -1,11 +1,12 @@
+// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - ReRunButton
 
 /// Top-bar re-run button.
-/// idle (arrow.clockwise + "Re-run") →
-/// loading (spinner + "Running…") →
-/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
+/// idle (arrow.clockwise + "Re-run") ->
+/// loading (spinner + "Running...") ->
+/// done (checkmark + "Done", 1.5 s) OR failed (cross + "Failed", 1.5 s) -> idle
 struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
