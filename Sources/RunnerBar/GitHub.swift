@@ -1,7 +1,6 @@
 import Foundation
 import os
 
-// swiftlint:disable file_length
 
 // MARK: - gh API
 
