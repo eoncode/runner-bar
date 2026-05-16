@@ -3,10 +3,30 @@ import SwiftUI
 // MARK: - Job Detail View
 struct JobDetailView: View {
     let job: ActiveJob
+    /// Unused tick counter kept for AppDelegate call-site compatibility.
+    let tick: Int
+    let onBack: (() -> Void)?
+    let onSelectStep: ((JobStep) -> Void)?
+
     @State private var isExpanded = false
+
+    init(
+        job: ActiveJob,
+        tick: Int = 0,
+        onBack: (() -> Void)? = nil,
+        onSelectStep: ((JobStep) -> Void)? = nil
+    ) {
+        self.job = job
+        self.tick = tick
+        self.onBack = onBack
+        self.onSelectStep = onSelectStep
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if onBack != nil {
+                backButton
+            }
             jobHeader
             if isExpanded {
                 stepsSection
@@ -14,6 +34,24 @@ struct JobDetailView: View {
         }
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(8)
+    }
+
+    // MARK: - Back button
+
+    private var backButton: some View {
+        Button(action: { onBack?() }) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .medium))
+                Text("Back")
+                    .font(.system(size: 12))
+            }
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Header
@@ -62,6 +100,10 @@ struct JobDetailView: View {
             Divider().padding(.horizontal, 10)
             ForEach(job.steps) { step in
                 StepRow(step: step)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onSelectStep?(step)
+                    }
             }
         }
     }
