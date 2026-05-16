@@ -22,6 +22,7 @@ final class RunnerStoreObservable: ObservableObject {
     /// Mirrors `RunnerStore.shared.isRateLimited`.
     @Published private(set) var isRateLimited = false
 
+    /// Creates a new instance; initial state is populated on first `reload()` call.
     init() {}
 
     /// Pulls the current state from `RunnerStore.shared` with no animation

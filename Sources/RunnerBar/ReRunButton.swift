@@ -1,4 +1,3 @@
-// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - ReRunButton
@@ -18,6 +17,7 @@ struct ReRunButton: View {
     // MARK: - Phase
 
     /// Visual states of the re-run button lifecycle.
+    // swiftlint:disable:next missing_docs
     enum Phase {
         /// Normal tappable state.
         case idle
