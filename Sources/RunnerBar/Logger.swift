@@ -1,19 +1,26 @@
 import Foundation
+import OSLog
 
-/// Writes a timestamped, file-annotated message to stderr.
-/// Visible in Terminal, Console.app, and crash logs.
+// MARK: - Unified logger instances
+
+extension Logger {
+    static let app   = Logger(subsystem: "dev.eonist.runnerbar", category: "app")
+    static let fetch = Logger(subsystem: "dev.eonist.runnerbar", category: "fetch")
+    static let store = Logger(subsystem: "dev.eonist.runnerbar", category: "store")
+    static let auth  = Logger(subsystem: "dev.eonist.runnerbar", category: "auth")
+}
+
+// MARK: - Legacy shim
+
+/// Writes a timestamped message via os_log (visible in `log stream` + Console.app).
+/// Category defaults to "app"; pass a specific Logger via the `logger` param for finer control.
 func log(
     _ message: String,
+    logger: Logger = .app,
     file: String = #file,
     line: Int = #line
 ) {
     let filename = URL(fileURLWithPath: file)
         .deletingPathExtension().lastPathComponent
-    let timestamp = _logFormatter.string(from: Date())
-    fputs("[RunnerBar \(timestamp)] \(filename):\(line) — \(message)\n", stderr)
+    logger.debug("\(filename, privacy: .public):\(line, privacy: .public) — \(message, privacy: .public)")
 }
-
-/// Shared ISO-8601 formatter for log timestamps.
-/// ISO8601DateFormatter is expensive to allocate; keeping one static instance
-/// avoids repeated allocation on every `log()` call.
-private let _logFormatter = ISO8601DateFormatter()
