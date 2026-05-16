@@ -67,8 +67,10 @@ struct PopoverMainView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // PopoverHeaderView.stats expects SystemStats (value type), not SystemStatsViewModel.
+            // Pass systemStats.stats — the @Published snapshot on the singleton.
             PopoverHeaderView(
-                stats: systemStats,
+                stats: systemStats.stats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
