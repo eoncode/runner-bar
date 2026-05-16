@@ -46,7 +46,7 @@ import SwiftUI
 // the panel under the status button.
 // ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate's floor (minWidth = 280)
+// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate’s floor (minWidth = 280)
 //    is lower; ActionDetailView needs its own content minWidth of 560.
 //
 // INITIAL WIDTH (openPanel):
@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chrome: PanelChromeView?
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
+    private let statsVM = SystemStatsViewModel()
     private var savedNavState: NavState?
     private var panelIsOpen = false
     private var eventMonitor: Any?
@@ -197,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// wrapper so that @EnvironmentObject dependencies resolve at every navigation level.
     ///
     /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
+    /// ❌ NEVER remove .environmentObject(statsVM).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
     private func wrapEnv<V: View>(_ view: V) -> AnyView {
@@ -204,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             view
                 .environmentObject(popoverOpenState)
                 .environmentObject(observable)
+                .environmentObject(statsVM)
                 .environmentObject(SettingsStore.shared)
                 .environmentObject(ScopeStore.shared)
                 .environmentObject(LocalRunnerStore.shared)
@@ -228,6 +231,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePanel)
             button.target = self
         }
+
+        statsVM.start()
 
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
@@ -269,6 +274,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        statsVM.stop()
     }
 
     // MARK: - Status icon
