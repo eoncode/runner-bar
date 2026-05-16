@@ -17,8 +17,6 @@ struct PopoverMainView: View {
 // MARK: - PopoverMainViewSubviews
 
 /// Layout shell that wires store data into the popover scroll view.
-/// Separated from `PopoverMainView` so `PopoverView` can also instantiate it
-/// directly without re-injecting all environment objects.
 ///
 /// ⚠️ SystemStatsViewModel is NOT injected by AppDelegate.wrapEnv() — it must
 /// be owned here as a @StateObject. Do NOT change to @EnvironmentObject.
@@ -36,14 +34,19 @@ struct PopoverMainViewSubviews: View {
     @State private var tick: Int = 0
     private let tickTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    /// fix(#441 bug2): treat as authenticated if token is non-empty OR if data
-    /// is already flowing (actions/jobs loaded) — prevents stale false-negative
-    /// on first render before SettingsStore propagates the saved token.
+    /// fix(#441 bug2): also true when store data is already flowing.
     private var isAuthenticated: Bool {
         !SettingsStore.shared.githubToken.isEmpty
             || !store.actions.isEmpty
             || !store.jobs.isEmpty
             || !store.runners.isEmpty
+    }
+
+    /// fix(#441 bug5): jobs already inlined under an ActionGroup must not
+    /// appear again in the standalone JOBS section.
+    private var standaloneJobs: [ActiveJob] {
+        let actionJobIDs = Set(store.actions.flatMap { $0.jobs.map(\.id) })
+        return store.jobs.filter { !actionJobIDs.contains($0.id) }
     }
 
     var body: some View {
@@ -72,9 +75,9 @@ struct PopoverMainViewSubviews: View {
                             )
                         }
                     }
-                    if !store.jobs.isEmpty {
+                    if !standaloneJobs.isEmpty {
                         SectionHeaderLabel(title: "Jobs")
-                        ForEach(store.jobs) { job in
+                        ForEach(standaloneJobs) { job in
                             Button(action: { onSelectJob(job) }) {
                                 HStack(spacing: 8) {
                                     DonutStatusView(
@@ -104,7 +107,7 @@ struct PopoverMainViewSubviews: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    if store.actions.isEmpty && store.jobs.isEmpty {
+                    if store.actions.isEmpty && standaloneJobs.isEmpty {
                         emptyState
                     }
                 }
