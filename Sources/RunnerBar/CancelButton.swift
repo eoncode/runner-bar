@@ -27,8 +27,8 @@ struct CancelButton: View {
                 }
                 .buttonStyle(.plain).disabled(isDisabled)
             case .loading: ButtonPhaseView(phase: .loading)
-            case .done:    ButtonPhaseView(phase: .done)
-            case .failed:  ButtonPhaseView(phase: .failed)
+            case .done: ButtonPhaseView(phase: .done)
+            case .failed: ButtonPhaseView(phase: .failed)
             }
         }
     }
