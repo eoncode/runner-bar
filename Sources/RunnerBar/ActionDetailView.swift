@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:disable identifier_name vertical_whitespace_opening_braces
 // ════════════════════════════════════════════════════════════════════════════════
 // ⚠️⚠️⚠️ NSPANEL SIZING GUARD — READ BEFORE ANY EDIT ⚠️⚠️⚠️
 // ════════════════════════════════════════════════════════════════════════════════
@@ -40,13 +40,14 @@ import SwiftUI
 // Review item 3: job rows now use .cardRow() modifier for consistency.
 // Review item 4: headBranch label replaced with BranchTagPill.
 // ════════════════════════════════════════════════════════════════════════════════
+
 /// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 ///
 /// Drill-down chain:
 /// PopoverMainView (action row tap)
-///   → ActionDetailView ← this view
-///   → JobDetailView (step list) ← existing, unchanged
-///   → StepLogView (log) ← existing, unchanged
+///   -> ActionDetailView <- this view
+///   -> JobDetailView (step list) <- existing, unchanged
+///   -> StepLogView (log) <- existing, unchanged
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
@@ -66,16 +67,17 @@ struct ActionDetailView: View {
         return f
     }()
     /// HH:mm:ss formatter — used for per-job time-range column.
-    /// Static so it is created once and reused on every 1 Hz tick × N job rows.
+    /// Static so it is created once and reused on every 1 Hz tick x N job rows.
     private static let jobTimeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
         return f
     }()
 
+    /// Root layout: back button bar, group title block, divider, scrollable jobs list.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header ───────────────────────────────────────────────────────────────────────
+            // ── Header ───────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -127,7 +129,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ────────────────────────────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -142,7 +144,6 @@ struct ActionDetailView: View {
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
-                // Phase 5 spec: branch label uses BranchTagPill for pill-style blue tag.
                 if let branch = group.headBranch {
                     BranchTagPill(name: branch)
                         .lineLimit(1)
@@ -174,7 +175,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
+            // ── Jobs list ──────────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: RBSpacing.xxs) {
@@ -206,7 +207,7 @@ struct ActionDetailView: View {
         }
     }
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:enable identifier_name vertical_whitespace_opening_braces
 
 extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Opens the SHA commit or PR associated with the group label on GitHub.
@@ -293,17 +294,16 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         }
         .padding(.horizontal, RBSpacing.sm)
         .padding(.vertical, 5)
-        // Use shared .cardRow() modifier for consistency (review item 3).
         .cardRow(cornerRadius: RBRadius.small)
         .contentShape(Rectangle())
     }
 
-    /// Formats start→end time range for a job row.
+    /// Formats start->end time range for a job row.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
-        if let end = job.completedAt { return "\(startStr)→\(Self.jobTimeFmt.string(from: end))" }
-        return "\(startStr)→now"
+        if let end = job.completedAt { return "\(startStr)->\(Self.jobTimeFmt.string(from: end))" }
+        return "\(startStr)->now"
     }
 
     /// Returns the status dot colour for a job row using design tokens.
@@ -329,10 +329,10 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     /// Maps a raw conclusion string to a human-readable icon + label.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success": return "✓ success"
-        case "failure": return "✗ failure"
-        case "cancelled": return "⊗ cancelled"
-        case "skipped": return "− skipped"
+        case "success": return "checkmark success"
+        case "failure": return "x failure"
+        case "cancelled": return "cancelled"
+        case "skipped": return "skipped"
         default: return conclusion
         }
     }
