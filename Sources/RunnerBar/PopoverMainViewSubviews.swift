@@ -28,8 +28,6 @@ struct PopoverHeaderView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Phase 2: HeaderStatsBar renders CPU/MEM/DISK sparklines + disk pill.
-            // Receives the shared VM — no second sampler is created.
             HeaderStatsBar(statsVM: statsVM)
 
             Spacer()
@@ -88,11 +86,6 @@ private struct RunnerTypeIcon: View {
 
 // MARK: - PopoverLocalRunnerRow
 /// Card-styled busy runner row.
-/// Phase 3 changes:
-///  - Each runner gets a RoundedRectangle card with .rbSurfaceElevated fill + .rbBorderSubtle stroke
-///  - CPU / MEM values use StatPill from ViewModifiers (ultraThinMaterial pill)
-///  - Runner name uses RBFont.label monospaced style
-///  - Trailing chevron.right added
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
@@ -119,40 +112,25 @@ struct PopoverLocalRunnerRow: View {
 
     private func runnerCard(_ runner: Runner) -> some View {
         HStack(spacing: 8) {
-            // Status dot
             Circle()
                 .fill(Color.rbWarning)
                 .frame(width: 7, height: 7)
-
-            // Runner name — monospaced per Phase 1 spec
             Text(runner.name)
                 .font(RBFont.label)
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .layoutPriority(1)
-
             Spacer()
-
-            // CPU / MEM stat pills
             if let metrics = runner.metrics {
-                StatPill(
-                    label: "CPU",
-                    value: String(format: "%.0f%%", metrics.cpu)
-                )
-                StatPill(
-                    label: "MEM",
-                    value: String(format: "%.0f%%", metrics.mem)
-                )
+                StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
+                StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
             }
-
-            // Trailing chevron
             Image(systemName: "chevron.right")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(Color.rbTextTertiary)
         }
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xs + 2)
-        // Card background: elevated fill + subtle border
         .background(
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(Color.rbSurfaceElevated)
@@ -167,34 +145,28 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// Phase 4 redesign:
-///  4a — Left-side status indicator: a 3pt-wide Capsule clipped inside the card
-///       RoundedRectangle so it never bleeds past the card corner radius.
-///       Tapping the pill toggles between auto-expand (in-progress jobs only)
-///       and full-expand (all jobs).
-///  4b — DonutStatusView replaces PieProgressDot
-///  4c — Subtle row background tint keyed to status
-///  4d — chevron.right is now always used (was chevron.down in some paths)
+/// Phase 4 redesign — left status pill, DonutStatusView, tint, chevron.
 ///
-/// Expand behaviour (fix #419 bug 2 & 3):
-///   - In-progress rows auto-expand on appear, showing ONLY in_progress jobs.
-///   - Failed/success/queued rows start collapsed.
-///   - User tap on pill cycles: collapsed -> auto (in-progress only) -> full (all jobs).
-///   - When status transitions to a terminal state, auto-collapse.
+/// Expand behaviour:
+///   expandState == nil   → collapsed (no inline rows)
+///   expandState == false → auto-expanded, shows only in_progress jobs
+///                          (set by .onAppear for in-progress runs)
+///   expandState == true  → user-expanded, shows ALL jobs
+///
+/// Pill tap is a SIMPLE TOGGLE: nil ↔ true.
+/// This means one tap always expands (all jobs), one tap always collapses.
+/// The auto-expand false state is only ever set by .onAppear / .onChange,
+/// never by the tap handler — eliminating the double-tap bug.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
 
-    /// Three-state expand:
-    ///  - nil        : collapsed — no inline rows
-    ///  - false      : auto-expand — only in_progress jobs (default for in-progress rows)
-    ///  - true       : full-expand — all jobs (user tapped a second time)
+    /// nil = collapsed, false = auto-expanded (in-progress only), true = user-expanded (all jobs)
     @State private var expandState: Bool? = nil
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // Card background — elevated surface + subtle border stroke
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(Color.rbSurfaceElevated)
                 .overlay(
@@ -202,24 +174,18 @@ struct ActionRowView: View {
                         .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
                 )
 
-            // Status tint overlay at very low opacity
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(rowStatus.tint)
 
-            // Left status indicator — tappable to cycle expand state.
-            // fix(#419 bug 4): no extra leading padding on the content below,
-            // so the donut aligns directly with the tree-line hierarchy.
+            // Left status pill — SIMPLE TOGGLE: nil ↔ true.
+            // Never cycles through false — that avoids the double-tap bug where
+            // false→true looked like nothing happened (both states show rows) or
+            // nil→false showed zero jobs on a completed run.
             Button(
                 action: {
-                    if !group.jobs.isEmpty {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            switch expandState {
-                            case nil:   expandState = false  // collapsed -> auto (in-progress only)
-                            case false: expandState = true   // auto -> full
-                            case true:  expandState = nil    // full -> collapsed
-                            default:    expandState = nil
-                            }
-                        }
+                    guard !group.jobs.isEmpty else { return }
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        expandState = (expandState == nil) ? true : nil
                     }
                 },
                 label: {
@@ -231,11 +197,8 @@ struct ActionRowView: View {
                 }
             )
             .buttonStyle(.plain)
-            .help(expandState == nil ? "Expand jobs" : "Collapse / expand jobs")
+            .help(expandState == nil ? "Expand jobs" : "Collapse jobs")
 
-            // Content column — offset only enough to clear the 3pt Capsule pill.
-            // fix(#419 bug 4): removed extra .padding(.leading, RBSpacing.sm) from rowContent
-            // so the donut aligns with the hierarchy line drawn by TreeLineLeader below.
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
                     Color.clear.frame(width: RBSpacing.md)
@@ -249,7 +212,6 @@ struct ActionRowView: View {
                         .padding(.trailing, 12)
                 }
 
-                // Inline job rows — shown when not collapsed
                 if let fullExpand = expandState {
                     InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
                 }
@@ -259,11 +221,11 @@ struct ActionRowView: View {
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear {
-            // fix(#419 bug 2): in-progress rows auto-expand showing only active jobs.
-            // Other states (queued, success, failed) start collapsed.
+            // Auto-expand in-progress rows showing only active jobs (false).
+            // Terminal/queued rows start collapsed (nil).
             expandState = (rowStatus == .inProgress) ? false : nil
         }
-        // fix(#419 bug 3): auto-collapse when run transitions to terminal state.
+        // Auto-collapse when run transitions to a terminal state.
         .onChange(of: rowStatus) { newStatus in
             if newStatus == .success || newStatus == .failed {
                 withAnimation(.easeInOut(duration: 0.15)) { expandState = nil }
@@ -288,11 +250,8 @@ struct ActionRowView: View {
 
     private var rowContent: some View {
         // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ☞ NEVER remove this line. tickSnapshot forces SwiftUI to invalidate
-        //   this view on every 1-second displayTick so elapsed strings stay live.
         let tickSnapshot = tick
         return HStack(spacing: 6) {
-            // 4b: DonutStatusView replaces PieProgressDot
             DonutStatusView(
                 status: rowStatus,
                 progress: group.progressFraction ?? 0,
@@ -312,17 +271,12 @@ struct ActionRowView: View {
             Spacer()
             metaTrailing(tick: tickSnapshot)
         }
-        // fix(#419 bug 4): no extra .padding(.leading) here — the Color.clear spacer
-        // above (width: RBSpacing.md) is sufficient to clear the Capsule pill.
-        // Removing this extra indent aligns the donut with the tree-line below.
         .padding(.trailing, RBSpacing.xs)
         .padding(.vertical, 4)
     }
 
     @ViewBuilder
     private func metaTrailing(tick tickSnapshot: Int) -> some View {
-        // tickSnapshot is consumed via .id() on the elapsed Text to force
-        // SwiftUI invalidation every display tick — DO NOT REMOVE.
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
                 .font(DesignTokens.Fonts.mono)
@@ -350,8 +304,6 @@ struct ActionRowView: View {
         statusBadge
     }
 
-    /// Phase 4: Status badge uses `StatusBadge` component from Phase 1 ViewModifiers
-    /// instead of raw Text with hardcoded colors.
     @ViewBuilder
     private var statusBadge: some View {
         switch group.groupStatus {
