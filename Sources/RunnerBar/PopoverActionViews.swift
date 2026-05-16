@@ -15,18 +15,11 @@ struct ActionRowView: View {
                 rowContent
             }
             .buttonStyle(.plain)
-            if group.isExpanded {
-                InlineJobRowsView(
-                    group: group,
-                    tick: tick,
-                    onSelectJob: onSelectJob
-                )
-            }
         }
     }
 
     private var rowContent: some View {
-        _ = tick // ⚠️ TICK CONTRACT — DO NOT REMOVE
+        let _ = tick // ⚠️ TICK CONTRACT — DO NOT REMOVE
         return HStack(spacing: 6) {
             statusDonut
             RunnerTypeIcon(isLocal: group.isLocalGroup ?? false)
@@ -40,7 +33,7 @@ struct ActionRowView: View {
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
             Spacer()
-            Text(group.elapsed(tick: tick))
+            Text(group.elapsed)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: true, vertical: false)
@@ -50,7 +43,11 @@ struct ActionRowView: View {
     }
 
     private var statusDonut: some View {
-        ActionStatusDonut(conclusion: group.conclusion, status: group.status, size: 14)
+        ActionStatusDonut(
+            conclusion: group.conclusion,
+            status: group.groupStatus,
+            size: 14
+        )
     }
 }
 

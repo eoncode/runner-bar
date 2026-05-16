@@ -54,7 +54,7 @@ struct ActionDetailView: View {
     // MARK: - Overall status badge
 
     private var overallStatusBadge: some View {
-        let (label, color) = statusLabelAndColor(status: group.status, conclusion: group.conclusion)
+        let (label, color) = statusLabelAndColor(status: group.groupStatus, conclusion: group.conclusion)
         return Text(label)
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
             .foregroundColor(color)
@@ -87,7 +87,7 @@ struct ActionDetailView: View {
                     .lineLimit(1).truncationMode(.tail)
                     .layoutPriority(1)
                 Spacer()
-                _ = tick
+                let _ = tick
                 Text(job.elapsed)
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(.secondary)
@@ -126,6 +126,14 @@ struct ActionDetailView: View {
 
     private func stepRow(_ step: JobStep, index: Int, job: ActiveJob) -> some View {
         let isSelectable = onSelectJob != nil
+        let stepElapsed: String? = {
+            guard let start = step.startedAt else { return nil }
+            let end = step.completedAt ?? Date()
+            let sec = Int(end.timeIntervalSince(start))
+            guard sec >= 0 else { return nil }
+            if sec < 60 { return "\(sec)s" }
+            return "\(sec / 60)m \(sec % 60)s"
+        }()
         let content = HStack(spacing: 8) {
             stepStatusIcon(step)
             Text(step.name ?? "Step \(index + 1)")
@@ -133,8 +141,8 @@ struct ActionDetailView: View {
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
             Spacer()
-            if let duration = step.duration {
-                Text(formatDuration(duration))
+            if let dur = stepElapsed {
+                Text(dur)
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(.secondary)
             }
@@ -174,35 +182,33 @@ struct ActionDetailView: View {
 
     private func iconAndColor(status: String?, conclusion: String?) -> (String, Color) {
         switch conclusion {
-        case "success":   return ("checkmark.circle.fill", .tokenGreen)
-        case "failure":   return ("xmark.circle.fill",     .tokenRed)
-        case "cancelled": return ("slash.circle.fill",     .tokenGray)
-        case "skipped":   return ("arrow.right.circle",    .tokenGray)
+        case "success":   return ("checkmark.circle.fill", DesignTokens.Color.statusGreen)
+        case "failure":   return ("xmark.circle.fill",     DesignTokens.Color.statusRed)
+        case "cancelled": return ("slash.circle.fill",     DesignTokens.Color.labelTertiary)
+        case "skipped":   return ("arrow.right.circle",    DesignTokens.Color.labelTertiary)
         default: break
         }
         switch status {
-        case "in_progress": return ("circle.dotted",       .tokenBlue)
-        case "queued":      return ("clock",               .tokenOrange)
-        default:            return ("circle",              .tokenGray)
+        case "in_progress": return ("circle.dotted",  DesignTokens.Color.statusBlue)
+        case "queued":      return ("clock",           DesignTokens.Color.statusOrange)
+        default:            return ("circle",          DesignTokens.Color.labelTertiary)
         }
     }
 
-    private func statusLabelAndColor(status: String?, conclusion: String?) -> (String, Color) {
+    private func statusLabelAndColor(status: GroupStatus, conclusion: String?) -> (String, Color) {
         if let c = conclusion {
             switch c {
-            case "success":   return ("success",   .tokenGreen)
-            case "failure":   return ("failed",    .tokenRed)
-            case "cancelled": return ("cancelled", .tokenGray)
-            case "skipped":   return ("skipped",   .tokenGray)
-            default:          return (c,            .tokenGray)
+            case "success":   return ("success",   DesignTokens.Color.statusGreen)
+            case "failure":   return ("failed",    DesignTokens.Color.statusRed)
+            case "cancelled": return ("cancelled", DesignTokens.Color.labelTertiary)
+            case "skipped":   return ("skipped",   DesignTokens.Color.labelTertiary)
+            default:          return (c,            DesignTokens.Color.labelTertiary)
             }
         }
-        return (status ?? "unknown", .tokenBlue)
-    }
-
-    private func formatDuration(_ seconds: Double) -> String {
-        let s = Int(seconds)
-        if s < 60 { return "\(s)s" }
-        return "\(s / 60)m \(s % 60)s"
+        switch status {
+        case .inProgress: return ("in progress", DesignTokens.Color.statusBlue)
+        case .queued:     return ("queued",       DesignTokens.Color.statusOrange)
+        case .completed:  return ("completed",    DesignTokens.Color.labelTertiary)
+        }
     }
 }

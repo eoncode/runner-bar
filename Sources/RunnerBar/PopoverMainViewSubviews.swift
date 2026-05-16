@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - SystemStatsChip
+// MARK: - SystemStatChip
 
 /// A single metric chip with label, value, and a sparkline history bar.
 struct SystemStatChip: View {
@@ -12,12 +12,12 @@ struct SystemStatChip: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(label)
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                .foregroundColor(.secondary)
+                .font(DesignTokens.Font.statLabel)
+                .foregroundColor(DesignTokens.Color.labelSecondary)
             SparklineView(values: history, highlight: pct)
                 .frame(width: 28, height: 12)
             Text(value)
-                .font(.system(size: 9, design: .monospaced))
+                .font(DesignTokens.Font.statValue)
                 .foregroundColor(.primary)
                 .frame(minWidth: 30, alignment: .trailing)
         }
@@ -32,11 +32,7 @@ struct SparklineView: View {
     let highlight: Double
 
     private var color: Color {
-        switch highlight {
-        case 0..<60: return .tokenGreen
-        case 60..<80: return .tokenOrange
-        default:     return .tokenRed
-        }
+        DesignTokens.Color.statColor(for: highlight)
     }
 
     var body: some View {
@@ -56,28 +52,25 @@ struct SparklineView: View {
 
 // MARK: - ActionStatusDonut
 
-/// A small circular progress indicator or status dot for an `ActionGroup`.
+/// A small circular status dot for an `ActionGroup`.
 struct ActionStatusDonut: View {
     let conclusion: String?
-    let status: String?
+    let status: GroupStatus?
     let size: CGFloat
 
     private var color: Color {
         switch conclusion {
-        case "success":   return .tokenGreen
-        case "failure":   return .tokenRed
-        case "cancelled",
-             "skipped":  return .tokenGray
+        case "success":              return DesignTokens.Color.statusGreen
+        case "failure":              return DesignTokens.Color.statusRed
+        case "cancelled", "skipped": return DesignTokens.Color.labelTertiary
         default:
             switch status {
-            case "in_progress": return .tokenBlue
-            case "queued":      return .tokenOrange
-            default:            return .tokenGray
+            case .inProgress: return DesignTokens.Color.statusBlue
+            case .queued:     return DesignTokens.Color.statusOrange
+            default:          return DesignTokens.Color.labelTertiary
             }
         }
     }
-
-    private var isSpinning: Bool { status == "in_progress" && conclusion == nil }
 
     var body: some View {
         Circle()
@@ -104,7 +97,7 @@ struct JobProgressBarView: View {
                     .fill(Color.secondary.opacity(0.15))
                 if let fraction = displayProgress {
                     Rectangle()
-                        .fill(Color.tokenBlue)
+                        .fill(DesignTokens.Color.statusBlue)
                         .frame(width: geo.size.width * CGFloat(fraction))
                 }
             }
@@ -126,7 +119,7 @@ struct LogCopyButton: View {
         Button(action: doCopy) {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: 11))
-                .foregroundColor(copied ? .tokenGreen : .secondary)
+                .foregroundColor(copied ? DesignTokens.Color.statusGreen : .secondary)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -150,9 +143,7 @@ struct LogCopyButton: View {
 // MARK: - PopoverHeaderView
 
 /// The system-stats header shown at the top of the main popover.
-/// Displays CPU / memory / disk sparklines, stat chips, and the toolbar buttons.
 struct PopoverHeaderView: View {
-    /// Callback fired when the user taps the settings gear icon.
     let onSelectSettings: () -> Void
     @ObservedObject private var vm = SystemStatsViewModel.shared
 
@@ -195,12 +186,11 @@ struct PopoverHeaderView: View {
 
 /// A single row in the local-runners section of the popover.
 struct PopoverLocalRunnerRow: View {
-    /// The runner model to display.
     let runner: Runner
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(runner.busy ? Color.tokenGreen : Color.tokenGray)
+                .fill(runner.busy ? DesignTokens.Color.statusGreen : DesignTokens.Color.labelTertiary)
                 .frame(width: 7, height: 7)
             Text(runner.name)
                 .font(.system(size: 12))
