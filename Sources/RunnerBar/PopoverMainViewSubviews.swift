@@ -2,10 +2,8 @@ import AppKit
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
-
 /// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
 struct SectionHeaderLabel: View {
-    /// The text to display, rendered uppercase.
     let title: String
     var body: some View {
         Text(title.uppercased())
@@ -18,12 +16,9 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - StatusBadge
-
 /// A small pill-shaped label used to display job status/conclusion.
 struct StatusBadge: View {
-    /// Short uppercase status text (e.g. "SUCCESS", "FAILED").
     let label: String
-    /// Foreground tint colour for the label.
     let color: Color
     var body: some View {
         Text(label)
@@ -35,10 +30,8 @@ struct StatusBadge: View {
 }
 
 // MARK: - JobProgressBarView
-
 /// A thin horizontal progress bar for in-progress job rows.
 struct JobProgressBarView: View {
-    /// Completion fraction in the range 0–1.
     let fraction: CGFloat
     var body: some View {
         GeometryReader { geo in
@@ -53,18 +46,61 @@ struct JobProgressBarView: View {
     }
 }
 
-// MARK: - PopoverHeaderView
+// MARK: - SparklineView
+/// Tiny inline sparkline drawn from a history of 0.0–1.0 samples.
+/// Fills the allocated frame; caller controls width/height.
+struct SparklineView: View {
+    /// Values in chronological order, each clamped to 0.0–1.0.
+    let samples: [Double]
+    /// Stroke and fill tint colour.
+    let color: Color
 
+    var body: some View {
+        Canvas { ctx, size in
+            guard samples.count >= 2 else { return }
+            let linePath = buildLinePath(size: size)
+            let fillPath = buildFillPath(linePath: linePath, size: size)
+            ctx.fill(fillPath, with: .color(color.opacity(0.18)))
+            ctx.stroke(linePath, with: .color(color.opacity(0.85)), lineWidth: 1)
+        }
+    }
+
+    private func buildLinePath(size: CGSize) -> Path {
+        let totalWidth  = size.width
+        let totalHeight = size.height
+        let step = totalWidth / CGFloat(samples.count - 1)
+        var path = Path()
+        for (idx, val) in samples.enumerated() {
+            let pointX = CGFloat(idx) * step
+            let pointY = totalHeight - CGFloat(max(0, min(1, val))) * totalHeight
+            if idx == 0 {
+                path.move(to: CGPoint(x: pointX, y: pointY))
+            } else {
+                path.addLine(to: CGPoint(x: pointX, y: pointY))
+            }
+        }
+        return path
+    }
+
+    private func buildFillPath(linePath: Path, size: CGSize) -> Path {
+        let totalWidth  = size.width
+        let totalHeight = size.height
+        var fill = linePath
+        let lastX = CGFloat(samples.count - 1) * (totalWidth / CGFloat(samples.count - 1))
+        fill.addLine(to: CGPoint(x: lastX, y: totalHeight))
+        fill.addLine(to: CGPoint(x: 0, y: totalHeight))
+        fill.closeSubpath()
+        return fill
+    }
+}
+
+// MARK: - PopoverHeaderView
 /// Header row: system stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
-    /// Current system resource snapshot.
     let stats: SystemStats
-    /// Whether the user is currently authenticated with GitHub.
     let isAuthenticated: Bool
-    /// Called when the user taps the settings gear icon.
     let onSelectSettings: () -> Void
-    /// Called when the user taps the "Sign in" button (unauthenticated state only).
     let onSignIn: () -> Void
     /// CPU utilisation history (0.0–1.0 per sample) for sparkline display.
     var cpuHistory: [Double] = []
@@ -77,6 +113,7 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
+            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -112,19 +149,23 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
+    /// Inline CPU / MEM / DISK chips with sparkline + block-bar fill prefix.
+    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
+    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
             statChip(
                 label: "CPU",
                 value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
+                pct: stats.cpuPct,
+                history: cpuHistory
             )
             statChip(
                 label: "MEM",
                 value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
                     + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
+                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0,
+                history: memHistory
             )
             diskChip
         }
@@ -139,15 +180,19 @@ struct PopoverHeaderView: View {
         let value   = blockBar(pct: pct)
             + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
             + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
+        return statChip(label: "DISK", value: value, pct: pct, history: diskHistory)
     }
 
-    private func statChip(label: String, value: String, pct: Double) -> some View {
+    private func statChip(label: String, value: String, pct: Double, history: [Double]) -> some View {
         HStack(spacing: 3) {
             Text(label)
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+            if history.count >= 2 {
+                SparklineView(samples: history, color: usageColor(pct: pct))
+                    .frame(width: 28, height: 12)
+            }
             Text(value)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(usageColor(pct: pct))
@@ -170,7 +215,6 @@ struct PopoverHeaderView: View {
 }
 
 // MARK: - RunnerTypeIcon
-
 private struct RunnerTypeIcon: View {
     let isLocal: Bool?
     var body: some View {
@@ -185,10 +229,7 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
-
-/// Displays busy local runners as elevated cards beneath the header.
 struct PopoverLocalRunnerRow: View {
-    /// The full list of runners; only busy ones are rendered.
     let runners: [Runner]
 
     var body: some View {
@@ -224,16 +265,10 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-
-/// A single row in the actions list, showing status, title, elapsed time, and inline job rows.
 struct ActionRowView: View {
-    /// The action group this row represents.
     let group: ActionGroup
-    /// Monotonically-increasing tick used to force elapsed-time label refresh.
     let tick: Int
-    /// Called when the user taps the row to open the action detail view.
     let onSelect: () -> Void
-    /// Optional callback for tapping an inline job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     var body: some View {
@@ -326,7 +361,6 @@ struct ActionRowView: View {
 }
 
 // MARK: - InlineJobRowsView
-
 /// Passive read-only ↳ job rows shown beneath every in-progress action group.
 /// Only shows jobs that are currently `in_progress`.
 ///
@@ -340,11 +374,8 @@ struct ActionRowView: View {
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
 struct InlineJobRowsView: View {
-    /// The action group whose in-progress jobs are displayed.
     let group: ActionGroup
-    /// Monotonically-increasing tick for elapsed-time refresh.
     let tick: Int
-    /// Optional callback when the user taps a job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
