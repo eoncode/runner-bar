@@ -425,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         savedNavState = nil
         return wrapEnv(PopoverMainView(
             store: observable,
-            onSelectJob: { [weak self] job in
+            onSelectJob: { [weak self] job, group in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
@@ -473,13 +473,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.navigate(to: self.mainView())
             },
-            onSelectJob: { [weak self] job in
+            onSelectJob: { [weak self] job, actionGroup in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
                         guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
+                        self.navigate(to: self.detailViewFromAction(job: enriched, group: actionGroup))
                     }
                 }
             }

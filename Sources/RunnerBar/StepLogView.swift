@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - StepLogView
 
 /// Full-screen log viewer for a single workflow step.
-/// Streams log text from `LogFetcher` and renders it in a monospaced scroll view.
+/// Fetches the full job log via `fetchJobLog` and extracts the relevant step section.
 struct StepLogView: View {
     // MARK: - Input
 
@@ -40,16 +40,12 @@ struct StepLogView: View {
 
     // MARK: - Fetch
 
-    /// Initiates log fetching via `LogFetcher` on a background thread.
+    /// Fetches the full job log and extracts the section for the target step.
     private func fetchLog() {
         isLoading = true
         error = nil
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = LogFetcher.shared.fetchStepLog(
-                group: group,
-                job: job,
-                stepIndex: stepIndex
-            )
+            let result = fetchStepLogText(group: group, job: job, stepIndex: stepIndex)
             DispatchQueue.main.async {
                 isLoading = false
                 switch result {
@@ -66,11 +62,7 @@ struct StepLogView: View {
     private var copyFetch: (@escaping (String?) -> Void) -> Void {
         { completion in
             DispatchQueue.global(qos: .userInitiated).async {
-                let result = LogFetcher.shared.fetchStepLog(
-                    group: self.group,
-                    job: self.job,
-                    stepIndex: self.stepIndex
-                )
+                let result = fetchStepLogText(group: self.group, job: self.job, stepIndex: self.stepIndex)
                 switch result {
                 case .success(let text): completion(text)
                 case .failure:           completion(nil)
@@ -157,6 +149,75 @@ struct StepLogView: View {
         }
         .onAppear { fetchLog() }
     }
+}
+
+// MARK: - Step log extraction
+
+/// Fetches the full job log and extracts lines belonging to `stepIndex`.
+/// GitHub job logs are plain text with section headers of the form:
+///   ##[group]Step N: <name>
+///   ##[endgroup]
+/// We fall back to returning the entire log when headers are absent.
+private enum StepLogError: LocalizedError {
+    case noScope
+    case fetchFailed
+    var errorDescription: String? {
+        switch self {
+        case .noScope:     return "Cannot determine repository scope from job URL."
+        case .fetchFailed: return "Failed to fetch log from GitHub."
+        }
+    }
+}
+
+func fetchStepLogText(
+    group: ActionGroup,
+    job: ActiveJob,
+    stepIndex: Int
+) -> Result<String, Error> {
+    // Determine the repo scope: prefer the group's repo, fall back to the job URL.
+    let scope: String
+    if group.repo.contains("/") {
+        scope = group.repo
+    } else if let s = scopeFromHtmlUrl(job.htmlUrl), s.contains("/") {
+        scope = s
+    } else {
+        return .failure(StepLogError.noScope)
+    }
+
+    guard let fullLog = fetchJobLog(jobID: job.id, scope: scope) else {
+        return .failure(StepLogError.fetchFailed)
+    }
+
+    // Extract just the step's section if GitHub section markers are present.
+    let extracted = extractStepSection(from: fullLog, stepIndex: stepIndex)
+    return .success(extracted)
+}
+
+/// Extracts lines for a specific step (1-based in GitHub logs, 0-based `stepIndex` here).
+/// GitHub log format uses `##[group]` / `##[endgroup]` to delimit steps.
+/// If no markers are found, returns the whole log.
+private func extractStepSection(from log: String, stepIndex: Int) -> String {
+    let lines = log.components(separatedBy: "\n")
+    var sections: [[String]] = []
+    var current: [String]? = nil
+
+    for line in lines {
+        if line.hasPrefix("##[group]") {
+            current = [line]
+        } else if line.hasPrefix("##[endgroup]") {
+            if var c = current {
+                c.append(line)
+                sections.append(c)
+            }
+            current = nil
+        } else {
+            current?.append(line)
+        }
+    }
+
+    guard !sections.isEmpty else { return log }
+    guard stepIndex < sections.count else { return sections.last?.joined(separator: "\n") ?? log }
+    return sections[stepIndex].joined(separator: "\n")
 }
 
 // MARK: - Collection+safe
