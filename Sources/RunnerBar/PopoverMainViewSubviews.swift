@@ -46,6 +46,43 @@ struct JobProgressBarView: View {
     }
 }
 
+// MARK: - SparklineView
+/// Tiny inline sparkline drawn from a history of 0.0–1.0 samples.
+/// Fills the allocated frame; caller controls width/height.
+struct SparklineView: View {
+    /// Values in chronological order, each 0.0–1.0.
+    let samples: [Double]
+    let color: Color
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard samples.count >= 2 else { return }
+            let w = size.width
+            let h = size.height
+            let step = w / CGFloat(samples.count - 1)
+
+            var path = Path()
+            for (i, v) in samples.enumerated() {
+                let x = CGFloat(i) * step
+                let y = h - CGFloat(max(0, min(1, v))) * h
+                if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                else       { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+
+            // Fill area under line
+            var fill = path
+            let lastX = CGFloat(samples.count - 1) * step
+            fill.addLine(to: CGPoint(x: lastX, y: h))
+            fill.addLine(to: CGPoint(x: 0, y: h))
+            fill.closeSubpath()
+            ctx.fill(fill, with: .color(color.opacity(0.18)))
+
+            // Draw line on top
+            ctx.stroke(path, with: .color(color.opacity(0.85)), lineWidth: 1)
+        }
+    }
+}
+
 // MARK: - PopoverHeaderView
 /// Header row: system stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
@@ -101,7 +138,7 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
+    /// Inline CPU / MEM / DISK chips with sparkline + block-bar fill prefix.
     /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
     /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
@@ -109,13 +146,15 @@ struct PopoverHeaderView: View {
             statChip(
                 label: "CPU",
                 value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
+                pct: stats.cpuPct,
+                history: cpuHistory
             )
             statChip(
                 label: "MEM",
                 value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
                     + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
+                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0,
+                history: memHistory
             )
             diskChip
         }
@@ -130,15 +169,19 @@ struct PopoverHeaderView: View {
         let value   = blockBar(pct: pct)
             + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
             + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
+        return statChip(label: "DISK", value: value, pct: pct, history: diskHistory)
     }
 
-    private func statChip(label: String, value: String, pct: Double) -> some View {
+    private func statChip(label: String, value: String, pct: Double, history: [Double]) -> some View {
         HStack(spacing: 3) {
             Text(label)
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+            if history.count >= 2 {
+                SparklineView(samples: history, color: usageColor(pct: pct))
+                    .frame(width: 28, height: 12)
+            }
             Text(value)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(usageColor(pct: pct))
