@@ -439,7 +439,8 @@ struct ActionRowView: View {
     private var statusDonut: some View {
         switch group.groupStatus {
         case .inProgress:
-            StatusDonut(state: .inProgress(group.progressFraction))
+            // ⚠️ progressFraction is Double? — always coalesce to 0, do NOT remove ?? 0
+            StatusDonut(state: .inProgress(group.progressFraction ?? 0))
         case .queued:
             StatusDonut(state: .inProgress(0.0))
         case .completed:
