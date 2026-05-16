@@ -252,12 +252,13 @@ enum RelativeTimeFormatter {
 // MARK: - ActionGroup + progressFraction
 extension ActionGroup {
     var progressFraction: Double? {
-        switch groupStatus {
+        switch typedGroupStatus {
         case .queued:     return nil
-        case .completed:  return 1.0
+        case .completed, .failed, .success:  return 1.0
         case .inProgress:
             guard jobsTotal > 0 else { return nil }
             return Double(jobsDone) / Double(jobsTotal)
+        case .unknown:    return nil
         }
     }
 }

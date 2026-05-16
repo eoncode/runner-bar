@@ -221,7 +221,7 @@ struct ActionRowView: View {
                     .fill(rowTint)
             )
 
-            if isExpanded {
+            if isExpanded && group.typedGroupStatus == .inProgress {
                 InlineJobRowsView(
                     group: group,
                     tick: tick,
@@ -233,7 +233,7 @@ struct ActionRowView: View {
         .padding(.horizontal, DesignTokens.Spacing.rowHPad)
         .padding(.vertical, 2)
         .onAppear {
-            if group.groupStatus == .inProgress {
+            if group.typedGroupStatus == .inProgress {
                 isExpanded = true
             }
         }
@@ -244,7 +244,7 @@ struct ActionRowView: View {
         _ = tick
         return HStack(spacing: 6) {
             DonutStatusView(
-                status: group.groupStatus,
+                status: group.typedGroupStatus,
                 conclusion: group.conclusion,
                 progress: group.progressFraction
             )
@@ -270,7 +270,7 @@ struct ActionRowView: View {
                 .font(DesignTokens.Fonts.mono).foregroundColor(.secondary)
                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         }
-        if group.groupStatus == .inProgress || group.groupStatus == .queued {
+        if group.typedGroupStatus == .inProgress || group.typedGroupStatus == .queued {
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(0)
@@ -289,12 +289,12 @@ struct ActionRowView: View {
     /// Fix #4: SUCCESS/FAILED also wrapped in stroked pill (green/red).
     @ViewBuilder
     private var statusChip: some View {
-        switch group.groupStatus {
+        switch group.typedGroupStatus {
         case .inProgress:
             StatusPill(label: "IN PROGRESS", color: DesignTokens.Colors.statusBlue)
         case .queued:
             StatusPill(label: "QUEUED", color: DesignTokens.Colors.statusOrange)
-        case .completed:
+        case .completed, .failed, .success, .unknown:
             let color = group.conclusion == "success"
                 ? DesignTokens.Colors.statusGreen
                 : DesignTokens.Colors.statusRed
@@ -304,10 +304,10 @@ struct ActionRowView: View {
     }
 
     private var indicatorColor: Color {
-        switch group.groupStatus {
+        switch group.typedGroupStatus {
         case .inProgress: return DesignTokens.Colors.statusBlue
         case .queued:     return DesignTokens.Colors.statusOrange
-        case .completed:
+        case .completed, .failed, .success, .unknown:
             // Fix #4: always green or red, never gray regardless of isDimmed
             return group.conclusion == "success"
                 ? DesignTokens.Colors.statusGreen
@@ -316,10 +316,10 @@ struct ActionRowView: View {
     }
 
     private var rowTint: Color {
-        switch group.groupStatus {
+        switch group.typedGroupStatus {
         case .inProgress: return DesignTokens.Colors.statusBlue.opacity(0.04)
         case .queued:     return DesignTokens.Colors.statusOrange.opacity(0.04)
-        case .completed:
+        case .completed, .failed, .success, .unknown:
             if group.isDimmed { return Color.clear }
             return group.conclusion == "success"
                 ? DesignTokens.Colors.statusGreen.opacity(0.04)

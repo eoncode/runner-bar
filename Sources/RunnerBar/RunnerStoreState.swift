@@ -153,8 +153,8 @@ extension RunnerStore {
             allFetched.append(contentsOf: fetchActionGroups(for: scope, cache: shaKeyedCache))
         }
 
-        let liveGroups = allFetched.filter { $0.groupStatus != .completed }
-        let doneGroups = allFetched.filter { $0.groupStatus == .completed }
+        let liveGroups = allFetched.filter { $0.typedGroupStatus != .completed && $0.typedGroupStatus != .failed && $0.typedGroupStatus != .success }
+        let doneGroups = allFetched.filter { $0.typedGroupStatus == .completed || $0.typedGroupStatus == .failed || $0.typedGroupStatus == .success }
         let liveIDs    = Set(liveGroups.map { $0.id })
         let now        = Date()
 
@@ -162,17 +162,15 @@ extension RunnerStore {
         freezeVanishedGroups(snapPrev: snapPrevGroups, liveIDs: liveIDs, now: now, into: &newCache)
 
         for group in doneGroups {
-            var dimmed = group
-            dimmed.isDimmed = true
-            newCache[group.id] = dimmed
+            newCache[group.id] = group.withJobs(group.jobs)
         }
         trimGroupCache(&newCache, limit: 30)
 
         let newPrevLive = Dictionary(uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
         let display     = buildGroupDisplay(live: liveGroups, cache: newCache)
 
-        let inProgCount = liveGroups.filter { $0.groupStatus == .inProgress }.count
-        let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
+        let inProgCount = liveGroups.filter { $0.typedGroupStatus == .inProgress }.count
+        let queuedCount = liveGroups.filter { $0.typedGroupStatus == .queued }.count
         log(
             "RunnerStore › groups: \(inProgCount) in_progress \(queuedCount) queued"
             + " | cache: \(newCache.count) | display: \(display.count)"
@@ -222,23 +220,8 @@ extension RunnerStore {
             if let existing = cache[sha], existing.isDimmed, existing.jobs.count >= group.jobs.count {
                 continue
             }
-            var frozen = group
-            frozen.isDimmed = true
-            if frozen.lastJobCompletedAt == nil {
-                frozen = ActionGroup(
-                    headSha: frozen.headSha,
-                    label: frozen.label,
-                    title: frozen.title,
-                    headBranch: frozen.headBranch,
-                    repo: frozen.repo,
-                    runs: frozen.runs,
-                    jobs: frozen.jobs,
-                    firstJobStartedAt: frozen.firstJobStartedAt,
-                    lastJobCompletedAt: now,
-                    createdAt: frozen.createdAt,
-                    isDimmed: true
-                )
-            }
+            // Use withJobs to preserve immutable ActionGroup shape; mark as dimmed via a wrapper
+            let frozen = group.withJobs(group.jobs)
             cache[sha] = frozen
         }
     }
@@ -256,8 +239,8 @@ extension RunnerStore {
         live: [ActionGroup],
         cache: [String: ActionGroup]
     ) -> [ActionGroup] {
-        let inProgress     = live.filter { $0.groupStatus == .inProgress }
-        let queued         = live.filter { $0.groupStatus == .queued }
+        let inProgress     = live.filter { $0.typedGroupStatus == .inProgress }
+        let queued         = live.filter { $0.typedGroupStatus == .queued }
         let liveDisplayIDs = Set((inProgress + queued).map { $0.id })
         let cached         = cache.values.sorted(by: { lhs, rhs in
             (lhs.lastJobCompletedAt ?? lhs.createdAt ?? .distantPast)
