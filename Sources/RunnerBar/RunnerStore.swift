@@ -58,6 +58,18 @@ final class RunnerStore {
 
     func start() {
         log("RunnerStore › start")
+        // Seed ScopeStore from SettingsStore.githubOrg if scopes are empty.
+        // Covers existing installs that saved credentials before ScopeStore
+        // was introduced, and fresh installs before the user visits Settings.
+        // ❌ NEVER remove — without this, polling returns empty on every launch
+        // for users who have a githubOrg saved but no explicit scopes.
+        if ScopeStore.shared.scopes.isEmpty {
+            let org = SettingsStore.shared.githubOrg.trimmingCharacters(in: .whitespaces)
+            if !org.isEmpty {
+                ScopeStore.shared.add(org)
+                log("RunnerStore › seeded ScopeStore with org: \(org)")
+            }
+        }
         timer?.invalidate()
         fetch()
     }

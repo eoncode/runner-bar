@@ -17,30 +17,43 @@ final class RunnerStoreObservable: ObservableObject {
 
     init(store: RunnerStore = RunnerStore.shared) {
         self.store = store
-        // Mirror current state immediately (covers the case where a poll already fired).
         self.runners = store.runners
         self.jobs    = store.jobs
         self.actions = store.actions
-        // Subscribe to future polls.
         store.onChange = { [weak self] in
             guard let self else { return }
-            // onChange is already dispatched to main by RunnerStore.
             self.runners = store.runners
             self.jobs    = store.jobs
             self.actions = store.actions
         }
     }
 
-    /// Triggers an immediate poll.
     func reload() {
         store.fetch()
     }
 
-    /// Persists new GitHub credentials and immediately re-polls.
-    /// Called by `AccountSettingsView` when the user taps "Save & Reconnect".
+    /// Persists new GitHub credentials, syncs org -> ScopeStore, and re-polls.
+    ///
+    /// ScopeStore.scopes drives ALL polling. The Settings UI exposes a single
+    /// org/user field (githubOrg). We translate it here so there is always at
+    /// least one scope to poll against.
+    /// ❌ NEVER remove the ScopeStore sync — without it actions/runners stay empty.
     func applySettings(_ settings: SettingsStore) {
         SettingsStore.shared.githubToken = settings.githubToken
         SettingsStore.shared.githubOrg   = settings.githubOrg
+        let org = settings.githubOrg.trimmingCharacters(in: .whitespaces)
+        if !org.isEmpty {
+            if ScopeStore.shared.scopes.isEmpty {
+                ScopeStore.shared.add(org)
+            } else {
+                // Replace the first (primary) scope with the new org value.
+                // Extra manually-added repo scopes stay intact.
+                var updated = ScopeStore.shared.scopes
+                updated[0] = org
+                for s in ScopeStore.shared.scopes { ScopeStore.shared.remove(s) }
+                for s in updated { ScopeStore.shared.add(s) }
+            }
+        }
         store.fetch()
     }
 }
