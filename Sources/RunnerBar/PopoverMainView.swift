@@ -1,9 +1,6 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #375 #376 #377)
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
+// REGRESSION GUARD — DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
 //
 // ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize
 // Dynamic height is achieved via KVO on NSHostingController.preferredContentSize.
@@ -14,10 +11,10 @@ import SwiftUI
 //   Dropping idealWidth lets SwiftUI report the natural content width as
 //   preferredContentSize.width. The panel clamps between 280 and 900.
 //   AppDelegate.resizeAndRepositionPanel() enforces these bounds at the NSPanel level.
-//   ❌ NEVER add idealWidth here — it pins the width to a fixed value regardless of content.
-//   ❌ NEVER add idealHeight or maxHeight to the root frame.
-//   ❌ NEVER use .fixedSize() on the root VStack.
-//   ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
+//   Never add idealWidth here — it pins the width to a fixed value regardless of content.
+//   Never add idealHeight or maxHeight to the root frame.
+//   Never use .fixedSize() on the root VStack.
+//   Never restore minWidth to 560 — that was the old fixed-width floor.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
@@ -26,18 +23,18 @@ import SwiftUI
 // RULE 5: NO height caps on actionsSection.
 //   With NSPanel, height caps are not needed. Content grows naturally.
 //   AppDelegate.maxHeight (85% screen) prevents off-screen overflow at the panel level.
-//   ❌ NEVER add .frame(maxHeight:) to actionsSection.
-//   ❌ NEVER wrap actionsSection in ScrollView.
-//   ❌ NEVER add .fixedSize() to actionsSection.
+//   Never add .frame(maxHeight:) to actionsSection.
+//   Never wrap actionsSection in ScrollView.
+//   Never add .fixedSize() to actionsSection.
 //
 // RULE 6: systemStats MUST be stopped while the panel is open.
-//   SystemStatsViewModel fires every 2s, mutating @StateObject → SwiftUI re-render
-//   → new preferredContentSize → KVO fires → resizeAndRepositionPanel().
+//   SystemStatsViewModel fires every 2s, mutating @StateObject -> SwiftUI re-render
+//   -> new preferredContentSize -> KVO fires -> resizeAndRepositionPanel().
 //   While open: stats polling is stopped to prevent unnecessary re-renders/resizes.
 //   While closed: stats polling runs to keep the header display current on next open.
 //   Gate reads PopoverOpenState via @EnvironmentObject (live, never stale).
-//   ❌ NEVER re-add `var isPopoverOpen: Bool` prop — frozen at construction.
-//   ❌ NEVER remove .onChange(of: popoverOpenState.isOpen).
+//   Never re-add `var isPopoverOpen: Bool` prop — frozen at construction.
+//   Never remove .onChange(of: popoverOpenState.isOpen).
 //
 // RULE 6b: systemStats must RESTART when the main view becomes visible again.
 //   onChange(of: popoverOpenState.isOpen) only fires on panel open/close — it
@@ -46,36 +43,36 @@ import SwiftUI
 //   Fix: call systemStats.start() inside PopoverHeaderView .onAppear (which
 //   re-fires on every back-navigation). The onChange(open=true) stop-guard
 //   still wins because isOpen is already true when the back-nav fires.
-//   ❌ NEVER remove the systemStats.start() from PopoverHeaderView .onAppear.
+//   Never remove the systemStats.start() from PopoverHeaderView .onAppear.
 //
 // RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload().
 //   BOTH gated behind !popoverOpenState.isOpen.
-//   ❌ NEVER remove this guard.
-//   ❌ NEVER call LocalRunnerStore.shared.refresh() directly from Timer closure
+//   Never remove this guard.
+//   Never call LocalRunnerStore.shared.refresh() directly from Timer closure
 //      — it is @MainActor isolated, requires Task { @MainActor in }.
 //
 // RULE 8: AppDelegate.initPanelWidth is 320 (initial open before SwiftUI measures).
-//   Panel width is then content-driven, clamped 280–900 by resizeAndRepositionPanel.
-//   ❌ NEVER add idealWidth back to this view.
-//   ❌ NEVER restore initPanelWidth to 600 — that was over-wide.
+//   Panel width is then content-driven, clamped 280-900 by resizeAndRepositionPanel.
+//   Never add idealWidth back to this view.
+//   Never restore initPanelWidth to 600 — that was over-wide.
 //
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 //   Its sole purpose is to force ActionRowView and InlineJobRowsView to
 //   re-render so elapsed strings, pie-chart progress and currentStep names
 //   stay live while the panel is visible.
-//   ❌ NEVER gate displayTick behind !popoverOpenState.isOpen.
-//   ❌ NEVER merge with runnerRefreshTimer (that one IS gated and fires at 5s).
-//
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
+//   Never gate displayTick behind !popoverOpenState.isOpen.
+//   Never merge with runnerRefreshTimer (that one IS gated and fires at 5s).
 
 /// Root popover view rendered inside the NSPanel.
 /// Owns the runner-refresh timer, display-tick timer, and system-stats lifecycle.
 struct PopoverMainView: View {
+    /// The observable store driving the runner and action lists.
     @ObservedObject var store: RunnerStoreObservable
+    /// Called when the user taps a job row to drill into job detail.
     let onSelectJob: (ActiveJob) -> Void
+    /// Called when the user taps an action group row to drill into action detail.
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when the user taps the settings gear icon.
     let onSelectSettings: () -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
@@ -87,6 +84,7 @@ struct PopoverMainView: View {
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
+    /// Root layout: header -> divider -> local-runner row -> actions list.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
@@ -104,10 +102,10 @@ struct PopoverMainView: View {
                 }
             actionsSection
         }
-        // RULE 1: content-driven width, clamped 280–900.
-        // ❌ NEVER add idealWidth here.
-        // ❌ NEVER add idealHeight or maxHeight here.
-        // ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
+        // RULE 1: content-driven width, clamped 280-900.
+        // Never add idealWidth here.
+        // Never add idealHeight or maxHeight here.
+        // Never restore minWidth to 560 — that was the old fixed-width floor.
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
@@ -181,7 +179,7 @@ struct PopoverMainView: View {
                 SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    // ⚠️ BUG FIX: Do NOT render InlineJobRowsView here.
+                    // BUG FIX: Do NOT render InlineJobRowsView here.
                     // ActionRowView already renders InlineJobRowsView internally
                     // when expanded=true. Rendering it here too caused duplicate
                     // job rows for in-progress groups.
