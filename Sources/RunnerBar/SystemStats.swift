@@ -25,7 +25,7 @@ struct SystemStats {
     var diskUsedGB: Double = 0
     /// Total disk capacity of the boot volume, in GB.
     var diskTotalGB: Double = 0
-    /// Constructs a zero-value snapshot.
+    /// A zero-value snapshot.
     static let zero = SystemStats()
 }
 
@@ -83,7 +83,7 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     private func append(_ value: Double, to history: inout [Double]) {
-        history.append(value / 100.0)   // SparklineView expects 0.0–1.0
+        history.append(value / 100.0)
         if history.count > maxHistory { history.removeFirst() }
     }
 
@@ -144,14 +144,14 @@ final class SystemStatsViewModel: ObservableObject {
     }
 }
 
-// MARK: - SystemStatsPoller (legacy — kept for any remaining observers)
+// MARK: - SystemStatsPoller
 
-/// Polls CPU and memory usage on a background thread and publishes snapshots.
+/// Legacy poller kept for observer-pattern consumers. Prefer `SystemStatsViewModel`.
 final class SystemStatsPoller {
     /// Shared singleton instance.
     static let shared = SystemStatsPoller()
     /// Most recent snapshot produced by the background poll.
-    private(set) var latest: SystemStatsSnapshot = SystemStatsSnapshot(cpuPercent: 0, memPercent: 0)
+    private(set) var latest = SystemStatsSnapshot(cpuPercent: 0, memPercent: 0)
     private var observers: [(SystemStatsSnapshot) -> Void] = []
     private let lock = NSLock()
     private init() {}
@@ -172,7 +172,7 @@ final class SystemStatsPoller {
         }
     }
 
-    /// Registers an observer block and returns a token for later removal.
+    /// Registers an observer block and returns a token.
     @discardableResult
     func addObserver(_ block: @escaping (SystemStatsSnapshot) -> Void) -> Int {
         lock.lock(); defer { lock.unlock() }

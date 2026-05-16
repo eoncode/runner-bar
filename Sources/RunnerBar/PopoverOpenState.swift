@@ -32,6 +32,7 @@ import SwiftUI
 // is major major major.
 // ════════════════════════════════════════════════════════════════════════════════
 
+// swiftlint:disable type_body_length
 /// Observable wrapper for NSPopover open/closed state and one-shot height callback.
 final class PopoverOpenState: ObservableObject {
     /// `true` from immediately before `NSPopover.show()` until after `NSPopover.close()`.
@@ -47,3 +48,4 @@ final class PopoverOpenState: ObservableObject {
     /// ❌ NEVER call more than once per open.
     var onHeightReady: ((CGFloat) -> Void)?
 }
+// swiftlint:enable type_body_length

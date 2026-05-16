@@ -1,3 +1,4 @@
+// swiftlint:disable missing_docs
 import AppKit
 
 MainActor.assumeIsolated {
@@ -5,3 +6,4 @@ MainActor.assumeIsolated {
     NSApplication.shared.delegate = delegate
     NSApplication.shared.run()
 }
+// swiftlint:enable missing_docs

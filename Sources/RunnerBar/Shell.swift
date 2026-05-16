@@ -2,6 +2,11 @@ import Foundation
 
 /// Runs `command` via zsh, draining stdout/stderr asynchronously to avoid
 /// pipe-buffer deadlock, and enforcing a hard timeout so the app never hangs.
+///
+/// - Parameters:
+///   - command: The shell command string passed to `/bin/zsh -c`.
+///   - timeout: Maximum seconds to wait before terminating the process.
+/// - Returns: Trimmed stdout+stderr output, or empty string on launch failure.
 @discardableResult
 func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell › \(command)")
@@ -12,8 +17,6 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     task.launchPath = "/bin/zsh"
     task.arguments = ["-c", command]
 
-    // Drain pipe asynchronously — prevents pipe-buffer deadlock when the
-    // subprocess produces more output than the kernel buffer can hold.
     var outputData = Data()
     let lock = NSLock()
     pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -30,8 +33,6 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
         return ""
     }
 
-    // Hard timeout: if gh CLI hangs (network stall, auth expiry, etc.) we
-    // terminate it rather than blocking the thread indefinitely.
     let deadline = Date().addingTimeInterval(timeout)
     while task.isRunning {
         if Date() > deadline {
@@ -42,8 +43,6 @@ func shell(_ command: String, timeout: TimeInterval = 20) -> String {
         Thread.sleep(forTimeInterval: 0.05)
     }
 
-    // Stop the handler, then drain any final bytes that arrived between the
-    // last readabilityHandler call and the process exiting.
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
     if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }

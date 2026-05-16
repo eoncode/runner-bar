@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
-/// States: idle (doc.on.doc + "Copy log") → loading (spinner + "Copying…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
+/// States: idle → loading (spinner) → done (✓, 1.5 s) OR failed (✗, 1.5 s) → idle
 struct LogCopyButton: View {
     /// Called on tap. Pass nil or empty string on failure — button still resets to idle.
     let fetch: (@escaping (String?) -> Void) -> Void
@@ -82,11 +82,10 @@ struct LogCopyButton: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                     phase = .done
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
                 } else {
                     phase = .failed
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
                 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }
     }

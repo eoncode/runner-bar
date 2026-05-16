@@ -1,9 +1,9 @@
 import Combine
 import Foundation
 
-// MARK: - SystemStatsPoller (legacy)
+// MARK: - SystemStatsPoller2
 
-/// Continuously polls CPU and memory usage on a background thread.
+/// Legacy background poller kept for any remaining observer-pattern consumers.
 final class SystemStatsPoller2 {
     /// Shared singleton instance.
     static let shared = SystemStatsPoller2()
@@ -48,9 +48,7 @@ final class SystemStatsPoller2 {
     }
 
     private static func poll() -> SystemStatsSnapshot {
-        let cpu = fetchCPU()
-        let mem = fetchMem()
-        return SystemStatsSnapshot(cpuPercent: cpu, memPercent: mem)
+        SystemStatsSnapshot(cpuPercent: fetchCPU(), memPercent: fetchMem())
     }
 
     private static func fetchCPU() -> Double {
@@ -61,10 +59,7 @@ final class SystemStatsPoller2 {
 
     private static func fetchMem() -> Double {
         let output = shell("vm_stat", timeout: 5)
-        var pagesFree = 0.0
-        var pagesActive = 0.0
-        var pagesInactive = 0.0
-        var pagesWired = 0.0
+        var pagesFree = 0.0, pagesActive = 0.0, pagesInactive = 0.0, pagesWired = 0.0
         for line in output.components(separatedBy: "\n") {
             func extract(_ key: String) -> Double? {
                 guard line.contains(key),
@@ -74,10 +69,10 @@ final class SystemStatsPoller2 {
                 else { return nil }
                 return Double(val)
             }
-            if let val = extract("Pages free")       { pagesFree    = val }
-            if let val = extract("Pages active")     { pagesActive  = val }
+            if let val = extract("Pages free")       { pagesFree     = val }
+            if let val = extract("Pages active")     { pagesActive   = val }
             if let val = extract("Pages inactive")   { pagesInactive = val }
-            if let val = extract("Pages wired down") { pagesWired   = val }
+            if let val = extract("Pages wired down") { pagesWired    = val }
         }
         let total = pagesFree + pagesActive + pagesInactive + pagesWired
         guard total > 0 else { return 0 }

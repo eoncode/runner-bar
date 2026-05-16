@@ -34,20 +34,16 @@ struct RunnerStatusEnricher {
 
     /// Fetches live GitHub status for all runners whose `gitHubUrl` is known
     /// and returns a new array with `githubStatus` and `isBusy` populated.
-    /// Runners without a `gitHubUrl` are returned unchanged — their
-    /// `statusColor` continues to reflect the local launchctl-derived state.
     func enrich(runners: [RunnerModel]) -> [RunnerModel] {
         guard !runners.isEmpty else { return runners }
-
         let apiLookup = buildAPILookup(for: runners)
         return runners.map { applyEnrichment(to: $0, lookup: apiLookup) }
     }
 
     // MARK: - Private helpers
 
-    private func buildAPILookup(
-        for runners: [RunnerModel]
-    ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
+    private func buildAPILookup(for runners: [RunnerModel])
+        -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
         var scopeToRunners: [String: [RunnerModel]] = [:]
         for runner in runners {
             guard let urlStr = runner.gitHubUrl,
@@ -109,11 +105,9 @@ struct RunnerStatusEnricher {
         enriched.githubStatus = api.status
         enriched.isBusy = api.busy
         if runner.isRunning && api.status == "offline" {
-            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
-                "launchctl=running but GitHub=offline")
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): launchctl=running but GitHub=offline")
         } else if !runner.isRunning && api.status == "online" {
-            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
-                "launchctl=idle but GitHub=online")
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): launchctl=idle but GitHub=online")
         }
         return enriched
     }
