@@ -3,7 +3,6 @@ import SwiftUI
 // MARK: - SectionHeaderLabel
 /// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
 struct SectionHeaderLabel: View {
-    /// The title string to display in uppercase.
     let title: String
     var body: some View {
         Text(title.uppercased())
@@ -17,21 +16,13 @@ struct SectionHeaderLabel: View {
 
 // MARK: - PopoverHeaderView
 /// Header row: system stats left, settings + close right.
-/// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
-    /// Current system stats snapshot.
     let stats: SystemStats
-    /// Phase 2: normalised (0–1) CPU history for sparkline, oldest first.
     let cpuHistory: [Double]
-    /// Phase 2: normalised (0–1) MEM history for sparkline, oldest first.
     let memHistory: [Double]
-    /// Phase 2: normalised (0–1) DISK-used history for sparkline, oldest first.
     let diskHistory: [Double]
-    /// Whether the user has a valid GitHub token.
     let isAuthenticated: Bool
-    /// Called when the user taps the settings button.
     let onSelectSettings: () -> Void
-    /// Called when the user taps the sign-in button.
     let onSignIn: () -> Void
 
     var body: some View {
@@ -60,8 +51,6 @@ struct PopoverHeaderView: View {
         .padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Phase 2: CPU sparkline + MEM sparkline + DISK sparkline+pill, separated by Dividers.
-    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` prevents multi-line wrapping that corrupts panel frame (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 6) {
             sparklineChip(
@@ -127,9 +116,7 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
-/// Displays busy local runners at the top of the popover.
 struct PopoverLocalRunnerRow: View {
-    /// The full list of runners; only busy ones are displayed.
     let runners: [Runner]
     var body: some View {
         let busy = runners.filter { $0.busy }
@@ -148,14 +135,8 @@ struct PopoverLocalRunnerRow: View {
                 Spacer()
                 if let metrics = runner.metrics {
                     HStack(spacing: 4) {
-                        StatPill(
-                            label: "CPU",
-                            value: String(format: "%.1f%%", metrics.cpu)
-                        )
-                        StatPill(
-                            label: "MEM",
-                            value: String(format: "%.1f%%", metrics.mem)
-                        )
+                        StatPill(label: "CPU", value: String(format: "%.1f%%", metrics.cpu))
+                        StatPill(label: "MEM", value: String(format: "%.1f%%", metrics.mem))
                     }
                 }
                 Image(systemName: "chevron.right")
@@ -185,10 +166,6 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// Phase 4: left indicator pill + DonutStatusView + row background tint.
-/// `isExpanded` controls whether InlineJobRowsView is shown below this row.
-/// Tapping the LeftIndicatorPill toggles expansion; the pill color reflects status.
-/// In-progress groups auto-expand on appear so jobs are immediately visible.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -217,11 +194,14 @@ struct ActionRowView: View {
             )
 
             if isExpanded && group.typedGroupStatus == .inProgress {
+                // fix(#441 bug3): indent inline job rows 16 pt so they sit
+                // visually nested under the parent action row.
                 InlineJobRowsView(
                     group: group,
                     tick: tick,
                     onSelectJob: onSelectJob
                 )
+                .padding(.leading, 16)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -363,9 +343,7 @@ struct InlineJobRowsView: View {
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
-    /// Deduplicated in-progress jobs — ActionGroup.jobs flattens all WorkflowRun.jobs
-    /// so multiple runs in the same group would produce duplicate job IDs.
-    /// fix(#441 bug1): filter by unique id before filtering status.
+    /// Deduplicated in-progress jobs — fix(#441 bug1)
     private var activeJobs: [ActiveJob] {
         var seen = Set<Int>()
         return group.jobs.filter { seen.insert($0.id).inserted }
