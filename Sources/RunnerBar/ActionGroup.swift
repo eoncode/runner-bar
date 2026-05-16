@@ -28,7 +28,9 @@ struct ActionGroup: Identifiable, Equatable {
     // MARK: - Computed status
 
     var overallStatus: String {
-        if runs.contains(where: { $0.status == "in_progress" || $0.status == "queued" }) { return "in_progress" }
+        if runs.contains(where: {
+            $0.status == "in_progress" || $0.status == "queued"
+        }) { return "in_progress" }
         if runs.contains(where: { $0.conclusion == "failure" }) { return "failure" }
         if runs.allSatisfy({ $0.conclusion == "success" }) { return "success" }
         return runs.first?.status ?? "unknown"
@@ -73,7 +75,9 @@ struct ActionGroup: Identifiable, Equatable {
     var createdAt: Date? { firstJobStartedAt }
 
     /// Whether this group should render dimmed.
-    var isDimmed: Bool { overallConclusion == "skipped" || overallConclusion == "cancelled" }
+    var isDimmed: Bool {
+        overallConclusion == "skipped" || overallConclusion == "cancelled"
+    }
 
     /// Total number of jobs across all runs.
     var jobsTotal: Int { jobs.count }
@@ -91,7 +95,9 @@ struct ActionGroup: Identifiable, Equatable {
         guard let start else { return "" }
         let sec = Int((end ?? Date()).timeIntervalSince(start))
         guard sec >= 0 else { return "0s" }
-        return sec >= 60 ? String(format: "%dm%02ds", sec / 60, sec % 60) : "\(sec)s"
+        return sec >= 60
+            ? String(format: "%dm%02ds", sec / 60, sec % 60)
+            : "\(sec)s"
     }
 
     /// Name of the currently running job, for display in the action row trailing area.
@@ -112,14 +118,27 @@ struct ActionGroup: Identifiable, Equatable {
         // Rebuild first run with the new jobs; preserve other runs as-is.
         guard let first = runs.first else { return self }
         let rebuilt = WorkflowRun(
-            id: first.id, status: first.status, conclusion: first.conclusion,
-            headSha: first.headSha, createdAt: first.createdAt, updatedAt: first.updatedAt,
-            htmlUrl: first.htmlUrl, headBranch: first.headBranch, event: first.event,
-            name: first.name, runNumber: first.runNumber, jobs: newJobs
+            id: first.id,
+            status: first.status,
+            conclusion: first.conclusion,
+            headSha: first.headSha,
+            createdAt: first.createdAt,
+            updatedAt: first.updatedAt,
+            htmlUrl: first.htmlUrl,
+            headBranch: first.headBranch,
+            event: first.event,
+            name: first.name,
+            runNumber: first.runNumber,
+            jobs: newJobs
         )
         let newRuns = [rebuilt] + runs.dropFirst()
-        return ActionGroup(id: id, title: title, runs: newRuns,
-                           headBranch: headBranch, htmlUrl: htmlUrl)
+        return ActionGroup(
+            id: id,
+            title: title,
+            runs: newRuns,
+            headBranch: headBranch,
+            htmlUrl: htmlUrl
+        )
     }
 }
 
@@ -144,10 +163,14 @@ extension ActionGroup {
 
 // MARK: - Fetch helpers
 
-func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) -> [ActionGroup] {
+func fetchActionGroups(
+    for scope: String,
+    cache: [String: ActionGroup] = [:]
+) -> [ActionGroup] {
     guard let data = ghAPI("repos/\(scope)/actions/runs?per_page=20"),
           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let runsArray = json["workflow_runs"] as? [[String: Any]] else { return [] }
+          let runsArray = json["workflow_runs"] as? [[String: Any]]
+    else { return [] }
     let iso = ISO8601DateFormatter()
     var grouped: [String: [WorkflowRun]] = [:]
     var order:   [String] = []
@@ -164,28 +187,45 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
         let updated    = (r["updated_at"]  as? String).flatMap { iso.date(from: $0) }
         let conclusion = r["conclusion"]   as? String
         let jobs       = fetchJobsForRun(runID: id, scope: scope, iso: iso)
-        let run = WorkflowRun(id: id, status: stat, conclusion: conclusion,
-                              headSha: sha, createdAt: created, updatedAt: updated,
-                              htmlUrl: htmlUrl, headBranch: branch, event: event,
-                              name: name, runNumber: runNum, jobs: jobs)
+        let run = WorkflowRun(
+            id: id,
+            status: stat,
+            conclusion: conclusion,
+            headSha: sha,
+            createdAt: created,
+            updatedAt: updated,
+            htmlUrl: htmlUrl,
+            headBranch: branch,
+            event: event,
+            name: name,
+            runNumber: runNum,
+            jobs: jobs
+        )
         if grouped[sha] == nil { order.append(sha) }
         grouped[sha, default: []].append(run)
     }
     return order.compactMap { sha -> ActionGroup? in
         guard let runs = grouped[sha], let first = runs.first else { return nil }
-        return ActionGroup(id: sha,
-                           title: first.name ?? first.event ?? sha,
-                           runs: runs,
-                           headBranch: first.headBranch,
-                           htmlUrl: first.htmlUrl)
+        return ActionGroup(
+            id: sha,
+            title: first.name ?? first.event ?? sha,
+            runs: runs,
+            headBranch: first.headBranch,
+            htmlUrl: first.htmlUrl
+        )
     }
 }
 
-func fetchJobsForRun(runID: Int, scope: String, iso: ISO8601DateFormatter) -> [ActiveJob] {
-    guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=30"),
+func fetchJobsForRun(
+    runID: Int,
+    scope: String,
+    iso: ISO8601DateFormatter
+) -> [ActiveJob] {
+    guard let data = ghAPI(
+        "repos/\(scope)/actions/runs/\(runID)/jobs?per_page=30"
+    ),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
     else { return [] }
-    // Use a temporary RunnerStore-like factory inline since makeActiveJob is on RunnerStore.
     return resp.jobs.map { payload in
         ActiveJob(
             id: payload.id,
