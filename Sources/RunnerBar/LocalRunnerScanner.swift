@@ -32,9 +32,9 @@ struct LocalRunnerScanner {
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
     /// This is a synchronous, blocking call — always invoke from a background thread.
-    // swiftlint:disable:next cyclomatic_complexity
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
         for model in scanRunnerJSONFiles() {
