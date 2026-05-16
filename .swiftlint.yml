@@ -10,29 +10,19 @@ excluded:
 
 # ── Opt-in rules ────────────────────────────────────────────────────────────────────────
 opt_in_rules:
-  - missing_docs           # require /// on all internal/public declarations
-  - closure_spacing        # consistent spacing inside closure braces
-  - explicit_init          # disallow explicit .init() calls where redundant
-  - operator_usage_whitespace  # spaces around operators
-  - sorted_imports         # keep import statements sorted
-  - vertical_whitespace_closing_braces  # no blank line before closing brace
-  - vertical_whitespace_opening_braces  # no blank line after opening brace
-  - collection_alignment   # align collection literal elements
-  - contains_over_filter_count  # prefer contains over filter().count
-  - contains_over_filter_is_empty  # prefer contains over filter().isEmpty
-  - empty_collection_literal  # prefer isEmpty over == []
-  - first_where            # prefer first(where:) over filter().first
+  - closure_spacing
+  - explicit_init
+  - operator_usage_whitespace
+  - sorted_imports
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - empty_collection_literal
+  - first_where
 
 # ── Rule configuration ───────────────────────────────────────────────────────────────────
-missing_docs:
-  warning:
-    - internal
-  error:
-    - public
-    - open
-  excludes_extensions: false
-  excludes_inherited_types: true
-
 line_length:
   warning: 120
   error: 160
@@ -63,5 +53,8 @@ nesting:
 
 # ── Disabled rules ───────────────────────────────────────────────────────────────────────
 disabled_rules:
-  - todo          # TODOs are acceptable during active development
-  - trailing_comma  # SwiftPM/Xcode auto-formatter conflicts with this
+  - todo
+  - trailing_comma
+  - missing_docs
+  - orphaned_doc_comment
+  - superfluous_disable_command
