@@ -63,7 +63,7 @@ struct AddRunnerSheet: View {
             await MainActor.run {
                 isRegistering = false
                 resultIsError = false
-                resultMessage = "Opening GitHub runner setup\u2026"
+                resultMessage = "Opening GitHub runner setup..."
             }
             if let url = URL(string: urlString) {
                 await MainActor.run { NSWorkspace.shared.open(url) }
