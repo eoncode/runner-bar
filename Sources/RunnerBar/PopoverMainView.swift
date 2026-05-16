@@ -15,8 +15,9 @@ import SwiftUI
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: RunnerStoreObservable.reload() uses withAnimation(nil).
 // RULE 5: NO height caps on actionsSection.
-// RULE 6: systemStats MUST be stopped while the panel is open.
-// RULE 6b: systemStats must RESTART when the main view becomes visible again.
+// RULE 6: systemStats polls CONTINUOUSLY regardless of open state so sparkline
+//         history always accumulates. Only runner/action refreshes are gated.
+// RULE 6b: systemStats starts on onAppear and stops on onDisappear.
 // RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload(), gated behind !isOpen.
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
@@ -73,7 +74,7 @@ struct PopoverMainView: View {
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            if !popoverOpenState.isOpen { systemStats.start() }
+            systemStats.start()  // always start — keeps sparkline history alive
             startRunnerRefreshTimer()
             startDisplayTickTimer()
         }
@@ -82,9 +83,7 @@ struct PopoverMainView: View {
             stopRunnerRefreshTimer()
             stopDisplayTickTimer()
         }
-        .onChange(of: popoverOpenState.isOpen) { open in
-            if open { systemStats.stop() } else { systemStats.start() }
-        }
+        // Rule 6 revised: do NOT stop systemStats when open — graphs need the data.
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
