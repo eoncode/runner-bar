@@ -88,25 +88,32 @@ final class SystemStatsViewModel: ObservableObject {
 
     // No setup required — state is populated via start().
     init() {}
+
     deinit { timer?.invalidate() }
 
     // MARK: - Lifecycle
 
     func start() {
         timer?.invalidate()
-        DispatchQueue.global(qos: .utility).async { self.sample() }
+        DispatchQueue.global(qos: .utility).async {
+            self.sample()
+        }
         timer = Timer.scheduledTimer(
             withTimeInterval: statsPollingInterval,
             repeats: true
         ) { [weak self] _ in
-            DispatchQueue.global(qos: .utility).async { self?.sample() }
+            DispatchQueue.global(qos: .utility).async {
+                self?.sample()
+            }
         }
     }
 
     func stop() {
         timer?.invalidate()
         timer = nil
-        DispatchQueue.global(qos: .utility).async { self.sample() }
+        DispatchQueue.global(qos: .utility).async {
+            self.sample()
+        }
     }
 
     // MARK: - CPU
@@ -121,8 +128,7 @@ final class SystemStatsViewModel: ObservableObject {
             &msgType,
             &cpuInfo,
             &numCPUInfo
-        ) == KERN_SUCCESS,
-        let info = cpuInfo else { return 0 }
+        ) == KERN_SUCCESS, let info = cpuInfo else { return 0 }
         let numCPUs = Int(msgType)
         var userTicks = 0.0
         var sysTicks = 0.0
@@ -130,22 +136,22 @@ final class SystemStatsViewModel: ObservableObject {
         for coreIdx in 0 ..< numCPUs {
             let base = Int32(CPU_STATE_MAX) * Int32(coreIdx)
             let userLoad = Double(info[Int(base) + Int(CPU_STATE_USER)])
-            let sysLoad = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
+            let sysLoad  = Double(info[Int(base) + Int(CPU_STATE_SYSTEM)])
             let idleLoad = Double(info[Int(base) + Int(CPU_STATE_IDLE)])
             let niceLoad = Double(info[Int(base) + Int(CPU_STATE_NICE)])
-            userTicks += userLoad + niceLoad
-            sysTicks += sysLoad
+            userTicks  += userLoad + niceLoad
+            sysTicks   += sysLoad
             totalTicks += userLoad + sysLoad + idleLoad + niceLoad
         }
         vm_deallocate(
             mach_task_self_,
             vm_address_t(bitPattern: cpuInfo),
-            vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<Int32>.stride)
+            vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<integer_t>.stride)
         )
         let cur = CPUTicks(user: userTicks, system: sysTicks, total: totalTicks)
-        let dUser = cur.user - prevTicks.user
-        let dSys = cur.system - prevTicks.system
-        let dTotal = cur.total - prevTicks.total
+        let dUser  = cur.user   - prevTicks.user
+        let dSys   = cur.system - prevTicks.system
+        let dTotal = cur.total  - prevTicks.total
         prevTicks = cur
         guard dTotal > 0 else { return 0 }
         return min(100, ((dUser + dSys) / dTotal) * 100)
@@ -166,7 +172,7 @@ final class SystemStatsViewModel: ObservableObject {
         guard kernResult == KERN_SUCCESS else {
             return MemoryStats(used: 0, total: SystemStatsDefaults.fallbackMemGB)
         }
-        let pageSize = Double(vm_kernel_page_size)
+        let pageSize  = Double(vm_kernel_page_size)
         let gigabytes = 1_024.0 * 1_024.0 * 1_024.0
         let used = Double(vmStats.active_count + vmStats.wire_count) * pageSize / gigabytes
         var memSize: UInt64 = 0
@@ -188,8 +194,7 @@ final class SystemStatsViewModel: ObservableObject {
             .volumeAvailableCapacityKey
         ]),
         let totalBytes = values.volumeTotalCapacity,
-        let freeBytes = values.volumeAvailableCapacity
-        else {
+        let freeBytes  = values.volumeAvailableCapacity else {
             return DiskStats(
                 used: 0,
                 total: SystemStatsDefaults.fallbackDiskGB,
@@ -197,9 +202,9 @@ final class SystemStatsViewModel: ObservableObject {
                 freePct: SystemStatsDefaults.fullPct
             )
         }
-        let total = Double(totalBytes) / gigabytes
-        let free = Double(freeBytes) / gigabytes
-        let used = total - free
+        let total   = Double(totalBytes) / gigabytes
+        let free    = Double(freeBytes)  / gigabytes
+        let used    = total - free
         let freePct = total > 0 ? (free / total) * 100 : SystemStatsDefaults.fullPct
         return DiskStats(used: used, total: total, free: free, freePct: freePct)
     }
@@ -207,18 +212,20 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - Sample
 
     private func sample() {
-        let cpu = cpuPercent()
-        let mem = memStats()
+        let cpu  = cpuPercent()
+        let mem  = memStats()
         let disk = diskStats()
         let snapshot = SystemStats(
-            cpuPct: cpu,
-            memUsedGB: mem.used,
+            cpuPct:     cpu,
+            memUsedGB:  mem.used,
             memTotalGB: mem.total,
-            diskUsedGB: disk.used,
+            diskUsedGB:  disk.used,
             diskTotalGB: disk.total,
-            diskFreeGB: disk.free,
+            diskFreeGB:  disk.free,
             diskFreePct: disk.freePct
         )
-        DispatchQueue.main.async { self.stats = snapshot }
+        DispatchQueue.main.async {
+            self.stats = snapshot
+        }
     }
 }

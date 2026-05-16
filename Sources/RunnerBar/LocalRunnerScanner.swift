@@ -18,6 +18,7 @@ import Foundation
 ///    Flags which runners currently have an active launchd service, indicating
 ///    they are registered and running.
 struct LocalRunnerScanner {
+
     // MARK: - .runner JSON schema
 
     /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
@@ -35,11 +36,9 @@ struct LocalRunnerScanner {
     // swiftlint:disable:next cyclomatic_complexity
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
-
         for model in scanRunnerJSONFiles() {
             models[model.id] = model
         }
-
         for model in scanLaunchAgents() {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
             let alreadyCoveredByJSON = models.values.contains { existing in
@@ -51,14 +50,12 @@ struct LocalRunnerScanner {
                 models[compositeKey] = model
             }
         }
-
         let liveLabels = scanLiveServices()
         for key in models.keys {
             if let model = models[key] {
                 models[key]?.isRunning = liveLabels.contains { $0.contains(model.runnerName) }
             }
         }
-
         return models.values.sorted { $0.runnerName < $1.runnerName }
     }
 
@@ -68,9 +65,7 @@ struct LocalRunnerScanner {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
         guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil)
-        else { return [] }
-
+            at: dir, includingPropertiesForKeys: nil) else { return [] }
         let prefix = "actions.runner."
         return entries.compactMap { url -> RunnerModel? in
             let filename = url.deletingPathExtension().lastPathComponent
@@ -83,7 +78,6 @@ struct LocalRunnerScanner {
             let runnerName = parts.count > 2 ? parts[2...].joined(separator: ".") : "runner"
             // NOSONAR — user-facing GitHub repo URL, not a configurable service endpoint.
             let gitHubUrl = "https://github.com/\(owner)/\(repo)"
-            // swiftlint:disable:next function_parameter_count
             return RunnerModel.make(
                 runnerName: runnerName,
                 gitHubUrl: gitHubUrl,
@@ -111,13 +105,11 @@ struct LocalRunnerScanner {
             "/usr/local/runner",
         ]
         let searchPaths = rawPaths.map { "'\($0)'" }.joined(separator: " ")
-
         let raw = shell(
             "find \(searchPaths) -maxdepth 6 -name '.runner' 2>/dev/null",
             timeout: 15
         )
         guard !raw.isEmpty else { return [] }
-
         return raw.components(separatedBy: "\n")
             .filter { !$0.isEmpty }
             .compactMap { path -> RunnerModel? in
@@ -137,7 +129,6 @@ struct LocalRunnerScanner {
                     return nil
                 }
                 let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
-                // swiftlint:disable:next function_parameter_count
                 return RunnerModel.make(
                     runnerName: name,
                     gitHubUrl: json.gitHubUrl,
@@ -157,7 +148,6 @@ struct LocalRunnerScanner {
             timeout: 5
         )
         guard !output.isEmpty else { return [] }
-
         var labels = Set<String>()
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let columns = line.components(separatedBy: "\t")
