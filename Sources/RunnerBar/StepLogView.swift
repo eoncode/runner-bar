@@ -54,7 +54,12 @@ struct StepLogView: View {
                 Text(step.name).font(.caption).foregroundColor(.secondary).lineLimit(1)
             }
             Spacer()
-            LogCopyButton(lines: fetcher.lines)
+            LogCopyButton(
+                fetch: { completion in
+                    completion(fetcher.lines.joined(separator: "\n"))
+                },
+                isDisabled: fetcher.isLoading || fetcher.lines.isEmpty
+            )
             searchBar
         }
         .padding(.horizontal, 12).padding(.vertical, 8)

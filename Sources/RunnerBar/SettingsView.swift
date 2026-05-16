@@ -1,4 +1,3 @@
-// swiftlint:disable missing_docs
 // swiftlint:disable all
 import SwiftUI
 
@@ -18,9 +17,7 @@ struct SettingsView: View {
             content
         }
         .frame(minWidth: 520, minHeight: 400)
-        .sheet(isPresented: $showLegal) {
-            LegalPrefsView(legalPrefsStore: legalPrefs)
-        }
+        .sheet(isPresented: $showLegal) { LegalPrefsView(legalPrefsStore: legalPrefs) }
     }
 
     private var sidebar: some View {
@@ -39,14 +36,13 @@ struct SettingsView: View {
         .frame(width: 160).padding(.top, 12)
     }
 
-    @ViewBuilder
-    private var content: some View {
+    @ViewBuilder private var content: some View {
         switch selectedTab {
-        case .general:       GeneralSettingsView()
-        case .account:       AccountSettingsView()
+        case .general: GeneralSettingsView()
+        case .account: AccountSettingsView()
         case .notifications: NotificationSettingsView()
-        case .runners:       RunnerSettingsView()
-        case .advanced:      AdvancedSettingsView()
+        case .runners: RunnerSettingsView()
+        case .advanced: AdvancedSettingsView()
         }
     }
 }
@@ -96,8 +92,12 @@ private struct GeneralSettingsView: View {
                 } minimumValueLabel: { Text("10s") } maximumValueLabel: { Text("2m") }
                 Text("Every \(Int(settingsStore.pollingInterval))s").font(.caption).foregroundColor(.secondary)
             }
-            Section("Runners") { Toggle("Show offline runners", isOn: $settingsStore.showOfflineRunners) }
-            Section("Startup") { Toggle("Launch at login", isOn: $settingsStore.launchAtLogin) }
+            Section("Runners") {
+                Toggle("Show offline runners", isOn: $settingsStore.showOfflineRunners)
+            }
+            Section("Startup") {
+                Toggle("Launch at login", isOn: $settingsStore.launchAtLogin)
+            }
         }.formStyle(.grouped).padding()
     }
 }
@@ -115,7 +115,12 @@ private struct AccountSettingsView: View {
                     SecureField("ghp_\u{2026}", text: $settingsStore.githubToken).textFieldStyle(.roundedBorder)
                 }
             }
-            Section { HStack { Spacer(); Button("Save & Reconnect") { store.applySettings(settingsStore) }.buttonStyle(.borderedProminent) } }
+            Section {
+                HStack {
+                    Spacer()
+                    Button("Save & Reconnect") { store.applySettings(settingsStore) }.buttonStyle(.borderedProminent)
+                }
+            }
         }.formStyle(.grouped).padding()
     }
 }
@@ -136,11 +141,13 @@ private struct RunnerSettingsView: View {
     var body: some View {
         Form {
             Section("Local Runners") {
-                if localRunnerStore.runners.isEmpty {
-                    Text(localRunnerStore.isScanning ? "Scanning…" : "No local runners found.")
-                        .foregroundColor(.secondary)
+                if localRunnerStore.isScanning {
+                    Text("Scanning…").foregroundColor(.secondary)
+                } else if localRunnerStore.runners.isEmpty {
+                    Text("No local runners found.").foregroundColor(.secondary)
                 } else {
-                    ForEach(localRunnerStore.runners) { runner in
+                    let runners = localRunnerStore.runners
+                    ForEach(runners) { runner in
                         HStack {
                             Text(runner.name)
                             Spacer()
@@ -158,7 +165,9 @@ private struct RunnerSettingsView: View {
 private struct AdvancedSettingsView: View {
     var body: some View {
         Form {
-            Section("Debug") { Text("Advanced options coming soon.").foregroundColor(.secondary) }
+            Section("Debug") {
+                Text("Advanced options coming soon.").foregroundColor(.secondary)
+            }
         }.formStyle(.grouped).padding()
     }
 }

@@ -1,16 +1,11 @@
 import Foundation
 
 // MARK: - Raw binary/text fetch via gh CLI
-
 /// Calls `gh api` with `Accept: application/vnd.github.v3.raw` so log endpoints
 /// return the raw redirected body (plain text for jobs, ZIP bytes for runs)
-/// instead of the default JSON wrapper. Mirrors the pattern used by
-/// `fetchStepLog` in GitHub.swift but returns raw `Data` for binary support.
+/// instead of the default JSON wrapper.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard let ghPath = ghBinaryPath() else {
-        log("ghRaw › gh not found")
-        return nil
-    }
+    guard let ghPath = ghBinaryPath() else { log("ghRaw › gh not found"); return nil }
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -22,38 +17,26 @@ private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
         guard !chunk.isEmpty else { return }
-        lock.lock()
-        outputData.append(chunk)
-        lock.unlock()
+        lock.lock(); outputData.append(chunk); lock.unlock()
     }
-    do {
-        try task.run()
-    } catch {
+    do { try task.run() } catch {
         log("ghRaw › launch error: \(error)")
         pipe.fileHandleForReading.readabilityHandler = nil
         return nil
     }
-    let timeoutItem = DispatchWorkItem {
-        if task.isRunning { task.terminate() }
-    }
+    let timeoutItem = DispatchWorkItem { if task.isRunning { task.terminate() } }
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
     task.waitUntilExit()
     timeoutItem.cancel()
     pipe.fileHandleForReading.readabilityHandler = nil
     let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty {
-        lock.lock()
-        outputData.append(tail)
-        lock.unlock()
-    }
+    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
     log("ghRaw › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
     return outputData.isEmpty ? nil : outputData
 }
 
 // MARK: - Job log (plain text, 1 call)
-
 /// Fetches the full plain-text log for a single job.
-/// `/actions/jobs/{id}/logs` 302-redirects to a short-lived S3 URL; gh follows it.
 func fetchJobLog(jobID: Int, scope: String) -> String? {
     guard scope.contains("/") else { return nil }
     guard let data = ghRaw("repos/\(scope)/actions/jobs/\(jobID)/logs"),
@@ -63,12 +46,9 @@ func fetchJobLog(jobID: Int, scope: String) -> String? {
 }
 
 // MARK: - Action logs (ZIP per run, N calls)
-
 /// Fetches and concatenates all job logs for every run in a group.
-/// Each run: 1 API call → ZIP → extract → read .txt files.
 func fetchActionLogs(group: ActionGroup) -> String? {
-    let scope = group.repo
-    guard scope.contains("/") else { return nil }
+    guard let scope = group.repo, scope.contains("/") else { return nil }
     let runIDs = group.runs.map { $0.id }
     guard !runIDs.isEmpty else { return nil }
     var parts: [(name: String, text: String)] = []
@@ -80,9 +60,7 @@ func fetchActionLogs(group: ActionGroup) -> String? {
             defer { dispatchGroup.leave() }
             guard let data = ghRaw("repos/\(scope)/actions/runs/\(runID)/logs") else { return }
             let extracted = unzipLogs(data)
-            lock.lock()
-            parts.append(contentsOf: extracted)
-            lock.unlock()
+            lock.lock(); parts.append(contentsOf: extracted); lock.unlock()
         }
     }
     dispatchGroup.wait()
@@ -93,9 +71,7 @@ func fetchActionLogs(group: ActionGroup) -> String? {
         .joined(separator: "\n\n")
 }
 
-// MARK: - ZIP extraction (uses /usr/bin/unzip — always available on macOS)
-
-/// Extracts all `.txt` files from a ZIP blob and returns `(name, text)` pairs.
+// MARK: - ZIP extraction
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     let fileManager = FileManager.default
     let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -104,20 +80,15 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     do {
         try fileManager.createDirectory(at: tmp, withIntermediateDirectories: true)
         try zipData.write(to: zipFile)
-    } catch {
-        return []
-    }
+    } catch { return [] }
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
     proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
     proc.standardOutput = FileHandle.nullDevice
     proc.standardError = FileHandle.nullDevice
-    try? proc.run()
-    proc.waitUntilExit()
+    try? proc.run(); proc.waitUntilExit()
     guard proc.terminationStatus == 0 else { return [] }
-    guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else {
-        return []
-    }
+    guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else { return [] }
     var results: [(name: String, text: String)] = []
     for case let url as URL in enumerator where url.pathExtension == "txt" {
         let relative = url.path.replacingOccurrences(of: tmp.path + "/", with: "")
@@ -127,4 +98,33 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         }
     }
     return results
+}
+
+// MARK: - LogFetcher
+/// ObservableObject wrapper around fetchJobLog for use in StepLogView.
+final class LogFetcher: ObservableObject {
+    @Published var lines: [String] = []
+    @Published var isLoading = false
+    @Published var error: String?
+
+    func fetch(jobID: Int, stepNumber: Int, token: String, org: String) {
+        isLoading = true
+        error = nil
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            // Derive scope from org (org/repo or org)
+            let scope = org.contains("/") ? org : nil
+            var text: String?
+            if let scope {
+                text = fetchJobLog(jobID: jobID, scope: scope)
+            }
+            // Filter to only lines from the requested step (step blocks start with ##[group] or timestamp prefix)
+            let allLines = text?.components(separatedBy: "\n") ?? []
+            DispatchQueue.main.async {
+                self.lines = allLines
+                self.isLoading = false
+                if allLines.isEmpty { self.error = "No log data returned." }
+            }
+        }
+    }
 }
