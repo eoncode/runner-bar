@@ -15,7 +15,6 @@ import Foundation
 ///    Flags which runners currently have an active launchd service, indicating
 ///    they are registered and running.
 struct LocalRunnerScanner {
-
     // MARK: - .runner JSON schema
 
     /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
@@ -23,12 +22,12 @@ struct LocalRunnerScanner {
         let runnerName: String?
         let gitHubUrl: String?
         let agentId: Int?
-        let os: String?
+        let osName: String?
         enum CodingKeys: String, CodingKey {
-            case runnerName = "runnerName"
-            case gitHubUrl  = "gitHubUrl"
-            case agentId    = "agentId"
-            case os
+            case runnerName
+            case gitHubUrl
+            case agentId
+            case osName = "os"
         }
     }
 
@@ -132,7 +131,7 @@ struct LocalRunnerScanner {
                     runnerName: name,
                     gitHubUrl: json.gitHubUrl,
                     agentId: json.agentId,
-                    os: json.os,
+                    os: json.osName,
                     isRunning: false
                 )
             }
