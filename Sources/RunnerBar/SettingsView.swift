@@ -54,8 +54,9 @@ struct SettingsView: View {
     @ObservedObject private var legal = LegalPrefsStore.shared
     /// Drives the Local Runners section (Phase 1 — no token required).
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
-    /// fix: observe ScopeStore so the Scopes list re-renders when scopes are added/removed.
-    @ObservedObject private var scopeStore = ScopeStore.shared
+    /// @StateObject so this view owns the observation lifetime.
+    /// ScopeStore is ObservableObject — scopes list re-renders on every add/remove.
+    @StateObject private var scopeStore = ScopeStore.shared
     @State private var newScope = ""
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var isAuthenticated = (githubToken() != nil)
@@ -347,7 +348,6 @@ struct SettingsView: View {
                 .font(RBFont.sectionHeader)
                 .foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
-            // Use @ObservedObject scopeStore so this list re-renders on every add/remove.
             ForEach(scopeStore.scopes, id: \.self) { scopeStr in
                 HStack {
                     Text(scopeStr).font(.system(size: 12))
