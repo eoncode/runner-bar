@@ -96,6 +96,9 @@ import SwiftUI
 // is major major major.
 
 /// Represents the currently visible navigation screen.
+///
+/// Persisted in `AppDelegate.savedNavState` so the panel can restore the user's
+/// position when it is re-opened after being dismissed.
 private enum NavState {
     case main
     case jobDetail(ActiveJob)
@@ -505,5 +508,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// swiftlint:enable type_body_length
-// swiftlint:enable file_length
+// swiftlint:enable type_body_length file_length

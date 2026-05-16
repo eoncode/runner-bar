@@ -44,17 +44,16 @@ struct LogCopyButton: View {
     private func startCopy() {
         guard phase == .idle else { return }
         phase = .loading
-        fetch { copyText in
+        fetch { text in
             DispatchQueue.main.async {
-                if let text = copyText, !text.isEmpty {
+                if let text, !text.isEmpty {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                     phase = .done
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
                 } else {
                     phase = .failed
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
                 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }
     }

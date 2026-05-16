@@ -3,18 +3,15 @@ import Foundation
 /// Discovers locally-installed GitHub Actions self-hosted runners without
 /// requiring a GitHub API token. Uses three complementary scan sources:
 ///
-/// 1. **LaunchAgents** — `~/Library/LaunchAgents/actions.runner.*.plist`
-///    Parses `owner`, `repo`, and `runnerName` from the plist filename.
+/// 1. **LaunchAgents** (`~/Library/LaunchAgents/actions.runner.*`)
+///    Reads the plist filename to derive owner, repo, and runner name.
+///    Avoids broad filesystem scans that would trigger macOS TCC prompts.
 ///
-/// 2. **`.runner` JSON files** — searches known runner install paths only
-///    (NOT `~` wholesale, which triggers macOS TCC permission dialogs for
-///    Desktop/Documents/Downloads). Searches:
-///    `~/actions-runner`, `~/runner`, `~/github-runner`, `/opt/actions-runner`,
-///    `/opt/runner`, `/usr/local/actions-runner`, `/usr/local/runner`
-///    up to depth 6. This avoids the TCC prompt while still covering all
-///    common self-hosted runner install locations.
+/// 2. **Runner JSON files** (`.runner` in known install dirs)
+///    Parses the JSON config written by the runner install script for richer
+///    metadata (agentId, gitHubUrl, OS).
 ///
-/// 3. **Live service check** — `launchctl list | grep actions.runner`
+/// 3. **Live launchd services** (`launchctl list`)
 ///    Flags which runners currently have an active launchd service, indicating
 ///    they are registered and running.
 struct LocalRunnerScanner {
@@ -23,13 +20,17 @@ struct LocalRunnerScanner {
 
     /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
     private struct RunnerJSON: Decodable {
-        let gitHubUrl: String?
         let runnerName: String?
+        let gitHubUrl: String?
         let agentId: Int?
-        let workFolder: String?
+        let os: String?
+        enum CodingKeys: String, CodingKey {
+            case runnerName = "runnerName"
+            case gitHubUrl  = "gitHubUrl"
+            case agentId    = "agentId"
+            case os
+        }
     }
-
-    // MARK: - Public API
 
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
     /// This is a synchronous, blocking call — always invoke from a background thread.
@@ -42,11 +43,10 @@ struct LocalRunnerScanner {
         for model in scanLaunchAgents() {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
             let alreadyCoveredByJSON = models.values.contains { existing in
-                let existingComposite = "\(existing.runnerName)-\(existing.gitHubUrl ?? "")"
-                return existingComposite == compositeKey
+                existing.runnerName == model.runnerName
+                    && existing.gitHubUrl == model.gitHubUrl
             }
-            guard !alreadyCoveredByJSON else { continue }
-            if models[compositeKey] == nil {
+            if !alreadyCoveredByJSON {
                 models[compositeKey] = model
             }
         }
@@ -70,8 +70,7 @@ struct LocalRunnerScanner {
         return entries.compactMap { url -> RunnerModel? in
             let filename = url.deletingPathExtension().lastPathComponent
             guard filename.hasPrefix(prefix) else { return nil }
-            let remainder = String(filename.dropFirst(prefix.count))
-            let parts = remainder.components(separatedBy: ".")
+            let parts = filename.dropFirst(prefix.count).components(separatedBy: ".")
             guard parts.count >= 2 else { return nil }
             let owner = parts[0]
             let repo = parts[1]
@@ -82,16 +81,16 @@ struct LocalRunnerScanner {
                 runnerName: runnerName,
                 gitHubUrl: gitHubUrl,
                 agentId: nil,
-                workFolder: nil,
-                installPath: nil,
+                os: nil,
                 isRunning: false
             )
         }
     }
 
-    // MARK: - Source 2: .runner JSON files
+    // MARK: - Source 2: Runner JSON files
 
-    /// Searches known runner install locations only — avoids scanning `~` wholesale
+    /// Scans well-known runner install directories for `.runner` JSON config files.
+    /// Explicit paths only — avoids broad scans
     /// which would trigger macOS TCC prompts for Desktop/Documents/Downloads (macOS 14+).
     private func scanRunnerJSONFiles() -> [RunnerModel] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -133,16 +132,15 @@ struct LocalRunnerScanner {
                     runnerName: name,
                     gitHubUrl: json.gitHubUrl,
                     agentId: json.agentId,
-                    workFolder: json.workFolder,
-                    installPath: url.deletingLastPathComponent().path,
+                    os: json.os,
                     isRunning: false
                 )
             }
     }
 
-    // MARK: - Source 3: Live service check
+    // MARK: - Source 3: Live launchd services
 
-    private func scanLiveServices() -> Set<String> {
+    private func scanLiveServices() -> [String] {
         let output = shell(
             "launchctl list 2>/dev/null | grep actions.runner",
             timeout: 5
@@ -151,13 +149,8 @@ struct LocalRunnerScanner {
         var labels = Set<String>()
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let columns = line.components(separatedBy: "\t")
-            guard columns.count >= 3 else { continue }
-            let pid = columns[0].trimmingCharacters(in: .whitespaces)
-            let label = columns[2].trimmingCharacters(in: .whitespaces)
-            if pid != "-", !label.isEmpty {
-                labels.insert(label)
-            }
+            if columns.count >= 3 { labels.insert(columns[2]) }
         }
-        return labels
+        return Array(labels)
     }
 }

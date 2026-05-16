@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - CancelButton
-
 /// Top-bar cancel button used in JobDetailView and StepLogView.
 /// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
 struct CancelButton: View {
@@ -9,7 +7,12 @@ struct CancelButton: View {
     var isDisabled: Bool = false
     @State private var phase: Phase = .idle
 
-    enum Phase { case idle, loading, done, failed }
+    enum Phase {
+        case idle
+        case loading
+        case done
+        case failed
+    }
 
     var body: some View {
         Group {
