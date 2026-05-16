@@ -1,167 +1,148 @@
 import SwiftUI
 
-// MARK: - Design Tokens
+// MARK: - SystemStatsChip
 
-extension Color {
-    /// Accent blue used for in-progress status indicators and sparklines.
-    static let tokenBlue   = Color(red: 0.20, green: 0.60, blue: 1.00)
-    /// Accent green used for success indicators.
-    static let tokenGreen  = Color(red: 0.20, green: 0.78, blue: 0.35)
-    /// Accent red used for failure indicators.
-    static let tokenRed    = Color(red: 1.00, green: 0.27, blue: 0.23)
-    /// Neutral gray used for dimmed/offline runners.
-    static let tokenGray   = Color(red: 0.55, green: 0.55, blue: 0.57)
-    /// Accent orange used for queued/warning states.
-    static let tokenOrange = Color(red: 1.00, green: 0.58, blue: 0.00)
-}
-
-// MARK: - SectionHeaderLabel
-
-/// Bold section-header label used to divide the popover into logical groups.
-struct SectionHeaderLabel: View {
-    /// The text displayed as the section header.
-    let title: String
-    var body: some View {
-        Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundColor(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.top, 8).padding(.bottom, 2)
-    }
-}
-
-// MARK: - StatusBadge
-
-/// Pill-shaped coloured badge showing a short status label.
-struct StatusBadge: View {
-    /// The short uppercase text displayed inside the badge.
+/// A single metric chip with label, value, and a sparkline history bar.
+struct SystemStatChip: View {
     let label: String
-    /// Background tint colour for the badge.
-    let color: Color
-    var body: some View {
-        Text(label)
-            .font(.system(size: 8, weight: .bold, design: .monospaced))
-            .foregroundColor(color)
-            .padding(.horizontal, 5).padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(color.opacity(0.15))
-            )
-            .fixedSize()
-    }
-}
+    let value: String
+    let pct: Double
+    let history: [Double]
 
-// MARK: - JobProgressBarView
-
-/// Thin horizontal progress bar reflecting a workflow run’s completion fraction.
-struct JobProgressBarView: View {
-    /// Completion fraction in the range 0.0–1.0.
-    let progress: Double
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Rectangle().fill(Color.secondary.opacity(0.15))
-                Rectangle()
-                    .fill(Color.tokenBlue)
-                    .frame(width: geo.size.width * CGFloat(min(max(progress, 0), 1)))
-            }
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .foregroundColor(.secondary)
+            SparklineView(values: history, highlight: pct)
+                .frame(width: 28, height: 12)
+            Text(value)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.primary)
+                .frame(minWidth: 30, alignment: .trailing)
         }
-        .frame(height: 2)
-        .cornerRadius(1)
     }
 }
 
 // MARK: - SparklineView
 
-/// Renders a filled sparkline chart from an array of 0.0–1.0 values.
+/// A tiny multi-bar sparkline for CPU/MEM/DISK history.
 struct SparklineView: View {
-    /// Normalised data points (0.0–1.0) ordered oldest-to-newest.
     let values: [Double]
-    /// Stroke and fill tint colour.
-    let color: Color
+    let highlight: Double
+
+    private var color: Color {
+        switch highlight {
+        case 0..<60: return .tokenGreen
+        case 60..<80: return .tokenOrange
+        default:     return .tokenRed
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
-            let size = geo.size
-            let linePath = buildLinePath(size: size)
-            let fillPath = buildFillPath(linePath: linePath, size: size)
-            ZStack {
-                fillPath.fill(color.opacity(0.15))
-                linePath.stroke(color, lineWidth: 1)
+            HStack(alignment: .bottom, spacing: 1) {
+                ForEach(Array(values.suffix(10).enumerated()), id: \.offset) { _, v in
+                    let h = max(1, geo.size.height * CGFloat(min(v, 100)) / 100)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(color.opacity(0.7))
+                        .frame(width: max(1, (geo.size.width - 9) / 10), height: h)
+                }
             }
+            .frame(maxHeight: .infinity, alignment: .bottom)
         }
-    }
-
-    private func buildLinePath(size: CGSize) -> Path {
-        Path { path in
-            guard values.count > 1 else { return }
-            let step = size.width / CGFloat(values.count - 1)
-            for (idx, val) in values.enumerated() {
-                let x = CGFloat(idx) * step
-                let y = size.height * (1 - CGFloat(val))
-                let point = CGPoint(x: x, y: y)
-                if idx == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
-        }
-    }
-
-    private func buildFillPath(linePath: Path, size: CGSize) -> Path {
-        var fill = linePath
-        fill.addLine(to: CGPoint(x: size.width, y: size.height))
-        fill.addLine(to: CGPoint(x: 0, y: size.height))
-        fill.closeSubpath()
-        return fill
     }
 }
 
-// MARK: - StatusDonut
+// MARK: - ActionStatusDonut
 
-/// Circular donut progress indicator for workflow run status.
-struct StatusDonut: View {
-    /// The visual state the donut should reflect.
-    enum State {
-        /// An in-progress run with a known completion fraction.
-        case inProgress(Double)
-        /// A successfully completed run.
-        case success
-        /// A failed or cancelled run.
-        case failed
+/// A small circular progress indicator or status dot for an `ActionGroup`.
+struct ActionStatusDonut: View {
+    let conclusion: String?
+    let status: String?
+    let size: CGFloat
+
+    private var color: Color {
+        switch conclusion {
+        case "success":   return .tokenGreen
+        case "failure":   return .tokenRed
+        case "cancelled",
+             "skipped":  return .tokenGray
+        default:
+            switch status {
+            case "in_progress": return .tokenBlue
+            case "queued":      return .tokenOrange
+            default:            return .tokenGray
+            }
+        }
     }
-    /// The current display state.
-    let state: State
+
+    private var isSpinning: Bool { status == "in_progress" && conclusion == nil }
 
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(trackColor, lineWidth: 2.5)
-                .frame(width: 14, height: 14)
-            Circle()
-                .trim(from: 0, to: trimAmount)
-                .stroke(fillColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .frame(width: 14, height: 14)
-                .rotationEffect(.degrees(-90))
-        }
+        Circle()
+            .fill(color)
+            .frame(width: size * 0.45, height: size * 0.45)
+    }
+}
+
+// MARK: - JobProgressBarView
+
+/// A thin horizontal progress bar for a job whose progress fraction is known.
+struct JobProgressBarView: View {
+    let progress: Double?
+
+    private var displayProgress: Double? {
+        guard let p = progress, p > 0 else { return nil }
+        return min(p, 1.0)
     }
 
-    private var trimAmount: CGFloat {
-        switch state {
-        case .inProgress(let f): return CGFloat(max(0.05, min(f, 1.0)))
-        case .success, .failed:  return 1.0
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.15))
+                if let fraction = displayProgress {
+                    Rectangle()
+                        .fill(Color.tokenBlue)
+                        .frame(width: geo.size.width * CGFloat(fraction))
+                }
+            }
+            .clipShape(Capsule())
         }
     }
+}
 
-    private var fillColor: Color {
-        switch state {
-        case .inProgress: return .tokenBlue
-        case .success:    return .tokenGreen
-        case .failed:     return .tokenRed
+// MARK: - LogCopyButton
+
+/// A button that fetches log text asynchronously and copies it to the clipboard.
+struct LogCopyButton: View {
+    var fetch: (@escaping (String?) -> Void) -> Void
+    var isDisabled: Bool = false
+
+    @State private var copied = false
+
+    var body: some View {
+        Button(action: doCopy) {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 11))
+                .foregroundColor(copied ? .tokenGreen : .secondary)
         }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help("Copy log to clipboard")
     }
 
-    private var trackColor: Color {
-        switch state {
-        case .inProgress: return .tokenBlue.opacity(0.2)
-        case .success:    return .tokenGreen.opacity(0.2)
-        case .failed:     return .tokenRed.opacity(0.2)
+    private func doCopy() {
+        fetch { text in
+            DispatchQueue.main.async {
+                if let text {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+            }
         }
     }
 }
@@ -198,13 +179,6 @@ struct PopoverHeaderView: View {
                                 .font(.system(size: 13)).foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
-                        .help("Settings")
-                        Button(action: { NSApplication.shared.terminate(nil) }, label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-                        })
-                        .buttonStyle(.plain)
-                        .help("Quit RunnerBar")
                     }
                 }
             }
@@ -213,38 +187,7 @@ struct PopoverHeaderView: View {
     }
 
     private func statChip(label: String, value: String, pct: Double, history: [Double]) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(.secondary)
-                .frame(width: 28, alignment: .leading)
-            SparklineView(values: history, color: usageColor(pct: pct))
-                .frame(width: 48, height: 14)
-            Text(value)
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundColor(usageColor(pct: pct))
-                .frame(width: 36, alignment: .trailing)
-        }
-    }
-
-    private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .tokenRed }
-        if pct > 60 { return .tokenOrange }
-        return .tokenGreen
-    }
-}
-
-// MARK: - RunnerTypeIcon
-
-/// Small icon indicating whether a runner is local or GitHub-hosted.
-struct RunnerTypeIcon: View {
-    /// When `true` the runner is locally registered; when `false` it is GitHub-hosted.
-    let isLocal: Bool
-    var body: some View {
-        Image(systemName: isLocal ? "desktopcomputer" : "cloud")
-            .font(.system(size: 9))
-            .foregroundColor(.secondary)
-            .help(isLocal ? "Local runner" : "GitHub-hosted runner")
+        SystemStatChip(label: label, value: value, pct: pct, history: history)
     }
 }
 
@@ -257,26 +200,26 @@ struct PopoverLocalRunnerRow: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(runner.isBusy ? Color.tokenGreen : Color.tokenGray)
+                .fill(runner.busy ? Color.tokenGreen : Color.tokenGray)
                 .frame(width: 7, height: 7)
             Text(runner.name)
                 .font(.system(size: 12))
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
             Spacer()
-            runnerList(runner.metrics.sorted { $0.cpu > $1.cpu }.prefix(3).map { $0 })
+            runnerList(runner.metrics.map { [$0] } ?? [])
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
 
-    private func runnerList(_ busy: [Runner]) -> some View {
+    private func runnerList(_ busy: [RunnerMetrics]) -> some View {
         HStack(spacing: 4) {
-            if runner.metrics.isEmpty {
-                Text(runner.isBusy ? "busy" : "idle")
+            if runner.metrics == nil {
+                Text(runner.busy ? "busy" : "idle")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(.secondary)
             } else {
-                ForEach(runner.metrics.prefix(2), id: \.cpu) { m in
+                ForEach(runner.metrics.map { [$0] } ?? [], id: \.cpu) { m in
                     metricPill(label: "CPU", value: String(format: "%.0f%%", m.cpu))
                     metricPill(label: "MEM", value: String(format: "%.0f%%", m.mem))
                 }
