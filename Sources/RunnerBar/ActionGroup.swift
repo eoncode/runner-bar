@@ -150,10 +150,24 @@ func fetchActionGroups(
     for scope: String,
     cache: [String: ActionGroup] = [:]
 ) -> [ActionGroup] {
-    guard let data = ghAPI("repos/\(scope)/actions/runs?per_page=20"),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let runsArray = json["workflow_runs"] as? [[String: Any]]
-    else { return [] }
+    // Fetch only active runs (in_progress + queued) so we never miss live
+    // workflow runs that sit beyond position 20 in the unfiltered list.
+    var runsArray: [[String: Any]] = []
+    var seenIDs = Set<Int>()
+    for status in ["in_progress", "queued"] {
+        let endpoint = scope.contains("/")
+            ? "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
+            : "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
+        guard let data = ghAPI(endpoint),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let page = json["workflow_runs"] as? [[String: Any]]
+        else { continue }
+        for r in page {
+            guard let id = r["id"] as? Int, seenIDs.insert(id).inserted else { continue }
+            runsArray.append(r)
+        }
+    }
+    guard !runsArray.isEmpty else { return [] }
     let iso = ISO8601DateFormatter()
     var grouped: [String: [WorkflowRun]] = [:]
     var order:   [String] = []
@@ -187,7 +201,7 @@ func fetchActionGroups(
         if grouped[sha] == nil { order.append(sha) }
         grouped[sha, default: []].append(run)
     }
-    return order.compactMap { sha -> ActionGroup? in
+    let groups = order.compactMap { sha -> ActionGroup? in
         guard let runs = grouped[sha], let first = runs.first else { return nil }
         return ActionGroup(
             id: sha,
@@ -197,6 +211,8 @@ func fetchActionGroups(
             htmlUrl: first.htmlUrl
         )
     }
+    log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
+    return groups
 }
 
 func fetchJobsForRun(
