@@ -25,13 +25,19 @@ struct PopoverMainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
-                onSelectSettings: onSelectSettings
+                stats: systemStats.stats,
+                isAuthenticated: isAuthenticated,
+                onSelectSettings: onSelectSettings,
+                onSignIn: {},
+                cpuHistory: systemStats.cpuHistory,
+                memHistory: systemStats.memHistory,
+                diskHistory: systemStats.diskHistory
             )
             .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             ForEach(store.runners) { runner in
-                PopoverLocalRunnerRow(runner: runner)
+                PopoverLocalRunnerRow(runners: [runner])
             }
             .onAppear {
                 Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
@@ -41,7 +47,7 @@ struct PopoverMainView: View {
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            systemStats.start()  // no-op if already running — singleton
+            systemStats.start()
             startRunnerRefreshTimer()
             startDisplayTickTimer()
         }
@@ -58,7 +64,7 @@ struct PopoverMainView: View {
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(DesignTokens.Color.statusOrange)
+                .foregroundColor(.orange)
                 .font(.system(size: 10))
             Text("GitHub API rate limited — retrying\u{2026}")
                 .font(.system(size: 10))
@@ -79,7 +85,7 @@ struct PopoverMainView: View {
                     ActionRowView(
                         group: group,
                         tick: tick,
-                        onSelect: onSelectAction,
+                        onSelect: { onSelectAction?(group) },
                         onSelectJob: onSelectInlineJob
                     )
                     Divider().padding(.leading, 12)

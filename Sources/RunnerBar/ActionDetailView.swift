@@ -82,7 +82,7 @@ struct ActionDetailView: View {
         }) {
             HStack(spacing: 8) {
                 jobStatusIcon(job)
-                Text(job.name ?? "Job \(job.id)")
+                Text(job.name)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1).truncationMode(.tail)
                     .layoutPriority(1)
@@ -106,7 +106,7 @@ struct ActionDetailView: View {
         let isActive: Bool = job.status == "in_progress" && fraction > 0
         return Group {
             if isActive {
-                JobProgressBarView(progress: fraction)
+                JobProgressBarView(fraction: fraction)
                     .frame(height: 2)
                     .padding(.horizontal, 12)
             }
@@ -196,13 +196,13 @@ struct ActionDetailView: View {
     }
 
     private func statusLabelAndColor(status: GroupStatus, conclusion: String?) -> (String, Color) {
-        if let c = conclusion {
-            switch c {
+        if let conc = conclusion {
+            switch conc {
             case "success":   return ("success",   DesignTokens.Color.statusGreen)
             case "failure":   return ("failed",    DesignTokens.Color.statusRed)
             case "cancelled": return ("cancelled", DesignTokens.Color.labelTertiary)
             case "skipped":   return ("skipped",   DesignTokens.Color.labelTertiary)
-            default:          return (c,            DesignTokens.Color.labelTertiary)
+            default:          return (conc,         DesignTokens.Color.labelTertiary)
             }
         }
         switch status {
