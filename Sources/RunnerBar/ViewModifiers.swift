@@ -43,6 +43,58 @@ struct StatusBadge: View {
     }
 }
 
+// MARK: - BranchTagPill
+/// Inline pill showing a git branch or tag name.
+/// Uses a blue-tinted stroke capsule consistent with the Phase 5 design language.
+struct BranchTagPill: View {
+    let name: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 8, weight: .medium))
+            Text(name)
+                .font(.system(size: 10, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .foregroundColor(Color.rbAccent)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - cardRow ViewModifier
+/// Applies a card-row background with rounded corners.
+/// Used by job/action row items inside list-style ScrollViews.
+private struct CardRowModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.rbSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+    }
+}
+
+extension View {
+    /// Wraps a row in a card-style rounded rectangle background.
+    /// - Parameter cornerRadius: Corner radius — prefer `RBRadius` tokens.
+    func cardRow(cornerRadius: CGFloat) -> some View {
+        modifier(CardRowModifier(cornerRadius: cornerRadius))
+    }
+}
+
 // MARK: - Previews
 #if DEBUG
 #Preview("StatPill") {
@@ -59,6 +111,14 @@ struct StatusBadge: View {
         StatusBadge(status: .success, text: "SUCCESS")
         StatusBadge(status: .failed, text: "FAILED")
         StatusBadge(status: .queued, text: "QUEUED")
+    }
+    .padding()
+}
+
+#Preview("BranchTagPill") {
+    VStack(spacing: 8) {
+        BranchTagPill(name: "feat/redesign-phases-1-5")
+        BranchTagPill(name: "main")
     }
     .padding()
 }
