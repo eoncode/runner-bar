@@ -62,14 +62,14 @@ struct StepLogView: View {
 
     // MARK: - Copy action
 
-    /// The `LogCopyButton` fetch closure: re-fetches and returns the log text.
+    /// Computed closure passed to `LogCopyButton`: re-fetches and returns the log text.
     private var copyFetch: (@escaping (String?) -> Void) -> Void {
         { completion in
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = LogFetcher.shared.fetchStepLog(
-                    group: group,
-                    job: job,
-                    stepIndex: stepIndex
+                    group: self.group,
+                    job: self.job,
+                    stepIndex: self.stepIndex
                 )
                 switch result {
                 case .success(let text): completion(text)
@@ -77,7 +77,7 @@ struct StepLogView: View {
                 }
             }
         }
-    }()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
