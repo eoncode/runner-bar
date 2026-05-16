@@ -153,42 +153,45 @@ struct LogCopyButton: View {
 // MARK: - PopoverHeaderView
 
 /// The system-stats header shown at the top of the main popover.
+/// Layout: [CPU chip] [MEM chip] [DISK chip] ---- [gear]
+/// All three chips are in a single horizontal HStack row.
 struct PopoverHeaderView: View {
     let onSelectSettings: () -> Void
     @ObservedObject private var vm = SystemStatsViewModel.shared
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 3) {
-                    statChip(label: "CPU",  value: String(format: "%.0f%%", vm.stats.cpuPct),
-                             pct: vm.stats.cpuPct, history: vm.cpuHistory)
-                    statChip(label: "MEM",  value: String(format: "%.1fG", vm.stats.memUsedGB),
-                             pct: vm.stats.memTotalGB > 0 ? (vm.stats.memUsedGB / vm.stats.memTotalGB) * 100 : 0,
-                             history: vm.memHistory)
-                    statChip(label: "DISK", value: String(format: "%.0f%%",
-                                                         vm.stats.diskTotalGB > 0
-                                                         ? (vm.stats.diskUsedGB / vm.stats.diskTotalGB) * 100 : 0),
-                             pct: vm.stats.diskTotalGB > 0 ? (vm.stats.diskUsedGB / vm.stats.diskTotalGB) * 100 : 0,
-                             history: vm.diskHistory)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Button(action: onSelectSettings) {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 13)).foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+        HStack(spacing: DesignTokens.Layout.statGroupGap) {
+            SystemStatChip(
+                label: "CPU",
+                value: String(format: "%.0f%%", vm.stats.cpuPct),
+                pct: vm.stats.cpuPct,
+                history: vm.cpuHistory
+            )
+            SystemStatChip(
+                label: "MEM",
+                value: String(format: "%.1fG", vm.stats.memUsedGB),
+                pct: vm.stats.memTotalGB > 0 ? (vm.stats.memUsedGB / vm.stats.memTotalGB) * 100 : 0,
+                history: vm.memHistory
+            )
+            SystemStatChip(
+                label: "DISK",
+                value: String(format: "%.0f%%",
+                              vm.stats.diskTotalGB > 0
+                              ? (vm.stats.diskUsedGB / vm.stats.diskTotalGB) * 100 : 0),
+                pct: vm.stats.diskTotalGB > 0 ? (vm.stats.diskUsedGB / vm.stats.diskTotalGB) * 100 : 0,
+                history: vm.diskHistory
+            )
+            Spacer()
+            Button(action: onSelectSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
+            .buttonStyle(.plain)
         }
-    }
-
-    private func statChip(label: String, value: String, pct: Double, history: [Double]) -> some View {
-        SystemStatChip(label: label, value: value, pct: pct, history: history)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 }
 
