@@ -115,6 +115,14 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     /// Non-blocking CPU usage via host_processor_info delta — no `top` subprocess.
+    ///
+    /// Memory ownership:
+    /// - `host_processor_info` allocates a Mach VM buffer that the caller must free.
+    /// - We keep the *current* buffer alive as `prevCPUInfo` so the next call can
+    ///   compute a delta. The old `prevCPUInfo` is freed each time it is replaced.
+    /// - ⚠️ Do NOT add a `defer` block that frees `info` — that would free the pointer
+    ///   immediately after storing it in `prevCPUInfo`, causing a use-after-free crash
+    ///   (SIGSEGV / KERN_INVALID_ADDRESS) on the second call.
     private func cpuUsage() -> Double {
         var cpuInfo: processor_info_array_t?
         var numCPUInfo: mach_msg_type_number_t = 0
@@ -126,11 +134,6 @@ final class SystemStatsViewModel: ObservableObject {
                                          &cpuInfo,
                                          &numCPUInfo)
         guard result == KERN_SUCCESS, let info = cpuInfo else { return 0 }
-        defer {
-            vm_deallocate(mach_task_self_,
-                          vm_address_t(bitPattern: info),
-                          vm_size_t(Int(numCPUInfo) * MemoryLayout<integer_t>.size))
-        }
 
         var totalUser: Double = 0, totalSys: Double = 0
         var totalIdle: Double = 0, totalNice: Double = 0
@@ -158,7 +161,7 @@ final class SystemStatsViewModel: ObservableObject {
             }
         }
 
-        // Store current as previous for next delta
+        // Free the old buffer now that we've finished reading it, then store the new one.
         if let prev = prevCPUInfo {
             vm_deallocate(mach_task_self_,
                           vm_address_t(bitPattern: prev),
@@ -166,9 +169,6 @@ final class SystemStatsViewModel: ObservableObject {
         }
         prevCPUInfo = info
         prevCPUInfoCount = numCPUInfo
-        // Prevent dealloc in defer since we stored it
-        // (We re-allocate from host each call, so the stored pointer stays valid
-        //  until explicitly deallocated above on the next call.)
 
         let total = totalUser + totalSys + totalIdle + totalNice
         guard total > 0 else { return 0 }
