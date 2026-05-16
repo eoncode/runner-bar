@@ -27,6 +27,8 @@ struct SystemStatChip: View {
 // MARK: - SparklineView
 
 /// A tiny multi-bar sparkline for CPU/MEM/DISK history.
+/// Values are expected as fractions in the range 0.0–1.0
+/// (as stored by SystemStatsViewModel — already divided by 100).
 struct SparklineView: View {
     let values: [Double]
     let highlight: Double
@@ -39,7 +41,7 @@ struct SparklineView: View {
         GeometryReader { geo in
             HStack(alignment: .bottom, spacing: 1) {
                 ForEach(Array(values.suffix(10).enumerated()), id: \.offset) { _, v in
-                    let h = max(1, geo.size.height * CGFloat(min(v, 100)) / 100)
+                    let h = max(1, geo.size.height * CGFloat(min(v, 1.0)))
                     RoundedRectangle(cornerRadius: 1)
                         .fill(color.opacity(0.7))
                         .frame(width: max(1, (geo.size.width - 9) / 10), height: h)
