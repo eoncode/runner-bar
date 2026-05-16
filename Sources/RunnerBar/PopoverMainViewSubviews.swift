@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 // MARK: - Design Tokens
+
 private extension Color {
     static let tokenGreen  = Color(red: 0.27, green: 0.80, blue: 0.39)
     static let tokenRed    = Color(red: 0.95, green: 0.33, blue: 0.33)
@@ -14,8 +15,12 @@ private extension Color {
 }
 
 // MARK: - SectionHeaderLabel
+
+/// Uppercased section header label used throughout the popover.
 struct SectionHeaderLabel: View {
+    /// The text to display (will be uppercased).
     let title: String
+
     var body: some View {
         Text(title.uppercased())
             .font(.system(size: 9, weight: .semibold))
@@ -27,9 +32,14 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - StatusBadge
+
+/// Capsule-shaped status badge with coloured text and tinted background.
 struct StatusBadge: View {
+    /// The text label displayed inside the badge.
     let label: String
+    /// The foreground and tint colour for the badge.
     let color: Color
+
     var body: some View {
         Text(label)
             .font(.system(size: 9, weight: .bold, design: .monospaced))
@@ -43,8 +53,12 @@ struct StatusBadge: View {
 }
 
 // MARK: - JobProgressBarView
+
+/// Horizontal progress bar that fills proportionally to `fraction`.
 struct JobProgressBarView: View {
+    /// Fill fraction in the range 0–1.
     let fraction: CGFloat
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
@@ -58,9 +72,14 @@ struct JobProgressBarView: View {
 }
 
 // MARK: - SparklineView
+
+/// Mini sparkline rendered via Canvas from a normalised sample array.
 struct SparklineView: View {
+    /// Normalised sample values (0–1) ordered oldest → newest.
     let samples: [Double]
+    /// Stroke and fill tint colour.
     let color: Color
+
     var body: some View {
         Canvas { ctx, size in
             guard samples.count >= 2 else { return }
@@ -70,16 +89,20 @@ struct SparklineView: View {
             ctx.stroke(line, with: .color(color.opacity(0.85)), lineWidth: 1)
         }
     }
+
     private func buildLinePath(size: CGSize) -> Path {
         let step = size.width / CGFloat(samples.count - 1)
         var path = Path()
-        for (i, v) in samples.enumerated() {
-            let pt = CGPoint(x: CGFloat(i) * step,
-                             y: size.height - CGFloat(max(0, min(1, v))) * size.height)
-            i == 0 ? path.move(to: pt) : path.addLine(to: pt)
+        for (idx, val) in samples.enumerated() {
+            let point = CGPoint(
+                x: CGFloat(idx) * step,
+                y: size.height - CGFloat(max(0, min(1, val))) * size.height
+            )
+            idx == 0 ? path.move(to: point) : path.addLine(to: point)
         }
         return path
     }
+
     private func buildFillPath(linePath: Path, size: CGSize) -> Path {
         let lastX = size.width
         var fill = linePath
@@ -91,9 +114,20 @@ struct SparklineView: View {
 }
 
 // MARK: - StatusDonut
+
 /// Phase 4: 3-state donut — solid fill+icon for success/failed, animated arc for in-progress.
 private struct StatusDonut: View {
-    enum State { case success, failed, inProgress(Double) }
+    /// The visual state the donut should render.
+    enum State {
+        /// Workflow completed successfully.
+        case success
+        /// Workflow failed.
+        case failed
+        /// Workflow is in progress with given completion fraction (0–1).
+        case inProgress(Double)
+    }
+
+    /// Current donut state.
     let state: State
     @SwiftUI.State private var rotation: Double = 0
 
@@ -132,13 +166,22 @@ private struct StatusDonut: View {
 }
 
 // MARK: - PopoverHeaderView
+
+/// Top header bar showing live system stats and action buttons.
 struct PopoverHeaderView: View {
+    /// Latest system stats snapshot.
     let stats: SystemStats
+    /// Whether a GitHub token is present.
     let isAuthenticated: Bool
+    /// Called when the user taps the settings gear.
     let onSelectSettings: () -> Void
+    /// Called when the user taps Sign In.
     let onSignIn: () -> Void
+    /// Historical CPU samples (normalised 0–1) for the sparkline.
     var cpuHistory: [Double] = []
+    /// Historical memory samples (normalised 0–1) for the sparkline.
     var memHistory: [Double] = []
+    /// Historical disk samples (normalised 0–1) for the sparkline.
     var diskHistory: [Double] = []
 
     var body: some View {
@@ -151,16 +194,22 @@ struct PopoverHeaderView: View {
                         Circle().fill(Color.orange).frame(width: 7, height: 7)
                         Text("Sign in").font(.caption2).foregroundColor(.secondary)
                     }
-                }.buttonStyle(.plain).help("Sign in with GitHub")
+                }
+                .buttonStyle(.plain)
+                .help("Sign in with GitHub")
             }
             Button(action: onSelectSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13)).foregroundColor(.secondary)
-            }.buttonStyle(.plain).help("Settings")
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-            }.buttonStyle(.plain).help("Quit RunnerBar")
+            }
+            .buttonStyle(.plain)
+            .help("Quit RunnerBar")
         }
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
@@ -192,12 +241,12 @@ struct PopoverHeaderView: View {
     }
 
     private var diskChip: some View {
-        let total   = stats.diskTotalGB
-        let used    = stats.diskUsedGB
-        let free    = max(0, total - used)
-        let pct     = total > 0 ? (used / total) * 100 : 0
+        let total  = stats.diskTotalGB
+        let used   = stats.diskUsedGB
+        let free   = max(0, total - used)
+        let pct    = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? Int((free / total * 100).rounded()) : 0
-        let value   = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+        let value  = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
         return HStack(spacing: 3) {
             Text("DISK")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -209,7 +258,6 @@ struct PopoverHeaderView: View {
             Text(value)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(usageColor(pct: pct)).lineLimit(1)
-            // Free% pill badge
             Text("\(freePct)%")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(usageColor(pct: pct))
@@ -236,15 +284,19 @@ struct PopoverHeaderView: View {
     }
 
     private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .tokenRed    }
+        if pct > 85 { return .tokenRed }
         if pct > 60 { return .tokenYellow }
         return .tokenGreen
     }
 }
 
 // MARK: - RunnerTypeIcon
+
+/// Small icon indicating local (desktop) vs cloud runner.
 private struct RunnerTypeIcon: View {
+    /// `true` = local runner, `false` = cloud runner, `nil` = unknown.
     let isLocal: Bool?
+
     var body: some View {
         if let local = isLocal {
             Image(systemName: local ? "desktopcomputer" : "cloud")
@@ -256,8 +308,10 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
-/// Phase 3: each runner wrapped in a bordered card with pill CPU/MEM stats.
+
+/// Phase 3: each busy runner wrapped in a bordered card with pill CPU/MEM stats.
 struct PopoverLocalRunnerRow: View {
+    /// All runners; only busy ones are rendered.
     let runners: [Runner]
 
     var body: some View {
@@ -285,14 +339,8 @@ struct PopoverLocalRunnerRow: View {
                         .font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.cardFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.cardBorder, lineWidth: 1)
-                )
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.cardFill))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.cardBorder, lineWidth: 1))
             }
             if busy.count > 3 {
                 Text("+ \(busy.count - 3) more…")
@@ -316,17 +364,21 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
+
 /// Phase 4: left-side vertical half-pill indicator (color = status) + status donut.
 struct ActionRowView: View {
+    /// The action group this row represents.
     let group: ActionGroup
+    /// Monotonically-increasing tick used to force re-render during polling.
     let tick: Int
+    /// Called when the user taps the row to drill into the action detail.
     let onSelect: () -> Void
+    /// Optional callback when the user taps an inline job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                // Left vertical status indicator
                 indicatorBar
                 Button(action: onSelect) { rowContent }.buttonStyle(.plain)
                 Image(systemName: "chevron.right")
@@ -349,7 +401,7 @@ struct ActionRowView: View {
     }
 
     private var rowContent: some View {
-        _ = tick  // ⚠️ TICK CONTRACT — DO NOT REMOVE
+        _ = tick // ⚠️ TICK CONTRACT — DO NOT REMOVE
         return HStack(spacing: 6) {
             statusDonut
             RunnerTypeIcon(isLocal: group.isLocalGroup)
@@ -373,15 +425,12 @@ struct ActionRowView: View {
     @ViewBuilder
     private var rowBackground: some View {
         if group.groupStatus == .inProgress {
-            RoundedRectangle(cornerRadius: 0)
-                .fill(Color.tokenBlue.opacity(0.05))
+            RoundedRectangle(cornerRadius: 0).fill(Color.tokenBlue.opacity(0.05))
         } else if group.groupStatus == .completed {
             if group.conclusion == "success" {
-                RoundedRectangle(cornerRadius: 0)
-                    .fill(Color.tokenGreen.opacity(0.04))
+                RoundedRectangle(cornerRadius: 0).fill(Color.tokenGreen.opacity(0.04))
             } else {
-                RoundedRectangle(cornerRadius: 0)
-                    .fill(Color.tokenRed.opacity(0.04))
+                RoundedRectangle(cornerRadius: 0).fill(Color.tokenRed.opacity(0.04))
             }
         }
     }
@@ -390,7 +439,7 @@ struct ActionRowView: View {
     private var statusDonut: some View {
         switch group.groupStatus {
         case .inProgress:
-            StatusDonut(state: .inProgress(group.progressFraction ?? 0))
+            StatusDonut(state: .inProgress(group.progressFraction))
         case .queued:
             StatusDonut(state: .inProgress(0.0))
         case .completed:
@@ -445,6 +494,7 @@ struct ActionRowView: View {
 }
 
 // MARK: - InlineJobRowsView
+
 /// Passive ↳ job rows beneath in-progress action groups.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
@@ -457,10 +507,12 @@ struct ActionRowView: View {
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
 struct InlineJobRowsView: View {
+    /// The action group whose in-progress jobs are shown.
     let group: ActionGroup
+    /// Tick counter used to force re-render on each poll cycle.
     let tick: Int
+    /// Optional callback fired when the user taps a job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
-
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
@@ -477,7 +529,9 @@ struct InlineJobRowsView: View {
             }
         }
         if activeJobs.count > cap {
-            Button(action: { if !popoverOpenState.isOpen { cap += 4 } }) {
+            Button(action: {
+                if !popoverOpenState.isOpen { cap += 4 }
+            }) {
                 Text("+ \(activeJobs.count - cap) more jobs…")
                     .font(.caption2).foregroundColor(.accentColor)
                     .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
@@ -488,9 +542,9 @@ struct InlineJobRowsView: View {
     }
 
     private func jobRow(_ job: ActiveJob) -> some View {
-        _ = tick  // ⚠️ TICK CONTRACT — DO NOT REMOVE
+        _ = tick // ⚠️ TICK CONTRACT — DO NOT REMOVE
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
-        let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+        let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
@@ -532,7 +586,7 @@ struct InlineJobRowsView: View {
         switch job.status {
         case "in_progress": return .tokenBlue
         case "queued":      return .tokenBlue.opacity(0.5)
-        default: return job.conclusion == "success" ? .tokenGreen : (job.isDimmed ? .gray : .tokenRed)
+        default:            return job.conclusion == "success" ? .tokenGreen : (job.isDimmed ? .gray : .tokenRed)
         }
     }
 }
