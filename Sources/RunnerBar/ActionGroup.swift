@@ -89,6 +89,13 @@ struct ActionGroup: Identifiable, Equatable {
         guard jobsTotal > 0 else { return "" }
         return "\(jobsDone)/\(jobsTotal) jobs"
     }
+
+    /// Progress fraction (0.0–1.0) of concluded jobs out of total, used by DonutStatusView.
+    var progressFraction: Double {
+        guard jobsTotal > 0 else { return 0 }
+        return Double(jobsDone) / Double(jobsTotal)
+    }
+
     var elapsed: String {
         let start = runs.compactMap(\.createdAt).min()
         let end   = runs.compactMap(\.updatedAt).max()
@@ -105,17 +112,15 @@ struct ActionGroup: Identifiable, Equatable {
         jobs.first(where: { $0.status == "in_progress" })?.name ?? ""
     }
 
-    /// True when all runs originate from a local runner (runner name does not contain "/").
-    /// Falls back to false when runner info is unavailable.
-    var isLocalGroup: Bool {
+    /// True when all runners are local (runner name does not contain "/").
+    var isLocalGroup: Bool? {
         let runnerNames = jobs.compactMap(\.runnerName)
-        guard !runnerNames.isEmpty else { return false }
+        guard !runnerNames.isEmpty else { return nil }
         return runnerNames.allSatisfy { !$0.contains("/") }
     }
 
     /// Returns a copy of this group with a different jobs array (via rebuilt runs).
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
-        // Rebuild first run with the new jobs; preserve other runs as-is.
         guard let first = runs.first else { return self }
         let rebuilt = WorkflowRun(
             id: first.id,

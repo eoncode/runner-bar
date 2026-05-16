@@ -62,19 +62,12 @@ final class RunnerStore {
         fetch()
     }
 
-    private func hasAnyActiveAction() -> Bool {
-        for action in actions {
-            let s = action.groupStatus
-            if s == .inProgress { return true }
-            if s == .queued { return true }
-        }
-        return false
-    }
-
     private func scheduleTimer() {
         timer?.invalidate()
         let hasActiveJobs: Bool = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
-        let hasActiveActions: Bool = hasAnyActiveAction()
+        let inProgress = GroupStatus.inProgress
+        let queued = GroupStatus.queued
+        let hasActiveActions: Bool = actions.contains { $0.typedGroupStatus == inProgress || $0.typedGroupStatus == queued }
         let hasActive = hasActiveJobs || hasActiveActions
         let baseIdle = max(10, SettingsStore.shared.pollingInterval)
         let interval: TimeInterval = (isRateLimited || !hasActive) ? TimeInterval(baseIdle) : 10
