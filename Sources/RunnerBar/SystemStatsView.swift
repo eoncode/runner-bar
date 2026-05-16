@@ -4,7 +4,10 @@ import SwiftUI
 
 /// Full-page system stats view shown in the settings panel.
 struct SystemStatsView: View {
-    @StateObject private var viewModel = SystemStatsViewModel()
+    // ⚠️ SystemStatsViewModel is a singleton — must NOT be instantiated directly.
+    // @StateObject would allocate a new instance, but private init() prevents it.
+    // Use .shared so the same history survives popover close/reopen.
+    @ObservedObject private var viewModel = SystemStatsViewModel.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
