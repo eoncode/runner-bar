@@ -93,9 +93,16 @@ final class RunnerStore {
     }
 
     /// Starts (or restarts) the polling timer and fires an immediate fetch.
+    ///
+    /// ⚠️ scheduleTimer() is called immediately (before the first fetch completes)
+    /// so the run loop always has a live Timer from the moment start() returns.
+    /// Without this, the app is a UIElement with no windows and no timers — macOS
+    /// TAL kills it within ~2 seconds of applicationDidFinishLaunching returning.
+    /// ❌ NEVER remove the scheduleTimer() call from this method.
     func start() {
         log("RunnerStore › start")
         timer?.invalidate()
+        scheduleTimer()  // keep run loop alive immediately — before fetch() returns
         fetch()
     }
 
