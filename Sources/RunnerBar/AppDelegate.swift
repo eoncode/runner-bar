@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length
+// swiftlint:disable type_body_length
+// swiftlint:disable file_length
 
 // MARK: - NavState
 
@@ -433,6 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -470,7 +472,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             guard let self, let panel = self.panel else { return }
             let loc = event.locationInWindow
-            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin ?? loc
+            let screenLoc = event.window?.convertToScreen(
+                NSRect(origin: loc, size: .zero)
+            ).origin ?? loc
             if !panel.frame.contains(screenLoc) {
                 self.closePanel()
             }
@@ -514,4 +518,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addWorkspaceObserver()
     }
 }
-// swiftlint:enable type_body_length file_length
+// swiftlint:enable type_body_length
+// swiftlint:enable file_length
