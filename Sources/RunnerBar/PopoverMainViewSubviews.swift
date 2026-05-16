@@ -48,7 +48,8 @@ struct JobProgressBarView: View {
 
 // MARK: - SparklineView
 /// Tiny inline sparkline drawn from a history of 0.0–1.0 samples.
-/// Fills the allocated frame; caller controls width/height.
+/// Uses Canvas (not GeometryReader) to avoid zero-width collapse inside HStack/Spacer.
+/// Per #420 Phase 2: this is the sole visual graph element — no block-bar text prefix.
 struct SparklineView: View {
     /// Values in chronological order, each 0.0–1.0.
     let samples: [Double]
@@ -84,7 +85,8 @@ struct SparklineView: View {
 }
 
 // MARK: - PopoverHeaderView
-/// Header row: system stats left, settings + close right.
+/// Header row: system stats left (sparkline chips), settings + close right.
+/// Per #420 Phase 2: CPU/MEM/DISK shown as [label] [sparkline] [value] chips.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
     let stats: SystemStats
@@ -102,7 +104,6 @@ struct PopoverHeaderView: View {
         HStack(spacing: 6) {
             systemStatsBadge
             Spacer()
-            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
                 Button(
                     action: onSignIn,
@@ -138,21 +139,19 @@ struct PopoverHeaderView: View {
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
     }
 
-    /// Inline CPU / MEM / DISK chips with sparkline + block-bar fill prefix.
-    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
-    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
+    /// CPU / MEM / DISK chips: [label] [sparkline] [value]
+    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` prevents multi-line wrapping that corrupts panel height (ref #52 #54).
     private var systemStatsBadge: some View {
         HStack(spacing: 8) {
             statChip(
                 label: "CPU",
-                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
+                value: String(format: "%.1f%%", stats.cpuPct),
                 pct: stats.cpuPct,
                 history: cpuHistory
             )
             statChip(
                 label: "MEM",
-                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
+                value: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
                 pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0,
                 history: memHistory
             )
@@ -166,8 +165,7 @@ struct PopoverHeaderView: View {
         let free    = max(0, total - used)
         let pct     = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = blockBar(pct: pct)
-            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+        let value   = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
             + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
         return statChip(label: "DISK", value: value, pct: pct, history: diskHistory)
     }
@@ -187,13 +185,6 @@ struct PopoverHeaderView: View {
                 .foregroundColor(usageColor(pct: pct))
                 .lineLimit(1)
         }
-    }
-
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw         = Int((pct / 100.0 * Double(width)).rounded())
-        let filledCount = max(0, min(width, raw))
-        return String(repeating: "█", count: filledCount)
-             + String(repeating: "░", count: width - filledCount)
     }
 
     private func usageColor(pct: Double) -> Color {
