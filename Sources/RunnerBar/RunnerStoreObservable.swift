@@ -14,6 +14,9 @@ final class RunnerStoreObservable: ObservableObject {
     @Published var actions: [ActionGroup] = []
 
     private let store: RunnerStore
+    /// Extra callbacks registered by AppDelegate (e.g. updateStatusIcon).
+    /// ❌ NEVER replace onChange directly — use registerSideEffect() instead.
+    private var sideEffects: [() -> Void] = []
 
     init(store: RunnerStore = RunnerStore.shared) {
         self.store = store
@@ -22,10 +25,20 @@ final class RunnerStoreObservable: ObservableObject {
         self.actions = store.actions
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.runners = store.runners
-            self.jobs    = store.jobs
-            self.actions = store.actions
+            DispatchQueue.main.async {
+                self.runners = store.runners
+                self.jobs    = store.jobs
+                self.actions = store.actions
+                self.sideEffects.forEach { $0() }
+            }
         }
+    }
+
+    /// Register an additional side-effect to run after each poll tick
+    /// (e.g. AppDelegate's updateStatusIcon).
+    /// ❌ NEVER overwrite store.onChange directly — that kills the @Published updates.
+    func registerSideEffect(_ block: @escaping () -> Void) {
+        sideEffects.append(block)
     }
 
     func reload() {
