@@ -79,17 +79,23 @@ struct SparklineMetricView: View {
 }
 
 // MARK: - DiskPillBadge
-/// Compact pill showing disk FREE percentage, placed inline next to the
+/// Compact pill showing disk used percentage, placed inline next to the
 /// DISK sparkline in HeaderStatsBar.
-/// fix(#419 bug 6): shows FREE space remaining, not used space.
-/// Low free % = danger (red); mid = warning (orange).
-/// Always renders at its intrinsic size -- never truncates.
+///
+/// Uses the same thresholds as SparklineView.themeColor and
+/// SparklineMetricView.labelColor so the pill, sparkline stroke, and
+/// value text always share one color:
+///   usedPct > 85  →  rbDanger  (red)
+///   usedPct > 60  →  rbWarning (orange)
+///   else          →  rbSuccess (green)
+///
+/// Always renders at its intrinsic size — never truncates.
 struct DiskPillBadge: View {
-    /// Percentage of disk space that is FREE (0–100).
-    let freePct: Double
+    /// Percentage of disk space that is USED (0–100). Same scale as SparklineView.currentPct.
+    let usedPct: Double
 
     var body: some View {
-        Text(String(format: "%.0f%%", freePct))
+        Text(String(format: "%.0f%%", usedPct))
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
             .foregroundStyle(pillColor)
             .fixedSize()
@@ -97,21 +103,22 @@ struct DiskPillBadge: View {
             .padding(.vertical, 2)
             .background(pillColor.opacity(0.15), in: Capsule())
             .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            // Never let the capsule be compressed
             .fixedSize()
     }
 
-    /// fix(#419 bug 6): danger when little free space remains (inverted from used-pct logic).
+    /// Matches SparklineView.themeColor exactly so pill color == sparkline color.
     private var pillColor: Color {
-        if freePct < 10 { return .rbDanger }   // < 10% free = red
-        if freePct < 25 { return .rbWarning }  // < 25% free = orange
-        return .rbWarning                       // plenty free — keep warm tone to match header
+        if usedPct > 85 { return .rbDanger }
+        if usedPct > 60 { return .rbWarning }
+        return .rbSuccess
     }
 }
 
 // MARK: - HeaderStatsBar
 /// Compact single-row stats header: CPU | MEM | DISK [pill] as inline chips.
 ///
-/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [12%free]  →  ⚙ ✕
+/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [87%]  →  ⚙ ✕
 ///
 /// The DiskPillBadge sits immediately after the DISK SparklineMetricView,
 /// before the Spacer, so it stays adjacent to the disk graph.
@@ -148,24 +155,25 @@ struct HeaderStatsBar: View {
             Color.secondary.opacity(0.3)
                 .frame(width: 1, height: 14)
 
-            // DISK chip + free-space pill inline, before Spacer.
-            // fix(#419 bug 6): pass freePct (not usedPct) to DiskPillBadge.
+            // DISK chip + usage pill inline, before Spacer.
+            // DiskPillBadge receives usedPct — same value as SparklineView.currentPct —
+            // so pill color always matches the sparkline stroke and value text.
             HStack(spacing: 5) {
+                let diskUsedPct = statsVM.stats.diskTotalGB > 0
+                    ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
+                    : 0.0
+
                 SparklineMetricView(
                     label: "DISK",
                     value: String(format: "%d/%dGB",
                                   Int(statsVM.stats.diskUsedGB.rounded()),
                                   Int(statsVM.stats.diskTotalGB.rounded())),
                     history: statsVM.diskHistory.values,
-                    currentPct: statsVM.stats.diskTotalGB > 0
-                        ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
-                        : 0
+                    currentPct: diskUsedPct
                 )
 
                 if statsVM.stats.diskTotalGB > 0 {
-                    let freePct = ((statsVM.stats.diskTotalGB - statsVM.stats.diskUsedGB)
-                        / statsVM.stats.diskTotalGB) * 100
-                    DiskPillBadge(freePct: freePct)
+                    DiskPillBadge(usedPct: diskUsedPct)
                 }
             }
             .fixedSize()
