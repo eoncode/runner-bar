@@ -190,13 +190,9 @@ struct PopoverLocalRunnerRow: View {
 /// Tapping the LeftIndicatorPill toggles expansion; the pill color reflects status.
 /// In-progress groups auto-expand on appear so jobs are immediately visible.
 struct ActionRowView: View {
-    /// The action group this row represents.
     let group: ActionGroup
-    /// Display tick used to force elapsed-time re-renders.
     let tick: Int
-    /// Called when the user taps the row content area.
     let onSelect: () -> Void
-    /// Optional callback for tapping an inline job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
     @State private var isExpanded: Bool = false
@@ -204,7 +200,6 @@ struct ActionRowView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                // Fix #2: LeftIndicatorPill must stretch full row height, not collapse to a dot.
                 LeftIndicatorPill(color: indicatorColor, isExpanded: isExpanded) {
                     withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
                 }
@@ -240,7 +235,6 @@ struct ActionRowView: View {
     }
 
     private var rowContent: some View {
-        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         _ = tick
         return HStack(spacing: 6) {
             DonutStatusView(
@@ -284,9 +278,6 @@ struct ActionRowView: View {
         statusChip
     }
 
-    // MARK: - Status chip
-    /// Fix #3: IN PROGRESS / QUEUED pill now has both fill AND stroke border.
-    /// Fix #4: SUCCESS/FAILED also wrapped in stroked pill (green/red).
     @ViewBuilder
     private var statusChip: some View {
         switch group.typedGroupStatus {
@@ -308,7 +299,6 @@ struct ActionRowView: View {
         case .inProgress: return DesignTokens.Colors.statusBlue
         case .queued:     return DesignTokens.Colors.statusOrange
         case .completed, .failed, .success, .unknown:
-            // Fix #4: always green or red, never gray regardless of isDimmed
             return group.conclusion == "success"
                 ? DesignTokens.Colors.statusGreen
                 : DesignTokens.Colors.statusRed
@@ -329,8 +319,6 @@ struct ActionRowView: View {
 }
 
 // MARK: - StatusPill
-/// Fix #3: stroked pill for all action-row status labels.
-/// Uses the status color for text, a semi-transparent fill, and a matching stroke border.
 private struct StatusPill: View {
     let label: String
     let color: Color
@@ -368,24 +356,24 @@ private struct StatusPill: View {
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
 struct InlineJobRowsView: View {
-    /// The action group whose in-progress jobs are shown.
     let group: ActionGroup
-    /// Display tick used to force elapsed-time re-renders.
     let tick: Int
-    /// Optional callback for tapping a job row.
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
+    /// Deduplicated in-progress jobs — ActionGroup.jobs flattens all WorkflowRun.jobs
+    /// so multiple runs in the same group would produce duplicate job IDs.
+    /// fix(#441 bug1): filter by unique id before filtering status.
     private var activeJobs: [ActiveJob] {
-        group.jobs.filter { $0.status == "in_progress" }
+        var seen = Set<Int>()
+        return group.jobs.filter { seen.insert($0.id).inserted }
+            .filter { $0.status == "in_progress" }
     }
 
     var body: some View {
-        // Fix #7: wrap all sub-job rows in a ZStack with a drawn connector line on the left.
         ZStack(alignment: .topLeading) {
-            // Vertical connector line from top to bottom of the job list
             if !activeJobs.isEmpty {
                 HierarchyConnectorLine(jobCount: min(activeJobs.count, cap))
             }
@@ -416,15 +404,11 @@ struct InlineJobRowsView: View {
         .padding(.top, 2)
     }
 
-    /// Fix #5: row order → icon/connector | job name · step | Spacer | progress bar | done/total | elapsed | chevron
-    /// Fix #6: each sub-job row gets a rounded card background.
     private func jobRow(_ job: ActiveJob) -> some View {
-        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
         _ = tick
         return jobRowContent(job)
             .padding(.vertical, 3)
             .padding(.trailing, DesignTokens.Spacing.rowHPad)
-            // Fix #6: rounded card background per sub-job row
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
                     .fill(DesignTokens.Colors.rowBackground)
@@ -436,7 +420,6 @@ struct InlineJobRowsView: View {
             .contentShape(Rectangle())
     }
 
-    /// Builds the inner HStack content for a single inline job row.
     private func jobRowContent(_ job: ActiveJob) -> some View {
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
         let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
@@ -446,9 +429,7 @@ struct InlineJobRowsView: View {
         let barColor = jobBarColor(for: job)
 
         return HStack(spacing: 6) {
-            // 28 pt left indent to clear the hierarchy connector
             Spacer().frame(width: 28)
-            // Job name · current step  (fix #5: name comes before progress bar)
             Group {
                 if let name = stepName {
                     Text(job.name + " · " + name)
@@ -462,7 +443,6 @@ struct InlineJobRowsView: View {
             .truncationMode(.tail)
             .layoutPriority(1)
             Spacer()
-            // Progress bar — after the name (fix #5)
             SubJobProgressBar(
                 fraction: job.status == "queued" ? nil : stepFraction,
                 color: barColor,
