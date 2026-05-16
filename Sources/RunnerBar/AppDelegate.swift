@@ -506,14 +506,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Builds a step log view reached from an action group.
     private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
         savedNavState = .actionStepLog(job, step, group)
+        let stepIndex = job.steps.firstIndex(where: { $0.id == step.id }) ?? 0
         return wrapEnv(StepLogView(
+            group: group,
             job: job,
-            step: step,
-            onBack: { [weak self] in
+            stepIndex: stepIndex,
+            onDismiss: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            },
-            onLogLoaded: nil
+            }
         ))
     }
 
@@ -563,14 +564,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Builds a step log view reached from the runner list.
     private func logView(job: ActiveJob, step: JobStep) -> AnyView {
         savedNavState = .stepLog(job, step)
+        let stepIndex = job.steps.firstIndex(where: { $0.id == step.id }) ?? 0
+        let group = syntheticGroup(for: job)
         return wrapEnv(StepLogView(
+            group: group,
             job: job,
-            step: step,
-            onBack: { [weak self] in
+            stepIndex: stepIndex,
+            onDismiss: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.detailView(job: job))
-            },
-            onLogLoaded: nil
+            }
         ))
     }
 
