@@ -97,6 +97,7 @@ private struct CardRowModifier: ViewModifier {
     }
 }
 
+/// SwiftUI `View` extensions providing reusable row and badge modifiers.
 extension View {
     /// Wraps a row in a card-style rounded rectangle background.
     /// - Parameter cornerRadius: Corner radius — prefer `RBRadius` tokens.
