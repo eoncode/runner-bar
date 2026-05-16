@@ -28,6 +28,7 @@ struct RunnerModel: Identifiable, Hashable {
         // NOSONAR S107 — Config.init intentionally mirrors all RunnerModel fields;
         // splitting further would add boilerplate with no architectural benefit.
         // This struct exists solely to keep RunnerModel.init under the S107 limit.
+        // swiftlint:disable:next function_parameter_count
         init(
             runnerName: String,
             gitHubUrl: String?,
@@ -135,6 +136,7 @@ struct RunnerModel: Identifiable, Hashable {
     /// Convenience factory that preserves the original call-site signature so
     /// existing callers (`LocalRunnerScanner`, `RunnerStatusEnricher`) require
     /// no changes.
+    // swiftlint:disable:next function_parameter_count
     static func make(
         runnerName: String,
         gitHubUrl: String?,
