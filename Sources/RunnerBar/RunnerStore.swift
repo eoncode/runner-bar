@@ -87,7 +87,9 @@ final class RunnerStore {
     }
 
     private func hasAnyActiveAction() -> Bool {
-        actions.contains { $0.groupStatus == .inProgress || $0.groupStatus == .queued }
+        let hasInProgress: Bool = actions.contains { $0.typedGroupStatus == .inProgress }
+        let hasQueued: Bool = actions.contains { $0.typedGroupStatus == .queued }
+        return hasInProgress || hasQueued
     }
 
     private func scheduleTimer() {
