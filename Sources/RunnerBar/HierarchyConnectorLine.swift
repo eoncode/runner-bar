@@ -2,6 +2,8 @@
 import SwiftUI
 
 struct HierarchyConnectorLine: View {
+    /// Number of job rows the connector spans (reserved for future height calculation).
+    var jobCount: Int = 1
     var color: Color = Color.secondary.opacity(0.3)
     var lineWidth: CGFloat = 1
     var body: some View {

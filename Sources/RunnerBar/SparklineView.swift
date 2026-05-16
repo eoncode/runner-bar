@@ -6,6 +6,24 @@ struct SparklineView: View {
     var color: Color = .rbBlue
     var lineWidth: CGFloat = 1.5
 
+    /// Convenience init used by PopoverMainViewSubviews sparklineChip.
+    /// `history` is the raw percentage history (0–100); `currentPct` is appended so
+    /// the rightmost point always reflects the live value.
+    init(history: [Double], currentPct: Double, color: Color = .rbBlue, lineWidth: CGFloat = 1.5) {
+        var v = history
+        v.append(currentPct)
+        self.values = v
+        self.color = color
+        self.lineWidth = lineWidth
+    }
+
+    /// Direct init — pass normalised or raw values directly.
+    init(values: [Double], color: Color = .rbBlue, lineWidth: CGFloat = 1.5) {
+        self.values = values
+        self.color = color
+        self.lineWidth = lineWidth
+    }
+
     private var normalized: [Double] {
         let mn = values.min() ?? 0
         let mx = values.max() ?? 1
