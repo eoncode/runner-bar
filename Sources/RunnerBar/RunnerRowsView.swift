@@ -3,11 +3,11 @@ import SwiftUI
 
 // MARK: - RunnerRowsView
 
-/// Renders runner rows without ANY use of SwiftUI ForEach.
-/// All ForEach overloads (Identifiable, id:, Range<Int>) resolve to
-/// Binding<C> in this SDK/compiler version when [Runner] is involved.
-/// Array.map + AnyView has zero SwiftUI overload ambiguity.
-/// ❌ NEVER reintroduce ForEach here under any circumstance.
+/// Renders runner rows without ANY use of SwiftUI ForEach on [Runner].
+/// All ForEach overloads resolve to Binding<C> in this SDK/compiler version.
+/// ForEach(runners.indices) iterates Int indices; runnerRow helper receives
+/// a plain Runner value with no type-context ambiguity.
+/// ❌ NEVER reintroduce ForEach(runners) or ForEach(runners, id:) here.
 struct RunnerRowsView: View {
     let runners: [Runner]
 
@@ -36,7 +36,7 @@ struct RunnerRowsView: View {
                 .font(.system(size: 13))
                 .lineLimit(1)
             Spacer()
-            Text(runner.displayStatus)
+            Text(runner.busy ? "busy" : runner.status)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
