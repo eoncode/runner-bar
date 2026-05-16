@@ -1,5 +1,63 @@
 import Combine
 import Foundation
+import SwiftUI
+
+// MARK: - SystemStatsViewModel
+
+/// ObservableObject that polls system stats and maintains rolling history arrays
+/// for the sparkline graphs in PopoverHeaderView.
+final class SystemStatsViewModel: ObservableObject {
+    /// Latest point-in-time stats snapshot.
+    @Published var stats: SystemStats = .zero
+    /// Rolling CPU utilisation history (0.0–1.0), newest last.
+    @Published var cpuHistory: [Double] = []
+    /// Rolling memory utilisation history (0.0–1.0), newest last.
+    @Published var memHistory: [Double] = []
+    /// Rolling disk utilisation history (0.0–1.0), newest last.
+    @Published var diskHistory: [Double] = []
+
+    private var timer: Timer?
+    private let maxSamples = 30
+
+    /// Starts the polling timer (every 2 s).
+    func start() {
+        guard timer == nil else { return }
+        poll()
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.poll()
+        }
+    }
+
+    /// Stops the polling timer.
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func poll() {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let snapshot = SystemStats.current()
+            await MainActor.run {
+                self.stats = snapshot
+                self.append(value: snapshot.cpuPct / 100.0, to: &self.cpuHistory)
+                let memPct = snapshot.memTotalGB > 0
+                    ? snapshot.memUsedGB / snapshot.memTotalGB
+                    : 0.0
+                self.append(value: memPct, to: &self.memHistory)
+                let diskPct = snapshot.diskTotalGB > 0
+                    ? snapshot.diskUsedGB / snapshot.diskTotalGB
+                    : 0.0
+                self.append(value: diskPct, to: &self.diskHistory)
+            }
+        }
+    }
+
+    private func append(value: Double, to array: inout [Double]) {
+        array.append(max(0, min(1, value)))
+        if array.count > maxSamples { array.removeFirst(array.count - maxSamples) }
+    }
+}
 
 // MARK: - SystemStatsPoller2
 
