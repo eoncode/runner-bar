@@ -33,7 +33,6 @@ struct PopoverMainView: View {
                 memHistory: systemStats.memHistory,
                 diskHistory: systemStats.diskHistory
             )
-            .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             ForEach(store.runners) { runner in
@@ -105,8 +104,12 @@ struct PopoverMainView: View {
 
     private func startRunnerRefreshTimer() {
         runnerRefreshTimer?.invalidate()
+        // ⚠️ DO NOT wrap in Task {} — Task dispatches onto a Swift cooperative background
+        // thread, causing all 4 @Published properties in RunnerStoreObservable to be
+        // mutated off-main (SwiftUI Fault). Timer callbacks already fire on the main
+        // run-loop thread, so store.reload() is called directly.
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
-            Task { await store.reload() }
+            store.reload()
         }
     }
 
