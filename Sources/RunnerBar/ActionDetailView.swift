@@ -40,14 +40,10 @@ import SwiftUI
 // Review item 3: job rows now use .cardRow() modifier for consistency.
 // Review item 4: headBranch label replaced with BranchTagPill.
 // ════════════════════════════════════════════════════════════════════════════════
-
-/// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
-///
-/// Drill-down chain:
-/// PopoverMainView (action row tap)
-///   → ActionDetailView ← this view
-///   → JobDetailView (step list) ← existing, unchanged
-///   → StepLogView (log) ← existing, unchanged
+// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
+// Drill-down chain:
+// PopoverMainView (action row tap) -> ActionDetailView <- this view
+// -> JobDetailView (step list) -> StepLogView (log)
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
@@ -143,7 +139,6 @@ struct ActionDetailView: View {
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
-                // Phase 5 spec: branch label uses BranchTagPill for pill-style blue tag.
                 if let branch = group.headBranch {
                     BranchTagPill(name: branch)
                         .lineLimit(1)
