@@ -22,6 +22,8 @@ import SwiftUI
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 // RULE 10: InlineJobRowsView is now owned by ActionRowView (not this file).
+// RULE 11: systemStats is SystemStatsViewModel.shared (singleton) — NEVER @StateObject.
+//          Changing this back to @StateObject wipes sparkline history on every close.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -44,7 +46,8 @@ struct PopoverMainView: View {
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     @State private var isAuthenticated = (githubToken() != nil)
-    @StateObject private var systemStats = SystemStatsViewModel()
+    // ⚠️ RULE 11 — singleton, NOT @StateObject. History must survive close/reopen.
+    @ObservedObject private var systemStats = SystemStatsViewModel.shared
     @State private var visibleCount: Int = 10
     @State private var runnerRefreshTimer: Timer?
     @State private var displayTick: Int = 0
@@ -74,16 +77,15 @@ struct PopoverMainView: View {
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            systemStats.start()  // always start — keeps sparkline history alive
+            systemStats.start()  // no-op if already running — singleton
             startRunnerRefreshTimer()
             startDisplayTickTimer()
         }
         .onDisappear {
-            systemStats.stop()
+            // Do NOT stop systemStats — singleton must keep accumulating history
             stopRunnerRefreshTimer()
             stopDisplayTickTimer()
         }
-        // Rule 6 revised: do NOT stop systemStats when open — graphs need the data.
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
