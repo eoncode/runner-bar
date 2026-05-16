@@ -173,13 +173,69 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
     return nil
 }
 
-/// Fetches active/queued jobs for a repo scope.
-/// Stub — returns empty array until full call-site migration is complete.
-func fetchActiveJobs(for scope: String) -> [ActiveJob] { [] }
+// MARK: - Runner payload
 
-/// Fetches self-hosted runners for a repo scope.
-/// Stub — returns empty array until full call-site migration is complete.
-func fetchRunners(for scope: String) -> [Runner] { [] }
+/// Response envelope for the GitHub list-self-hosted-runners API.
+private struct RunnersResponse: Decodable {
+    let runners: [Runner]
+}
+
+/// Fetches self-hosted runners for a scope.
+///
+/// Scope can be:
+/// - `"owner/repo"` — repo-level runners  (`/repos/{owner}/{repo}/actions/runners`)
+/// - `"owner"`      — org-level runners   (`/orgs/{owner}/actions/runners`)
+func fetchRunners(for scope: String) -> [Runner] {
+    let parts = scope.split(separator: "/")
+    let endpoint: String
+    if parts.count >= 2 {
+        endpoint = "repos/\(scope)/actions/runners?per_page=100"
+    } else {
+        endpoint = "orgs/\(scope)/actions/runners?per_page=100"
+    }
+    log("fetchRunners › endpoint: \(endpoint)", logger: .fetch)
+    guard let data = ghAPI(endpoint) else {
+        log("fetchRunners › ghAPI returned nil for \(endpoint)", logger: .fetch)
+        return []
+    }
+    let runners = (try? JSONDecoder().decode(RunnersResponse.self, from: data))?.runners ?? []
+    log("fetchRunners › decoded \(runners.count) runners from \(scope)", logger: .fetch)
+    return runners
+}
+
+/// Fetches active/queued jobs for a repo scope.
+///
+/// Queries in_progress and queued runs then fetches their jobs,
+/// returning them as `ActiveJob` values ready for `buildJobState`.
+func fetchActiveJobs(for scope: String) -> [ActiveJob] {
+    let iso = ISO8601DateFormatter()
+    var result: [ActiveJob] = []
+    var seenIDs = Set<Int>()
+
+    for status in ["in_progress", "queued"] {
+        let endpoint = "repos/\(scope)/actions/runs?status=\(status)&per_page=20"
+        log("fetchActiveJobs › endpoint: \(endpoint)", logger: .fetch)
+        guard let data = ghAPI(endpoint),
+              let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
+        else {
+            log("fetchActiveJobs › ghAPI/decode failed for \(scope) status=\(status)", logger: .fetch)
+            continue
+        }
+        log("fetchActiveJobs › \(resp.workflowRuns.count) runs (\(status)) for \(scope)", logger: .fetch)
+        for run in resp.workflowRuns {
+            guard let jobData = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100"),
+                  let jobResp = try? JSONDecoder().decode(JobsResponse.self, from: jobData)
+            else { continue }
+            for payload in jobResp.jobs where seenIDs.insert(payload.id).inserted {
+                result.append(
+                    RunnerStore.shared.makeActiveJob(from: payload, iso: iso, isDimmed: false)
+                )
+            }
+        }
+    }
+    log("fetchActiveJobs › total \(result.count) active jobs for \(scope)", logger: .fetch)
+    return result
+}
 
 /// Fetches the log text for a single step using the `gh` CLI.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
