@@ -1,8 +1,7 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable:file type_body_length
-// swiftlint:disable:file file_length
+// swiftlint:disable type_body_length file_length
 
 // MARK: - NavState
 
@@ -434,7 +433,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
@@ -467,6 +465,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if panelIsOpen { closePanel() } else { openPanel() }
     }
 
+    private func addEventMonitor(statusItemRect: NSRect) {
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            guard let self, let panel = self.panel else { return }
+            let loc = event.locationInWindow
+            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin ?? loc
+            if !panel.frame.contains(screenLoc) {
+                self.closePanel()
+            }
+        }
+        _ = statusItemRect
+    }
+
+    private func addWorkspaceObserver() {
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
+                self.closePanel()
+            }
+        }
+    }
+
     private func openPanel() {
         guard let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
@@ -486,24 +510,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
-        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            guard let self, let panel = self.panel else { return }
-            let loc = event.locationInWindow
-            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin ?? loc
-            if !panel.frame.contains(screenLoc) {
-                self.closePanel()
-            }
-        }
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
-                self.closePanel()
-            }
-        }
+        addEventMonitor(statusItemRect: statusItemRect)
+        addWorkspaceObserver()
     }
 }
+// swiftlint:enable type_body_length file_length
