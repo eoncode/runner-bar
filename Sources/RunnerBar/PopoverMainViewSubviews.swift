@@ -133,51 +133,47 @@ struct ActionRowView: View {
     @State private var previousStatus: RBStatus? = nil
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: RBSpacing.md)
+                Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+            }
+            if let fullExpand = expandState {
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(
+            // Card background with left-edge color indicator.
+            // The indicator is a plain Rectangle overlaid at the leading edge.
+            // The parent .clipShape(RoundedRectangle) clips all four corners of
+            // everything inside — including this Rectangle — so the top-left and
+            // bottom-left corners of the strip are rounded by the card itself,
+            // producing a perfect left-side half-pill flush with the card edge.
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(Color.rbSurfaceElevated)
                 .overlay(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous).strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-
-            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous).fill(rowStatus.tint)
-
-            Button(
-                action: {
-                    guard !group.jobs.isEmpty else { return }
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        if expandState == true {
-                            expandState = (rowStatus == .inProgress) ? false : nil
-                        } else {
-                            expandState = true
-                        }
-                    }
-                },
-                label: {
-                    // Left-edge indicator: a plain Rectangle pinned to the leading edge.
-                    // The parent's clipShape(RoundedRectangle(cornerRadius: RBRadius.card))
-                    // naturally rounds the top-left and bottom-left corners, producing
-                    // exactly a left-side half-pill. No RoundedRectangle needed here —
-                    // fighting the parent shape causes the wrong corners to be rounded.
+                .overlay(
                     Rectangle()
                         .fill(rowStatus.color)
                         .frame(width: 4)
-                        .frame(maxHeight: .infinity)
-                }
-            )
-            .buttonStyle(.plain)
-            .help(expandState == true ? "Collapse jobs" : "Expand jobs")
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 0) {
-                    Color.clear.frame(width: RBSpacing.md)
-                    Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-                    Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
-                }
-                if let fullExpand = expandState {
-                    InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
+                        .frame(maxHeight: .infinity),
+                    alignment: .leading
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .onTapGesture {
+            guard !group.jobs.isEmpty else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                if expandState == true {
+                    expandState = (rowStatus == .inProgress) ? false : nil
+                } else {
+                    expandState = true
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear {
