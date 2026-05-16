@@ -17,15 +17,8 @@ struct ReRunButton: View {
     // MARK: - Phase
 
     /// Visual states of the re-run button lifecycle.
-    enum Phase { // swiftlint:disable:this missing_docs
-        /// Normal tappable state.
-        case idle
-        /// Spinner shown while the re-run request is in-flight.
-        case loading
-        /// Green checkmark shown for 1.5 s after success.
-        case done
-        /// Red cross shown for 1.5 s after failure.
-        case failed
+    enum Phase {
+        case idle, loading, done, failed
     }
 
     // MARK: - Body
