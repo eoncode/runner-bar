@@ -1,7 +1,6 @@
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
-/// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
 struct SectionHeaderLabel: View {
     let title: String
     var body: some View {
@@ -15,7 +14,6 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PopoverHeaderView
-/// Header row: system stats left, settings + close right.
 struct PopoverHeaderView: View {
     let stats: SystemStats
     let cpuHistory: [Double]
@@ -182,9 +180,12 @@ struct ActionRowView: View {
                 }
                 .frame(maxHeight: .infinity)
                 Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+                // fix(#441 bug6): explicit rotationEffect(0) prevents parent
+                // animation context from rotating this chevron on expand/collapse.
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                    .rotationEffect(.degrees(0))
                     .padding(.trailing, 8)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -194,8 +195,6 @@ struct ActionRowView: View {
             )
 
             if isExpanded && group.typedGroupStatus == .inProgress {
-                // fix(#441 bug3): indent inline job rows 16 pt so they sit
-                // visually nested under the parent action row.
                 InlineJobRowsView(
                     group: group,
                     tick: tick,
@@ -324,7 +323,6 @@ private struct StatusPill: View {
 
 // MARK: - InlineJobRowsView
 /// Passive read-only ↳ job rows shown beneath every in-progress action group.
-/// Only shows jobs that are currently `in_progress`.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
@@ -343,7 +341,7 @@ struct InlineJobRowsView: View {
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
-    /// Deduplicated in-progress jobs — fix(#441 bug1)
+    /// fix(#441 bug1): deduplicate by id before filtering status.
     private var activeJobs: [ActiveJob] {
         var seen = Set<Int>()
         return group.jobs.filter { seen.insert($0.id).inserted }
