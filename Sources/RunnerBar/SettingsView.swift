@@ -218,9 +218,9 @@ struct SettingsView: View {
     // MARK: - Runner Management
 
     private var runnerSection: some View {
-        // ❌ NEVER put ForEach(observable.runners) directly here.
-        // Pass runners as a plain [Runner] to a child struct so the compiler
-        // cannot coerce the @EnvironmentObject access to Binding<C>.
+        // RunnerRowsView lives in RunnerRowsView.swift.
+        // ❌ NEVER use ForEach(observable.runners) directly here —
+        // the @EnvironmentObject coercion causes Binding<C> overload resolution.
         VStack(alignment: .leading, spacing: 0) {
             Text("Runner management").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
@@ -405,41 +405,6 @@ struct SettingsView: View {
             _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
             DispatchQueue.main.async { isSigningOut = false }
         }
-    }
-}
-
-// MARK: - RunnerRowsView
-
-/// Isolated struct so ForEach receives a plain [Runner] value — no
-/// @EnvironmentObject / @ObservedObject in scope — defeating the
-/// Binding<C> and Range<Int> overload resolution paths entirely.
-/// Uses explicit id: \.id keypath to guarantee the correct ForEach
-/// overload is selected regardless of Swift toolchain version.
-/// ❌ NEVER inline this back into SettingsView.runnerSection.
-/// ❌ NEVER change ForEach(runners, id: \.id) back to ForEach(runners).
-private struct RunnerRowsView: View {
-    let runners: [Runner]
-
-    var body: some View {
-        if runners.isEmpty {
-            Text("No runners configured").font(.caption).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 4)
-        } else {
-            ForEach(runners, id: \.id) { runner in
-                HStack(spacing: 8) {
-                    Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
-                    Text(runner.name).font(.system(size: 13)).lineLimit(1)
-                    Spacer()
-                    Text(runner.displayStatus)
-                        .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
-                }
-                .padding(.horizontal, 12).padding(.vertical, 5)
-            }
-        }
-    }
-
-    private func dotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 }
 // swiftlint:enable type_body_length
