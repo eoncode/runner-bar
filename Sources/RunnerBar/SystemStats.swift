@@ -138,22 +138,24 @@ final class SystemStatsViewModel: ObservableObject {
         var totalUser: Double = 0, totalSys: Double = 0
         var totalIdle: Double = 0, totalNice: Double = 0
 
-        for i in 0 ..< Int(numCPUs) {
-            let base = Int(CPU_STATE_MAX) * i
-            let user   = Double(info[base + Int(CPU_STATE_USER)])
-            let sys    = Double(info[base + Int(CPU_STATE_SYSTEM)])
-            let idle   = Double(info[base + Int(CPU_STATE_IDLE)])
-            let nice   = Double(info[base + Int(CPU_STATE_NICE)])
+        for coreIdx in 0 ..< Int(numCPUs) {
+            let base = Int(CPU_STATE_MAX) * coreIdx
+            let user = Double(info[base + Int(CPU_STATE_USER)])
+            let sys  = Double(info[base + Int(CPU_STATE_SYSTEM)])
+            let idle = Double(info[base + Int(CPU_STATE_IDLE)])
+            let nice = Double(info[base + Int(CPU_STATE_NICE)])
 
             if let prev = prevCPUInfo {
-                let du = user   - Double(prev[base + Int(CPU_STATE_USER)])
-                let ds = sys    - Double(prev[base + Int(CPU_STATE_SYSTEM)])
-                let di = idle   - Double(prev[base + Int(CPU_STATE_IDLE)])
-                let dn = nice   - Double(prev[base + Int(CPU_STATE_NICE)])
-                let total = du + ds + di + dn
+                let deltaUser = user - Double(prev[base + Int(CPU_STATE_USER)])
+                let deltaSys  = sys  - Double(prev[base + Int(CPU_STATE_SYSTEM)])
+                let deltaIdle = idle - Double(prev[base + Int(CPU_STATE_IDLE)])
+                let deltaNice = nice - Double(prev[base + Int(CPU_STATE_NICE)])
+                let total = deltaUser + deltaSys + deltaIdle + deltaNice
                 if total > 0 {
-                    totalUser += du; totalSys += ds
-                    totalIdle += di; totalNice += dn
+                    totalUser += deltaUser
+                    totalSys  += deltaSys
+                    totalIdle += deltaIdle
+                    totalNice += deltaNice
                 }
             } else {
                 totalUser += user; totalSys += sys

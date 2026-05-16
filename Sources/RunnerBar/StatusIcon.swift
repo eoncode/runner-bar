@@ -10,17 +10,17 @@ struct StatusIcon {
     /// Icon character for the current status/conclusion.
     var icon: String {
         switch conclusion {
-        case "success":          return "\u{2713}"
-        case "failure":          return "\u{2717}"
-        case "cancelled":        return "\u{2298}"
-        case "skipped":          return "\u{2298}"
-        case "timed_out":        return "\u{2717}"
-        case "action_required":  return "!"
+        case "success":         return "\u{2713}"
+        case "failure":         return "\u{2717}"
+        case "cancelled":       return "\u{2298}"
+        case "skipped":         return "\u{2298}"
+        case "timed_out":       return "\u{2717}"
+        case "action_required": return "!"
         default:
             switch status {
-            case "in_progress":  return "\u{25B6}"
-            case "queued":       return "\u{00B7}"
-            default:             return "\u{00B7}"
+            case "in_progress": return "\u{25B6}"
+            case "queued":      return "\u{00B7}"
+            default:            return "\u{00B7}"
             }
         }
     }
@@ -28,15 +28,15 @@ struct StatusIcon {
     /// Foreground colour for the icon.
     var color: NSColor {
         switch conclusion {
-        case "success":                  return .systemGreen
-        case "failure", "timed_out":     return .systemRed
-        case "action_required":          return .systemOrange
-        case "cancelled", "skipped":     return .secondaryLabelColor
+        case "success":                return .systemGreen
+        case "failure", "timed_out":   return .systemRed
+        case "action_required":        return .systemOrange
+        case "cancelled", "skipped":   return .secondaryLabelColor
         default:
             switch status {
-            case "in_progress":          return .systemYellow
-            case "queued":               return .secondaryLabelColor
-            default:                     return .secondaryLabelColor
+            case "in_progress":        return .systemYellow
+            case "queued":             return .secondaryLabelColor
+            default:                   return .secondaryLabelColor
             }
         }
     }
