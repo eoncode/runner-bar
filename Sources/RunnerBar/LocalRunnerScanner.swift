@@ -1,6 +1,5 @@
 import Foundation
 
-// swiftlint:disable function_parameter_count
 // MARK: - LocalRunnerScanner
 
 /// Discovers locally-installed GitHub Actions self-hosted runners without
@@ -39,12 +38,10 @@ struct LocalRunnerScanner {
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 
-        // Source 2 first: .runner JSON is most authoritative — richer data.
         for model in scanRunnerJSONFiles() {
             models[model.id] = model
         }
 
-        // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found.
         for model in scanLaunchAgents() {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
             let alreadyCoveredByJSON = models.values.contains { existing in
@@ -57,7 +54,6 @@ struct LocalRunnerScanner {
             }
         }
 
-        // Source 3: mark which runners are live.
         let liveLabels = scanLiveServices()
         for key in models.keys {
             if let model = models[key] {
@@ -89,6 +85,7 @@ struct LocalRunnerScanner {
             let runnerName = parts.count > 2 ? parts[2...].joined(separator: ".") : "runner"
             // NOSONAR — user-facing GitHub repo URL, not a configurable service endpoint.
             let gitHubUrl = "https://github.com/\(owner)/\(repo)"
+            // swiftlint:disable:next function_parameter_count
             return RunnerModel.make(
                 runnerName: runnerName,
                 gitHubUrl: gitHubUrl,
@@ -142,6 +139,7 @@ struct LocalRunnerScanner {
                     return nil
                 }
                 let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
+                // swiftlint:disable:next function_parameter_count
                 return RunnerModel.make(
                     runnerName: name,
                     gitHubUrl: json.gitHubUrl,
@@ -175,4 +173,3 @@ struct LocalRunnerScanner {
         return labels
     }
 }
-// swiftlint:enable function_parameter_count

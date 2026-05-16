@@ -1,6 +1,8 @@
 import Foundation
 import os
 
+// swiftlint:disable file_length
+
 // MARK: - gh API
 
 /// Thread-safe rate-limit flag.
@@ -299,6 +301,11 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
         return nil
     }
+    return sliceStepFromLog(raw: raw, stepNumber: stepNumber)
+}
+
+/// Slices a step section out of raw log text.
+private func sliceStepFromLog(raw: String, stepNumber: Int) -> String {
     let cleaned = stripAnsi(raw)
     let lines = cleaned.components(separatedBy: "\n")
     var sections: [String] = []
@@ -319,10 +326,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     }
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
-        log(
-            "fetchStepLog › stepNumber \(stepNumber) out of range "
-                + "(sections=\(sections.count)), returning full log"
-        )
+        log("fetchStepLog › stepNumber \(stepNumber) out of range (sections=\(sections.count)), returning full log")
         return cleaned
     }
     let section = sections[index]
@@ -379,3 +383,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
+// swiftlint:enable file_length
