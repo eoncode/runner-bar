@@ -100,12 +100,6 @@ struct ActionGroup: Identifiable, Equatable {
         return runnerNames.allSatisfy { !$0.contains("/") }
     }
 
-    var progressFraction: Double? {
-        let total = jobsTotal
-        guard total > 0 else { return nil }
-        return Double(jobsDone) / Double(total)
-    }
-
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
         guard let first = runs.first else { return self }
         let rebuilt = WorkflowRun(
