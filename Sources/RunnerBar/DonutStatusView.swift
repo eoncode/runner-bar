@@ -27,7 +27,7 @@ struct DonutStatusView: View {
                 inProgressDonut
             case .queued:
                 queuedDonut
-            case .completed:
+            case .completed, .success, .failed, .unknown:
                 completedDonut
             }
         }
@@ -73,7 +73,7 @@ struct DonutStatusView: View {
             )
     }
 
-    /// Static ring + SF symbol for completed state.
+    /// Static ring + SF symbol for completed/success/failed/unknown state.
     private var completedDonut: some View {
         let color = isSuccess ? DesignTokens.Colors.statusGreen : DesignTokens.Colors.statusRed
         let symbol = isSuccess ? "checkmark" : "xmark"

@@ -2,8 +2,7 @@ import SwiftUI
 
 // MARK: - Job Detail View
 struct JobDetailView: View {
-    let job: WorkflowJob
-    @EnvironmentObject var runnerModel: RunnerModel
+    let job: ActiveJob
     @State private var isExpanded = false
 
     var body: some View {
@@ -61,7 +60,7 @@ struct JobDetailView: View {
     private var stepsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Divider().padding(.horizontal, 10)
-            ForEach(job.steps, id: \.number) { step in
+            ForEach(job.steps) { step in
                 StepRow(step: step)
             }
         }
@@ -98,7 +97,7 @@ struct JobDetailView: View {
 
 // MARK: - Step Row
 struct StepRow: View {
-    let step: WorkflowStep
+    let step: JobStep
 
     var body: some View {
         HStack(spacing: 6) {
