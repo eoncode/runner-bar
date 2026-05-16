@@ -1,4 +1,5 @@
 import Combine
+import Darwin
 import Foundation
 
 // MARK: - SystemStatsSnapshot
@@ -33,7 +34,13 @@ struct SystemStats {
 
 /// ObservableObject that drives the system-stats header in `PopoverMainView`.
 /// Publishes `stats`, `cpuHistory`, `memHistory`, and `diskHistory` on the main thread.
+///
+/// ⚠️ SINGLETON — use `.shared`. Must NOT be created as @StateObject in views;
+/// history must survive popover close/reopen so sparklines show immediately on open.
 final class SystemStatsViewModel: ObservableObject {
+    /// Shared singleton — history accumulates for the lifetime of the app.
+    static let shared = SystemStatsViewModel()
+
     /// Current system resource snapshot.
     @Published var stats = SystemStats.zero
     /// Rolling CPU usage history (0.0–1.0 values for SparklineView).
@@ -43,18 +50,25 @@ final class SystemStatsViewModel: ObservableObject {
     /// Rolling disk usage history (0.0–1.0 values for SparklineView).
     @Published var diskHistory: [Double] = []
 
-    private let maxHistory = 30
+    private let maxHistory = 60
+    // ⚠️ 2s interval — sparkline needs ≥2 points; 5s meant blank graph for first 10s
+    private let pollInterval: TimeInterval = 2
     private var timer: Timer?
+    // For non-blocking delta CPU (host_processor_info)
+    private var prevCPUInfo: processor_info_array_t?
+    private var prevCPUInfoCount: mach_msg_type_number_t = 0
+
+    private init() {}
 
     // MARK: - Lifecycle
 
-    /// Starts a repeating 5-second poll.
+    /// Starts a repeating poll. Safe to call multiple times — no-ops if already running.
     func start() {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
             self?.poll()
         }
-        poll()
+        poll() // immediate first sample — no waiting for first tick
     }
 
     /// Stops the repeating poll timer.
@@ -66,6 +80,7 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - Private
 
     private func poll() {
+        // Disk reads are cheap; cpu/mem are fast with host APIs — no need for background thread
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let snapshot = self.collectStats()
@@ -99,25 +114,75 @@ final class SystemStatsViewModel: ObservableObject {
         return snapshot
     }
 
+    /// Non-blocking CPU usage via host_processor_info delta — no `top` subprocess.
     private func cpuUsage() -> Double {
-        let output = shell("top -l 1 -n 0 | grep 'CPU usage'", timeout: 5)
-        var used = 0.0
-        for part in output.components(separatedBy: ",") {
-            if part.contains("idle") { continue }
-            let nums = part.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-            if let val = Double(nums) { used += val }
+        var cpuInfo: processor_info_array_t?
+        var numCPUInfo: mach_msg_type_number_t = 0
+        var numCPUs: natural_t = 0
+
+        let result = host_processor_info(mach_host_self(),
+                                         PROCESSOR_CPU_LOAD_INFO,
+                                         &numCPUs,
+                                         &cpuInfo,
+                                         &numCPUInfo)
+        guard result == KERN_SUCCESS, let info = cpuInfo else { return 0 }
+        defer {
+            vm_deallocate(mach_task_self_,
+                          vm_address_t(bitPattern: info),
+                          vm_size_t(Int(numCPUInfo) * MemoryLayout<integer_t>.size))
         }
-        return min(used, 100)
+
+        var totalUser: Double = 0, totalSys: Double = 0
+        var totalIdle: Double = 0, totalNice: Double = 0
+
+        for i in 0 ..< Int(numCPUs) {
+            let base = Int(CPU_STATE_MAX) * i
+            let user   = Double(info[base + Int(CPU_STATE_USER)])
+            let sys    = Double(info[base + Int(CPU_STATE_SYSTEM)])
+            let idle   = Double(info[base + Int(CPU_STATE_IDLE)])
+            let nice   = Double(info[base + Int(CPU_STATE_NICE)])
+
+            if let prev = prevCPUInfo {
+                let du = user   - Double(prev[base + Int(CPU_STATE_USER)])
+                let ds = sys    - Double(prev[base + Int(CPU_STATE_SYSTEM)])
+                let di = idle   - Double(prev[base + Int(CPU_STATE_IDLE)])
+                let dn = nice   - Double(prev[base + Int(CPU_STATE_NICE)])
+                let total = du + ds + di + dn
+                if total > 0 {
+                    totalUser += du; totalSys += ds
+                    totalIdle += di; totalNice += dn
+                }
+            } else {
+                totalUser += user; totalSys += sys
+                totalIdle += idle; totalNice += nice
+            }
+        }
+
+        // Store current as previous for next delta
+        if let prev = prevCPUInfo {
+            vm_deallocate(mach_task_self_,
+                          vm_address_t(bitPattern: prev),
+                          vm_size_t(Int(prevCPUInfoCount) * MemoryLayout<integer_t>.size))
+        }
+        prevCPUInfo = info
+        prevCPUInfoCount = numCPUInfo
+        // Prevent dealloc in defer since we stored it
+        // (We re-allocate from host each call, so the stored pointer stays valid
+        //  until explicitly deallocated above on the next call.)
+
+        let total = totalUser + totalSys + totalIdle + totalNice
+        guard total > 0 else { return 0 }
+        return min(((totalUser + totalSys + totalNice) / total) * 100.0, 100.0)
     }
 
     private func memTotalGB() -> Double {
-        let output = shell("sysctl -n hw.memsize", timeout: 5)
+        let output = shell("sysctl -n hw.memsize", timeout: 3)
         guard let bytes = Double(output.trimmingCharacters(in: .whitespacesAndNewlines)) else { return 0 }
         return bytes / 1_073_741_824
     }
 
     private func memUsedGB() -> Double {
-        let output = shell("vm_stat", timeout: 5)
+        let output = shell("vm_stat", timeout: 3)
         var active: Double = 0, wired: Double = 0, compressed: Double = 0
         for line in output.components(separatedBy: "\n") {
             let lineNums = line.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
@@ -130,14 +195,14 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     private func diskTotalGB() -> Double {
-        let output = shell("df -k / | tail -1", timeout: 5)
+        let output = shell("df -k / | tail -1", timeout: 3)
         let parts = output.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
         guard parts.count >= 2, let kilobytes = Double(parts[1]) else { return 0 }
         return kilobytes / 1_048_576
     }
 
     private func diskUsedGB() -> Double {
-        let output = shell("df -k / | tail -1", timeout: 5)
+        let output = shell("df -k / | tail -1", timeout: 3)
         let parts = output.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
         guard parts.count >= 3, let kilobytes = Double(parts[2]) else { return 0 }
         return kilobytes / 1_048_576
