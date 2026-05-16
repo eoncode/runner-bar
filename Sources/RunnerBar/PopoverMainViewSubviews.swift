@@ -15,7 +15,8 @@ struct SystemStatChip: View {
                 .font(DesignTokens.Font.statLabel)
                 .foregroundColor(DesignTokens.Color.labelSecondary)
             SparklineView(values: history, highlight: pct)
-                .frame(width: 28, height: 12)
+                .frame(width: DesignTokens.Layout.sparklineWidth,
+                       height: DesignTokens.Layout.sparklineHeight)
             Text(value)
                 .font(DesignTokens.Font.statValue)
                 .foregroundColor(.primary)
@@ -27,8 +28,8 @@ struct SystemStatChip: View {
 // MARK: - SparklineView
 
 /// A tiny multi-bar sparkline for CPU/MEM/DISK history.
-/// Values are expected as fractions in the range 0.0–1.0
-/// (as stored by SystemStatsViewModel — already divided by 100).
+/// Uses Canvas instead of GeometryReader to avoid zero-width collapse
+/// when placed inside an HStack that contains a Spacer().
 struct SparklineView: View {
     let values: [Double]
     let highlight: Double
@@ -38,16 +39,23 @@ struct SparklineView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            HStack(alignment: .bottom, spacing: 1) {
-                ForEach(Array(values.suffix(10).enumerated()), id: \.offset) { _, v in
-                    let h = max(1, geo.size.height * CGFloat(min(v, 1.0)))
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(color.opacity(0.7))
-                        .frame(width: max(1, (geo.size.width - 9) / 10), height: h)
-                }
+        Canvas { ctx, size in
+            let samples = values.suffix(10)
+            guard !samples.isEmpty else { return }
+            let count = samples.count
+            let gap: CGFloat = 1
+            let barW = max(1, (size.width - CGFloat(count - 1) * gap) / CGFloat(count))
+            for (i, v) in samples.enumerated() {
+                let fraction = CGFloat(min(max(v, 0), 100)) / 100
+                let barH = max(1, size.height * fraction)
+                let x = CGFloat(i) * (barW + gap)
+                let y = size.height - barH
+                let rect = CGRect(x: x, y: y, width: barW, height: barH)
+                ctx.fill(
+                    Path(roundedRect: rect, cornerRadius: 1),
+                    with: .color(color.opacity(0.75))
+                )
             }
-            .frame(maxHeight: .infinity, alignment: .bottom)
         }
     }
 }
