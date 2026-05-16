@@ -29,7 +29,6 @@ import SwiftUI
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
 struct SettingsView: View {
-    /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
 
     @ObservedObject private var settings = SettingsStore.shared
@@ -138,9 +137,6 @@ struct SettingsView: View {
     // MARK: - Local Runners
 
     private var localRunnersSection: some View {
-        // Explicit [RunnerModel] type annotation prevents Swift from resolving
-        // ForEach to the Range<Int> overload when RunnerModel.id is an Int.
-        // ❌ NEVER remove the type annotation on localRunners.
         let localRunners: [RunnerModel] = localRunnerStore.runners
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -222,29 +218,13 @@ struct SettingsView: View {
     // MARK: - Runner Management
 
     private var runnerSection: some View {
-        // ForEach(_:id:) with an explicit id keypath hard-pins the
-        // RandomAccessCollection overload. The compiler cannot fall back to
-        // ForEach(Range<Int>) when id: is present, regardless of Runner.ID type.
-        // ❌ NEVER remove the id: \.id argument from this ForEach.
-        // ❌ NEVER pass observable.runners directly without id:.
+        // ❌ NEVER put ForEach(observable.runners) directly here.
+        // Pass runners as a plain [Runner] to a child struct so the compiler
+        // cannot coerce the @EnvironmentObject access to Binding<C>.
         VStack(alignment: .leading, spacing: 0) {
             Text("Runner management").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            if observable.runners.isEmpty {
-                Text("No runners configured").font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-            } else {
-                ForEach(observable.runners, id: \.id) { runner in
-                    HStack(spacing: 8) {
-                        Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
-                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
-                        Spacer()
-                        Text(runner.displayStatus)
-                            .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                }
-            }
+            RunnerRowsView(runners: observable.runners)
             Text("Scopes").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
             ForEach(scopeStore.scopes, id: \.self) { scopeStr in
@@ -413,10 +393,6 @@ struct SettingsView: View {
         newScope = ""
     }
 
-    private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
-    }
-
     private func signInWithGitHub() {
         guard let url = URL(string: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens") else { return }
         NSWorkspace.shared.open(url)
@@ -429,6 +405,38 @@ struct SettingsView: View {
             _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
             DispatchQueue.main.async { isSigningOut = false }
         }
+    }
+}
+
+// MARK: - RunnerRowsView
+
+/// Isolated struct so ForEach receives a plain [Runner] value — no
+/// @EnvironmentObject / @ObservedObject in scope — defeating the
+/// Binding<C> and Range<Int> overload resolution paths entirely.
+/// ❌ NEVER inline this back into SettingsView.runnerSection.
+private struct RunnerRowsView: View {
+    let runners: [Runner]
+
+    var body: some View {
+        if runners.isEmpty {
+            Text("No runners configured").font(.caption).foregroundColor(.secondary)
+                .padding(.horizontal, 12).padding(.vertical, 4)
+        } else {
+            ForEach(runners) { runner in
+                HStack(spacing: 8) {
+                    Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
+                    Text(runner.name).font(.system(size: 13)).lineLimit(1)
+                    Spacer()
+                    Text(runner.displayStatus)
+                        .font(.caption).foregroundColor(.secondary).lineLimit(1).fixedSize()
+                }
+                .padding(.horizontal, 12).padding(.vertical, 5)
+            }
+        }
+    }
+
+    private func dotColor(for runner: Runner) -> Color {
+        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
     }
 }
 // swiftlint:enable type_body_length
