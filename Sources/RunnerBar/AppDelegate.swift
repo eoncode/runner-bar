@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length function_parameter_count
+// swiftlint:disable type_body_length
+// swiftlint:disable file_length
 
 // MARK: - NavState
 
@@ -147,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ?? NSImage()
     }
 
-    func applicationDidFinishLaunching(_ _: Notification) {
+    func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
             button.image = menuBarImage(for: .allOffline)
@@ -186,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
+        _ = notification
     }
 
     private func updateStatusIcon() {
@@ -475,7 +477,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let saved = savedNavState, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             guard let self, let panel = self.panel else { return }
             let loc = event.locationInWindow
             let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin ?? loc
@@ -489,4 +492,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length function_parameter_count
+// swiftlint:enable type_body_length file_length

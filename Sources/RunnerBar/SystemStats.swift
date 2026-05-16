@@ -73,8 +73,7 @@ private struct DiskStats {
 /// Lifecycle: call `start()` from `.onAppear` and `stop()` from `.onDisappear`.
 ///
 /// PRE-WARM CONTRACT:
-/// start() dispatches an immediate background sample so real values publish
-/// before the first timer tick.
+/// start() dispatches an immediate background sample so real values publish before the first timer tick.
 final class SystemStatsViewModel: ObservableObject {
     @Published var stats: SystemStats = .zero
     private var timer: Timer?
@@ -87,7 +86,7 @@ final class SystemStatsViewModel: ObservableObject {
     /// macOS always mounts the root volume at `/` — this is not configurable.
     private let rootVolumePath = "/" // NOSONAR S1075 — macOS root mount point, not a user path
 
-    /// No setup required — state is populated via start().
+    // No setup required — state is populated via start().
     init() {}
     deinit { timer?.invalidate() }
 

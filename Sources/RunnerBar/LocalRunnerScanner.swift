@@ -1,7 +1,5 @@
 import Foundation
 
-// MARK: - LocalRunnerScanner
-
 /// Discovers locally-installed GitHub Actions self-hosted runners without
 /// requiring a GitHub API token. Uses three complementary scan sources:
 ///
