@@ -250,10 +250,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
         }
 
+        // ⚠️ THREAD SAFETY — DO NOT REMOVE DispatchQueue.main.async.
+        // RunnerStore polls on a background thread and calls onChange from that
+        // thread. Both updateStatusIcon() and observable.reload() mutate
+        // @Published/@MainActor state and MUST run on the main thread.
+        // The DispatchQueue.main.async here is the enforcement point.
+        // ❌ NEVER remove this dispatch or call onChange body directly.
         RunnerStore.shared.onChange = { [weak self] in
-            guard let self else { return }
-            self.updateStatusIcon()
-            if !self.panelIsOpen { self.observable.reload() }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.updateStatusIcon()
+                if !self.panelIsOpen { self.observable.reload() }
+            }
         }
         RunnerStore.shared.start()
     }
