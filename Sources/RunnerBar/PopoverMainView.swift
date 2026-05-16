@@ -6,10 +6,6 @@ import SwiftUI
 /// by AppDelegate via `wrapEnv`, so no init parameters are needed.
 struct PopoverMainView: View {
     @EnvironmentObject private var callbacks: NavigationCallbacks
-    @EnvironmentObject private var store: RunnerStoreObservable
-    @EnvironmentObject private var statsVM: SystemStatsViewModel
-    @EnvironmentObject private var popoverOpenState: PopoverOpenState
-    @EnvironmentObject private var localRunnerStore: LocalRunnerStore
 
     var body: some View {
         PopoverMainViewSubviews(
@@ -39,6 +35,10 @@ struct PopoverMainViewSubviews: View {
     @State private var tick: Int = 0
     private let tickTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    private var isAuthenticated: Bool {
+        !SettingsStore.shared.githubToken.isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             PopoverHeaderView(
@@ -46,7 +46,7 @@ struct PopoverMainViewSubviews: View {
                 cpuHistory: statsVM.cpuHistory,
                 memHistory: statsVM.memHistory,
                 diskHistory: [],
-                isAuthenticated: !SettingsStore.shared.githubToken.isEmpty,
+                isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: onSelectSettings
             )
@@ -70,18 +70,23 @@ struct PopoverMainViewSubviews: View {
                         ForEach(store.jobs) { job in
                             Button(action: { onSelectJob(job) }) {
                                 HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(job.conclusion == nil ? Color.blue : (job.conclusion == "success" ? Color.green : Color.red))
-                                        .frame(width: 8, height: 8)
+                                    DonutStatusView(
+                                        status: .inProgress,
+                                        conclusion: job.conclusion,
+                                        progress: job.progressFraction
+                                    )
                                     Text(job.name)
                                         .font(.system(size: 12))
                                         .foregroundColor(.primary)
                                         .lineLimit(1)
+                                        .truncationMode(.tail)
                                         .layoutPriority(1)
                                     Spacer()
                                     Text(job.elapsed)
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(DesignTokens.Fonts.mono)
                                         .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
                                     Image(systemName: "chevron.right")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
