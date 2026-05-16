@@ -283,7 +283,12 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
             if !observable.runners.isEmpty {
-                ForEach(observable.runners, id: \.id) { runner in
+                // Runner: Identifiable — do NOT add id: \.id here.
+                // Passing an explicit id: triggers the Binding<MutableCollection>
+                // ForEach overload instead of the plain RandomAccessCollection one,
+                // causing a cascade of type errors.
+                // ❌ NEVER add id: \.id back to this ForEach.
+                ForEach(observable.runners) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
                         Text(runner.name).font(.system(size: 13)).lineLimit(1)
