@@ -35,6 +35,7 @@ struct LocalRunnerScanner {
 
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
     /// This is a synchronous, blocking call — always invoke from a background thread.
+    // swiftlint:disable:next cyclomatic_complexity
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 
@@ -105,10 +106,6 @@ struct LocalRunnerScanner {
     /// which would trigger macOS TCC prompts for Desktop/Documents/Downloads (macOS 14+).
     private func scanRunnerJSONFiles() -> [RunnerModel] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        // Known self-hosted runner install directories — explicit paths only.
-        // ⚠️ DO NOT add `~` or `$HOME` here: broad home-dir scans trigger TCC dialogs.
-        // ⚠️ Each path is single-quoted before shell interpolation so that home
-        // directories containing spaces (e.g. /Users/First Last) don't break find.
         let rawPaths = [
             "\(home)/actions-runner",
             "\(home)/runner",

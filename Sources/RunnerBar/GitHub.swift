@@ -80,7 +80,6 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     guard let ghPath = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
-    // Need exit code for rate-limit detection, so run the process manually to capture it.
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -344,19 +343,6 @@ private func stripAnsi(_ input: String) -> String {
         log("stripAnsi › regex compile error: \(error)")
         return input
     }
-}
-
-// MARK: - Shared gh binary path
-
-/// Returns the first executable `gh` binary found on common install paths.
-/// Paths are security-allowlisted absolute locations — never resolved via PATH.
-func ghBinaryPath() -> String? {
-    let candidates = [
-        "/opt/homebrew/bin/gh", // NOSONAR S1075 — allowlisted Apple Silicon Homebrew path
-        "/usr/local/bin/gh",   // NOSONAR S1075 — allowlisted Intel Homebrew path
-        "/usr/bin/gh"          // NOSONAR S1075 — allowlisted system-level path
-    ]
-    return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
 }
 
 // MARK: - POST helper

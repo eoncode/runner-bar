@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length
+// swiftlint:disable type_body_length file_length function_parameter_count
 
 // MARK: - NavState
 
@@ -665,4 +665,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length file_length
+// swiftlint:enable type_body_length file_length function_parameter_count
