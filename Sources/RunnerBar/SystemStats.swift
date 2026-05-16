@@ -2,6 +2,7 @@ import Combine
 import Foundation
 
 // MARK: - SystemStatsSnapshot
+
 /// Immutable snapshot of CPU and memory utilisation at a point in time.
 struct SystemStatsSnapshot {
     /// CPU utilisation as a percentage (0–100).
@@ -11,6 +12,7 @@ struct SystemStatsSnapshot {
 }
 
 // MARK: - SystemStats
+
 /// Snapshot of system resource utilisation used by the popover header.
 struct SystemStats {
     /// CPU utilisation percentage (0–100).
@@ -28,12 +30,17 @@ struct SystemStats {
 }
 
 // MARK: - SystemStatsViewModel
+
 /// ObservableObject that drives the system-stats header in `PopoverMainView`.
 /// Publishes `stats`, `cpuHistory`, `memHistory`, and `diskHistory` on the main thread.
 final class SystemStatsViewModel: ObservableObject {
+    /// Current system resource snapshot.
     @Published var stats = SystemStats.zero
+    /// Rolling CPU usage history (0.0–1.0 values for SparklineView).
     @Published var cpuHistory: [Double] = []
+    /// Rolling memory usage history (0.0–1.0 values for SparklineView).
     @Published var memHistory: [Double] = []
+    /// Rolling disk usage history (0.0–1.0 values for SparklineView).
     @Published var diskHistory: [Double] = []
 
     private let maxHistory = 30
@@ -83,13 +90,13 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: - System calls
 
     private func collectStats() -> SystemStats {
-        var s = SystemStats()
-        s.cpuPct     = cpuUsage()
-        s.memUsedGB  = memUsedGB()
-        s.memTotalGB = memTotalGB()
-        s.diskUsedGB = diskUsedGB()
-        s.diskTotalGB = diskTotalGB()
-        return s
+        var snapshot = SystemStats()
+        snapshot.cpuPct     = cpuUsage()
+        snapshot.memUsedGB  = memUsedGB()
+        snapshot.memTotalGB = memTotalGB()
+        snapshot.diskUsedGB = diskUsedGB()
+        snapshot.diskTotalGB = diskTotalGB()
+        return snapshot
     }
 
     private func cpuUsage() -> Double {
@@ -114,8 +121,8 @@ final class SystemStatsViewModel: ObservableObject {
         let output = shell("vm_stat", timeout: 5)
         var active: Double = 0, wired: Double = 0, compressed: Double = 0
         for line in output.components(separatedBy: "\n") {
-            let n = line.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-            let val = Double(n) ?? 0
+            let lineNums = line.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+            let val = Double(lineNums) ?? 0
             if line.contains("Pages active")     { active     = val }
             if line.contains("Pages wired")      { wired      = val }
             if line.contains("Pages occupied")   { compressed = val }
@@ -127,27 +134,31 @@ final class SystemStatsViewModel: ObservableObject {
     private func diskTotalGB() -> Double {
         let output = shell("df -k / | tail -1", timeout: 5)
         let parts = output.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        guard parts.count >= 2, let kb = Double(parts[1]) else { return 0 }
-        return kb / 1_048_576
+        guard parts.count >= 2, let kilobytes = Double(parts[1]) else { return 0 }
+        return kilobytes / 1_048_576
     }
 
     private func diskUsedGB() -> Double {
         let output = shell("df -k / | tail -1", timeout: 5)
         let parts = output.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        guard parts.count >= 3, let kb = Double(parts[2]) else { return 0 }
-        return kb / 1_048_576
+        guard parts.count >= 3, let kilobytes = Double(parts[2]) else { return 0 }
+        return kilobytes / 1_048_576
     }
 }
 
 // MARK: - SystemStatsPoller (legacy — kept for any remaining observers)
+
 /// Polls CPU and memory usage on a background thread and publishes snapshots.
 final class SystemStatsPoller {
+    /// Shared singleton instance.
     static let shared = SystemStatsPoller()
+    /// Most recent snapshot produced by the background poll.
     private(set) var latest: SystemStatsSnapshot = SystemStatsSnapshot(cpuPercent: 0, memPercent: 0)
     private var observers: [(SystemStatsSnapshot) -> Void] = []
     private let lock = NSLock()
     private init() {}
 
+    /// Starts the background polling loop at `interval` seconds.
     func start(interval: TimeInterval = 5) {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
@@ -163,6 +174,7 @@ final class SystemStatsPoller {
         }
     }
 
+    /// Registers an observer block and returns a token (unused; kept for API compatibility).
     @discardableResult
     func addObserver(_ block: @escaping (SystemStatsSnapshot) -> Void) -> Int {
         lock.lock(); defer { lock.unlock() }

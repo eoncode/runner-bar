@@ -39,7 +39,6 @@ final class SettingsStore: ObservableObject {
 
 // MARK: - Comparable+clamped
 
-/// Clamps a `Comparable` value to the given closed range.
 private extension Comparable {
     /// Returns this value clamped to `range`.
     func clamped(to range: ClosedRange<Self>) -> Self {

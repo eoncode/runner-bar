@@ -69,48 +69,69 @@ struct StepLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ──────────────────────────────────────────────────────────────────────────
-            HStack(spacing: 6) {
-                Button(action: onBack) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "chevron.left").font(.caption)
-                        Text("Steps").font(.caption)
-                    }
-                    .foregroundColor(.secondary)
-                    .fixedSize()
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                    Button(
-                        action: { NSWorkspace.shared.open(url) },
-                        label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "safari").font(.caption)
-                                Text("GitHub").font(.caption)
-                            }
-                            .foregroundColor(.secondary)
-                            .fixedSize()
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .help("Open job on GitHub")
-                }
-                LogCopyButton(
-                    fetch: { completion in
-                        let text = logText
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(text)
-                        }
-                    },
-                    isDisabled: logText == nil || logText?.isEmpty == true
-                )
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+            topBar
+            stepHeader
+            logScrollView
+        }
+        // ════════════════════════════════════════════════════════════════════════
+        // ⚠️ idealWidth: 480 hints the initial panel width before KVO fires.
+        // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // ❌ NEVER omit idealWidth: 480
+        // ❌ NEVER add .frame(height:) or .fixedSize() here
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
+        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
+        // is removed is major major major.
+        // ════════════════════════════════════════════════════════════════════════
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        .onAppear { loadLog() }
+    }
 
-            // ── Step name (large) ───────────────────────────────────────────────────────────
+    // MARK: - Subviews
+
+    private var topBar: some View {
+        HStack(spacing: 6) {
+            Button(action: onBack) {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.caption)
+                    Text("Steps").font(.caption)
+                }
+                .foregroundColor(.secondary)
+                .fixedSize()
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            if let urlString = job.htmlUrl, let url = URL(string: urlString) {
+                Button(
+                    action: { NSWorkspace.shared.open(url) },
+                    label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "safari").font(.caption)
+                            Text("GitHub").font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                        .fixedSize()
+                    }
+                )
+                .buttonStyle(.plain)
+                .help("Open job on GitHub")
+            }
+            LogCopyButton(
+                fetch: { completion in
+                    let text = logText
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        completion(text)
+                    }
+                },
+                isDisabled: logText == nil || logText?.isEmpty == true
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+    }
+
+    private var stepHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -118,7 +139,6 @@ struct StepLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ───────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase")
                     .font(.system(size: 10))
@@ -204,52 +224,42 @@ struct StepLogView: View {
             .padding(.horizontal, 12).padding(.bottom, 6)
 
             Divider()
-
-            // ── Log — INSIDE ScrollView ────────────────────────────────────────────────────────
-            // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
-            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
-            ScrollView(.vertical, showsIndicators: true) {
-                if isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView().controlSize(.small).padding(.vertical, 20)
-                        Spacer()
-                    }
-                } else if let text = logText, !text.isEmpty {
-                    Text(text)
-                        .font(DesignTokens.Font.monoXSmall)
-                        .foregroundColor(.primary.opacity(0.85))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        // ⚠️ Adaptive log background.
-                        // Color.primary.opacity(0.05) is perceptually neutral on both
-                        // light (near-white tint) and dark (near-black tint) surfaces.
-                        // ❌ NEVER use Color.black.opacity() here — it is not adaptive
-                        // and produces a muddy grey on light mode.
-                        .background(Color.primary.opacity(0.05))
-                } else {
-                    Text("Log not available")
-                        .font(DesignTokens.Font.monoSmall)
-                        .foregroundColor(DesignTokens.Color.labelSecondary)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                }
-            }
-            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents panel growing off-screen.
-            // ❌ NEVER remove this modifier.
-            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ════════════════════════════════════════════════════════════════════════
-        // ⚠️ idealWidth: 480 hints the initial panel width before KVO fires.
-        // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // ❌ NEVER omit idealWidth: 480
-        // ❌ NEVER add .frame(height:) or .fixedSize() here
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
-        // is removed is major major major.
-        // ════════════════════════════════════════════════════════════════════════
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-        .onAppear { loadLog() }
+    }
+
+    private var logScrollView: some View {
+        // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
+        // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
+        ScrollView(.vertical, showsIndicators: true) {
+            if isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView().controlSize(.small).padding(.vertical, 20)
+                    Spacer()
+                }
+            } else if let text = logText, !text.isEmpty {
+                Text(text)
+                    .font(DesignTokens.Font.monoXSmall)
+                    .foregroundColor(.primary.opacity(0.85))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    // ⚠️ Adaptive log background.
+                    // Color.primary.opacity(0.05) is perceptually neutral on both
+                    // light (near-white tint) and dark (near-black tint) surfaces.
+                    // ❌ NEVER use Color.black.opacity() here — it is not adaptive
+                    // and produces a muddy grey on light mode.
+                    .background(Color.primary.opacity(0.05))
+            } else {
+                Text("Log not available")
+                    .font(DesignTokens.Font.monoSmall)
+                    .foregroundColor(DesignTokens.Color.labelSecondary)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+            }
+        }
+        // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents panel growing off-screen.
+        // ❌ NEVER remove this modifier.
+        .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
     }
 
     // MARK: - Log loading
