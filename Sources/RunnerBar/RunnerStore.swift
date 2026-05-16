@@ -38,7 +38,7 @@ final class RunnerStore {
     private var actionGroupCache: [String: ActionGroup] = [:]
     private(set) var isRateLimited = false
     private var timer: Timer?
-    private var intervalCancellable: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
     var onChange: (() -> Void)?
 
     var aggregateStatus: AggregateStatus {
@@ -50,10 +50,22 @@ final class RunnerStore {
     }
 
     private init() {
-        intervalCancellable = SettingsStore.shared.$pollingInterval
+        SettingsStore.shared.$pollingInterval
             .dropFirst(1)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleTimer() }
+            .store(in: &cancellables)
+
+        // Re-fetch immediately when scopes are added or removed so the
+        // popover reflects the new scope without requiring an app restart.
+        ScopeStore.shared.$scopes
+            .dropFirst(1)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.timer?.invalidate()
+                self?.fetch()
+            }
+            .store(in: &cancellables)
     }
 
     func start() {
