@@ -26,12 +26,18 @@ import SwiftUI
 //
 // RULE 6: systemStats MUST be stopped while the panel is open.
 // RULE 6b: systemStats must RESTART when the main view becomes visible again.
-// RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload().
+//
+// RULE 7: RunnerStore self-schedules via its own adaptive timer after each fetch().
+//   ❌ NEVER add a second repeating timer in PopoverMainView that calls
+//      store.reload() — it doubles API calls and drains GitHub quota.
+//   LocalRunnerStore.refresh() (local-only, no API) may be called from onAppear.
+//
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 
 /// Root popover view rendered inside the NSPanel.
-/// Owns the runner-refresh timer, display-tick timer, and system-stats lifecycle.
+/// Owns the display-tick timer and system-stats lifecycle.
+/// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
@@ -43,7 +49,6 @@ struct PopoverMainView: View {
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
-    @State private var runnerRefreshTimer: Timer?
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
@@ -79,14 +84,15 @@ struct PopoverMainView: View {
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if !popoverOpenState.isOpen { systemStats.start() }
-            startRunnerRefreshTimer()
             startDisplayTickTimer()
         }
         .onDisappear {
             systemStats.stop()
-            stopRunnerRefreshTimer()
             stopDisplayTickTimer()
         }
+        // RULE 6: stop stats polling while panel is open to prevent
+        // KVO storm (systemStats fires every 2s → preferredContentSize
+        // changes → resizeAndRepositionPanel() called on every tick).
         .onChange(of: popoverOpenState.isOpen) { open in
             if open { systemStats.stop() } else { systemStats.start() }
         }
@@ -134,23 +140,6 @@ struct PopoverMainView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
-    }
-
-    // MARK: - Runner refresh timer (RULE 7 — gated, 5s)
-
-    private func startRunnerRefreshTimer() {
-        stopRunnerRefreshTimer()
-        runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            if !self.popoverOpenState.isOpen {
-                Task { @MainActor in LocalRunnerStore.shared.refresh() }
-                self.store.reload()
-            }
-        }
-    }
-
-    private func stopRunnerRefreshTimer() {
-        runnerRefreshTimer?.invalidate()
-        runnerRefreshTimer = nil
     }
 
     // MARK: - Display tick timer (RULE 9 — ungated, 1s)
