@@ -46,7 +46,7 @@ import SwiftUI
 // the panel under the status button.
 // ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
 // ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate’s floor (minWidth = 280)
+// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate's floor (minWidth = 280)
 //    is lower; ActionDetailView needs its own content minWidth of 560.
 //
 // INITIAL WIDTH (openPanel):
@@ -73,8 +73,9 @@ import SwiftUI
 // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
 //
 // TIMER / POLL GUARD:
-// RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
-// ❌ NEVER remove this guard.
+// RunnerStore.shared.onChange fires on every poll tick.
+// observable.reload() is called unconditionally so the UI stays live while open.
+// updateStatusIcon() always runs regardless of panel state.
 //
 // DYNAMIC HEIGHT + WIDTH CONTRACT:
 // sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
@@ -271,7 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.updateStatusIcon()
-            if !self.panelIsOpen { self.observable.reload() }
+            self.observable.reload()
         }
         RunnerStore.shared.start()
     }
