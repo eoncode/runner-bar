@@ -79,14 +79,17 @@ struct SparklineMetricView: View {
 }
 
 // MARK: - DiskPillBadge
-/// Compact pill showing disk-used percentage, placed inline next to the
+/// Compact pill showing disk FREE percentage, placed inline next to the
 /// DISK sparkline in HeaderStatsBar.
+/// fix(#419 bug 6): shows FREE space remaining, not used space.
+/// Low free % = danger (red); mid = warning (orange).
 /// Always renders at its intrinsic size -- never truncates.
 struct DiskPillBadge: View {
-    let usedPct: Double
+    /// Percentage of disk space that is FREE (0–100).
+    let freePct: Double
 
     var body: some View {
-        Text(String(format: "%.0f%%", usedPct))
+        Text(String(format: "%.0f%%", freePct))
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
             .foregroundStyle(pillColor)
             .fixedSize()
@@ -94,21 +97,21 @@ struct DiskPillBadge: View {
             .padding(.vertical, 2)
             .background(pillColor.opacity(0.15), in: Capsule())
             .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
-            // Never let the capsule be compressed
             .fixedSize()
     }
 
+    /// fix(#419 bug 6): danger when little free space remains (inverted from used-pct logic).
     private var pillColor: Color {
-        if usedPct > 90 { return .rbDanger }
-        if usedPct > 75 { return .rbWarning }
-        return .rbWarning
+        if freePct < 10 { return .rbDanger }   // < 10% free = red
+        if freePct < 25 { return .rbWarning }  // < 25% free = orange
+        return .rbWarning                       // plenty free — keep warm tone to match header
     }
 }
 
 // MARK: - HeaderStatsBar
 /// Compact single-row stats header: CPU | MEM | DISK [pill] as inline chips.
 ///
-/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [87%]  →  ⚙ ✕
+/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [12%free]  →  ⚙ ✕
 ///
 /// The DiskPillBadge sits immediately after the DISK SparklineMetricView,
 /// before the Spacer, so it stays adjacent to the disk graph.
@@ -145,8 +148,8 @@ struct HeaderStatsBar: View {
             Color.secondary.opacity(0.3)
                 .frame(width: 1, height: 14)
 
-            // DISK chip + usage pill inline, before Spacer
-            // .fixedSize() on the HStack prevents either child from being squeezed
+            // DISK chip + free-space pill inline, before Spacer.
+            // fix(#419 bug 6): pass freePct (not usedPct) to DiskPillBadge.
             HStack(spacing: 5) {
                 SparklineMetricView(
                     label: "DISK",
@@ -160,8 +163,9 @@ struct HeaderStatsBar: View {
                 )
 
                 if statsVM.stats.diskTotalGB > 0 {
-                    let usedPct = (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
-                    DiskPillBadge(usedPct: usedPct)
+                    let freePct = ((statsVM.stats.diskTotalGB - statsVM.stats.diskUsedGB)
+                        / statsVM.stats.diskTotalGB) * 100
+                    DiskPillBadge(freePct: freePct)
                 }
             }
             .fixedSize()

@@ -36,6 +36,7 @@ private struct TreeLineLeader: View {
 
 // MARK: - JobInlineProgress
 /// Inline progress capsule rendered in the same HStack row as the job name.
+/// fix(#419): fill is rbBlue (in-progress = blue per spec), not rbWarning.
 private struct JobInlineProgress: View {
     let progress: Double
     var body: some View {
@@ -43,7 +44,7 @@ private struct JobInlineProgress: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.rbTextTertiary.opacity(0.22)).frame(height: 3)
                 Capsule()
-                    .fill(Color.rbWarning)
+                    .fill(Color.rbBlue)   // fix(#419): blue, not yellow
                     .frame(width: max(3, geo.size.width * CGFloat(progress)), height: 3)
             }
         }
@@ -117,6 +118,10 @@ private struct JobRowCard: View {
 /// Phase 4 spec (#420): inline job rows are **read-only / passive context**.
 /// No `>` chevron and no tap handler — navigation lives in ActionDetailView only.
 ///
+/// Expand behaviour (fix #419):
+///   - Default (auto-expand for in-progress): shows ONLY in_progress jobs.
+///   - After user taps the pill (fullExpand): shows ALL jobs.
+///
 /// ⚠️ REGRESSION GUARD #377 — DO NOT REMOVE `@EnvironmentObject popoverState`:
 /// This view must not render (or drive any cap/state mutations) while the
 /// popover is hidden. Removing the `isOpen` guard re-introduces the
@@ -124,6 +129,9 @@ private struct JobRowCard: View {
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
+    /// When false (default auto-expand), only in_progress jobs are shown.
+    /// When true (user tapped pill), all jobs are shown.
+    var fullExpand: Bool = false
 
     @EnvironmentObject private var popoverState: PopoverOpenState
 
@@ -132,7 +140,10 @@ struct InlineJobRowsView: View {
         guard popoverState.isOpen else { return AnyView(EmptyView()) }
         // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
         _ = tick
-        let jobs = group.jobs
+        // fix(#419): show only in_progress jobs in default expand; all jobs when fullExpand.
+        let jobs = fullExpand
+            ? group.jobs
+            : group.jobs.filter { $0.status == "in_progress" }
         return AnyView(
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in

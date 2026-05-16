@@ -6,6 +6,7 @@ import SwiftUI
 ///   - in_progress : animated rotating shimmer arc (blue) + arc trim from 0 → progress
 ///   - success     : full green circle stroke + checkmark SF Symbol
 ///   - failed      : full red circle stroke + xmark SF Symbol
+///   - queued      : solid yellow circle stroke
 ///
 /// Animation contract:
 ///   - In-progress background ring uses `@State rotationAngle` driven by
@@ -92,13 +93,11 @@ struct DonutStatusView: View {
         }
     }
 
-    /// Queued ring: dotted/low-opacity ring, no symbol.
+    /// Queued ring: solid yellow stroke — spec: queued = yellow.
+    /// fix(#419): was dashed blue, corrected to solid rbWarning.
     private var queuedRing: some View {
         Circle()
-            .stroke(
-                Color.rbBlue.opacity(0.4),
-                style: StrokeStyle(lineWidth: strokeWidth, dash: [2, 2])
-            )
+            .stroke(Color.rbWarning, lineWidth: strokeWidth)
             .frame(width: size, height: size)
     }
 

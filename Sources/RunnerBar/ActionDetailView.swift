@@ -39,6 +39,7 @@ import SwiftUI
 //          with Color.rbWarning / rbSuccess / rbDanger; job rows card-styled.
 // Review item 3: job rows now use .cardRow() modifier for consistency.
 // Review item 4: headBranch label replaced with BranchTagPill.
+// fix(#419): jobDotColor + jobStatusColor in_progress -> .rbBlue (spec: in-progress=blue).
 // ════════════════════════════════════════════════════════════════════════════════
 // Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
 // Drill-down chain:
@@ -303,10 +304,15 @@ extension ActionDetailView {
         return "\(startStr)→now"
     }
 
-    /// Returns the status dot colour for a job row using design tokens.
+    /// Returns the status dot colour for a job row.
+    /// fix(#419): in_progress -> .rbBlue (spec: in-progress=blue, not yellow).
     func jobDotColor(for job: ActiveJob) -> Color {
         if job.isDimmed { return Color.rbTextTertiary }
-        return job.status == "in_progress" ? Color.rbWarning : Color.rbTextTertiary
+        switch job.status {
+        case "in_progress": return Color.rbBlue
+        case "queued":      return Color.rbWarning
+        default:            return Color.rbTextTertiary
+        }
     }
 
     /// Short status label shown when a job has no conclusion yet.
@@ -319,8 +325,13 @@ extension ActionDetailView {
     }
 
     /// Text colour for a live (no-conclusion) job status label.
+    /// fix(#419): in_progress -> .rbBlue (spec: in-progress=blue).
     func jobStatusColor(for job: ActiveJob) -> Color {
-        job.status == "in_progress" ? Color.rbWarning : Color.rbTextSecondary
+        switch job.status {
+        case "in_progress": return Color.rbBlue
+        case "queued":      return Color.rbWarning
+        default:            return Color.rbTextSecondary
+        }
     }
 
     /// Maps a raw conclusion string to a human-readable icon + label.

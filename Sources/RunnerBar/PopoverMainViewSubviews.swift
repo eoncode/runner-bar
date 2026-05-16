@@ -170,29 +170,31 @@ struct PopoverLocalRunnerRow: View {
 /// Phase 4 redesign:
 ///  4a — Left-side status indicator: a 3pt-wide Capsule clipped inside the card
 ///       RoundedRectangle so it never bleeds past the card corner radius.
-///       Tapping the pill still toggles expand/collapse.
+///       Tapping the pill toggles between auto-expand (in-progress jobs only)
+///       and full-expand (all jobs).
 ///  4b — DonutStatusView replaces PieProgressDot
 ///  4c — Subtle row background tint keyed to status
 ///  4d — chevron.right is now always used (was chevron.down in some paths)
 ///
-/// Layout (fix 2 + 3a):
-///   The whole card (group header + optional inline rows) is wrapped in a
-///   RoundedRectangle background. The Capsule indicator is overlaid at the
-///   leading edge using a ZStack with .clipped() on the card so the pill
-///   never extends beyond the card's corner radius.
+/// Expand behaviour (fix #419 bug 2 & 3):
+///   - In-progress rows auto-expand on appear, showing ONLY in_progress jobs.
+///   - Failed/success/queued rows start collapsed.
+///   - User tap on pill cycles: collapsed -> auto (in-progress only) -> full (all jobs).
+///   - When status transitions to a terminal state, auto-collapse.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
 
-    // Expanded state for inline job rows; defaults to true for in-progress, false otherwise.
-    @State private var expanded: Bool = false
+    /// Three-state expand:
+    ///  - nil        : collapsed — no inline rows
+    ///  - false      : auto-expand — only in_progress jobs (default for in-progress rows)
+    ///  - true       : full-expand — all jobs (user tapped a second time)
+    @State private var expandState: Bool? = nil
 
     var body: some View {
-        // fix(3a): RoundedRectangle card wraps the full group (header + inline rows).
-        // .clipped() ensures the Capsule pill (fix 2) is masked to card bounds.
         ZStack(alignment: .leading) {
-            // fix(3a): card background — elevated surface + subtle border stroke
+            // Card background — elevated surface + subtle border stroke
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(Color.rbSurfaceElevated)
                 .overlay(
@@ -200,17 +202,24 @@ struct ActionRowView: View {
                         .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
                 )
 
-            // fix(3c): Status tint overlay at very low opacity
+            // Status tint overlay at very low opacity
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(rowStatus.tint)
 
-            // fix(2): Left status indicator as a Capsule inside the card.
-            // Width fixed at 3pt; height unconstrained so it spans the full card.
-            // .clipped() on the outer ZStack clips it to the card's corner radius.
+            // Left status indicator — tappable to cycle expand state.
+            // fix(#419 bug 4): no extra leading padding on the content below,
+            // so the donut aligns directly with the tree-line hierarchy.
             Button(
                 action: {
                     if !group.jobs.isEmpty {
-                        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            switch expandState {
+                            case nil:   expandState = false  // collapsed -> auto (in-progress only)
+                            case false: expandState = true   // auto -> full
+                            case true:  expandState = nil    // full -> collapsed
+                            default:    expandState = nil
+                            }
+                        }
                     }
                 },
                 label: {
@@ -222,37 +231,43 @@ struct ActionRowView: View {
                 }
             )
             .buttonStyle(.plain)
-            .help(expanded ? "Collapse jobs" : "Expand jobs")
+            .help(expandState == nil ? "Expand jobs" : "Collapse / expand jobs")
 
-            // Content column offset to clear the 3pt Capsule pill
+            // Content column — offset only enough to clear the 3pt Capsule pill.
+            // fix(#419 bug 4): removed extra .padding(.leading, RBSpacing.sm) from rowContent
+            // so the donut aligns with the hierarchy line drawn by TreeLineLeader below.
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
-                    // Spacer clears the Capsule pill (3pt) + inner padding
                     Color.clear.frame(width: RBSpacing.md)
 
                     Button(action: onSelect, label: { rowContent })
                         .buttonStyle(.plain)
 
-                    // 4d: Always chevron.right
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .padding(.trailing, 12)
                 }
 
-                // Inline job rows — only when expanded
-                if expanded {
-                    InlineJobRowsView(group: group, tick: tick)
+                // Inline job rows — shown when not collapsed
+                if let fullExpand = expandState {
+                    InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
                 }
             }
         }
-        // fix(2): clip the ZStack so the Capsule pill is masked by the card radius
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear {
-            // In-progress rows start expanded by default
-            expanded = (rowStatus == .inProgress)
+            // fix(#419 bug 2): in-progress rows auto-expand showing only active jobs.
+            // Other states (queued, success, failed) start collapsed.
+            expandState = (rowStatus == .inProgress) ? false : nil
+        }
+        // fix(#419 bug 3): auto-collapse when run transitions to terminal state.
+        .onChange(of: rowStatus) { newStatus in
+            if newStatus == .success || newStatus == .failed {
+                withAnimation(.easeInOut(duration: 0.15)) { expandState = nil }
+            }
         }
     }
 
@@ -285,7 +300,7 @@ struct ActionRowView: View {
             )
             RunnerTypeIcon(isLocal: group.isLocalGroup)
             Text(group.label)
-                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -297,7 +312,9 @@ struct ActionRowView: View {
             Spacer()
             metaTrailing(tick: tickSnapshot)
         }
-        .padding(.leading, RBSpacing.sm)
+        // fix(#419 bug 4): no extra .padding(.leading) here — the Color.clear spacer
+        // above (width: RBSpacing.md) is sufficient to clear the Capsule pill.
+        // Removing this extra indent aligns the donut with the tree-line below.
         .padding(.trailing, RBSpacing.xs)
         .padding(.vertical, 4)
     }
@@ -308,7 +325,7 @@ struct ActionRowView: View {
         // SwiftUI invalidation every display tick — DO NOT REMOVE.
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
-                .font(DesignTokens.Fonts.mono)         // Phase 1: mono font token
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -321,12 +338,12 @@ struct ActionRowView: View {
                 .layoutPriority(0)
         }
         Text(group.jobProgress)
-            .font(DesignTokens.Fonts.mono)             // Phase 1: mono font token
+            .font(DesignTokens.Fonts.mono)
             .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         Text(group.elapsed)
-            .font(DesignTokens.Fonts.mono)             // Phase 1: mono font token
+            .font(DesignTokens.Fonts.mono)
             .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)

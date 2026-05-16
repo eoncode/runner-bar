@@ -46,11 +46,11 @@ extension Color {
 /// Design-token color extensions used throughout the app.
 extension Color {
     // Status colors — same in both appearances
-    /// Accent blue — links, non-status UI accents (#0A84FF)
+    /// Accent blue — in-progress status color + links, non-status UI accents (#0A84FF)
     static let rbBlue = Color(red: 0.04, green: 0.52, blue: 1.00)
     /// Success green (#30D158)
     static let rbSuccess = Color(red: 0.19, green: 0.82, blue: 0.35)
-    /// Warning orange (#FF9F0A)
+    /// Warning yellow/orange (#FF9F0A) — queued status color
     static let rbWarning = Color(red: 1.00, green: 0.62, blue: 0.04)
     /// Danger red (#FF453A)
     static let rbDanger = Color(red: 1.00, green: 0.27, blue: 0.23)
@@ -102,9 +102,9 @@ extension Color {
     )
 
     // Tinted row backgrounds (very faint, status-keyed)
-    /// Faint yellow row tint for in-progress rows.
+    /// Faint yellow row tint for queued rows.
     static let rbYellowTint = rbWarning.opacity(0.05)
-    /// Faint blue tint — kept for any non-status blue UI accents.
+    /// Faint blue tint — in-progress row background + non-status blue UI accents.
     static let rbBlueTint = rbBlue.opacity(0.05)
     /// Faint green row tint for success rows.
     static let rbGreenTint = rbSuccess.opacity(0.05)
@@ -130,14 +130,13 @@ enum RBStatus {
     case unknown
 
     /// The primary display color associated with this status.
+    /// Spec (issue #403): queued=yellow, in-progress=blue, failed=red, success=green.
     var color: Color {
         switch self {
-        // fix(#419): in-progress uses yellow (rbWarning), matching the reference design.
-        // rbBlue is reserved for non-status UI accents (links, chevrons, etc.).
-        case .inProgress: return .rbWarning
+        case .inProgress: return .rbBlue     // fix(#419): blue, not yellow
         case .success: return .rbSuccess
         case .failed: return .rbDanger
-        case .queued: return .rbWarning
+        case .queued: return .rbWarning      // yellow
         case .unknown: return .rbTextTertiary
         }
     }
@@ -145,11 +144,10 @@ enum RBStatus {
     /// The faint row-background tint color associated with this status.
     var tint: Color {
         switch self {
-        // fix(#419): in-progress and queued both tint with faint yellow
-        case .inProgress: return .rbYellowTint
+        case .inProgress: return .rbBlueTint  // fix(#419): blue tint for in-progress
         case .success: return .rbGreenTint
         case .failed: return .rbRedTint
-        case .queued: return .rbWarning.opacity(0.05)
+        case .queued: return .rbYellowTint
         default: return .clear
         }
     }
