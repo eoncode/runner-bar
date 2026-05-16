@@ -4,7 +4,9 @@ import SwiftUI
 /// Compact ultraThinMaterial pill showing a label + value (e.g. "CPU 3.2%").
 /// Used in PopoverLocalRunnerRow to surface per-runner CPU / MEM metrics.
 struct StatPill: View {
+    /// The short metric label (e.g. "CPU", "MEM").
     let label: String
+    /// The formatted metric value (e.g. "3.6%").
     let value: String
 
     var body: some View {
@@ -27,7 +29,9 @@ struct StatPill: View {
 /// Capsule-stroked badge used in action-row trailing area.
 /// Renders a colour-matched border + label for a given RBStatus.
 struct StatusBadge: View {
+    /// The status that drives the badge colour.
     let status: RBStatus
+    /// The text displayed inside the badge.
     let text: String
 
     var body: some View {
@@ -44,9 +48,10 @@ struct StatusBadge: View {
 }
 
 // MARK: - BranchTagPill
-/// Inline pill showing a git branch or tag name.
+/// Inline pill displaying a git branch or tag name.
 /// Uses a blue-tinted stroke capsule consistent with the Phase 5 design language.
 struct BranchTagPill: View {
+    /// The branch or tag name to display.
     let name: String
 
     var body: some View {
@@ -72,6 +77,7 @@ struct BranchTagPill: View {
 /// Applies a card-row background with rounded corners.
 /// Used by job/action row items inside list-style ScrollViews.
 private struct CardRowModifier: ViewModifier {
+    /// Corner radius applied to the background rectangle.
     let cornerRadius: CGFloat
 
     func body(content: Content) -> some View {
