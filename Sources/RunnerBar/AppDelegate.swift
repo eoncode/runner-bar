@@ -435,6 +435,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             },
+            onSelectSettings: { [weak self] in
+                guard let self else { return }
+                self.navigate(to: self.settingsView())
+            },
             onSelectAction: { [weak self] group in
                 guard let self else { return }
                 let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
@@ -445,10 +449,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.navigate(to: self.actionDetailView(group: enriched))
                     }
                 }
-            },
-            onSelectSettings: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
             },
             onSelectInlineJob: { [weak self] job, group in
                 guard let self else { return }
