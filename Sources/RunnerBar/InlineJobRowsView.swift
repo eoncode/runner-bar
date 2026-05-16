@@ -82,10 +82,11 @@ private struct JobRowCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
+            Spacer(minLength: 4)
             if job.status == "in_progress" {
                 JobInlineProgress(progress: job.progressFraction ?? 0)
+                    .frame(width: 120)
             }
-            Spacer(minLength: 4)
             if totalSteps > 0 {
                 Text("\(completedSteps)/\(totalSteps)")
                     .font(.caption2.monospacedDigit())
