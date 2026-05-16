@@ -13,14 +13,15 @@ import SwiftUI
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
-// RULE 5: actionsSection is wrapped in a ScrollView with a dynamic maxHeight.
-//   The scroll view caps the list height so expanded rows never push the panel
-//   past the bottom of the screen. availableBodyHeight is read from
-//   PopoverHeightKey, which reports the full panel height minus the header
-//   and runner-row heights. The panel itself still grows naturally for small
-//   lists via preferredContentSize KVO; the ScrollView only kicks in when the
-//   list would exceed the available space.
+// RULE 5: actionsSection is wrapped in a ScrollView capped at screenScrollMaxHeight.
+//   screenScrollMaxHeight = NSScreen.main.visibleFrame.height * 0.80.
+//   This mirrors AppDelegate's 85% panel ceiling minus headroom for the header
+//   and runner rows above the list. The ScrollView is transparent for short lists
+//   (content fits, no scroll indicator) and activates only when expanded rows
+//   would push content off screen.
 //   ❌ NEVER remove the ScrollView from actionsSection.
+//   ❌ NEVER use a GeometryReader or preference key for this cap — it freezes
+//      at the initial layout height and prevents scrolling to expanded content.
 //   ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
 //
 // RULE 6: systemStats MUST be stopped while the panel is open.
@@ -46,9 +47,15 @@ struct PopoverMainView: View {
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
-    /// Available height for the scrollable actions list, reported by PopoverHeightKey.
-    /// Falls back to 400 until the first layout pass.
-    @State private var availableBodyHeight: CGFloat = 400
+    /// Maximum height for the scrollable actions list.
+    /// 80% of the visible screen height — matches AppDelegate's 85% panel cap
+    /// minus ~5% headroom for the fixed header + runner rows above the list.
+    /// Computed fresh on each body evaluation so it always reflects current screen.
+    /// ❌ NEVER replace with a GeometryReader/preference approach — it freezes
+    ///    at initial layout height and breaks scrolling for expanded rows.
+    private var screenScrollMaxHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -65,22 +72,8 @@ struct PopoverMainView: View {
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
-            // RULE 5: scrollable actions list, capped to available panel height.
-            // The GeometryReader below measures the full panel height and feeds
-            // it via PopoverHeightKey so the ScrollView stays within screen bounds.
+            // RULE 5: scrollable actions list, capped at screenScrollMaxHeight.
             actionsSectionScrollable
-        }
-        // Measure total available height via background GeometryReader.
-        // This is the NSPanel content height minus chrome padding.
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .preference(key: PopoverHeightKey.self, value: geo.size.height)
-            }
-        )
-        .onPreferenceChange(PopoverHeightKey.self) { h in
-            // Reserve ~80pt for header + runner rows above the actions list.
-            availableBodyHeight = max(120, h - 80)
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
@@ -106,7 +99,7 @@ struct PopoverMainView: View {
         ScrollView(.vertical, showsIndicators: true) {
             actionsSectionContent
         }
-        .frame(maxHeight: availableBodyHeight)
+        .frame(maxHeight: screenScrollMaxHeight)
     }
 
     private var actionsSectionContent: some View {
