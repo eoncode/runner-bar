@@ -22,24 +22,6 @@ import SwiftUI
 // AppDelegate's callback calls popover.setContentSize(). animates=false = no jump.
 // After the callback fires, heightReported = true prevents repeated calls.
 //
-// USAGE:
-// AppDelegate:
-//   popoverOpenState.isOpen = true
-//   popoverOpenState.heightReported = false
-//   popoverOpenState.onHeightReady = { [weak popover] h in
-//       let w = AppDelegate.fixedWidth
-//       let max = self.maxHeight
-//       popover?.setContentSize(NSSize(width: w, height: min(h, max)))
-//   }
-//   popover.show(...)
-//
-// PopoverMainView:
-//   .onPreferenceChange(PopoverHeightKey.self) { h in
-//       guard h > 10, !popoverOpenState.heightReported else { return }
-//       popoverOpenState.heightReported = true
-//       popoverOpenState.onHeightReady?(h)
-//   }
-//
 // ⚠️ CONTRACT:
 // ❌ NEVER replace isOpen with a plain Bool prop on any view.
 // ❌ NEVER remove onHeightReady or heightReported.
@@ -50,7 +32,7 @@ import SwiftUI
 // is major major major.
 // ════════════════════════════════════════════════════════════════════════════════
 
-/// Observable wrapper for NSPopover open/closed state + one-shot height callback.
+/// Observable wrapper for NSPopover open/closed state and one-shot height callback.
 final class PopoverOpenState: ObservableObject {
     /// `true` from immediately before `NSPopover.show()` until after `NSPopover.close()`.
     @Published var isOpen: Bool = false

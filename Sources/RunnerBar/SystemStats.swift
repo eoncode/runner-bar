@@ -91,10 +91,10 @@ final class SystemStatsViewModel: ObservableObject {
 
     private func collectStats() -> SystemStats {
         var snapshot = SystemStats()
-        snapshot.cpuPct     = cpuUsage()
-        snapshot.memUsedGB  = memUsedGB()
-        snapshot.memTotalGB = memTotalGB()
-        snapshot.diskUsedGB = diskUsedGB()
+        snapshot.cpuPct      = cpuUsage()
+        snapshot.memUsedGB   = memUsedGB()
+        snapshot.memTotalGB  = memTotalGB()
+        snapshot.diskUsedGB  = diskUsedGB()
         snapshot.diskTotalGB = diskTotalGB()
         return snapshot
     }
@@ -117,18 +117,16 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     private func memUsedGB() -> Double {
-        // vm_stat gives pages; page size is typically 16384 bytes on Apple Silicon.
         let output = shell("vm_stat", timeout: 5)
         var active: Double = 0, wired: Double = 0, compressed: Double = 0
         for line in output.components(separatedBy: "\n") {
             let lineNums = line.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
             let val = Double(lineNums) ?? 0
-            if line.contains("Pages active")     { active     = val }
-            if line.contains("Pages wired")      { wired      = val }
-            if line.contains("Pages occupied")   { compressed = val }
+            if line.contains("Pages active")   { active     = val }
+            if line.contains("Pages wired")    { wired      = val }
+            if line.contains("Pages occupied") { compressed = val }
         }
-        let pages = active + wired + compressed
-        return (pages * 16384) / 1_073_741_824
+        return ((active + wired + compressed) * 16384) / 1_073_741_824
     }
 
     private func diskTotalGB() -> Double {
@@ -174,7 +172,7 @@ final class SystemStatsPoller {
         }
     }
 
-    /// Registers an observer block and returns a token (unused; kept for API compatibility).
+    /// Registers an observer block and returns a token for later removal.
     @discardableResult
     func addObserver(_ block: @escaping (SystemStatsSnapshot) -> Void) -> Int {
         lock.lock(); defer { lock.unlock() }
@@ -183,9 +181,7 @@ final class SystemStatsPoller {
     }
 
     private func poll() -> SystemStatsSnapshot {
-        let cpu = cpuUsage()
-        let mem = memUsage()
-        return SystemStatsSnapshot(cpuPercent: cpu, memPercent: mem)
+        SystemStatsSnapshot(cpuPercent: cpuUsage(), memPercent: memUsage())
     }
 
     private func cpuUsage() -> Double {

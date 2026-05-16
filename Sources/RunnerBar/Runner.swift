@@ -24,7 +24,11 @@ struct Runner: Codable, Identifiable {
     /// Excludes `metrics` from JSON decoding — it is assigned locally after fetch,
     /// not returned by the GitHub API.
     enum CodingKeys: String, CodingKey { case id, name, status, busy }
+}
 
+// MARK: - Runner display helpers
+
+extension Runner {
     /// A single-line status string for display in the runner list row.
     ///
     /// Possible formats:
@@ -35,8 +39,8 @@ struct Runner: Codable, Identifiable {
         if status == "offline" { return "offline" }
         let label = busy ? "active" : "idle"
         guard let runnerMetrics = metrics else { return "\(label) (CPU: \u{2014} MEM: \u{2014})" }
-        let cpu = String(format: "%.1f", runnerMetrics.cpu)
-        let mem = String(format: "%.1f", runnerMetrics.mem)
-        return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"
+        let cpuStr = String(format: "%.1f", runnerMetrics.cpu)
+        let memStr = String(format: "%.1f", runnerMetrics.mem)
+        return "\(label) (CPU: \(cpuStr)% MEM: \(memStr)%)"
     }
 }

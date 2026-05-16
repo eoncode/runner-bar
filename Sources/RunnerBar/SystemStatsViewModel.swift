@@ -1,22 +1,12 @@
-// swiftlint:disable missing_docs
-import Foundation
 import Combine
+import Foundation
 
-// MARK: - SystemStatsSnapshot
-
-/// Lightweight value type carrying a CPU and memory usage snapshot.
-struct SystemStatsSnapshot {
-    /// CPU usage as a percentage (0–100).
-    let cpuPercent: Double
-    /// Memory usage as a percentage (0–100).
-    let memPercent: Double
-}
-
-// MARK: - SystemStatsPoller
+// MARK: - SystemStatsPoller (legacy)
 
 /// Continuously polls CPU and memory usage on a background thread.
-final class SystemStatsPoller {
-    static let shared = SystemStatsPoller()
+final class SystemStatsPoller2 {
+    /// Shared singleton instance.
+    static let shared = SystemStatsPoller2()
     private init() {}
 
     private var observers: [Int: (SystemStatsSnapshot) -> Void] = [:]
@@ -24,18 +14,21 @@ final class SystemStatsPoller {
     private let lock = NSLock()
     private var isStarted = false
 
+    /// Registers an observer block and returns a stable token for later removal.
     func addObserver(_ block: @escaping (SystemStatsSnapshot) -> Void) -> Int {
         lock.lock(); defer { lock.unlock() }
-        let id = nextID; nextID += 1
-        observers[id] = block
-        return id
+        let observerID = nextID; nextID += 1
+        observers[observerID] = block
+        return observerID
     }
 
+    /// Removes the observer identified by `token`.
     func removeObserver(_ token: Int) {
         lock.lock(); defer { lock.unlock() }
         observers.removeValue(forKey: token)
     }
 
+    /// Starts the background polling thread if not already running.
     func start() {
         lock.lock()
         if isStarted { lock.unlock(); return }
@@ -62,13 +55,8 @@ final class SystemStatsPoller {
 
     private static func fetchCPU() -> Double {
         let output = shell("top -l 1 -s 0 | grep 'CPU usage'", timeout: 5)
-        if let range = output.range(of: #"(\d+\.\d+)% user"#, options: .regularExpression) {
-            // swiftlint:disable:next identifier_name
-            if let val = Double(output[range].components(separatedBy: "%").first ?? "") {
-                return val
-            }
-        }
-        return 0
+        guard let range = output.range(of: #"(\d+\.\d+)% user"#, options: .regularExpression) else { return 0 }
+        return Double(output[range].components(separatedBy: "%").first ?? "") ?? 0
     }
 
     private static func fetchMem() -> Double {
@@ -86,15 +74,13 @@ final class SystemStatsPoller {
                 else { return nil }
                 return Double(val)
             }
-            if let val = extract("Pages free")        { pagesFree = val }
-            if let val = extract("Pages active")      { pagesActive = val }
-            if let val = extract("Pages inactive")    { pagesInactive = val }
-            if let val = extract("Pages wired down")  { pagesWired = val }
+            if let val = extract("Pages free")       { pagesFree    = val }
+            if let val = extract("Pages active")     { pagesActive  = val }
+            if let val = extract("Pages inactive")   { pagesInactive = val }
+            if let val = extract("Pages wired down") { pagesWired   = val }
         }
         let total = pagesFree + pagesActive + pagesInactive + pagesWired
         guard total > 0 else { return 0 }
-        let used = pagesActive + pagesWired
-        return (used / total) * 100
+        return ((pagesActive + pagesWired) / total) * 100
     }
 }
-// swiftlint:enable missing_docs
