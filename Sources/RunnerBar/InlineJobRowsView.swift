@@ -137,27 +137,29 @@ struct InlineJobRowsView: View {
 
     var body: some View {
         // ⚠️ REGRESSION GUARD #377 — do not remove this check.
-        guard popoverState.isOpen else { return AnyView(EmptyView()) }
-        // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
-        _ = tick
-        // fix(#419): show only in_progress jobs in default expand; all jobs when fullExpand.
-        let jobs = fullExpand
-            ? group.jobs
-            : group.jobs.filter { $0.status == "in_progress" }
-        return AnyView(
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in
-                    JobRowCard(
-                        job: job,
-                        status: jobStatus(for: job),
-                        isLast: index == jobs.count - 1
-                    )
+        // Using Group+if instead of AnyView to preserve SwiftUI view identity
+        // and prevent DonutStatusView @State (rotationAngle) from resetting.
+        Group {
+            if popoverState.isOpen {
+                // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
+                let _ = tick
+                let jobs = fullExpand
+                    ? group.jobs
+                    : group.jobs.filter { $0.status == "in_progress" }
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in
+                        JobRowCard(
+                            job: job,
+                            status: jobStatus(for: job),
+                            isLast: index == jobs.count - 1
+                        )
+                    }
                 }
+                .padding(.leading, RBSpacing.md)
+                .padding(.trailing, RBSpacing.xs)
+                .padding(.bottom, RBSpacing.xs)
             }
-            .padding(.leading, RBSpacing.md)
-            .padding(.trailing, RBSpacing.xs)
-            .padding(.bottom, RBSpacing.xs)
-        )
+        }
     }
 
     // MARK: - Helpers

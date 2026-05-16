@@ -54,13 +54,13 @@ struct SparklineView: View {
     private func fillPath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
-            guard !points.isEmpty else { return }
+            guard !points.isEmpty, let lastPoint = points.last else { return }
             path.move(to: CGPoint(x: points[0].x, y: size.height))
             path.addLine(to: points[0])
             for point in points.dropFirst() {
                 path.addLine(to: point)
             }
-            path.addLine(to: CGPoint(x: points.last!.x, y: size.height))
+            path.addLine(to: CGPoint(x: lastPoint.x, y: size.height))
             path.closeSubpath()
         }
     }
