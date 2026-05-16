@@ -28,10 +28,10 @@ enum AggregateStatus {
 // MARK: - RunnerStore
 final class RunnerStore {
     static let shared = RunnerStore()
+
     private(set) var runners: [Runner] = []
     private(set) var jobs: [ActiveJob] = []
     private(set) var actions: [ActionGroup] = []
-
     private var prevLiveJobs: [Int: ActiveJob] = [:]
     private var completedCache: [Int: ActiveJob] = [:]
     private var prevLiveGroups: [String: ActionGroup] = [:]
@@ -62,17 +62,26 @@ final class RunnerStore {
         fetch()
     }
 
+    private func hasAnyActiveAction() -> Bool {
+        for action in actions {
+            let s = action.groupStatus
+            if s == "in_progress" { return true }
+            if s == "queued" { return true }
+        }
+        return false
+    }
+
     private func scheduleTimer() {
         timer?.invalidate()
         let hasActiveJobs: Bool = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
-        let inProgress = GroupStatus.inProgress
-        let queued = GroupStatus.queued
-        let hasActiveActions: Bool = actions.contains { $0.typedGroupStatus == inProgress || $0.typedGroupStatus == queued }
+        let hasActiveActions: Bool = hasAnyActiveAction()
         let hasActive = hasActiveJobs || hasActiveActions
         let baseIdle = max(10, SettingsStore.shared.pollingInterval)
         let interval: TimeInterval = (isRateLimited || !hasActive) ? TimeInterval(baseIdle) : 10
         log("RunnerStore › next poll in \(Int(interval))s (active=\(hasActive) rateLimited=\(isRateLimited))")
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in self?.fetch() }
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            self?.fetch()
+        }
     }
 
     func fetch() {

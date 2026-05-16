@@ -40,8 +40,8 @@ import SwiftUI
 //
 // WIDTH: Content-driven via preferredContentSize.width.
 // SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
-// ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
-// JobDetailView: .frame(idealWidth: 720, maxWidth: .infinity)
+//   ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
+//   JobDetailView:    .frame(idealWidth: 720, maxWidth: .infinity)
 // resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
 // the panel under the status button.
 // ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
@@ -141,7 +141,8 @@ private enum NavState {
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded or enrichGroupIfNeeded.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE.
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: NSPanel?
     private var chrome: PanelChromeView?
@@ -152,7 +153,6 @@ private enum NavState {
     private var eventMonitor: Any?
     private var sizeObservation: NSKeyValueObservation?
     private var workspaceObserver: Any?
-
     /// Top anchor (screen coords) captured once in openPanel().
     /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
     private var panelTopY: CGFloat?
@@ -183,7 +183,6 @@ private enum NavState {
         NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
     }
     private static let gap: CGFloat = 2
-
     /// Initial panel width used before SwiftUI has measured content.
     /// Does NOT need to match any idealWidth (there are none — width is content-driven).
     /// 320 is a compact default; the panel resizes to actual content on the first KVO fire.
@@ -229,16 +228,19 @@ private enum NavState {
             button.action = #selector(togglePanel)
             button.target = self
         }
+
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
         controller.view.autoresizingMask = [.width, .height]
         hostingController = controller
+
         let initW = Self.initPanelWidth
         let chromeView = PanelChromeView(
             frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight)
         )
         chromeView.addSubview(controller.view)
         chrome = chromeView
+
         let newPanel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -253,13 +255,14 @@ private enum NavState {
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.animationBehavior = .none
         panel = newPanel
+
         sizeObservation = controller.observe(
-            \.preferredContentSize,
-            options: [.new]
+            \.preferredContentSize, options: [.new]
         ) { [weak self] _, change in
             guard let size = change.newValue, size.height > 0 else { return }
             DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
         }
+
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.updateStatusIcon()
@@ -287,11 +290,11 @@ private enum NavState {
     /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
     private func resizeAndRepositionPanel() {
         guard panelIsOpen,
-              let panel,
-              let chrome,
+              let panel, let chrome,
               let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
-              let topY = panelTopY else { return }
+              let topY = panelTopY
+        else { return }
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
         let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
         let contentH = min(max(preferred.height, 60), maxHeight)
@@ -330,10 +333,10 @@ private enum NavState {
         // as before, and the main-screen path now has live callbacks instead of
         // dead no-op stubs.
         // ❌ NEVER replace this with a no-op stub PopoverMainView — that breaks
-        // all button and row taps when the panel next opens on the main screen.
+        //    all button and row taps when the panel next opens on the main screen.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             let preserved = self.savedNavState
             self.hostingController?.rootView = self.mainView()
@@ -359,7 +362,8 @@ private enum NavState {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data) else { return job }
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
+        else { return job }
         let iso = ISO8601DateFormatter()
         return RunnerStore.shared.makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
@@ -377,7 +381,8 @@ private enum NavState {
         var seenIDs = Set<Int>()
         for run in group.runs {
             guard let data = ghAPI("repos/\(group.repo ?? "")/actions/runs/\(run.id)/jobs?per_page=100"),
-                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else { continue }
+                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+            else { continue }
             for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
                 fetched.append(RunnerStore.shared.makeActiveJob(from: payload, iso: iso, isDimmed: group.isDimmed))
             }
@@ -389,17 +394,10 @@ private enum NavState {
             title: group.title,
             runs: group.runs.map { run in
                 WorkflowRun(
-                    id: run.id,
-                    status: run.status,
-                    conclusion: run.conclusion,
-                    headSha: run.headSha,
-                    createdAt: run.createdAt,
-                    updatedAt: run.updatedAt,
-                    htmlUrl: run.htmlUrl,
-                    headBranch: run.headBranch,
-                    event: run.event,
-                    name: run.name,
-                    runNumber: run.runNumber,
+                    id: run.id, status: run.status, conclusion: run.conclusion,
+                    headSha: run.headSha, createdAt: run.createdAt, updatedAt: run.updatedAt,
+                    htmlUrl: run.htmlUrl, headBranch: run.headBranch, event: run.event,
+                    name: run.name, runNumber: run.runNumber,
                     jobs: fetched.filter { _ in run == group.runs.first }
                 )
             },
@@ -562,7 +560,8 @@ private enum NavState {
     private func openPanel() {
         guard let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
-              let panel else { return }
+              let panel
+        else { return }
         observable.reload()
         panelIsOpen = true
         popoverOpenState.isOpen = true
@@ -603,5 +602,4 @@ private enum NavState {
         }
     }
 }
-
 // swiftlint:enable type_body_length

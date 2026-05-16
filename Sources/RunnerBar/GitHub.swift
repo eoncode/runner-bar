@@ -2,22 +2,16 @@ import Foundation
 import os
 
 // MARK: - gh API
-
 /// Thread-safe rate-limit flag.
 private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
-
 var ghIsRateLimited: Bool {
     get { _rateLimitLock.withLock { $0 } }
     set { _rateLimitLock.withLock { $0 = newValue } }
 }
 
 // MARK: - Process runner (private)
-
 private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Data? {
-    guard let ghPath = ghBinaryPath() else {
-        log("runGHProcess › gh not found")
-        return nil
-    }
+    guard let ghPath = ghBinaryPath() else { log("runGHProcess › gh not found"); return nil }
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -47,7 +41,6 @@ private func runGHProcess(arguments: [String], timeout: TimeInterval = 20) -> Da
 }
 
 // MARK: - Public gh wrappers
-
 func ghAPI(_ endpoint: String, method: String = "GET", timeout: TimeInterval = 20) -> Data? {
     var args = ["api"]
     if method != "GET" { args += ["--method", method] }
@@ -106,10 +99,8 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
 }
 
 // MARK: - URL helpers
-
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
-    guard let urlString,
-          let url = URL(string: urlString),
+    guard let urlString, let url = URL(string: urlString),
           url.pathComponents.count >= 3 else { return nil }
     let components = url.pathComponents
     return "\(components[1])/\(components[2])"
@@ -125,22 +116,22 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 }
 
 // MARK: - Fetch all jobs from active runs
-
 func fetchActiveJobs(for scope: String) -> [ActiveJob] {
-    let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
+
     func runsEndpoint(status: String) -> String {
         scope.contains("/")
             ? "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
             : "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
     }
-    // GHWorkflowRunID is a private local struct to avoid clash with the public WorkflowRun.
+
     struct GHWorkflowRunID: Codable { let id: Int }
     struct GHWorkflowRunsResponse: Codable {
         let workflowRuns: [GHWorkflowRunID]
         enum CodingKeys: String, CodingKey { case workflowRuns = "workflow_runs" }
     }
+
     for status in ["in_progress", "queued"] {
         guard let data = ghAPI(runsEndpoint(status: status)),
               let resp = try? JSONDecoder().decode(GHWorkflowRunsResponse.self, from: data)
@@ -151,9 +142,10 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
         }
         // swiftlint:enable for_where
     }
+
     var jobs: [ActiveJob] = []
     var seenJobIDs = Set<Int>()
-    let iso2 = ISO8601DateFormatter()
+    let iso = ISO8601DateFormatter()
     for runID in runIDs {
         guard scope.contains("/") else { continue }
         guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
@@ -166,16 +158,17 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
                 name: payload.name,
                 status: payload.status,
                 conclusion: payload.conclusion,
-                startedAt: payload.startedAt.flatMap { iso2.date(from: $0) },
-                createdAt: payload.createdAt.flatMap { iso2.date(from: $0) },
-                completedAt: payload.completedAt.flatMap { iso2.date(from: $0) },
+                startedAt: payload.startedAt.flatMap { iso.date(from: $0) },
+                createdAt: payload.createdAt.flatMap { iso.date(from: $0) },
+                completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
                 htmlUrl: payload.htmlUrl,
                 isDimmed: false,
                 steps: (payload.steps ?? []).map { s in
-                    JobStep(id: s.number, name: s.name, status: s.status,
-                            conclusion: s.conclusion,
-                            startedAt: s.startedAt.flatMap { iso2.date(from: $0) },
-                            completedAt: s.completedAt.flatMap { iso2.date(from: $0) })
+                    JobStep(
+                        id: s.number, name: s.name, status: s.status, conclusion: s.conclusion,
+                        startedAt: s.startedAt.flatMap { iso.date(from: $0) },
+                        completedAt: s.completedAt.flatMap { iso.date(from: $0) }
+                    )
                 },
                 runnerName: payload.runnerName
             ))
@@ -186,7 +179,6 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
 }
 
 // MARK: - Runners
-
 func fetchRunners(for scope: String) -> [Runner] {
     let endpoint: String
     if scope.contains("/") {
@@ -209,7 +201,6 @@ func fetchRunners(for scope: String) -> [Runner] {
 private struct RunnersResponse: Codable { let runners: [Runner] }
 
 // MARK: - User orgs and repos
-
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
@@ -228,7 +219,6 @@ func fetchUserRepos() -> [String] {
 }
 
 // MARK: - Registration token
-
 func fetchRegistrationToken(scope: String) -> String? {
     let endpoint: String
     if scope.contains("/") {
@@ -236,8 +226,7 @@ func fetchRegistrationToken(scope: String) -> String? {
     } else {
         endpoint = "orgs/\(scope)/actions/runners/registration-token"
     }
-    let args = ["api", "--method", "POST",
-                "-H", "Accept: application/vnd.github+json", endpoint]
+    let args = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
     guard let outputData = runGHProcess(arguments: args, timeout: 30) else {
         log("fetchRegistrationToken › no data for \(endpoint)")
         return nil
@@ -255,7 +244,6 @@ func fetchRegistrationToken(scope: String) -> String? {
 }
 
 // MARK: - Step log
-
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     guard scope.contains("/") else {
         log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
@@ -318,27 +306,21 @@ private func stripAnsi(_ input: String) -> String {
 }
 
 // MARK: - Shared gh binary path
-
 func ghBinaryPath() -> String? {
     let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
     return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
 }
 
 // MARK: - POST helper
-
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
     guard let ghPath = ghBinaryPath() else { log("ghPost › gh not found"); return false }
     let task = Process()
     task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", "--method", "POST",
-                      "-H", "Accept: application/vnd.github+json", endpoint]
+    task.arguments = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
     task.standardOutput = Pipe()
     task.standardError = Pipe()
-    do { try task.run() } catch {
-        log("ghPost › launch error: \(error)")
-        return false
-    }
+    do { try task.run() } catch { log("ghPost › launch error: \(error)"); return false }
     let timeoutItem = DispatchWorkItem(block: { task.terminate() })
     DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
     task.waitUntilExit()
@@ -348,7 +330,6 @@ func ghPost(_ endpoint: String) -> Bool {
 }
 
 // MARK: - Cancel run
-
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
@@ -357,26 +338,18 @@ func cancelRun(runID: Int, scope: String) -> Bool {
 }
 
 // MARK: - Re-run job
-
 @discardableResult
 func reRunJob(jobID: Int, repoSlug: String) -> Bool {
-    guard repoSlug.contains("/") else {
-        log("reRunJob › invalid repoSlug: \(repoSlug)")
-        return false
-    }
+    guard repoSlug.contains("/") else { log("reRunJob › invalid repoSlug: \(repoSlug)"); return false }
     let result = ghPost("repos/\(repoSlug)/actions/jobs/\(jobID)/rerun")
     log("reRunJob › job=\(jobID) repo=\(repoSlug) success=\(result)")
     return result
 }
 
 // MARK: - Re-run failed jobs
-
 @discardableResult
 func reRunFailedJobs(runID: Int, repoSlug: String) -> Bool {
-    guard repoSlug.contains("/") else {
-        log("reRunFailedJobs › invalid repoSlug: \(repoSlug)")
-        return false
-    }
+    guard repoSlug.contains("/") else { log("reRunFailedJobs › invalid repoSlug: \(repoSlug)"); return false }
     let result = ghPost("repos/\(repoSlug)/actions/runs/\(runID)/rerun-failed-jobs")
     log("reRunFailedJobs › run=\(runID) repo=\(repoSlug) success=\(result)")
     return result
