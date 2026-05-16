@@ -23,14 +23,17 @@ import SwiftUI
 // RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload().
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
+//
+// PARAM ORDER CONTRACT — must match AppDelegate.mainView() call-site exactly:
+//   store, onSelectJob, onSelectSettings, onSelectAction, onSelectInlineJob
 
 /// Root popover view rendered inside the NSPanel.
 /// Owns the runner-refresh timer, display-tick timer, and system-stats lifecycle.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob, ActionGroup) -> Void
-    let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
+    let onSelectAction: (ActionGroup) -> Void
     let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
