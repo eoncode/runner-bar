@@ -18,7 +18,8 @@ import SwiftUI
 // RULE 6: systemStats polls CONTINUOUSLY regardless of open state so sparkline
 //         history always accumulates. Only runner/action refreshes are gated.
 // RULE 6b: systemStats starts on onAppear and stops on onDisappear.
-// RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload(), gated behind !isOpen.
+// RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload() every 5s.
+//         NOT gated behind isOpen — actions must update while popover is open.
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 // RULE 10: InlineJobRowsView is now owned by ActionRowView (not this file).
@@ -89,15 +90,14 @@ struct PopoverMainView: View {
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
-    // MARK: - Runner refresh timer (RULE 7 — gated, 5s)
+    // MARK: - Runner refresh timer (RULE 7 — ungated, 5s)
 
     private func startRunnerRefreshTimer() {
         stopRunnerRefreshTimer()
+        // ⚠️ RULE 7: NOT gated behind !isOpen — actions must poll while popover is open.
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            if !self.popoverOpenState.isOpen {
-                Task { @MainActor in LocalRunnerStore.shared.refresh() }
-                self.store.reload()
-            }
+            Task { @MainActor in LocalRunnerStore.shared.refresh() }
+            self.store.reload()
         }
     }
 

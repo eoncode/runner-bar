@@ -241,29 +241,32 @@ struct PopoverHeaderView: View {
     }
 
     private var diskChip: some View {
-        let total  = stats.diskTotalGB
-        let used   = stats.diskUsedGB
-        let free   = max(0, total - used)
-        let pct    = total > 0 ? (used / total) * 100 : 0
+        let total   = stats.diskTotalGB
+        let used    = stats.diskUsedGB
+        let free    = max(0, total - used)
+        let usedPct = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? Int((free / total * 100).rounded()) : 0
-        let value  = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+        let value   = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
+        // Color is keyed on *used* pressure: high used = red, low used = green.
+        let color   = usageColor(pct: usedPct)
+        // Pill label and tooltip show FREE space.
         return HStack(spacing: 3) {
             Text("DISK")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(.secondary).lineLimit(1)
             if diskHistory.count >= 2 {
-                SparklineView(samples: diskHistory, color: usageColor(pct: pct))
+                SparklineView(samples: diskHistory, color: color)
                     .frame(width: 28, height: 12)
             }
             Text(value)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(usageColor(pct: pct)).lineLimit(1)
-            Text("\(freePct)%")
+                .foregroundColor(color).lineLimit(1)
+            Text("FREE \(freePct)%")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(usageColor(pct: pct))
+                .foregroundColor(color)
                 .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(Capsule().fill(usageColor(pct: pct).opacity(0.15)))
-                .overlay(Capsule().stroke(usageColor(pct: pct).opacity(0.35), lineWidth: 0.5))
+                .background(Capsule().fill(color.opacity(0.15)))
+                .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 0.5))
                 .lineLimit(1)
         }
     }
