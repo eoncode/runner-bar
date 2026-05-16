@@ -6,7 +6,7 @@ import SwiftUI
 /// Detail view for an `ActionGroup` showing all its jobs and their steps.
 struct ActionDetailView: View {
     let group: ActionGroup
-    let tick: Int
+    var tick: Int = 0
     var onBack: () -> Void = {}
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
@@ -117,7 +117,7 @@ struct ActionDetailView: View {
 
     private func stepsSection(_ job: ActiveJob) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array((job.steps ?? []).enumerated()), id: \.element.id) { idx, step in
+            ForEach(Array(job.steps.enumerated()), id: \.element.id) { idx, step in
                 stepRow(step, index: idx, job: job)
             }
         }

@@ -2,19 +2,20 @@ import SwiftUI
 
 // MARK: - PopoverMainView
 
-/// The root view rendered inside the NSPopover.
+/// The root view rendered inside the NSPanel.
 /// Composes the system-stats header, runner rows, and action rows.
 struct PopoverMainView: View {
     // MARK: - Dependencies (injected)
-    @ObservedObject var store: RunnerStore
+    @ObservedObject var store: RunnerStoreObservable
     var onSelectRunner: ((Runner) -> Void)?
     var onSelectGroup:  ((ActionGroup) -> Void)?
     var onSelectJob:    ((ActiveJob, ActionGroup) -> Void)?
     var onSelectSettings: () -> Void = {}
+    var onSelectAction:    ((ActionGroup) -> Void)?
+    var onSelectInlineJob: ((ActiveJob, ActionGroup) -> Void)?
 
     // MARK: - Internal state
     @ObservedObject private var systemStats = SystemStatsViewModel.shared
-    @ObservedObject private var actionStore = ActionStore.shared
     @State private var isAuthenticated = false
     @State private var tick: Int = 0
     @State private var runnerRefreshTimer: Timer?
@@ -57,9 +58,9 @@ struct PopoverMainView: View {
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.tokenOrange)
+                .foregroundColor(DesignTokens.Color.statusOrange)
                 .font(.system(size: 10))
-            Text("GitHub API rate limited — retrying…")
+            Text("GitHub API rate limited — retrying\u{2026}")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }
@@ -71,15 +72,15 @@ struct PopoverMainView: View {
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Divider()
-            if actionStore.groups.isEmpty {
+            if store.actions.isEmpty {
                 emptyActionsPlaceholder
             } else {
-                ForEach(actionStore.groups) { group in
+                ForEach(store.actions) { group in
                     ActionRowView(
                         group: group,
                         tick: tick,
-                        onSelect: onSelectGroup,
-                        onSelectJob: onSelectJob
+                        onSelect: onSelectAction,
+                        onSelectJob: onSelectInlineJob
                     )
                     Divider().padding(.leading, 12)
                 }
@@ -99,7 +100,7 @@ struct PopoverMainView: View {
     private func startRunnerRefreshTimer() {
         runnerRefreshTimer?.invalidate()
         runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
-            Task { await store.fetch() }
+            Task { await store.reload() }
         }
     }
 
@@ -108,11 +109,5 @@ struct PopoverMainView: View {
         displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             tick += 1
         }
-    }
-
-    // MARK: - Auth helpers
-
-    private func signInWithGitHub() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/login/device")!)
     }
 }

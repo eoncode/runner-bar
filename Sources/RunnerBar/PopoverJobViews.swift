@@ -60,9 +60,9 @@ struct InlineJobRowsView: View {
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
-        case "in_progress": return .tokenBlue
-        case "queued":      return .tokenOrange
-        default:            return .tokenGray
+        case "in_progress": return DesignTokens.Color.statusBlue
+        case "queued":      return DesignTokens.Color.statusOrange
+        default:            return DesignTokens.Color.labelTertiary
         }
     }
 }
