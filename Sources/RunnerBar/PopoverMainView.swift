@@ -31,14 +31,19 @@ struct PopoverMainViewSubviews: View {
     @EnvironmentObject private var store: RunnerStoreObservable
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
-    // SystemStatsViewModel is never in the environment — own it here.
     @StateObject private var statsVM = SystemStatsViewModel()
 
     @State private var tick: Int = 0
     private let tickTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    /// fix(#441 bug2): treat as authenticated if token is non-empty OR if data
+    /// is already flowing (actions/jobs loaded) — prevents stale false-negative
+    /// on first render before SettingsStore propagates the saved token.
     private var isAuthenticated: Bool {
         !SettingsStore.shared.githubToken.isEmpty
+            || !store.actions.isEmpty
+            || !store.jobs.isEmpty
+            || !store.runners.isEmpty
     }
 
     var body: some View {
