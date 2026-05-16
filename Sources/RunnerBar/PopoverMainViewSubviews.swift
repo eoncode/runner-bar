@@ -152,18 +152,15 @@ struct ActionRowView: View {
                     }
                 },
                 label: {
-                    // Half-pill indicator: sits at the leading edge of the card.
-                    // Width = card corner radius * 2 so the rectangle is wide enough
-                    // for its left side to form a full rounded curve matching the card
-                    // corner. The right rounded half overflows rightward and is clipped
-                    // by the parent clipShape — leaving only the left half-pill visible,
-                    // snug inside the card's leading rounded corner. No offset needed:
-                    // ZStack(alignment: .leading) pins it flush to the left edge.
-                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                    // Left-edge indicator: a plain Rectangle pinned to the leading edge.
+                    // The parent's clipShape(RoundedRectangle(cornerRadius: RBRadius.card))
+                    // naturally rounds the top-left and bottom-left corners, producing
+                    // exactly a left-side half-pill. No RoundedRectangle needed here —
+                    // fighting the parent shape causes the wrong corners to be rounded.
+                    Rectangle()
                         .fill(rowStatus.color)
-                        .frame(width: RBRadius.card * 2)
+                        .frame(width: 4)
                         .frame(maxHeight: .infinity)
-                        .padding(.vertical, RBSpacing.xs)
                 }
             )
             .buttonStyle(.plain)
