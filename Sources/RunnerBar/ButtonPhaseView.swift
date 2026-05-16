@@ -4,8 +4,15 @@ import SwiftUI
 
 /// Shared loading/done/failed phase indicator used by action buttons.
 struct ButtonPhaseView: View {
-    /// The visual phase to display.
-    enum Phase { case loading, done, failed }
+    /// The three visual phases an action button can display.
+    enum Phase {
+        /// A spinner indicating an in-flight network request.
+        case loading
+        /// A green checkmark shown briefly after success.
+        case done
+        /// A red cross shown briefly after failure.
+        case failed
+    }
     /// The phase currently being rendered.
     let phase: Phase
 
@@ -14,7 +21,7 @@ struct ButtonPhaseView: View {
             switch phase {
             case .loading:
                 ProgressView().scaleEffect(0.6)
-                Text("Running…").font(.caption).foregroundColor(.secondary)
+                Text("Running\u{2026}").font(.caption).foregroundColor(.secondary)
             case .done:
                 Image(systemName: "checkmark").font(.caption).foregroundColor(.green)
                 Text("Done").font(.caption).foregroundColor(.secondary)

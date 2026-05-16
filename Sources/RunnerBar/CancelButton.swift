@@ -12,7 +12,16 @@ struct CancelButton: View {
     @State private var phase: Phase = .idle
 
     /// Visual states of the cancel button lifecycle.
-    enum Phase { case idle, loading, done, failed }
+    enum Phase {
+        /// Normal tappable state.
+        case idle
+        /// Spinner shown while the cancel request is in-flight.
+        case loading
+        /// Green checkmark shown for 1.5 s after success.
+        case done
+        /// Red cross shown for 1.5 s after failure.
+        case failed
+    }
 
     var body: some View {
         Group {
@@ -40,7 +49,7 @@ struct CancelButton: View {
         phase = .loading
         action { success in
             DispatchQueue.main.async {
-                phase = success ? .done : .failed
+                if success { phase = .done } else { phase = .failed }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { phase = .idle }
             }
         }
