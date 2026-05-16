@@ -44,7 +44,7 @@ struct ActionGroup: Identifiable, Equatable {
 
     // MARK: - Compatibility shims
 
-    var groupStatus: String { overallStatus }
+    var groupStatus: GroupStatus { typedGroupStatus }
     var conclusion: String? { overallConclusion }
 
     var repo: String? {
@@ -98,6 +98,12 @@ struct ActionGroup: Identifiable, Equatable {
         let runnerNames = jobs.compactMap(\.runnerName)
         guard !runnerNames.isEmpty else { return nil }
         return runnerNames.allSatisfy { !$0.contains("/") }
+    }
+
+    var progressFraction: Double? {
+        let total = jobsTotal
+        guard total > 0 else { return nil }
+        return Double(jobsDone) / Double(total)
     }
 
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
