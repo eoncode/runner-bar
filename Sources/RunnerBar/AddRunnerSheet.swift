@@ -45,7 +45,7 @@ struct AddRunnerSheet: View {
             DispatchQueue.main.async {
                 isLoading = false
                 if valid {
-                    store.state.scopeStore.add(trimmed)
+                    ScopeStore.shared.add(trimmed)
                     dismiss()
                 } else {
                     errorMessage = "Could not validate scope. Check org/repo and token."
@@ -56,8 +56,6 @@ struct AddRunnerSheet: View {
 }
 
 func validateScope(_ scope: String, token: String) -> Bool {
-    let path = scope.contains("/")
-        ? "repos/\(scope)"
-        : "orgs/\(scope)"
+    let path = scope.contains("/") ? "repos/\(scope)" : "orgs/\(scope)"
     return ghAPI(path) != nil
 }

@@ -5,7 +5,7 @@ import SwiftUI
 struct StepLogView: View {
     let job: ActiveJob
     let step: JobStep
-    @EnvironmentObject var store: RunnerStoreObservable
+
     @StateObject private var fetcher = LogFetcher()
     @State private var searchText: String = ""
     @State private var matchedLines: [Int] = []
@@ -35,18 +35,23 @@ struct StepLogView: View {
         }
         .frame(minWidth: 600, minHeight: 400)
         .onAppear {
-            fetcher.fetch(jobID: job.id, stepNumber: step.number,
-                          token: store.state.settings.githubToken,
-                          org: store.state.settings.githubOrg)
+            fetcher.fetch(
+                jobID: job.id,
+                stepNumber: step.id,
+                token: SettingsStore.shared.githubToken,
+                org: SettingsStore.shared.githubOrg
+            )
         }
     }
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button(action: { dismiss() }) { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+            Button(action: { dismiss() }) {
+                Image(systemName: "chevron.left")
+            }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 1) {
                 Text(job.name).font(.headline).lineLimit(1)
-                Text(step.name ?? "Step \(step.number)").font(.caption).foregroundColor(.secondary).lineLimit(1)
+                Text(step.name).font(.caption).foregroundColor(.secondary).lineLimit(1)
             }
             Spacer()
             LogCopyButton(lines: fetcher.lines)
@@ -82,7 +87,9 @@ struct StepLogView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(filteredLines, id: \.index) { item in logLine(item.index, text: item.text) }
+                    ForEach(filteredLines, id: \.index) { item in
+                        logLine(item.index, text: item.text)
+                    }
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
             }

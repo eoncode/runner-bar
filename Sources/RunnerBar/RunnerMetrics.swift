@@ -2,7 +2,7 @@ import Foundation
 
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
 /// Values are percentages sourced from the `%CPU` and `%MEM` columns of `ps aux`.
-struct RunnerMetrics {
+struct RunnerMetrics: Codable, Equatable {
     /// CPU utilisation as a percentage (e.g. `12.5` means 12.5% of one core).
     let cpu: Double
     /// Memory utilisation as a percentage of total physical RAM (from `ps aux` `%MEM`).

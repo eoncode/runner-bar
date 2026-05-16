@@ -7,7 +7,6 @@ struct JobDetailView: View {
     let tick: Int
     let onBack: (() -> Void)?
     let onSelectStep: ((JobStep) -> Void)?
-
     @State private var isExpanded = false
 
     init(
@@ -24,32 +23,23 @@ struct JobDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if onBack != nil {
-                backButton
-            }
+            if onBack != nil { backButton }
             jobHeader
-            if isExpanded {
-                stepsSection
-            }
+            if isExpanded { stepsSection }
         }
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(8)
     }
 
     // MARK: - Back button
-
     private var backButton: some View {
         Button(action: { onBack?() }) {
             HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 11, weight: .medium))
-                Text("Back")
-                    .font(.system(size: 12))
+                Image(systemName: "chevron.left").font(.system(size: 11, weight: .medium))
+                Text("Back").font(.system(size: 12))
             }
             .foregroundColor(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 4)
         }
         .buttonStyle(.plain)
     }
@@ -59,33 +49,23 @@ struct JobDetailView: View {
         HStack(spacing: 8) {
             statusIcon
             VStack(alignment: .leading, spacing: 2) {
-                Text(job.name)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+                Text(job.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
                 HStack(spacing: 4) {
-                    Text(statusLabel)
-                        .font(.system(size: 10))
-                        .foregroundColor(statusColor)
+                    Text(statusLabel).font(.system(size: 10)).foregroundColor(statusColor)
                     Text("\u{00b7}").font(.caption).foregroundColor(.secondary)
-                    if let duration = job.durationString {
-                        Text(duration)
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
+                    Text(job.elapsed).font(.system(size: 10)).foregroundColor(.secondary)
                 }
             }
             Spacer()
             if !job.steps.isEmpty {
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .contentShape(Rectangle())
         .onTapGesture {
             if !job.steps.isEmpty {
@@ -101,9 +81,7 @@ struct JobDetailView: View {
             ForEach(job.steps) { step in
                 StepRow(step: step)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        onSelectStep?(step)
-                    }
+                    .onTapGesture { onSelectStep?(step) }
             }
         }
     }
@@ -131,9 +109,7 @@ struct JobDetailView: View {
     }
 
     private var statusIcon: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
+        Circle().fill(statusColor).frame(width: 8, height: 8)
     }
 }
 
@@ -145,24 +121,15 @@ struct StepRow: View {
         HStack(spacing: 6) {
             stepIcon
             Text(step.name)
-                .font(.system(size: 11))
-                .lineLimit(1)
-                .foregroundColor(stepTextColor)
+                .font(.system(size: 11)).lineLimit(1).foregroundColor(stepTextColor)
             Spacer()
             HStack(spacing: 4) {
-                if let duration = step.durationString {
-                    Text(duration)
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
+                Text(step.elapsed).font(.system(size: 10)).foregroundColor(.secondary)
                 Text("\u{2192}").font(.caption).foregroundColor(.secondary)
-                Text(stepStatusLabel)
-                    .font(.system(size: 10))
-                    .foregroundColor(stepStatusColor)
+                Text(stepStatusLabel).font(.system(size: 10)).foregroundColor(stepStatusColor)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 16).padding(.vertical, 5)
     }
 
     private var stepStatusLabel: String {
@@ -196,16 +163,11 @@ struct StepRow: View {
     private var stepIcon: some View {
         Group {
             switch step.conclusion ?? step.status {
-            case "success":
-                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-            case "failure":
-                Image(systemName: "xmark.circle.fill").foregroundColor(.red)
-            case "skipped":
-                Image(systemName: "minus.circle").foregroundColor(.secondary)
-            case "in_progress":
-                Image(systemName: "circle.dotted").foregroundColor(.blue)
-            default:
-                Image(systemName: "circle").foregroundColor(.secondary)
+            case "success": Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            case "failure": Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+            case "skipped": Image(systemName: "minus.circle").foregroundColor(.secondary)
+            case "in_progress": Image(systemName: "circle.dotted").foregroundColor(.blue)
+            default: Image(systemName: "circle").foregroundColor(.secondary)
             }
         }
         .font(.system(size: 10))

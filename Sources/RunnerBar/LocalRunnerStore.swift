@@ -2,7 +2,6 @@ import Combine
 import Foundation
 
 // MARK: - LocalRunnerStore
-
 /// An `ObservableObject` that drives the Local Runners section of `SettingsView`.
 ///
 /// Wraps `LocalRunnerScanner` and exposes the result as a published array so
@@ -21,19 +20,15 @@ import Foundation
 /// `@Published` properties). Safe to cross actor boundaries.
 final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     // MARK: Shared singleton
-
     static let shared = LocalRunnerStore()
 
     // MARK: Published state
-
     /// The list of locally-discovered runners. Empty until the first scan completes.
     @Published private(set) var runners: [RunnerModel] = []
-
     /// `true` while a background scan is in progress.
     @Published private(set) var isScanning: Bool = false
 
     // MARK: Private
-
     private let scanner = LocalRunnerScanner()
     private let enricher = RunnerStatusEnricher.shared
     private let queue = DispatchQueue(
@@ -42,11 +37,9 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     )
 
     // MARK: - Init
-
     private init() {}
 
     // MARK: - Public API
-
     /// Triggers a fresh scan on a background thread. The published `runners`
     /// array is updated on the main thread when the scan and optional enrichment
     /// finish.
@@ -56,8 +49,7 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     /// work to close the race window where two rapid calls could both pass the guard.
     ///
     /// ⚠️ REGRESSION GUARD: `isScanning = true` must remain synchronous here.
-    @MainActor
-    func refresh() {
+    @MainActor func refresh() {
         guard !isScanning else { return }
         isScanning = true
         queue.async { [weak self] in
@@ -65,7 +57,7 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
             // Phase 1: local scan
             var result = self.scanner.scan()
             // Phase 4: enrich with live GitHub API status (skipped if no token)
-            if githubToken() != nil {
+            if !SettingsStore.shared.githubToken.isEmpty {
                 result = self.enricher.enrich(runners: result)
             }
             DispatchQueue.main.async {
