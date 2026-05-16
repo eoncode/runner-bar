@@ -45,8 +45,8 @@ struct PopoverMainViewSubviews: View {
                 stats: statsVM.stats,
                 cpuHistory: statsVM.cpuHistory,
                 memHistory: statsVM.memHistory,
-                diskHistory: statsVM.diskHistory,
-                isAuthenticated: store.isAuthenticated,
+                diskHistory: [],
+                isAuthenticated: !SettingsStore.shared.githubToken.isEmpty,
                 onSelectSettings: onSelectSettings,
                 onSignIn: onSelectSettings
             )
@@ -69,7 +69,25 @@ struct PopoverMainViewSubviews: View {
                         SectionHeaderLabel(title: "Jobs")
                         ForEach(store.jobs) { job in
                             Button(action: { onSelectJob(job) }) {
-                                JobRowView(job: job, tick: tick)
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(job.conclusion == nil ? Color.blue : (job.conclusion == "success" ? Color.green : Color.red))
+                                        .frame(width: 8, height: 8)
+                                    Text(job.name)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                        .layoutPriority(1)
+                                    Spacer()
+                                    Text(job.elapsed)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+                                .padding(.vertical, 5)
                             }
                             .buttonStyle(.plain)
                         }
