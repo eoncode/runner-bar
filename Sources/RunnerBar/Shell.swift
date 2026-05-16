@@ -1,5 +1,6 @@
 import Foundation
 
+@discardableResult
 /// Runs `command` via zsh, draining stdout/stderr asynchronously to avoid
 /// pipe-buffer deadlock, and enforcing a hard timeout so the app never hangs.
 ///
@@ -7,7 +8,6 @@ import Foundation
 ///   - command: The shell command string passed to `/bin/zsh -c`.
 ///   - timeout: Maximum seconds to wait before terminating the process.
 /// - Returns: Trimmed stdout+stderr output, or empty string on launch failure.
-@discardableResult
 func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell › \(command)")
     let task = Process()
