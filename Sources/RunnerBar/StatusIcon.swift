@@ -10,17 +10,17 @@ struct StatusIcon {
     /// Icon character for the current status/conclusion.
     var icon: String {
         switch conclusion {
-        case "success":         return "✓"
-        case "failure":         return "✗"
-        case "cancelled":       return "⊘"
-        case "skipped":         return "⊘"
-        case "timed_out":       return "✗"
+        case "success": return "✓"
+        case "failure": return "✗"
+        case "cancelled": return "⊘"
+        case "skipped": return "⊘"
+        case "timed_out": return "✗"
         case "action_required": return "!"
         default:
             switch status {
-            case "in_progress":  return "▶"
-            case "queued":       return "·"
-            default:             return "·"
+            case "in_progress": return "▶"
+            case "queued": return "·"
+            default: return "·"
             }
         }
     }
@@ -28,15 +28,15 @@ struct StatusIcon {
     /// Foreground colour for the icon.
     var color: NSColor {
         switch conclusion {
-        case "success":                  return .systemGreen
-        case "failure", "timed_out":     return .systemRed
-        case "action_required":          return .systemOrange
-        case "cancelled", "skipped":     return .secondaryLabelColor
+        case "success": return .systemGreen
+        case "failure", "timed_out": return .systemRed
+        case "action_required": return .systemOrange
+        case "cancelled", "skipped": return .secondaryLabelColor
         default:
             switch status {
-            case "in_progress":  return .systemYellow
-            case "queued":       return .secondaryLabelColor
-            default:             return .secondaryLabelColor
+            case "in_progress": return .systemYellow
+            case "queued": return .secondaryLabelColor
+            default: return .secondaryLabelColor
             }
         }
     }
@@ -74,4 +74,5 @@ struct StatusIcon {
         ))
     }
 }
+
 // swiftlint:enable missing_docs

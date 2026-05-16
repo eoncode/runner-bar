@@ -1,5 +1,7 @@
 import Foundation
 
+// MARK: - LocalRunnerScanner
+
 /// Discovers locally-installed GitHub Actions self-hosted runners without
 /// requiring a GitHub API token. Uses three complementary scan sources:
 ///
@@ -15,6 +17,7 @@ import Foundation
 ///    Flags which runners currently have an active launchd service, indicating
 ///    they are registered and running.
 struct LocalRunnerScanner {
+
     // MARK: - .runner JSON schema
 
     /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
@@ -23,6 +26,7 @@ struct LocalRunnerScanner {
         let gitHubUrl: String?
         let agentId: Int?
         let osName: String?
+
         enum CodingKeys: String, CodingKey {
             case runnerName
             case gitHubUrl
@@ -36,18 +40,13 @@ struct LocalRunnerScanner {
     /// This is a synchronous, blocking call — always invoke from a background thread.
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
-        for model in scanRunnerJSONFiles() {
-            models[model.id] = model
-        }
+        for model in scanRunnerJSONFiles() { models[model.id] = model }
         for model in scanLaunchAgents() {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
             let alreadyCoveredByJSON = models.values.contains { existing in
-                existing.runnerName == model.runnerName
-                    && existing.gitHubUrl == model.gitHubUrl
+                existing.runnerName == model.runnerName && existing.gitHubUrl == model.gitHubUrl
             }
-            if !alreadyCoveredByJSON {
-                models[compositeKey] = model
-            }
+            if !alreadyCoveredByJSON { models[compositeKey] = model }
         }
         let liveLabels = scanLiveServices()
         for key in models.keys {
@@ -113,16 +112,12 @@ struct LocalRunnerScanner {
             .compactMap { path -> RunnerModel? in
                 let url = URL(fileURLWithPath: path)
                 let data: Data
-                do {
-                    data = try Data(contentsOf: url)
-                } catch {
+                do { data = try Data(contentsOf: url) } catch {
                     log("LocalRunnerScanner › failed to read \(path): \(error)")
                     return nil
                 }
                 let json: RunnerJSON
-                do {
-                    json = try JSONDecoder().decode(RunnerJSON.self, from: data)
-                } catch {
+                do { json = try JSONDecoder().decode(RunnerJSON.self, from: data) } catch {
                     log("LocalRunnerScanner › failed to decode \(path): \(error)")
                     return nil
                 }

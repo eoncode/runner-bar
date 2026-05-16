@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 // swiftlint:disable type_body_length
-// swiftlint:disable file_length
 
 // MARK: - NavState
 
@@ -23,10 +22,10 @@ import SwiftUI
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
 // 2. Position is computed from status button's window frame (screen coords):
-//    statusItemRect = button.window!.frame     ← already in screen coords
-//    panelX = statusItemRect.midX - contentW/2  ← re-centred each resize
-//    panelTopY = statusItemRect.minY - gap       ← locked at open time
-//    y (frame origin) = panelTopY - totalH       ← recomputed each resize
+//    statusItemRect = button.window!.frame ← already in screen coords
+//    panelX = statusItemRect.midX - contentW/2 ← re-centred each resize
+//    panelTopY = statusItemRect.minY - gap ← locked at open time
+//    y (frame origin) = panelTopY - totalH ← recomputed each resize
 //    ❌ NEVER re-derive panelTopY from statusItemRect inside
 //       resizeAndRepositionPanel() — menu bar hide/show shifts
 //       statusItemRect.minY, moving the panel under the notch.
@@ -38,59 +37,59 @@ import SwiftUI
 // 5. Dismiss: NSEvent global monitor + NSWorkspace app-switch notification.
 //
 // CHROME DIMENSIONS (match NSPopover exactly):
-//   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
+// arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
 // WIDTH: Content-driven via preferredContentSize.width.
-//   SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
-//   ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
-//   JobDetailView:    .frame(idealWidth: 720, maxWidth: .infinity)
-//   resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
-//   the panel under the status button.
-//   ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
-//   ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-//   ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate's floor (minWidth = 280)
-//     is lower; ActionDetailView needs its own content minWidth of 560.
+// SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
+// ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
+// JobDetailView: .frame(idealWidth: 720, maxWidth: .infinity)
+// resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
+// the panel under the status button.
+// ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
+// ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
+// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate's floor (minWidth = 280)
+//    is lower; ActionDetailView needs its own content minWidth of 560.
 //
 // INITIAL WIDTH (openPanel):
-//   initPanelWidth is the fallback frame width used for the initial open before
-//   SwiftUI has measured anything. It does NOT need to match any idealWidth (there
-//   are none). 320 is a compact default; the panel resizes to actual content on the
-//   first preferredContentSize KVO fire.
-//   ❌ NEVER set initPanelWidth > maxWidth.
-//   ❌ NEVER restore initPanelWidth to 600 — that was wider than necessary.
+// initPanelWidth is the fallback frame width used for the initial open before
+// SwiftUI has measured anything. It does NOT need to match any idealWidth (there
+// are none). 320 is a compact default; the panel resizes to actual content on the
+// first preferredContentSize KVO fire.
+// ❌ NEVER set initPanelWidth > maxWidth.
+// ❌ NEVER restore initPanelWidth to 600 — that was wider than necessary.
 //
 // ARROW CENTERING ON NAVIGATE:
-//   navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
-//   and fires the preferredContentSize KVO — async on the main queue. Between the
-//   navigate() call and the KVO fire there is at least one frame where arrowX still
-//   holds the value computed for the *previous* view's panel frame. If the new view
-//   has a different width, resizeAndRepositionPanel() moves the panel, invalidating
-//   the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
-//   navigate(to:) immediately after swapping rootView, so arrowX is always
-//   recomputed from the current (or new) panel frame before the first draw.
+// navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
+// and fires the preferredContentSize KVO — async on the main queue. Between the
+// navigate() call and the KVO fire there is at least one frame where arrowX still
+// holds the value computed for the *previous* view's panel frame. If the new view
+// has a different width, resizeAndRepositionPanel() moves the panel, invalidating
+// the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
+// navigate(to:) immediately after swapping rootView, so arrowX is always
+// recomputed from the current (or new) panel frame before the first draw.
 //
 // POPOVEROPENSTATE:
-//   popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
-//   ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-//   ❌ NEVER pass as a plain Bool prop to PopoverMainView.
+// popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
+// ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
+// ❌ NEVER pass as a plain Bool prop to PopoverMainView.
 //
 // TIMER / POLL GUARD:
-//   RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
-//   ❌ NEVER remove this guard.
+// RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
+// ❌ NEVER remove this guard.
 //
 // DYNAMIC HEIGHT + WIDTH CONTRACT:
-//   sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
-//   → resizeAndRepositionPanel() → panel.setFrame() → chrome.layout() runs
-//   → hosting view frame = chrome.contentRect (updated) → SwiftUI fills new frame.
-//   ❌ NEVER set hosting view frame only at init. layout() must always re-pin it.
-//   ❌ NEVER set autoresizingMask = [] on the hosting view.
+// sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
+// → resizeAndRepositionPanel() → panel.setFrame() → chrome.layout() runs
+// → hosting view frame = chrome.contentRect (updated) → SwiftUI fills new frame.
+// ❌ NEVER set hosting view frame only at init. layout() must always re-pin it.
+// ❌ NEVER set autoresizingMask = [] on the hosting view.
 //
 // STATUS ICON (issue #241):
-//   updateStatusIcon() sets the menu bar image from RunnerStore.shared.aggregateStatus.
-//   ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
-//   ❌ NEVER read RunnerStore.shared.jobs for the icon — it is almost always empty.
-//   ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
-//   Use AggregateStatus.symbolName with NSImage(systemSymbolName:) instead.
+// updateStatusIcon() sets the menu bar image from RunnerStore.shared.aggregateStatus.
+// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
+// ❌ NEVER read RunnerStore.shared.jobs for the icon — it is almost always empty.
+// ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
+// Use AggregateStatus.symbolName with NSImage(systemSymbolName:) instead.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
@@ -159,14 +158,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePanel)
             button.target = self
         }
+
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
         controller.view.autoresizingMask = [.width, .height]
         hostingController = controller
+
         let initW = Self.initPanelWidth
         let chromeView = PanelChromeView(frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight))
         chromeView.addSubview(controller.view)
         chrome = chromeView
+
         let newPanel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -181,18 +183,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.animationBehavior = .none
         panel = newPanel
+
         sizeObservation = controller.observe(\.preferredContentSize, options: [.new]) { [weak self] _, change in
             guard let size = change.newValue, size.height > 0 else { return }
-            DispatchQueue.main.async {
-                self?.resizeAndRepositionPanel()
-            }
+            DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
         }
+
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
             self.updateStatusIcon()
-            if !self.panelIsOpen {
-                self.observable.reload()
-            }
+            if !self.panelIsOpen { self.observable.reload() }
         }
         RunnerStore.shared.start()
         _ = notification
@@ -255,7 +255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data) else { return job }
+              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
+        else { return job }
         let iso = ISO8601DateFormatter()
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
@@ -271,7 +272,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var seenIDs = Set<Int>()
         for run in group.runs {
             guard let data = ghAPI("repos/\(group.repo)/actions/runs/\(run.id)/jobs?per_page=100"),
-                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else { continue }
+                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+            else { continue }
             for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
                 fetched.append(makeActiveJob(from: payload, iso: iso, isDimmed: group.isDimmed))
             }
@@ -475,9 +477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let screenLoc = event.window?.convertToScreen(
                 NSRect(origin: loc, size: .zero)
             ).origin ?? loc
-            if !panel.frame.contains(screenLoc) {
-                self.closePanel()
-            }
+            if !panel.frame.contains(screenLoc) { self.closePanel() }
         }
         _ = statusItemRect
     }
@@ -518,5 +518,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addWorkspaceObserver()
     }
 }
+
 // swiftlint:enable type_body_length
-// swiftlint:enable file_length
