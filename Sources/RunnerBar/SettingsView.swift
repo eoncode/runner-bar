@@ -156,11 +156,11 @@ private struct RunnerSettingsView: View {
 
     @ViewBuilder private var runnerList: some View {
         let models: [RunnerModel] = localRunnerStore.runners
-        ForEach(models, id: \.id) { runner in
+        ForEach(models) { runner in
             HStack {
-                Text(runner.name)
+                Text(runner.runnerName)
                 Spacer()
-                Text(runner.status).font(.caption).foregroundColor(.secondary)
+                Text(runner.displayStatus).font(.caption).foregroundColor(.secondary)
             }
         }
     }

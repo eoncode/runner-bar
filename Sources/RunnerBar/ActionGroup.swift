@@ -42,15 +42,11 @@ struct ActionGroup: Identifiable, Equatable {
         return runs.first?.conclusion
     }
 
-    // MARK: - Compatibility shims (call-site compat with old ActionGroup shape)
+    // MARK: - Compatibility shims
 
-    /// Maps to `overallStatus` for sites that still reference `.groupStatus`.
     var groupStatus: String { overallStatus }
-
-    /// Maps to `overallConclusion` for sites that still reference `.conclusion`.
     var conclusion: String? { overallConclusion }
 
-    /// Derived from the first run's HTML URL, e.g. "owner/repo".
     var repo: String? {
         guard let url = htmlUrl ?? runs.first?.htmlUrl,
               let parsed = URL(string: url),
@@ -58,42 +54,29 @@ struct ActionGroup: Identifiable, Equatable {
         return "\(parsed.pathComponents[1])/\(parsed.pathComponents[2])"
     }
 
-    /// Human-readable label (same as title for new model).
     var label: String { title }
 
-    /// Earliest job start time across all runs.
     var firstJobStartedAt: Date? {
         runs.compactMap(\.createdAt).min()
     }
 
-    /// Latest job completion time across all runs.
     var lastJobCompletedAt: Date? {
         runs.compactMap(\.updatedAt).max()
     }
 
-    /// Alias for `firstJobStartedAt` where old code used `.createdAt`.
     var createdAt: Date? { firstJobStartedAt }
 
-    /// Whether this group should render dimmed.
     var isDimmed: Bool {
         overallConclusion == "skipped" || overallConclusion == "cancelled"
     }
 
-    /// Total number of jobs across all runs.
     var jobsTotal: Int { jobs.count }
 
-    /// Number of completed jobs (those with a non-nil conclusion) across all runs.
     var jobsDone: Int { jobs.filter { $0.conclusion != nil }.count }
 
     var jobProgress: String {
         guard jobsTotal > 0 else { return "" }
         return "\(jobsDone)/\(jobsTotal) jobs"
-    }
-
-    /// Progress fraction (0.0–1.0) of concluded jobs out of total, used by DonutStatusView.
-    var progressFraction: Double {
-        guard jobsTotal > 0 else { return 0 }
-        return Double(jobsDone) / Double(jobsTotal)
     }
 
     var elapsed: String {
@@ -107,19 +90,16 @@ struct ActionGroup: Identifiable, Equatable {
             : "\(sec)s"
     }
 
-    /// Name of the currently running job, for display in the action row trailing area.
     var currentJobName: String {
         jobs.first(where: { $0.status == "in_progress" })?.name ?? ""
     }
 
-    /// True when all runners are local (runner name does not contain "/").
     var isLocalGroup: Bool? {
         let runnerNames = jobs.compactMap(\.runnerName)
         guard !runnerNames.isEmpty else { return nil }
         return runnerNames.allSatisfy { !$0.contains("/") }
     }
 
-    /// Returns a copy of this group with a different jobs array (via rebuilt runs).
     func withJobs(_ newJobs: [ActiveJob]) -> ActionGroup {
         guard let first = runs.first else { return self }
         let rebuilt = WorkflowRun(
@@ -147,10 +127,8 @@ struct ActionGroup: Identifiable, Equatable {
     }
 }
 
-// MARK: - GroupStatus type alias for legacy call sites
+// MARK: - GroupStatus
 
-/// Legacy enum used in DonutStatusView / PopoverProgressViews.
-/// Maps string-based overallStatus to typed cases.
 enum GroupStatus: String, Equatable {
     case inProgress = "in_progress"
     case queued
