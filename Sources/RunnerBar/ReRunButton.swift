@@ -18,13 +18,13 @@ struct ReRunButton: View {
 
     /// Visual states of the re-run button lifecycle.
     enum Phase {
-        /// Normal tappable state — shows arrow.clockwise + "Re-run".
+        /// Normal tappable state.
         case idle
-        /// In-flight state — shows a spinner + "Running...".
+        /// Spinner shown while the re-run request is in-flight.
         case loading
-        /// Success state — shows a checkmark + "Done" for 1.5 s.
+        /// Green checkmark shown for 1.5 s after success.
         case done
-        /// Failure state — shows a cross + "Failed" for 1.5 s.
+        /// Red cross shown for 1.5 s after failure.
         case failed
     }
 
