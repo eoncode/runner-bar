@@ -74,7 +74,7 @@ struct PopoverLocalRunnerRow: View {
     private func runnerList(_ busy: [Runner]) -> some View {
         ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
         if busy.count > 3 {
-            Text("+ \(busy.count - 3) more…")
+            Text("+ \(busy.count - 3) more\u{2026}")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
         }
@@ -104,19 +104,19 @@ struct PopoverLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 /// Expand behaviour (spec):
-///   expandState == nil   → COMPACT
-///     in-progress rows: auto-set to false on appear (shows only in_progress jobs)
-///     terminal rows: nil = no jobs shown
-///   expandState == false → AUTO-COMPACT (in-progress only)
+///   expandState == nil   → COMPACT (no jobs shown)
+///     terminal rows (success/failed/queued) start here
+///   expandState == false → AUTO-COMPACT (in_progress jobs only)
 ///     set by .onAppear for in-progress runs only
-///     InlineJobRowsView receives fullExpand=false → shows only in_progress jobs
 ///   expandState == true  → EXPANDED (all jobs)
 ///     set by user tapping the left pill
-///     InlineJobRowsView receives fullExpand=true → shows ALL jobs
 ///
-/// Pill tap is a SIMPLE TOGGLE: nil/false ↔ true
-///   One tap always expands to all jobs.
-///   One tap on expanded always collapses back to the default compact state.
+/// Auto-collapse on transition:
+///   When a run transitions FROM inProgress → terminal (success/failed),
+///   expandState is reset to nil so it collapses to compact.
+///   This ONLY fires on an actual status change, NOT on every re-render.
+///   Terminal rows that are already failed/success at appear time are
+///   never auto-collapsed and remain fully user-controllable.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -124,6 +124,8 @@ struct ActionRowView: View {
 
     /// nil = fully collapsed, false = auto-compact (in_progress jobs only), true = full expand
     @State private var expandState: Bool? = nil
+    /// Tracks the last-seen status so onChange only reacts to genuine transitions.
+    @State private var previousStatus: RBStatus? = nil
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -133,14 +135,11 @@ struct ActionRowView: View {
 
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous).fill(rowStatus.tint)
 
-            // Left pill — SIMPLE TOGGLE: any non-expanded state → true, true → nil/false
-            // One tap = expand all, one tap = collapse back to default compact.
             Button(
                 action: {
                     guard !group.jobs.isEmpty else { return }
                     withAnimation(.easeInOut(duration: 0.15)) {
                         if expandState == true {
-                            // Collapse back to default compact state for this row's status
                             expandState = (rowStatus == .inProgress) ? false : nil
                         } else {
                             expandState = true
@@ -164,8 +163,6 @@ struct ActionRowView: View {
                     Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
                     Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
                 }
-                // Show InlineJobRowsView only when NOT fully collapsed (nil).
-                // false = in_progress jobs only, true = all jobs.
                 if let fullExpand = expandState {
                     InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
                 }
@@ -175,14 +172,21 @@ struct ActionRowView: View {
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear {
+            let s = rowStatus
+            previousStatus = s
             // In-progress rows auto-expand to compact mode (in_progress jobs only).
-            // Terminal/queued rows start fully collapsed.
-            expandState = (rowStatus == .inProgress) ? false : nil
+            // Terminal/queued rows start fully collapsed — user must tap to expand.
+            expandState = (s == .inProgress) ? false : nil
         }
         .onChange(of: rowStatus) { newStatus in
-            if newStatus == .success || newStatus == .failed {
+            // ⚠️ Only auto-collapse when genuinely transitioning FROM inProgress
+            // TO a terminal state. Without the previousStatus guard this fires
+            // on every displayTick re-render for already-terminal rows, instantly
+            // collapsing any user-triggered expand. Never remove previousStatus check.
+            if previousStatus == .inProgress && (newStatus == .success || newStatus == .failed) {
                 withAnimation(.easeInOut(duration: 0.15)) { expandState = nil }
             }
+            previousStatus = newStatus
         }
     }
 
