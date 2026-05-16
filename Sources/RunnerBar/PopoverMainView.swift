@@ -28,13 +28,12 @@ import SwiftUI
 /// Owns the runner-refresh timer, display-tick timer, and system-stats lifecycle.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
-    let onSelectJob: (ActiveJob) -> Void
+    let onSelectJob: (ActiveJob, ActionGroup) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
     let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
-
     @ObservedObject private var systemStats = SystemStatsViewModel.shared
     @State private var isAuthenticated = false
     @State private var visibleCount: Int = 10
@@ -42,10 +41,6 @@ struct PopoverMainView: View {
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
-    /// Maximum height for the scrollable actions list.
-    /// 80% of the visible screen height — matches AppDelegate's 85% panel cap
-    /// minus ~5% headroom for the fixed header + runner rows above the list.
-    /// ❌ NEVER replace with a GeometryReader/preference approach.
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
@@ -53,17 +48,20 @@ struct PopoverMainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
-                statsVM: systemStats,
+                stats: systemStats.stats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
-                onSignIn: signInWithGitHub
+                onSignIn: signInWithGitHub,
+                cpuHistory: systemStats.cpuHistory,
+                memHistory: systemStats.memHistory,
+                diskHistory: systemStats.diskHistory
             )
             Divider()
+            if store.isRateLimited { rateLimitBanner; Divider() }
             PopoverLocalRunnerRow(runners: store.runners)
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
-            // RULE 5: scrollable actions list, capped at screenScrollMaxHeight.
             actionsSectionScrollable
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
@@ -96,15 +94,22 @@ struct PopoverMainView: View {
 
     private var actionsSectionContent: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Divider()
             if store.actions.isEmpty {
-                Text("No recent actions")
-                    .font(.caption).foregroundColor(.secondary)
+                Text(isAuthenticated ? "No recent workflow runs" : "Sign in to see workflow runs")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
-                SectionHeaderLabel(title: "Actions")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
+                    ActionRowView(
+                        group: group,
+                        tick: displayTick,
+                        onSelect: { onSelectAction(group) },
+                        onSelectJob: { job, grp in onSelectInlineJob(job, grp) }
+                    )
+                    Divider().padding(.leading, 12)
                 }
                 loadMoreButton
             }
@@ -128,13 +133,29 @@ struct PopoverMainView: View {
         }
     }
 
+    // MARK: - Rate-limit banner
+
+    private var rateLimitBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+                .font(.system(size: 10))
+            Text("GitHub API rate limited — retrying\u{2026}")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+    }
+
     // MARK: - Runner refresh timer (RULE 7 — gated, 10s)
 
     private func startRunnerRefreshTimer() {
         runnerRefreshTimer?.invalidate()
-        runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [self] _ in
-            guard !popoverOpenState.isOpen else { return }
-            Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
+        // ⚠️ DO NOT wrap in Task {} — Task dispatches onto a Swift cooperative background
+        // thread, causing all 4 @Published properties in RunnerStoreObservable to be
+        // mutated off-main (SwiftUI Fault). Timer callbacks already fire on the main
+        // run-loop thread, so store.reload() is called directly.
+        runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
             store.reload()
         }
     }
@@ -145,22 +166,6 @@ struct PopoverMainView: View {
         displayTickTimer?.invalidate()
         displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             displayTick += 1
-        }
-    }
-
-    // MARK: - Rate-limit banner
-
-    @ViewBuilder
-    private var rateLimitBanner: some View {
-        if store.isRateLimited {
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange).font(.system(size: 10))
-                Text("GitHub API rate limited — retrying\u{2026}")
-                    .font(.system(size: 10)).foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 4)
-            Divider()
         }
     }
 
