@@ -74,8 +74,10 @@ import SwiftUI
 //
 // TIMER / POLL GUARD:
 // RunnerStore.shared.onChange fires on every poll tick.
-// observable.reload() is called unconditionally so the UI stays live while open.
-// updateStatusIcon() always runs regardless of panel state.
+// observable.registerSideEffect registers updateStatusIcon without clobbering
+// the observable's own @Published property updates.
+// ❌ NEVER assign RunnerStore.shared.onChange directly in AppDelegate —
+//    that overwrites the observable's closure and breaks UI refresh.
 //
 // DYNAMIC HEIGHT + WIDTH CONTRACT:
 // sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
@@ -269,10 +271,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
         }
 
-        RunnerStore.shared.onChange = { [weak self] in
-            guard let self else { return }
-            self.updateStatusIcon()
-            self.observable.reload()
+        // ❌ NEVER set RunnerStore.shared.onChange = ... here.
+        // The observable's init() already owns that closure to drive @Published updates.
+        // Use registerSideEffect() for any additional per-poll work.
+        observable.registerSideEffect { [weak self] in
+            self?.updateStatusIcon()
         }
         RunnerStore.shared.start()
     }
