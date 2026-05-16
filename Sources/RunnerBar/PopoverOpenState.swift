@@ -1,8 +1,8 @@
 import SwiftUI
 
-// ════════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 // ⚠️ PopoverOpenState — SIDE-JUMP REGRESSION GUARD (ref #377 #375 #376)
-// ════════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 //
 // PURPOSE:
 // 1. Provides a live, mutable signal of whether the NSPopover is currently open.
@@ -30,9 +30,8 @@ import SwiftUI
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
-// ════════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 
-// swiftlint:disable type_body_length
 /// Observable wrapper for NSPopover open/closed state and one-shot height callback.
 final class PopoverOpenState: ObservableObject {
     /// `true` from immediately before `NSPopover.show()` until after `NSPopover.close()`.
@@ -48,4 +47,3 @@ final class PopoverOpenState: ObservableObject {
     /// ❌ NEVER call more than once per open.
     var onHeightReady: ((CGFloat) -> Void)?
 }
-// swiftlint:enable type_body_length

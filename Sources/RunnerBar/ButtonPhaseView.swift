@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import SwiftUI
 
 // MARK: - ButtonPhaseView
@@ -26,4 +25,3 @@ struct ButtonPhaseView: View {
         }
     }
 }
-// swiftlint:enable file_length

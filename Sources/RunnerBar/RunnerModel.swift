@@ -29,7 +29,6 @@ struct RunnerModel: Identifiable {
     var isBusy: Bool = false
     /// Labels configured for this runner (from `.runner` JSON `customLabels`).
     var labels: [String] = []
-
     /// `true` when the runner is considered non-primary (hidden by default).
     var isDimmed: Bool = false
 
@@ -37,9 +36,13 @@ struct RunnerModel: Identifiable {
 
     /// Semantic colour state for the status dot in `SettingsView`.
     enum StatusColor {
+        /// Runner service is running and GitHub reports it online and not busy.
         case running
+        /// Runner is actively executing a job.
         case busy
+        /// Runner service is running but GitHub reports it idle.
         case idle
+        /// Runner service is not running.
         case offline
     }
 

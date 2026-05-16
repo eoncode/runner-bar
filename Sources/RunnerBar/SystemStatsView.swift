@@ -2,41 +2,74 @@ import SwiftUI
 
 // MARK: - SystemStatsView
 
-/// Compact CPU / RAM bar shown at the bottom of the popover.
+/// Full-page system stats view shown in the settings panel.
 struct SystemStatsView: View {
-    /// Live system stats injected from the parent.
-    let stats: SystemStatsSnapshot
+    @StateObject private var viewModel = SystemStatsViewModel()
 
     var body: some View {
-        HStack(spacing: 10) {
-            statPill(
-                icon: "cpu",
-                label: "CPU",
-                value: stats.cpuPercent,
-                color: stats.cpuPercent > 80 ? .red : .blue
-            )
-            statPill(
-                icon: "memorychip",
-                label: "RAM",
-                value: stats.memPercent,
-                color: stats.memPercent > 80 ? .red : .green
-            )
+        VStack(alignment: .leading, spacing: 12) {
+            Text("System Stats")
+                .font(.headline)
+                .padding(.bottom, 4)
+            statRow(label: "CPU", value: String(format: "%.1f%%", viewModel.stats.cpuPct))
+            statRow(label: "Memory Used", value: String(format: "%.1f GB", viewModel.stats.memUsedGB))
+            statRow(label: "Memory Total", value: String(format: "%.1f GB", viewModel.stats.memTotalGB))
+            statRow(label: "Disk Used", value: String(format: "%.1f GB", viewModel.stats.diskUsedGB))
+            statRow(label: "Disk Total", value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding()
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.stop() }
     }
 
-    @ViewBuilder private func statPill(icon: String, label: String, value: Double, color: Color) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
+    private func statRow(label: String, value: String) -> some View {
+        HStack {
             Text(label)
-                .font(DesignTokens.Font.monoXSmall)
+                .font(.system(size: 12))
                 .foregroundColor(.secondary)
-            Text(String(format: "%.0f%%", value))
-                .font(DesignTokens.Font.monoXSmall)
-                .foregroundColor(value > 80 ? color : .secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 12, design: .monospaced))
         }
+    }
+}
+
+// MARK: - BlockBarView
+
+/// Renders a coloured block-bar and percentage label for a given metric.
+struct BlockBarView: View {
+    /// The display label shown to the left of the bar.
+    let label: String
+    /// Usage percentage (0–100).
+    let pct: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(.secondary)
+            GeometryReader { geo in
+                let barWidth = geo.size.width * CGFloat(min(max(pct / 100.0, 0), 1))
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.2))
+                    Rectangle()
+                        .fill(usageColor)
+                        .frame(width: barWidth)
+                }
+                .cornerRadius(2)
+            }
+            .frame(height: 6)
+            Text(String(format: "%.0f%%", pct))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(usageColor)
+                .frame(width: 36, alignment: .trailing)
+        }
+    }
+
+    private var usageColor: Color {
+        if pct > 85 { return .red }
+        if pct > 60 { return .yellow }
+        return .green
     }
 }

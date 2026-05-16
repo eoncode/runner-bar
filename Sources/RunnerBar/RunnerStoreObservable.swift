@@ -22,6 +22,9 @@ final class RunnerStoreObservable: ObservableObject {
     /// Mirrors `RunnerStore.shared.isRateLimited`.
     @Published private(set) var isRateLimited = false
 
+    /// Creates a new observable bridge with empty initial state.
+    init() {}
+
     /// Pulls the current state from `RunnerStore.shared` with no animation.
     ///
     /// ❌ NEVER add objectWillChange.send() here — double-publish causes flicker.
