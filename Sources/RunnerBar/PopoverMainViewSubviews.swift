@@ -107,7 +107,8 @@ struct PopoverLocalRunnerRow: View {
 ///   expandState == nil   → COMPACT (no jobs shown)
 ///     terminal rows (success/failed/queued) start here
 ///   expandState == false → AUTO-COMPACT (in_progress jobs only)
-///     set by .onAppear for in-progress runs only
+///     set by .onAppear for in-progress runs only, OR by onChange when
+///     the row first transitions INTO inProgress (async store population)
 ///   expandState == true  → EXPANDED (all jobs)
 ///     set by user tapping the left pill
 ///
@@ -117,6 +118,10 @@ struct PopoverLocalRunnerRow: View {
 ///   This ONLY fires on an actual status change, NOT on every re-render.
 ///   Terminal rows that are already failed/success at appear time are
 ///   never auto-collapsed and remain fully user-controllable.
+///
+/// fix: async RunnerStore population means onAppear often fires before
+///   groupStatus is inProgress. The onChange guard below catches the
+///   first transition INTO inProgress so inline jobs always appear.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -179,6 +184,15 @@ struct ActionRowView: View {
             expandState = (s == .inProgress) ? false : nil
         }
         .onChange(of: rowStatus) { newStatus in
+            // fix: RunnerStore populates async — onAppear often fires before
+            // groupStatus is inProgress, leaving expandState == nil and hiding
+            // inline jobs. Auto-expand the first time we see inProgress.
+            // Guard: only expand if user hasn't manually collapsed (expandState == nil).
+            // ⚠️ Never remove the expandState == nil guard — without it this would
+            // override a user-triggered full-expand collapse back to auto-compact.
+            if newStatus == .inProgress && expandState == nil {
+                withAnimation(.easeInOut(duration: 0.15)) { expandState = false }
+            }
             // ⚠️ Only auto-collapse when genuinely transitioning FROM inProgress
             // TO a terminal state. Without the previousStatus guard this fires
             // on every displayTick re-render for already-terminal rows, instantly
