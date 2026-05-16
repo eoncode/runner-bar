@@ -152,11 +152,16 @@ struct ActionRowView: View {
                     }
                 },
                 label: {
-                    Capsule(style: .continuous)
+                    // Half-pill indicator: a RoundedRectangle wide enough that its
+                    // right rounded edge is clipped by the parent's clipShape, leaving
+                    // only the left side of the pill visible — snug against the card's
+                    // leading rounded corner.
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                         .fill(rowStatus.color)
-                        .frame(width: 3)
+                        .frame(width: RBRadius.card * 2)
                         .frame(maxHeight: .infinity)
                         .padding(.vertical, RBSpacing.xs)
+                        .offset(x: -(RBRadius.card))
                 }
             )
             .buttonStyle(.plain)
