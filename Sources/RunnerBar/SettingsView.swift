@@ -222,20 +222,19 @@ struct SettingsView: View {
     // MARK: - Runner Management
 
     private var runnerSection: some View {
-        // Explicit [Runner] type annotation is required.
-        // Without it, Swift 6 resolves ForEach(runners) to ForEach(Range<Int>)
-        // because Runner.id: Int satisfies ExpressibleByIntegerLiteral on Range.
-        // ❌ NEVER remove the explicit [Runner] annotation on this local.
-        // ❌ NEVER pass observable.runners directly to ForEach.
-        let runners: [Runner] = observable.runners
-        return VStack(alignment: .leading, spacing: 0) {
+        // ForEach(_:id:) with an explicit id keypath hard-pins the
+        // RandomAccessCollection overload. The compiler cannot fall back to
+        // ForEach(Range<Int>) when id: is present, regardless of Runner.ID type.
+        // ❌ NEVER remove the id: \.id argument from this ForEach.
+        // ❌ NEVER pass observable.runners directly without id:.
+        VStack(alignment: .leading, spacing: 0) {
             Text("Runner management").font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
-            if runners.isEmpty {
+            if observable.runners.isEmpty {
                 Text("No runners configured").font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 4)
             } else {
-                ForEach(runners) { runner in
+                ForEach(observable.runners, id: \.id) { runner in
                     HStack(spacing: 8) {
                         Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
                         Text(runner.name).font(.system(size: 13)).lineLimit(1)
