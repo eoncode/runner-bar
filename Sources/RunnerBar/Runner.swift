@@ -1,13 +1,6 @@
 // swiftlint:disable all
 import Foundation
 
-struct RunnerMetrics: Codable, Equatable {
-    /// CPU usage percentage (0–100).
-    let cpu: Double
-    /// Memory usage percentage (0–100).
-    let mem: Double
-}
-
 struct Runner: Identifiable, Codable, Equatable {
     let id: Int
     let name: String
