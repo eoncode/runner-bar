@@ -25,7 +25,7 @@ final class ScopeStore: ObservableObject {
         if selectedScope == scope { selectedScope = scopes.first ?? "" }
     }
     private func save() {
-        UserDefaults.standard.set(scopes, forKey: Keys.selected)
+        UserDefaults.standard.set(scopes, forKey: Keys.scopes)
     }
     private enum Keys {
         static let scopes   = "scopeStore.scopes"
