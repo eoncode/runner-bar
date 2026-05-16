@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - AddRunnerSheet
@@ -50,20 +51,22 @@ struct AddRunnerSheet: View {
         isRegistering = true
         resultMessage = nil
         let trimmedScope = scope.trimmingCharacters(in: .whitespaces)
-        let trimmedLabel = label.trimmingCharacters(in: .whitespaces)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let runner = RunnerModel(
-                id: UUID().uuidString,
-                name: trimmedLabel.isEmpty ? trimmedScope : trimmedLabel,
-                scope: trimmedScope,
-                workDir: nil
-            )
-            // swiftlint:disable:next identifier_name
-            let ok = RunnerLifecycleService.shared.start(runner: runner)
-            DispatchQueue.main.async {
+        Task.detached(priority: .userInitiated) {
+            // RunnerLifecycleService manages already-installed runners via launchd only.
+            // Remote registration requires a GitHub API token — open the GitHub setup page instead.
+            let urlString: String
+            if trimmedScope.contains("/") {
+                urlString = "https://github.com/\(trimmedScope)/settings/actions/runners/new"
+            } else {
+                urlString = "https://github.com/organizations/\(trimmedScope)/settings/actions/runners/new"
+            }
+            await MainActor.run {
                 isRegistering = false
-                resultIsError = !ok
-                resultMessage = ok ? "Runner registered successfully." : "Registration failed."
+                resultIsError = false
+                resultMessage = "Opening GitHub runner setup\u2026"
+            }
+            if let url = URL(string: urlString) {
+                await MainActor.run { NSWorkspace.shared.open(url) }
             }
         }
     }
