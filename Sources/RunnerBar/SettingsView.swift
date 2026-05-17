@@ -28,11 +28,12 @@ import SwiftUI
 /// NSPanel.setFrame() has no anchor → zero side jump on any size change.
 ///
 /// HEIGHT CONTRACT:
-/// NO ScrollView, NO frame(maxHeight:) cap.
-/// preferredContentSize reports the full natural VStack height.
-/// AppDelegate.resizeAndRepositionPanel() clamps to maxHeight = 85% screen.
-/// That is the only height cap — enforced at the AppDelegate level, not here.
-/// ❌ NEVER add a ScrollView or frame(maxHeight:) cap back to SettingsView.
+/// ScrollView wraps inner content only (below the header bar).
+/// preferredContentSize reports the full natural VStack height up to the panel cap.
+/// AppDelegate.resizeAndRepositionPanel() clamps panel to maxHeight = 85% screen.
+/// When content exceeds that cap the ScrollView allows it to scroll within the panel.
+/// ❌ NEVER wrap the headerBar in ScrollView — back button must always be visible.
+/// ❌ NEVER add frame(maxHeight:) cap to the ScrollView or its content VStack.
 /// ❌ NEVER add idealHeight to the root frame.
 ///
 /// WIDTH CONTRACT:
@@ -85,30 +86,34 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        // NO ScrollView — NSPanel grows to show all content.
-        // AppDelegate clamps panel height to 85% screen visibleFrame.
-        // ❌ NEVER wrap in ScrollView or add frame(maxHeight:) here.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
-            VStack(alignment: .leading, spacing: 0) {
-                localRunnersSection
-                Divider()
-                runnerSection
-                Divider()
-                notificationsSection
-                Divider()
-                generalSection
-                Divider()
-                accountSection
-                Divider()
-                legalSection
-                Divider()
-                aboutSection
+            // ScrollView wraps only the sections below the header.
+            // Header bar stays pinned — back button always visible.
+            // AppDelegate clamps panel height to 85% screen; ScrollView handles overflow.
+            // ❌ NEVER move headerBar inside the ScrollView.
+            // ❌ NEVER add frame(maxHeight:) to this ScrollView.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+            // UNDER ANY CIRCUMSTANCE.
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    localRunnersSection
+                    Divider()
+                    runnerSection
+                    Divider()
+                    notificationsSection
+                    Divider()
+                    generalSection
+                    Divider()
+                    accountSection
+                    Divider()
+                    legalSection
+                    Divider()
+                    aboutSection
+                }
+                .padding(.bottom, 16)
             }
-            .padding(.bottom, 16)
         }
         // idealWidth only — no idealHeight. NSPanel handles screen bounds.
         // ❌ NEVER add idealHeight here.
