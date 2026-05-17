@@ -647,7 +647,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             guard let self else { return }
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
-                self.closePanel()
+                // ⚠️ closePanel() is @MainActor-isolated. The NotificationCenter callback
+                // runs on .main queue but is nonisolated in Swift's concurrency model.
+                // Task { @MainActor in } gives the compiler a typed hop without
+                // changing the runtime behaviour (already on main thread).
+                Task { @MainActor [weak self] in self?.closePanel() }
             }
         }
     }
