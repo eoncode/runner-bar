@@ -1,4 +1,4 @@
-// swiftlint:disable file_length identifier_name opening_brace
+// swiftlint:disable identifier_name opening_brace
 import SwiftUI
 
 // MARK: - SystemStatsView
