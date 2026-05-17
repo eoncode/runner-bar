@@ -9,46 +9,39 @@ import SwiftUI
 /// labels, and taps Confirm. The sheet fetches a registration token via the
 /// GitHub API, downloads the runner tarball if not present, unpacks it, then
 /// runs `./config.sh` in the runner install directory to complete registration.
-/// On success it dismisses itself and calls `onComplete` so the caller can
-/// re-scan and show the new runner.
+/// If the directory is already configured, `./config.sh remove` is run first.
 ///
 /// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
-    /// Binding that controls sheet presentation; set to `false` to dismiss.
     @Binding var isPresented: Bool
-    /// Called when registration succeeds so the caller can re-scan runners.
     let onComplete: () -> Void
 
     // MARK: Scope state
 
-    /// Scope type selection for the new runner: a specific repository or an organisation.
     enum ScopeType: String, CaseIterable, Identifiable {
-        /// Register the runner under a specific repository (owner/repo).
         case repo = "Repository"
-        /// Register the runner under an entire organisation.
-        case org = "Organisation"
-        /// Stable identifier for `ForEach` — uses the raw string value.
+        case org  = "Organisation"
         var id: String { rawValue }
     }
 
     @State private var scopeType: ScopeType = .repo
     @State private var selectedRepo = ""
-    @State private var selectedOrg = ""
+    @State private var selectedOrg  = ""
     @State private var repos: [String] = []
-    @State private var orgs: [String] = []
+    @State private var orgs:  [String] = []
     @State private var isLoadingScopes = false
 
     // MARK: Runner config state
 
-    @State private var runnerName = ""
-    @State private var labelsText = "self-hosted,macOS"
-    @State private var installDir = FileManager.default
+    @State private var runnerName  = ""
+    @State private var labelsText  = "self-hosted,macOS"
+    @State private var installDir  = FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent("actions-runner").path
 
     // MARK: Registration state
 
-    @State private var isRegistering = false
+    @State private var isRegistering    = false
     @State private var registrationStep = ""
     @State private var errorMessage: String?
 
@@ -59,7 +52,7 @@ struct AddRunnerSheet: View {
             Text("Add runner").font(.headline)
 
             Picker("Scope", selection: $scopeType) {
-                ForEach(ScopeType.allCases) { scopeOption in Text(scopeOption.rawValue).tag(scopeOption) }
+                ForEach(ScopeType.allCases) { s in Text(s.rawValue).tag(s) }
             }
             .pickerStyle(.segmented)
 
@@ -77,7 +70,8 @@ struct AddRunnerSheet: View {
             }
 
             labeledField("Runner name", placeholder: "e.g. my-mac-runner", text: $runnerName)
-            labeledField("Labels (comma-separated)", placeholder: "e.g. self-hosted,macOS,arm64", text: $labelsText)
+            labeledField("Labels (comma-separated)", placeholder: "e.g. self-hosted,macOS,arm64",
+                         text: $labelsText)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runner install directory").font(.caption).foregroundColor(.secondary)
@@ -156,12 +150,12 @@ struct AddRunnerSheet: View {
         isLoadingScopes = true
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchedRepos = fetchUserRepos()
-            let fetchedOrgs = fetchUserOrgs()
+            let fetchedOrgs  = fetchUserOrgs()
             DispatchQueue.main.async {
                 repos = fetchedRepos
-                orgs = fetchedOrgs
+                orgs  = fetchedOrgs
                 if let first = fetchedRepos.first { selectedRepo = first }
-                if let first = fetchedOrgs.first { selectedOrg = first }
+                if let first = fetchedOrgs.first  { selectedOrg  = first }
                 isLoadingScopes = false
             }
         }
@@ -171,86 +165,104 @@ struct AddRunnerSheet: View {
         DispatchQueue.main.async { registrationStep = msg }
     }
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     private func register() {
         guard canRegister else { return }
         errorMessage = nil
         registrationStep = ""
         isRegistering = true
-        let scope = effectiveScope
-        let name = runnerName.trimmingCharacters(in: .whitespaces)
+        let scope  = effectiveScope
+        let name   = runnerName.trimmingCharacters(in: .whitespaces)
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
-        let dir = installDir.trimmingCharacters(in: .whitespaces)
+        let dir    = installDir.trimmingCharacters(in: .whitespaces)
 
         DispatchQueue.global(qos: .userInitiated).async {
             // Security: only allow paths inside the user's home directory.
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath().path
+            let homeDir     = FileManager.default.homeDirectoryForCurrentUser
+                .resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir).resolvingSymlinksInPath().path
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage = "Install directory must be inside your home folder (~/…)."
+                    errorMessage  = "Install directory must be inside your home folder (~/…)."
                 }
                 return
             }
 
-            // 1. Fetch registration token.
-            setStep("Fetching registration token…")
-            guard let token = fetchRegistrationToken(scope: scope) else {
-                DispatchQueue.main.async {
-                    isRegistering = false
-                    errorMessage = "Failed to fetch registration token. " +
-                        "Ensure `gh auth login` has been run or GH_TOKEN is set."
-                }
-                return
-            }
-
-            // 2. Create install directory.
+            // 1. Create install directory.
             do {
-                try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(atPath: dir,
+                                                        withIntermediateDirectories: true)
             } catch {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage = "Failed to create directory: \(error.localizedDescription)"
+                    errorMessage  = "Failed to create directory: \(error.localizedDescription)"
                 }
                 return
             }
 
-            // 3. Download + unpack runner package if config.sh is absent.
             let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
+            let runnerFile = URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
+
+            // 2. Download + unpack runner package if config.sh is absent.
             if !FileManager.default.fileExists(atPath: configPath) {
                 setStep("Downloading runner package…")
                 guard let downloadURL = fetchRunnerDownloadURL() else {
                     DispatchQueue.main.async {
                         isRegistering = false
-                        errorMessage = "Could not determine runner download URL. Check your internet connection."
+                        errorMessage  = "Could not determine runner download URL. " +
+                                        "Check your internet connection."
                     }
                     return
                 }
-                let tarPath = URL(fileURLWithPath: dir).appendingPathComponent("actions-runner.tar.gz").path
-                guard runSimpleProcess("/usr/bin/curl", args: ["-sL", downloadURL, "-o", tarPath]) == 0 else {
-                    DispatchQueue.main.async { isRegistering = false; errorMessage = "Download failed." }
+                let tarPath = URL(fileURLWithPath: dir)
+                    .appendingPathComponent("actions-runner.tar.gz").path
+                guard runSimpleProcess("/usr/bin/curl",
+                                      args: ["-sL", downloadURL, "-o", tarPath]) == 0 else {
+                    DispatchQueue.main.async {
+                        isRegistering = false; errorMessage = "Download failed."
+                    }
                     return
                 }
                 setStep("Unpacking runner package…")
                 let tarExit = runSimpleProcess("/usr/bin/tar", args: ["xzf", tarPath, "-C", dir])
                 try? FileManager.default.removeItem(atPath: tarPath)
                 guard tarExit == 0 else {
-                    DispatchQueue.main.async { isRegistering = false; errorMessage = "Unpack failed." }
+                    DispatchQueue.main.async {
+                        isRegistering = false; errorMessage = "Unpack failed."
+                    }
                     return
                 }
             }
 
-            // 4. Run config.sh.
-            // --replace: removes any existing .runner registration so re-registering
-            //            the same directory (or re-running after a failed attempt) works.
-            // --unattended: no interactive prompts.
+            // 3. If already configured, run `config.sh remove` first.
+            //    `--replace` is not honoured by all runner versions; explicit remove is reliable.
+            if FileManager.default.fileExists(atPath: runnerFile) {
+                setStep("Removing existing runner configuration…")
+                let removeExit = runRegistrationRemove(dir: dir)
+                log("register › config.sh remove exit=\(removeExit)")
+                // Non-zero is non-fatal — continue and let config.sh report if truly broken.
+            }
+
+            // 4. Fetch a fresh registration token (after remove, so it isn’t wasted
+            //    waiting while the old runner deregisters).
+            setStep("Fetching registration token…")
+            guard let token = fetchRegistrationToken(scope: scope) else {
+                DispatchQueue.main.async {
+                    isRegistering = false
+                    errorMessage  = "Failed to fetch registration token. " +
+                        "Ensure `gh auth login` has been run or GH_TOKEN is set."
+                }
+                return
+            }
+
+            // 5. Run config.sh.
             setStep("Configuring runner…")
-            let ghURL = "https://github.com/\(scope)"
+            let ghURL    = "https://github.com/\(scope)"
             let exitCode = runRegistrationCommand(dir: dir, ghURL: ghURL,
                                                   token: token, name: name, labels: labels)
             DispatchQueue.main.async {
-                isRegistering = false
+                isRegistering    = false
                 registrationStep = ""
                 if exitCode == 0 {
                     isPresented = false
@@ -263,26 +275,47 @@ struct AddRunnerSheet: View {
         }
     }
 
-    /// Runs `config.sh --replace --unattended` so:
-    ///   - `--replace` removes any pre-existing `.runner` file, allowing re-registration
-    ///     of a directory that was previously configured (fixes the exit-1 on re-use).
-    ///   - `--unattended` suppresses all interactive prompts.
-    /// Timeout raised to 120 s — org-runner config calls back to GitHub and can be slow.
+    /// Runs `./config.sh remove --unattended` to deregister an existing runner.
+    /// Non-zero exit is non-fatal — the caller decides whether to continue.
+    private func runRegistrationRemove(dir: String) -> Int32 {
+        let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
+        let task = Process()
+        task.executableURL       = configURL
+        task.currentDirectoryURL = URL(fileURLWithPath: dir)
+        task.arguments           = ["remove", "--unattended"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError  = pipe
+        do { try task.run() } catch {
+            log("runRegistrationRemove › launch error: \(error)")
+            return 1
+        }
+        let timeoutItem = DispatchWorkItem { task.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
+        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                         encoding: .utf8) ?? ""
+        log("runRegistrationRemove › exit=\(task.terminationStatus): \(out.prefix(200))")
+        return task.terminationStatus
+    }
+
+    /// Runs `./config.sh --url … --token … --name … --unattended`.
+    /// Timeout: 120 s — org-runner config calls back to GitHub and can be slow.
     /// ⚠️ Blocking — call only from a background thread.
     private func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) -> Int32 {
         let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
         let task = Process()
-        task.executableURL = configURL
+        task.executableURL       = configURL
         task.currentDirectoryURL = URL(fileURLWithPath: dir)
-        var args = ["--url", ghURL, "--token", token, "--name", name,
-                    "--unattended", "--replace"]
+        var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
         if !labels.isEmpty { args += ["--labels", labels] }
         task.arguments = args
         let pipe = Pipe()
         task.standardOutput = pipe
-        task.standardError = pipe
+        task.standardError  = pipe
         var outputData = Data()
         let lock = NSLock()
         pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -303,7 +336,6 @@ struct AddRunnerSheet: View {
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
         if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
         let output = String(data: outputData, encoding: .utf8) ?? ""
-        // Log up to 500 chars so failures are diagnosable without truncating key error lines.
         log("runRegistrationCommand › exit=\(task.terminationStatus): \(output.prefix(500))")
         return task.terminationStatus
     }
@@ -312,10 +344,10 @@ struct AddRunnerSheet: View {
     /// Blocking — call only from a background thread.
     private func runSimpleProcess(_ executable: String, args: [String]) -> Int32 {
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: executable)
-        task.arguments = args
+        task.executableURL  = URL(fileURLWithPath: executable)
+        task.arguments      = args
         task.standardOutput = Pipe()
-        task.standardError = Pipe()
+        task.standardError  = Pipe()
         do { try task.run() } catch {
             log("runSimpleProcess › \(executable) launch error: \(error)")
             return 1
@@ -335,20 +367,21 @@ struct AddRunnerSheet: View {
 /// from the latest GitHub Actions runner release.
 private func fetchRunnerDownloadURL() -> String? {
     let archTask = Process()
-    archTask.executableURL = URL(fileURLWithPath: "/usr/bin/uname")
-    archTask.arguments = ["-m"]
+    archTask.executableURL  = URL(fileURLWithPath: "/usr/bin/uname")
+    archTask.arguments      = ["-m"]
     let archPipe = Pipe()
     archTask.standardOutput = archPipe
-    archTask.standardError = Pipe()
+    archTask.standardError  = Pipe()
     guard (try? archTask.run()) != nil else { return nil }
     archTask.waitUntilExit()
-    let archRaw = archPipe.fileHandleForReading.readDataToEndOfFile()
-    let arch = String(data: archRaw, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let archRaw   = archPipe.fileHandleForReading.readDataToEndOfFile()
+    let arch      = String(data: archRaw, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     let assetArch = (arch == "arm64") ? "arm64" : "x64"
     let assetName = "actions-runner-osx-\(assetArch)"
     log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
 
-    guard let url = URL(string: "https://api.github.com/repos/actions/runner/releases/latest"),
+    guard let url  = URL(string: "https://api.github.com/repos/actions/runner/releases/latest"),
           let data = try? Data(contentsOf: url) else {
         log("fetchRunnerDownloadURL › failed to fetch release JSON")
         return nil
@@ -357,8 +390,7 @@ private func fetchRunnerDownloadURL() -> String? {
         let name: String
         let browserDownloadUrl: String
         enum CodingKeys: String, CodingKey {
-            case name
-            case browserDownloadUrl = "browser_download_url"
+            case name; case browserDownloadUrl = "browser_download_url"
         }
     }
     struct Release: Decodable { let assets: [Asset] }
@@ -366,7 +398,9 @@ private func fetchRunnerDownloadURL() -> String? {
         log("fetchRunnerDownloadURL › decode failed")
         return nil
     }
-    let match = release.assets.first { $0.name.hasPrefix(assetName) && $0.name.hasSuffix(".tar.gz") }
+    let match = release.assets.first {
+        $0.name.hasPrefix(assetName) && $0.name.hasSuffix(".tar.gz")
+    }
     log("fetchRunnerDownloadURL › match=\(match?.name ?? "nil")")
     return match?.browserDownloadUrl
 }
