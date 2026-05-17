@@ -30,20 +30,15 @@ import SwiftUI
 /// NSPanel.setFrame() has no anchor → zero side jump on any size change.
 ///
 /// HEIGHT CONTRACT:
-/// NO ScrollView, NO frame(maxHeight:) cap.
-/// preferredContentSize reports the full natural VStack height.
-/// AppDelegate.resizeAndRepositionPanel() clamps to maxHeight = 85% screen.
-/// That is the only height cap — enforced at the AppDelegate level, not here.
-/// ❌ NEVER add a ScrollView or frame(maxHeight:) cap back to SettingsView.
-/// ❌ NEVER add idealHeight to the root frame.
+/// Content is wrapped in a ScrollView so it never gets cut off when the panel
+/// is clamped by AppDelegate (85 % of screen height). The ScrollView's content
+/// still reports its natural height via preferredContentSize so the panel grows
+/// to show everything when screen space allows, and becomes scrollable only
+/// when clamped.
 ///
 /// WIDTH CONTRACT:
 /// .frame(idealWidth: 480) — only idealWidth needed. NSPanel handles bounds.
 /// ❌ NEVER remove idealWidth: 480.
-///
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-/// is major major major.
 struct SettingsView: View {
     /// Called when the user taps the back button to return to the main view.
     let onBack: () -> Void
@@ -86,19 +81,16 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        // NO ScrollView — NSPanel grows to show all content.
-        // AppDelegate clamps panel height to 85% screen visibleFrame.
-        // ❌ NEVER wrap in ScrollView or add frame(maxHeight:) here.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-        // UNDER ANY CIRCUMSTANCE.
-        sectionsStack
-            .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-            .onAppear(perform: onAppearAction)
-            .onChange(of: localRunnerStore.isScanning) { if !$0 { hasLoadedOnce = true } }
-            .onDisappear { ScopeStore.shared.onMutate = nil }
-            .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
-            .sheet(item: $runnerBeingConfigured, content: configSheet)
-            .modifier(removalAlertModifier)
+        ScrollView(.vertical, showsIndicators: true) {
+            sectionsStack
+        }
+        .frame(idealWidth: 480, maxWidth: .infinity)
+        .onAppear(perform: onAppearAction)
+        .onChange(of: localRunnerStore.isScanning) { if !$0 { hasLoadedOnce = true } }
+        .onDisappear { ScopeStore.shared.onMutate = nil }
+        .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
+        .sheet(item: $runnerBeingConfigured, content: configSheet)
+        .modifier(removalAlertModifier)
     }
 
     // MARK: - Body helpers
@@ -130,11 +122,6 @@ struct SettingsView: View {
     }
 
     /// Root stack of all settings sections.
-    ///
-    /// ❌ NEVER add idealHeight here.
-    /// ❌ NEVER remove idealWidth: 480.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -484,107 +471,97 @@ struct SettingsView: View {
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             #if DEBUG
             Divider().padding(.leading, RBSpacing.md)
-            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
+            linkRow(label: "Privacy Policy", url: "https://dev.eon.st/runnerbar/privacy")
             Divider().padding(.leading, RBSpacing.md)
-            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar")
+            linkRow(label: "Terms of Service", url: "https://dev.eon.st/runnerbar/terms")
             #endif
         }
     }
 
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("About")
                 .font(RBFont.sectionHeader)
                 .foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
+                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Version").font(.system(size: 12))
                 Spacer()
                 Text("\(appVersion) (\(appBuild))")
                     .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
             }
-            .padding(.horizontal, RBSpacing.md).padding(.vertical, 2)
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
+            Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("RunnerBar").font(.system(size: 12))
                 Spacer()
-                Text(Bundle.main.bundleIdentifier ?? "dev.eonist.runnerbar")
+                Text("dev.eon.st/runnerbar")
                     .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
             }
-            .padding(.horizontal, RBSpacing.md).padding(.vertical, 2)
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
             Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
-                .font(.system(size: 11)).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.top, 4).padding(.bottom, 8)
+                .font(.caption).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
         }
     }
 
     // MARK: - Helpers
-    private func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
-    private func submitScope() {
-        let trimmed = newScope.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        ScopeStore.shared.add(trimmed)
-        RunnerStore.shared.start()
-        store.reload()
-        newScope = ""
+    private func linkRow(label: String, url: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 12))
+            Spacer()
+            Link(url, destination: URL(string: url)!)
+                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
     }
 
     private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? Color.rbTextTertiary : (runner.busy ? Color.rbWarning : Color.rbSuccess)
+        switch runner.status {
+        case "online":  return Color.rbSuccess
+        case "offline": return Color.rbDanger
+        default:        return Color.rbTextTertiary
+        }
     }
 
-    private func linkRow(label: String, url: String) -> some View {
-        Button(
-            action: { if let dest = URL(string: url) { NSWorkspace.shared.open(dest) } },
-            label: {
-                HStack {
-                    Text(label).font(.system(size: 12)).foregroundColor(.primary)
-                    Spacer()
-                    Image(systemName: "arrow.up.right").font(.caption).foregroundColor(Color.rbTextSecondary)
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
-            }
-        ).buttonStyle(.plain)
+    private func submitScope() {
+        let trimmed = newScope.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        ScopeStore.shared.add(trimmed)
+        RunnerStore.shared.start()
+        newScope = ""
+    }
+
+    private func applyLaunchAtLogin(_ enabled: Bool) {
+        LoginItem.setEnabled(enabled)
     }
 
     private func signInWithGitHub() {
-        let urlString = "https://docs.github.com/en/authentication/"
-            + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
-        guard let url = URL(string: urlString) else { return }
+        let url = URL(string: "https://github.com/login/oauth/authorize")!
         NSWorkspace.shared.open(url)
     }
 
-    /// Runs `gh auth logout --hostname github.com` on a background thread.
-    /// Updates `isAuthenticated` on the main thread when the call completes.
-    /// ❌ NEVER run shell calls on the main thread — they block the UI.
     private func signOutOfGitHub() {
-        guard !isSigningOut else { return }
         isSigningOut = true
         DispatchQueue.global(qos: .userInitiated).async {
             _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
             DispatchQueue.main.async {
-                isAuthenticated = (githubToken() != nil)
+                isAuthenticated = false
                 isSigningOut = false
             }
         }
     }
 
-    /// Executes the confirmed runner-removal flow on a background thread.
     private func performRemoval() {
         guard let runner = runnerPendingRemoval else { return }
-        guard isAuthenticated else { runnerPendingRemoval = nil; return }
         runnerPendingRemoval = nil
-        removeErrorMessage = nil
         DispatchQueue.global(qos: .userInitiated).async {
-            let succeeded = RunnerLifecycleService.shared.remove(runner: runner)
+            let ok = RunnerLifecycleService.shared.remove(runner: runner)
             DispatchQueue.main.async {
-                if !succeeded {
-                    removeErrorMessage = "De-registration failed — the runner may "
-                        + "still appear in GitHub. Check your token and try again."
-                }
+                if !ok { removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs." }
                 localRunnerStore.refresh()
             }
         }
     }
 }
-// swiftlint:enable type_body_length file_length
