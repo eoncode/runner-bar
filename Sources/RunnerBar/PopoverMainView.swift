@@ -55,7 +55,8 @@ struct PopoverMainViewSubviews: View {
                 stats: statsVM.stats,
                 cpuHistory: statsVM.cpuHistory,
                 memHistory: statsVM.memHistory,
-                diskHistory: [],
+                // fix(#452): pass live diskHistory instead of hardcoded []
+                diskHistory: statsVM.diskHistory,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: onSelectSettings
@@ -80,8 +81,9 @@ struct PopoverMainViewSubviews: View {
                         ForEach(standaloneJobs) { job in
                             Button(action: { onSelectJob(job) }) {
                                 HStack(spacing: 8) {
+                                    // fix(#452): status driven by actual job status not hardcoded .inProgress
                                     DonutStatusView(
-                                        status: .inProgress,
+                                        status: job.typedStatus,
                                         conclusion: job.conclusion,
                                         progress: job.progressFraction
                                     )
@@ -103,6 +105,17 @@ struct PopoverMainViewSubviews: View {
                                 }
                                 .padding(.horizontal, DesignTokens.Spacing.rowHPad)
                                 .padding(.vertical, 5)
+                                // fix(#452): card background matching runner rows and action rows
+                                .background(
+                                    RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                                        .fill(DesignTokens.Colors.rowBackground)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                                                .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                                        )
+                                )
+                                .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+                                .padding(.vertical, 2)
                             }
                             .buttonStyle(.plain)
                         }

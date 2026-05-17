@@ -51,18 +51,20 @@ struct PopoverHeaderView: View {
 
     private var systemStatsBadge: some View {
         HStack(spacing: 6) {
+            // fix(#452): divide by 100 so currentPct is 0-1, matching normalised history scale
+            let cpuFrac = stats.cpuPct / 100.0
             sparklineChip(
                 label: "CPU",
                 history: cpuHistory,
-                currentPct: stats.cpuPct,
+                currentPct: cpuFrac,
                 valueText: String(format: "%.1f%%", stats.cpuPct)
             )
             Divider().frame(height: 16)
-            let memPct = stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
+            let memFrac = stats.memTotalGB > 0 ? stats.memUsedGB / stats.memTotalGB : 0
             sparklineChip(
                 label: "MEM",
                 history: memHistory,
-                currentPct: memPct,
+                currentPct: memFrac,
                 valueText: String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB)
             )
             Divider().frame(height: 16)
@@ -79,6 +81,8 @@ struct PopoverHeaderView: View {
         }
     }
 
+    /// fix(#452): currentPct must be 0-1 normalised (same scale as history array)
+    /// to prevent SparklineView normalisation collapsing all history to near-zero.
     private func sparklineChip(
         label: String,
         history: [Double],
@@ -94,7 +98,8 @@ struct PopoverHeaderView: View {
                 .frame(width: 28, height: 14)
             Text(valueText)
                 .font(DesignTokens.Fonts.monoStat)
-                .foregroundColor(DesignTokens.Colors.usage(pct: currentPct))
+                // usage(pct:) expects 0-100; pass raw stats value not normalised fraction
+                .foregroundColor(DesignTokens.Colors.usage(pct: currentPct * 100))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }

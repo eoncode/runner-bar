@@ -6,6 +6,7 @@ final class SystemStatsViewModel: ObservableObject {
     @Published var stats = SystemStats()
     @Published var cpuHistory: [Double] = []
     @Published var memHistory: [Double] = []
+    @Published var diskHistory: [Double] = []
 
     private var timer: Timer?
     private let maxHistory = 30
@@ -31,8 +32,11 @@ final class SystemStatsViewModel: ObservableObject {
                 self.stats = s
                 self.cpuHistory.append(s.cpuPct / 100.0)
                 self.memHistory.append(s.memTotalGB > 0 ? s.memUsedGB / s.memTotalGB : 0)
-                if self.cpuHistory.count > self.maxHistory { self.cpuHistory.removeFirst() }
-                if self.memHistory.count > self.maxHistory { self.memHistory.removeFirst() }
+                let diskPct = s.diskTotalGB > 0 ? s.diskUsedGB / s.diskTotalGB : 0
+                self.diskHistory.append(diskPct)
+                if self.cpuHistory.count  > self.maxHistory { self.cpuHistory.removeFirst() }
+                if self.memHistory.count  > self.maxHistory { self.memHistory.removeFirst() }
+                if self.diskHistory.count > self.maxHistory { self.diskHistory.removeFirst() }
             }
         }
     }
