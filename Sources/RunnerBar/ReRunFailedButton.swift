@@ -35,6 +35,7 @@ struct ReRunFailedButton: View {
 
     // MARK: - Body
 
+    /// Renders idle re-run-failed button or delegates to `ButtonPhaseView` for active states.
     var body: some View {
         Group {
             switch phase {

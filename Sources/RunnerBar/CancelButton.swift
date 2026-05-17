@@ -14,7 +14,7 @@ struct CancelButton: View {
 
     // MARK: - Body
 
-    // swiftlint:disable missing_docs
+    /// Renders idle cancel button or delegates to `ButtonPhaseView` for active states.
     var body: some View {
         Group {
             if let phase {
@@ -35,7 +35,6 @@ struct CancelButton: View {
             }
         }
     }
-    // swiftlint:enable missing_docs
 
     // MARK: - Actions
 

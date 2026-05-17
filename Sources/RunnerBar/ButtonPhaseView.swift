@@ -26,6 +26,7 @@ struct ButtonPhaseView: View {
     /// Phase to render. Must be `.loading`, `.done`, or `.failed`.
     let phase: Phase
 
+    /// Renders the appropriate icon+label HStack for the current phase.
     var body: some View {
         switch phase {
         case .loading:
