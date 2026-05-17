@@ -9,7 +9,10 @@ import SwiftUI
 /// labels, and taps Confirm. The sheet fetches a registration token via the
 /// GitHub API, downloads the runner tarball if not present, unpacks it, then
 /// runs `./config.sh` in the runner install directory to complete registration.
-/// If the directory is already configured, `./config.sh remove` is run first.
+///
+/// Each runner must have its own unique install directory. If the chosen
+/// directory already contains a `.runner` file the Add Runner button is
+/// disabled and an inline warning is shown, preventing silent overwrites.
 ///
 /// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
@@ -33,11 +36,13 @@ struct AddRunnerSheet: View {
 
     // MARK: Runner config state
 
-    @State private var runnerName  = ""
-    @State private var labelsText  = "self-hosted,macOS"
-    @State private var installDir  = FileManager.default
+    @State private var runnerName = ""
+    @State private var labelsText = "self-hosted,macOS"
+    /// Default: ~/actions-runner/my-runner  — user should rename the last
+    /// component to match their runner name. Each runner needs its own folder.
+    @State private var installDir = FileManager.default
         .homeDirectoryForCurrentUser
-        .appendingPathComponent("actions-runner").path
+        .appendingPathComponent("actions-runner/my-runner").path
 
     // MARK: Registration state
 
@@ -73,11 +78,27 @@ struct AddRunnerSheet: View {
             labeledField("Labels (comma-separated)", placeholder: "e.g. self-hosted,macOS,arm64",
                          text: $labelsText)
 
+            // MARK: Install directory field
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runner install directory").font(.caption).foregroundColor(.secondary)
                 TextField("", text: $installDir)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11, design: .monospaced))
+
+                // Always-visible hint: convention guidance.
+                Text("Each runner needs its own unique folder. Use the runner name as the last path component, e.g. ~/actions-runner/my-runner.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                // Conditional warning: path is already taken.
+                if dirAlreadyConfigured {
+                    Label(
+                        "This folder already has a runner configured. Choose a different path.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+                }
             }
 
             if isRegistering && !registrationStep.isEmpty {
@@ -142,8 +163,19 @@ struct AddRunnerSheet: View {
 
     private var effectiveScope: String { scopeType == .repo ? selectedRepo : selectedOrg }
 
+    /// True when the current installDir already has a `.runner` file.
+    private var dirAlreadyConfigured: Bool {
+        let dir = installDir.trimmingCharacters(in: .whitespaces)
+        guard !dir.isEmpty else { return false }
+        return FileManager.default.fileExists(
+            atPath: URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
+        )
+    }
+
     private var canRegister: Bool {
-        !runnerName.trimmingCharacters(in: .whitespaces).isEmpty && !effectiveScope.isEmpty
+        !runnerName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !effectiveScope.isEmpty
+            && !dirAlreadyConfigured
     }
 
     private func loadScopes() {
@@ -189,6 +221,16 @@ struct AddRunnerSheet: View {
                 return
             }
 
+            // Re-check on the background thread in case the file appeared since the UI check.
+            let runnerFile = URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
+            if FileManager.default.fileExists(atPath: runnerFile) {
+                DispatchQueue.main.async {
+                    isRegistering = false
+                    // dirAlreadyConfigured will already be showing the inline warning.
+                }
+                return
+            }
+
             // 1. Create install directory.
             do {
                 try FileManager.default.createDirectory(atPath: dir,
@@ -202,7 +244,6 @@ struct AddRunnerSheet: View {
             }
 
             let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
-            let runnerFile = URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
 
             // 2. Download + unpack runner package if config.sh is absent.
             if !FileManager.default.fileExists(atPath: configPath) {
@@ -235,17 +276,7 @@ struct AddRunnerSheet: View {
                 }
             }
 
-            // 3. If already configured, run `config.sh remove` first.
-            //    `--replace` is not honoured by all runner versions; explicit remove is reliable.
-            if FileManager.default.fileExists(atPath: runnerFile) {
-                setStep("Removing existing runner configuration…")
-                let removeExit = runRegistrationRemove(dir: dir)
-                log("register › config.sh remove exit=\(removeExit)")
-                // Non-zero is non-fatal — continue and let config.sh report if truly broken.
-            }
-
-            // 4. Fetch a fresh registration token (after remove, so it isn’t wasted
-            //    waiting while the old runner deregisters).
+            // 3. Fetch registration token.
             setStep("Fetching registration token…")
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
@@ -256,7 +287,7 @@ struct AddRunnerSheet: View {
                 return
             }
 
-            // 5. Run config.sh.
+            // 4. Run config.sh.
             setStep("Configuring runner…")
             let ghURL    = "https://github.com/\(scope)"
             let exitCode = runRegistrationCommand(dir: dir, ghURL: ghURL,
@@ -273,31 +304,6 @@ struct AddRunnerSheet: View {
                 }
             }
         }
-    }
-
-    /// Runs `./config.sh remove --unattended` to deregister an existing runner.
-    /// Non-zero exit is non-fatal — the caller decides whether to continue.
-    private func runRegistrationRemove(dir: String) -> Int32 {
-        let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
-        let task = Process()
-        task.executableURL       = configURL
-        task.currentDirectoryURL = URL(fileURLWithPath: dir)
-        task.arguments           = ["remove", "--unattended"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError  = pipe
-        do { try task.run() } catch {
-            log("runRegistrationRemove › launch error: \(error)")
-            return 1
-        }
-        let timeoutItem = DispatchWorkItem { task.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                         encoding: .utf8) ?? ""
-        log("runRegistrationRemove › exit=\(task.terminationStatus): \(out.prefix(200))")
-        return task.terminationStatus
     }
 
     /// Runs `./config.sh --url … --token … --name … --unattended`.
