@@ -8,14 +8,14 @@ import SwiftUI
 /// The user picks a scope (org or repo), names the runner, optionally sets
 /// labels, and taps Confirm. The sheet fetches a registration token via the
 /// GitHub API, downloads the runner tarball if not present, unpacks it, then
-/// runs `./config.sh` to register followed by `./svc.sh install` to register
-/// the runner as a macOS LaunchAgent service.
+/// runs `./config.sh` to register the runner with GitHub.
 ///
-/// Installing as a service writes `~/Library/LaunchAgents/actions.runner.*.plist`
-/// which contains the `WorkingDirectory` key (the runner's install path).
-/// `LocalRunnerScanner` reads this key at every scan, so the runner is always
-/// discoverable — even after the app is reinstalled — without any UserDefaults
-/// or other app-level persistence.
+/// After successful registration the app writes a minimal LaunchAgent plist to
+/// `~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist` directly
+/// via FileManager. This avoids calling `svc.sh install` (which requires an
+/// interactive user session and fails from an app-launched Process) while still
+/// giving `LocalRunnerScanner` the `WorkingDirectory` key it needs to find the
+/// runner on every subsequent scan — including after a full app reinstall.
 ///
 /// Each runner must have its own unique install directory. If the chosen
 /// directory already contains a `.runner` file the Add Runner button is
@@ -45,7 +45,7 @@ struct AddRunnerSheet: View {
 
     @State private var runnerName = ""
     @State private var labelsText = "self-hosted,macOS"
-    /// Default: ~/actions-runner/my-runner  — user should rename the last
+    /// Default: ~/actions-runner/my-runner — user should rename the last
     /// component to match their runner name. Each runner needs its own folder.
     @State private var installDir = FileManager.default
         .homeDirectoryForCurrentUser
@@ -256,8 +256,7 @@ struct AddRunnerSheet: View {
                 guard let downloadURL = fetchRunnerDownloadURL() else {
                     DispatchQueue.main.async {
                         isRegistering = false
-                        errorMessage  = "Could not determine runner download URL. " +
-                                        "Check your internet connection."
+                        errorMessage  = "Could not determine runner download URL. Check your internet connection."
                     }
                     return
                 }
@@ -282,40 +281,39 @@ struct AddRunnerSheet: View {
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage  = "Failed to fetch registration token. " +
-                        "Ensure `gh auth login` has been run or GH_TOKEN is set."
+                    errorMessage  = "Failed to fetch registration token. Ensure `gh auth login` has been run or GH_TOKEN is set."
                 }
                 return
             }
 
             // 4. Run config.sh to register the runner with GitHub.
             setStep("Configuring runner…")
-            let ghURL    = "https://github.com/\(scope)"
+            let ghURL      = "https://github.com/\(scope)"
             let configExit = runRegistrationCommand(dir: dir, ghURL: ghURL,
                                                     token: token, name: name, labels: labels)
             guard configExit == 0 else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage  = "config.sh failed (exit \(configExit)). " +
-                        "Check the token is valid and the runner name is unique."
+                    errorMessage  = "config.sh failed (exit \(configExit)). Check the token is valid and the runner name is unique."
                 }
                 return
             }
 
-            // 5. Install as a LaunchAgent service via svc.sh.
+            // 5. Write a minimal LaunchAgent plist so LocalRunnerScanner can find
+            //    this runner on every future scan via the WorkingDirectory key.
             //
-            // This writes ~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist
-            // with a WorkingDirectory key pointing to `dir`. LocalRunnerScanner reads
-            // this key on every scan, so the runner is always discoverable — even after
-            // the app is reinstalled — with zero UserDefaults or app-level persistence.
-            setStep("Installing service…")
-            let svcPath = URL(fileURLWithPath: dir).appendingPathComponent("svc.sh").path
-            let svcExit = runSimpleProcess("/bin/bash", args: [svcPath, "install"])
-            if svcExit != 0 {
-                // svc.sh install failure is non-fatal: the runner is registered with
-                // GitHub but won't auto-start on login. Log and surface a soft warning.
-                log("AddRunnerSheet › svc.sh install exited \(svcExit) — runner registered but not installed as service")
-            }
+            //    We write the plist directly with FileManager rather than calling
+            //    `svc.sh install` because svc.sh requires an interactive user
+            //    session (`launchctl bootstrap`) and exits 1 when invoked from an
+            //    app-launched Process. Writing the plist ourselves achieves the
+            //    same result with no elevated permissions.
+            //
+            //    The plist is intentionally minimal: it stores WorkingDirectory so
+            //    the scanner resolves the install path, but does NOT set RunAtLoad
+            //    or ProgramArguments — the user can enable auto-start separately
+            //    via the lifecycle controls (Phase 2).
+            setStep("Registering service…")
+            writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
 
             DispatchQueue.main.async {
                 isRegistering    = false
@@ -326,9 +324,41 @@ struct AddRunnerSheet: View {
         }
     }
 
+    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/`.
+    /// The plist contains the `WorkingDirectory` key so `LocalRunnerScanner`
+    /// can locate the runner on every scan without any UserDefaults persistence.
+    ///
+    /// Plist filename format: `actions.runner.<owner>.<repo>.<runnerName>.plist`
+    /// For org-scoped runners `repo` is the org name (same component, single part).
+    private func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
+        let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents")
+        // Normalise scope into owner + repo components for the filename.
+        // scope is "owner/repo" (repo-scoped) or "orgname" (org-scoped).
+        let scopeParts   = scope.components(separatedBy: "/")
+        let owner        = scopeParts[0]
+        let repo         = scopeParts.count > 1 ? scopeParts[1] : scopeParts[0]
+        let label        = "actions.runner.\(owner).\(repo).\(runnerName)"
+        let plistURL     = launchAgentsDir.appendingPathComponent("\(label).plist")
+
+        let plist: NSDictionary = [
+            "Label": label,
+            "WorkingDirectory": workingDirectory,
+        ]
+        do {
+            try FileManager.default.createDirectory(
+                at: launchAgentsDir, withIntermediateDirectories: true)
+            plist.write(to: plistURL, atomically: true)
+            log("AddRunnerSheet › wrote LaunchAgent plist: \(plistURL.path)")
+        } catch {
+            // Non-fatal: runner is registered with GitHub; it just won't appear
+            // in the scanner until the install dir falls inside a default root.
+            log("AddRunnerSheet › failed to write LaunchAgent plist: \(error)")
+        }
+    }
+
     /// Runs `./config.sh --url … --token … --name … --unattended`.
-    /// Timeout: 120 s — org-runner config can be slow.
-    /// ⚠️ Blocking — call only from a background thread.
+    /// Timeout: 120 s. Blocking — call only from a background thread.
     private func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) -> Int32 {
@@ -365,8 +395,7 @@ struct AddRunnerSheet: View {
         return task.terminationStatus
     }
 
-    /// Runs a simple process synchronously and returns its exit code.
-    /// Blocking — call only from a background thread.
+    /// Runs a simple process synchronously. Blocking — call only from a background thread.
     private func runSimpleProcess(_ executable: String, args: [String]) -> Int32 {
         let task = Process()
         task.executableURL  = URL(fileURLWithPath: executable)
