@@ -32,34 +32,6 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     /// `true` while a background scan is in progress.
     @Published private(set) var isScanning: Bool = false
 
-    // MARK: Persisted install paths
-
-    /// UserDefaults key for runner install directories registered via AddRunnerSheet.
-    private static let installedPathsKey = "dev.eonist.runnerbar.installedRunnerPaths"
-
-    /// Absolute paths of runner install directories that were registered through
-    /// the Add Runner sheet. Persisted in UserDefaults so they survive app restarts
-    /// and are fed into LocalRunnerScanner as additional search roots.
-    private(set) var installedPaths: [String] {
-        get {
-            UserDefaults.standard.stringArray(forKey: Self.installedPathsKey) ?? []
-        }
-        set {
-            UserDefaults.standard.set(newValue, forKey: Self.installedPathsKey)
-        }
-    }
-
-    /// Registers a runner install directory so it is included in future scans.
-    /// Safe to call from any thread — UserDefaults writes are thread-safe.
-    func addInstalledPath(_ path: String) {
-        let trimmed = path.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        var current = installedPaths
-        guard !current.contains(trimmed) else { return }
-        current.append(trimmed)
-        installedPaths = current
-    }
-
     // MARK: Private
 
     private let scanner = LocalRunnerScanner()
@@ -88,11 +60,12 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
     func refresh() {
         guard !isScanning else { return }
         isScanning = true
-        let extraPaths = installedPaths
         queue.async { [weak self] in
             guard let self else { return }
-            // Phase 1: local scan — include any paths registered via Add Runner sheet
-            var result = self.scanner.scan(extraPaths: extraPaths)
+            // Phase 1: local scan — install paths are derived from LaunchAgent
+            // plists (WorkingDirectory key), so no UserDefaults persistence needed.
+            // This approach survives app reinstalls since plists live in ~/Library.
+            var result = self.scanner.scan()
             // Phase 4: enrich with live GitHub API status (skipped if no token)
             if githubToken() != nil {
                 result = self.enricher.enrich(runners: result)

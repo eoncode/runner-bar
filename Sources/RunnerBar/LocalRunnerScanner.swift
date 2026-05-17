@@ -7,23 +7,24 @@ import Foundation
 ///
 /// 1. **LaunchAgents** — `~/Library/LaunchAgents/actions.runner.*.plist`
 ///    Parses `owner`, `repo`, and `runnerName` from the plist filename.
+///    Also reads the `WorkingDirectory` key from the plist XML so the
+///    runner's install path is known even for non-standard locations.
+///    This file lives in `~/Library` and survives app reinstalls.
 ///
-/// 2. **`.runner` JSON files** — searches a set of known runner install paths
-///    PLUS any extra paths provided by the caller (e.g. paths persisted by
-///    `LocalRunnerStore` after an Add Runner registration).
-///    Does NOT scan `~` wholesale to avoid macOS TCC permission dialogs for
-///    Desktop/Documents/Downloads (macOS 14+). Default known paths:
-///    `~/actions-runner`, `~/runner`, `~/github-runner`, `/opt/actions-runner`,
-///    `/opt/runner`, `/usr/local/actions-runner`, `/usr/local/runner`
-///    up to depth 6.
+/// 2. **`.runner` JSON files** — searches the known default install paths
+///    PLUS any install paths extracted from LaunchAgent plists (Source 1).
+///    This means any runner registered as a service is always found,
+///    regardless of where it was installed — no UserDefaults or any other
+///    app-level persistence required.
+///    Default search roots: `~/actions-runner`, `~/runner`, `~/github-runner`,
+///    `/opt/actions-runner`, `/opt/runner`, `/usr/local/actions-runner`,
+///    `/usr/local/runner` up to depth 6.
 ///
 /// 3. **Live service check** — `launchctl list | grep actions.runner`
-///    Flags which runners currently have an active launchd service, indicating
-///    they are registered and running.
+///    Flags which runners currently have an active launchd service.
 struct LocalRunnerScanner {
     // MARK: - .runner JSON schema
 
-    /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
     private struct RunnerJSON: Decodable {
         let gitHubUrl: String?
         let runnerName: String?
@@ -34,35 +35,33 @@ struct LocalRunnerScanner {
     // MARK: - Public API
 
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
-    ///
-    /// - Parameter extraPaths: Additional absolute install-directory paths to include
-    ///   in the `.runner` JSON search. Typically the paths persisted by
-    ///   `LocalRunnerStore.installedPaths` after an Add Runner registration so that
-    ///   runners installed outside the default search roots are always discovered.
-    ///
-    /// This is a synchronous, blocking call — always invoke from a background thread.
-    func scan(extraPaths: [String] = []) -> [RunnerModel] {
+    /// Synchronous and blocking — always invoke from a background thread.
+    func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 
-        // Source 2 first: .runner JSON is most authoritative — richer data.
-        for model in scanRunnerJSONFiles(extraPaths: extraPaths) {
+        // Source 1: LaunchAgents — extract install paths from WorkingDirectory key.
+        let (launchAgentModels, launchAgentPaths) = scanLaunchAgents()
+
+        // Source 2: .runner JSON — most authoritative (richer data).
+        // Seed with install paths extracted from LaunchAgent plists so runners
+        // in non-standard locations are always found without any persisted config.
+        for model in scanRunnerJSONFiles(extraRoots: launchAgentPaths) {
             models[model.id] = model
         }
 
-        // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found.
-        for model in scanLaunchAgents() {
+        // Merge LaunchAgent entries that weren't covered by a .runner JSON file.
+        for model in launchAgentModels {
             let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
-            let alreadyCoveredByJSON = models.values.contains { existing in
-                let existingComposite = "\(existing.runnerName)-\(existing.gitHubUrl ?? "")"
-                return existingComposite == compositeKey
+            let coveredByJSON = models.values.contains { existing in
+                "\(existing.runnerName)-\(existing.gitHubUrl ?? "")" == compositeKey
             }
-            guard !alreadyCoveredByJSON else { continue }
+            guard !coveredByJSON else { continue }
             if models[compositeKey] == nil {
                 models[compositeKey] = model
             }
         }
 
-        // Source 3: mark which runners are live.
+        // Source 3: mark which runners are currently live.
         let liveLabels = scanLiveServices()
         for key in models.keys {
             if let model = models[key] {
@@ -75,45 +74,61 @@ struct LocalRunnerScanner {
 
     // MARK: - Source 1: LaunchAgents
 
-    private func scanLaunchAgents() -> [RunnerModel] {
+    /// Scans `~/Library/LaunchAgents/actions.runner.*.plist`.
+    /// Returns both the parsed `RunnerModel` array and the set of
+    /// `WorkingDirectory` paths found in those plists.
+    /// The working directory paths are passed to `scanRunnerJSONFiles` so
+    /// runners installed outside the default search roots are always found.
+    private func scanLaunchAgents() -> (models: [RunnerModel], installPaths: Set<String>) {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: nil)
-        else { return [] }
+        else { return ([], []) }
 
+        var models: [RunnerModel] = []
+        var installPaths = Set<String>()
         let prefix = "actions.runner."
-        return entries.compactMap { url -> RunnerModel? in
+
+        for url in entries {
             let filename = url.deletingPathExtension().lastPathComponent
-            guard filename.hasPrefix(prefix) else { return nil }
+            guard filename.hasPrefix(prefix) else { continue }
             let remainder = String(filename.dropFirst(prefix.count))
             let parts = remainder.components(separatedBy: ".")
-            guard parts.count >= 2 else { return nil }
+            guard parts.count >= 2 else { continue }
             let owner = parts[0]
             let repo = parts[1]
             let runnerName = parts.count > 2 ? parts[2...].joined(separator: ".") : "runner"
             let gitHubUrl = "https://github.com/\(owner)/\(repo)"
-            return RunnerModel(
+
+            // Read WorkingDirectory from the plist — this is the runner install dir.
+            // The runner writes this key itself during `svc.sh install`, so it
+            // reliably reflects the actual install location even for custom paths.
+            if let plist = NSDictionary(contentsOf: url),
+               let workDir = plist["WorkingDirectory"] as? String,
+               !workDir.isEmpty {
+                installPaths.insert(workDir)
+            }
+
+            models.append(RunnerModel(
                 runnerName: runnerName,
                 gitHubUrl: gitHubUrl,
                 agentId: nil,
                 workFolder: nil,
                 installPath: nil,
                 isRunning: false
-            )
+            ))
         }
+        return (models, installPaths)
     }
 
     // MARK: - Source 2: .runner JSON files
 
-    /// Searches known runner install locations plus any caller-supplied extra paths.
+    /// Searches known default runner install locations plus any `extraRoots`
+    /// (typically `WorkingDirectory` values from LaunchAgent plists).
     /// Avoids scanning `~` wholesale to prevent macOS TCC prompts (macOS 14+).
-    private func scanRunnerJSONFiles(extraPaths: [String]) -> [RunnerModel] {
+    private func scanRunnerJSONFiles(extraRoots: Set<String>) -> [RunnerModel] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        // Known self-hosted runner install directories — explicit paths only.
-        // ⚠️ DO NOT add `~` or `$HOME` here: broad home-dir scans trigger TCC dialogs.
-        // ⚠️ Each path is single-quoted before shell interpolation so that home
-        // directories containing spaces (e.g. /Users/First Last) don't break find.
         var rawPaths = [
             "\(home)/actions-runner",
             "\(home)/runner",
@@ -123,13 +138,14 @@ struct LocalRunnerScanner {
             "/usr/local/actions-runner",
             "/usr/local/runner",
         ]
-        // Append extra paths registered via Add Runner sheet, deduplicating.
-        for extra in extraPaths where !rawPaths.contains(extra) {
+        // Append LaunchAgent WorkingDirectory paths, deduplicating.
+        // These are the actual install directories written by svc.sh install,
+        // so they cover any non-standard location without any extra config.
+        for extra in extraRoots where !rawPaths.contains(extra) {
             rawPaths.append(extra)
         }
 
         let searchPaths = rawPaths.map { "'\($0)'" }.joined(separator: " ")
-
         let raw = shell(
             "find \(searchPaths) -maxdepth 6 -name '.runner' 2>/dev/null",
             timeout: 15

@@ -8,16 +8,18 @@ import SwiftUI
 /// The user picks a scope (org or repo), names the runner, optionally sets
 /// labels, and taps Confirm. The sheet fetches a registration token via the
 /// GitHub API, downloads the runner tarball if not present, unpacks it, then
-/// runs `./config.sh` in the runner install directory to complete registration.
+/// runs `./config.sh` to register followed by `./svc.sh install` to register
+/// the runner as a macOS LaunchAgent service.
+///
+/// Installing as a service writes `~/Library/LaunchAgents/actions.runner.*.plist`
+/// which contains the `WorkingDirectory` key (the runner's install path).
+/// `LocalRunnerScanner` reads this key at every scan, so the runner is always
+/// discoverable — even after the app is reinstalled — without any UserDefaults
+/// or other app-level persistence.
 ///
 /// Each runner must have its own unique install directory. If the chosen
 /// directory already contains a `.runner` file the Add Runner button is
 /// disabled and an inline warning is shown, preventing silent overwrites.
-///
-/// On successful registration the install directory is persisted to
-/// `LocalRunnerStore.shared.installedPaths` so that subsequent scans always
-/// find the runner regardless of whether the path falls inside one of the
-/// default search roots.
 ///
 /// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
@@ -90,12 +92,10 @@ struct AddRunnerSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11, design: .monospaced))
 
-                // Always-visible hint: convention guidance.
                 Text("Each runner needs its own unique folder. Use the runner name as the last path component, e.g. ~/actions-runner/my-runner.")
                     .font(.caption2)
                     .foregroundColor(.secondary)
 
-                // Conditional warning: path is already taken.
                 if dirAlreadyConfigured {
                     Label(
                         "This folder already has a runner configured. Choose a different path.",
@@ -129,7 +129,7 @@ struct AddRunnerSheet: View {
                         HStack(spacing: 6) {
                             ProgressView()
                                 .scaleEffect(0.7)
-                                .frame(width: 14, height: 14)  // match text line height; prevents button growing
+                                .frame(width: 14, height: 14)
                             Text("Registering…")
                         }
                     } else {
@@ -173,7 +173,6 @@ struct AddRunnerSheet: View {
 
     private var effectiveScope: String { scopeType == .repo ? selectedRepo : selectedOrg }
 
-    /// True when the current installDir already has a `.runner` file.
     private var dirAlreadyConfigured: Bool {
         let dir = installDir.trimmingCharacters(in: .whitespaces)
         guard !dir.isEmpty else { return false }
@@ -231,13 +230,9 @@ struct AddRunnerSheet: View {
                 return
             }
 
-            // Re-check on the background thread in case the file appeared since the UI check.
             let runnerFile = URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
             if FileManager.default.fileExists(atPath: runnerFile) {
-                DispatchQueue.main.async {
-                    isRegistering = false
-                    // dirAlreadyConfigured will already be showing the inline warning.
-                }
+                DispatchQueue.main.async { isRegistering = false }
                 return
             }
 
@@ -270,18 +265,14 @@ struct AddRunnerSheet: View {
                     .appendingPathComponent("actions-runner.tar.gz").path
                 guard runSimpleProcess("/usr/bin/curl",
                                       args: ["-sL", downloadURL, "-o", tarPath]) == 0 else {
-                    DispatchQueue.main.async {
-                        isRegistering = false; errorMessage = "Download failed."
-                    }
+                    DispatchQueue.main.async { isRegistering = false; errorMessage = "Download failed." }
                     return
                 }
                 setStep("Unpacking runner package…")
                 let tarExit = runSimpleProcess("/usr/bin/tar", args: ["xzf", tarPath, "-C", dir])
                 try? FileManager.default.removeItem(atPath: tarPath)
                 guard tarExit == 0 else {
-                    DispatchQueue.main.async {
-                        isRegistering = false; errorMessage = "Unpack failed."
-                    }
+                    DispatchQueue.main.async { isRegistering = false; errorMessage = "Unpack failed." }
                     return
                 }
             }
@@ -297,30 +288,46 @@ struct AddRunnerSheet: View {
                 return
             }
 
-            // 4. Run config.sh.
+            // 4. Run config.sh to register the runner with GitHub.
             setStep("Configuring runner…")
             let ghURL    = "https://github.com/\(scope)"
-            let exitCode = runRegistrationCommand(dir: dir, ghURL: ghURL,
-                                                  token: token, name: name, labels: labels)
+            let configExit = runRegistrationCommand(dir: dir, ghURL: ghURL,
+                                                    token: token, name: name, labels: labels)
+            guard configExit == 0 else {
+                DispatchQueue.main.async {
+                    isRegistering = false
+                    errorMessage  = "config.sh failed (exit \(configExit)). " +
+                        "Check the token is valid and the runner name is unique."
+                }
+                return
+            }
+
+            // 5. Install as a LaunchAgent service via svc.sh.
+            //
+            // This writes ~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist
+            // with a WorkingDirectory key pointing to `dir`. LocalRunnerScanner reads
+            // this key on every scan, so the runner is always discoverable — even after
+            // the app is reinstalled — with zero UserDefaults or app-level persistence.
+            setStep("Installing service…")
+            let svcPath = URL(fileURLWithPath: dir).appendingPathComponent("svc.sh").path
+            let svcExit = runSimpleProcess("/bin/bash", args: [svcPath, "install"])
+            if svcExit != 0 {
+                // svc.sh install failure is non-fatal: the runner is registered with
+                // GitHub but won't auto-start on login. Log and surface a soft warning.
+                log("AddRunnerSheet › svc.sh install exited \(svcExit) — runner registered but not installed as service")
+            }
+
             DispatchQueue.main.async {
                 isRegistering    = false
                 registrationStep = ""
-                if exitCode == 0 {
-                    // Persist the install path so LocalRunnerScanner always finds
-                    // this runner even if it lives outside the default search roots.
-                    LocalRunnerStore.shared.addInstalledPath(dir)
-                    isPresented = false
-                    onComplete()
-                } else {
-                    errorMessage = "config.sh failed (exit \(exitCode)). " +
-                        "Check the token is valid and the runner name is unique."
-                }
+                isPresented      = false
+                onComplete()
             }
         }
     }
 
     /// Runs `./config.sh --url … --token … --name … --unattended`.
-    /// Timeout: 120 s — org-runner config calls back to GitHub and can be slow.
+    /// Timeout: 120 s — org-runner config can be slow.
     /// ⚠️ Blocking — call only from a background thread.
     private func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
@@ -354,8 +361,7 @@ struct AddRunnerSheet: View {
         pipe.fileHandleForReading.readabilityHandler = nil
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
         if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        log("runRegistrationCommand › exit=\(task.terminationStatus): \(output.prefix(500))")
+        log("runRegistrationCommand › exit=\(task.terminationStatus): \((String(data: outputData, encoding: .utf8) ?? "").prefix(500))")
         return task.terminationStatus
     }
 
@@ -382,8 +388,6 @@ struct AddRunnerSheet: View {
 
 // MARK: - Runner download URL
 
-/// Fetches the macOS runner tarball download URL for the current architecture
-/// from the latest GitHub Actions runner release.
 private func fetchRunnerDownloadURL() -> String? {
     let archTask = Process()
     archTask.executableURL  = URL(fileURLWithPath: "/usr/bin/uname")
