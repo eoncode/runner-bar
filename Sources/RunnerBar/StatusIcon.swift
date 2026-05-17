@@ -1,7 +1,5 @@
 import AppKit
 
-// swiftlint:disable missing_docs
-
 /// Renders the coloured status icon shown in the menu bar and popover rows.
 struct StatusIcon {
     let status: String
@@ -49,13 +47,11 @@ struct StatusIcon {
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
 
-        // Background circle
         let rect = NSRect(x: 1, y: 1, width: size - 2, height: size - 2)
         let bgPath = NSBezierPath(ovalIn: rect)
         color.withAlphaComponent(0.15).setFill()
         bgPath.fill()
 
-        // Icon text centred in the circle
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: size * 0.55, weight: .bold),
             .foregroundColor: color
@@ -72,4 +68,3 @@ struct StatusIcon {
         return img
     }
 }
-// swiftlint:enable missing_docs
