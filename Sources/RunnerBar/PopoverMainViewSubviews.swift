@@ -239,6 +239,22 @@ struct ActionRowView: View {
                 .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            // Branch pill — ⎇ icon + branch name
+            if let branch = group.headBranch {
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    Text(branch)
+                        .font(DesignTokens.Fonts.mono)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 80, alignment: .leading)
+                }
+                .layoutPriority(0)
+            }
             Spacer()
             metaTrailing(tick: tickSnapshot)
         }
