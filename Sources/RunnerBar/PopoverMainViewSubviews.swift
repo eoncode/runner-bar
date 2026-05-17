@@ -231,7 +231,7 @@ struct ActionRowView: View {
         let tickSnapshot = tick
         return HStack(spacing: 6) {
             DonutStatusView(status: rowStatus, progress: group.progressFraction ?? 0, size: 14)
-            RunnerTypeIcon(isLocal: group.isLocalGroup)
+            RunnerTypeIcon(isLocal: group.isLocalGroup ?? false)
             Text(group.label)
                 .font(DesignTokens.Fonts.mono).foregroundColor(.secondary).lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)

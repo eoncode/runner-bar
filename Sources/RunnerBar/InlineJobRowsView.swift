@@ -136,14 +136,17 @@ struct InlineJobRowsView: View {
 
     @EnvironmentObject private var popoverState: PopoverOpenState
 
+    // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
+    // Consumed here (outside @ViewBuilder) to avoid Swift 5 TableColumnBuilder
+    // type-inference ambiguity that occurs when `_ = tick` appears inside Group.
+    private var tickSnapshot: Int { tick }
+
     var body: some View {
         // ⚠️ REGRESSION GUARD #377 — do not remove this check.
         // Using Group+if instead of AnyView to preserve SwiftUI view identity
         // and prevent DonutStatusView @State (rotationAngle) from resetting.
         Group {
             if popoverState.isOpen {
-                // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
-                _ = tick
                 let jobs = fullExpand
                     ? group.jobs
                     : group.jobs.filter { $0.status == "in_progress" }
@@ -159,6 +162,7 @@ struct InlineJobRowsView: View {
                 .padding(.leading, RBSpacing.md)
                 .padding(.trailing, RBSpacing.xs)
                 .padding(.bottom, RBSpacing.xs)
+                .id(tickSnapshot)
             }
         }
     }
