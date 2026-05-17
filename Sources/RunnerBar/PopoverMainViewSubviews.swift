@@ -50,15 +50,11 @@ struct PopoverHeaderView: View {
 
 // MARK: - RunnerTypeIcon
 private struct RunnerTypeIcon: View {
-    let isLocal: Bool?
+    let isLocal: Bool
     var body: some View {
-        if let local = isLocal {
-            Image(systemName: local ? "desktopcomputer" : "cloud")
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
-                .accessibilityLabel(local ? "Local runner" : "Cloud runner")
-                .fixedSize()
-        }
+        Image(systemName: isLocal ? "desktopcomputer" : "cloud")
+            .font(.system(size: 9))
+            .foregroundColor(.secondary)
     }
 }
 
@@ -84,19 +80,28 @@ struct PopoverLocalRunnerRow: View {
     private func runnerCard(_ runner: Runner) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
-            Text(runner.name).font(RBFont.label).foregroundColor(.primary).lineLimit(1).layoutPriority(1)
+            Text(runner.name)
+                .font(RBFont.label)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .layoutPriority(1)
             Spacer()
             if let metrics = runner.metrics {
                 StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
                 StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
             }
-            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.rbTextTertiary)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.rbTextTertiary)
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
         .background(
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(Color.rbSurfaceElevated)
-                .overlay(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous).strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
         )
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
     }
@@ -128,9 +133,9 @@ struct ActionRowView: View {
     let onSelect: () -> Void
 
     /// nil = fully collapsed, false = auto-compact (in_progress jobs only), true = full expand
-    @State private var expandState: Bool? = nil
+    @State private var expandState: Bool?
     /// Tracks the last-seen status so onChange only reacts to genuine transitions.
-    @State private var previousStatus: RBStatus? = nil
+    @State private var previousStatus: RBStatus?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -153,7 +158,10 @@ struct ActionRowView: View {
             // producing a perfect left-side half-pill flush with the card edge.
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
                 .fill(Color.rbSurfaceElevated)
-                .overlay(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous).strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
                 .overlay(
                     Rectangle()
                         .fill(rowStatus.color)
@@ -177,11 +185,11 @@ struct ActionRowView: View {
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear {
-            let s = rowStatus
-            previousStatus = s
+            let status = rowStatus
+            previousStatus = status
             // In-progress rows auto-expand to compact mode (in_progress jobs only).
             // Terminal/queued rows start fully collapsed — user must tap to expand.
-            expandState = (s == .inProgress) ? false : nil
+            expandState = (status == .inProgress) ? false : nil
         }
         .onChange(of: rowStatus) { newStatus in
             // fix: RunnerStore populates async — onAppear often fires before

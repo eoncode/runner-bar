@@ -143,7 +143,7 @@ struct InlineJobRowsView: View {
         Group {
             if popoverState.isOpen {
                 // ⚠️ TICK CONTRACT — tick drives live elapsed refresh. DO NOT REMOVE.
-                let _ = tick
+                _ = tick
                 let jobs = fullExpand
                     ? group.jobs
                     : group.jobs.filter { $0.status == "in_progress" }
