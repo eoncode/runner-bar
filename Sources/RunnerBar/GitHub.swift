@@ -347,7 +347,7 @@ func ghPost(_ endpoint: String) -> Bool {
         log("ghPost › launch error: \(error)")
         return false
     }
-    let timeoutItem = DispatchWorkItem(block: { task.terminate() })
+    let timeoutItem = DispatchWorkItem { task.terminate() }
     DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
     task.waitUntilExit()
     timeoutItem.cancel()
