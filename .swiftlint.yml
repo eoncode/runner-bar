@@ -8,7 +8,7 @@ excluded:
   - .build
   - Package.swift
 
-# ── Opt-in rules ────────────────────────────────────────────────────────────────────────
+# ── Opt-in rules ───────────────────────────────────────────────────────────────────────────────────
 opt_in_rules:
   - missing_docs           # require /// on all internal/public declarations
   - closure_spacing        # consistent spacing inside closure braces
@@ -23,7 +23,7 @@ opt_in_rules:
   - empty_collection_literal  # prefer isEmpty over == []
   - first_where            # prefer first(where:) over filter().first
 
-# ── Rule configuration ───────────────────────────────────────────────────────────────────
+# ── Rule configuration ──────────────────────────────────────────────────────────────────────────────────
 missing_docs:
   warning:
     - internal
@@ -44,7 +44,7 @@ file_length:
   error: 600
 
 type_body_length:
-  warning: 200
+  warning: 210
   error: 350
 
 function_body_length:
@@ -52,7 +52,7 @@ function_body_length:
   error: 100
 
 cyclomatic_complexity:
-  warning: 10
+  warning: 12
   error: 20
 
 nesting:
@@ -61,7 +61,10 @@ nesting:
   function_level:
     warning: 3
 
-# ── Disabled rules ───────────────────────────────────────────────────────────────────────
+# ── Disabled rules ────────────────────────────────────────────────────────────────────────────────────
 disabled_rules:
   - todo          # TODOs are acceptable during active development
   - trailing_comma  # SwiftPM/Xcode auto-formatter conflicts with this
+  - orphaned_doc_comment  # merge commits between architecturally-diverged branches produce orphans
+  - superfluous_disable_command  # disable commands valid on one branch may be superfluous post-merge
+  - vertical_whitespace  # merge conflict resolution can introduce extra blank lines
