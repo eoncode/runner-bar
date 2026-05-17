@@ -47,7 +47,7 @@ struct DonutStatusView: View {
         }
         .frame(width: size, height: size)
         .onAppear {
-            displayProgress = progress
+            displayProgress = max(0, min(1, progress))
             withAnimation(
                 .linear(duration: 2)
                 .repeatForever(autoreverses: false)
@@ -59,7 +59,7 @@ struct DonutStatusView: View {
         // The `progress` property is captured directly from the current value.
         .onChange(of: progress) { _ in
             withAnimation(.easeInOut(duration: 0.4)) {
-                displayProgress = progress
+                displayProgress = max(0, min(1, progress))
             }
         }
     }
