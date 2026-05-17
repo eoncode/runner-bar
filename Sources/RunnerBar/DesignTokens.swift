@@ -44,19 +44,16 @@ extension Color {
     // ❌ NEVER switch PanelChrome material back to .popover — warm brown tint.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     //
-    // Stacking note: sub-rows paint rbSurfaceElevated ON TOP of the parent card
-    // which also uses rbSurfaceElevated. Keep white very low so stacking doesn't
-    // compound into a light solid rectangle.
-    //   rbSurface         — white: 0.06 @ 0.70  (panel bg / gaps)
-    //   rbSurfaceElevated — white: 0.09 @ 0.75  (cards + sub-rows)
+    //   rbSurface         — white: 0.06 @ 0.45
+    //   rbSurfaceElevated — white: 0.09 @ 0.50
 
     static let rbSurface = Color.adaptive(
         light: Color(white: 0.95).opacity(0.88),
-        dark:  Color(white: 0.06).opacity(0.70)
+        dark:  Color(white: 0.06).opacity(0.45)
     )
     static let rbSurfaceElevated = Color.adaptive(
         light: Color(white: 0.88).opacity(0.92),
-        dark:  Color(white: 0.09).opacity(0.75)
+        dark:  Color(white: 0.09).opacity(0.50)
     )
     static let rbBorderSubtle = Color.adaptive(
         light: Color(white: 0.0).opacity(0.08),
