@@ -39,29 +39,22 @@ extension Color {
     // Neutral / surface — semi-transparent so .hudWindow vibrancy shows through.
     //
     // ⚠️ TRANSLUCENCY CONTRACT — DO NOT REMOVE THIS COMMENT.
-    // The NSVisualEffectView uses .hudWindow material (.behindWindow blending).
-    // rbSurface and rbSurfaceElevated MUST use opacity < 1.0 to let vibrancy through.
-    // .hudWindow renders as a cool dark grey — no warm tint.
-    //
-    // Tuning guide (dark mode):
-    //   white:  controls the grey lightness of the fill on top of vibrancy
-    //   opacity: controls how much vibrancy bleeds through (lower = more see-through)
-    //
-    // Current target: dark charcoal with visible cool transparency.
-    //   rbSurface         — panel bg gaps:  white:0.10 @ 0.80
-    //   rbSurfaceElevated — card rows:      white:0.14 @ 0.85
-    //
-    // ❌ NEVER set opacity to 1.0 — kills vibrancy entirely.
-    // ❌ NEVER switch PanelChrome material back to .popover — causes warm brown tint.
+    // NSVisualEffectView uses .hudWindow (.behindWindow). MUST stay opacity < 1.0.
+    // ❌ NEVER set opacity 1.0 — kills vibrancy.
+    // ❌ NEVER switch PanelChrome material back to .popover — warm brown tint.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+    //
+    // Target dark values:
+    //   rbSurface         ≈ #1C1C1E — white: 0.11 @ 0.82
+    //   rbSurfaceElevated ≈ #252527 — white: 0.15 @ 0.88
 
     static let rbSurface = Color.adaptive(
         light: Color(white: 0.95).opacity(0.88),
-        dark:  Color(white: 0.10).opacity(0.80)
+        dark:  Color(white: 0.11).opacity(0.82)
     )
     static let rbSurfaceElevated = Color.adaptive(
         light: Color(white: 0.88).opacity(0.92),
-        dark:  Color(white: 0.14).opacity(0.85)
+        dark:  Color(white: 0.15).opacity(0.88)
     )
     static let rbBorderSubtle = Color.adaptive(
         light: Color(white: 0.0).opacity(0.08),
@@ -160,16 +153,16 @@ enum RBShadow {
 // MARK: - Typography Tokens
 
 enum RBFont {
-    static let mono:          Font = .system(.caption, design: .monospaced)
-    static let monoSmall:     Font = .system(size: 11, weight: .regular, design: .monospaced)
-    static let monoBold:      Font = .system(size: 13, weight: .semibold, design: .monospaced)
-    static let label:         Font = .system(size: 13, weight: .medium)
-    static let body:          Font = .system(size: 12, weight: .regular)
-    static let sectionKey:    Font = .system(size: 12.5, weight: .regular)
-    static let sectionHeader: Font = sectionKey
-    static let sectionCaption:Font = .system(size: 9, weight: .semibold)
-    static let statLabel:     Font = .system(size: 9,  weight: .semibold, design: .monospaced)
-    static let statValue:     Font = .system(size: 10, weight: .regular,  design: .monospaced)
+    static let mono:           Font = .system(.caption, design: .monospaced)
+    static let monoSmall:      Font = .system(size: 11, weight: .regular,  design: .monospaced)
+    static let monoBold:       Font = .system(size: 13, weight: .semibold, design: .monospaced)
+    static let label:          Font = .system(size: 13, weight: .medium)
+    static let body:           Font = .system(size: 12, weight: .regular)
+    static let sectionKey:     Font = .system(size: 12.5, weight: .regular)
+    static let sectionHeader:  Font = sectionKey
+    static let sectionCaption: Font = .system(size: 9,  weight: .semibold)
+    static let statLabel:      Font = .system(size: 9,  weight: .semibold, design: .monospaced)
+    static let statValue:      Font = .system(size: 10, weight: .regular,  design: .monospaced)
 }
 
 // MARK: - DesignTokens namespace shim
