@@ -2,56 +2,97 @@ import Foundation
 import Combine
 import Darwin
 
-/// Observable view-model that periodically samples CPU, memory, and disk metrics.
-final class SystemStatsViewModel: ObservableObject {
-    @Published var current: SystemStats = .zero
+// MARK: - RingBuffer
+/// Fixed-capacity circular buffer whose `values` property returns elements oldest-first.
+struct RingBuffer {
+    private var storage: [Double]
+    private let capacity: Int
 
-    /// Rolling history arrays for sparkline charts (last 60 samples).
-    @Published var cpuHistory:  [Double] = Array(repeating: 0, count: 60)
-    @Published var memHistory:  [Double] = Array(repeating: 0, count: 60)
-    @Published var diskHistory: [Double] = Array(repeating: 0, count: 60)
+    init(capacity: Int, fill: Double = 0) {
+        self.capacity = capacity
+        self.storage  = Array(repeating: fill, count: capacity)
+    }
+
+    mutating func append(_ value: Double) {
+        storage.removeFirst()
+        storage.append(value)
+    }
+
+    /// Elements in insertion order (oldest first).
+    var values: [Double] { storage }
+}
+
+// MARK: - SystemStatsViewModel
+/// Observable view-model that periodically samples CPU, memory, and disk metrics.
+/// Call `start()` when the owning view appears and `stop()` when it disappears.
+final class SystemStatsViewModel: ObservableObject {
+    /// Latest sampled snapshot, ready for display.
+    @Published private(set) var stats: SystemStats = .zero
+
+    /// Rolling 60-sample history for sparkline charts.
+    @Published private(set) var cpuHistory:  RingBuffer = RingBuffer(capacity: 60)
+    @Published private(set) var memHistory:  RingBuffer = RingBuffer(capacity: 60)
+    @Published private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
 
     private var timer: Timer?
     private var prevCPUInfo: processor_info_array_t?
     private var prevNumCPUInfo: mach_msg_type_number_t = 0
 
-    init() {
+    init() {}
+
+    deinit {
+        stop()
+        deallocPrevCPUInfo()
+    }
+
+    // MARK: Lifecycle
+
+    func start() {
+        guard timer == nil else { return }
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             self?.sample()
         }
     }
 
-    deinit {
+    func stop() {
         timer?.invalidate()
-        if let prev = prevCPUInfo {
-            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prev), vm_size_t(prevNumCPUInfo) * vm_size_t(MemoryLayout<integer_t>.size))
-        }
+        timer = nil
     }
+
+    // MARK: Sampling
 
     private func sample() {
         let cpu  = sampleCPU()
         let mem  = sampleMemory()
         let disk = sampleDisk()
 
-        let stats = SystemStats(
-            cpuPct:    cpu,
-            memUsedGB: mem.used,
+        let snapshot = SystemStats(
+            cpuPct:     cpu,
+            memUsedGB:  mem.used,
             memTotalGB: mem.total,
             diskUsedGB: disk.used,
             diskTotalGB: disk.total
         )
 
+        var newCPU  = cpuHistory
+        var newMem  = memHistory
+        var newDisk = diskHistory
+        newCPU.append(cpu)
+        newMem.append(mem.total > 0 ? (mem.used / mem.total) * 100 : 0)
+        newDisk.append(disk.total > 0 ? (disk.used / disk.total) * 100 : 0)
+
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.current = stats
-            self.cpuHistory.removeFirst();  self.cpuHistory.append(cpu)
-            self.memHistory.removeFirst();  self.memHistory.append(mem.total > 0 ? mem.used / mem.total * 100 : 0)
-            self.diskHistory.removeFirst(); self.diskHistory.append(disk.total > 0 ? disk.used / disk.total * 100 : 0)
+            self.stats       = snapshot
+            self.cpuHistory  = newCPU
+            self.memHistory  = newMem
+            self.diskHistory = newDisk
         }
     }
 
-    // MARK: CPU
+    // MARK: CPU (Mach host_processor_info)
+
     private func sampleCPU() -> Double {
         var numCPUsU: natural_t = 0
         var cpuInfo: processor_info_array_t?
@@ -60,11 +101,9 @@ final class SystemStatsViewModel: ObservableObject {
         let kr = host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO,
                                      &numCPUsU, &cpuInfo, &numCPUInfo)
         guard kr == KERN_SUCCESS, let cpuInfo else { return 0 }
+
         defer {
-            if let prev = prevCPUInfo {
-                vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prev),
-                              vm_size_t(prevNumCPUInfo) * vm_size_t(MemoryLayout<integer_t>.size))
-            }
+            deallocPrevCPUInfo()
             prevCPUInfo    = cpuInfo
             prevNumCPUInfo = numCPUInfo
         }
@@ -76,25 +115,34 @@ final class SystemStatsViewModel: ObservableObject {
         let numCPUs = Int(numCPUsU)
 
         for i in 0 ..< numCPUs {
-            let base = Int32(CPU_STATE_MAX) * Int32(i)
-            let user   = Double(cpuInfo[Int(base) + Int(CPU_STATE_USER)]   - prevInfo[Int(base) + Int(CPU_STATE_USER)])
-            let sys    = Double(cpuInfo[Int(base) + Int(CPU_STATE_SYSTEM)]  - prevInfo[Int(base) + Int(CPU_STATE_SYSTEM)])
-            let idle   = Double(cpuInfo[Int(base) + Int(CPU_STATE_IDLE)]    - prevInfo[Int(base) + Int(CPU_STATE_IDLE)])
-            let nice   = Double(cpuInfo[Int(base) + Int(CPU_STATE_NICE)]    - prevInfo[Int(base) + Int(CPU_STATE_NICE)])
-            let used   = user + sys + nice
-            let all    = used + idle
+            let base  = Int(CPU_STATE_MAX) * i
+            let user  = Double(cpuInfo[base + Int(CPU_STATE_USER)]   - prevInfo[base + Int(CPU_STATE_USER)])
+            let sys   = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)]  - prevInfo[base + Int(CPU_STATE_SYSTEM)])
+            let idle  = Double(cpuInfo[base + Int(CPU_STATE_IDLE)]    - prevInfo[base + Int(CPU_STATE_IDLE)])
+            let nice  = Double(cpuInfo[base + Int(CPU_STATE_NICE)]    - prevInfo[base + Int(CPU_STATE_NICE)])
+            let used  = user + sys + nice
             totalUsed += used
-            totalAll  += all
+            totalAll  += used + idle
         }
-        guard totalAll > 0 else { return 0 }
-        return (totalUsed / totalAll) * 100
+        return totalAll > 0 ? (totalUsed / totalAll) * 100 : 0
     }
 
-    // MARK: Memory
+    private func deallocPrevCPUInfo() {
+        guard let prev = prevCPUInfo else { return }
+        vm_deallocate(mach_task_self_,
+                      vm_address_t(bitPattern: prev),
+                      vm_size_t(prevNumCPUInfo) * vm_size_t(MemoryLayout<integer_t>.size))
+        prevCPUInfo = nil
+    }
+
+    // MARK: Memory (vm_statistics64)
+
     private func sampleMemory() -> (used: Double, total: Double) {
-        var stats  = vm_statistics64()
-        var count  = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
-        let kr = withUnsafeMutablePointer(to: &stats) {
+        var vmStats = vm_statistics64()
+        var count   = mach_msg_type_number_t(
+            MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &vmStats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
@@ -102,18 +150,19 @@ final class SystemStatsViewModel: ObservableObject {
         let pageSize   = Double(vm_kernel_page_size)
         let totalBytes = Double(ProcessInfo.processInfo.physicalMemory)
         guard kr == KERN_SUCCESS else { return (0, totalBytes / 1e9) }
-        let usedPages  = Double(stats.active_count + stats.wire_count + stats.compressor_page_count)
+        let usedPages  = Double(vmStats.active_count + vmStats.wire_count +
+                                vmStats.compressor_page_count)
         return (usedPages * pageSize / 1e9, totalBytes / 1e9)
     }
 
-    // MARK: Disk
+    // MARK: Disk (FileManager)
+
     private func sampleDisk() -> (used: Double, total: Double) {
-        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: "/"),
-              let total = attrs[.systemSize] as? Int64,
-              let free  = attrs[.systemFreeSize] as? Int64
+        guard
+            let attrs = try? FileManager.default.attributesOfFileSystem(forPath: "/"),
+            let total = attrs[.systemSize]     as? Int64,
+            let free  = attrs[.systemFreeSize] as? Int64
         else { return (0, 0) }
-        let totalGB = Double(total) / 1e9
-        let usedGB  = Double(total - free) / 1e9
-        return (usedGB, totalGB)
+        return (Double(total - free) / 1e9, Double(total) / 1e9)
     }
 }

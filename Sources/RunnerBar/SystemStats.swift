@@ -25,6 +25,12 @@ struct SystemStats {
         return diskUsedGB / diskTotalGB
     }
 
+    /// Percentage of disk space that is FREE (0–100).
+    var diskFreePct: Double {
+        guard diskTotalGB > 0 else { return 0 }
+        return ((diskTotalGB - diskUsedGB) / diskTotalGB) * 100
+    }
+
     /// Zero-initialised snapshot used as the default before the first sample arrives.
     static let zero = SystemStats(
         cpuPct: 0, memUsedGB: 0, memTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0
