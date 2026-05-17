@@ -28,7 +28,7 @@ struct RemovalAlertModifier: ViewModifier {
                     + "A GitHub token is required for de-registration.")
             } else {
                 Text("A GitHub token is required to de-register the runner from GitHub. "
-                    + "Sign in via `gh auth login` or set GH_TOKEN, then try again.")
+                    + "Sign in via `gh auth login` or set GH_TOKEN / GITHUB_TOKEN env var, then try again.")
             }
         }
     }
