@@ -39,23 +39,12 @@ struct RunnerStatusEnricher {
     /// `statusColor` continues to reflect the local launchctl-derived state.
     func enrich(runners: [RunnerModel]) -> [RunnerModel] {
         guard !runners.isEmpty else { return runners }
-
         let apiLookup = buildAPILookup(for: runners)
         return runners.map { applyEnrichment(to: $0, lookup: apiLookup) }
     }
 
     // MARK: - Private helpers
 
-    /// Fetches runner status from the GitHub API for each unique scope in `runners`
-    /// using manual `?page=N` iteration so that scopes with more than 100 runners
-    /// are fully captured.
-    ///
-    /// `gh api --paginate` emits concatenated JSON objects
-    /// (`{"runners":[...]}\n{"runners":[...]}`) which `JSONDecoder` cannot parse
-    /// as a single value. Manual iteration avoids this entirely.
-    ///
-    /// Returns a lookup keyed by `agentId` (primary) and `"scope/name"`
-    /// (fallback, scope-qualified to prevent cross-scope collisions).
     private func buildAPILookup(
         for runners: [RunnerModel]
     ) -> (byID: [Int: APIRunner], byName: [String: APIRunner]) {
@@ -75,9 +64,6 @@ struct RunnerStatusEnricher {
                 ? "repos/\(scope)/actions/runners"
                 : "orgs/\(scope)/actions/runners"
 
-            // Paginate manually: fetch ?page=1,2,… until an empty runners array.
-            // This avoids the `gh --paginate` concatenated-object stream problem
-            // where multiple {"runners":[...]} objects cannot be decoded as one value.
             var page = 1
             var totalFetched = 0
             while true {
@@ -93,13 +79,10 @@ struct RunnerStatusEnricher {
                 let pageRunners = decoded.runners
                 for apiRunner in pageRunners {
                     byID[apiRunner.id] = apiRunner
-                    // Key by "scope/name" to prevent silent overwrites when runners
-                    // across different scopes share the same name.
                     byName["\(scope)/\(apiRunner.name)"] = apiRunner
                 }
                 totalFetched += pageRunners.count
                 log("RunnerStatusEnricher › scope=\(scope) page=\(page) fetched=\(pageRunners.count)")
-                // Stop when a page returns fewer than 100 results — no more pages.
                 if pageRunners.count < 100 { break }
                 page += 1
             }
@@ -119,7 +102,6 @@ struct RunnerStatusEnricher {
             apiRunner = lookup.byID[aid]
         } else if let urlStr = runner.gitHubUrl,
                   let scope = scopeFrom(gitHubUrl: urlStr) {
-            // Fallback: look up by scope-qualified key to avoid cross-scope collision.
             apiRunner = lookup.byName["\(scope)/\(runner.runnerName)"]
         } else {
             apiRunner = nil
@@ -128,11 +110,9 @@ struct RunnerStatusEnricher {
         enriched.githubStatus = api.status
         enriched.isBusy = api.busy
         if runner.isRunning && api.status == "offline" {
-            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
-                "launchctl=running but GitHub=offline")
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): launchctl=running but GitHub=offline")
         } else if !runner.isRunning && api.status == "online" {
-            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): " +
-                "launchctl=idle but GitHub=online")
+            log("RunnerStatusEnricher › DIVERGENCE \(runner.runnerName): launchctl=idle but GitHub=online")
         }
         return enriched
     }

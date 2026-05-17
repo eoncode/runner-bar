@@ -1,9 +1,8 @@
 import AppKit
 import SwiftUI
-// swiftlint:disable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
-
+// swiftlint:disable identifier_name
 // ════════════════════════════════════════════════════════════════════════════════
-// ⚠️⚠️⚠️  NSPANEL SIZING GUARD — READ BEFORE ANY EDIT  ⚠️⚠️⚠️
+// ⚠️⚠️⚠️ NSPANEL SIZING GUARD — READ BEFORE ANY EDIT ⚠️⚠️⚠️
 // ════════════════════════════════════════════════════════════════════════════════
 //
 // ARCHITECTURE: NSPanel (NOT NSPopover).
@@ -12,39 +11,40 @@ import SwiftUI
 // NSPanel.setFrame(), repositioning under the status button each time.
 //
 // ROOT FRAME RULE:
-//   .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
-//   • minWidth: 560 — minimum panel width; content decides actual width.
-//   • maxWidth: .infinity — fills the panel width up to AppDelegate.maxWidth.
-//   • NO idealWidth — width is content-driven, not pinned to a fixed value.
-//   • NO idealHeight / maxHeight on the root frame.
+// .frame(minWidth: 560, maxWidth: .infinity, alignment: .top)
+// • minWidth: 560 — minimum panel width; content decides actual width.
+// • maxWidth: .infinity — fills the panel width up to AppDelegate.maxWidth.
+// • NO idealWidth — width is content-driven, not pinned to a fixed value.
+// • NO idealHeight / maxHeight on the root frame.
 //
 // SCROLLVIEW HEIGHT CAP — REQUIRED:
-//   .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
-//   Prevents the panel growing taller than the screen.
-//   ❌ NEVER remove this modifier from the ScrollView.
-//   ❌ NEVER use a fixed constant — must adapt to screen size.
+// .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
+// Prevents the panel growing taller than the screen.
+// ❌ NEVER remove this modifier from the ScrollView.
+// ❌ NEVER use a fixed constant — must adapt to screen size.
 //
 // ════════════════════════════════════════════════════════════════════════════════
 // HISTORY:
-//   Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
-//   Job rows collapsed to single line: [#N][dot][name][time range]...[status][elapsed][›]
-//   Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
-//   Side-jump is impossible with NSPanel — no anchor to re-calculate.
-//   Added #N order index badge to each job row (1-based display order).
-//   Replaced generic "X/N jobs concluded" with context-aware outcome label.
-//   Elapsed moved from header to timing row below branch label.
-//   SHA/PR label made tappable: opens commit or PR on GitHub.
-//   Time-range and elapsed columns hidden for queued jobs (no startedAt).
-//   Switched from idealWidth (fixed) to minWidth (content-driven) width model.
+// Widened from 480 → 560 to accommodate start/end time columns (NSPanel).
+// Job rows collapsed to single line: [#N][dot][name][time range]...[status][elapsed][›]
+// Time range format changed to HH:mm:ss→HH:mm:ss (column width 96 → 130).
+// Side-jump is impossible with NSPanel — no anchor to re-calculate.
+// Added #N order index badge to each job row (1-based display order).
+// Replaced generic "X/N jobs concluded" with context-aware outcome label.
+// Elapsed moved from header to timing row below branch label.
+// SHA/PR label made tappable: opens commit or PR on GitHub.
+// Time-range and elapsed columns hidden for queued jobs (no startedAt).
+// Switched from idealWidth (fixed) to minWidth (content-driven) width model.
+// Phase 5: DesignToken colour sweep — all hardcoded .yellow/.green/.red replaced
+//          with Color.rbWarning / rbSuccess / rbDanger; job rows card-styled.
+// Review item 3: job rows now use .cardRow() modifier for consistency.
+// Review item 4: headBranch label replaced with BranchTagPill.
+// fix(#419): jobDotColor + jobStatusColor in_progress -> .rbBlue (spec: in-progress=blue).
 // ════════════════════════════════════════════════════════════════════════════════
-
-/// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
-///
-/// Drill-down chain:
-///   PopoverMainView (action row tap)
-///   → ActionDetailView            ← this view
-///   → JobDetailView (step list)   ← existing, unchanged
-///   → StepLogView (log)           ← existing, unchanged
+// Navigation level 2a (Actions path): shows the flat job list for a commit/PR group.
+// Drill-down chain:
+// PopoverMainView (action row tap) -> ActionDetailView <- this view
+// -> JobDetailView (step list) -> StepLogView (log)
 struct ActionDetailView: View {
     let group: ActionGroup
     let onBack: () -> Void
@@ -57,14 +57,12 @@ struct ActionDetailView: View {
     @State private var tickTimer: Timer?
 
     // MARK: - Formatters
-
     /// HH:mm formatter — used for group start/end labels in the header.
     private static let timeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
         return f
     }()
-
     /// HH:mm:ss formatter — used for per-job time-range column.
     /// Static so it is created once and reused on every 1 Hz tick × N job rows.
     private static let jobTimeFmt: DateFormatter = {
@@ -75,15 +73,14 @@ struct ActionDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
-            // ── Header ──────────────────────────────────────────────────────────────────────────
+            // ── Header ───────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left").font(.caption)
                         Text("Actions").font(.caption)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.rbTextSecondary)
                     .fixedSize()
                 }
                 .buttonStyle(.plain)
@@ -124,47 +121,52 @@ struct ActionDetailView: View {
                     isDisabled: false
                 )
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, RBSpacing.md)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ──────────────────────────────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
                         Text(group.label)
                             .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.rbTextSecondary)
                     }
                     .buttonStyle(.plain)
                     .help(labelLinkTooltip)
-
                     Text(group.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
                 if let branch = group.headBranch {
-                    Text(branch)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    BranchTagPill(name: branch)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 HStack(spacing: 4) {
-                    Image(systemName: "clock").font(.system(size: 9)).foregroundColor(.secondary)
-                    Text(groupStartLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
-                    Text("→").font(.caption2).foregroundColor(.secondary)
-                    Text(groupEndLabel).font(.caption2.monospacedDigit()).foregroundColor(.secondary).fixedSize()
-                    Text("·").font(.caption2).foregroundColor(.secondary)
+                    Image(systemName: "clock")
+                        .font(.system(size: 9))
+                        .foregroundColor(Color.rbTextSecondary)
+                    Text(groupStartLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(Color.rbTextSecondary)
+                        .fixedSize()
+                    Text("→").font(.caption2).foregroundColor(Color.rbTextSecondary)
+                    Text(groupEndLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(Color.rbTextSecondary)
+                        .fixedSize()
+                    Text("·").font(.caption2).foregroundColor(Color.rbTextSecondary)
                     Text(elapsedLive(tick: tick))
                         .font(.caption2.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.rbTextSecondary)
                         .fixedSize()
                 }
-                Text(jobsSummaryLine).font(.caption).foregroundColor(.secondary)
+                Text(jobsSummaryLine).font(.caption).foregroundColor(Color.rbTextSecondary)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, RBSpacing.md)
             .padding(.bottom, 8)
 
             Divider()
@@ -172,20 +174,20 @@ struct ActionDetailView: View {
             // ── Jobs list ──────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: RBSpacing.xxs) {
                     if group.jobs.isEmpty {
                         Text("No jobs available")
-                            .font(.caption).foregroundColor(.secondary)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .font(.caption).foregroundColor(Color.rbTextSecondary)
+                            .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
                     } else {
                         ForEach(Array(group.jobs.enumerated()), id: \.element.id) { index, job in
-                            Button(action: { onSelectJob(job) }, label: {
-                                jobRow(job, index: index + 1)
-                            })
-                            .buttonStyle(.plain)
+                            Button(action: { onSelectJob(job) }, label: { jobRow(job, index: index + 1) })
+                                .buttonStyle(.plain)
                         }
                     }
                 }
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, RBSpacing.xs)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
@@ -201,14 +203,14 @@ struct ActionDetailView: View {
         }
     }
 }
-// swiftlint:enable identifier_name vertical_whitespace_opening_braces superfluous_disable_command
+// swiftlint:enable identifier_name
 
-extension ActionDetailView { // swiftlint:disable:this missing_docs
+/// ActionDetailView helpers: navigation, formatting, and row rendering.
+extension ActionDetailView {
     /// Opens the SHA commit or PR associated with the group label on GitHub.
     func openLabelOnGitHub() {
         let urlString: String
-        if group.label.hasPrefix("#"),
-           let number = Int(group.label.dropFirst()) {
+        if group.label.hasPrefix("#"), let number = Int(group.label.dropFirst()) {
             urlString = "https://github.com/\(group.repo)/pull/\(number)"
         } else {
             urlString = "https://github.com/\(group.repo)/commit/\(group.headSha)"
@@ -217,14 +219,12 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         NSWorkspace.shared.open(url)
     }
 
-    /// Tooltip text for the label link button, describing whether it links to a PR or commit.
+    /// Tooltip text for the label link button.
     var labelLinkTooltip: String {
-        group.label.hasPrefix("#")
-            ? "Open pull request on GitHub"
-            : "Open commit on GitHub"
+        group.label.hasPrefix("#") ? "Open pull request on GitHub" : "Open commit on GitHub"
     }
 
-    /// Formatted start time for the group (first job started or group created).
+    /// Formatted start time for the group.
     var groupStartLabel: String {
         guard let date = group.firstJobStartedAt ?? group.createdAt else { return "—" }
         return Self.timeFmt.string(from: date)
@@ -239,7 +239,7 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
 
     /// Human-readable summary of job completion state for the group.
     var jobsSummaryLine: String {
-        let done  = group.jobsDone
+        let done = group.jobsDone
         let total = group.jobsTotal
         let conclusions = group.jobs.compactMap { $0.conclusion }
         if group.groupStatus == .inProgress || conclusions.count < total { return "\(done)/\(total) jobs running" }
@@ -249,22 +249,24 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
         return "\(done)/\(total) jobs completed"
     }
 
-    /// Returns the group elapsed string; `tick` parameter triggers SwiftUI refresh every second.
+    /// Returns the group elapsed string; `tick` triggers SwiftUI refresh every second.
     func elapsedLive(tick _: Int) -> String { group.elapsed }
 
-    @ViewBuilder func jobRow(_ job: ActiveJob, index: Int) -> some View { // swiftlint:disable:this missing_docs
+    /// Renders a single job row with index badge, status dot, name, time range, and conclusion.
+    @ViewBuilder
+    func jobRow(_ job: ActiveJob, index: Int) -> some View {
         HStack(spacing: 8) {
             Text("#\(index)")
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .font(.caption2.monospacedDigit()).foregroundColor(Color.rbTextTertiary)
                 .frame(width: 28, alignment: .leading)
             Circle().fill(jobDotColor(for: job)).frame(width: 7, height: 7)
             Text(job.name)
-                .font(.system(size: 12))
-                .foregroundColor(job.isDimmed ? .secondary : .primary)
+                .font(RBFont.body)
+                .foregroundColor(job.isDimmed ? Color.rbTextSecondary : Color.rbTextPrimary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
             if job.startedAt != nil {
                 Text(jobTimeRange(job))
-                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                    .font(.caption2.monospacedDigit()).foregroundColor(Color.rbTextSecondary)
                     .lineLimit(1).frame(width: 130, alignment: .leading)
             } else {
                 Spacer().frame(width: 130)
@@ -281,18 +283,20 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
             }
             if job.startedAt != nil {
                 Text(job.elapsed)
-                    .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                    .font(.caption.monospacedDigit()).foregroundColor(Color.rbTextSecondary)
                     .frame(width: 40, alignment: .trailing)
             } else {
                 Spacer().frame(width: 40)
             }
-            Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
+            Image(systemName: "chevron.right").font(.caption2).foregroundColor(Color.rbTextTertiary)
         }
-        .padding(.horizontal, 12).padding(.vertical, 5)
+        .padding(.horizontal, RBSpacing.sm)
+        .padding(.vertical, 5)
+        .cardRow(cornerRadius: RBRadius.small)
         .contentShape(Rectangle())
     }
 
-    /// Formats start→end time range for a job row, using HH:mm:ss precision.
+    /// Formats start→end time range for a job row.
     func jobTimeRange(_ job: ActiveJob) -> String {
         guard let start = job.startedAt ?? job.createdAt else { return "" }
         let startStr = Self.jobTimeFmt.string(from: start)
@@ -301,40 +305,52 @@ extension ActionDetailView { // swiftlint:disable:this missing_docs
     }
 
     /// Returns the status dot colour for a job row.
+    /// fix(#419): in_progress -> .rbBlue (spec: in-progress=blue, not yellow).
     func jobDotColor(for job: ActiveJob) -> Color {
-        if job.isDimmed { return .secondary }
-        return job.status == "in_progress" ? .yellow : .gray
+        if job.isDimmed { return Color.rbTextTertiary }
+        switch job.status {
+        case "in_progress": return Color.rbBlue
+        case "queued":      return Color.rbWarning
+        default:            return Color.rbTextTertiary
+        }
     }
 
     /// Short status label shown when a job has no conclusion yet.
     func jobStatusLabel(for job: ActiveJob) -> String {
         switch job.status {
         case "in_progress": return "In Progress"
-        case "queued":      return "Queued"
-        default:            return "Pending"
+        case "queued": return "Queued"
+        default: return "Pending"
         }
     }
 
     /// Text colour for a live (no-conclusion) job status label.
-    func jobStatusColor(for job: ActiveJob) -> Color { job.status == "in_progress" ? .yellow : .secondary }
+    /// fix(#419): in_progress -> .rbBlue (spec: in-progress=blue).
+    func jobStatusColor(for job: ActiveJob) -> Color {
+        switch job.status {
+        case "in_progress": return Color.rbBlue
+        case "queued":      return Color.rbWarning
+        default:            return Color.rbTextSecondary
+        }
+    }
 
     /// Maps a raw conclusion string to a human-readable icon + label.
     func conclusionLabel(_ conclusion: String) -> String {
         switch conclusion {
-        case "success":   return "✓ success"
-        case "failure":   return "✗ failure"
+        case "success": return "✓ success"
+        case "failure": return "✗ failure"
         case "cancelled": return "⊗ cancelled"
-        case "skipped":   return "− skipped"
-        default:          return conclusion
+        case "skipped": return "− skipped"
+        default: return conclusion
         }
     }
 
-    /// Maps a raw conclusion string to a display colour.
+    /// Maps a raw conclusion string to a display colour using design tokens.
     func conclusionColor(_ conclusion: String) -> Color {
         switch conclusion {
-        case "success": return .green
-        case "failure": return .red
-        default:        return .secondary
+        case "success": return Color.rbSuccess
+        case "failure": return Color.rbDanger
+        default: return Color.rbTextSecondary
         }
     }
 }

@@ -1,365 +1,299 @@
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
-/// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
 struct SectionHeaderLabel: View {
     let title: String
     var body: some View {
         Text(title.uppercased())
-            .font(.system(size: 9, weight: .semibold))
+            .font(RBFont.sectionCaption)
             .foregroundColor(.secondary)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, DesignTokens.Spacing.rowHPad)
             .padding(.top, 6)
             .padding(.bottom, 2)
     }
 }
 
 // MARK: - PopoverHeaderView
-/// Header row: system stats left, settings + close right.
-/// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
-    let stats: SystemStats
+    @ObservedObject var statsVM: SystemStatsViewModel
     let isAuthenticated: Bool
     let onSelectSettings: () -> Void
     let onSignIn: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            systemStatsBadge
+            HeaderStatsBar(statsVM: statsVM)
             Spacer()
-            // #10: green dot removed; only show Sign-in button when unauthenticated.
             if !isAuthenticated {
-                Button(
-                    action: onSignIn,
-                    label: {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.orange).frame(width: 7, height: 7)
-                            Text("Sign in")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
+                Button(action: onSignIn, label: {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.orange).frame(width: 7, height: 7)
+                        Text("Sign in").font(.caption2).foregroundColor(.secondary)
                     }
-                )
-                .buttonStyle(.plain)
-                .help("Sign in with GitHub")
+                })
+                .buttonStyle(.plain).help("Sign in with GitHub")
             }
-            Button(
-                action: onSelectSettings,
-                label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13)).foregroundColor(.secondary)
-                }
-            )
+            Button(action: onSelectSettings, label: {
+                Image(systemName: "gearshape").font(.system(size: 13)).foregroundColor(.secondary)
+            })
             .buttonStyle(.plain).help("Settings")
-            Button(
-                action: { NSApplication.shared.terminate(nil) },
-                label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-                }
-            )
+            Button(action: { NSApplication.shared.terminate(nil) }, label: {
+                Image(systemName: "xmark").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+            })
             .buttonStyle(.plain).help("Quit RunnerBar")
         }
-        .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
-    }
-
-    /// Inline CPU / MEM / DISK chips with block-bar fill prefix.
-    /// ⚠️ LOAD-BEARING: `.lineLimit(1)` on chip texts prevents multi-line wrapping that
-    /// would change `preferredContentSize.height` and corrupt the panel frame (ref #52 #54).
-    private var systemStatsBadge: some View {
-        HStack(spacing: 8) {
-            statChip(
-                label: "CPU",
-                value: blockBar(pct: stats.cpuPct) + " " + String(format: "%.1f%%", stats.cpuPct),
-                pct: stats.cpuPct
-            )
-            statChip(
-                label: "MEM",
-                value: blockBar(pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0)
-                    + " " + String(format: "%.1f/%.1fGB", stats.memUsedGB, stats.memTotalGB),
-                pct: stats.memTotalGB > 0 ? (stats.memUsedGB / stats.memTotalGB) * 100 : 0
-            )
-            diskChip
-        }
-    }
-
-    private var diskChip: some View {
-        let total   = stats.diskTotalGB
-        let used    = stats.diskUsedGB
-        let free    = max(0, total - used)
-        let pct     = total > 0 ? (used / total) * 100 : 0
-        let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = blockBar(pct: pct)
-            + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct)
-    }
-
-    private func statChip(label: String, value: String, pct: Double) -> some View {
-        HStack(spacing: 3) {
-            Text(label)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            Text(value)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(usageColor(pct: pct))
-                .lineLimit(1)
-        }
-    }
-
-    private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw         = Int((pct / 100.0 * Double(width)).rounded())
-        let filledCount = max(0, min(width, raw))
-        return String(repeating: "█", count: filledCount)
-             + String(repeating: "░", count: width - filledCount)
-    }
-
-    private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .red    }
-        if pct > 60 { return .yellow }
-        return .green
+        .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 }
 
 // MARK: - RunnerTypeIcon
 private struct RunnerTypeIcon: View {
-    let isLocal: Bool?
+    let isLocal: Bool
     var body: some View {
-        if let local = isLocal {
-            Image(systemName: local ? "desktopcomputer" : "cloud")
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
-                .accessibilityLabel(local ? "Local runner" : "Cloud runner")
-                .fixedSize()
-        }
+        Image(systemName: isLocal ? "desktopcomputer" : "cloud")
+            .font(.system(size: 9))
+            .foregroundColor(.secondary)
     }
 }
 
 // MARK: - PopoverLocalRunnerRow
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
-
     var body: some View {
         let busy = runners.filter { $0.busy }
-        if !busy.isEmpty {
-            runnerList(busy)
-        }
+        if !busy.isEmpty { runnerList(busy) }
     }
 
     @ViewBuilder
     private func runnerList(_ busy: [Runner]) -> some View {
-        ForEach(busy.prefix(3)) { runner in
-            HStack(spacing: 8) {
-                Circle().fill(Color.yellow).frame(width: 8, height: 8)
-                Text(runner.name)
-                    .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
-                Spacer()
-                if let metrics = runner.metrics {
-                    Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 3)
-        }
+        ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
         if busy.count > 3 {
-            Text("+ \(busy.count - 3) more…")
+            Text("+ \(busy.count - 3) more\u{2026}")
                 .font(.caption2).foregroundColor(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 2)
+                .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
         }
         Divider()
+    }
+
+    private func runnerCard(_ runner: Runner) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
+            Text(runner.name)
+                .font(RBFont.label)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Spacer()
+            if let metrics = runner.metrics {
+                StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
+                StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.rbTextTertiary)
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        )
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
     }
 }
 
 // MARK: - ActionRowView
+/// Expand behaviour (spec):
+///   expandState == nil   → COMPACT (no jobs shown)
+///     terminal rows (success/failed/queued) start here
+///   expandState == false → AUTO-COMPACT (in_progress jobs only)
+///     set by .onAppear for in-progress runs only, OR by onChange when
+///     the row first transitions INTO inProgress (async store population)
+///   expandState == true  → EXPANDED (all jobs)
+///     set by user tapping the left pill
+///
+/// Auto-collapse on transition:
+///   When a run transitions FROM inProgress → terminal (success/failed),
+///   expandState is reset to nil so it collapses to compact.
+///   This ONLY fires on an actual status change, NOT on every re-render.
+///   Terminal rows that are already failed/success at appear time are
+///   never auto-collapsed and remain fully user-controllable.
+///
+/// fix: async RunnerStore population means onAppear often fires before
+///   groupStatus is inProgress. The onChange guard below catches the
+///   first transition INTO inProgress so inline jobs always appear.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
 
+    /// nil = fully collapsed, false = auto-compact (in_progress jobs only), true = full expand
+    @State private var expandState: Bool?
+    /// Tracks the last-seen status so onChange only reacts to genuine transitions.
+    @State private var previousStatus: RBStatus?
+
     var body: some View {
-        HStack(spacing: 0) {
-            Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-            Image(systemName: "chevron.right")
-                .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: RBSpacing.md)
+                Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+            }
+            if let fullExpand = expandState {
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(
+            // Card background with left-edge color indicator.
+            // The indicator is a plain Rectangle overlaid at the leading edge.
+            // The parent .clipShape(RoundedRectangle) clips all four corners of
+            // everything inside — including this Rectangle — so the top-left and
+            // bottom-left corners of the strip are rounded by the card itself,
+            // producing a perfect left-side half-pill flush with the card edge.
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+                .overlay(
+                    Rectangle()
+                        .fill(rowStatus.color)
+                        .frame(width: 4)
+                        .frame(maxHeight: .infinity),
+                    alignment: .leading
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .onTapGesture {
+            guard !group.jobs.isEmpty else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                if expandState == true {
+                    expandState = (rowStatus == .inProgress) ? false : nil
+                } else {
+                    expandState = true
+                }
+            }
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xxs)
+        .onAppear {
+            let status = rowStatus
+            previousStatus = status
+            // In-progress rows auto-expand to compact mode (in_progress jobs only).
+            // Terminal/queued rows start fully collapsed — user must tap to expand.
+            expandState = (status == .inProgress) ? false : nil
+        }
+        .onChange(of: rowStatus) { newStatus in
+            // fix: RunnerStore populates async — onAppear often fires before
+            // groupStatus is inProgress, leaving expandState == nil and hiding
+            // inline jobs. Auto-expand the first time we see inProgress.
+            // Guard: only expand if user hasn't manually collapsed (expandState == nil).
+            // ⚠️ Never remove the expandState == nil guard — without it this would
+            // override a user-triggered full-expand collapse back to auto-compact.
+            if newStatus == .inProgress && expandState == nil {
+                withAnimation(.easeInOut(duration: 0.15)) { expandState = false }
+            }
+            // ⚠️ Only auto-collapse when genuinely transitioning FROM inProgress
+            // TO a terminal state. Without the previousStatus guard this fires
+            // on every displayTick re-render for already-terminal rows, instantly
+            // collapsing any user-triggered expand. Never remove previousStatus check.
+            if previousStatus == .inProgress && (newStatus == .success || newStatus == .failed) {
+                withAnimation(.easeInOut(duration: 0.15)) { expandState = nil }
+            }
+            previousStatus = newStatus
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var rowStatus: RBStatus {
+        switch group.groupStatus {
+        case .inProgress: return .inProgress
+        case .queued:     return .queued
+        case .completed:
+            switch group.conclusion {
+            case "success":  return .success
+            case "failure":  return .failed
+            default:         return .unknown
+            }
         }
     }
 
     private var rowContent: some View {
-        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ❌ NEVER remove this line.
-        _ = tick
+        let tickSnapshot = tick
         return HStack(spacing: 6) {
-            PieProgressDot(progress: group.progressFraction, color: dotColor)
-            RunnerTypeIcon(isLocal: group.isLocalGroup)
+            DonutStatusView(status: rowStatus, progress: group.progressFraction ?? 0, size: 14)
+            RunnerTypeIcon(isLocal: group.isLocalGroup ?? false)
             Text(group.label)
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1)
+                .font(DesignTokens.Fonts.mono).foregroundColor(.secondary).lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             Text(group.title)
                 .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
-                .lineLimit(1).truncationMode(.tail)
-                .layoutPriority(1)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            // Branch pill — ⎇ icon + branch name
+            if let branch = group.headBranch {
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    Text(branch)
+                        .font(DesignTokens.Fonts.mono)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 80, alignment: .leading)
+                }
+                .layoutPriority(0)
+            }
             Spacer()
-            metaTrailing
+            metaTrailing(tick: tickSnapshot)
         }
-        .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 3)
+        .padding(.trailing, RBSpacing.xs)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
-    private var metaTrailing: some View {
+    private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+                .font(DesignTokens.Fonts.mono).foregroundColor(.secondary).lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false).id(tickSnapshot)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.currentJobName)
                 .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).truncationMode(.tail)
-                .layoutPriority(0)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(0)
         }
         Text(group.jobProgress)
-            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            .lineLimit(1)
+            .font(DesignTokens.Fonts.mono).foregroundColor(.secondary).lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         Text(group.elapsed)
-            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-            .lineLimit(1)
+            .font(DesignTokens.Fonts.mono).foregroundColor(.secondary).lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-        statusChip
+        statusBadge
     }
 
     @ViewBuilder
-    private var statusChip: some View {
+    private var statusBadge: some View {
         switch group.groupStatus {
-        case .inProgress:
-            Text("IN PROGRESS")
-                .font(.system(size: 9, weight: .bold)).foregroundColor(.yellow)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-        case .queued:
-            Text("QUEUED")
-                .font(.system(size: 9, weight: .bold)).foregroundColor(.blue)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+        case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
+        case .queued:     StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
-            let success = group.conclusion == "success"
-            Text(success ? "SUCCESS" : "FAILED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(success ? .green : .red)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-        }
-    }
-
-    private var dotColor: Color {
-        switch group.groupStatus {
-        case .inProgress: return .yellow
-        case .queued: return .blue
-        case .completed:
-            if group.isDimmed { return .gray }
-            return group.conclusion == "success" ? .green : .red
-        }
-    }
-}
-
-// MARK: - InlineJobRowsView
-/// Passive read-only ↳ job rows shown beneath every in-progress action group.
-/// Only shows jobs that are currently `in_progress`.
-///
-/// ⚠️ REGRESSION GUARD (#377):
-/// `cap += 4` on button tap mutates @State while the popover is visible.
-/// isPopoverOpen is read from @EnvironmentObject PopoverOpenState — NOT from a plain Bool prop.
-/// ❌ NEVER add `var isPopoverOpen: Bool` prop back.
-/// ❌ NEVER mutate cap while popoverOpenState.isOpen == true.
-/// ❌ NEVER remove .disabled(popoverOpenState.isOpen) from the expand button.
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-/// is major major major.
-struct InlineJobRowsView: View {
-    let group: ActionGroup
-    let tick: Int
-    var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
-
-    @EnvironmentObject private var popoverOpenState: PopoverOpenState
-    @State private var cap: Int = 4
-
-    private var activeJobs: [ActiveJob] {
-        group.jobs.filter { $0.status == "in_progress" }
-    }
-
-    var body: some View {
-        ForEach(activeJobs.prefix(cap)) { job in
-            if let onSelectJob {
-                Button(action: { onSelectJob(job, group) }, label: { jobRow(job) })
-                    .buttonStyle(.plain)
-            } else {
-                jobRow(job)
+            switch group.conclusion {
+            case "success": StatusBadge(status: .success, text: "SUCCESS")
+            case "failure": StatusBadge(status: .failed, text: "FAILED")
+            default:        StatusBadge(status: .unknown, text: "DONE")
             }
-        }
-        if activeJobs.count > cap {
-            Button(
-                action: {
-                    if !popoverOpenState.isOpen { cap += 4 }
-                },
-                label: {
-                    Text("+ \(activeJobs.count - cap) more jobs…")
-                        .font(.caption2).foregroundColor(.accentColor)
-                        .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
-                }
-            )
-            .buttonStyle(.plain)
-            .disabled(popoverOpenState.isOpen)
-        }
-    }
-
-    private func jobRow(_ job: ActiveJob) -> some View {
-        // ⚠️ TICK CONTRACT — DO NOT REMOVE.
-        // ❌ NEVER remove this line.
-        _ = tick
-        let currentStep = job.steps.first(where: { $0.status == "in_progress" })
-        let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
-        let done  = job.steps.filter { $0.conclusion != nil }.count
-        let total = job.steps.count
-        return HStack(spacing: 6) {
-            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
-            PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
-            Group {
-                if let name = stepName {
-                    Text(job.name + " · " + name)
-                } else {
-                    Text(job.name)
-                }
-            }
-            .font(.caption).foregroundColor(.secondary)
-            .lineLimit(1).truncationMode(.tail)
-            .layoutPriority(1)
-            Spacer()
-            if total > 0 {
-                Text("\(done)/\(total)")
-                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            Text(job.elapsed)
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-            if onSelectJob != nil {
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
-            }
-        }
-        .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
-        .contentShape(Rectangle())
-    }
-
-    private func jobDotColor(for job: ActiveJob) -> Color {
-        switch job.status {
-        case "in_progress": return .yellow
-        case "queued":      return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
         }
     }
 }

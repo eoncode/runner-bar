@@ -42,7 +42,7 @@ struct LogCopyButton: View {
             case .loading:
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
-                    Text("Copying…")
+                    Text("Copying\u{2026}")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize()

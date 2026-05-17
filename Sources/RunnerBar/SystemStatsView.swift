@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name opening_brace
 import SwiftUI
 
 // MARK: - SystemStatsView
@@ -25,17 +26,169 @@ struct SystemStatsView: View {
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 12))
+                .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .font(.system(size: 12, design: .monospaced))
+                .font(DesignTokens.Fonts.mono)
         }
     }
 }
 
-// MARK: - BlockBarView
+// MARK: - SparklineMetricView
+/// A single header metric chip: label + inline sparkline + monospaced value,
+/// all in one horizontal row -- matching the reference compact header design.
+///
+/// Layout:  CPU [▄▄▄] 41.1%    MEM [▄▄▄] 6.4/16.0GB
+///             ^     ^     ^
+///    9pt label   40x14pt sparkline   10pt mono value
+///
+/// Do NOT restore the VStack layout -- it makes the header ~70pt tall.
+struct SparklineMetricView: View {
+    let label: String
+    let value: String
+    let history: [Double]
+    let currentPct: Double
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+
+            // Sparkline inline, constrained so it does not drive row height
+            SparklineView(history: history, currentPct: currentPct)
+                .frame(width: 40, height: 14)
+                .clipShape(RoundedRectangle(cornerRadius: 2))
+
+            Text(value)
+                .font(.system(size: 10, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(labelColor)
+                .fixedSize()
+        }
+        // Prevent the entire chip from being squeezed by a Spacer or sibling views
+        .fixedSize()
+    }
+
+    private var labelColor: Color {
+        if currentPct > 85 { return .rbDanger }
+        if currentPct > 60 { return .rbWarning }
+        return .primary
+    }
+}
+
+// MARK: - DiskPillBadge
+/// Compact pill showing disk used percentage, placed inline next to the
+/// DISK sparkline in HeaderStatsBar.
+///
+/// Uses the same thresholds as SparklineView.themeColor and
+/// SparklineMetricView.labelColor so the pill, sparkline stroke, and
+/// value text always share one color:
+///   usedPct > 85  →  rbDanger  (red)
+///   usedPct > 60  →  rbWarning (orange)
+///   else          →  rbSuccess (green)
+///
+/// Always renders at its intrinsic size — never truncates.
+struct DiskPillBadge: View {
+    /// Percentage of disk space that is USED (0–100). Same scale as SparklineView.currentPct.
+    let usedPct: Double
+
+    var body: some View {
+        Text(String(format: "%.0f%%", usedPct))
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundStyle(pillColor)
+            .fixedSize()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(pillColor.opacity(0.15), in: Capsule())
+            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            // Never let the capsule be compressed
+            .fixedSize()
+    }
+
+    /// Matches SparklineView.themeColor exactly so pill color == sparkline color.
+    private var pillColor: Color {
+        if usedPct > 85 { return .rbDanger }
+        if usedPct > 60 { return .rbWarning }
+        return .rbSuccess
+    }
+}
+
+// MARK: - HeaderStatsBar
+/// Compact single-row stats header: CPU | MEM | DISK [pill] as inline chips.
+///
+/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [87%]  →  ⚙ ✕
+///
+/// The DiskPillBadge sits immediately after the DISK SparklineMetricView,
+/// before the Spacer, so it stays adjacent to the disk graph.
+///
+/// Accepts an existing SystemStatsViewModel so it shares the sampler
+/// already running in PopoverMainView -- no second timer is created.
+struct HeaderStatsBar: View {
+    @ObservedObject var statsVM: SystemStatsViewModel
+
+    var body: some View {
+        HStack(spacing: RBSpacing.md) {
+            SparklineMetricView(
+                label: "CPU",
+                value: String(format: "%.1f%%", statsVM.stats.cpuPct),
+                history: statsVM.cpuHistory.values,
+                currentPct: statsVM.stats.cpuPct
+            )
+
+            // Thin vertical separator; fixed height tied to sparkline height
+            Color.secondary.opacity(0.3)
+                .frame(width: 1, height: 14)
+
+            SparklineMetricView(
+                label: "MEM",
+                value: String(format: "%.1f/%.1fGB",
+                              statsVM.stats.memUsedGB,
+                              statsVM.stats.memTotalGB),
+                history: statsVM.memHistory.values,
+                currentPct: statsVM.stats.memTotalGB > 0
+                    ? (statsVM.stats.memUsedGB / statsVM.stats.memTotalGB) * 100
+                    : 0
+            )
+
+            Color.secondary.opacity(0.3)
+                .frame(width: 1, height: 14)
+
+            // DISK chip + usage pill inline, before Spacer.
+            // DiskPillBadge receives usedPct — same value as SparklineView.currentPct —
+            // so pill color always matches the sparkline stroke and value text.
+            HStack(spacing: 5) {
+                let diskUsedPct = statsVM.stats.diskTotalGB > 0
+                    ? (statsVM.stats.diskUsedGB / statsVM.stats.diskTotalGB) * 100
+                    : 0.0
+
+                SparklineMetricView(
+                    label: "DISK",
+                    value: String(format: "%d/%dGB",
+                                  Int(statsVM.stats.diskUsedGB.rounded()),
+                                  Int(statsVM.stats.diskTotalGB.rounded())),
+                    history: statsVM.diskHistory.values,
+                    currentPct: diskUsedPct
+                )
+
+                if statsVM.stats.diskTotalGB > 0 {
+                    DiskPillBadge(usedPct: diskUsedPct)
+                }
+            }
+            .fixedSize()
+
+            Spacer()
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.sm)
+    }
+}
+
+// MARK: - BlockBarView (kept for backward compat)
 /// Renders a coloured block-bar and percentage label for a given metric.
+/// ⚠️ Deprecated -- use SparklineMetricView / HeaderStatsBar instead.
 struct BlockBarView: View {
     let label: String
     let pct: Double
@@ -43,7 +196,7 @@ struct BlockBarView: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
 
             GeometryReader { geo in
@@ -60,15 +213,13 @@ struct BlockBarView: View {
             .frame(height: 6)
 
             Text(String(format: "%.0f%%", pct))
-                .font(.system(size: 10, design: .monospaced))
+                .font(DesignTokens.Fonts.mono)
                 .foregroundColor(usageColor)
                 .frame(width: 36, alignment: .trailing)
         }
     }
 
     private var usageColor: Color {
-        if pct > 85 { return .red }
-        if pct > 60 { return .yellow }
-        return .green
+        DesignTokens.Colors.usage(pct: pct)
     }
 }

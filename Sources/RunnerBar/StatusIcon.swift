@@ -10,17 +10,17 @@ struct StatusIcon {
     /// Icon character for the current status/conclusion.
     var icon: String {
         switch conclusion {
-        case "success":            return "✓"
-        case "failure":            return "✗"
-        case "cancelled":          return "⊘"
-        case "skipped":            return "⊘"
-        case "timed_out":          return "✗"
-        case "action_required":    return "!"
+        case "success": return "✓"
+        case "failure": return "✗"
+        case "cancelled": return "⊘"
+        case "skipped": return "⊘"
+        case "timed_out": return "✗"
+        case "action_required": return "!"
         default:
             switch status {
-            case "in_progress":    return "▶"
-            case "queued":         return "·"
-            default:               return "·"
+            case "in_progress": return "▶"
+            case "queued": return "·"
+            default: return "·"
             }
         }
     }
@@ -28,15 +28,15 @@ struct StatusIcon {
     /// Foreground colour for the icon.
     var color: NSColor {
         switch conclusion {
-        case "success":            return .systemGreen
+        case "success": return .systemGreen
         case "failure", "timed_out": return .systemRed
-        case "action_required":    return .systemOrange
+        case "action_required": return .systemOrange
         case "cancelled", "skipped": return .secondaryLabelColor
         default:
             switch status {
-            case "in_progress":    return .systemYellow
-            case "queued":         return .secondaryLabelColor
-            default:               return .secondaryLabelColor
+            case "in_progress": return .systemYellow
+            case "queued": return .secondaryLabelColor
+            default: return .secondaryLabelColor
             }
         }
     }
@@ -59,9 +59,9 @@ struct StatusIcon {
             .font: NSFont.systemFont(ofSize: size * 0.55, weight: .bold),
             .foregroundColor: color
         ]
-        let str = NSAttributedString(string: icon, attributes: attrs)
-        let strSize = str.size()
-        str.draw(at: NSPoint(
+        let attrStr = NSAttributedString(string: icon, attributes: attrs)
+        let strSize = attrStr.size()
+        attrStr.draw(at: NSPoint(
             x: (size - strSize.width) / 2,
             y: (size - strSize.height) / 2
         ))

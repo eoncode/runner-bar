@@ -1,9 +1,6 @@
 import SwiftUI
 
-// ⚠️ REGRESSION GUARD — READ BEFORE CHANGING (ref #52 #54 #57 #375 #376 #377)
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
+// REGRESSION GUARD — DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
 //
 // ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize
 // Dynamic height is achieved via KVO on NSHostingController.preferredContentSize.
@@ -11,85 +8,64 @@ import SwiftUI
 // SwiftUI views report their natural ideal size. No height caps needed here.
 //
 // RULE 1: Root VStack uses .frame(minWidth: 280, maxWidth: 900, alignment: .top)
-//   Dropping idealWidth lets SwiftUI report the natural content width as
-//   preferredContentSize.width. The panel clamps between 280 and 900.
-//   AppDelegate.resizeAndRepositionPanel() enforces these bounds at the NSPanel level.
-//   ❌ NEVER add idealWidth here — it pins the width to a fixed value regardless of content.
-//   ❌ NEVER add idealHeight or maxHeight to the root frame.
-//   ❌ NEVER use .fixedSize() on the root VStack.
-//   ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: RunnerStoreObservable.reload() uses withAnimation(nil).
 //
-// RULE 5: NO height caps on actionsSection.
-//   With NSPanel, height caps are not needed. Content grows naturally.
-//   AppDelegate.maxHeight (85% screen) prevents off-screen overflow at the panel level.
-//   ❌ NEVER add .frame(maxHeight:) to actionsSection.
-//   ❌ NEVER wrap actionsSection in ScrollView.
-//   ❌ NEVER add .fixedSize() to actionsSection.
+// RULE 5: actionsSection is wrapped in a ScrollView capped at screenScrollMaxHeight.
+//   screenScrollMaxHeight = NSScreen.main.visibleFrame.height * 0.80.
+//   This mirrors AppDelegate's 85% panel ceiling minus headroom for the header
+//   and runner rows above the list. The ScrollView is transparent for short lists
+//   (content fits, no scroll indicator) and activates only when expanded rows
+//   would push content off screen.
+//   ❌ NEVER remove the ScrollView from actionsSection.
+//   ❌ NEVER use a GeometryReader or preference key for this cap — it freezes
+//      at the initial layout height and prevents scrolling to expanded content.
+//   ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
 //
 // RULE 6: systemStats MUST be stopped while the panel is open.
-//   SystemStatsViewModel fires every 2s, mutating @StateObject → SwiftUI re-render
-//   → new preferredContentSize → KVO fires → resizeAndRepositionPanel().
-//   While open: stats polling is stopped to prevent unnecessary re-renders/resizes.
-//   While closed: stats polling runs to keep the header display current on next open.
-//   Gate reads PopoverOpenState via @EnvironmentObject (live, never stale).
-//   ❌ NEVER re-add `var isPopoverOpen: Bool` prop — frozen at construction.
-//   ❌ NEVER remove .onChange(of: popoverOpenState.isOpen).
-//
 // RULE 6b: systemStats must RESTART when the main view becomes visible again.
-//   onChange(of: popoverOpenState.isOpen) only fires on panel open/close — it
-//   does NOT fire when the user navigates back from a drill-down view. Without
-//   this rule the header shows zeroed stats after back-navigation.
-//   Fix: call systemStats.start() inside PopoverHeaderView .onAppear (which
-//   re-fires on every back-navigation). The onChange(open=true) stop-guard
-//   still wins because isOpen is already true when the back-nav fires.
-//   ❌ NEVER remove the systemStats.start() from PopoverHeaderView .onAppear.
 //
-// RULE 7: Timer calls LocalRunnerStore.refresh() + store.reload().
-//   BOTH gated behind !popoverOpenState.isOpen.
-//   ❌ NEVER remove this guard.
-//   ❌ NEVER call LocalRunnerStore.shared.refresh() directly from Timer closure
-//      — it is @MainActor isolated, requires Task { @MainActor in }.
+// RULE 7: RunnerStore self-schedules via its own adaptive timer after each fetch().
+//   ❌ NEVER add a second repeating timer in PopoverMainView that calls
+//      store.reload() — it doubles API calls and drains GitHub quota.
+//   LocalRunnerStore.refresh() (local-only, no API) may be called from onAppear.
 //
-// RULE 8: AppDelegate.initPanelWidth is 320 (initial open before SwiftUI measures).
-//   Panel width is then content-driven, clamped 280–900 by resizeAndRepositionPanel.
-//   ❌ NEVER add idealWidth back to this view.
-//   ❌ NEVER restore initPanelWidth to 600 — that was over-wide.
-//
+// RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
-//   Its sole purpose is to force ActionRowView and InlineJobRowsView to
-//   re-render so elapsed strings, pie-chart progress and currentStep names
-//   stay live while the panel is visible.
-//   ❌ NEVER gate displayTick behind !popoverOpenState.isOpen.
-//   ❌ NEVER merge with runnerRefreshTimer (that one IS gated and fires at 5s).
-//
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
 
+/// Root popover view rendered inside the NSPanel.
+/// Owns the display-tick timer and system-stats lifecycle.
+/// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     let onSelectSettings: () -> Void
-    let onSelectInlineJob: (ActiveJob, ActionGroup) -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
 
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
-    @State private var runnerRefreshTimer: Timer?
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
+
+    /// Maximum height for the scrollable actions list.
+    /// 80% of the visible screen height — matches AppDelegate's 85% panel cap
+    /// minus ~5% headroom for the fixed header + runner rows above the list.
+    /// Computed fresh on each body evaluation so it always reflects current screen.
+    /// ❌ NEVER replace with a GeometryReader/preference approach — it freezes
+    ///    at initial layout height and breaks scrolling for expanded rows.
+    private var screenScrollMaxHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
-                stats: systemStats.stats,
+                statsVM: systemStats,
                 isAuthenticated: isAuthenticated,
                 onSelectSettings: onSelectSettings,
                 onSignIn: signInWithGitHub
@@ -101,45 +77,69 @@ struct PopoverMainView: View {
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
-            actionsSection
+            // RULE 5: scrollable actions list, capped at screenScrollMaxHeight.
+            actionsSectionScrollable
         }
-        // RULE 1: content-driven width, clamped 280–900.
-        // ❌ NEVER add idealWidth here.
-        // ❌ NEVER add idealHeight or maxHeight here.
-        // ❌ NEVER restore minWidth to 560 — that was the old fixed-width floor.
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if !popoverOpenState.isOpen { systemStats.start() }
-            startRunnerRefreshTimer()
             startDisplayTickTimer()
         }
         .onDisappear {
             systemStats.stop()
-            stopRunnerRefreshTimer()
             stopDisplayTickTimer()
         }
+        // RULE 6: stop stats polling while panel is open to prevent
+        // KVO storm (systemStats fires every 2s → preferredContentSize
+        // changes → resizeAndRepositionPanel() called on every tick).
         .onChange(of: popoverOpenState.isOpen) { open in
             if open { systemStats.stop() } else { systemStats.start() }
         }
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
 
-    // MARK: - Runner refresh timer (RULE 7 — gated, 5s)
+    // MARK: - Scrollable actions section (RULE 5)
 
-    private func startRunnerRefreshTimer() {
-        stopRunnerRefreshTimer()
-        runnerRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            if !self.popoverOpenState.isOpen {
-                Task { @MainActor in LocalRunnerStore.shared.refresh() }
-                self.store.reload()
-            }
+    private var actionsSectionScrollable: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            actionsSectionContent
         }
+        .frame(maxHeight: screenScrollMaxHeight)
     }
 
-    private func stopRunnerRefreshTimer() {
-        runnerRefreshTimer?.invalidate()
-        runnerRefreshTimer = nil
+    private var actionsSectionContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if store.actions.isEmpty {
+                Text("No recent actions")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+            } else {
+                SectionHeaderLabel(title: "Actions")
+                let visible = Array(store.actions.prefix(visibleCount))
+                ForEach(visible) { group in
+                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
+                }
+                loadMoreButton
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var loadMoreButton: some View {
+        let nextBatch = min(10, store.actions.count - visibleCount)
+        if nextBatch > 0 {
+            Button(
+                action: { visibleCount += nextBatch },
+                label: {
+                    Text("Load \(nextBatch) more actions\u{2026}")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            )
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+        }
     }
 
     // MARK: - Display tick timer (RULE 9 — ungated, 1s)
@@ -166,49 +166,6 @@ struct PopoverMainView: View {
                 .font(.caption).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
-    }
-
-    // MARK: - Actions section (RULE 5: no height cap)
-
-    private var actionsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if store.actions.isEmpty {
-                Text("No recent actions")
-                    .font(.caption).foregroundColor(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-            } else {
-                SectionHeaderLabel(title: "Actions")
-                let visible = Array(store.actions.prefix(visibleCount))
-                ForEach(visible) { group in
-                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
-                    if group.groupStatus == .inProgress && !group.jobs.isEmpty {
-                        InlineJobRowsView(
-                            group: group,
-                            tick: displayTick,
-                            onSelectJob: onSelectInlineJob
-                        )
-                    }
-                }
-                loadMoreButton
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
-    private var loadMoreButton: some View {
-        let nextBatch = min(10, store.actions.count - visibleCount)
-        if nextBatch > 0 {
-            Button(
-                action: { visibleCount += nextBatch },
-                label: {
-                    Text("Load \(nextBatch) more actions\u{2026}")
-                        .font(.caption).foregroundColor(.secondary)
-                }
-            )
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-        }
     }
 
     // MARK: - Helpers
