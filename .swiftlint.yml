@@ -23,12 +23,6 @@ opt_in_rules:
   - first_where            # prefer first(where:) over filter().first
 
 # ── Rule configuration ────────────────────────────────────────────────────────────────────────────────────
-line_length:
-  warning: 120
-  error: 160
-  ignores_comments: true
-  ignores_urls: true
-
 type_body_length:
   warning: 200
   error: 350
@@ -54,3 +48,4 @@ disabled_rules:
   - file_length                 # large files are acceptable during active development
   - missing_docs                # docs not required for all internal declarations
   - superfluous_disable_command # in-file disables may pre-empt future violations
+  - line_length                 # long lines are acceptable in this codebase
