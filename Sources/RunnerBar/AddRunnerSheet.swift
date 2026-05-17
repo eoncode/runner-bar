@@ -121,7 +121,12 @@ struct AddRunnerSheet: View {
                 Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
                 Button(action: register) {
                     if isRegistering {
-                        HStack(spacing: 6) { ProgressView().scaleEffect(0.7); Text("Registering…") }
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 14, height: 14)  // match text line height; prevents button growing
+                            Text("Registering…")
+                        }
                     } else {
                         Text("Add Runner")
                     }
