@@ -46,7 +46,9 @@ struct RingBuffer {
     let capacity: Int
 
     /// Creates a ring buffer retaining the most recent `capacity` samples.
+    /// - Precondition: `capacity > 0`
     init(capacity: Int = 20) {
+        precondition(capacity > 0, "RingBuffer capacity must be > 0")
         self.capacity = capacity
     }
 
