@@ -37,28 +37,46 @@ struct SystemStats {
 
 // MARK: - RingBuffer
 
-/// A fixed-size ring buffer that stores the last `capacity` samples for a metric.
-/// Used to drive `SparklineView` without growing unboundedly.
+/// A fixed-capacity circular buffer storing the last `capacity` samples.
+///
+/// perf(#461): uses a `head` write index so `append` is O(1) with zero
+/// allocations after init. Previously the backing array grew to capacity
+/// and then called `removeFirst()` on every tick, which is O(n).
+///
+/// - Precondition: `capacity > 0` (fix #460).
 struct RingBuffer {
-    /// The collected sample values, oldest-first.
-    private(set) var values: [Double] = []
-    /// Maximum number of samples retained before the oldest is evicted.
+    /// Maximum number of samples retained.
     let capacity: Int
+    /// Number of valid samples currently held (0 ≤ count ≤ capacity).
+    private(set) var count: Int = 0
+    /// Index of the next write slot (mod capacity).
+    private var head: Int = 0
+    /// Fixed-size backing store; slots are nil until first written.
+    private var storage: [Double?]
 
     /// Creates a ring buffer retaining the most recent `capacity` samples.
     /// - Precondition: `capacity > 0`
     init(capacity: Int = 20) {
         precondition(capacity > 0, "RingBuffer capacity must be > 0")
         self.capacity = capacity
+        self.storage = Array(repeating: nil, count: capacity)
     }
 
-    /// Appends `value`, evicting the oldest sample when at capacity.
+    /// Appends `value` in O(1), overwriting the oldest sample when full.
     mutating func append(_ value: Double) {
-        if values.count >= capacity {
-            values.removeFirst()
-        }
-        values.append(value)
+        storage[head] = value
+        head = (head + 1) % capacity
+        count = min(count + 1, capacity)
     }
+
+    /// All valid samples in insertion order (oldest first).
+    var elements: [Double] {
+        let start = count < capacity ? 0 : head
+        return (0 ..< count).map { storage[(start + $0) % capacity]! }
+    }
+
+    /// Alias for `elements` — keeps existing SparklineView call sites unchanged.
+    var values: [Double] { elements }
 }
 
 private struct CPUTicks {
