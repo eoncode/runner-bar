@@ -59,9 +59,9 @@ struct StatusIcon {
             .font: NSFont.systemFont(ofSize: size * 0.55, weight: .bold),
             .foregroundColor: color
         ]
-        let str = NSAttributedString(string: icon, attributes: attrs)
-        let strSize = str.size()
-        str.draw(at: NSPoint(
+        let attrStr = NSAttributedString(string: icon, attributes: attrs)
+        let strSize = attrStr.size()
+        attrStr.draw(at: NSPoint(
             x: (size - strSize.width) / 2,
             y: (size - strSize.height) / 2
         ))
