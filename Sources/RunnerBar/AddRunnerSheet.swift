@@ -21,30 +21,34 @@ struct AddRunnerSheet: View {
 
     // MARK: Scope state
 
+    /// Scope type selection for the new runner: a specific repository or an organisation.
     enum ScopeType: String, CaseIterable, Identifiable {
+        /// Register the runner under a specific repository (owner/repo).
         case repo = "Repository"
-        case org  = "Organisation"
+        /// Register the runner under an entire organisation.
+        case org = "Organisation"
+        /// Stable identifier for `ForEach` — uses the raw string value.
         var id: String { rawValue }
     }
 
     @State private var scopeType: ScopeType = .repo
     @State private var selectedRepo = ""
-    @State private var selectedOrg  = ""
+    @State private var selectedOrg = ""
     @State private var repos: [String] = []
-    @State private var orgs:  [String] = []
+    @State private var orgs: [String] = []
     @State private var isLoadingScopes = false
 
     // MARK: Runner config state
 
-    @State private var runnerName  = ""
-    @State private var labelsText  = "self-hosted,macOS"
-    @State private var installDir  = FileManager.default
+    @State private var runnerName = ""
+    @State private var labelsText = "self-hosted,macOS"
+    @State private var installDir = FileManager.default
         .homeDirectoryForCurrentUser
         .appendingPathComponent("actions-runner").path
 
     // MARK: Registration state
 
-    @State private var isRegistering   = false
+    @State private var isRegistering = false
     @State private var registrationStep = ""
     @State private var errorMessage: String?
 
@@ -55,7 +59,7 @@ struct AddRunnerSheet: View {
             Text("Add runner").font(.headline)
 
             Picker("Scope", selection: $scopeType) {
-                ForEach(ScopeType.allCases) { s in Text(s.rawValue).tag(s) }
+                ForEach(ScopeType.allCases) { scopeOption in Text(scopeOption.rawValue).tag(scopeOption) }
             }
             .pickerStyle(.segmented)
 
@@ -152,12 +156,12 @@ struct AddRunnerSheet: View {
         isLoadingScopes = true
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchedRepos = fetchUserRepos()
-            let fetchedOrgs  = fetchUserOrgs()
+            let fetchedOrgs = fetchUserOrgs()
             DispatchQueue.main.async {
                 repos = fetchedRepos
-                orgs  = fetchedOrgs
+                orgs = fetchedOrgs
                 if let first = fetchedRepos.first { selectedRepo = first }
-                if let first = fetchedOrgs.first  { selectedOrg  = first }
+                if let first = fetchedOrgs.first { selectedOrg = first }
                 isLoadingScopes = false
             }
         }
@@ -167,25 +171,25 @@ struct AddRunnerSheet: View {
         DispatchQueue.main.async { registrationStep = msg }
     }
 
-    // swiftlint:disable:next function_body_length cyclomatic_complexity
+    // swiftlint:disable:next function_body_length
     private func register() {
         guard canRegister else { return }
         errorMessage = nil
         registrationStep = ""
         isRegistering = true
-        let scope  = effectiveScope
-        let name   = runnerName.trimmingCharacters(in: .whitespaces)
+        let scope = effectiveScope
+        let name = runnerName.trimmingCharacters(in: .whitespaces)
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
-        let dir    = installDir.trimmingCharacters(in: .whitespaces)
+        let dir = installDir.trimmingCharacters(in: .whitespaces)
 
         DispatchQueue.global(qos: .userInitiated).async {
             // Security: only allow paths inside the user's home directory.
-            let homeDir     = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath().path
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath().path
             let resolvedDir = URL(fileURLWithPath: dir).resolvingSymlinksInPath().path
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage  = "Install directory must be inside your home folder (~/…)."
+                    errorMessage = "Install directory must be inside your home folder (~/…)."
                 }
                 return
             }
@@ -195,7 +199,7 @@ struct AddRunnerSheet: View {
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage  = "Failed to fetch registration token. " +
+                    errorMessage = "Failed to fetch registration token. " +
                         "Ensure `gh auth login` has been run or GH_TOKEN is set."
                 }
                 return
@@ -207,7 +211,7 @@ struct AddRunnerSheet: View {
             } catch {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage  = "Failed to create directory: \(error.localizedDescription)"
+                    errorMessage = "Failed to create directory: \(error.localizedDescription)"
                 }
                 return
             }
@@ -219,7 +223,7 @@ struct AddRunnerSheet: View {
                 guard let downloadURL = fetchRunnerDownloadURL() else {
                     DispatchQueue.main.async {
                         isRegistering = false
-                        errorMessage  = "Could not determine runner download URL. Check your internet connection."
+                        errorMessage = "Could not determine runner download URL. Check your internet connection."
                     }
                     return
                 }
@@ -242,11 +246,11 @@ struct AddRunnerSheet: View {
             //            the same directory (or re-running after a failed attempt) works.
             // --unattended: no interactive prompts.
             setStep("Configuring runner…")
-            let ghURL    = "https://github.com/\(scope)"
+            let ghURL = "https://github.com/\(scope)"
             let exitCode = runRegistrationCommand(dir: dir, ghURL: ghURL,
                                                   token: token, name: name, labels: labels)
             DispatchQueue.main.async {
-                isRegistering   = false
+                isRegistering = false
                 registrationStep = ""
                 if exitCode == 0 {
                     isPresented = false
@@ -270,7 +274,7 @@ struct AddRunnerSheet: View {
     ) -> Int32 {
         let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
         let task = Process()
-        task.executableURL  = configURL
+        task.executableURL = configURL
         task.currentDirectoryURL = URL(fileURLWithPath: dir)
         var args = ["--url", ghURL, "--token", token, "--name", name,
                     "--unattended", "--replace"]
@@ -278,7 +282,7 @@ struct AddRunnerSheet: View {
         task.arguments = args
         let pipe = Pipe()
         task.standardOutput = pipe
-        task.standardError  = pipe
+        task.standardError = pipe
         var outputData = Data()
         let lock = NSLock()
         pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -309,9 +313,9 @@ struct AddRunnerSheet: View {
     private func runSimpleProcess(_ executable: String, args: [String]) -> Int32 {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: executable)
-        task.arguments     = args
+        task.arguments = args
         task.standardOutput = Pipe()
-        task.standardError  = Pipe()
+        task.standardError = Pipe()
         do { try task.run() } catch {
             log("runSimpleProcess › \(executable) launch error: \(error)")
             return 1
@@ -335,22 +339,27 @@ private func fetchRunnerDownloadURL() -> String? {
     archTask.arguments = ["-m"]
     let archPipe = Pipe()
     archTask.standardOutput = archPipe
-    archTask.standardError  = Pipe()
+    archTask.standardError = Pipe()
     guard (try? archTask.run()) != nil else { return nil }
     archTask.waitUntilExit()
-    let archRaw  = archPipe.fileHandleForReading.readDataToEndOfFile()
-    let arch     = String(data: archRaw, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let archRaw = archPipe.fileHandleForReading.readDataToEndOfFile()
+    let arch = String(data: archRaw, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     let assetArch = (arch == "arm64") ? "arm64" : "x64"
     let assetName = "actions-runner-osx-\(assetArch)"
     log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
 
-    guard let url  = URL(string: "https://api.github.com/repos/actions/runner/releases/latest"),
+    guard let url = URL(string: "https://api.github.com/repos/actions/runner/releases/latest"),
           let data = try? Data(contentsOf: url) else {
         log("fetchRunnerDownloadURL › failed to fetch release JSON")
         return nil
     }
-    struct Asset:   Decodable { let name: String; let browserDownloadUrl: String
-        enum CodingKeys: String, CodingKey { case name; case browserDownloadUrl = "browser_download_url" }
+    struct Asset: Decodable {
+        let name: String
+        let browserDownloadUrl: String
+        enum CodingKeys: String, CodingKey {
+            case name
+            case browserDownloadUrl = "browser_download_url"
+        }
     }
     struct Release: Decodable { let assets: [Asset] }
     guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
