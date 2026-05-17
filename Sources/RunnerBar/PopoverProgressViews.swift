@@ -231,16 +231,4 @@ extension ActionGroup {
     }
 }
 
-// MARK: - ActiveJob + progressFraction
-extension ActiveJob {
-    var progressFraction: Double? {
-        switch status {
-        case "queued":    return nil
-        case "completed": return 1.0
-        default:
-            guard !steps.isEmpty else { return nil }
-            let done = steps.filter { $0.conclusion != nil }.count
-            return Double(done) / Double(steps.count)
-        }
-    }
-}
+// ActiveJob.progressFraction lives in ActiveJob.swift
