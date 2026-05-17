@@ -196,7 +196,7 @@ struct StepPayload: Decodable {
 
 // MARK: - ActiveJob factory
 
-/// RunnerStore extension providing the `ActiveJob` factory method.
+// RunnerStore extension providing the `ActiveJob` factory method.
 extension RunnerStore {
     /// Builds an `ActiveJob` from a decoded `JobPayload`.
     func makeActiveJob(
@@ -216,7 +216,7 @@ extension RunnerStore {
             isDimmed: isDimmed,
             steps: (payload.steps ?? []).map { stepPayload in
                 JobStep(
-                    // ⚠️: Use the API-supplied step number, not the array index.
+                    // ⚠️ Use the API-supplied step number, not the array index.
                     // GitHub step numbers can be non-contiguous (e.g. retried or skipped steps).
                     // Using idx+1 would cause fetchStepLog(jobID:stepNumber:) to fetch the wrong log.
                     id: stepPayload.number,

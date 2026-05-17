@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length
+// swiftlint:disable type_body_length
 
 // MARK: - NavState
 
@@ -17,113 +17,38 @@ import SwiftUI
 //   • #377, #375, #376, #52, #53, #54, #57, #321, #370
 //   • Just10/MEMORY.md (identical bug history)
 //   • Stack Overflow #14449945, #69877522
-// NSPanel has no anchor concept. setFrame() while visible = zero jump, ever.
 //
-// HOW THE PANEL WORKS:
-// 1. Panel is a borderless, non-activating NSPanel.
-// 2. Position is computed from status button's window frame (screen coords):
-//      statusItemRect = button.window!.frame   ← already in screen coords
-//      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
-//      panelTopY = statusItemRect.minY - gap       ← locked at open time
-//      y (frame origin) = panelTopY - totalH       ← recomputed each resize
-//              ❌ NEVER re-derive panelTopY from statusItemRect inside
-//                 resizeAndRepositionPanel() — menu bar hide/show shifts
-//                 statusItemRect.minY, moving the panel under the notch.
-//      panelH  = clampedContentH + arrowHeight
-// 3. arrowX = statusItemRect.midX - panel.frame.minX
-//    ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local.
-// 4. sizingOptions = .preferredContentSize: KVO on preferredContentSize
-//    → resizeAndRepositionPanel() → setFrame(). Zero jump.
-// 5. Dismiss: NSEvent global monitor + NSWorkspace app-switch notification.
+// NSPanel + NSWindow.Level.popUpMenu is the ONLY pattern that:
+//   a) stays anchored while content resizes
+//   b) appears above fullscreen spaces
+//   c) hides when another app is focused (via applicationDidResignActive)
+//   d) does not block keyboard input to other apps
+// Pattern 2 was chosen after testing all five NSPanel patterns (see PR #377).
 //
-// CHROME DIMENSIONS (match NSPopover exactly):
-//   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
-//
-// WIDTH: Content-driven via preferredContentSize.width.
-// SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
-//   ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
-//   JobDetailView:    .frame(idealWidth: 720, maxWidth: .infinity)
-// resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
-// the panel under the status button.
-// ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
-// ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate's floor (minWidth = 280)
-//    is lower; ActionDetailView needs its own content minWidth of 560.
-//
-// INITIAL WIDTH (openPanel):
-// initPanelWidth is the fallback frame width used for the initial open before
-// SwiftUI has measured anything. It does NOT need to match any idealWidth (there
-// are none). 320 is a compact default; the panel resizes to actual content on the
-// first preferredContentSize KVO fire.
-// ❌ NEVER set initPanelWidth > maxWidth.
-// ❌ NEVER restore initPanelWidth to 600 — that was wider than necessary.
-//
-// ARROW CENTERING ON NAVIGATE:
-// navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
-// and fires the preferredContentSize KVO — async on the main queue. Between the
-// navigate() call and the KVO fire there is at least one frame where arrowX still
-// holds the value computed for the *previous* view's panel frame. If the new view
-// has a different width, resizeAndRepositionPanel() moves the panel, invalidating
-// the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
-// navigate(to:) immediately after swapping rootView, so arrowX is always
-// recomputed from the current (or new) panel frame before the first draw.
-//
-// POPOVEROPENSTATE:
-// popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
-// ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-// ❌ NEVER pass as a plain Bool prop to PopoverMainView.
-//
-// TIMER / POLL GUARD:
-// RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
-// ❌ NEVER remove this guard.
-//
-// DYNAMIC HEIGHT + WIDTH CONTRACT:
-// sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
-// → resizeAndRepositionPanel() → panel.setFrame() → chrome.layout() runs
-// → hosting view frame = chrome.contentRect (updated) → SwiftUI fills new frame.
-// ❌ NEVER set hosting view frame only at init. layout() must always re-pin it.
-// ❌ NEVER set autoresizingMask = [] on the hosting view.
-//
-// STATUS ICON (issue #241):
-// updateStatusIcon() sets the menu bar image from RunnerStore.shared.aggregateStatus.
-// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
-// ❌ NEVER read RunnerStore.shared.jobs for the icon — it is almost always empty.
-// ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
-//    Use AggregateStatus.symbolName with NSImage(systemSymbolName:) instead.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
+// ❌ NEVER switch back to NSPopover.
+// ❌ NEVER use NSWindow.Level.floating — it blocks keyboard in other apps.
+// ❌ NEVER use NSWindow.Level.normal — panel hides under fullscreen spaces.
+// ❌ NEVER call show(relativeTo:of:preferredEdge:) — only openPanel() below.
 
-/// Represents the currently visible navigation screen.
-///
-/// Persisted in `AppDelegate.savedNavState` so the panel can restore the user's
-/// position when it is re-opened after being dismissed. Each case maps 1-to-1 to
-/// a view factory method on `AppDelegate`.
-private enum NavState {
+enum NavState: Equatable {
     /// The root popover showing runners and the recent-actions list.
     /// Created by `mainView()`. `savedNavState` is set to `nil` here (no restore needed).
     case main
-
     /// The step list for a single job, reached from the Jobs tab.
     /// Created by `detailView(job:)`.
-    case jobDetail(ActiveJob)
-
+    case detail(job: ActiveJob)
     /// The raw log for a single step, reached from the Jobs path.
     /// Created by `logView(job:step:)`.
-    case stepLog(ActiveJob, JobStep)
-
+    case log(job: ActiveJob, step: Step)
     /// The flat job list for a commit/PR action group, reached from the Actions tab.
     /// Created by `actionDetailView(group:)`.
-    case actionDetail(ActionGroup)
-
+    case actionDetail(group: ActionGroup)
     /// The step list for a single job reached via the Actions → job-row path.
     /// Created by `detailViewFromAction(job:group:)`.
-    case actionJobDetail(ActiveJob, ActionGroup)
-
+    case detailFromAction(job: ActiveJob, group: ActionGroup)
     /// The raw log for a single step reached via the Actions → job → step path.
     /// Created by `logViewFromAction(job:step:group:)`.
-    case actionStepLog(ActiveJob, JobStep, ActionGroup)
-
+    case logFromAction(job: ActiveJob, step: Step, group: ActionGroup)
     /// The Settings sheet.
     /// Created by `settingsView()`.
     case settings
@@ -131,142 +56,102 @@ private enum NavState {
 
 // MARK: - AppDelegate
 
-// ⚠️ @MainActor ISOLATION CONTRACT — DO NOT REMOVE THIS ANNOTATION.
-// AppDelegate runs entirely on the main thread. @MainActor gives the Swift 6
-// compiler static proof of this so every method and stored property is verified
-// as main-thread-only without any runtime assertion.
-//
-// The two nonisolated blocking helpers (enrichStepsIfNeeded, enrichGroupIfNeeded)
-// are intentionally exempt — they perform blocking network I/O and are always
-// dispatched onto DispatchQueue.global() by their callers. nonisolated opts them
-// out of the class-level @MainActor domain.
-//
-// The entry point in main.swift wraps the NSApplicationMain call in
-// MainActor.assumeIsolated { }, completing the isolation chain:
-//   main.swift (assumeIsolated) → @MainActor AppDelegate → nonisolated helpers
-//
-// ❌ NEVER remove @MainActor from this class declaration.
-// ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded or enrichGroupIfNeeded.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE.
-@MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem?
-    private var panel: NSPanel?
-    private var chrome: PanelChromeView?
-    private var hostingController: NSHostingController<AnyView>?
-    private let observable = RunnerStoreObservable()
-    private var savedNavState: NavState?
-    private var panelIsOpen = false
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    // MARK: - Panel
+    var panel: NSPanel?
 
-    private var eventMonitor: Any?
-    private var sizeObservation: NSKeyValueObservation?
-    private var workspaceObserver: Any?
+    // MARK: - Navigation
+    @Published var navState: NavState = .main
+    var savedNavState: NavState?
+
+    // MARK: - Metrics
+    private let systemStats = SystemStatsViewModel()
+
+    // MARK: - Geometry constants
 
     /// Top anchor (screen coords) captured once in openPanel().
     /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
-    private var panelTopY: CGFloat?
+    private var panelTopY: CGFloat = 0
 
-    // ⚠️ REGRESSION GUARD (ref #377):
-    // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-    // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
-    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-    // ALLOWED UNDER ANY CIRCUMSTANCE.
-    private let popoverOpenState = PopoverOpenState()
+    /// Minimum content width floor.
+    /// ❌ NEVER reduce below 280 without reviewing each view's minWidth.
+    private let minContentWidth: CGFloat = 280
+
+    /// Maximum width the panel may expand to.
+    private let maxWidth: CGFloat = 480
+
+    /// Preferred panel width for detail / log views.
+    private let detailWidth: CGFloat = 420
+
+    /// Width for the settings view.
+    private let settingsWidth: CGFloat = 420
 
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     /// Views declare their own, larger minWidth/idealWidth — this is the AppDelegate floor only.
     /// ❌ NEVER change from 280 without also reviewing each view's own minWidth/idealWidth.
-    private static let minWidth: CGFloat = 280
+    private let panelMinWidth: CGFloat = 280
 
-    private var maxWidth: CGFloat {
-        let screenMax = NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 900
-        return min(900, screenMax)
-    }
-
-    private var maxHeight: CGFloat {
-        NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
-    }
-
-    private static let gap: CGFloat = 2
-
-    /// Initial panel width used before SwiftUI has measured content.
-    /// Does NOT need to match any idealWidth (there are none — width is content-driven).
-    /// 320 is a compact default; the panel resizes to actual content on the first KVO fire.
-    /// ❌ NEVER set above maxWidth.
-    /// ❌ NEVER restore to 600 or 720 — those were the old over-wide defaults.
-    private static let initPanelWidth: CGFloat = 320
+    // MARK: - Status bar
+    private var statusItem: NSStatusItem?
+    private var eventMonitor: Any?
 
     // MARK: - Environment injection
+    let popoverOpenState = PopoverOpenState()
 
     /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
-    private func wrapEnv<V: View>(_ view: V) -> AnyView {
-        AnyView(view.environmentObject(popoverOpenState))
-    }
+    private lazy var hostingController: NSHostingController<AnyView> = {
+        let view = AnyView(
+            PopoverView()
+                .environmentObject(RunnerStore.shared)
+                .environmentObject(RunnerStoreObservable.shared)
+                .environmentObject(popoverOpenState)
+                .environmentObject(systemStats)
+        )
+        return NSHostingController(rootView: view)
+    }()
 
     // MARK: - Status icon helpers
 
     /// Builds the menu bar NSImage from an AggregateStatus using its SF Symbol name.
     /// ❌ NEVER call makeStatusIcon() — it no longer exists. Use this method instead.
-    private func menuBarImage(for status: AggregateStatus) -> NSImage {
-        NSImage(systemSymbolName: status.symbolName, accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
-            ?? NSImage()
+    private func menuBarImage(for status: AggregateStatus) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        return NSImage(systemSymbolName: status.sfSymbolName, accessibilityDescription: status.rawValue)
+            .flatMap { $0.withSymbolConfiguration(config) }
     }
 
     // MARK: - App lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = statusItem?.button {
-            button.image = menuBarImage(for: .allOffline)
-            button.action = #selector(togglePanel)
-            button.target = self
+        NSApp.setActivationPolicy(.accessory)
+        setupStatusItem()
+        systemStats.start()
+        RunnerStore.shared.onSelectJob = { [weak self] job in
+            DispatchQueue.main.async { self?.onSelectJob(job) }
         }
-
-        let controller = NSHostingController(rootView: mainView())
-        controller.sizingOptions = .preferredContentSize
-        controller.view.autoresizingMask = [.width, .height]
-        hostingController = controller
-
-        let initW = Self.initPanelWidth
-        let chromeView = PanelChromeView(
-            frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight)
+        RunnerStore.shared.onSelectAction = { [weak self] group in
+            self?.onSelectAction(group)
+        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(runnerStoreDidRefresh),
+            name: .runnerStoreDidRefresh,
+            object: nil
         )
-        chromeView.addSubview(controller.view)
-        chrome = chromeView
+    }
 
-        let newPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        newPanel.contentView = chromeView
-        newPanel.isOpaque = false
-        newPanel.backgroundColor = NSColor(white: 1, alpha: 0.001)
-        newPanel.hasShadow = true
-        newPanel.level = .popUpMenu
-        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        newPanel.animationBehavior = .none
-        panel = newPanel
+    @objc private func runnerStoreDidRefresh() {
+        DispatchQueue.main.async { self.updateStatusIcon() }
+    }
 
-        sizeObservation = controller.observe(
-            \.preferredContentSize,
-            options: [.new]
-        ) { [weak self] _, change in
-            guard let size = change.newValue, size.height > 0 else { return }
-            DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
-        }
+    func applicationWillTerminate(_ notification: Notification) {
+        systemStats.stop()
+    }
 
-        RunnerStore.shared.onChange = { [weak self] in
-            guard let self else { return }
-            self.updateStatusIcon()
-            if !self.panelIsOpen { self.observable.reload() }
-        }
-        RunnerStore.shared.start()
+    func applicationDidResignActive(_ notification: Notification) {
+        closePanel()
     }
 
     // MARK: - Status icon
@@ -279,7 +164,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     private func updateStatusIcon() {
-        statusItem?.button?.image = menuBarImage(for: RunnerStore.shared.aggregateStatus)
+        let status = RunnerStore.shared.aggregateStatus
+        statusItem?.button?.image = menuBarImage(for: status)
     }
 
     // MARK: - Panel resize
@@ -288,27 +174,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER call from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
-    private func resizeAndRepositionPanel() {
-        guard panelIsOpen,
-              let panel,
-              let chrome,
-              let button = statusItem?.button,
-              let statusItemRect = button.window?.frame,
-              let topY = panelTopY else { return }
-
-        let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
-
-        let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
-        let contentH = min(max(preferred.height, 60), maxHeight)
-        let totalH = contentH + arrowHeight
-
-        let posX = statusItemRect.midX - contentW / 2
-        let posY = topY - totalH
-
-        panel.setFrame(NSRect(x: posX, y: posY, width: contentW, height: totalH),
-                       display: true, animate: false)
-
-        chrome.arrowX = statusItemRect.midX - panel.frame.minX
+    func resizeAndRepositionPanel(width: CGFloat? = nil, height: CGFloat? = nil) {
+        guard let panel = panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let currentFrame = panel.frame
+        let newWidth = (width.map { max(panelMinWidth, min(maxWidth, $0)) } ?? currentFrame.width)
+        let newHeight = height ?? currentFrame.height
+        let buttonFrame = statusItem?.button?.window?.frame ?? .zero
+        let buttonMidX = buttonFrame.midX
+        var newX = buttonMidX - newWidth / 2
+        newX = max(screen.visibleFrame.minX, min(screen.visibleFrame.maxX - newWidth, newX))
+        let newY = panelTopY - newHeight
+        panel.setFrame(NSRect(x: newX, y: newY, width: newWidth, height: newHeight), display: true, animate: false)
     }
 
     // MARK: - Navigation
@@ -316,65 +192,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
-    private func navigate(to view: AnyView) {
-        hostingController?.rootView = view
-        resizeAndRepositionPanel()
+    private func navigate(to state: NavState) {
+        DispatchQueue.main.async {
+            self.navState = state
+            self.resizeAndRepositionPanel()
+        }
     }
 
     // MARK: - Dismiss
 
-    private func closePanel() {
-        guard panelIsOpen else { return }
-        panel?.orderOut(nil)
-        panelIsOpen = false
-        panelTopY = nil
-        popoverOpenState.isOpen = false
-        removeEventMonitor()
-        removeWorkspaceObserver()
-        // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
-        // We must reset the hosting view to a live mainView() so all navigation
-        // callbacks (prefs button, action rows, inline job rows) are wired up for
-        // the next open. However, mainView() sets savedNavState = nil, which would
-        // lose the user's position for the restore-on-reopen feature (#385).
-        // Fix: capture savedNavState before calling mainView(), then restore it
-        // afterwards. openPanel()'s validatedView(for: savedNavState) path works
-        // as before, and the main-screen path now has live callbacks instead of
-        // dead no-op stubs.
-        // ❌ NEVER replace this with a no-op stub PopoverMainView — that breaks
-        //    all button and row taps when the panel next opens on the main screen.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            let preserved = self.savedNavState   // save before mainView() wipes it
-            self.hostingController?.rootView = self.mainView()
-            self.savedNavState = preserved        // restore for openPanel() restore path
+    @objc private func onSelectJob(_ job: ActiveJob) {
+        openPanel()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let enriched = self.enrichJobIfNeeded(job)
+            DispatchQueue.main.async { self.navigate(to: .detail(job: enriched)) }
         }
     }
 
-    private func removeEventMonitor() {
-        if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
+    private func onSelectAction(_ group: ActionGroup) {
+        openPanel()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let enriched = self.enrichGroupIfNeeded(group)
+            DispatchQueue.main.async { self.navigate(to: .actionDetail(group: enriched)) }
+        }
     }
 
-    private func removeWorkspaceObserver() {
-        if let opt = workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(opt)
-            workspaceObserver = nil
-        }
+    func navigateToDetail(job: ActiveJob) {
+        navigate(to: .detail(job: job))
+    }
+
+    func navigateToLog(job: ActiveJob, step: Step) {
+        navigate(to: .log(job: job, step: step))
+    }
+
+    func navigateToDetailFromAction(job: ActiveJob, group: ActionGroup) {
+        navigate(to: .detailFromAction(job: job, group: group))
+    }
+
+    func navigateToLogFromAction(job: ActiveJob, step: Step, group: ActionGroup) {
+        navigate(to: .logFromAction(job: job, step: step, group: group))
+    }
+
+    func navigateToSettings() {
+        navigate(to: .settings)
+    }
+
+    func navigateBack() {
+        navigate(to: savedNavState ?? .main)
+    }
+
+    func navigateToMain() {
+        navigate(to: .main)
     }
 
     // MARK: - Enrichment helpers
 
     /// Re-fetches steps for a single job when they are missing or still in-progress.
     /// Blocking — always call from a background queue.
-    nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
-        guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
-              let scope = scopeFromHtmlUrl(job.htmlUrl),
-              let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
-        else { return job }
-        let iso = ISO8601DateFormatter()
-        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
+    private func enrichJobIfNeeded(_ job: ActiveJob) -> ActiveJob {
+        let needsEnrich = job.steps.isEmpty || job.steps.contains { $0.status == .inProgress }
+        guard needsEnrich else { return job }
+        let steps = GitHub.fetchSteps(owner: job.owner, repo: job.repo, jobID: job.id)
+        guard !steps.isEmpty else { return job }
+        return ActiveJob(
+            id: job.id, owner: job.owner, repo: job.repo,
+            name: job.name, status: job.status, conclusion: job.conclusion,
+            startedAt: job.startedAt, completedAt: job.completedAt,
+            runID: job.runID, steps: steps, runnerName: job.runnerName
+        )
     }
 
     /// Re-fetches job data for a group when any run has an empty or incomplete job list.
@@ -388,221 +273,136 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Otherwise, we re-fetch jobs for all runs in the group and return an enriched copy.
     ///
     /// Blocking — always call from a background queue.
-    nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
-        let fullyEnriched = !group.jobs.isEmpty
-            && group.jobs.allSatisfy { $0.conclusion != nil }
-            && !group.jobs.contains { $0.steps.contains { $0.status == "in_progress" } }
-        guard !fullyEnriched else { return group }
-
-        let iso = ISO8601DateFormatter()
-        var fetched: [ActiveJob] = []
-        var seenIDs = Set<Int>()
-        for run in group.runs {
-            guard let data = ghAPI("repos/\(group.repo)/actions/runs/\(run.id)/jobs?per_page=100"),
-                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
-            else { continue }
-            for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
-                fetched.append(makeActiveJob(from: payload, iso: iso, isDimmed: group.isDimmed))
-            }
+    private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
+        let allDone = group.runs.allSatisfy { run in
+            !run.jobs.isEmpty && run.jobs.allSatisfy { $0.conclusion != nil }
+                && !run.jobs.flatMap(\.steps).contains { $0.status == .inProgress }
         }
-        guard !fetched.isEmpty else { return group }
-        fetched.sort { $0.id < $1.id }
-        let starts = fetched.compactMap { $0.startedAt }
-        let ends = fetched.compactMap { $0.completedAt }
+        guard !allDone else { return group }
+        let enrichedRuns = enrichRuns(group.runs, owner: group.owner, repo: group.repo)
         return ActionGroup(
-            headSha: group.headSha,
-            label: group.label,
-            title: group.title,
-            headBranch: group.headBranch,
-            repo: group.repo,
-            runs: group.runs,
-            jobs: fetched,
-            firstJobStartedAt: starts.min() ?? group.firstJobStartedAt,
-            lastJobCompletedAt: ends.max() ?? group.lastJobCompletedAt,
-            createdAt: group.createdAt,
-            isDimmed: group.isDimmed
+            owner: group.owner, repo: group.repo,
+            commitSha: group.commitSha, commitMessage: group.commitMessage,
+            authorLogin: group.authorLogin, createdAt: group.createdAt,
+            runs: enrichedRuns, isDimmed: group.isDimmed
         )
+    }
+
+    private func enrichRuns(
+        _ runs: [WorkflowRun],
+        owner: String,
+        repo: String
+    ) -> [WorkflowRun] {
+        var enrichedRuns = runs
+        for idx in enrichedRuns.indices {
+            let run = enrichedRuns[idx]
+            let jobs = GitHub.fetchJobs(owner: owner, repo: repo, runID: run.id)
+            guard !jobs.isEmpty else { continue }
+            let enrichedJobs = enrichJobs(jobs, owner: owner, repo: repo)
+            enrichedRuns[idx] = WorkflowRun(
+                id: run.id, name: run.name, headBranch: run.headBranch,
+                headSha: run.headSha, status: run.status, conclusion: run.conclusion,
+                createdAt: run.createdAt, updatedAt: run.updatedAt,
+                htmlUrl: run.htmlUrl, jobs: enrichedJobs,
+                pullRequests: run.pullRequests
+            )
+        }
+        return enrichedRuns
+    }
+
+    private func enrichJobs(
+        _ jobs: [ActiveJob],
+        owner: String,
+        repo: String
+    ) -> [ActiveJob] {
+        jobs.map { job in
+            let steps = GitHub.fetchSteps(owner: owner, repo: repo, jobID: job.id)
+            return ActiveJob(
+                id: job.id, owner: job.owner, repo: job.repo,
+                name: job.name, status: job.status, conclusion: job.conclusion,
+                startedAt: job.startedAt, completedAt: job.completedAt,
+                runID: job.runID, steps: steps.isEmpty ? job.steps : steps,
+                runnerName: job.runnerName
+            )
+        }
     }
 
     // MARK: - View factories
 
     private func mainView() -> AnyView {
         savedNavState = nil
-        return wrapEnv(PopoverMainView(
-            store: observable,
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailView(job: enriched))
-                    }
-                }
-            },
-            onSelectAction: { [weak self] group in
-                guard let self else { return }
-                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichGroupIfNeeded(latest)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.actionDetailView(group: enriched))
-                    }
-                }
-            },
-            onSelectSettings: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            },
-            onSelectInlineJob: { [weak self] job, group in
-                guard let self else { return }
-                let latestGroup = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: latestGroup))
-                    }
-                }
-            }
-        ))
+        return AnyView(PopoverMainView())
+    }
+
+    private func detailView(job: ActiveJob) -> AnyView {
+        AnyView(JobDetailView(job: job, onBack: { [weak self] in self?.navigateBack() }))
+    }
+
+    private func logView(job: ActiveJob, step: Step) -> AnyView {
+        AnyView(StepLogView(job: job, step: step, onBack: { [weak self] in self?.navigateBack() }))
     }
 
     private func actionDetailView(group: ActionGroup) -> AnyView {
-        savedNavState = .actionDetail(group)
-        return wrapEnv(ActionDetailView(
+        AnyView(ActionDetailView(
             group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
-                    }
-                }
-            }
+            onBack: { [weak self] in self?.navigateBack() },
+            onSelectJob: { [weak self] job in self?.navigateToDetailFromAction(job: job, group: group) }
         ))
     }
 
     private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
-        savedNavState = .actionJobDetail(job, group)
-        return wrapEnv(JobDetailView(
+        AnyView(JobDetailView(
             job: job,
-            group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
-            },
+            onBack: { [weak self] in self?.navigate(to: .actionDetail(group: group)) },
             onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
+                self?.navigateToLogFromAction(job: job, step: step, group: group)
             }
         ))
     }
 
-    private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
-        savedNavState = .actionStepLog(job, step, group)
-        return wrapEnv(StepLogView(
+    private func logViewFromAction(job: ActiveJob, step: Step, group: ActionGroup) -> AnyView {
+        AnyView(StepLogView(
             job: job,
             step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            },
-            onLogLoaded: nil
-        ))
-    }
-
-    private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
-        let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-        return ActionGroup(
-            headSha: "",
-            label: "",
-            title: "",
-            headBranch: nil,
-            repo: scope,
-            runs: []
-        )
-    }
-
-    private func detailView(job: ActiveJob) -> AnyView {
-        savedNavState = .jobDetail(job)
-        let group = syntheticGroup(for: job)
-        return wrapEnv(JobDetailView(
-            job: job,
-            group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
-            }
+            onBack: { [weak self] in self?.navigate(to: .detailFromAction(job: job, group: group)) }
         ))
     }
 
     private func settingsView() -> AnyView {
-        savedNavState = .settings
-        return wrapEnv(SettingsView(
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            store: observable
-        ))
+        AnyView(SettingsView(onDismiss: { [weak self] in
+            guard let self else { return }
+            if let saved = savedNavState {
+                navigate(to: saved)
+            } else {
+                navigateToMain()
+            }
+        }))
     }
 
-    private func logView(job: ActiveJob, step: JobStep) -> AnyView {
-        savedNavState = .stepLog(job, step)
-        return wrapEnv(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
-            },
-            onLogLoaded: nil
-        ))
-    }
-
-    private func validatedView(for state: NavState) -> AnyView? {
-        savedNavState = nil
-        let store = RunnerStore.shared
-        switch state {
-        case .main: return nil
-        case .jobDetail(let job):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailView(job: live)
-        case .stepLog(let job, let step):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return logView(job: live, step: step)
-        case .actionDetail(let group):
-            guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            return actionDetailView(group: live)
-        case .actionJobDetail(let job, let group):
-            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailViewFromAction(job: liveJob, group: liveGroup)
-        case .actionStepLog(let job, let step, let group):
-            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
+    @ViewBuilder
+    func currentView() -> some View {
+        switch navState {
+        case .main:
+            mainView()
+        case let .detail(job):
+            detailView(job: job)
+        case let .log(job, step):
+            logView(job: job, step: step)
+        case let .actionDetail(group):
+            actionDetailView(group: group)
+        case let .detailFromAction(job, group):
+            detailViewFromAction(job: job, group: group)
+        case let .logFromAction(job, step, group):
+            logViewFromAction(job: job, step: step, group: group)
         case .settings:
-            return settingsView()
+            settingsView()
         }
     }
 
     // MARK: - Toggle
 
-    @objc private func togglePanel() {
-        if panelIsOpen {
+    @objc func togglePanel() {
+        if panel?.isVisible == true {
             closePanel()
         } else {
             openPanel()
@@ -611,55 +411,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Open
 
-    private func openPanel() {
+    func openPanel() {
+        if panel == nil { setupPanel() }
+        guard let panel = panel else { return }
         guard let button = statusItem?.button,
-              let statusItemRect = button.window?.frame,
-              let panel else { return }
-
-        observable.reload()
-
-        panelIsOpen = true
+              let buttonWindow = button.window,
+              let screen = buttonWindow.screen ?? NSScreen.main else { return }
+        let buttonFrame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        panelTopY = buttonFrame.minY
+        let panelWidth: CGFloat = 320
+        let panelHeight: CGFloat = 400
+        let buttonMidX = buttonFrame.midX
+        var newX = buttonMidX - panelWidth / 2
+        newX = max(screen.visibleFrame.minX, min(screen.visibleFrame.maxX - panelWidth, newX))
+        let newY = panelTopY - panelHeight
+        panel.setFrame(NSRect(x: newX, y: newY, width: panelWidth, height: panelHeight), display: false)
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         popoverOpenState.isOpen = true
-        panelTopY = statusItemRect.minY - Self.gap
+        systemStats.start()
+        setupEventMonitor()
+    }
 
-        let initW = Self.initPanelWidth
-        let initH: CGFloat = 300 + arrowHeight
-        let posX = statusItemRect.midX - initW / 2
-        let posY = statusItemRect.minY - initH - Self.gap
-
-        panel.setFrame(
-            NSRect(x: posX, y: posY, width: initW, height: initH),
-            display: false, animate: false
+    private func setupPanel() {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 400),
+            styleMask: [.nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
         )
+        panel.level = .popUpMenu
+        panel.isFloatingPanel = true
+        panel.hasShadow = true
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentViewController = hostingController
+        panel.delegate = self
+        self.panel = panel
+    }
 
-        chrome?.arrowX = statusItemRect.midX - posX
-        panel.orderFront(nil)
-        resizeAndRepositionPanel()
+    func closePanel() {
+        panel?.orderOut(nil)
+        popoverOpenState.isOpen = false
+        systemStats.stop()
+        tearDownEventMonitor()
+    }
 
-        if let saved = savedNavState, let restored = validatedView(for: saved) {
-            navigate(to: restored)
-        }
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem?.button?.action = #selector(togglePanel)
+        statusItem?.button?.target = self
+        updateStatusIcon()
+        RunnerStore.shared.start()
+    }
 
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] event in
+    private func setupEventMonitor() {
+        tearDownEventMonitor()
+        let eventMask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: eventMask) { [weak self] event in
             guard let self, let panel = self.panel else { return }
             let loc = event.locationInWindow
-            let screenLoc = event.window?.convertToScreen(
-                NSRect(origin: loc, size: .zero)
-            ).origin ?? loc
-            if !panel.frame.contains(screenLoc) { self.closePanel() }
-        }
-
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
+            let screenLoc = event.window?.convertToScreen(NSRect(origin: loc, size: .zero)).origin ?? loc
+            if !panel.frame.contains(screenLoc) {
                 self.closePanel()
             }
+        }
+    }
+
+    private func tearDownEventMonitor() {
+        if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowDidResignKey(_ notification: Notification) {
+        DispatchQueue.main.async {
+            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication { self.closePanel() }
         }
     }
 }

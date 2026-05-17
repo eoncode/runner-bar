@@ -1,6 +1,7 @@
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
+
 /// Uppercase section header label used throughout the popover (e.g. "ACTIONS").
 struct SectionHeaderLabel: View {
     let title: String
@@ -15,6 +16,7 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PopoverHeaderView
+
 /// Header row: system stats left, settings + close right.
 /// ⚠️ Auth green dot removed — auth status lives in Settings > Account only (#10).
 struct PopoverHeaderView: View {
@@ -84,12 +86,12 @@ struct PopoverHeaderView: View {
     }
 
     private var diskChip: some View {
-        let total   = stats.diskTotalGB
-        let used    = stats.diskUsedGB
-        let free    = max(0, total - used)
-        let pct     = total > 0 ? (used / total) * 100 : 0
+        let total = stats.diskTotalGB
+        let used = stats.diskUsedGB
+        let free = max(0, total - used)
+        let pct = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = blockBar(pct: pct)
+        let value = blockBar(pct: pct)
             + " " + String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
             + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
         return statChip(label: "DISK", value: value, pct: pct)
@@ -109,20 +111,21 @@ struct PopoverHeaderView: View {
     }
 
     private func blockBar(pct: Double, width: Int = 3) -> String {
-        let raw         = Int((pct / 100.0 * Double(width)).rounded())
+        let raw = Int((pct / 100.0 * Double(width)).rounded())
         let filledCount = max(0, min(width, raw))
         return String(repeating: "█", count: filledCount)
-             + String(repeating: "░", count: width - filledCount)
+            + String(repeating: "░", count: width - filledCount)
     }
 
     private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .red    }
+        if pct > 85 { return .red }
         if pct > 60 { return .yellow }
         return .green
     }
 }
 
 // MARK: - RunnerTypeIcon
+
 private struct RunnerTypeIcon: View {
     let isLocal: Bool?
     var body: some View {
@@ -137,9 +140,9 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
+
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
-
     var body: some View {
         let busy = runners.filter { $0.busy }
         if !busy.isEmpty {
@@ -173,6 +176,7 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
+
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -265,6 +269,7 @@ struct ActionRowView: View {
 }
 
 // MARK: - InlineJobRowsView
+
 /// Passive read-only ↳ job rows shown beneath every in-progress action group.
 /// Only shows jobs that are currently `in_progress`.
 ///
@@ -281,7 +286,6 @@ struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
-
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
@@ -319,8 +323,8 @@ struct InlineJobRowsView: View {
         // ❌ NEVER remove this line.
         _ = tick
         let currentStep = job.steps.first(where: { $0.status == "in_progress" })
-        let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
-        let done  = job.steps.filter { $0.conclusion != nil }.count
+        let stepName = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
+        let done = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
         return HStack(spacing: 6) {
             Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
@@ -358,8 +362,10 @@ struct InlineJobRowsView: View {
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
         case "in_progress": return .yellow
-        case "queued":      return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
+        case "queued": return .blue
+        default:
+            if job.conclusion == "success" { return .green }
+            return job.isDimmed ? .gray : .red
         }
     }
 }

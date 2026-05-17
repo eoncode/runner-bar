@@ -12,8 +12,8 @@ struct RunnerMetrics {
 /// Collects all Runner.Worker processes from `ps aux` and returns them
 /// sorted by CPU% descending.
 ///
-/// Mirrors ci-dash.py `runner_procs()` + `pair_runners()`: the runner name
-/// does NOT appear in ps args, so name-based matching always fails.
+/// Mirrors ci-dash.py `runner_procs()` + `pair_runners()`:
+/// the runner name does NOT appear in ps args, so name-based matching always fails.
 /// Instead the caller assigns metrics by slot index (busy runners first).
 func allWorkerMetrics() -> [RunnerMetrics] {
     let output = shell("ps aux", timeout: 5)

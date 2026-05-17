@@ -10,6 +10,47 @@ import Foundation
 /// Fields are populated by `LocalRunnerScanner` and can later be enriched with
 /// live GitHub API status in Phase 4.
 struct RunnerModel: Identifiable, Hashable {
+    // MARK: - Config
+
+    /// Bundles all construction parameters for `RunnerModel` into a single value,
+    /// keeping the primary `init` under the S107 7-parameter limit.
+    struct Config {
+        let runnerName: String
+        let gitHubUrl: String?
+        let agentId: Int?
+        let workFolder: String?
+        let labels: [String]
+        let installPath: String?
+        let isRunning: Bool
+        let githubStatus: String?
+        let isBusy: Bool
+
+        // NOSONAR S107 — Config.init intentionally mirrors all RunnerModel fields;
+        // splitting further would add boilerplate with no architectural benefit.
+        // This struct exists solely to keep RunnerModel.init under the S107 limit.
+        init(
+            runnerName: String,
+            gitHubUrl: String?,
+            agentId: Int?,
+            workFolder: String?,
+            labels: [String] = [],
+            installPath: String?,
+            isRunning: Bool,
+            githubStatus: String? = nil,
+            isBusy: Bool = false
+        ) {
+            self.runnerName = runnerName
+            self.gitHubUrl = gitHubUrl
+            self.agentId = agentId
+            self.workFolder = workFolder
+            self.labels = labels
+            self.installPath = installPath
+            self.isRunning = isRunning
+            self.githubStatus = githubStatus
+            self.isBusy = isBusy
+        }
+    }
+
     // MARK: Identity
 
     /// Stable, unique identifier computed once at init-time from `agentId`
@@ -73,7 +114,29 @@ struct RunnerModel: Identifiable, Hashable {
 
     // MARK: - Init
 
-    init(
+    /// Primary init — accepts a `Config` to stay under the S107 parameter limit.
+    init(config: Config) {
+        runnerName   = config.runnerName
+        gitHubUrl    = config.gitHubUrl
+        agentId      = config.agentId
+        workFolder   = config.workFolder
+        labels       = config.labels
+        installPath  = config.installPath
+        isRunning    = config.isRunning
+        githubStatus = config.githubStatus
+        isBusy       = config.isBusy
+        if let aid = config.agentId {
+            id = String(aid)
+        } else {
+            id = "\(config.runnerName)-\(config.gitHubUrl ?? "")"
+        }
+    }
+
+    /// Convenience factory that preserves the original call-site signature so
+    /// existing callers (`LocalRunnerScanner`, `RunnerStatusEnricher`) require
+    /// no changes.
+    // swiftlint:disable:next function_parameter_count
+    static func make(
         runnerName: String,
         gitHubUrl: String?,
         agentId: Int?,
@@ -83,21 +146,18 @@ struct RunnerModel: Identifiable, Hashable {
         isRunning: Bool,
         githubStatus: String? = nil,
         isBusy: Bool = false
-    ) {
-        self.runnerName = runnerName
-        self.gitHubUrl = gitHubUrl
-        self.agentId = agentId
-        self.workFolder = workFolder
-        self.labels = labels
-        self.installPath = installPath
-        self.isRunning = isRunning
-        self.githubStatus = githubStatus
-        self.isBusy = isBusy
-        if let aid = agentId {
-            self.id = String(aid)
-        } else {
-            self.id = "\(runnerName)-\(gitHubUrl ?? "")"
-        }
+    ) -> RunnerModel {
+        RunnerModel(config: Config(
+            runnerName: runnerName,
+            gitHubUrl: gitHubUrl,
+            agentId: agentId,
+            workFolder: workFolder,
+            labels: labels,
+            installPath: installPath,
+            isRunning: isRunning,
+            githubStatus: githubStatus,
+            isBusy: isBusy
+        ))
     }
 
     // MARK: - Display helpers

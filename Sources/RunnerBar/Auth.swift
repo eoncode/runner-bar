@@ -9,8 +9,11 @@ import Foundation
 ///
 /// Returns `nil` if no token is available from any source.
 func githubToken() -> String? {
-    let result = shell("/opt/homebrew/bin/gh auth token", timeout: 10)
-    if !result.isEmpty && !result.hasPrefix("error") { return result }
+    if let ghPath = ghBinaryPath() {
+        let safeGhPath = "\"\(ghPath.replacingOccurrences(of: "\"", with: "\\\""))\""
+        let result = shell("\(safeGhPath) auth token", timeout: 10)
+        if !result.isEmpty && !result.hasPrefix("error") { return result }
+    }
     if let envToken = ProcessInfo.processInfo.environment["GH_TOKEN"],
        !envToken.isEmpty { return envToken }
     if let envToken = ProcessInfo.processInfo.environment["GITHUB_TOKEN"],

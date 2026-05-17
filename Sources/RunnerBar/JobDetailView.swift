@@ -383,12 +383,12 @@ struct JobDetailView: View {
 }
 
 // MARK: - Wallclock formatter
-private let _wallTimeFmt: DateFormatter = {
+private let wallTimeFmt: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "HH:mm:ss"
     return formatter
 }()
 
 private func wallTime(_ date: Date) -> String {
-    _wallTimeFmt.string(from: date)
+    wallTimeFmt.string(from: date)
 }

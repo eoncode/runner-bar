@@ -407,7 +407,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             Divider().padding(.leading, 12)
-            // ── Show offline runners ──────────────────────────────────────
+            // ── Show offline runners ────────────────────────────────────────────────
             HStack {
                 Text("Show offline runners").font(.system(size: 12))
                 Spacer()
@@ -420,7 +420,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .padding(.horizontal, 12).padding(.bottom, 6)
             Divider().padding(.leading, 12)
-            // ── Polling interval ─────────────────────────────────────────
+            // ── Polling interval ────────────────────────────────────────────────
             HStack {
                 Text("Polling interval").font(.system(size: 12))
                 Spacer()
@@ -500,9 +500,9 @@ struct SettingsView: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
 #if DEBUG
             Divider().padding(.leading, 12)
-            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar")
+            linkRow(label: "Privacy Policy", url: "https://github.com/eoncode/runner-bar") // NOSONAR
             Divider().padding(.leading, 12)
-            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar")
+            linkRow(label: "EULA", url: "https://github.com/eoncode/runner-bar") // NOSONAR
 #endif
         }
     }
@@ -547,8 +547,11 @@ struct SettingsView: View {
         newScope = ""
     }
 
+    /// Returns the status dot colour for an API-registered runner.
+    /// Uses a guard + explicit returns to avoid nested ternaries (S3358).
     private func runnerDotColor(for runner: Runner) -> Color {
-        runner.status != "online" ? .gray : (runner.busy ? .yellow : .green)
+        guard runner.status == "online" else { return .gray }
+        return runner.busy ? .yellow : .green
     }
 
     private func linkRow(label: String, url: String) -> some View {
@@ -566,6 +569,7 @@ struct SettingsView: View {
     }
 
     private func signInWithGitHub() {
+        // NOSONAR — user-facing navigation URL, not a configurable endpoint.
         let urlString = "https://docs.github.com/en/authentication/" +
             "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
@@ -576,12 +580,21 @@ struct SettingsView: View {
     /// Updates `isAuthenticated` on the main thread when the call completes.
     /// Uses `isSigningOut` to prevent double-tap.
     ///
+    /// ghPath is wrapped in double-quotes (with embedded quotes escaped) before
+    /// shell interpolation to prevent failures or injection if the path contains
+    /// spaces or shell-significant characters.
+    ///
     /// ❌ NEVER run shell calls on the main thread — they block the UI.
     private func signOutOfGitHub() {
         guard !isSigningOut else { return }
+        guard let ghPath = ghBinaryPath() else {
+            log("SettingsView › signOutOfGitHub: gh CLI not found")
+            return
+        }
         isSigningOut = true
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = shell("/opt/homebrew/bin/gh auth logout --hostname github.com")
+            let safeGhPath = "\"\(ghPath.replacingOccurrences(of: "\"", with: "\\\""))\""
+            _ = shell("\(safeGhPath) auth logout --hostname github.com")
             DispatchQueue.main.async {
                 isAuthenticated = (githubToken() != nil)
                 isSigningOut = false

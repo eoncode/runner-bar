@@ -128,7 +128,7 @@ struct ActionGroup: Identifiable, Equatable {
     /// Returns nil while jobs are still loading (jobs.isEmpty) or while any job
     /// has not yet concluded, to prevent a premature FAILED badge.
     var conclusion: String? {
-        // ── Job-based conclusion (preferred) ──────────────────────────────────────────────────────
+        // ── Job-based conclusion (preferred) ────────────────────────────────────────────────────────────────────────
         // Use job data when available and fully loaded.
         if !jobs.isEmpty {
             // Only conclude when every single job has a conclusion.
@@ -258,6 +258,22 @@ private func prLabel(from run: RunPayload) -> String {
     return String(run.headSha.prefix(7))
 }
 
+// MARK: - Job fetch helper
+
+/// Fetches and deduplicates all jobs for a set of sibling run payloads.
+/// Extracted from `fetchActionGroups` to keep closure nesting ≤ 2 levels (S3776).
+private func fetchFlatJobs(for shaRuns: [RunPayload], scope: String) -> [ActiveJob] {
+    var fetched: [ActiveJob] = []
+    var seenJobIDs = Set<Int>()
+    for runID in shaRuns.map({ $0.id }) {
+        for job in fetchJobsForRun(runID, scope: scope) where seenJobIDs.insert(job.id).inserted {
+            fetched.append(job)
+        }
+    }
+    fetched.sort { $0.id < $1.id }
+    return fetched
+}
+
 // MARK: - Fetch + Group
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
@@ -274,11 +290,14 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     // Phase 1: fetch in_progress and queued runs.
     for status in ["in_progress", "queued"] {
         let endpoint = "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
-        guard let data = ghAPI(endpoint),
-              let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data)
-        else { continue }
-        for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
-            runPayloads.append(run)
+        guard let data = ghAPI(endpoint) else { continue }
+        do {
+            let resp = try JSONDecoder().decode(ActionRunsResponse.self, from: data)
+            for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
+                runPayloads.append(run)
+            }
+        } catch {
+            log("fetchActionGroups › decode error (\(status)): \(error)")
         }
     }
 
@@ -287,10 +306,14 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
     for run in runPayloads { bySha[run.headSha, default: []].append(run) }
 
     // Phase 2: merge recently completed runs into EXISTING groups only.
-    if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
-       let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
-        for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
-            if bySha[run.headSha] != nil { bySha[run.headSha]!.append(run) }
+    if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100") {
+        do {
+            let resp = try JSONDecoder().decode(ActionRunsResponse.self, from: data)
+            for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
+                if bySha[run.headSha] != nil { bySha[run.headSha]!.append(run) }
+            }
+        } catch {
+            log("fetchActionGroups › decode error (completed): \(error)")
         }
     }
 
@@ -317,16 +340,7 @@ func fetchActionGroups(for scope: String, cache: [String: ActionGroup] = [:]) ->
            !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
             allJobs = cached.jobs
         } else {
-            var fetched: [ActiveJob] = []
-            var seenJobIDs = Set<Int>()
-            for runID in shaRuns.map({ $0.id }) {
-                for job in fetchJobsForRun(runID, scope: scope)
-                where seenJobIDs.insert(job.id).inserted {
-                    fetched.append(job)
-                }
-            }
-            fetched.sort { $0.id < $1.id }
-            allJobs = fetched
+            allJobs = fetchFlatJobs(for: shaRuns, scope: scope)
         }
         let starts = allJobs.compactMap { $0.startedAt }
         let ends   = allJobs.compactMap { $0.completedAt }
@@ -391,9 +405,14 @@ func makeActiveJob(from jobPayload: JobPayload,
 /// causing the main row to show a lower jobsTotal than the detail view.
 /// per_page=100 is the GitHub API maximum and covers all realistic job counts.
 private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
-    guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
-          let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
-    else { return [] }
+    guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100") else { return [] }
+    let resp: JobsResponse
+    do {
+        resp = try JSONDecoder().decode(JobsResponse.self, from: data)
+    } catch {
+        log("fetchJobsForRun › decode error (run \(runID)): \(error)")
+        return []
+    }
     let initial = resp.jobs.map { makeActiveJob(from: $0, iso: iso8601) }
     var result = initial
     var refreshCount = 0
@@ -402,9 +421,14 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
         let needsRefresh = job.conclusion == nil || job.steps.contains { $0.status == "in_progress" }
         guard needsRefresh, refreshCount < 3 else { continue }
         refreshCount += 1
-        guard let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: freshData)
-        else { continue }
+        guard let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)") else { continue }
+        let fresh: JobPayload
+        do {
+            fresh = try JSONDecoder().decode(JobPayload.self, from: freshData)
+        } catch {
+            log("fetchJobsForRun › fresh-job decode error (job \(job.id)): \(error)")
+            continue
+        }
         let freshJob = makeActiveJob(from: fresh, iso: iso8601)
         if fresh.conclusion != nil { result[idx] = freshJob; continue }
         let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == "in_progress" }

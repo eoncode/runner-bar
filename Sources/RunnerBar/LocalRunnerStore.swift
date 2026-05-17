@@ -43,6 +43,7 @@ final class LocalRunnerStore: ObservableObject, @unchecked Sendable {
 
     // MARK: - Init
 
+    /// Use `LocalRunnerStore.shared`.
     private init() {}
 
     // MARK: - Public API

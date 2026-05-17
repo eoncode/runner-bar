@@ -93,9 +93,11 @@ func fetchActionLogs(group: ActionGroup) -> String? {
         .joined(separator: "\n\n")
 }
 
-// MARK: - ZIP extraction (uses /usr/bin/unzip — always available on macOS)
+// MARK: - ZIP extraction
 
 /// Extracts all `.txt` files from a ZIP blob and returns `(name, text)` pairs.
+/// Uses the shared `shell()` helper with `BinaryPaths.unzip` (/usr/bin/unzip)
+/// so all CLI invocations go through the centralised subprocess orchestrator.
 func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     let fileManager = FileManager.default
     let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -105,16 +107,19 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         try fileManager.createDirectory(at: tmp, withIntermediateDirectories: true)
         try zipData.write(to: zipFile)
     } catch {
+        log("unzipLogs › failed to write ZIP to tmp: \(error)")
         return []
     }
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
-    proc.standardOutput = FileHandle.nullDevice
-    proc.standardError = FileHandle.nullDevice
-    try? proc.run()
-    proc.waitUntilExit()
-    guard proc.terminationStatus == 0 else { return [] }
+    // Use the shared shell() helper for CLI consistency (S1075 / CodeRabbit).
+    // Arguments are quoted; both paths come from controlled sources (UUID tmp dir).
+    let output = shell(
+        "\(BinaryPaths.unzip) -q \"\(zipFile.path)\" -d \"\(tmp.path)\"",
+        timeout: 30
+    )
+    guard output.isEmpty || !output.lowercased().contains("error") else {
+        log("unzipLogs › failed: \(output.prefix(120))")
+        return []
+    }
     guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else {
         return []
     }
@@ -122,8 +127,11 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     for case let url as URL in enumerator where url.pathExtension == "txt" {
         let relative = url.path.replacingOccurrences(of: tmp.path + "/", with: "")
         let name = URL(fileURLWithPath: relative).deletingPathExtension().path
-        if let text = try? String(contentsOf: url, encoding: .utf8) {
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
             results.append((name: name, text: text))
+        } catch {
+            log("unzipLogs › failed to read \(url.lastPathComponent): \(error)")
         }
     }
     return results

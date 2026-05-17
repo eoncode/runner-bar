@@ -14,6 +14,8 @@ struct RunnerLifecycleService {
 
     /// The shared `RunnerLifecycleService` instance used throughout the app.
     static let shared = RunnerLifecycleService()
+
+    /// Use `RunnerLifecycleService.shared`.
     private init() {}
 
     // MARK: - launchctl label helper
@@ -37,33 +39,14 @@ struct RunnerLifecycleService {
     }
 
     /// Looks up the exact launchd label for this runner by running
-    /// `/bin/launchctl list` via Process (no shell, no grep) and filtering
+    /// `launchctl list` via the shared shell() helper and filtering
     /// the output lines in Swift.
-    ///
-    /// Uses `hasSuffix("." + runnerName)` rather than `contains(runnerName)`
-    /// to prevent a runner named "ci-runner" from matching
-    /// "actions.runner.org.repo.ci-runner-backup" or similar.
-    ///
-    /// Falls back to the derived `serviceLabel(for:)` if no match is found.
     private func resolvedLabel(for runner: RunnerModel) -> String? {
-        // Run /bin/launchctl list directly — no shell string, no pipe, no grep.
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        task.arguments = ["list"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe() // discard stderr
-        do { try task.run() } catch {
-            log("RunnerLifecycle › resolvedLabel: launchctl list failed: \(error)")
+        let output = shell("\(BinaryPaths.launchctl) list", timeout: 5)
+        guard !output.isEmpty else {
+            log("RunnerLifecycle › resolvedLabel: launchctl list returned empty output")
             return serviceLabel(for: runner)
         }
-        let timeoutItem = DispatchWorkItem { task.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
-        // Filter in Swift: find a launchd label whose last component is exactly runnerName.
         let exactSuffix = "." + runner.runnerName
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let cols = line.components(separatedBy: "\t")
@@ -79,7 +62,8 @@ struct RunnerLifecycleService {
     // MARK: - Start
 
     /// Starts the runner's launchd service.
-    /// Returns `true` when `launchctl start` exits with status 0, `false` otherwise.
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// Returns `true` when `launchctl start` exits cleanly, `false` otherwise.
     @discardableResult
     func start(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -92,7 +76,8 @@ struct RunnerLifecycleService {
     // MARK: - Stop
 
     /// Stops the runner's launchd service.
-    /// Returns `true` when `launchctl stop` exits with status 0, `false` otherwise.
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// Returns `true` when `launchctl stop` exits cleanly, `false` otherwise.
     @discardableResult
     func stop(runner: RunnerModel) -> Bool {
         guard let label = resolvedLabel(for: runner) else {
@@ -104,48 +89,26 @@ struct RunnerLifecycleService {
 
     // MARK: - launchctl runner
 
-    /// Invokes `/bin/launchctl <subcommand> <label>` via Process (no shell
-    /// interpolation) and returns `true` iff the exit status is 0.
-    ///
-    /// launchctl exits 0 on success and non-zero with a descriptive error on
-    /// failure, so terminationStatus is the authoritative signal.
+    /// Invokes `launchctl <subcommand> <label>` via the shared shell() helper
+    /// and returns `true` iff stdout is empty (no error output).
     @discardableResult
     private func runLaunchctl(_ subcommand: String, label: String) -> Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        task.arguments = [subcommand, label]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
-        do { try task.run() } catch {
-            log("RunnerLifecycle › launchctl \(subcommand) \(label) launch error: \(error)")
-            return false
-        }
-        let timeoutItem = DispatchWorkItem { task.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        log("RunnerLifecycle › launchctl \(subcommand) \(label) exit=\(task.terminationStatus): \(output.prefix(120))")
-        return task.terminationStatus == 0
+        let output = shell("\(BinaryPaths.launchctl) \(subcommand) \(label)", timeout: 10)
+        log("RunnerLifecycle › launchctl \(subcommand) \(label): \(output.prefix(120))")
+        // launchctl exits 0 silently on success; any output typically means an error.
+        return output.isEmpty
     }
 
     // MARK: - Remove
 
-    /// Uninstalls and de-registers the runner.
-    ///
-    /// Runs `./svc.sh uninstall` then `./config.sh remove --unattended` from the
-    /// runner's `installPath` using `Process.arguments` so the path is never
-    /// interpolated into a shell string.
-    ///
-    /// If `svc.sh uninstall` fails, a warning is logged and the method still
-    /// proceeds to `config.sh remove` to avoid leaving a ghost registration on
-    /// the GitHub side. The return value reflects whether both steps succeeded.
+    /// Uninstalls and de-registers the runner from GitHub.
     ///
     /// ⚠️ Blocking — must only be called from a background thread.
     /// Requires a GitHub token (gh auth login, GH_TOKEN, or GITHUB_TOKEN).
     ///
-    /// Returns `true` when both scripts exit with status 0.
+    /// Priority: GitHub de-registration (`config.sh remove`) is always attempted
+    /// even if the local service uninstall (`svc.sh uninstall`) fails, so the
+    /// runner does not remain in a half-registered state on GitHub.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         guard let path = runner.installPath else {
@@ -159,9 +122,6 @@ struct RunnerLifecycleService {
                               timeout: 30,
                               logTag: "svc.sh uninstall")
         if !svcOk {
-            // Log a warning but continue: de-registering from GitHub is more
-            // important than the local service uninstall, since a failed
-            // svc.sh often means the service wasn't loaded (already stopped).
             log("RunnerLifecycle › remove: svc.sh uninstall failed for \(runner.runnerName)")
             log("RunnerLifecycle › remove: proceeding to config.sh remove")
         }
@@ -173,12 +133,8 @@ struct RunnerLifecycleService {
         return svcOk && cfgOk
     }
 
-    /// Launches `<workingDirectory>/<executableName>` via `Process.arguments`
-    /// (no shell interpolation). Waits up to `timeout` seconds.
-    ///
-    /// ⚠️ Blocking — must only be called from a background thread.
-    ///
-    /// Returns `true` when the process exits with status 0.
+    /// Launches `<workingDirectory>/<executableName>` via `Process.arguments`.
+    /// ⚠️ Blocking — always call from a background thread.
     private func runScript(
         executableName: String,
         arguments: [String],
@@ -220,18 +176,13 @@ struct RunnerLifecycleService {
 
     // MARK: - Rename
 
-    // Phase 2 — wired in follow-up.
-    // rename() currently only patches the local .runner JSON; it does not call
-    // config.sh remove + config.sh --name <newName> to re-register the runner
-    // with GitHub. Full rename requires a registration token and is deferred to
-    // the Phase 2 follow-up issue. Marked private to prevent accidental use
-    // until re-registration is implemented.
-    /// Renames the runner by patching the `runnerName` field in the `.runner`
-    /// JSON file at `installPath`.
+    /// Writes a new `runnerName` into the runner's `.runner` JSON file.
     ///
-    /// ⚠️ Incomplete — does NOT re-register the runner with GitHub.
-    /// Local state and GitHub state will diverge silently if called.
-    /// Deferred to Phase 2 follow-up issue. Do not expose via UI.
+    /// ⚠️ Blocking — must only be called from a background thread.
+    /// ⚠️ Phase 2 (#253) — intentionally private. Do NOT expose via UI until
+    /// the SettingsView rename flow is wired up and `LocalRunnerScanner` re-reads
+    /// `customLabels` from RunnerJSON so `RunnerModel.labels` reflects the new
+    /// name on the next scan cycle.
     @discardableResult
     private func rename(runner: RunnerModel, newName: String) -> Bool {
         guard let path = runner.installPath else {
@@ -240,16 +191,30 @@ struct RunnerLifecycleService {
         }
         let jsonPath = "\(path)/.runner"
         let url = URL(fileURLWithPath: jsonPath)
-        guard let data = try? Data(contentsOf: url),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonPath)")
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            log("RunnerLifecycle › rename: failed to read .runner JSON at \(jsonPath): \(error)")
+            return false
+        }
+        var json: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                log("RunnerLifecycle › rename: unexpected JSON structure at \(jsonPath)")
+                return false
+            }
+            json = decoded
+        } catch {
+            log("RunnerLifecycle › rename: failed to decode .runner JSON at \(jsonPath): \(error)")
             return false
         }
         json["runnerName"] = newName
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-        else {
-            log("RunnerLifecycle › rename: failed to serialise updated JSON")
+        let updated: Data
+        do {
+            updated = try JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
+        } catch {
+            log("RunnerLifecycle › rename: failed to serialise updated JSON: \(error)")
             return false
         }
         do {
@@ -266,11 +231,14 @@ struct RunnerLifecycleService {
 
     /// Writes updated labels and workFolder to the `.runner` JSON at `installPath`.
     ///
+    /// ⚠️ Blocking — must only be called from a background thread.
+    ///
     /// Note: the runner agent caches config in memory — changes take effect after
     /// the next runner restart.
     ///
-    /// TODO: add `customLabels` to `RunnerJSON` in `LocalRunnerScanner` so labels
-    /// written here are re-read on the next scan and reflected in `RunnerModel.labels`.
+    /// Phase 2 follow-up (#253): add `customLabels` to `RunnerJSON` in
+    /// `LocalRunnerScanner` so labels written here are re-read on the next scan
+    /// and reflected in `RunnerModel.labels`.
     @discardableResult
     func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
         guard let path = runner.installPath else {
@@ -279,16 +247,33 @@ struct RunnerLifecycleService {
         }
         let jsonPath = "\(path)/.runner"
         let url = URL(fileURLWithPath: jsonPath)
-        guard let data = try? Data(contentsOf: url),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonPath)")
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            log("RunnerLifecycle › updateConfig: failed to read .runner at \(jsonPath): \(error)")
+            return false
+        }
+        var json: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                log("RunnerLifecycle › updateConfig: unexpected JSON structure at \(jsonPath)")
+                return false
+            }
+            json = decoded
+        } catch {
+            log("RunnerLifecycle › updateConfig: failed to decode .runner at \(jsonPath): \(error)")
             return false
         }
         json["workFolder"] = workFolder
         json["customLabels"] = labels
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-        else { return false }
+        let updated: Data
+        do {
+            updated = try JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
+        } catch {
+            log("RunnerLifecycle › updateConfig: failed to serialise JSON: \(error)")
+            return false
+        }
         do {
             try updated.write(to: url)
             log("RunnerLifecycle › updateConfig: labels=\(labels) workFolder=\(workFolder)")

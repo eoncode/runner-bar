@@ -15,7 +15,10 @@ struct RunnerStatusEnricher {
 
     /// The shared `RunnerStatusEnricher` instance used throughout the app.
     static let shared = RunnerStatusEnricher()
-    private init() {}
+
+    private init() {
+        // Singleton — use RunnerStatusEnricher.shared.
+    }
 
     // MARK: - Codable schema
 
@@ -75,9 +78,6 @@ struct RunnerStatusEnricher {
                 ? "repos/\(scope)/actions/runners"
                 : "orgs/\(scope)/actions/runners"
 
-            // Paginate manually: fetch ?page=1,2,… until an empty runners array.
-            // This avoids the `gh --paginate` concatenated-object stream problem
-            // where multiple {"runners":[...]} objects cannot be decoded as one value.
             var page = 1
             var totalFetched = 0
             while true {
@@ -86,20 +86,20 @@ struct RunnerStatusEnricher {
                     log("RunnerStatusEnricher › API call failed for scope: \(scope) page: \(page)")
                     break
                 }
-                guard let decoded = try? JSONDecoder().decode(APIRunnersPage.self, from: data) else {
-                    log("RunnerStatusEnricher › decode failed for scope: \(scope) page: \(page)")
+                let decoded: APIRunnersPage
+                do {
+                    decoded = try JSONDecoder().decode(APIRunnersPage.self, from: data)
+                } catch {
+                    log("RunnerStatusEnricher › decode failed for scope: \(scope) page: \(page) error: \(error)")
                     break
                 }
                 let pageRunners = decoded.runners
                 for apiRunner in pageRunners {
                     byID[apiRunner.id] = apiRunner
-                    // Key by "scope/name" to prevent silent overwrites when runners
-                    // across different scopes share the same name.
                     byName["\(scope)/\(apiRunner.name)"] = apiRunner
                 }
                 totalFetched += pageRunners.count
                 log("RunnerStatusEnricher › scope=\(scope) page=\(page) fetched=\(pageRunners.count)")
-                // Stop when a page returns fewer than 100 results — no more pages.
                 if pageRunners.count < 100 { break }
                 page += 1
             }
@@ -119,7 +119,6 @@ struct RunnerStatusEnricher {
             apiRunner = lookup.byID[aid]
         } else if let urlStr = runner.gitHubUrl,
                   let scope = scopeFrom(gitHubUrl: urlStr) {
-            // Fallback: look up by scope-qualified key to avoid cross-scope collision.
             apiRunner = lookup.byName["\(scope)/\(runner.runnerName)"]
         } else {
             apiRunner = nil
@@ -139,8 +138,6 @@ struct RunnerStatusEnricher {
 
     // MARK: - Helpers
 
-    /// Converts a `gitHubUrl` into a scope string (`"owner/repo"` or `"org"`)
-    /// suitable for the GitHub Actions runners API.
     private func scopeFrom(gitHubUrl: String) -> String? {
         guard let url = URL(string: gitHubUrl) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }

@@ -1,20 +1,22 @@
+// swiftlint:disable file_length
 import Foundation
 import os
+
 
 // MARK: - gh API
 
 /// Thread-safe rate-limit flag.
 /// Replaces the bare `var ghIsRateLimited: Bool` global that was written from
 /// background threads without synchronization (data race, issue #399 item 2).
-/// Access via `_rateLimitLock.withLock { ... }` or the `ghIsRateLimited` computed
+/// Access via `rateLimitLock.withLock { ... }` or the `ghIsRateLimited` computed
 /// property below.
-private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
+private let rateLimitLock = OSAllocatedUnfairLock(initialState: false)
 
 /// Set to `true` when any `ghAPI` call receives a 403/429 rate-limit response.
 /// Reset to `false` at the start of each `RunnerStore.fetch()` poll cycle.
 var ghIsRateLimited: Bool {
-    get { _rateLimitLock.withLock { $0 } }
-    set { _rateLimitLock.withLock { $0 = newValue } }
+    get { rateLimitLock.withLock { $0 } }
+    set { rateLimitLock.withLock { $0 = newValue } }
 }
 
 // MARK: - Process runner (private)
@@ -67,7 +69,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         return nil
     }
     log("ghAPI › \(endpoint) → \(outputData.count)b")
-    if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
+    if let json = (try? JSONSerialization.jsonObject(with: outputData)) as? [String: Any],
        let status = json["status"] as? String,
        status == "403" || status == "429" {
         ghIsRateLimited = true
@@ -80,7 +82,6 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Calls `gh api --paginate` to follow Link rel=next automatically.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     guard let ghPath = ghBinaryPath() else { log("ghAPIPaginated › gh not found"); return nil }
-    // Need exit code for rate-limit detection, so run the process manually to capture it.
     let task = Process()
     let pipe = Pipe()
     task.executableURL = URL(fileURLWithPath: ghPath)
@@ -154,25 +155,31 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             : "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
     }
     for status in ["in_progress", "queued"] {
-        guard let data = ghAPI(runsEndpoint(status: status)),
-              let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
-        else { continue }
-        // swiftlint:disable for_where
-        for run in resp.workflowRuns {
-            if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
+        guard let data = ghAPI(runsEndpoint(status: status)) else { continue }
+        do {
+            let resp = try JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
+            // swiftlint:disable for_where
+            for run in resp.workflowRuns {
+                if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
+            }
+            // swiftlint:enable for_where
+        } catch {
+            log("fetchActiveJobs › decode error (\(status)): \(error)")
         }
-        // swiftlint:enable for_where
     }
     var jobs: [ActiveJob] = []
     var seenJobIDs = Set<Int>()
     for runID in runIDs {
         guard scope.contains("/") else { continue }
-        guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
-              let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
-        else { continue }
-        for payload in resp.jobs {
-            guard seenJobIDs.insert(payload.id).inserted else { continue }
-            jobs.append(makeActiveJob(from: payload, iso: iso, isDimmed: false))
+        guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100") else { continue }
+        do {
+            let resp = try JSONDecoder().decode(JobsResponse.self, from: data)
+            for payload in resp.jobs {
+                guard seenJobIDs.insert(payload.id).inserted else { continue }
+                jobs.append(makeActiveJob(from: payload, iso: iso, isDimmed: false))
+            }
+        } catch {
+            log("fetchActiveJobs › jobs decode error (run \(runID)): \(error)")
         }
     }
     log("fetchActiveJobs › \(jobs.count) job(s) for \(scope)")
@@ -202,12 +209,14 @@ func fetchRunners(for scope: String) -> [Runner] {
         log("fetchRunners › no data for scope: \(scope)")
         return []
     }
-    guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
-        log("fetchRunners › decode failed for scope: \(scope)")
+    do {
+        let response = try JSONDecoder().decode(RunnersResponse.self, from: data)
+        log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
+        return response.runners
+    } catch {
+        log("fetchRunners › decode failed for scope \(scope): \(error)")
         return []
     }
-    log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
-    return response.runners
 }
 private struct RunnersResponse: Codable { let runners: [Runner] }
 
@@ -217,8 +226,13 @@ private struct RunnersResponse: Codable { let runners: [Runner] }
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
-    guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
-    return orgs.map(\.login)
+    do {
+        let orgs = try JSONDecoder().decode([Org].self, from: data)
+        return orgs.map(\.login)
+    } catch {
+        log("fetchUserOrgs › decode failed: \(error)")
+        return []
+    }
 }
 
 /// Returns `owner/repo` strings for the authenticated user's repositories.
@@ -228,8 +242,13 @@ func fetchUserRepos() -> [String] {
         let fullName: String
         enum CodingKeys: String, CodingKey { case fullName = "full_name" }
     }
-    guard let repos = try? JSONDecoder().decode([Repo].self, from: data) else { return [] }
-    return repos.map(\.fullName)
+    do {
+        let repos = try JSONDecoder().decode([Repo].self, from: data)
+        return repos.map(\.fullName)
+    } catch {
+        log("fetchUserRepos › decode failed: \(error)")
+        return []
+    }
 }
 
 // MARK: - Registration token
@@ -250,12 +269,14 @@ func fetchRegistrationToken(scope: String) -> String? {
     }
     log("fetchRegistrationToken › \(endpoint) \(outputData.count)b")
     struct TokenResponse: Decodable { let token: String }
-    guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
+    do {
+        let resp = try JSONDecoder().decode(TokenResponse.self, from: outputData)
+        return resp.token
+    } catch {
         log("fetchRegistrationToken › decode failed: "
-            + "\(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "")")
+            + "\(String(data: outputData, encoding: .utf8)?.prefix(120) ?? "") error: \(error)")
         return nil
     }
-    return resp.token
 }
 
 // MARK: - Step log
@@ -280,6 +301,11 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
         return nil
     }
+    return sliceStepFromLog(raw: raw, stepNumber: stepNumber)
+}
+
+/// Slices a step section out of raw log text.
+private func sliceStepFromLog(raw: String, stepNumber: Int) -> String {
     let cleaned = stripAnsi(raw)
     let lines = cleaned.components(separatedBy: "\n")
     var sections: [String] = []
@@ -300,10 +326,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
     }
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
-        log(
-            "fetchStepLog › stepNumber \(stepNumber) out of range "
-                + "(sections=\(sections.count)), returning full log"
-        )
+        log("fetchStepLog › stepNumber \(stepNumber) out of range (sections=\(sections.count)), returning full log")
         return cleaned
     }
     let section = sections[index]
@@ -312,22 +335,18 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
 }
 
 private func stripAnsi(_ input: String) -> String {
-    guard let regex = try? NSRegularExpression(
-        pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
-    ) else { return input }
-    return regex.stringByReplacingMatches(
-        in: input,
-        range: NSRange(input.startIndex..., in: input),
-        withTemplate: ""
-    )
-}
-
-// MARK: - Shared gh binary path
-
-/// Returns the first executable `gh` binary found on common install paths.
-func ghBinaryPath() -> String? {
-    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
-    return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+    let pattern = "\u{001B}\\[[0-9;]*[A-Za-z]"
+    do {
+        let regex = try NSRegularExpression(pattern: pattern)
+        return regex.stringByReplacingMatches(
+            in: input,
+            range: NSRange(input.startIndex..., in: input),
+            withTemplate: ""
+        )
+    } catch {
+        log("stripAnsi › regex compile error: \(error)")
+        return input
+    }
 }
 
 // MARK: - POST helper

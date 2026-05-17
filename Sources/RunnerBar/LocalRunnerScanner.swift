@@ -1,7 +1,5 @@
 import Foundation
 
-// MARK: - LocalRunnerScanner
-
 /// Discovers locally-installed GitHub Actions self-hosted runners without
 /// requiring a GitHub API token. Uses three complementary scan sources:
 ///
@@ -20,6 +18,8 @@ import Foundation
 ///    Flags which runners currently have an active launchd service, indicating
 ///    they are registered and running.
 struct LocalRunnerScanner {
+    // MARK: - LocalRunnerScanner
+
     // MARK: - .runner JSON schema
 
     /// Decodable mirror of the relevant fields inside a `.runner` JSON file.
@@ -28,6 +28,7 @@ struct LocalRunnerScanner {
         let runnerName: String?
         let agentId: Int?
         let workFolder: String?
+        let poolName: String?
     }
 
     // MARK: - Public API
@@ -35,133 +36,133 @@ struct LocalRunnerScanner {
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
     /// This is a synchronous, blocking call — always invoke from a background thread.
     func scan() -> [RunnerModel] {
-        var models: [String: RunnerModel] = [:]
-
-        // Source 2 first: .runner JSON is most authoritative — richer data.
-        for model in scanRunnerJSONFiles() {
-            models[model.id] = model
-        }
-
-        // Source 1: LaunchAgents — fills in runners whose .runner file wasn't found.
-        for model in scanLaunchAgents() {
-            let compositeKey = "\(model.runnerName)-\(model.gitHubUrl ?? "")"
-            let alreadyCoveredByJSON = models.values.contains { existing in
-                let existingComposite = "\(existing.runnerName)-\(existing.gitHubUrl ?? "")"
-                return existingComposite == compositeKey
+        let launchAgentRunners = scanLaunchAgents()
+        let jsonRunners = scanRunnerJsonFiles()
+        let liveServices = liveLaunchdServices()
+        var seen = Set<String>()
+        var results: [RunnerModel] = []
+        for runner in (launchAgentRunners + jsonRunners) {
+            let key = "\(runner.owner)/\(runner.repo)/\(runner.name)"
+            guard seen.insert(key).inserted else { continue }
+            let isLive = liveServices.contains { svc in
+                svc.contains(runner.owner) && svc.contains(runner.repo)
             }
-            guard !alreadyCoveredByJSON else { continue }
-            if models[compositeKey] == nil {
-                models[compositeKey] = model
-            }
+            results.append(RunnerModel(
+                id: runner.id,
+                name: runner.name,
+                owner: runner.owner,
+                repo: runner.repo,
+                status: isLive ? .online : .offline,
+                busy: runner.busy,
+                os: runner.os,
+                labels: runner.labels,
+                isLocal: true
+            ))
         }
-
-        // Source 3: mark which runners are live.
-        let liveLabels = scanLiveServices()
-        for key in models.keys {
-            if let model = models[key] {
-                models[key]?.isRunning = liveLabels.contains { $0.contains(model.runnerName) }
-            }
-        }
-
-        return models.values.sorted { $0.runnerName < $1.runnerName }
+        return results
     }
 
     // MARK: - Source 1: LaunchAgents
 
     private func scanLaunchAgents() -> [RunnerModel] {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
+        let launchAgentsURL = FileManager.default
+            .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil)
-        else { return [] }
-
-        let prefix = "actions.runner."
-        return entries.compactMap { url -> RunnerModel? in
-            let filename = url.deletingPathExtension().lastPathComponent
-            guard filename.hasPrefix(prefix) else { return nil }
-            let remainder = String(filename.dropFirst(prefix.count))
-            let parts = remainder.components(separatedBy: ".")
-            guard parts.count >= 2 else { return nil }
-            let owner = parts[0]
-            let repo = parts[1]
-            let runnerName = parts.count > 2 ? parts[2...].joined(separator: ".") : "runner"
-            let gitHubUrl = "https://github.com/\(owner)/\(repo)"
-            return RunnerModel(
-                runnerName: runnerName,
-                gitHubUrl: gitHubUrl,
-                agentId: nil,
-                workFolder: nil,
-                installPath: nil,
-                isRunning: false
-            )
-        }
+        guard let plists = try? FileManager.default.contentsOfDirectory(
+            at: launchAgentsURL,
+            includingPropertiesForKeys: nil
+        ) else { return [] }
+        return plists
+            .filter { $0.lastPathComponent.hasPrefix("actions.runner.") && $0.pathExtension == "plist" }
+            .compactMap { plistURL -> RunnerModel? in
+                // actions.runner.<owner>.<repo>.<runnerName>.plist
+                let parts = plistURL.deletingPathExtension().lastPathComponent
+                    .components(separatedBy: ".")
+                guard parts.count >= 4 else { return nil }
+                let owner = parts[2]
+                let repo = parts[3]
+                let runnerName = parts.count > 4 ? parts[4...].joined(separator: ".") : "unknown"
+                return makeRunnerModel(owner: owner, repo: repo, name: runnerName)
+            }
     }
 
     // MARK: - Source 2: .runner JSON files
 
     /// Searches known runner install locations only — avoids scanning `~` wholesale
     /// which would trigger macOS TCC prompts for Desktop/Documents/Downloads (macOS 14+).
-    private func scanRunnerJSONFiles() -> [RunnerModel] {
+    private func scanRunnerJsonFiles() -> [RunnerModel] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        // Known self-hosted runner install directories — explicit paths only.
-        // ⚠️ DO NOT add `~` or `$HOME` here: broad home-dir scans trigger TCC dialogs.
-        // ⚠️ Each path is single-quoted before shell interpolation so that home
-        // directories containing spaces (e.g. /Users/First Last) don't break find.
-        let rawPaths = [
+        let searchRoots = [
             "\(home)/actions-runner",
             "\(home)/runner",
             "\(home)/github-runner",
             "/opt/actions-runner",
             "/opt/runner",
             "/usr/local/actions-runner",
-            "/usr/local/runner",
+            "/usr/local/runner"
         ]
-        let searchPaths = rawPaths.map { "'\($0)'" }.joined(separator: " ")
+        var results: [RunnerModel] = []
+        for root in searchRoots {
+            guard FileManager.default.fileExists(atPath: root) else { continue }
+            results += findRunnerJsonFiles(in: root, maxDepth: 6)
+                .compactMap { parseRunnerJson(at: $0) }
+        }
+        return results
+    }
 
-        let raw = shell(
-            "find \(searchPaths) -maxdepth 6 -name '.runner' 2>/dev/null",
-            timeout: 15
-        )
-        guard !raw.isEmpty else { return [] }
-
-        return raw.components(separatedBy: "\n")
-            .filter { !$0.isEmpty }
-            .compactMap { path -> RunnerModel? in
-                let url = URL(fileURLWithPath: path)
-                guard let data = try? Data(contentsOf: url),
-                      let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
-                else { return nil }
-                let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
-                return RunnerModel(
-                    runnerName: name,
-                    gitHubUrl: json.gitHubUrl,
-                    agentId: json.agentId,
-                    workFolder: json.workFolder,
-                    installPath: url.deletingLastPathComponent().path,
-                    isRunning: false
-                )
+    private func findRunnerJsonFiles(in directory: String, maxDepth: Int) -> [String] {
+        guard maxDepth > 0 else { return [] }
+        var files: [String] = []
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directory) else {
+            return []
+        }
+        for item in contents {
+            let path = (directory as NSString).appendingPathComponent(item)
+            var isDir: ObjCBool = false
+            FileManager.default.fileExists(atPath: path, isDirectory: &isDir)
+            if isDir.boolValue {
+                files += findRunnerJsonFiles(in: path, maxDepth: maxDepth - 1)
+            } else if item == ".runner" {
+                files.append(path)
             }
+        }
+        return files
+    }
+
+    private func parseRunnerJson(at path: String) -> RunnerModel? {
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONDecoder().decode(RunnerJSON.self, from: data),
+              let urlStr = json.gitHubUrl,
+              let url = URL(string: urlStr)
+        else { return nil }
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        guard pathComponents.count >= 2 else { return nil }
+        let owner = pathComponents[0]
+        let repo = pathComponents[1]
+        let name = json.runnerName ?? "unknown"
+        return makeRunnerModel(owner: owner, repo: repo, name: name)
     }
 
     // MARK: - Source 3: Live service check
 
-    private func scanLiveServices() -> Set<String> {
-        let output = shell(
-            "launchctl list 2>/dev/null | grep actions.runner",
-            timeout: 5
-        )
-        guard !output.isEmpty else { return [] }
+    private func liveLaunchdServices() -> [String] {
+        let output = shell("launchctl list | grep actions.runner", timeout: 5)
+        return output.components(separatedBy: "\n").filter { !$0.isEmpty }
+    }
 
-        var labels = Set<String>()
-        for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            let columns = line.components(separatedBy: "\t")
-            guard columns.count >= 3 else { continue }
-            let pid = columns[0].trimmingCharacters(in: .whitespaces)
-            let label = columns[2].trimmingCharacters(in: .whitespaces)
-            if pid != "-", !label.isEmpty {
-                labels.insert(label)
-            }
-        }
-        return labels
+    // MARK: - Factory
+
+    private func makeRunnerModel(owner: String, repo: String, name: String) -> RunnerModel {
+        RunnerModel(
+            id: abs((owner + repo + name).hashValue),
+            name: name,
+            owner: owner,
+            repo: repo,
+            status: .offline,
+            busy: false,
+            os: "macOS",
+            labels: [],
+            isLocal: true
+        )
     }
 }
