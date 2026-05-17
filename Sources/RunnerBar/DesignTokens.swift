@@ -57,26 +57,32 @@ extension Color {
     /// Primary accent — alias for rbBlue; used by sparklines and stat chips.
     static let rbAccent = rbBlue
 
-    // Neutral / surface — adaptive light/dark
-    // Dark values match the reference design screenshot:
-    //   rbSurface        ≈ #1C1C1C  (panel background, white: 0.11)
-    //   rbSurfaceElevated ≈ #262626  (card rows, white: 0.15)
-    // Light values follow the same relative elevation pattern.
-    // ❌ NEVER make these fully transparent — the NSVisualEffectView vibrancy
-    //    behind the hosting view causes card content to wash out against the
-    //    desktop when surface fills are clear. The PanelChrome draw() method
-    //    already adds a near-zero alpha fill (0.01) to keep the backdrop sampler
-    //    active; the SwiftUI layer on top should be opaque.
-    //    If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-    /// Base panel surface color — solid dark fill matching reference design.
+    // Neutral / surface — adaptive light/dark, semi-transparent so vibrancy shows through.
+    //
+    // ⚠️ TRANSLUCENCY CONTRACT — DO NOT REMOVE THIS COMMENT.
+    // rbSurface and rbSurfaceElevated MUST use alpha < 1.0 so the NSVisualEffectView
+    // (.popover material, .behindWindow blending) behind the SwiftUI hosting view
+    // remains visible. Fully opaque fills kill the frosted-glass effect.
+    //
+    // Alpha tuning:
+    //   rbSurface         — panel-wide tint: low alpha so vibrancy dominates
+    //   rbSurfaceElevated — card rows: slightly higher alpha for depth separation
+    //
+    // PanelChrome.draw() already adds a near-zero fill (alpha 0.01) to keep the
+    // CABackdropLayer sampler alive; these SwiftUI fills sit on top and must stay
+    // semi-transparent.
+    // ❌ NEVER set these to Color(white: x) with no .opacity() call.
+    // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+
+    /// Base panel surface color — semi-transparent tint, vibrancy shows through.
     static let rbSurface = Color.adaptive(
-        light: Color(white: 0.96),
-        dark: Color(white: 0.11)
+        light: Color(white: 0.96).opacity(0.55),
+        dark:  Color(white: 0.11).opacity(0.55)
     )
-    /// Elevated card surface — visibly lighter than rbSurface to distinguish rows.
+    /// Elevated card surface — slightly more opaque than rbSurface for row depth.
     static let rbSurfaceElevated = Color.adaptive(
-        light: Color(white: 0.88),
-        dark: Color(white: 0.15)
+        light: Color(white: 0.88).opacity(0.65),
+        dark:  Color(white: 0.15).opacity(0.65)
     )
     /// Subtle border / stroke color.
     static let rbBorderSubtle = Color.adaptive(
