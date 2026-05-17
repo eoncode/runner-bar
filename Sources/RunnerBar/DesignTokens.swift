@@ -58,18 +58,25 @@ extension Color {
     static let rbAccent = rbBlue
 
     // Neutral / surface — adaptive light/dark
-    // ❌ NEVER make rbSurface opaque — it sits on top of NSVisualEffectView (.popover
-    //    vibrancy). An opaque fill blocks the backdrop sampler and kills translucency.
-    //    rbSurface must be .clear so the vibrancy shows through as the panel background.
-    //    rbSurfaceElevated must be semi-transparent — just enough lift to distinguish
-    //    card rows from the vibrancy background without blocking it.
+    // Dark values match the reference design screenshot:
+    //   rbSurface        ≈ #1C1C1C  (panel background, white: 0.11)
+    //   rbSurfaceElevated ≈ #262626  (card rows, white: 0.15)
+    // Light values follow the same relative elevation pattern.
+    // ❌ NEVER make these fully transparent — the NSVisualEffectView vibrancy
+    //    behind the hosting view causes card content to wash out against the
+    //    desktop when surface fills are clear. The PanelChrome draw() method
+    //    already adds a near-zero alpha fill (0.01) to keep the backdrop sampler
+    //    active; the SwiftUI layer on top should be opaque.
     //    If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-    /// Base panel surface — fully transparent so NSVisualEffectView vibrancy shows through.
-    static let rbSurface = Color.clear
-    /// Slightly elevated card surface — semi-transparent lift above the vibrancy layer.
+    /// Base panel surface color — solid dark fill matching reference design.
+    static let rbSurface = Color.adaptive(
+        light: Color(white: 0.96),
+        dark: Color(white: 0.11)
+    )
+    /// Elevated card surface — visibly lighter than rbSurface to distinguish rows.
     static let rbSurfaceElevated = Color.adaptive(
-        light: Color(white: 1.0).opacity(0.55),
-        dark: Color(white: 1.0).opacity(0.07)
+        light: Color(white: 0.88),
+        dark: Color(white: 0.15)
     )
     /// Subtle border / stroke color.
     static let rbBorderSubtle = Color.adaptive(
@@ -106,15 +113,15 @@ extension Color {
 
     // Tinted row backgrounds (very faint, status-keyed)
     /// Faint yellow row tint for queued rows.
-    static let rbYellowTint = rbWarning.opacity(0.05)
+    static let rbYellowTint = rbWarning.opacity(0.08)
     /// Faint blue tint — in-progress row background + non-status blue UI accents.
-    static let rbBlueTint = rbBlue.opacity(0.05)
+    static let rbBlueTint = rbBlue.opacity(0.08)
     /// Faint green row tint for success rows.
-    static let rbGreenTint = rbSuccess.opacity(0.05)
+    static let rbGreenTint = rbSuccess.opacity(0.08)
     /// Faint red row tint for failed rows.
-    static let rbRedTint = rbDanger.opacity(0.05)
+    static let rbRedTint = rbDanger.opacity(0.08)
     /// Faint orange row tint for warning rows.
-    static let rbOrangeTint = rbWarning.opacity(0.05)
+    static let rbOrangeTint = rbWarning.opacity(0.08)
 }
 
 // MARK: - Status helpers
