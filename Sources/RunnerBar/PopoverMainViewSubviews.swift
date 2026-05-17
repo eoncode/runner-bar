@@ -16,14 +16,17 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - StatusBadge
-/// A small pill-shaped label used to display job status/conclusion.
+/// A pill-shaped label used to display job status/conclusion.
 struct StatusBadge: View {
     let label: String
     let color: Color
     var body: some View {
         Text(label)
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundColor(color)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(color))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
     }
@@ -36,10 +39,10 @@ struct JobProgressBarView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Rectangle()
+                Capsule()
                     .fill(Color.secondary.opacity(0.15))
-                Rectangle()
-                    .fill(Color.accentColor.opacity(0.7))
+                Capsule()
+                    .fill(DesignTokens.Color.statusBlue.opacity(0.7))
                     .frame(width: geo.size.width * max(0, min(1, fraction)))
             }
         }
@@ -165,9 +168,34 @@ struct PopoverHeaderView: View {
         let free    = max(0, total - used)
         let pct     = total > 0 ? (used / total) * 100 : 0
         let freePct = total > 0 ? (free / total) * 100 : 0
-        let value   = String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded()))
-            + " (" + String(format: "%dGB %d%%", Int(free.rounded()), Int(freePct.rounded())) + ")"
-        return statChip(label: "DISK", value: value, pct: pct, history: diskHistory)
+        let diskColor = DesignTokens.Color.statColor(for: pct)
+        let pillLabel = String(format: "%d%%", Int(freePct.rounded()))
+        return HStack(spacing: 3) {
+            Text("DISK")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            if diskHistory.count >= 2 {
+                SparklineView(samples: diskHistory, color: diskColor)
+                    .frame(width: 28, height: 12)
+            }
+            Text(String(format: "%d/%dGB", Int(used.rounded()), Int(total.rounded())))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(diskColor)
+                .lineLimit(1)
+            // Pill badge showing free percentage
+            Text(pillLabel)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(diskColor)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(
+                    Capsule()
+                        .fill(diskColor.opacity(0.14))
+                        .overlay(Capsule().strokeBorder(diskColor.opacity(0.3), lineWidth: 0.5))
+                )
+                .lineLimit(1)
+        }
     }
 
     private func statChip(label: String, value: String, pct: Double, history: [Double]) -> some View {
@@ -188,9 +216,7 @@ struct PopoverHeaderView: View {
     }
 
     private func usageColor(pct: Double) -> Color {
-        if pct > 85 { return .red    }
-        if pct > 60 { return .yellow }
-        return .green
+        DesignTokens.Color.statColor(for: pct)
     }
 }
 
@@ -208,8 +234,32 @@ private struct RunnerTypeIcon: View {
     }
 }
 
+// MARK: - MetricPill
+/// A small Capsule pill badge showing a CPU or MEM metric label+value.
+private struct MetricPill: View {
+    let label: String
+    let value: String
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.primary.opacity(0.75))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(DesignTokens.Color.pillBg)
+                .overlay(Capsule().strokeBorder(DesignTokens.Color.pillBorder, lineWidth: 0.5))
+        )
+    }
+}
+
 // MARK: - PopoverLocalRunnerRow
-/// Shows busy local runners with CPU/MEM metrics at the top of the popover.
+/// Phase 3: Shows busy local runners as bordered card rows with CPU/MEM pill badges.
 struct PopoverLocalRunnerRow: View {
     let runners: [Runner]
 
@@ -224,17 +274,40 @@ struct PopoverLocalRunnerRow: View {
     private func runnerList(_ busy: [Runner]) -> some View {
         ForEach(busy.prefix(3)) { runner in
             HStack(spacing: 8) {
-                Circle().fill(Color.yellow).frame(width: 8, height: 8)
+                Circle()
+                    .fill(Color.yellow)
+                    .frame(width: 8, height: 8)
                 Text(runner.name)
-                    .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
                 Spacer()
                 if let metrics = runner.metrics {
-                    Text(String(format: "CPU: %.1f%% MEM: %.1f%%", metrics.cpu, metrics.mem))
-                        .font(.caption.monospacedDigit()).foregroundColor(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                    MetricPill(
+                        label: "CPU:",
+                        value: String(format: "%.1f%%", metrics.cpu)
+                    )
+                    MetricPill(
+                        label: "MEM:",
+                        value: String(format: "%.1f%%", metrics.mem)
+                    )
                 }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(DesignTokens.Color.labelTertiary)
             }
-            .padding(.horizontal, 12).padding(.vertical, 3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius)
+                    .fill(Color.primary.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignTokens.Layout.cardRadius)
+                            .strokeBorder(DesignTokens.Color.cardBorder, lineWidth: 1)
+                    )
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
         }
         if busy.count > 3 {
             Text("+ \(busy.count - 3) more…")
@@ -246,7 +319,8 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// A single action-group row in the popover, with optional inline job expansion.
+/// Phase 4: Action row with left-side colored indicator bar, StatusDonutView,
+/// row tint background, branch pill, and proper status pill badge.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
@@ -254,14 +328,37 @@ struct ActionRowView: View {
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     var body: some View {
+        VStack(spacing: 0) {
+            rowWithIndicator
+            if group.groupStatus == .inProgress {
+                InlineJobRowsView(group: group, tick: tick, onSelectJob: onSelectJob)
+            }
+        }
+    }
+
+    // Left-side colored indicator bar + main row content
+    private var rowWithIndicator: some View {
         HStack(spacing: 0) {
-            Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
+            // Phase 4: left-side half-pill indicator bar (leading corners rounded, trailing flat)
+            UnevenRoundedRectangle(
+                topLeadingRadius: DesignTokens.Layout.leftIndicatorWidth,
+                bottomLeadingRadius: DesignTokens.Layout.leftIndicatorWidth,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0
+            )
+            .fill(indicatorColor)
+            .frame(width: DesignTokens.Layout.leftIndicatorWidth)
+            .padding(.vertical, 4)
+
+            Button(action: onSelect, label: { rowContent })
+                .buttonStyle(.plain)
+
             Image(systemName: "chevron.right")
-                .font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+                .font(.caption2)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
+                .padding(.trailing, 12)
         }
-        if group.groupStatus == .inProgress {
-            InlineJobRowsView(group: group, tick: tick, onSelectJob: onSelectJob)
-        }
+        .background(rowTint)
     }
 
     private var rowContent: some View {
@@ -269,82 +366,125 @@ struct ActionRowView: View {
         // ❌ NEVER remove this line.
         _ = tick
         return HStack(spacing: 6) {
-            PieProgressDot(progress: group.progressFraction, color: dotColor)
+            StatusDonutView(
+                status: group.groupStatus,
+                conclusion: group.conclusion,
+                progress: group.progressFraction
+            )
+            .frame(width: DesignTokens.Layout.donutSize, height: DesignTokens.Layout.donutSize)
+
             RunnerTypeIcon(isLocal: group.isLocalGroup)
+
             Text(group.label)
-                .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+
             Text(group.title)
                 .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.tail)
                 .layoutPriority(1)
+
             Spacer()
             metaTrailing
         }
-        .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 3)
+        .padding(.leading, 8).padding(.trailing, 4).padding(.vertical, 5)
     }
 
     @ViewBuilder
     private var metaTrailing: some View {
+        // Relative time
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .font(.caption2.monospacedDigit())
+                .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        if group.groupStatus == .inProgress || group.groupStatus == .queued {
-            Text(group.currentJobName)
-                .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).truncationMode(.tail)
-                .layoutPriority(0)
+
+        // Branch pill: 🌿 branchName
+        if let branch = group.headBranch, !branch.isEmpty {
+            HStack(spacing: 2) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 8))
+                Text(branch)
+                    .font(.system(size: 9, design: .monospaced))
+            }
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(
+                Capsule()
+                    .fill(Color.primary.opacity(0.06))
+                    .overlay(Capsule().strokeBorder(DesignTokens.Color.cardBorder, lineWidth: 0.5))
+            )
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
         }
+
+        // Job progress e.g. 6/10
         Text(group.jobProgress)
-            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .font(.caption.monospacedDigit())
+            .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
+
+        // Elapsed time
         Text(group.elapsed)
-            .font(.caption.monospacedDigit()).foregroundColor(.secondary)
+            .font(.caption.monospacedDigit())
+            .foregroundColor(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-        statusChip
+
+        // Status pill badge
+        statusPill
     }
 
     @ViewBuilder
-    private var statusChip: some View {
+    private var statusPill: some View {
         switch group.groupStatus {
         case .inProgress:
-            Text("IN PROGRESS")
-                .font(.system(size: 9, weight: .bold)).foregroundColor(.yellow)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(label: "IN PROGRESS", color: DesignTokens.Color.statusBlue)
         case .queued:
-            Text("QUEUED")
-                .font(.system(size: 9, weight: .bold)).foregroundColor(.blue)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(label: "QUEUED", color: DesignTokens.Color.statusBlue.opacity(0.7))
         case .completed:
             let success = group.conclusion == "success"
-            Text(success ? "SUCCESS" : "FAILED")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(success ? .green : .red)
-                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            StatusBadge(
+                label: success ? "SUCCESS" : "FAILED",
+                color: success ? DesignTokens.Color.statusGreen : DesignTokens.Color.statusRed
+            )
         }
     }
 
-    private var dotColor: Color {
+    private var indicatorColor: Color {
         switch group.groupStatus {
-        case .inProgress: return .yellow
-        case .queued: return .blue
+        case .inProgress: return DesignTokens.Color.statusBlue
+        case .queued:     return DesignTokens.Color.statusBlue.opacity(0.5)
         case .completed:
-            if group.isDimmed { return .gray }
-            return group.conclusion == "success" ? .green : .red
+            if group.isDimmed { return .gray.opacity(0.4) }
+            return group.conclusion == "success"
+                ? DesignTokens.Color.statusGreen
+                : DesignTokens.Color.statusRed
+        }
+    }
+
+    private var rowTint: Color {
+        switch group.groupStatus {
+        case .inProgress: return DesignTokens.Color.tintBlue
+        case .queued:     return DesignTokens.Color.tintBlue
+        case .completed:
+            if group.isDimmed { return .clear }
+            return group.conclusion == "success"
+                ? DesignTokens.Color.tintGreen
+                : DesignTokens.Color.tintRed
         }
     }
 }
 
 // MARK: - InlineJobRowsView
-/// Passive read-only ↳ job rows shown beneath every in-progress action group.
-/// Only shows jobs that are currently `in_progress`.
+/// Phase 5: ↳ inline job rows with spinning 14pt StatusDonutView and step progress bar.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
@@ -400,9 +540,23 @@ struct InlineJobRowsView: View {
         let stepName    = currentStep.map(\.name).flatMap { $0.isEmpty ? nil : $0 }
         let done  = job.steps.filter { $0.conclusion != nil }.count
         let total = job.steps.count
+        let fraction: CGFloat = total > 0 ? CGFloat(done) / CGFloat(total) : 0
+
         return HStack(spacing: 6) {
-            Text("↳").font(.caption).foregroundColor(.secondary).frame(width: 16, alignment: .trailing)
-            PieProgressDot(progress: job.progressFraction, color: jobDotColor(for: job), size: 7)
+            // Phase 5: → arrow + 14pt spinning donut
+            Text("→")
+                .font(.caption)
+                .foregroundColor(DesignTokens.Color.labelTertiary)
+                .frame(width: 16, alignment: .trailing)
+
+            StatusDonutView(
+                status: .inProgress,
+                conclusion: nil,
+                progress: job.progressFraction
+            )
+            .frame(width: 14, height: 14)
+
+            // Job name · current step
             Group {
                 if let name = stepName {
                     Text(job.name + " · " + name)
@@ -410,34 +564,57 @@ struct InlineJobRowsView: View {
                     Text(job.name)
                 }
             }
-            .font(.caption).foregroundColor(.secondary)
+            .font(.caption)
+            .foregroundColor(.secondary)
             .lineLimit(1).truncationMode(.tail)
             .layoutPriority(1)
+
             Spacer()
+
+            // Phase 5: thin progress bar (90×3)
+            if total > 0 {
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(width: 90, height: 3)
+                    Capsule()
+                        .fill(DesignTokens.Color.statusBlue.opacity(0.75))
+                        .frame(width: 90 * fraction, height: 3)
+                }
+            }
+
+            // Step count e.g. 20/21
             if total > 0 {
                 Text("\(done)/\(total)")
-                    .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
+
+            // Elapsed
             Text(job.elapsed)
-                .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                .font(.caption2.monospacedDigit())
+                .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+
             if onSelectJob != nil {
                 Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundColor(.secondary)
+                    .font(.caption2).foregroundColor(DesignTokens.Color.labelTertiary)
             }
         }
-        .padding(.leading, 24).padding(.trailing, 12).padding(.vertical, 2)
+        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 3)
         .contentShape(Rectangle())
     }
 
     private func jobDotColor(for job: ActiveJob) -> Color {
         switch job.status {
-        case "in_progress": return .yellow
-        case "queued":      return .blue
-        default: return job.conclusion == "success" ? .green : (job.isDimmed ? .gray : .red)
+        case "in_progress": return DesignTokens.Color.statusBlue
+        case "queued":      return DesignTokens.Color.statusBlue
+        default: return job.conclusion == "success"
+            ? DesignTokens.Color.statusGreen
+            : (job.isDimmed ? .gray : DesignTokens.Color.statusRed)
         }
     }
 }
