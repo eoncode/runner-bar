@@ -29,7 +29,8 @@ enum Shell {
 
         process.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let raw = String(data: data, encoding: .utf8)
+        let output = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return Result(output: output, exitCode: process.terminationStatus)
     }
 }
