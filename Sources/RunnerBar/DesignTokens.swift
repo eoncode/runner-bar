@@ -44,17 +44,18 @@ extension Color {
     // ❌ NEVER switch PanelChrome material back to .popover — warm brown tint.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     //
-    // Target dark values:
-    //   rbSurface         ≈ #1C1C1E — white: 0.11 @ 0.82
-    //   rbSurfaceElevated ≈ #252527 — white: 0.15 @ 0.88
+    // Target dark values: low opacity so vibrancy bleeds through both
+    // panel bg gaps AND row fills — cool dark translucent, not painted solid.
+    //   rbSurface         — white: 0.11 @ 0.55
+    //   rbSurfaceElevated — white: 0.15 @ 0.60
 
     static let rbSurface = Color.adaptive(
         light: Color(white: 0.95).opacity(0.88),
-        dark:  Color(white: 0.11).opacity(0.82)
+        dark:  Color(white: 0.11).opacity(0.55)
     )
     static let rbSurfaceElevated = Color.adaptive(
         light: Color(white: 0.88).opacity(0.92),
-        dark:  Color(white: 0.15).opacity(0.88)
+        dark:  Color(white: 0.15).opacity(0.60)
     )
     static let rbBorderSubtle = Color.adaptive(
         light: Color(white: 0.0).opacity(0.08),
