@@ -44,8 +44,8 @@ extension Color {
     // ❌ NEVER switch PanelChrome material back to .popover — warm brown tint.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     //
-    //   rbSurface         — white: 0.11 @ 0.45
-    //   rbSurfaceElevated — white: 0.15 @ 0.50
+    //   rbSurface         — white: 0.11 @ 0.45  (panel bg — leave lighter/transparent)
+    //   rbSurfaceElevated — white: 0.15 @ 0.72  (rows — more opaque = darker/defined)
 
     static let rbSurface = Color.adaptive(
         light: Color(white: 0.95).opacity(0.88),
@@ -53,7 +53,7 @@ extension Color {
     )
     static let rbSurfaceElevated = Color.adaptive(
         light: Color(white: 0.88).opacity(0.92),
-        dark:  Color(white: 0.15).opacity(0.50)
+        dark:  Color(white: 0.15).opacity(0.72)
     )
     static let rbBorderSubtle = Color.adaptive(
         light: Color(white: 0.0).opacity(0.08),
