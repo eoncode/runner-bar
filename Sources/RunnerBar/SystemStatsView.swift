@@ -79,23 +79,21 @@ struct SparklineMetricView: View {
 }
 
 // MARK: - DiskPillBadge
-/// Compact pill showing disk used percentage, placed inline next to the
+/// Compact pill showing disk FREE percentage, placed inline next to the
 /// DISK sparkline in HeaderStatsBar.
 ///
-/// Uses the same thresholds as SparklineView.themeColor and
-/// SparklineMetricView.labelColor so the pill, sparkline stroke, and
-/// value text always share one color:
-///   usedPct > 85  →  rbDanger  (red)
-///   usedPct > 60  →  rbWarning (orange)
+/// Color thresholds (inverted vs. used-space — low free = danger):
+///   freePct < 15  →  rbDanger  (red)
+///   freePct < 40  →  rbWarning (orange)
 ///   else          →  rbSuccess (green)
 ///
 /// Always renders at its intrinsic size — never truncates.
 struct DiskPillBadge: View {
-    /// Percentage of disk space that is USED (0–100). Same scale as SparklineView.currentPct.
-    let usedPct: Double
+    /// Percentage of disk space that is FREE (0–100).
+    let freePct: Double
 
     var body: some View {
-        Text(String(format: "%.0f%%", usedPct))
+        Text(String(format: "%.0f%% free", freePct))
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
             .foregroundStyle(pillColor)
             .fixedSize()
@@ -106,10 +104,10 @@ struct DiskPillBadge: View {
             .fixedSize()
     }
 
-    /// Matches SparklineView.themeColor exactly so pill color == sparkline color.
+    /// Low free space = danger (inverted from used-space thresholds).
     private var pillColor: Color {
-        if usedPct > 85 { return .rbDanger }
-        if usedPct > 60 { return .rbWarning }
+        if freePct < 15 { return .rbDanger }
+        if freePct < 40 { return .rbWarning }
         return .rbSuccess
     }
 }
@@ -117,7 +115,7 @@ struct DiskPillBadge: View {
 // MARK: - HeaderStatsBar
 /// Compact single-row stats header: CPU | MEM | DISK [pill] as inline chips.
 ///
-/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [87%]  →  ⚙ ✕
+/// Layout: CPU [spark] 41.1% | MEM [spark] 7.0/16.0GB | DISK [spark] 394/460GB [13% free]  →  ⚙ ✕
 ///
 /// The DiskPillBadge sits immediately after the DISK SparklineMetricView,
 /// before the Spacer, so it stays adjacent to the disk graph.
@@ -168,7 +166,7 @@ struct HeaderStatsBar: View {
                 )
 
                 if statsVM.stats.diskTotalGB > 0 {
-                    DiskPillBadge(usedPct: diskUsedPct)
+                    DiskPillBadge(freePct: statsVM.stats.diskFreePct)
                 }
             }
             .fixedSize()
