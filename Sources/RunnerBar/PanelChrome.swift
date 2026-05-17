@@ -109,10 +109,11 @@ final class PanelChromeView: NSView {
 
     private let vibrancyView: NSVisualEffectView = {
         let view = NSVisualEffectView()
-        // ❌ NEVER change .popover to .hudWindow or any other material.
-        // .popover is the exact frosted-glass material used by native NSPopover.
+        // .hudWindow gives a cool dark translucent look — no warm tint.
+        // .popover has a warm cream tint in dark mode which is undesirable.
+        // ❌ NEVER switch back to .popover — it produces a warm brown tint on dark wallpapers.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        view.material = .popover
+        view.material = .hudWindow
         view.blendingMode = .behindWindow
         view.state = .active
         view.wantsLayer = true
@@ -202,13 +203,11 @@ final class PanelChromeView: NSView {
         path.line(to: NSPoint(x: width, y: baseY - rad))
         path.appendArc(withCenter: NSPoint(x: width - rad, y: baseY - rad), radius: rad, startAngle: 0, endAngle: 90)
         path.line(to: rightPoint)
-        // Arrow right side: rightPoint → toPoint
         path.curve(
             to: toPoint,
             controlPoint1: NSPoint(x: centreX + cpFoot, y: baseY),
             controlPoint2: NSPoint(x: centreX + cpTip, y: tipY)
         )
-        // Arrow left side: toPoint → leftPoint (exact mirror)
         path.curve(
             to: leftPoint,
             controlPoint1: NSPoint(x: centreX - cpTip, y: tipY),
