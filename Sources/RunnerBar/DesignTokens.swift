@@ -58,15 +58,18 @@ extension Color {
     static let rbAccent = rbBlue
 
     // Neutral / surface — adaptive light/dark
-    /// Base panel surface color.
-    static let rbSurface = Color.adaptive(
-        light: Color(white: 0.96),
-        dark: Color(white: 0.11)
-    )
-    /// Slightly elevated card surface.
+    // ❌ NEVER make rbSurface opaque — it sits on top of NSVisualEffectView (.popover
+    //    vibrancy). An opaque fill blocks the backdrop sampler and kills translucency.
+    //    rbSurface must be .clear so the vibrancy shows through as the panel background.
+    //    rbSurfaceElevated must be semi-transparent — just enough lift to distinguish
+    //    card rows from the vibrancy background without blocking it.
+    //    If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+    /// Base panel surface — fully transparent so NSVisualEffectView vibrancy shows through.
+    static let rbSurface = Color.clear
+    /// Slightly elevated card surface — semi-transparent lift above the vibrancy layer.
     static let rbSurfaceElevated = Color.adaptive(
-        light: Color(white: 0.92),
-        dark: Color(white: 0.14)
+        light: Color(white: 1.0).opacity(0.55),
+        dark: Color(white: 1.0).opacity(0.07)
     )
     /// Subtle border / stroke color.
     static let rbBorderSubtle = Color.adaptive(
