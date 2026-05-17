@@ -14,6 +14,7 @@ struct CancelButton: View {
 
     // MARK: - Body
 
+    /// The button's root view: idle cancel button or active phase indicator.
     var body: some View {
         Group {
             if let phase {
