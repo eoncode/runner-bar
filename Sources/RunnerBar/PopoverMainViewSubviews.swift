@@ -170,18 +170,25 @@ struct ActionRowView: View {
     let onSelect: () -> Void
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)? = nil
 
-    @State private var isExpanded: Bool = false
+    // Tri-state expansion:
+    //   collapsed = no sub-jobs shown
+    //   compact   = in-progress jobs only (auto-set for inProgress groups)
+    //   expanded  = all jobs shown
+    @State private var expandMode: ExpandMode = .collapsed
+
+    /// fix(#444): spec requires compact/expanded distinction.
+    /// - inProgress: collapsed→compact (in-progress only), compact→expanded (all jobs)
+    /// - queued/done: collapsed↔expanded (all jobs)
+    enum ExpandMode { case collapsed, compact, expanded }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                LeftIndicatorPill(color: indicatorColor, isExpanded: isExpanded) {
-                    withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+                LeftIndicatorPill(color: indicatorColor, isExpanded: expandMode != .collapsed) {
+                    withAnimation(.easeInOut(duration: 0.18)) { cycleExpand() }
                 }
                 .frame(maxHeight: .infinity)
                 Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-                // fix(#441 bug6): explicit rotationEffect(0) prevents parent
-                // animation context from rotating this chevron on expand/collapse.
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -189,15 +196,22 @@ struct ActionRowView: View {
                     .padding(.trailing, 8)
             }
             .fixedSize(horizontal: false, vertical: true)
+            // fix(#446): strokeBorder overlay matching runner row card style
             .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius)
+                RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
                     .fill(rowTint)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignTokens.Spacing.cardRadius, style: .continuous)
+                            .strokeBorder(DesignTokens.Colors.rowBorder, lineWidth: 0.5)
+                    )
             )
 
-            if isExpanded && group.typedGroupStatus == .inProgress {
+            // fix(#444): show sub-jobs based on expand mode
+            if expandMode != .collapsed {
                 InlineJobRowsView(
                     group: group,
                     tick: tick,
+                    showAllJobs: expandMode == .expanded,
                     onSelectJob: onSelectJob
                 )
                 .padding(.leading, 16)
@@ -207,9 +221,24 @@ struct ActionRowView: View {
         .padding(.horizontal, DesignTokens.Spacing.rowHPad)
         .padding(.vertical, 2)
         .onAppear {
+            // In-progress groups auto-open in compact mode (in-progress jobs only)
             if group.typedGroupStatus == .inProgress {
-                isExpanded = true
+                expandMode = .compact
             }
+        }
+    }
+
+    /// Cycle through expand states based on group status.
+    private func cycleExpand() {
+        switch group.typedGroupStatus {
+        case .inProgress:
+            switch expandMode {
+            case .collapsed: expandMode = .compact
+            case .compact:   expandMode = .expanded
+            case .expanded:  expandMode = .collapsed
+            }
+        default:
+            expandMode = expandMode == .collapsed ? .expanded : .collapsed
         }
     }
 
@@ -322,7 +351,7 @@ private struct StatusPill: View {
 }
 
 // MARK: - InlineJobRowsView
-/// Passive read-only ↳ job rows shown beneath every in-progress action group.
+/// Passive read-only ↳ job rows shown beneath every action group when expanded.
 ///
 /// ⚠️ REGRESSION GUARD (#377):
 /// `cap += 4` on button tap mutates @State while the popover is visible.
@@ -336,25 +365,29 @@ private struct StatusPill: View {
 struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
+    /// fix(#444): when true, show all jobs; when false, show only in-progress jobs.
+    var showAllJobs: Bool = false
     var onSelectJob: ((ActiveJob, ActionGroup) -> Void)?
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
     @State private var cap: Int = 4
 
-    /// fix(#441 bug1): deduplicate by id before filtering status.
-    private var activeJobs: [ActiveJob] {
+    /// fix(#444): filter based on showAllJobs flag.
+    /// fix(#441 bug1): deduplication must happen before status filtering.
+    private var visibleJobs: [ActiveJob] {
         var seen = Set<Int>()
-        return group.jobs.filter { seen.insert($0.id).inserted }
-            .filter { $0.status == "in_progress" }
+        let deduped = group.jobs.filter { seen.insert($0.id).inserted }
+        if showAllJobs { return deduped }
+        return deduped.filter { $0.status == "in_progress" }
     }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if !activeJobs.isEmpty {
-                HierarchyConnectorLine(jobCount: min(activeJobs.count, cap))
+            if !visibleJobs.isEmpty {
+                HierarchyConnectorLine(jobCount: min(visibleJobs.count, cap))
             }
             VStack(spacing: 2) {
-                ForEach(Array(activeJobs.prefix(cap).enumerated()), id: \.element.id) { _, job in
+                ForEach(Array(visibleJobs.prefix(cap).enumerated()), id: \.element.id) { _, job in
                     if let onSelectJob {
                         Button(action: { onSelectJob(job, group) }) {
                             jobRow(job)
@@ -364,11 +397,11 @@ struct InlineJobRowsView: View {
                         jobRow(job)
                     }
                 }
-                if activeJobs.count > cap {
+                if visibleJobs.count > cap {
                     Button(
                         action: { if !popoverOpenState.isOpen { cap += 4 } },
                         label: {
-                            Text("+ \(activeJobs.count - cap) more jobs…")
+                            Text("+ \(visibleJobs.count - cap) more jobs…")
                                 .font(.caption2).foregroundColor(.accentColor)
                                 .padding(.leading, 28).padding(.trailing, 12).padding(.vertical, 2)
                         }
@@ -405,7 +438,14 @@ struct InlineJobRowsView: View {
         let barColor = jobBarColor(for: job)
 
         return HStack(spacing: 6) {
-            Spacer().frame(width: 28)
+            // fix(#447): DonutStatusView (15pt) replaces blank spacer — spec Phase 5
+            DonutStatusView(
+                status: job.typedStatus,
+                conclusion: job.conclusion,
+                progress: job.progressFraction
+            )
+            .frame(width: 15, height: 15)
+            .padding(.leading, 4)
             Group {
                 if let name = stepName {
                     Text(job.name + " · " + name)

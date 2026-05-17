@@ -3,10 +3,10 @@ import SwiftUI
 // MARK: - DonutStatusView
 /// Phase 4 (#419): Redesigned status indicator for action rows.
 /// Three states:
-/// - in_progress: animated blue arc ring (trim + spinning AngularGradient)
+/// - in_progress: animated blue arc ring (trim + spinning AngularGradient shimmer on bg ring)
 /// - success: green full-circle stroke + checkmark SF Symbol
 /// - failed/other: red full-circle stroke + xmark SF Symbol
-/// - queued: dotted blue ring
+/// - queued: dotted orange ring
 ///
 /// ❌ NEVER inline this back into PopoverProgressViews — spec requires a dedicated file.
 struct DonutStatusView: View {
@@ -17,6 +17,7 @@ struct DonutStatusView: View {
     var size: CGFloat = 18
 
     @State private var arcPhase: Double = 0
+    @State private var shimmerPhase: Double = 0
 
     private var isSuccess: Bool { conclusion == "success" }
 
@@ -37,15 +38,38 @@ struct DonutStatusView: View {
             withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
                 arcPhase = 360
             }
+            withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+                shimmerPhase = 360
+            }
         }
     }
 
     /// Animated blue arc for in-progress runs.
+    /// The background ring uses a rotating AngularGradient shimmer so it has
+    /// visible motion even when the progress arc itself isn't moving —
+    /// reassures users the run is alive (spec: #403 comment).
     private var inProgressDonut: some View {
         let fraction = progress ?? 0
         return ZStack {
+            // Living shimmer background ring
             Circle()
-                .stroke(DesignTokens.Colors.statusBlue.opacity(0.18), lineWidth: 2)
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [
+                            DesignTokens.Colors.statusBlue.opacity(0.0),
+                            DesignTokens.Colors.statusBlue.opacity(0.28),
+                            DesignTokens.Colors.statusBlue.opacity(0.0)
+                        ]),
+                        center: .center,
+                        startAngle: .degrees(shimmerPhase),
+                        endAngle: .degrees(shimmerPhase + 200)
+                    ),
+                    lineWidth: 2
+                )
+            // Static dim base ring
+            Circle()
+                .stroke(DesignTokens.Colors.statusBlue.opacity(0.12), lineWidth: 2)
+            // Progress arc
             Circle()
                 .trim(from: 0, to: max(0.08, CGFloat(fraction)))
                 .stroke(
@@ -68,7 +92,7 @@ struct DonutStatusView: View {
     private var queuedDonut: some View {
         Circle()
             .stroke(
-                DesignTokens.Colors.statusBlue.opacity(0.5),
+                DesignTokens.Colors.statusOrange.opacity(0.5),
                 style: StrokeStyle(lineWidth: 1.5, dash: [2, 3])
             )
     }
