@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 // swiftlint:disable type_body_length
-// swiftlint:disable file_length
 
 // MARK: - NavState
 
@@ -280,21 +279,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 && !run.jobs.flatMap(\.steps).contains { $0.status == .inProgress }
         }
         guard !allDone else { return group }
-        var enrichedRuns = group.runs
+        let enrichedRuns = enrichRuns(group.runs, owner: group.owner, repo: group.repo)
+        return ActionGroup(
+            owner: group.owner, repo: group.repo,
+            commitSha: group.commitSha, commitMessage: group.commitMessage,
+            authorLogin: group.authorLogin, createdAt: group.createdAt,
+            runs: enrichedRuns, isDimmed: group.isDimmed
+        )
+    }
+
+    private func enrichRuns(
+        _ runs: [WorkflowRun],
+        owner: String,
+        repo: String
+    ) -> [WorkflowRun] {
+        var enrichedRuns = runs
         for idx in enrichedRuns.indices {
             let run = enrichedRuns[idx]
-            let jobs = GitHub.fetchJobs(owner: group.owner, repo: group.repo, runID: run.id)
+            let jobs = GitHub.fetchJobs(owner: owner, repo: repo, runID: run.id)
             guard !jobs.isEmpty else { continue }
-            let enrichedJobs: [ActiveJob] = jobs.map { job in
-                let steps = GitHub.fetchSteps(owner: group.owner, repo: group.repo, jobID: job.id)
-                return ActiveJob(
-                    id: job.id, owner: job.owner, repo: job.repo,
-                    name: job.name, status: job.status, conclusion: job.conclusion,
-                    startedAt: job.startedAt, completedAt: job.completedAt,
-                    runID: job.runID, steps: steps.isEmpty ? job.steps : steps,
-                    runnerName: job.runnerName
-                )
-            }
+            let enrichedJobs = enrichJobs(jobs, owner: owner, repo: repo)
             enrichedRuns[idx] = WorkflowRun(
                 id: run.id, name: run.name, headBranch: run.headBranch,
                 headSha: run.headSha, status: run.status, conclusion: run.conclusion,
@@ -303,12 +307,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 pullRequests: run.pullRequests
             )
         }
-        return ActionGroup(
-            owner: group.owner, repo: group.repo,
-            commitSha: group.commitSha, commitMessage: group.commitMessage,
-            authorLogin: group.authorLogin, createdAt: group.createdAt,
-            runs: enrichedRuns, isDimmed: group.isDimmed
-        )
+        return enrichedRuns
+    }
+
+    private func enrichJobs(
+        _ jobs: [ActiveJob],
+        owner: String,
+        repo: String
+    ) -> [ActiveJob] {
+        jobs.map { job in
+            let steps = GitHub.fetchSteps(owner: owner, repo: repo, jobID: job.id)
+            return ActiveJob(
+                id: job.id, owner: job.owner, repo: job.repo,
+                name: job.name, status: job.status, conclusion: job.conclusion,
+                startedAt: job.startedAt, completedAt: job.completedAt,
+                runID: job.runID, steps: steps.isEmpty ? job.steps : steps,
+                runnerName: job.runnerName
+            )
+        }
     }
 
     // MARK: - View factories
@@ -475,4 +491,4 @@ extension AppDelegate: NSWindowDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length file_length
+// swiftlint:enable type_body_length
