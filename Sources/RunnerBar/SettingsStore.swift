@@ -17,26 +17,13 @@ final class SettingsStore: ObservableObject {
     static let pollingRange: ClosedRange<Int> = 10 ... 300
 
     /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
-    ///
-    /// didSet contract:
-    ///   1. Clamp the new value to pollingRange.
-    ///   2. If clamping was needed, write back the clamped value and return —
-    ///      the second didSet will hit the else branch and persist.
-    ///   3. If already in range, persist to UserDefaults immediately.
-    ///
-    /// ❌ NEVER write UserDefaults inside the `else` branch — doing so
-    ///    causes an infinite didSet → Combine → scheduleTimer → fetch loop
-    ///    that drains the entire GitHub API quota in seconds.
     @Published var pollingInterval: Int {
         didSet {
             let clamped = pollingInterval.clamped(to: Self.pollingRange)
             if clamped != pollingInterval {
-                // Out of range — clamp and return. The reassignment triggers
-                // didSet once more; that call hits the else branch below.
                 pollingInterval = clamped
                 return
             }
-            // Value is valid — persist.
             UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
         }
     }
