@@ -299,29 +299,16 @@ struct SettingsView: View {
 
     // MARK: - Remote runner scopes
 
-    /// Returns true when the scope string looks like an org (no slash), false for owner/repo.
-    private func isOrgScope(_ scope: String) -> Bool {
-        !scope.contains("/")
-    }
-
     private var remoteScopesSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header
             Text("Remote runner scopes")
                 .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
-            // Subtitle
             Text("GitHub repos or orgs whose runners are fetched via the API.")
                 .font(.caption).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
-            // Existing scopes
             ForEach(scopeStore.scopes, id: \.self) { scopeStr in
-                HStack(spacing: 6) {
-                    // Icon distinguishes org (building) from repo (chevron.left.slash.chevron.right)
-                    Image(systemName: isOrgScope(scopeStr) ? "building.2" : "chevron.left.forwardslash.chevron.right")
-                        .font(.caption)
-                        .foregroundColor(Color.rbTextTertiary)
-                        .frame(width: 14, alignment: .center)
+                HStack {
                     Text(scopeStr).font(.system(size: 12))
                     Spacer()
                     Button(action: { ScopeStore.shared.remove(scopeStr); RunnerStore.shared.start() },
@@ -330,13 +317,7 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 2)
             }
-            // Add scope row
-            HStack(spacing: 6) {
-                // Preview icon updates as the user types
-                Image(systemName: isOrgScope(newScope) && !newScope.isEmpty ? "building.2" : "chevron.left.forwardslash.chevron.right")
-                    .font(.caption)
-                    .foregroundColor(Color.rbTextTertiary)
-                    .frame(width: 14, alignment: .center)
+            HStack {
                 TextField("e.g. myorg  or  myorg/myrepo", text: $newScope)
                     .textFieldStyle(.roundedBorder).font(.system(size: 12)).onSubmit { submitScope() }
                 Button(action: submitScope, label: { Image(systemName: "plus.circle") })
@@ -510,16 +491,11 @@ struct SettingsView: View {
     private func performRemoval() {
         guard let runner = runnerPendingRemoval else { return }
         runnerPendingRemoval = nil
-        // Optimistically remove from list immediately — the background work (dir delete)
-        // can take several seconds. This makes the UI feel instant.
         LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
         DispatchQueue.global(qos: .userInitiated).async {
             let ok = RunnerLifecycleService.shared.remove(runner: runner)
             DispatchQueue.main.async {
-                if !ok {
-                    removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
-                    // Put it back by doing a fresh scan
-                }
+                if !ok { removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs." }
                 LocalRunnerStore.shared.refresh()
             }
         }
