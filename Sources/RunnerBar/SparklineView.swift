@@ -1,4 +1,5 @@
 import SwiftUI
+// swiftlint:disable multiple_closures_with_trailing_closure
 
 // MARK: - SparklineView
 /// A mini sparkline graph using Path: polyline stroke + gradient fill.
