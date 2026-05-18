@@ -321,10 +321,8 @@ struct SettingsView: View {
         }
     }
 
-    /// #499: Scope row is a tappable Button that navigates to ScopeDetailView.
-    /// Inner toggle and minus use .buttonStyle(.borderless) so they receive their
-    /// own independent hit-testing without leaking the tap to the outer row Button.
-    /// This is VoiceOver-safe — each control gets its own accessibility element.
+    /// #499: Scope row is now a tappable Button that navigates to ScopeDetailView.
+    /// The inner content is unchanged except for the added chevron on the right.
     private func scopeRow(_ entry: ScopeEntry) -> some View {
         let isRepo = entry.scope.contains("/")
         let displayName = ScopeSettingsStore.displayName(for: entry.scope)
@@ -355,8 +353,7 @@ struct SettingsView: View {
 
                 Spacer()
 
-                // .buttonStyle(.borderless) gives the toggle its own hit area without
-                // needing simultaneousGesture — correct fix for a11y (VoiceOver safe).
+                // Enable/disable toggle — stopPropagation via simultaneous gesture trick
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
                     set: { ScopeStore.shared.setEnabled(entry.id, $0); RunnerStore.shared.start() }
@@ -365,14 +362,14 @@ struct SettingsView: View {
                 .labelsHidden()
                 .help(entry.isEnabled ? "Pause monitoring" : "Resume monitoring")
                 .scaleEffect(0.8, anchor: .trailing)
-                .buttonStyle(.borderless)
+                .simultaneousGesture(TapGesture()) // absorbs tap so row nav isn't triggered
 
-                // Chevron — visual affordance for drill-down
+                // Chevron — navigates to ScopeDetailView
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
 
-                // Remove button — .buttonStyle(.borderless) ensures independent hit area.
+                // Remove button
                 Button(action: {
                     ScopeSettingsStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
@@ -382,8 +379,9 @@ struct SettingsView: View {
                         .font(.caption2)
                         .foregroundColor(Color.rbDanger)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Remove scope")
+                .simultaneousGesture(TapGesture()) // absorbs tap so row nav isn't triggered
             }
         }
         .buttonStyle(.plain)
@@ -431,15 +429,6 @@ struct SettingsView: View {
                     .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-            Divider().padding(.leading, RBSpacing.md)
-            HStack {
-                Text("Show offline runners").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $settings.showDimmedRunners).toggleStyle(.switch).labelsHidden()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
-            Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
-                .font(.caption).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Polling interval").font(.system(size: 12)); Spacer()
