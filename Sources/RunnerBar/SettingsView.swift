@@ -185,15 +185,19 @@ struct SettingsView: View {
     }
 
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
-        localRunnerRowContent(runner)
-            .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: RBRadius.small)
-                    .fill(Color.rbSurfaceElevated)
-                    .overlay(RoundedRectangle(cornerRadius: RBRadius.small)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                    .padding(.horizontal, RBSpacing.xs)
-            )
+        // #490: Full row is tappable — navigates to RunnerDetailView (stub until #491 lands).
+        Button(action: { runnerBeingConfigured = runner }) {
+            localRunnerRowContent(runner)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.small)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(RoundedRectangle(cornerRadius: RBRadius.small)
+                    .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+                .padding(.horizontal, RBSpacing.xs)
+        )
     }
 
     private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
@@ -224,9 +228,10 @@ struct SettingsView: View {
                        label: { Text("Resume").font(.caption2) })
                 .buttonStyle(.bordered).help("Start runner service")
             }
-            Button(action: { runnerBeingConfigured = runner },
-                   label: { Image(systemName: "gearshape").font(.caption2) })
-            .buttonStyle(.plain).help("Configure runner")
+            // #490: chevron replaces cog — row navigates to RunnerDetailView.
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(Color.rbTextTertiary)
             Button(action: { runnerPendingRemoval = runner },
                    label: { Image(systemName: "minus.circle").font(.caption2).foregroundColor(Color.rbDanger) })
             .buttonStyle(.plain).help("Remove runner")
