@@ -1,3 +1,4 @@
+// swiftlint:disable function_body_length
 import Foundation
 
 // Executes shell commands synchronously.
@@ -10,7 +11,6 @@ enum Shell {
 
     // Runs `command` in `/bin/zsh -c` and returns the trimmed output + exit code.
     @discardableResult
-    // swiftlint:disable:next function_body_length
     static func run(_ command: String) -> Result {
         let process = makeProcess(command)
         let (outPipe, errPipe) = attachPipes(to: process)
@@ -46,6 +46,7 @@ enum Shell {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }
+// swiftlint:enable function_body_length
 
 // Backward-compatibility shim.
 // Legacy call-sites use shell("cmd", timeout: N) -> String.
