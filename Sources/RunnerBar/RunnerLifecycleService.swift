@@ -118,6 +118,7 @@ struct RunnerLifecycleService {
         }
         let dir = URL(fileURLWithPath: path)
 
+        // Step 1: svc.sh uninstall (non-fatal)
         log("RunnerLifecycle > REMOVE step1: svc.sh uninstall")
         let (svcOk, _) = runScriptWithOutput(executableName: "svc.sh", arguments: ["uninstall"],
                               workingDirectory: dir, timeout: 30, logTag: "svc.sh uninstall")
@@ -128,6 +129,8 @@ struct RunnerLifecycleService {
             return false
         }
         let scope = scopeFromGitHubUrl(gitHubUrl)
+
+        // Step 2: fetch removal token
         log("RunnerLifecycle > REMOVE step2: fetching removal token for scope=\(scope)")
         guard let token = fetchRemovalToken(scope: scope) else {
             log("RunnerLifecycle > REMOVE abort — fetchRemovalToken returned nil for scope=\(scope)")
@@ -135,17 +138,46 @@ struct RunnerLifecycleService {
         }
         log("RunnerLifecycle > REMOVE step2: got token len=\(token.count)")
 
+        // Step 3: config.sh remove --token
         log("RunnerLifecycle > REMOVE step3: config.sh remove --token <token> in \(path)")
-        let (cfgOk, _) = runScriptWithOutput(executableName: "config.sh",
+        let (cfgOk, cfgOutput) = runScriptWithOutput(executableName: "config.sh",
             arguments: ["remove", "--token", token],
             workingDirectory: dir, timeout: 30, logTag: "config.sh remove")
         log("RunnerLifecycle > REMOVE step3 result=\(cfgOk) for \(runner.runnerName)")
 
-        if cfgOk {
+        var removeOk = cfgOk
+
+        // Step 3b: fallback — if config.sh failed (e.g. corrupt install, missing .bin/Runner.Listener),
+        // deregister directly via GitHub DELETE API using the runner's agentId.
+        if !cfgOk {
+            let isCorrupt = cfgOutput.contains("No such file or directory")
+                || cfgOutput.contains("install is corrupt")
+                || cfgOutput.contains("must run from runner root")
+            log("RunnerLifecycle > REMOVE step3b: config.sh failed isCorrupt=\(isCorrupt) — trying API DELETE fallback")
+            if let agentId = runner.agentId {
+                log("RunnerLifecycle > REMOVE step3b: calling deleteRunnerByID scope=\(scope) agentId=\(agentId)")
+                let apiOk = deleteRunnerByID(scope: scope, runnerID: agentId)
+                log("RunnerLifecycle > REMOVE step3b: deleteRunnerByID result=\(apiOk)")
+                removeOk = apiOk
+            } else {
+                log("RunnerLifecycle > REMOVE step3b: no agentId available — cannot use API DELETE fallback")
+            }
+        }
+
+        // Step 4: unconditionally clean up local disk if deregistration succeeded (or corrupt)
+        if removeOk || (!cfgOk && runner.agentId != nil) {
+            log("RunnerLifecycle > REMOVE step4: deleting install dir \(path)")
+            do {
+                try FileManager.default.removeItem(atPath: path)
+                log("RunnerLifecycle > REMOVE step4: deleted \(path)")
+            } catch {
+                log("RunnerLifecycle > REMOVE step4: failed to delete dir \(path): \(error)")
+            }
             deleteLaunchAgentPlist(for: runner.runnerName)
         }
-        log("RunnerLifecycle > REMOVE done: svcOk=\(svcOk) cfgOk=\(cfgOk) for \(runner.runnerName)")
-        return cfgOk
+
+        log("RunnerLifecycle > REMOVE done: svcOk=\(svcOk) cfgOk=\(cfgOk) removeOk=\(removeOk) for \(runner.runnerName)")
+        return removeOk
     }
 
     // MARK: - Corrupt install detection

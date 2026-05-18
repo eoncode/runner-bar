@@ -268,6 +268,50 @@ func fetchRemovalToken(scope: String) -> String? {
     return resp.token
 }
 
+// MARK: - Delete runner by ID (API fallback for corrupt installs)
+
+/// Directly deregisters a runner from GitHub via DELETE API.
+/// Used as fallback when config.sh is missing or corrupt.
+/// Returns true if the runner was deleted (204) or was already gone (404).
+@discardableResult
+func deleteRunnerByID(scope: String, runnerID: Int) -> Bool {
+    let endpoint: String
+    if scope.contains("/") {
+        endpoint = "repos/\(scope)/actions/runners/\(runnerID)"
+    } else {
+        endpoint = "orgs/\(scope)/actions/runners/\(runnerID)"
+    }
+    log("deleteRunnerByID › DELETE \(endpoint) runnerID=\(runnerID)")
+    guard let ghPath = ghBinaryPath() else {
+        log("deleteRunnerByID › gh not found")
+        return false
+    }
+    let task = Process()
+    let pipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: ghPath)
+    task.arguments = ["api", "--method", "DELETE",
+                      "-H", "Accept: application/vnd.github+json", endpoint]
+    task.standardOutput = pipe
+    task.standardError = pipe
+    do { try task.run() } catch {
+        log("deleteRunnerByID › launch error: \(error)")
+        return false
+    }
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
+    let outData = pipe.fileHandleForReading.readDataToEndOfFile()
+    let raw = String(data: outData, encoding: .utf8) ?? ""
+    let status = task.terminationStatus
+    log("deleteRunnerByID › exit=\(status) response=\(raw.prefix(200))")
+    // 204 No Content = deleted; gh exits 0. 404 = already gone, gh exits non-zero but we treat as success.
+    let alreadyGone = raw.contains("\"404\"") || raw.lowercased().contains("not found")
+    let ok = status == 0 || alreadyGone
+    log("deleteRunnerByID › result=\(ok) alreadyGone=\(alreadyGone) for runnerID=\(runnerID)")
+    return ok
+}
+
 // MARK: - Step log
 
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
