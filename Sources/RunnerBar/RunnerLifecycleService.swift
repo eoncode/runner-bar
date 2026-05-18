@@ -12,6 +12,7 @@ enum LifecycleResult {
 
 // MARK: - RunnerLifecycleService
 
+// swiftlint:disable:next type_body_length
 struct RunnerLifecycleService {
     static let shared = RunnerLifecycleService()
     private init() {}
