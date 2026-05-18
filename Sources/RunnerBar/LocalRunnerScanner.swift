@@ -6,12 +6,11 @@ import Foundation
 /// requiring a GitHub API token. Uses three complementary scan sources:
 ///
 /// 1. **LaunchAgents** — `~/Library/LaunchAgents/actions.runner.*.plist`
-///    Reads the `WorkingDirectory` key from each plist so the runner's exact
-///    install path is known for any custom location. The plist filename is
-///    used ONLY to extract the runner name for display — it is never used
-///    to construct a `gitHubUrl` (the filename encoding is lossy for org
-///    names containing hyphens). `gitHubUrl` is always sourced from the
-///    `.runner` JSON file (Source 2) which is authoritative.
+///    Reads the `WorkingDirectory` key from each plist so the runner’s exact
+///    install path is known for any custom location. The plist label is also
+///    used to derive a `gitHubUrl` fallback (`https://github.com/<owner>/<repo>`)
+///    for runners whose `.runner` JSON omits the field (e.g. installed via
+///    `svc.sh install`). The JSON is still authoritative when present.
 ///
 /// 2. **`.runner` JSON files** — searches the known default install paths
 ///    PLUS any `WorkingDirectory` paths extracted from LaunchAgent plists.
@@ -39,11 +38,21 @@ struct LocalRunnerScanner {
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
 
-        // Source 1: extract WorkingDirectory paths from LaunchAgent plists.
+        // Source 1: extract WorkingDirectory paths and plist-derived gitHubUrl fallbacks.
         let (launchAgentModels, launchAgentPaths) = scanLaunchAgents()
 
-        // Source 2: .runner JSON is authoritative — provides correct gitHubUrl.
-        for model in scanRunnerJSONFiles(extraRoots: launchAgentPaths) {
+        // Build a name → fallback-URL map from Source 1 so Source 2 can use it.
+        let plistFallbackURLs: [String: String] = launchAgentModels.reduce(into: [:]) { dict, m in
+            if let url = m.gitHubUrl { dict[m.runnerName] = url }
+        }
+
+        // Source 2: .runner JSON is authoritative — provides correct gitHubUrl when present.
+        // If gitHubUrl is nil/empty in the JSON, patch it from the plist-derived fallback.
+        for var model in scanRunnerJSONFiles(extraRoots: launchAgentPaths) {
+            if (model.gitHubUrl ?? "").isEmpty, let fallback = plistFallbackURLs[model.runnerName] {
+                model.gitHubUrl = fallback
+                log("LocalRunnerScanner › patched gitHubUrl from plist label for \(model.runnerName): \(fallback)")
+            }
             models[model.id] = model
         }
 
@@ -86,9 +95,28 @@ struct LocalRunnerScanner {
         for url in entries {
             let filename = url.deletingPathExtension().lastPathComponent
             guard filename.hasPrefix(prefix) else { continue }
+            // Label format: actions.runner.<owner>.<repo>.<runnerName>
+            // parts[0] = owner, parts[1] = repo, parts[2...] = runner name components
             let remainder = String(filename.dropFirst(prefix.count))
             let parts = remainder.components(separatedBy: ".")
             let runnerName = parts.last ?? "runner"
+
+            // Derive a GitHub URL fallback from the label when possible.
+            // Requires at least owner + repo (i.e. ≥2 dot-separated parts before the name).
+            var plistGitHubUrl: String?
+            if parts.count >= 3 {
+                let owner = parts[0]
+                let repo  = parts[1]
+                if !owner.isEmpty && !repo.isEmpty {
+                    plistGitHubUrl = "https://github.com/\(owner)/\(repo)"
+                }
+            } else if parts.count == 2 {
+                // Org-scoped runner: actions.runner.<org>.<runnerName>
+                let org = parts[0]
+                if !org.isEmpty {
+                    plistGitHubUrl = "https://github.com/\(org)"
+                }
+            }
 
             if let plist = NSDictionary(contentsOf: url),
                let workDir = plist["WorkingDirectory"] as? String,
@@ -98,7 +126,7 @@ struct LocalRunnerScanner {
 
             models.append(RunnerModel(
                 runnerName: runnerName,
-                gitHubUrl: nil,
+                gitHubUrl: plistGitHubUrl,
                 agentId: nil,
                 workFolder: nil,
                 installPath: nil,
