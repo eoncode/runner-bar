@@ -7,7 +7,7 @@ import SwiftUI
 // HEIGHT CONTRACT:
 // headerBar is OUTSIDE the ScrollView — back button always visible.
 // ScrollView uses maxHeight: .infinity to fill all remaining panel space.
-// AppDelegate.resizeAndRepositionPanel() clamps the panel to 85% visibleFrame.
+// AppDelegate.resizeAndRepositionPanel() clamps the panel at 85% visibleFrame.
 // No extra cap needed here — the panel cap IS the scroll boundary.
 // ❌ NEVER move headerBar inside the ScrollView.
 // ❌ NEVER replace .infinity with a fixed number.
@@ -99,7 +99,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             localRunnersSection
             Divider()
-            runnerSection
+            remoteScopesSection
             Divider()
             notificationsSection
             Divider()
@@ -297,30 +297,31 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Runner scopes
-    private var runnerSection: some View {
+    // MARK: - Remote runner scopes
+
+    /// Returns true when the scope string looks like an org (no slash), false for owner/repo.
+    private func isOrgScope(_ scope: String) -> Bool {
+        !scope.contains("/")
+    }
+
+    private var remoteScopesSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Runner management").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
-            if !store.runners.isEmpty {
-                ForEach(store.runners, id: \.id) { runner in
-                    HStack(spacing: 8) {
-                        Circle().fill(runnerDotColor(for: runner)).frame(width: 8, height: 8)
-                        Text(runner.name).font(.system(size: 13)).lineLimit(1)
-                        Spacer()
-                        Text(runner.displayStatus).font(.caption).foregroundColor(Color.rbTextSecondary)
-                            .lineLimit(1).fixedSize()
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-                }
-            } else {
-                Text("No runners configured").font(.caption).foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
-            }
-            Text("Scopes").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
+            // Section header
+            Text("Remote runner scopes")
+                .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
+            // Subtitle
+            Text("GitHub repos or orgs whose runners are fetched via the API.")
+                .font(.caption).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
+            // Existing scopes
             ForEach(scopeStore.scopes, id: \.self) { scopeStr in
-                HStack {
+                HStack(spacing: 6) {
+                    // Icon distinguishes org (building) from repo (chevron.left.slash.chevron.right)
+                    Image(systemName: isOrgScope(scopeStr) ? "building.2" : "chevron.left.forwardslash.chevron.right")
+                        .font(.caption)
+                        .foregroundColor(Color.rbTextTertiary)
+                        .frame(width: 14, alignment: .center)
                     Text(scopeStr).font(.system(size: 12))
                     Spacer()
                     Button(action: { ScopeStore.shared.remove(scopeStr); RunnerStore.shared.start() },
@@ -329,8 +330,14 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 2)
             }
-            HStack {
-                TextField("owner/repo or org", text: $newScope)
+            // Add scope row
+            HStack(spacing: 6) {
+                // Preview icon updates as the user types
+                Image(systemName: isOrgScope(newScope) && !newScope.isEmpty ? "building.2" : "chevron.left.forwardslash.chevron.right")
+                    .font(.caption)
+                    .foregroundColor(Color.rbTextTertiary)
+                    .frame(width: 14, alignment: .center)
+                TextField("e.g. myorg  or  myorg/myrepo", text: $newScope)
                     .textFieldStyle(.roundedBorder).font(.system(size: 12)).onSubmit { submitScope() }
                 Button(action: submitScope, label: { Image(systemName: "plus.circle") })
                     .buttonStyle(.plain)
@@ -475,14 +482,6 @@ struct SettingsView: View {
                 .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-    }
-
-    private func runnerDotColor(for runner: Runner) -> Color {
-        switch runner.status {
-        case "online":  return Color.rbSuccess
-        case "offline": return Color.rbDanger
-        default:        return Color.rbTextTertiary
-        }
     }
 
     private func submitScope() {
