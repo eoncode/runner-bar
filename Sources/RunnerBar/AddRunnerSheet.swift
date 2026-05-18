@@ -389,9 +389,8 @@ struct AddRunnerSheet: View {
         openPanel.allowsMultipleSelection = false
         openPanel.message = "Select the runner install folder (must contain a .runner file)"
         openPanel.prompt = "Select"
-        openPanel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
-        NSApp.activate(ignoringOtherApps: true)
-        openPanel.begin { response in
+        guard let window = NSApp.keyWindow else { return }
+        openPanel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = openPanel.url else { return }
             handlePickedFolder(url)
         }
