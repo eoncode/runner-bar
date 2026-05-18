@@ -2,24 +2,24 @@ import Foundation
 
 // MARK: - RunnerStatusEnricher
 
-/// Phase 4: Enriches locally-discovered `RunnerModel` values with live status
-/// from the GitHub API.
-///
-/// Uses the `gitHubUrl` already stored in each runner to call only the targeted
-/// API endpoints — no brute-force org/repo iteration. One paginated API call
-/// series per unique scope (owner/repo or org) in the runner list.
-///
-/// All methods are synchronous and blocking — always call from a background thread.
+// Phase 4: Enriches locally-discovered `RunnerModel` values with live status
+// from the GitHub API.
+//
+// Uses the `gitHubUrl` already stored in each runner to call only the targeted
+// API endpoints — no brute-force org/repo iteration. One paginated API call
+// series per unique scope (owner/repo or org) in the runner list.
+//
+// All methods are synchronous and blocking — always call from a background thread.
 struct RunnerStatusEnricher {
     // MARK: - Shared singleton
 
-    /// The shared `RunnerStatusEnricher` instance used throughout the app.
+    // The shared `RunnerStatusEnricher` instance used throughout the app.
     static let shared = RunnerStatusEnricher()
     private init() {}
 
     // MARK: - Codable schema
 
-    /// Decodable mirror of one runner entry from the GitHub Actions runners API.
+    // Decodable mirror of one runner entry from the GitHub Actions runners API.
     private struct APIRunner: Decodable {
         let id: Int
         let name: String
@@ -33,10 +33,10 @@ struct RunnerStatusEnricher {
 
     // MARK: - Public API
 
-    /// Fetches live GitHub status for all runners whose `gitHubUrl` is known
-    /// and returns a new array with `githubStatus` and `isBusy` populated.
-    /// Runners without a `gitHubUrl` are returned unchanged — their
-    /// `statusColor` continues to reflect the local launchctl-derived state.
+    // Fetches live GitHub status for all runners whose `gitHubUrl` is known
+    // and returns a new array with `githubStatus` and `isBusy` populated.
+    // Runners without a `gitHubUrl` are returned unchanged — their
+    // `statusColor` continues to reflect the local launchctl-derived state.
     func enrich(runners: [RunnerModel]) -> [RunnerModel] {
         guard !runners.isEmpty else { return runners }
         let apiLookup = buildAPILookup(for: runners)
@@ -92,7 +92,6 @@ struct RunnerStatusEnricher {
         return (byID, byName)
     }
 
-    /// Applies GitHub API status to a single `RunnerModel`, logging divergence.
     private func applyEnrichment(
         to runner: RunnerModel,
         lookup: (byID: [Int: APIRunner], byName: [String: APIRunner])
@@ -120,8 +119,6 @@ struct RunnerStatusEnricher {
 
     // MARK: - Helpers
 
-    /// Converts a `gitHubUrl` into a scope string (`"owner/repo"` or `"org"`)
-    /// suitable for the GitHub Actions runners API.
     private func scopeFrom(gitHubUrl: String) -> String? {
         guard let url = URL(string: gitHubUrl) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }

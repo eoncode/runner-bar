@@ -1,3 +1,4 @@
+// swiftlint:disable operator_usage_whitespace vertical_whitespace_opening_braces
 import AppKit
 
 /// Renders the coloured status icon shown in the menu bar and popover rows.
@@ -43,18 +44,15 @@ struct StatusIcon {
 
     /// Renders the status icon as a square `NSImage` suitable for the menu bar.
     /// - Parameter size: Width and height in points (default 18).
-    // swiftlint:disable operator_usage_whitespace
     func image(size: CGFloat = 18) -> NSImage {
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
-
         let inset: CGFloat = 1
         let iconSize = size - 2
         let rect = NSRect(x: inset, y: inset, width: iconSize, height: iconSize)
         let bgPath = NSBezierPath(ovalIn: rect)
         color.withAlphaComponent(0.15).setFill()
         bgPath.fill()
-
         let fontSize = size * 0.55
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
@@ -65,10 +63,8 @@ struct StatusIcon {
         let drawX = (size - strSize.width) / 2
         let drawY = (size - strSize.height) / 2
         attrStr.draw(at: NSPoint(x: drawX, y: drawY))
-
         img.unlockFocus()
         img.isTemplate = false
         return img
     }
-    // swiftlint:enable operator_usage_whitespace
 }
