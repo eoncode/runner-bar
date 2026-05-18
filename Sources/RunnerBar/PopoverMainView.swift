@@ -74,7 +74,7 @@ struct PopoverMainView: View {
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
             SectionHeaderLabel(title: "Local Runners")
-            PopoverLocalRunnerRow(runners: store.runners)
+            PopoverLocalRunnerRow(runners: store.localRunners)
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
