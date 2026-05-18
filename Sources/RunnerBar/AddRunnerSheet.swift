@@ -614,11 +614,15 @@ struct AddRunnerSheet: View {
         let label      = "actions.runner.\(owner).\(repo).\(runnerName)"
         let plistURL   = launchAgentsDir.appendingPathComponent("\(label).plist")
 
-        let plist: NSDictionary = ["Label": label, "WorkingDirectory": workingDirectory]
         do {
             try FileManager.default.createDirectory(
                 at: launchAgentsDir, withIntermediateDirectories: true)
-            plist.write(to: plistURL, atomically: true)
+            let plistData = try PropertyListSerialization.data(
+                fromPropertyList: ["Label": label, "WorkingDirectory": workingDirectory],
+                format: .xml,
+                options: 0
+            )
+            try plistData.write(to: plistURL, options: .atomic)
             log("AddRunnerSheet › wrote LaunchAgent plist: \(plistURL.path)")
         } catch {
             log("AddRunnerSheet › failed to write LaunchAgent plist: \(error)")
