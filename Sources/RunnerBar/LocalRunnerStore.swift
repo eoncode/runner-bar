@@ -1,5 +1,5 @@
-import Combine
 import Foundation
+import Combine
 
 // MARK: - LocalRunnerStore
 
@@ -12,7 +12,7 @@ final class LocalRunnerStore: ObservableObject {
     @Published var isScanning: Bool = false
 
     private let scanner  = LocalRunnerScanner()
-    private let enricher = RunnerStatusEnricher()
+    private let enricher = RunnerStatusEnricher.shared
 
     // MARK: - Refresh
 
@@ -38,7 +38,7 @@ final class LocalRunnerStore: ObservableObject {
                 enriched = self.enricher.enrich(runners: scanned)
                 let enrichedSummary = enriched.map { r -> String in
                     let st = r.githubStatus ?? "nil"
-                    return "\(r.runnerName)(isRunning=\(r.isRunning),status=\(st),warning=\(r.lifecycleWarning ?? "none"))"
+                    return "\(r.runnerName)(isRunning=\(r.isRunning),status=\(st),warning=\(r.lifecycleWarning ?? \"none\"))"
                 }.joined(separator: ", ")
                 log("LocalRunnerStore > refresh() background — enricher returned \(enriched.count) runner(s): [\(enrichedSummary)]")
             } else {
