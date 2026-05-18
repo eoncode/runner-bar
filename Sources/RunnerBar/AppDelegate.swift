@@ -173,13 +173,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     private static let minWidth: CGFloat = 280
 
+    /// The screen the status item lives on.
+    /// Falls back to NSScreen.main only if the status item’s window has no screen
+    /// (e.g. before the panel has ever been shown).
+    /// Using this instead of NSScreen.main ensures correct sizing on multi-monitor
+    /// setups where the key window is on a different display than the menu bar.
+    private var statusItemScreen: NSScreen {
+        statusItem?.button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+
     private var maxWidth: CGFloat {
-        let screenMax = NSScreen.main.map { $0.visibleFrame.width * 0.9 } ?? 900
+        let screenMax = statusItemScreen.visibleFrame.width * 0.9
         return min(900, screenMax)
     }
 
     private var maxHeight: CGFloat {
-        NSScreen.main.map { $0.visibleFrame.height * 0.85 } ?? 700
+        statusItemScreen.visibleFrame.height * 0.85
     }
 
     private static let gap: CGFloat = 2
@@ -299,7 +308,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let posX = statusItemRect.midX - contentW / 2
         let rawPosY = topY - totalH
-        let screenMinY = NSScreen.main?.visibleFrame.minY ?? 0
+        // Use the status-item’s own screen for the Y-clamp floor so the panel
+        // never dips below the Dock on whichever display the menu bar is on.
+        let screenMinY = statusItemScreen.visibleFrame.minY
         let posY = max(rawPosY, screenMinY)
 
         panel.setFrame(NSRect(x: posX, y: posY, width: contentW, height: totalH),
