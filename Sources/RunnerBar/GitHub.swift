@@ -272,7 +272,8 @@ func fetchRemovalToken(scope: String) -> String? {
 
 /// Directly deregisters a runner from GitHub via DELETE API.
 /// Used as fallback when config.sh is missing or corrupt.
-/// Returns true if the runner was deleted (204) or was already gone (404).
+/// Returns true only if the runner was successfully deleted (HTTP 204, gh exit 0).
+/// A 404 response means the runner ID was not found — that is a failure, not a deletion.
 @discardableResult
 func deleteRunnerByID(scope: String, runnerID: Int) -> Bool {
     let endpoint: String
@@ -305,10 +306,13 @@ func deleteRunnerByID(scope: String, runnerID: Int) -> Bool {
     let raw = String(data: outData, encoding: .utf8) ?? ""
     let status = task.terminationStatus
     log("deleteRunnerByID › exit=\(status) response=\(raw.prefix(200))")
-    // 204 No Content = deleted; gh exits 0. 404 = already gone, gh exits non-zero but we treat as success.
-    let alreadyGone = raw.contains("\"404\"") || raw.lowercased().contains("not found")
-    let ok = status == 0 || alreadyGone
-    log("deleteRunnerByID › result=\(ok) alreadyGone=\(alreadyGone) for runnerID=\(runnerID)")
+    // GitHub DELETE returns 204 No Content on success — gh exits 0.
+    // Any non-zero exit (including 404 Not Found) is a genuine failure.
+    let ok = status == 0
+    if !ok {
+        log("deleteRunnerByID › DELETE failed (exit=\(status)) for runnerID=\(runnerID) — runner may still exist on GitHub")
+    }
+    log("deleteRunnerByID › result=\(ok) for runnerID=\(runnerID)")
     return ok
 }
 
