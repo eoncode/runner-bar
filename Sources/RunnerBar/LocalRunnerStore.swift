@@ -6,7 +6,9 @@ import Foundation
 @MainActor
 final class LocalRunnerStore: ObservableObject {
     static let shared = LocalRunnerStore()
-    private init() {}
+    private init() {
+        // No custom initialisation needed; singleton uses default property values.
+    }
 
     @Published var runners: [RunnerModel] = []
     @Published var isScanning: Bool = false
@@ -75,7 +77,7 @@ final class LocalRunnerStore: ObservableObject {
         runners[idx].isRunning = isRunning
         runners[idx].lifecycleWarning = nil
         log("LocalRunnerStore > optimisticallySetRunning — cleared lifecycleWarning for \(runnerName)")
-        runners = runners
+        objectWillChange.send()
         log("LocalRunnerStore > optimisticallySetRunning — done, runners.count=\(runners.count)")
     }
 
@@ -88,7 +90,7 @@ final class LocalRunnerStore: ObservableObject {
         }
         log("LocalRunnerStore > setLifecycleWarning — FOUND at index \(idx), setting warning=\(w) on runner \(runnerName)")
         runners[idx].lifecycleWarning = warning
-        runners = runners
+        objectWillChange.send()
         let displayStatus = runners[idx].displayStatus
         log("LocalRunnerStore > setLifecycleWarning — done for \(runnerName), displayStatus is now: \(displayStatus)")
     }
