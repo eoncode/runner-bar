@@ -47,12 +47,12 @@ struct StatusIcon {
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
 
-        let rect = NSRect(x: 1, y: 1, width: size - 2, height: size - 2)
+        let inset: CGFloat = 1
+        let rect = NSRect(x: inset, y: inset, width: size - 2, height: size - 2)
         let bgPath = NSBezierPath(ovalIn: rect)
         color.withAlphaComponent(0.15).setFill()
         bgPath.fill()
 
-        // swiftlint:disable:next operator_usage_whitespace
         let fontSize = size * 0.55
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
@@ -60,10 +60,9 @@ struct StatusIcon {
         ]
         let attrStr = NSAttributedString(string: icon, attributes: attrs)
         let strSize = attrStr.size()
-        attrStr.draw(at: NSPoint(
-            x: (size - strSize.width) / 2,
-            y: (size - strSize.height) / 2
-        ))
+        let drawX = (size - strSize.width) / 2
+        let drawY = (size - strSize.height) / 2
+        attrStr.draw(at: NSPoint(x: drawX, y: drawY))
 
         img.unlockFocus()
         img.isTemplate = false
