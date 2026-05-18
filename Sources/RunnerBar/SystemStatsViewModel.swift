@@ -38,6 +38,9 @@ final class SystemStatsViewModel: ObservableObject {
     private var prevCPUInfo: processor_info_array_t?
     private var prevNumCPUInfo: mach_msg_type_number_t = 0
 
+    /// Root volume path used for disk-space queries.
+    private static let rootVolumePath = "/"
+
     init() {
         // No custom initialisation needed; all properties have defaults.
     }
@@ -169,7 +172,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     private func sampleDisk() -> (used: Double, total: Double) {
         guard
-            let attrs = try? FileManager.default.attributesOfFileSystem(forPath: "/"),
+            let attrs = try? FileManager.default.attributesOfFileSystem(forPath: Self.rootVolumePath),
             let total = attrs[.systemSize] as? Int64,
             let free = attrs[.systemFreeSize] as? Int64
         else { return (0, 0) }
