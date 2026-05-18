@@ -4,6 +4,14 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - AddRunnerSheet
 
+// MARK: - URI Constants
+private enum GitHubURIs {
+    static let base            = "https://github.com/"
+    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest"
+    static let launchAgentsDir = "Library/LaunchAgents"
+    static let actionsRunnerDefaultDir = "actions-runner/my-runner"
+}
+
 /// Sheet view for onboarding a self-hosted runner.
 ///
 /// Supports two modes selectable via a segmented control at the top:
@@ -59,7 +67,7 @@ struct AddRunnerSheet: View {
     /// component to match their runner name. Each runner needs its own folder.
     @State private var installDir = FileManager.default
         .homeDirectoryForCurrentUser
-        .appendingPathComponent("actions-runner/my-runner").path
+        .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
 
     // MARK: Registration state (Add new only)
 
@@ -75,7 +83,7 @@ struct AddRunnerSheet: View {
     @State private var detectedName = ""
     /// GitHub URL parsed from the `.runner` JSON inside `existingDir`.
     @State private var detectedGitHubURL = ""
-    /// Shown when the selected folder has no valid `.runner` file or it can’t be parsed.
+    /// Shown when the selected folder has no valid `.runner` file or it can't be parsed.
     @State private var existingError: String?
     /// Editable fallback shown when `.runner` JSON has no `gitHubUrl` (rare, org-scoped runners).
     @State private var githubURLOverride = ""
@@ -242,7 +250,7 @@ struct AddRunnerSheet: View {
                     // Fallback: let user supply the GitHub URL manually
                     VStack(alignment: .leading, spacing: 4) {
                         Text("GitHub URL").font(.caption).foregroundColor(.secondary)
-                        TextField("https://github.com/owner/repo", text: $githubURLOverride)
+                        TextField("\(GitHubURIs.base)owner/repo", text: $githubURLOverride)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                         Text("The .runner file has no GitHub URL. Paste the repo or org URL above.")
@@ -364,7 +372,7 @@ struct AddRunnerSheet: View {
     /// Checks whether a LaunchAgent plist already exists for this runner name.
     private func checkDuplicate(runnerName: String) -> Bool {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents").path
+            .appendingPathComponent(GitHubURIs.launchAgentsDir).path
         guard let entries = try? FileManager.default
             .contentsOfDirectory(atPath: launchAgentsDir) else { return false }
         return entries.contains {
@@ -374,24 +382,6 @@ struct AddRunnerSheet: View {
 
     // MARK: - Actions (Add pre-existing)
 
-    /// Opens an NSOpenPanel restricted to directories, reads and validates the .runner JSON.
-    ///
-    /// ## Root cause of the z-ordering bug
-    ///
-    /// The RunnerBar Settings panel is an NSPanel with `level = .popUpMenu`
-    /// (see AppDelegate). macOS window level ordering, from low to high:
-    ///
-    ///   .normal < .floating < .modalPanel < .mainMenu < .status < .popUpMenu < .screenSaver
-    ///
-    /// NSOpenPanel defaults to `.modalPanel`. That is *below* `.popUpMenu`, so
-    /// the Settings NSPanel always wins the z-fight regardless of which
-    /// presentation API is used (runModal, begin, beginSheetModal, orderFrontRegardless).
-    ///
-    /// ## Fix
-    ///
-    /// Set `openPanel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)`
-    /// before calling `begin(completionHandler:)`. This places the file picker
-    /// one level above the Settings panel so it always renders on top.
     private func pickExistingFolder() {
         let openPanel = NSOpenPanel()
         openPanel.canChooseFiles = false
@@ -399,16 +389,8 @@ struct AddRunnerSheet: View {
         openPanel.allowsMultipleSelection = false
         openPanel.message = "Select the runner install folder (must contain a .runner file)"
         openPanel.prompt = "Select"
-
-        // ⚠️ KEY FIX: raise the panel above the .popUpMenu-level NSPanel.
-        // The RunnerBar status-bar NSPanel sits at .popUpMenu level.
-        // NSOpenPanel defaults to .modalPanel which is below .popUpMenu.
-        // Simply bump it one step higher so it always wins the z-ordering fight.
         openPanel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
-
-        // Activate the app so the panel can become key window and receive input.
         NSApp.activate(ignoringOtherApps: true)
-
         openPanel.begin { response in
             guard response == .OK, let url = openPanel.url else { return }
             handlePickedFolder(url)
@@ -420,14 +402,12 @@ struct AddRunnerSheet: View {
         resetExistingState()
         existingDir = url.path
 
-        // Validate .runner file is present
         let runnerFileURL = url.appendingPathComponent(".runner")
         guard FileManager.default.fileExists(atPath: runnerFileURL.path) else {
             existingError = "No .runner file found in the selected folder. Is this a valid runner install directory?"
             return
         }
 
-        // Decode .runner JSON
         guard let data = try? Data(contentsOf: runnerFileURL) else {
             existingError = "Could not read .runner file."
             return
@@ -455,7 +435,7 @@ struct AddRunnerSheet: View {
         guard canImport else { return }
 
         let scope = effectiveGitHubURL
-            .replacingOccurrences(of: "https://github.com/", with: "")
+            .replacingOccurrences(of: GitHubURIs.base, with: "")
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
         guard !scope.isEmpty else {
@@ -480,7 +460,7 @@ struct AddRunnerSheet: View {
         labelsText       = "self-hosted,macOS"
         installDir       = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("actions-runner/my-runner").path
+            .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
         isRegistering    = false
         registrationStep = ""
         errorMessage     = nil
@@ -601,7 +581,7 @@ struct AddRunnerSheet: View {
             }
 
             setStep("Configuring runner…")
-            let ghURL      = "https://github.com/\(scope)"
+            let ghURL      = "\(GitHubURIs.base)\(scope)"
             let configExit = runRegistrationCommand(dir: dir, ghURL: ghURL,
                                                     token: token, name: name, labels: labels)
             guard configExit == 0 else {
@@ -628,7 +608,7 @@ struct AddRunnerSheet: View {
 
     func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents")
+            .appendingPathComponent(GitHubURIs.launchAgentsDir)
         let scopeParts = scope.components(separatedBy: "/")
         let owner      = scopeParts[0]
         let repo       = scopeParts.count > 1 ? scopeParts[1] : scopeParts[0]
@@ -721,7 +701,7 @@ private func fetchRunnerDownloadURL() -> String? {
     let assetName = "actions-runner-osx-\(assetArch)"
     log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
 
-    guard let url  = URL(string: "https://api.github.com/repos/actions/runner/releases/latest"),
+    guard let url  = URL(string: GitHubURIs.apiRunnerLatest),
           let data = try? Data(contentsOf: url) else {
         log("fetchRunnerDownloadURL › failed to fetch release JSON")
         return nil
