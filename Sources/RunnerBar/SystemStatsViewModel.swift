@@ -95,6 +95,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: CPU (Mach host_processor_info)
 
+    // swiftlint:disable:next function_body_length
     private func sampleCPU() -> Double {
         var numCPUsU: natural_t = 0
         var cpuInfo: processor_info_array_t?

@@ -38,7 +38,7 @@ struct SystemStatsView: View {
 /// A single header metric chip: label + inline sparkline + monospaced value,
 /// all in one horizontal row -- matching the reference compact header design.
 ///
-/// Layout:  CPU [▄▄▄] 41.1%    MEM [▄▄▄] 6.4/16.0GB
+/// Layout:  CPU [▄6▄6▄6] 41.1%    MEM [▄6▄6▄6] 6.4/16.0GB
 ///             ^     ^     ^
 ///    9pt label   40x14pt sparkline   10pt mono value
 ///
@@ -89,7 +89,6 @@ struct SparklineMetricView: View {
 struct DiskPillBadge: View {
     // Percentage of disk space that is FREE (0-100).
     let freePct: Double
-
     var body: some View {
         Text(String(format: "%.0f%% free", freePct))
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -186,7 +185,6 @@ struct BlockBarView: View {
             Text(label)
                 .font(DesignTokens.Fonts.monoLabel)
                 .foregroundColor(.secondary)
-
             GeometryReader { geo in
                 let barWidth = geo.size.width * CGFloat(min(max(pct / 100.0, 0), 1))
                 ZStack(alignment: .leading) {

@@ -20,6 +20,7 @@ enum Shell {
         }
         process.waitUntilExit()
         let output = readOutput(from: outPipe)
+        // swiftlint:disable:next unused_optional_binding
         _ = errPipe
         return Result(output: output, exitCode: process.terminationStatus)
     }
@@ -41,7 +42,8 @@ enum Shell {
 
     private static func readOutput(from pipe: Pipe) -> String {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)?
+        // swiftlint:disable:next operator_usage_whitespace
+        return String(data: data, encoding: .utf8)??
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }
