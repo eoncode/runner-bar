@@ -3,6 +3,8 @@ import Foundation
 // MARK: - ScopeSettingsStore
 // #505: Per-scope UserDefaults schema.
 //
+// Intentionally caseless — used as a namespace only. Instantiation is forbidden.
+//
 // Keys are namespaced under "scope.<scopeString>.<field>" so each scope has its
 // own independent settings bucket. All values are optional — nil means "use the
 // global setting" (alias: use raw scope string; polling: use SettingsStore.pollingInterval;

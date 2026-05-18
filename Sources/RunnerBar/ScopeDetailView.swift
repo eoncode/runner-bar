@@ -17,6 +17,8 @@ struct ScopeDetailView: View {
 
     // #500: Alias
     @State private var aliasText: String
+    // Cached initial alias so .disabled() on Save never reads UserDefaults on every body pass.
+    @State private var savedAlias: String
     @State private var aliasSaved = false
 
     // #502: Polling interval override
@@ -40,7 +42,9 @@ struct ScopeDetailView: View {
         self.scopeEntry = scopeEntry
         self.onBack = onBack
         let scope = scopeEntry.scope
-        _aliasText = State(initialValue: ScopeSettingsStore.alias(for: scope) ?? "")
+        let initialAlias = ScopeSettingsStore.alias(for: scope) ?? ""
+        _aliasText = State(initialValue: initialAlias)
+        _savedAlias = State(initialValue: initialAlias)
         _pollingOverride = State(initialValue: ScopeSettingsStore.pollingInterval(for: scope))
         _notifySuccessOverride = State(initialValue: ScopeSettingsStore.notifyOnSuccess(for: scope))
         _notifyFailureOverride = State(initialValue: ScopeSettingsStore.notifyOnFailure(for: scope))
@@ -77,6 +81,7 @@ struct ScopeDetailView: View {
 
     private var headerBar: some View {
         HStack(spacing: 8) {
+            // Back label reads "‹ Settings" — intentional, mirrors RunnerDetailView.
             Button(action: onBack) {
                 HStack(spacing: 3) {
                     Image(systemName: "chevron.left").font(.caption)
@@ -152,8 +157,8 @@ struct ScopeDetailView: View {
                             Text("Save").font(.caption2)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(aliasText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            == (ScopeSettingsStore.alias(for: scope) ?? ""))
+                        // Compare against cached savedAlias — avoids a UserDefaults read on every body pass.
+                        .disabled(aliasText.trimmingCharacters(in: .whitespacesAndNewlines) == savedAlias)
                     }
                 }
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
@@ -181,7 +186,8 @@ struct ScopeDetailView: View {
                     }
                     .labelsHidden()
                     .frame(width: 110)
-                    .onChange(of: pollingOverride) { newValue in
+                    // Two-argument form — single-arg onChange(of:) deprecated macOS 14 / Swift 5.9.
+                    .onChange(of: pollingOverride) { _, newValue in
                         ScopeSettingsStore.setPollingInterval(newValue, for: scope)
                         RunnerStore.shared.start()
                     }
@@ -318,12 +324,17 @@ struct ScopeDetailView: View {
     private func saveAlias() {
         let trimmed = aliasText.trimmingCharacters(in: .whitespacesAndNewlines)
         ScopeSettingsStore.setAlias(trimmed.isEmpty ? nil : trimmed, for: scope)
+        // Update cached value so Save button disables immediately after saving.
+        savedAlias = trimmed
         aliasSaved = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { aliasSaved = false }
     }
 
     private func removeScope() {
         ScopeSettingsStore.cleanUp(scope: scope)
+        // ScopeStore.remove is synchronous and fires onMutate → observable.reload() before
+        // returning, so the scope is fully gone from the live store before start() polls.
+        // No removed-scope poll window exists.
         ScopeStore.shared.remove(id: scopeEntry.id)
         RunnerStore.shared.start()
         onBack()

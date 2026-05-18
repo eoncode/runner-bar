@@ -321,8 +321,10 @@ struct SettingsView: View {
         }
     }
 
-    /// #499: Scope row is now a tappable Button that navigates to ScopeDetailView.
-    /// The inner content is unchanged except for the added chevron on the right.
+    /// #499: Scope row is a tappable Button that navigates to ScopeDetailView.
+    /// Inner toggle and minus use .buttonStyle(.borderless) so they receive their
+    /// own independent hit-testing without leaking the tap to the outer row Button.
+    /// This is VoiceOver-safe — each control gets its own accessibility element.
     private func scopeRow(_ entry: ScopeEntry) -> some View {
         let isRepo = entry.scope.contains("/")
         let displayName = ScopeSettingsStore.displayName(for: entry.scope)
@@ -353,7 +355,8 @@ struct SettingsView: View {
 
                 Spacer()
 
-                // Enable/disable toggle — stopPropagation via simultaneous gesture trick
+                // .buttonStyle(.borderless) gives the toggle its own hit area without
+                // needing simultaneousGesture — correct fix for a11y (VoiceOver safe).
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
                     set: { ScopeStore.shared.setEnabled(entry.id, $0); RunnerStore.shared.start() }
@@ -362,14 +365,14 @@ struct SettingsView: View {
                 .labelsHidden()
                 .help(entry.isEnabled ? "Pause monitoring" : "Resume monitoring")
                 .scaleEffect(0.8, anchor: .trailing)
-                .simultaneousGesture(TapGesture()) // absorbs tap so row nav isn't triggered
+                .buttonStyle(.borderless)
 
-                // Chevron — navigates to ScopeDetailView
+                // Chevron — visual affordance for drill-down
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
 
-                // Remove button
+                // Remove button — .buttonStyle(.borderless) ensures independent hit area.
                 Button(action: {
                     ScopeSettingsStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
@@ -379,9 +382,8 @@ struct SettingsView: View {
                         .font(.caption2)
                         .foregroundColor(Color.rbDanger)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .help("Remove scope")
-                .simultaneousGesture(TapGesture()) // absorbs tap so row nav isn't triggered
             }
         }
         .buttonStyle(.plain)
