@@ -71,9 +71,10 @@ struct ActionDetailView: View {
         return f
     }()
 
+    // swiftlint:disable:next function_body_length
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header ───────────────────────────────────────────────────────────────────────
+            // ── Header ────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -125,7 +126,7 @@ struct ActionDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Group title block ────────────────────────────────────────────────────────────────────
+            // ── Group title block ────────────────────────────────────────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Button(action: openLabelOnGitHub) {
@@ -171,7 +172,7 @@ struct ActionDetailView: View {
 
             Divider()
 
-            // ── Jobs list ──────────────────────────────────────────────────────────────────────────
+            // ── Jobs list ──────────────────────────────────────────────────────────────────────────────────────
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: RBSpacing.xxs) {

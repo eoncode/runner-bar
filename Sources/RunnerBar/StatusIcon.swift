@@ -46,9 +46,9 @@ struct StatusIcon {
     func image(size: CGFloat = 18) -> NSImage {
         let img = NSImage(size: NSSize(width: size, height: size))
         img.lockFocus()
-        let inset: CGFloat = 1
         // swiftlint:disable:next operator_usage_whitespace
         let iconSize = size - 2
+        let inset: CGFloat = 1
         let rect = NSRect(x: inset, y: inset, width: iconSize, height: iconSize)
         let bgPath = NSBezierPath(ovalIn: rect)
         color.withAlphaComponent(0.15).setFill()
