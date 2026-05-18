@@ -312,6 +312,74 @@ func deleteRunnerByID(scope: String, runnerID: Int) -> Bool {
     return ok
 }
 
+// MARK: - Patch runner labels (#492)
+
+/// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
+/// The built-in labels (self-hosted, OS, arch) are preserved by GitHub automatically.
+/// Returns the updated label names on success, or nil on failure.
+@discardableResult
+func patchRunnerLabels(scope: String, runnerID: Int, labels: [String]) -> [String]? {
+    let endpoint: String
+    if scope.contains("/") {
+        endpoint = "repos/\(scope)/actions/runners/\(runnerID)/labels"
+    } else {
+        endpoint = "orgs/\(scope)/actions/runners/\(runnerID)/labels"
+    }
+    log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
+    // Build JSON body: {"labels": ["label1","label2"]}
+    guard let bodyData = try? JSONSerialization.data(withJSONObject: ["labels": labels]),
+          let bodyString = String(data: bodyData, encoding: .utf8),
+          let ghPath = ghBinaryPath()
+    else {
+        log("patchRunnerLabels › failed to build request")
+        return nil
+    }
+    let task = Process()
+    let pipe = Pipe()
+    let errPipe = Pipe()
+    task.executableURL = URL(fileURLWithPath: ghPath)
+    task.arguments = [
+        "api",
+        "--method", "PUT",
+        "-H", "Accept: application/vnd.github+json",
+        "-H", "Content-Type: application/json",
+        "--input", "-",
+        endpoint
+    ]
+    task.standardOutput = pipe
+    task.standardError = errPipe
+    let inputPipe = Pipe()
+    task.standardInput = inputPipe
+    do { try task.run() } catch {
+        log("patchRunnerLabels › launch error: \(error)")
+        return nil
+    }
+    inputPipe.fileHandleForWriting.write(bodyData)
+    inputPipe.fileHandleForWriting.closeFile()
+    let timeoutItem = DispatchWorkItem { task.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: timeoutItem)
+    task.waitUntilExit()
+    timeoutItem.cancel()
+    let outData = pipe.fileHandleForReading.readDataToEndOfFile()
+    let raw = String(data: outData, encoding: .utf8) ?? ""
+    log("patchRunnerLabels › exit=\(task.terminationStatus) response=\(raw.prefix(300))")
+    guard task.terminationStatus == 0 else {
+        log("patchRunnerLabels › non-zero exit for endpoint=\(endpoint) body=\(bodyString)")
+        return nil
+    }
+    struct LabelsResponse: Decodable {
+        struct Label: Decodable { let name: String }
+        let labels: [Label]
+    }
+    guard let resp = try? JSONDecoder().decode(LabelsResponse.self, from: outData) else {
+        log("patchRunnerLabels › decode failed raw=\(raw.prefix(200))")
+        return nil
+    }
+    let names = resp.labels.map(\.name)
+    log("patchRunnerLabels › success labels=\(names)")
+    return names
+}
+
 // MARK: - Step log
 
 func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
