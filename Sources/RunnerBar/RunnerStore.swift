@@ -94,7 +94,11 @@ final class RunnerStore {
 
     /// Starts (or restarts) the polling timer and fires an immediate fetch.
     func start() {
-        log("RunnerStore › start")
+        let scopes = ScopeStore.shared.scopes
+        log("RunnerStore › start — scopes=\(scopes)")
+        if scopes.isEmpty {
+            log("RunnerStore › ⚠️ start called but ScopeStore.shared.scopes is EMPTY — actions will not load")
+        }
         timer?.invalidate()
         fetch()
     }
@@ -121,6 +125,11 @@ final class RunnerStore {
 
     /// Fetches runners, jobs, and action groups for all scopes on a background thread.
     func fetch() {
+        let scopesSnapshot = ScopeStore.shared.scopes
+        log("RunnerStore › fetch — scopesSnapshot=\(scopesSnapshot)")
+        if scopesSnapshot.isEmpty {
+            log("RunnerStore › ⚠️ fetch called but scopes snapshot is EMPTY — buildGroupState will produce no actions")
+        }
         let snapPrev = prevLiveJobs
         let snapCache = completedCache
         let snapPrevGroups = prevLiveGroups
@@ -144,6 +153,7 @@ final class RunnerStore {
                 self.actionGroupCache = groupResult.newGroupCache
                 self.prevLiveGroups = groupResult.newPrevLiveGroups
                 self.isRateLimited = ghIsRateLimited
+                log("RunnerStore › fetch complete — actions.count=\(groupResult.display.count) jobs.count=\(jobResult.display.count)")
                 self.onChange?()
                 self.scheduleTimer()
             }

@@ -24,8 +24,13 @@ final class ScopeStore: ObservableObject {
     /// The current list of scopes, read from and written to `UserDefaults` on every access.
     /// Calls `objectWillChange.send()` before each mutation so SwiftUI observing views update.
     var scopes: [String] {
-        get { UserDefaults.standard.stringArray(forKey: key) ?? [] }
+        get {
+            let result = UserDefaults.standard.stringArray(forKey: key) ?? []
+            log("ScopeStore › scopes read: \(result)")
+            return result
+        }
         set {
+            log("ScopeStore › scopes write: \(newValue)")
             objectWillChange.send()
             UserDefaults.standard.set(newValue, forKey: key)
         }

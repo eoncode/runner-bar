@@ -147,11 +147,19 @@ extension RunnerStore {
         snapGroupCache: [String: ActionGroup],
         jobCache: [Int: ActiveJob]
     ) -> GroupPollResult {
+        let scopes = ScopeStore.shared.scopes
+        log("RunnerStore › buildGroupState — scopes=\(scopes) snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count)")
+        if scopes.isEmpty {
+            log("RunnerStore › ⚠️ buildGroupState — scopes is EMPTY, returning empty GroupPollResult")
+            return GroupPollResult(display: [], newGroupCache: snapGroupCache, newPrevLiveGroups: snapPrevGroups)
+        }
         let shaKeyedCache = makeShaKeyedCache(snapGroupCache)
         var allFetched: [ActionGroup] = []
-        for scope in ScopeStore.shared.scopes {
+        for scope in scopes {
+            log("RunnerStore › buildGroupState — fetching scope=\(scope)")
             allFetched.append(contentsOf: fetchActionGroups(for: scope, cache: shaKeyedCache))
         }
+        log("RunnerStore › buildGroupState — allFetched.count=\(allFetched.count)")
 
         let liveGroups = allFetched.filter { $0.groupStatus != .completed }
         let doneGroups = allFetched.filter { $0.groupStatus == .completed }
