@@ -62,6 +62,11 @@ struct PopoverMainView: View {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
 
+    /// True when at least one local runner is busy — gates the entire Local Runners section.
+    private var hasBusyRunners: Bool {
+        store.localRunners.contains { $0.busy }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverHeaderView(
@@ -73,8 +78,14 @@ struct PopoverMainView: View {
             .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
-            SectionHeaderLabel(title: "Local Runners")
-            PopoverLocalRunnerRow(runners: store.localRunners)
+            // Local Runners section — hidden entirely when no runners are busy.
+            if hasBusyRunners {
+                SectionHeaderLabel(title: "Local Runners")
+                PopoverLocalRunnerRow(runners: store.localRunners)
+            }
+            // Always trigger a refresh of local runner state on appear,
+            // regardless of whether the section is currently visible.
+            Color.clear.frame(width: 0, height: 0)
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
