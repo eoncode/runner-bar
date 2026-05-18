@@ -116,8 +116,6 @@ struct SettingsView: View {
             Divider()
             accountSection
             Divider()
-            legalSection
-            Divider()
             aboutSection
         }
         .padding(.bottom, 16)
@@ -149,7 +147,7 @@ struct SettingsView: View {
     // MARK: - Local Runners
     private var localRunnersSectionHeader: some View {
         HStack {
-            Text("Local runners")
+            Text("Active local runners")
                 .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
             Spacer()
             Button(action: { showAddRunnerSheet = true }, label: {
@@ -490,25 +488,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Legal
-    private var legalSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Legal").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
-            HStack {
-                Text("Share analytics").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $legal.analyticsEnabled).toggleStyle(.switch).labelsHidden()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-            #if DEBUG
-            Divider().padding(.leading, RBSpacing.md)
-            linkRow(label: "Privacy Policy", url: SettingsURIs.privacyPolicy)
-            Divider().padding(.leading, RBSpacing.md)
-            linkRow(label: "Terms of Service", url: SettingsURIs.termsOfService)
-            #endif
-        }
-    }
-
     // MARK: - About
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -519,15 +498,6 @@ struct SettingsView: View {
                 Text("\(appVersion) (\(appBuild))").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-            Divider().padding(.leading, RBSpacing.md)
-            HStack {
-                Text("RunnerBar").font(.system(size: 12)); Spacer()
-                Text("dev.eon.st/runnerbar").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-            Text("A macOS menu bar utility for monitoring GitHub Actions self-hosted runners.")
-                .font(.caption).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
         }
     }
 
