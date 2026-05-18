@@ -1,3 +1,4 @@
+// swiftlint:disable file_length type_body_length
 import ServiceManagement
 import SwiftUI
 // MARK: - SettingsView
@@ -20,7 +21,6 @@ import SwiftUI
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 /// is major major major.
-// swiftlint:disable:next type_body_length
 struct SettingsView: View {
     let onBack: () -> Void
     @ObservedObject var store: RunnerStoreObservable
@@ -188,7 +188,11 @@ struct SettingsView: View {
     }
 
     private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
-        HStack(spacing: 6) {
+        let hasWarning = runner.lifecycleWarning != nil
+        let displayStatus = runner.displayStatus
+        let statusColor = runner.statusColor
+        log("SettingsView > localRunnerRowContent rendering runner=\(runner.runnerName) isRunning=\(runner.isRunning) githubStatus=\(runner.githubStatus ?? "none") lifecycleWarning=\(runner.lifecycleWarning ?? "none") displayStatus=\(displayStatus) statusColor=\(statusColor) hasWarning=\(hasWarning)")
+        return HStack(spacing: 6) {
             Circle().fill(localRunnerDotColor(for: runner)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(runner.runnerName).font(.system(size: 13)).lineLimit(1)
@@ -197,9 +201,9 @@ struct SettingsView: View {
                 }
             }
             Spacer()
-            Text(runner.displayStatus)
+            Text(displayStatus)
                 .font(.caption)
-                .foregroundColor(runner.lifecycleWarning != nil ? Color.rbWarning : Color.rbTextSecondary)
+                .foregroundColor(hasWarning ? Color.rbWarning : Color.rbTextSecondary)
                 .lineLimit(1)
                 .fixedSize()
             if runner.isRunning {
@@ -222,74 +226,73 @@ struct SettingsView: View {
 
     // MARK: - Resume / Stop actions
 
-    /// Tapping Resume:
-    /// 1. Optimistically flip dot to green immediately (main thread, instant UI)
-    /// 2. Run svc.sh install + start on background thread
-    /// 3. Dispatch back to main thread and call refresh() to confirm truth from launchctl
     private func performResume(runner: RunnerModel) {
-        log("SettingsView › performResume — runner=\(runner.runnerName) isRunning=\(runner.isRunning)")
-        log("SettingsView › performResume — calling optimisticallySetRunning(\(runner.runnerName), isRunning: true)")
+        log("SettingsView > performResume called runner=\(runner.runnerName) isRunning=\(runner.isRunning) lifecycleWarning=\(runner.lifecycleWarning ?? "none")")
         LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
-        log("SettingsView › performResume — optimistic flip done, dispatching svc.sh to background")
+        log("SettingsView > performResume — optimistic flip done, dispatching to background")
         DispatchQueue.global(qos: .userInitiated).async {
-            log("SettingsView › performResume background — calling RunnerLifecycleService.start for \(runner.runnerName)")
+            log("SettingsView > performResume background — calling RunnerLifecycleService.start for \(runner.runnerName)")
             let result = RunnerLifecycleService.shared.start(runner: runner)
-            log("SettingsView › performResume background — start() returned \(result) for \(runner.runnerName)")
+            log("SettingsView > performResume background — start() returned \(result) for \(runner.runnerName)")
             DispatchQueue.main.async {
+                log("SettingsView > performResume main — handling result=\(result) for \(runner.runnerName)")
                 switch result {
                 case .success:
-                    log("SettingsView › performResume main — success, no revert needed for \(runner.runnerName)")
+                    log("SettingsView > performResume main — SUCCESS, keeping optimistic flip for \(runner.runnerName)")
                 case .corruptInstall:
-                    log("SettingsView › performResume main — corruptInstall, reverting and setting warning for \(runner.runnerName)")
+                    log("SettingsView > performResume main — CORRUPT INSTALL: reverting isRunning and setting warning for \(runner.runnerName)")
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                    log("SettingsView > performResume main — calling setLifecycleWarning with corrupt install message for \(runner.runnerName)")
                     LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
+                    log("SettingsView > performResume main — setLifecycleWarning done for \(runner.runnerName), displayStatus should now be: ⚠ corrupt install")
                 case .failed(let msg):
-                    log("SettingsView › performResume main — failed (\(msg)), reverting and setting warning for \(runner.runnerName)")
+                    log("SettingsView > performResume main — FAILED (\(msg)): reverting isRunning and setting warning for \(runner.runnerName)")
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-                    let shortMsg = msg.components(separatedBy: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                    let shortMsg = msg.components(separatedBy: "\n")
+                        .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                    log("SettingsView > performResume main — calling setLifecycleWarning with message=\(shortMsg) for \(runner.runnerName)")
                     LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(shortMsg)")
+                    log("SettingsView > performResume main — setLifecycleWarning done for \(runner.runnerName)")
                 }
-                log("SettingsView › performResume main — calling LocalRunnerStore.shared.refresh() for confirmed state")
+                log("SettingsView > performResume main — calling refresh() for \(runner.runnerName)")
                 LocalRunnerStore.shared.refresh()
             }
         }
     }
 
-    /// Tapping Stop:
-    /// 1. Optimistically flip dot to red immediately (main thread, instant UI)
-    /// 2. Run svc.sh stop + uninstall on background thread
-    /// 3. Dispatch back to main thread and call refresh() to confirm truth from launchctl
     private func performStop(runner: RunnerModel) {
-        log("SettingsView › performStop — runner=\(runner.runnerName) isRunning=\(runner.isRunning)")
-        log("SettingsView › performStop — calling optimisticallySetRunning(\(runner.runnerName), isRunning: false)")
+        log("SettingsView > performStop called runner=\(runner.runnerName) isRunning=\(runner.isRunning) lifecycleWarning=\(runner.lifecycleWarning ?? "none")")
         LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-        log("SettingsView › performStop — optimistic flip done, dispatching svc.sh to background")
         DispatchQueue.global(qos: .userInitiated).async {
-            log("SettingsView › performStop background — calling RunnerLifecycleService.stop for \(runner.runnerName)")
+            log("SettingsView > performStop background — calling RunnerLifecycleService.stop for \(runner.runnerName)")
             let result = RunnerLifecycleService.shared.stop(runner: runner)
-            log("SettingsView › performStop background — stop() returned \(result) for \(runner.runnerName)")
+            log("SettingsView > performStop background — stop() returned \(result) for \(runner.runnerName)")
             DispatchQueue.main.async {
+                log("SettingsView > performStop main — handling result=\(result) for \(runner.runnerName)")
                 switch result {
                 case .success:
-                    log("SettingsView › performStop main — success for \(runner.runnerName)")
+                    log("SettingsView > performStop main — SUCCESS for \(runner.runnerName)")
                 case .corruptInstall:
-                    log("SettingsView › performStop main — corruptInstall on stop for \(runner.runnerName)")
+                    log("SettingsView > performStop main — CORRUPT INSTALL on stop for \(runner.runnerName)")
                     LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
                 case .failed(let msg):
-                    log("SettingsView › performStop main — failed (\(msg)) reverting for \(runner.runnerName)")
+                    log("SettingsView > performStop main — FAILED (\(msg)), reverting for \(runner.runnerName)")
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
-                    let shortMsg = msg.components(separatedBy: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                    let shortMsg = msg.components(separatedBy: "\n")
+                        .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
                     LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(shortMsg)")
                 }
-                log("SettingsView › performStop main — calling LocalRunnerStore.shared.refresh() for confirmed state")
+                log("SettingsView > performStop main — calling refresh()")
                 LocalRunnerStore.shared.refresh()
             }
         }
     }
 
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
-        log("SettingsView › localRunnerDotColor for \(runner.runnerName) statusColor=\(runner.statusColor) isRunning=\(runner.isRunning) githubStatus=\(runner.githubStatus ?? \"nil\")")
-        switch runner.statusColor {
+        let sc = runner.statusColor
+        let w = runner.lifecycleWarning ?? "none"
+        log("SettingsView > localRunnerDotColor runner=\(runner.runnerName) statusColor=\(sc) lifecycleWarning=\(w) isRunning=\(runner.isRunning) githubStatus=\(runner.githubStatus ?? "none")")
+        switch sc {
         case .running: return Color.rbSuccess
         case .busy:    return Color.rbWarning
         case .idle:    return Color.rbTextTertiary
