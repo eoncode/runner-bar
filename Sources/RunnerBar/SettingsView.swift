@@ -21,6 +21,14 @@ import SwiftUI
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
+
+// MARK: - URI Constants
+private enum SettingsURIs {
+    static let privacyPolicy  = "https://dev.eon.st/runnerbar/privacy"
+    static let termsOfService = "https://dev.eon.st/runnerbar/terms"
+    static let gitHubOAuth    = "https://github.com/login/oauth/authorize"
+}
+
 // swiftlint:disable:next type_body_length
 struct SettingsView: View {
     let onBack: () -> Void
@@ -47,7 +55,7 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
     private var removalAlertTitle: String {
-        "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "this runner")\""
+        "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "this runner\"")"
     }
 
     var body: some View {
@@ -426,9 +434,9 @@ struct SettingsView: View {
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             #if DEBUG
             Divider().padding(.leading, RBSpacing.md)
-            linkRow(label: "Privacy Policy", url: "https://dev.eon.st/runnerbar/privacy")
+            linkRow(label: "Privacy Policy", url: SettingsURIs.privacyPolicy)
             Divider().padding(.leading, RBSpacing.md)
-            linkRow(label: "Terms of Service", url: "https://dev.eon.st/runnerbar/terms")
+            linkRow(label: "Terms of Service", url: SettingsURIs.termsOfService)
             #endif
         }
     }
@@ -476,7 +484,7 @@ struct SettingsView: View {
     private func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
     private func signInWithGitHub() {
-        guard let url = URL(string: "https://github.com/login/oauth/authorize") else { return }
+        guard let url = URL(string: SettingsURIs.gitHubOAuth) else { return }
         NSWorkspace.shared.open(url)
     }
 
