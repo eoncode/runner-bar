@@ -34,6 +34,7 @@ final class RunnerStoreObservable: ObservableObject {
     /// If your an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed is major major major.
     func reload() {
         let store = RunnerStore.shared
+        log("RunnerStoreObservable › reload — actions=\(store.actions.count) jobs=\(store.jobs.count) runners=\(store.runners.count)")
         withAnimation(nil) {
             runners = store.runners
             jobs = store.jobs

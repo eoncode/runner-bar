@@ -74,8 +74,11 @@ import SwiftUI
 // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
 //
 // TIMER / POLL GUARD:
-// RunnerStore.shared.onChange → observable.reload() gated behind !panelIsOpen.
-// ❌ NEVER remove this guard.
+// RunnerStore.shared.onChange fires on every poll and always calls observable.reload()
+// regardless of panelIsOpen. The reload() call is cheap (copies arrays) and does
+// NOT trigger a KVO/preferredContentSize storm — SwiftUI only redraws when the
+// content actually differs. The old !panelIsOpen gate was removed because it caused
+// actions to show as empty whenever the panel opened before the first poll completed.
 //
 // DYNAMIC HEIGHT + WIDTH CONTRACT:
 // sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
@@ -261,10 +264,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
         }
 
+        // ⚠️ FIX: observable.reload() is called unconditionally on every poll so
+        // SwiftUI sees updates whether the panel is open or closed.
+        // The old !panelIsOpen gate caused actions to appear empty when the panel
+        // opened before the first poll completed. reload() is cheap (array copy)
+        // and does NOT trigger a KVO/size storm — SwiftUI only redraws on diff.
         RunnerStore.shared.onChange = { [weak self] in
             guard let self else { return }
+            log("AppDelegate › onChange fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
             self.updateStatusIcon()
-            if !self.panelIsOpen { self.observable.reload() }
+            self.observable.reload()
         }
         RunnerStore.shared.start()
     }
@@ -614,6 +623,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let statusItemRect = button.window?.frame,
               let panel else { return }
 
+        // Seed observable from store before showing the panel so the view never
+        // opens with stale/empty state even if onChange hasn't fired yet.
+        log("AppDelegate › openPanel — seeding observable: actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
         observable.reload()
 
         panelIsOpen = true
