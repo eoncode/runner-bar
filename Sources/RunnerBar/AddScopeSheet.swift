@@ -117,7 +117,11 @@ struct AddScopeSheet: View {
 
             // ── Button row ─────────────────────────────────────────────────
             HStack {
-                CancelButton { isPresented = false }
+                // CancelButton requires a completion-based action closure.
+                CancelButton(action: { completion in
+                    isPresented = false
+                    completion(true)
+                })
                 Spacer()
                 Button(action: confirmAdd) {
                     Text("Add Scope")

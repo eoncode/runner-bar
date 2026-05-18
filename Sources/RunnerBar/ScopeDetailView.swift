@@ -186,11 +186,8 @@ struct ScopeDetailView: View {
                     }
                     .labelsHidden()
                     .frame(width: 110)
-                    // Two-argument form — single-arg onChange(of:) deprecated macOS 14 / Swift 5.9.
-                    .onChange(of: pollingOverride) { _, newValue in
-                        ScopeSettingsStore.setPollingInterval(newValue, for: scope)
-                        RunnerStore.shared.start()
-                    }
+                    // Two-arg onChange requires macOS 14. Single-arg fallback for macOS 13.
+                    .modifier(PollingOnChangeModifier(pollingOverride: $pollingOverride, scope: scope))
                 }
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
             }
@@ -380,5 +377,27 @@ struct ScopeDetailView: View {
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+    }
+}
+
+// MARK: - PollingOnChangeModifier
+/// ViewModifier that applies onChange(of: pollingOverride) in a way that compiles
+/// for both macOS 13 (single-arg) and macOS 14+ (two-arg).
+private struct PollingOnChangeModifier: ViewModifier {
+    @Binding var pollingOverride: Int?
+    let scope: String
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.onChange(of: pollingOverride) { _, newValue in
+                ScopeSettingsStore.setPollingInterval(newValue, for: scope)
+                RunnerStore.shared.start()
+            }
+        } else {
+            content.onChange(of: pollingOverride) { newValue in
+                ScopeSettingsStore.setPollingInterval(newValue, for: scope)
+                RunnerStore.shared.start()
+            }
+        }
     }
 }
