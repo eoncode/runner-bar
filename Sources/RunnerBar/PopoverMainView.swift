@@ -73,6 +73,7 @@ struct PopoverMainView: View {
             .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
+            SectionHeaderLabel(title: "Local Runners")
             PopoverLocalRunnerRow(runners: store.runners)
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
@@ -111,11 +112,11 @@ struct PopoverMainView: View {
     private var actionsSectionContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             if store.actions.isEmpty {
-                Text("No recent actions")
+                Text("No recent workflows")
                     .font(.caption).foregroundColor(.secondary)
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
-                SectionHeaderLabel(title: "Actions")
+                SectionHeaderLabel(title: "Workflows")
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
                     ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
@@ -133,7 +134,7 @@ struct PopoverMainView: View {
             Button(
                 action: { visibleCount += nextBatch },
                 label: {
-                    Text("Load \(nextBatch) more actions\u{2026}")
+                    Text("Load \(nextBatch) more workflows\u{2026}")
                         .font(.caption).foregroundColor(.secondary)
                 }
             )
