@@ -3,30 +3,39 @@ import SwiftUI
 // swiftlint:disable type_body_length
 // MARK: - AddRunnerSheet
 
-/// Phase 3: Sheet view for onboarding a new self-hosted runner.
+/// Sheet view for onboarding a self-hosted runner.
 ///
-/// The user picks a scope (org or repo), names the runner, optionally sets
-/// labels, and taps Confirm. The sheet fetches a registration token via the
-/// GitHub API, downloads the runner tarball if not present, unpacks it, then
-/// runs `./config.sh` to register the runner with GitHub.
+/// Supports two modes selectable via a segmented control at the top:
 ///
-/// After successful registration the app writes a minimal LaunchAgent plist to
+/// - **Add new**: downloads, configures and registers a brand-new runner with GitHub.
+/// - **Add pre-existing**: imports a runner folder that was already configured outside
+///   of RunnerBar (e.g. via terminal). Only writes the LaunchAgent plist so
+///   `LocalRunnerScanner` can discover the runner — no token or download needed.
+///
+/// After successful registration/import the app writes a minimal LaunchAgent plist to
 /// `~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist` directly
 /// via FileManager. This avoids calling `svc.sh install` (which requires an
 /// interactive user session and fails from an app-launched Process) while still
 /// giving `LocalRunnerScanner` the `WorkingDirectory` key it needs to find the
 /// runner on every subsequent scan — including after a full app reinstall.
 ///
-/// Each runner must have its own unique install directory. If the chosen
-/// directory already contains a `.runner` file the Add Runner button is
-/// disabled and an inline warning is shown, preventing silent overwrites.
-///
-/// Requires a GitHub token (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
+/// Requires a GitHub token for "Add new" only (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
     @Binding var isPresented: Bool
     let onComplete: () -> Void
 
-    // MARK: Scope state
+    // MARK: - Add Mode
+
+    /// Controls which form body is shown in the sheet.
+    enum AddMode: String, CaseIterable, Identifiable {
+        case addNew      = "Add new"
+        case addExisting = "Add pre-existing"
+        var id: String { rawValue }
+    }
+
+    @State private var addMode: AddMode = .addNew
+
+    // MARK: Scope state (Add new only)
 
     enum ScopeType: String, CaseIterable, Identifiable {
         case repo = "Repository"
@@ -41,7 +50,7 @@ struct AddRunnerSheet: View {
     @State private var orgs:  [String] = []
     @State private var isLoadingScopes = false
 
-    // MARK: Runner config state
+    // MARK: Runner config state (Add new only)
 
     @State private var runnerName = ""
     @State private var labelsText = "self-hosted,macOS"
@@ -51,7 +60,7 @@ struct AddRunnerSheet: View {
         .homeDirectoryForCurrentUser
         .appendingPathComponent("actions-runner/my-runner").path
 
-    // MARK: Registration state
+    // MARK: Registration state (Add new only)
 
     @State private var isRegistering    = false
     @State private var registrationStep = ""
@@ -61,88 +70,151 @@ struct AddRunnerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Add new runner").font(.headline)
+            Text("Add runner").font(.headline)
 
-            Picker("Scope", selection: $scopeType) {
-                ForEach(ScopeType.allCases) { s in Text(s.rawValue).tag(s) }
+            // MARK: Mode toggle
+            Picker("Mode", selection: $addMode) {
+                ForEach(AddMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
             }
             .pickerStyle(.segmented)
+            .onChange(of: addMode) { _ in resetAddNewState() }
 
-            if isLoadingScopes {
-                HStack {
-                    ProgressView().scaleEffect(0.7)
-                    Text("Loading…").font(.caption).foregroundColor(.secondary)
-                }
-            } else if scopeType == .repo {
-                scopePicker(label: "Repository", selection: $selectedRepo, items: repos,
-                            empty: "No repositories found. Run `gh auth login` or set GH_TOKEN.")
+            Divider()
+
+            // MARK: Form body branch
+            if addMode == .addNew {
+                addNewFormBody
             } else {
-                scopePicker(label: "Organisation", selection: $selectedOrg, items: orgs,
-                            empty: "No organisations found. Run `gh auth login` or set GH_TOKEN.")
+                addExistingFormBody
             }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .onAppear {
+            if addMode == .addNew { loadScopes() }
+        }
+    }
 
-            labeledField("Runner name", placeholder: "e.g. my-mac-runner", text: $runnerName)
-            labeledField("Labels (comma-separated)", placeholder: "e.g. self-hosted,macOS,arm64",
-                         text: $labelsText)
+    // MARK: - Add New Form Body
 
-            // MARK: Install directory field
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Runner install directory").font(.caption).foregroundColor(.secondary)
-                TextField("", text: $installDir)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 11, design: .monospaced))
+    @ViewBuilder
+    private var addNewFormBody: some View {
+        // Scope picker
+        Picker("Scope", selection: $scopeType) {
+            ForEach(ScopeType.allCases) { s in Text(s.rawValue).tag(s) }
+        }
+        .pickerStyle(.segmented)
 
-                Text("Each runner needs its own unique folder. Use the runner name as the last path component, e.g. ~/actions-runner/my-runner.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+        if isLoadingScopes {
+            HStack {
+                ProgressView().scaleEffect(0.7)
+                Text("Loading…").font(.caption).foregroundColor(.secondary)
+            }
+        } else if scopeType == .repo {
+            scopePicker(
+                label: "Repository",
+                selection: $selectedRepo,
+                items: repos,
+                empty: "No repositories found. Run `gh auth login` or set GH_TOKEN."
+            )
+        } else {
+            scopePicker(
+                label: "Organisation",
+                selection: $selectedOrg,
+                items: orgs,
+                empty: "No organisations found. Run `gh auth login` or set GH_TOKEN."
+            )
+        }
 
-                if dirAlreadyConfigured {
-                    Label(
-                        "This folder already has a runner configured. Choose a different path.",
-                        systemImage: "exclamationmark.triangle.fill"
-                    )
-                    .font(.caption2)
-                    .foregroundColor(.orange)
+        labeledField("Runner name", placeholder: "e.g. my-mac-runner", text: $runnerName)
+        labeledField(
+            "Labels (comma-separated)",
+            placeholder: "e.g. self-hosted,macOS,arm64",
+            text: $labelsText
+        )
+
+        // Install directory field
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Runner install directory").font(.caption).foregroundColor(.secondary)
+            TextField("", text: $installDir)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, design: .monospaced))
+
+            Text(
+                "Each runner needs its own unique folder. Use the runner name as the last path component, e.g. ~/actions-runner/my-runner."
+            )
+            .font(.caption2)
+            .foregroundColor(.secondary)
+
+            if dirAlreadyConfigured {
+                Label(
+                    "This folder already has a runner configured. Choose a different path.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption2)
+                .foregroundColor(.orange)
+            }
+        }
+
+        if isRegistering && !registrationStep.isEmpty {
+            HStack(spacing: 6) {
+                ProgressView().scaleEffect(0.7)
+                Text(registrationStep).font(.caption).foregroundColor(.secondary)
+            }
+        }
+
+        if let err = errorMessage {
+            Text(err)
+                .font(.caption).foregroundColor(.red)
+                .padding(8)
+                .background(Color.red.opacity(0.08))
+                .cornerRadius(6)
+        }
+
+        HStack {
+            Spacer()
+            Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
+            Button(action: register) {
+                if isRegistering {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 14, height: 14)
+                        Text("Registering…")
+                    }
+                } else {
+                    Text("Add new runner")
                 }
             }
+            .keyboardShortcut(.defaultAction)
+            .disabled(!canRegister || isRegistering)
+        }
+    }
 
-            if isRegistering && !registrationStep.isEmpty {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.7)
-                    Text(registrationStep).font(.caption).foregroundColor(.secondary)
-                }
-            }
+    // MARK: - Add Pre-Existing Form Body (Phase 2 placeholder)
 
-            if let err = errorMessage {
-                Text(err)
-                    .font(.caption).foregroundColor(.red)
-                    .padding(8)
-                    .background(Color.red.opacity(0.08))
-                    .cornerRadius(6)
-            }
+    @ViewBuilder
+    private var addExistingFormBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Select a folder that already contains a configured runner.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            // TODO: Phase 2 — folder picker + .runner JSON detection
+            // TODO: Phase 3 — import action + plist write + duplicate validation
+            Text("Coming soon")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 24)
 
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
-                Button(action: register) {
-                    if isRegistering {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 14, height: 14)
-                            Text("Registering…")
-                        }
-                    } else {
-                        Text("Add new runner")
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!canRegister || isRegistering)
             }
         }
-        .padding(20)
-        .frame(width: 400)
-        .onAppear(perform: loadScopes)
     }
 
     // MARK: - Sub-views
@@ -185,6 +257,24 @@ struct AddRunnerSheet: View {
         !runnerName.trimmingCharacters(in: .whitespaces).isEmpty
             && !effectiveScope.isEmpty
             && !dirAlreadyConfigured
+    }
+
+    /// Resets all "Add new" form state. Called when switching away from .addNew mode.
+    private func resetAddNewState() {
+        runnerName       = ""
+        labelsText       = "self-hosted,macOS"
+        installDir       = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("actions-runner/my-runner").path
+        isRegistering    = false
+        registrationStep = ""
+        errorMessage     = nil
+        scopeType        = .repo
+        selectedRepo     = repos.first ?? ""
+        selectedOrg      = orgs.first  ?? ""
+        if addMode == .addNew && repos.isEmpty && orgs.isEmpty {
+            loadScopes()
+        }
     }
 
     private func loadScopes() {
@@ -330,7 +420,7 @@ struct AddRunnerSheet: View {
     ///
     /// Plist filename format: `actions.runner.<owner>.<repo>.<runnerName>.plist`
     /// For org-scoped runners `repo` is the org name (same component, single part).
-    private func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
+    func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
         // Normalise scope into owner + repo components for the filename.
