@@ -518,36 +518,78 @@ struct RunnerDetailView: View {
 
     // MARK: - On Appear
 
+    // swiftlint:disable:next function_body_length
     private func loadEditableFields() {
-        guard let installPath = runner.installPath else { return }
-        let runnerJSONPath = installPath + "/.runner"
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            let disableUpdate = json["disableUpdate"] as? Bool ?? false
-            autoUpdate = !disableUpdate
+        log("RunnerDetailView loadEditableFields ENTER runner=\(runner.runnerName) installPath=\(runner.installPath ?? "<nil>") platform=\(runner.platform ?? "<nil>") platformArch=\(runner.platformArchitecture ?? "<nil>") agentVersion=\(runner.agentVersion ?? "<nil>") displayOsArch=\(displayOsArch) displayVersion=\(displayVersion)")
 
-            if displayOsArch.isEmpty {
-                let platform = json["platform"] as? String ?? ""
-                let arch = json["platformArchitecture"] as? String ?? ""
-                let combined = [platform, arch].filter { !$0.isEmpty }.joined(separator: " / ")
-                if !combined.isEmpty { displayOsArch = combined }
-            }
-
-            if displayVersion.isEmpty {
-                if let version = json["agentVersion"] as? String, !version.isEmpty {
-                    displayVersion = version
-                }
-            }
+        guard let installPath = runner.installPath else {
+            log("RunnerDetailView loadEditableFields BAIL installPath is nil for runner=\(runner.runnerName)")
+            return
         }
+
+        let runnerJSONPath = installPath + "/.runner"
+        log("RunnerDetailView loadEditableFields reading JSON path=\(runnerJSONPath)")
+
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)) else {
+            log("RunnerDetailView loadEditableFields ERROR could not read .runner file at \(runnerJSONPath)")
+            return
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            log("RunnerDetailView loadEditableFields ERROR could not parse JSON at \(runnerJSONPath) dataBytes=\(data.count)")
+            return
+        }
+
+        log("RunnerDetailView loadEditableFields JSON keys=\(json.keys.sorted().joined(separator: ","))")
+
+        let disableUpdate = json["disableUpdate"] as? Bool ?? false
+        autoUpdate = !disableUpdate
+        log("RunnerDetailView loadEditableFields disableUpdate=\(disableUpdate) → autoUpdate=\(autoUpdate)")
+
+        if displayOsArch.isEmpty {
+            let platform = json["platform"] as? String ?? ""
+            let arch = json["platformArchitecture"] as? String ?? ""
+            log("RunnerDetailView loadEditableFields platform=\(platform) arch=\(arch) (from JSON)")
+            let combined = [platform, arch].filter { !$0.isEmpty }.joined(separator: " / ")
+            if !combined.isEmpty {
+                displayOsArch = combined
+                log("RunnerDetailView loadEditableFields set displayOsArch=\(combined)")
+            } else {
+                log("RunnerDetailView loadEditableFields WARNING platform+arch both empty in JSON, displayOsArch stays empty")
+            }
+        } else {
+            log("RunnerDetailView loadEditableFields displayOsArch already seeded from model=\(displayOsArch), skipping JSON override")
+        }
+
+        if displayVersion.isEmpty {
+            if let version = json["agentVersion"] as? String, !version.isEmpty {
+                displayVersion = version
+                log("RunnerDetailView loadEditableFields set displayVersion=\(version)")
+            } else {
+                log("RunnerDetailView loadEditableFields WARNING agentVersion missing or empty in JSON keys=\(json.keys.sorted())")
+            }
+        } else {
+            log("RunnerDetailView loadEditableFields displayVersion already seeded from model=\(displayVersion), skipping JSON override")
+        }
+
+        // Proxy
         let proxyFilePath = installPath + "/.proxy"
-        proxyUrl = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
+        let proxyContent = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        proxyUrl = proxyContent
+        log("RunnerDetailView loadEditableFields proxyUrl=\(proxyUrl.isEmpty ? "<empty>" : proxyUrl)")
+
         let credPath = installPath + "/.proxycredentials"
         if let credContent = try? String(contentsOfFile: credPath, encoding: .utf8) {
             let lines = credContent.components(separatedBy: "\n")
             proxyUser = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
             proxyPassword = lines.dropFirst().first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+            log("RunnerDetailView loadEditableFields proxyUser=\(proxyUser.isEmpty ? "<empty>" : "<set>") proxyPassword=\(proxyPassword.isEmpty ? "<empty>" : "<set>")")
+        } else {
+            log("RunnerDetailView loadEditableFields no .proxycredentials file at \(credPath)")
         }
+
+        log("RunnerDetailView loadEditableFields EXIT displayOsArch=\(displayOsArch) displayVersion=\(displayVersion)")
     }
 
     // MARK: - Save Actions
