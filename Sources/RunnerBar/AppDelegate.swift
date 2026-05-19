@@ -124,6 +124,42 @@ private enum NavState {
     case scopeDetail(ScopeEntry)
 }
 
+// MARK: - KeyablePanel
+
+// ⚠️ TEXT INPUT FIX (#525) — DO NOT REMOVE THIS CLASS.
+//
+// WHY THIS EXISTS:
+// NSPanel with .nonactivatingPanel overrides canBecomeKey to return false.
+// This is the AppKit contract: a non-activating panel intentionally never
+// steals focus from the frontmost application.
+// The side-effect is that NSTextField (and SwiftUI TextField backed by it)
+// never receives first-responder, making all text fields silently non-editable.
+//
+// FIX:
+// KeyablePanel is a minimal NSPanel subclass. It adds a single `wantsKey`
+// flag. canBecomeKey returns true only when `wantsKey == true`, so the panel
+// only becomes key for views that contain TextFields (settings, runner detail,
+// scope detail). All read-only views leave wantsKey = false, preserving the
+// non-activating behaviour everywhere else.
+//
+// USAGE IN AppDelegate:
+//   panel.wantsKey = true   — before navigating to a text-input view
+//   panel.makeKeyAndOrderFront(nil) — promotes panel to key window
+//   panel.wantsKey = false  — in closePanel(), resets for next open
+//
+// ❌ NEVER replace KeyablePanel with plain NSPanel — text fields break again.
+// ❌ NEVER set wantsKey = true globally — that makes the panel steal focus
+//    from the frontmost app whenever it is shown, defeating .nonactivatingPanel.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE.
+private final class KeyablePanel: NSPanel {
+    /// Set to true immediately before navigating to a view that contains TextFields.
+    /// Reset to false in closePanel().
+    var wantsKey = false
+
+    override var canBecomeKey: Bool { wantsKey }
+}
+
 // MARK: - AppDelegate
 
 // ⚠️ @MainActor ISOLATION CONTRACT — DO NOT REMOVE THIS ANNOTATION.
@@ -147,7 +183,7 @@ private enum NavState {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var panel: NSPanel?
+    private var panel: KeyablePanel?
     private var chrome: PanelChromeView?
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
@@ -235,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chromeView.addSubview(controller.view)
         chrome = chromeView
 
-        let newPanel = NSPanel(
+        let newPanel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -331,21 +367,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Make key for text input
 
-    // ⚠️ TEXT INPUT FIX (#525):
-    // The panel uses .nonactivatingPanel so it never becomes key on its own.
-    // This silently prevents NSTextField from receiving first-responder and
-    // makes all text fields non-editable. Calling makeKey() before navigating
-    // to a view that contains TextFields restores editable behaviour without
-    // changing the non-activating nature of the panel for read-only views.
+    // See KeyablePanel comment block above for the full explanation.
     // ❌ NEVER call this for views that have no text input (main, job detail, logs).
     private func makeKeyForTextInput() {
-        panel?.makeKey()
+        panel?.wantsKey = true
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Dismiss
 
     private func closePanel() {
         guard panelIsOpen else { return }
+        panel?.wantsKey = false
         panel?.orderOut(nil)
         panelIsOpen = false
         panelTopY = nil
