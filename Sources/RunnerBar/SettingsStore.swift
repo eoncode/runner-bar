@@ -1,1 +1,57 @@
-aW1wb3J0IENvbWJpbmUKaW1wb3J0IEZvdW5kYXRpb24KCi8vIE1BUks6IC0gU2V0dGluZ3NTdG9yZQoKLy8vIFBlcnNpc3RzIGdlbmVyYWwgYXBwIHNldHRpbmdzIHRvIFVzZXJEZWZhdWx0cy4KZmluYWwgY2xhc3MgU2V0dGluZ3NTdG9yZTogT2JzZXJ2YWJsZU9iamVjdCB7CiAgICAvLy8gU2hhcmVkIHNpbmdsZXRvbiBpbnN0YW5jZS4KICAgIHN0YXRpYyBsZXQgc2hhcmVkID0gU2V0dGluZ3NTdG9yZSgpCgogICAgcHJpdmF0ZSBlbnVtIEtleSB7CiAgICAgICAgc3RhdGljIGxldCBwb2xsaW5nSW50ZXJ2YWwgICAgPSAic2V0dGluZ3MucG9sbGluZ0ludGVydmFsIgogICAgICAgIHN0YXRpYyBsZXQgc2hvd0RpbW1lZFJ1bm5lcnMgID0gInNldHRpbmdzLnNob3dEaW1tZWRSdW5uZXJzIgogICAgfQoKICAgIC8vLyBWYWxpZCByYW5nZSBmb3IgdGhlIHBvbGxpbmcgaW50ZXJ2YWwgKHNlY29uZHMpLgogICAgc3RhdGljIGxldCBwb2xsaW5nUmFuZ2U6IENsb3NlZFJhbmdlPEludD4gPSAxMCAuLi4gMzAwCgogICAgLy8vIERlZmF1bHQgcG9sbGluZyBpbnRlcnZhbCBpbiBzZWNvbmRzLgogICAgc3RhdGljIGxldCBkZWZhdWx0UG9sbGluZ0ludGVydmFsOiBJbnQgPSAxNQoKICAgIC8vLyBIb3cgb2Z0ZW4gKGluIHNlY29uZHMpIFJ1bm5lckJhciBwb2xscyBHaXRIdWIuIENsYW1wZWQgdG8gMTAtMzAwIHMuCiAgICBAUHVibGlzaGVkIHZhciBwb2xsaW5nSW50ZXJ2YWw6IEludCB7CiAgICAgICAgZGlkU2V0IHsKICAgICAgICAgICAgbGV0IGNsYW1wZWQgPSBwb2xsaW5nSW50ZXJ2YWwuY2xhbXBlZCh0bzogU2VsZi5wb2xsaW5nUmFuZ2UpCiAgICAgICAgICAgIGlmIGNsYW1wZWQgIT0gcG9sbGluZ0ludGVydmFsIHsKICAgICAgICAgICAgICAgIHBvbGxpbmdJbnRlcnZhbCA9IGNsYW1wZWQKICAgICAgICAgICAgICAgIHJldHVybgogICAgICAgICAgICB9CiAgICAgICAgICAgIFVzZXJEZWZhdWx0cy5zdGFuZGFyZC5zZXQocG9sbGluZ0ludGVydmFsLCBmb3JLZXk6IEtleS5wb2xsaW5nSW50ZXJ2YWwpCiAgICAgICAgfQogICAgfQoKICAgIC8vLyBXaGV0aGVyIHRvIHNob3cgZGltbWVkIChvZmZsaW5lL2lkbGUpIHJ1bm5lcnMgaW4gdGhlIHJ1bm5lcnMgbGlzdC4KICAgIC8vLyBSZXRhaW5lZCBmb3IgYmFja3dhcmRzIGNvbXBhdCBidXQgbm8gbG9uZ2VyIHN1cmZhY2VkIGluIHRoZSBVSSAoIzUxMCkuCiAgICBAUHVibGlzaGVkIHZhciBzaG93RGltbWVkUnVubmVyczogQm9vbCB7CiAgICAgICAgZGlkU2V0IHsgVXNlckRlZmF1bHRzLnN0YW5kYXJkLnNldChzaG93RGltbWVkUnVubmVycywgZm9yS2V5OiBLZXkuc2hvd0RpbW1lZFJ1bm5lcnMpIH0KICAgIH0KCiAgICBwcml2YXRlIGluaXQoKSB7CiAgICAgICAgbGV0IHN0b3JlZCA9IFVzZXJEZWZhdWx0cy5zdGFuZGFyZC5pbnRlZ2VyKGZvcktleTogS2V5LnBvbGxpbmdJbnRlcnZhbCkKICAgICAgICAvLyBEZWZhdWx0IHBvbGxpbmcgaW50ZXJ2YWwgaXMgMTVzIGZvciBtb3JlIHJlc3BvbnNpdmUgbW9uaXRvcmluZy4KICAgICAgICBsZXQgcmF3ID0gc3RvcmVkID4gMCA/IHN0b3JlZCA6IFNlbGYuZGVmYXVsdFBvbGxpbmdJbnRlcnZhbAogICAgICAgIHBvbGxpbmdJbnRlcnZhbCA9IHJhdy5jbGFtcGVkKHRvOiBTZWxmLnBvbGxpbmdSYW5nZSkKCiAgICAgICAgaWYgVXNlckRlZmF1bHRzLnN0YW5kYXJkLm9iamVjdChmb3JLZXk6IEtleS5zaG93RGltbWVkUnVubmVycykgPT0gbmlsIHsKICAgICAgICAgICAgc2hvd0RpbW1lZFJ1bm5lcnMgPSB0cnVlCiAgICAgICAgfSBlbHNlIHsKICAgICAgICAgICAgc2hvd0RpbW1lZFJ1bm5lcnMgPSBVc2VyRGVmYXVsdHMuc3RhbmRhcmQuYm9vbChmb3JLZXk6IEtleS5zaG93RGltbWVkUnVubmVycykKICAgICAgICB9CiAgICB9Cn0KCi8vIE1BUks6IC0gQ29tcGFyYWJsZStjbGFtcGVkCgpwcml2YXRlIGV4dGVuc2lvbiBDb21wYXJhYmxlIHsKICAgIGZ1bmMgY2xhbXBlZCh0byByYW5nZTogQ2xvc2VkUmFuZ2U8U2VsZj4pIC0+IFNlbGYgewogICAgICAgIG1pbihtYXgoc2VsZiwgcmFuZ2UubG93ZXJCb3VuZCksIHJhbmdlLnVwcGVyQm91bmQpCiAgICB9Cn0K
+import Combine
+import Foundation
+
+// MARK: - SettingsStore
+
+/// Persists general app settings to UserDefaults.
+final class SettingsStore: ObservableObject {
+    /// Shared singleton instance.
+    static let shared = SettingsStore()
+
+    private enum Key {
+        static let pollingInterval    = "settings.pollingInterval"
+        static let showDimmedRunners  = "settings.showDimmedRunners"
+    }
+
+    /// Valid range for the polling interval (seconds).
+    static let pollingRange: ClosedRange<Int> = 10 ... 300
+
+    /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
+    @Published var pollingInterval: Int {
+        didSet {
+            let clamped = pollingInterval.clamped(to: Self.pollingRange)
+            if clamped != pollingInterval {
+                pollingInterval = clamped
+                return
+            }
+            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
+        }
+    }
+
+    /// Whether to show dimmed (offline/idle) runners in the runners list.
+    /// Retained for backwards compat but no longer surfaced in the UI (#510).
+    @Published var showDimmedRunners: Bool {
+        didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
+    }
+
+    private init() {
+        let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
+        // #511: Default changed from 30 s to 15 s for more responsive monitoring.
+        let raw = stored > 0 ? stored : 15
+        pollingInterval = raw.clamped(to: Self.pollingRange)
+
+        if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
+            showDimmedRunners = true
+        } else {
+            showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
+        }
+    }
+}
+
+// MARK: - Comparable+clamped
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
+}
