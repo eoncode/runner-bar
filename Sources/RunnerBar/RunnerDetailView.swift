@@ -5,7 +5,7 @@ import SwiftUI
 // Navigation level: SettingsView (runner row tap) → RunnerDetailView ← this view
 //
 // #491: Scaffold + read-only info block
-// #492: Editable config fields (labels, workFolder, disableUpdate, proxy)
+// #492: Editable config fields (labels, workFolder, autoUpdate, proxy)
 // #493: Danger Zone (remove only)
 
 // MARK: - Save state helper
@@ -42,8 +42,9 @@ struct RunnerDetailView: View {
     @State private var labelsSaveState: SaveState = .idle
     @State private var workFolderText: String
     @State private var workFolderSaveState: SaveState = .idle
-    @State private var disableUpdate: Bool
-    @State private var disableUpdateSaveState: SaveState = .idle
+    /// `true` = auto-update enabled (written to .runner JSON as disableUpdate: false)
+    @State private var autoUpdate: Bool
+    @State private var autoUpdateSaveState: SaveState = .idle
     @State private var proxyUrl: String
     @State private var proxyUrlSaveState: SaveState = .idle
     @State private var proxyUser: String
@@ -69,7 +70,8 @@ struct RunnerDetailView: View {
             .joined(separator: ", ")
         )
         self._workFolderText = State(initialValue: runner.workFolder ?? "_work")
-        self._disableUpdate = State(initialValue: false)
+        // Default to enabled; actual value loaded in onAppear
+        self._autoUpdate = State(initialValue: true)
         self._proxyUrl = State(initialValue: "")
         self._proxyUser = State(initialValue: "")
         self._proxyPassword = State(initialValue: "")
@@ -212,16 +214,16 @@ struct RunnerDetailView: View {
             infoCard {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Disable auto-update")
+                        Text("Autoupdate")
                             .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
                             .frame(width: 130, alignment: .leading).fixedSize()
                         Spacer()
-                        Toggle("", isOn: $disableUpdate)
+                        Toggle("", isOn: $autoUpdate)
                             .toggleStyle(.switch).labelsHidden()
-                            .onChange(of: disableUpdate) { _ in saveDisableUpdate() }
+                            .onChange(of: autoUpdate) { _ in saveAutoUpdate() }
                     }
                     .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(disableUpdateSaveState, restartNote: true)
+                    saveStateRow(autoUpdateSaveState, restartNote: true)
                 }
             }
             infoCard {
@@ -498,7 +500,8 @@ struct RunnerDetailView: View {
         let runnerJSONPath = installPath + "/.runner"
         if let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            disableUpdate = json["disableUpdate"] as? Bool ?? false
+            let disableUpdate = json["disableUpdate"] as? Bool ?? false
+            autoUpdate = !disableUpdate
         }
         let proxyFilePath = installPath + "/.proxy"
         proxyUrl = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
@@ -560,19 +563,21 @@ struct RunnerDetailView: View {
         }
     }
 
-    private func saveDisableUpdate() {
+    private func saveAutoUpdate() {
         guard let installPath = runner.installPath else {
-            disableUpdateSaveState = .failure("Install path unknown"); return
+            autoUpdateSaveState = .failure("Install path unknown"); return
         }
-        disableUpdateSaveState = .saving
-        let value = disableUpdate
+        autoUpdateSaveState = .saving
+        // autoUpdate = true  → disableUpdate: false
+        // autoUpdate = false → disableUpdate: true
+        let disableUpdate = !autoUpdate
         DispatchQueue.global(qos: .userInitiated).async {
-            let ok = patchRunnerJSON(installPath: installPath, key: "disableUpdate", boolValue: value)
+            let ok = patchRunnerJSON(installPath: installPath, key: "disableUpdate", boolValue: disableUpdate)
             DispatchQueue.main.async {
-                disableUpdateSaveState = ok ? .success : .failure("Failed to write .runner JSON")
+                autoUpdateSaveState = ok ? .success : .failure("Failed to write .runner JSON")
                 if ok {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        if disableUpdateSaveState == .success { disableUpdateSaveState = .idle }
+                        if autoUpdateSaveState == .success { autoUpdateSaveState = .idle }
                     }
                 }
             }
