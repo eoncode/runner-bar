@@ -7,6 +7,8 @@ import SwiftUI
 // #491: Scaffold + read-only info block
 // #492: Editable config fields (labels, workFolder, autoUpdate, proxy)
 // #493: Danger Zone (remove only)
+// #532: Redesign — two-row header, slim info section, unified proxy card
+// #533: OS/Arch + Version rows in Runner Info; Danger Zone always expanded
 
 // MARK: - Save state helper
 private enum SaveState: Equatable {
@@ -35,6 +37,7 @@ struct RunnerDetailView: View {
     let onBack: () -> Void
 
     @State private var isRunning: Bool
+    @State private var displayStatus: String
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     // MARK: - Editable field state (#492)
@@ -45,14 +48,17 @@ struct RunnerDetailView: View {
     /// `true` = auto-update enabled (written to .runner JSON as disableUpdate: false)
     @State private var autoUpdate: Bool
     @State private var autoUpdateSaveState: SaveState = .idle
+    // #532: unified proxy card — single save state for URL + user + pass
     @State private var proxyUrl: String
-    @State private var proxyUrlSaveState: SaveState = .idle
     @State private var proxyUser: String
     @State private var proxyPassword: String
-    @State private var proxyCreditsSaveState: SaveState = .idle
+    @State private var proxySaveState: SaveState = .idle
+
+    // MARK: - Info fields loaded from .runner JSON (#533)
+    @State private var displayOsArch: String = ""
+    @State private var displayVersion: String = ""
 
     // MARK: - Danger Zone state (#493)
-    @State private var dangerZoneExpanded = true
     @State private var pendingDangerAction: DangerAction?
     @State private var dangerActionState: SaveState = .idle
 
@@ -60,6 +66,7 @@ struct RunnerDetailView: View {
         self.runner = runner
         self.onBack = onBack
         self._isRunning = State(initialValue: runner.isRunning)
+        self._displayStatus = State(initialValue: runner.displayStatus)
         self._labelsText = State(initialValue: runner.labels
             .filter { !["self-hosted"].contains($0)
                 && !$0.lowercased().contains("x64")
@@ -70,11 +77,15 @@ struct RunnerDetailView: View {
             .joined(separator: ", ")
         )
         self._workFolderText = State(initialValue: runner.workFolder ?? "_work")
-        // Default to enabled; actual value loaded in onAppear
         self._autoUpdate = State(initialValue: true)
         self._proxyUrl = State(initialValue: "")
         self._proxyUser = State(initialValue: "")
         self._proxyPassword = State(initialValue: "")
+        // Seed OS/Arch + Version from model — onAppear will override from JSON if needed
+        let osArch = [runner.platform, runner.platformArchitecture]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
+        self._displayOsArch = State(initialValue: osArch)
+        self._displayVersion = State(initialValue: runner.agentVersion ?? "")
     }
 
     var body: some View {
@@ -96,36 +107,38 @@ struct RunnerDetailView: View {
         .onChange(of: localRunnerStore.runners) { updated in
             if let fresh = updated.first(where: { $0.id == runner.id }) {
                 isRunning = fresh.isRunning
+                displayStatus = fresh.displayStatus
             }
         }
         .sheet(item: $pendingDangerAction, content: dangerActionSheet)
     }
 
-    // MARK: - Header
+    // MARK: - Header (#532: two-row layout)
 
     private var headerBar: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Button(action: onBack) {
                 HStack(spacing: 3) {
                     Image(systemName: "chevron.left").font(.caption)
                     Text("Settings").font(.caption)
                 }
                 .foregroundColor(Color.rbTextSecondary)
-                .fixedSize()
             }
             .buttonStyle(.plain)
-            Spacer()
-            Circle().fill(dotColor).frame(width: 8, height: 8)
-            Text(runner.runnerName)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-            Spacer()
-            if isRunning {
-                Button(action: stopRunner) { Text("Stop").font(.caption2) }
-                    .buttonStyle(.bordered).help("Stop runner service")
-            } else {
-                Button(action: startRunner) { Text("Start").font(.caption2) }
-                    .buttonStyle(.bordered).help("Start runner service")
+
+            HStack(spacing: 6) {
+                Circle().fill(dotColor).frame(width: 8, height: 8)
+                Text(runner.runnerName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isRunning {
+                    Button(action: stopRunner) { Text("Stop").font(.caption2) }
+                        .buttonStyle(.bordered).help("Stop runner service")
+                } else {
+                    Button(action: startRunner) { Text("Start").font(.caption2) }
+                        .buttonStyle(.bordered).help("Start runner service")
+                }
             }
         }
         .padding(.horizontal, RBSpacing.md)
@@ -133,212 +146,197 @@ struct RunnerDetailView: View {
         .padding(.bottom, 8)
     }
 
-    // MARK: - Info Section
+    // MARK: - Info Section (#532 / #533)
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Runner Info")
             infoCard {
                 if let url = runner.gitHubUrl {
-                    infoRow(label: "GitHub URL", value: url, description: "The GitHub repository or organisation this runner is registered to.", copyable: true)
+                    infoRow(label: "GitHub URL", value: url, copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
                 }
-                if let agentId = runner.agentId {
-                    infoRow(label: "Agent ID", value: String(agentId), description: "Unique numeric ID assigned by GitHub when the runner was registered.")
-                    Divider().padding(.leading, RBSpacing.md)
-                }
-                let osArch = [runner.platform, runner.platformArchitecture]
-                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
-                if !osArch.isEmpty {
-                    infoRow(label: "OS / Arch", value: osArch, description: "Operating system and CPU architecture of this runner machine.")
-                    Divider().padding(.leading, RBSpacing.md)
-                }
-                if let version = runner.agentVersion {
-                    infoRow(label: "Version", value: version, description: "Installed GitHub Actions runner agent version.")
-                    Divider().padding(.leading, RBSpacing.md)
-                }
-                if let installPath = runner.installPath {
-                    infoRow(label: "Install path", value: installPath, description: "Folder on disk where the runner agent binaries are installed.", copyable: true)
-                    Divider().padding(.leading, RBSpacing.md)
-                }
-                infoRow(label: "Work folder", value: runner.workFolder ?? "_work", description: "Subfolder inside the install path used as the working directory for jobs.")
+                infoRow(label: "Work folder", value: runner.workFolder ?? "_work")
                 Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No", description: "Ephemeral runners de-register automatically after completing a single job.")
-                if !runner.labels.isEmpty {
+                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No")
+                if !displayOsArch.isEmpty {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Labels", value: runner.labels.joined(separator: ", "), description: "Tags used in workflow files to route jobs to this specific runner.")
+                    infoRow(label: "OS / Arch", value: displayOsArch)
                 }
-                if let group = runner.runnerGroup {
+                if !displayVersion.isEmpty {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Runner group", value: group, description: "Organisation-level runner group this runner belongs to.")
+                    infoRow(label: "Version", value: displayVersion)
                 }
                 Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Status", value: runner.displayStatus, description: "Current connectivity and availability state reported by GitHub.")
+                statusRow
             }
         }
     }
 
-    // MARK: - Config Section (#492)
+    private var statusRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("Status")
+                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading).fixedSize()
+            HStack(spacing: 4) {
+                Circle().fill(dotColor).frame(width: 7, height: 7)
+                Text(displayStatus)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(Color.rbTextPrimary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, 7)
+    }
+
+    // MARK: - Config Section (#532 / #533: single card with dividers)
 
     private var configSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Configuration")
             infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Labels")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Custom comma-separated labels to route specific workflow jobs to this runner.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("comma-separated", text: $labelsText)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: labelsSaveState, action: saveLabels)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(labelsSaveState, restartNote: false)
+                configRow(
+                    label: "Labels",
+                    placeholder: "comma-separated",
+                    text: $labelsText,
+                    saveState: labelsSaveState,
+                    onSave: saveLabels
+                )
+                Divider().padding(.leading, RBSpacing.md)
+                configRow(
+                    label: "Work folder",
+                    placeholder: "_work",
+                    text: $workFolderText,
+                    saveState: workFolderSaveState,
+                    onSave: saveWorkFolder
+                )
+                Divider().padding(.leading, RBSpacing.md)
+                HStack(spacing: 8) {
+                    Text("Autoupdate")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.rbTextSecondary)
+                        .frame(width: 100, alignment: .leading)
+                        .fixedSize()
+                    Spacer()
+                    Toggle("", isOn: $autoUpdate)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: autoUpdate) { _ in saveAutoUpdate() }
                 }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Work folder")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Directory used as the working directory during job execution. Requires runner restart.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("_work", text: $workFolderText)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: workFolderSaveState, action: saveWorkFolder)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(workFolderSaveState, restartNote: true)
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, 8)
+                Divider().padding(.leading, RBSpacing.md)
+                // #532: unified proxy — URL + user + pass + single Save
+                Text("Proxy")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color.rbTextTertiary)
+                    .padding(.horizontal, RBSpacing.md)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                Divider().padding(.leading, RBSpacing.md)
+                HStack {
+                    Text("URL")
+                        .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                        .frame(width: 100, alignment: .leading).fixedSize()
+                    TextField("http://proxy:8080", text: $proxyUrl)
+                        .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                 }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Autoupdate")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 130, alignment: .leading).fixedSize()
-                            Text("Allow the runner to automatically update itself when a new version is released.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $autoUpdate)
-                            .toggleStyle(.switch).labelsHidden()
-                            .onChange(of: autoUpdate) { _ in saveAutoUpdate() }
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(autoUpdateSaveState, restartNote: true)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+                Divider().padding(.leading, RBSpacing.md)
+                HStack {
+                    Text("Username")
+                        .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                        .frame(width: 100, alignment: .leading).fixedSize()
+                    TextField("username", text: $proxyUser)
+                        .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                 }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Proxy URL")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("HTTP/HTTPS proxy the runner uses to reach GitHub. Leave blank for a direct connection.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("http://proxy:8080", text: $proxyUrl)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: proxyUrlSaveState, action: saveProxyUrl)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(proxyUrlSaveState, restartNote: true)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+                Divider().padding(.leading, RBSpacing.md)
+                HStack {
+                    Text("Password")
+                        .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                        .frame(width: 100, alignment: .leading).fixedSize()
+                    SecureField("password", text: $proxyPassword)
+                        .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                 }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Proxy user")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Username for authenticating with the proxy server.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("username", text: $proxyUser)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    Divider().padding(.leading, RBSpacing.md)
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Proxy pass")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Password for authenticating with the proxy server.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        SecureField("password", text: $proxyPassword)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: proxyCreditsSaveState, action: saveProxyCredentials)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(proxyCreditsSaveState, restartNote: true)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+                Divider().padding(.leading, RBSpacing.md)
+                HStack {
+                    Spacer()
+                    saveButton(state: proxySaveState, action: saveProxy)
                 }
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, 6)
+                saveStateRow(proxySaveState, restartNote: true)
             }
         }
     }
 
-    // MARK: - Danger Zone (#493)
+    private func configRow(
+        label: String,
+        placeholder: String,
+        text: Binding<String>,
+        saveState: SaveState,
+        onSave: @escaping () -> Void,
+        secure: Bool = false
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading)
+                .fixedSize()
+            if secure {
+                SecureField(placeholder, text: text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity)
+            } else {
+                TextField(placeholder, text: text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity)
+            }
+            saveButton(state: saveState, action: onSave)
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Danger Zone (#493 / #533: always expanded)
 
     private var dangerZoneSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // swiftlint:disable:next multiple_closures_with_trailing_closure
-            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { dangerZoneExpanded.toggle() } }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color.rbDanger)
-                    Text("Danger Zone")
-                        .font(RBFont.sectionHeader)
-                        .foregroundColor(Color.rbDanger)
-                    Spacer()
-                    Image(systemName: dangerZoneExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color.rbTextTertiary)
-                }
-                .padding(.horizontal, RBSpacing.md)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.rbDanger)
+                Text("Danger Zone")
+                    .font(RBFont.sectionHeader)
+                    .foregroundColor(Color.rbDanger)
+                Spacer()
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, RBSpacing.md)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
 
-            if dangerZoneExpanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    dangerActionRow(
-                        action: .remove,
-                        description: "Permanently de-registers and removes this runner."
-                    )
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .fill(Color.rbDanger.opacity(0.05))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: RBRadius.small)
-                                .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
-                        )
+            VStack(alignment: .leading, spacing: 0) {
+                dangerActionRow(
+                    action: .remove,
+                    description: "Permanently de-registers and removes this runner."
                 )
-                .padding(.horizontal, RBSpacing.md)
-                .padding(.bottom, 8)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            .background(
+                RoundedRectangle(cornerRadius: RBRadius.small)
+                    .fill(Color.rbDanger.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: RBRadius.small)
+                            .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
+                    )
+            )
+            .padding(.horizontal, RBSpacing.md)
+            .padding(.bottom, 8)
         }
     }
 
@@ -410,8 +408,6 @@ struct RunnerDetailView: View {
         .padding(20)
         .frame(minWidth: 380)
     }
-
-    // MARK: - Danger Zone Trigger & Execute
 
     private func triggerDangerAction(_ action: DangerAction) {
         dangerActionState = .idle
@@ -491,18 +487,11 @@ struct RunnerDetailView: View {
             .padding(.bottom, 8)
     }
 
-    private func infoRow(label: String, value: String, description: String? = nil, copyable: Bool = false) -> some View {
+    private func infoRow(label: String, value: String, copyable: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                    .frame(width: 100, alignment: .leading).fixedSize()
-                if let description = description {
-                    Text(description)
-                        .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text(label)
+                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading).fixedSize()
             Text(value)
                 .font(.system(size: 12, design: .monospaced)).foregroundColor(Color.rbTextPrimary)
                 .lineLimit(2).truncationMode(.middle)
@@ -521,37 +510,88 @@ struct RunnerDetailView: View {
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
     }
 
+    // dotColor is derived from live isRunning state, not the frozen runner snapshot
     private var dotColor: Color {
-        switch runner.statusColor {
-        case .running: return Color.rbSuccess
-        case .busy:    return Color.rbWarning
-        case .idle:    return Color.rbTextTertiary
-        case .offline: return Color.rbDanger
-        }
+        isRunning ? Color.rbSuccess : Color.rbDanger
     }
 
     // MARK: - On Appear
 
+    // swiftlint:disable:next function_body_length
     private func loadEditableFields() {
-        guard let installPath = runner.installPath else { return }
-        let runnerJSONPath = installPath + "/.runner"
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            let disableUpdate = json["disableUpdate"] as? Bool ?? false
-            autoUpdate = !disableUpdate
+        log("RunnerDetailView loadEditableFields ENTER runner=\(runner.runnerName) installPath=\(runner.installPath ?? "<nil>") platform=\(runner.platform ?? "<nil>") platformArch=\(runner.platformArchitecture ?? "<nil>") agentVersion=\(runner.agentVersion ?? "<nil>") displayOsArch=\(displayOsArch) displayVersion=\(displayVersion)")
+
+        guard let installPath = runner.installPath else {
+            log("RunnerDetailView loadEditableFields BAIL installPath is nil for runner=\(runner.runnerName)")
+            return
         }
+
+        let runnerJSONPath = installPath + "/.runner"
+        log("RunnerDetailView loadEditableFields reading JSON path=\(runnerJSONPath)")
+
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)) else {
+            log("RunnerDetailView loadEditableFields ERROR could not read .runner file at \(runnerJSONPath)")
+            return
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            log("RunnerDetailView loadEditableFields ERROR could not parse JSON at \(runnerJSONPath) dataBytes=\(data.count)")
+            return
+        }
+
+        log("RunnerDetailView loadEditableFields JSON keys=\(json.keys.sorted().joined(separator: ","))")
+
+        let disableUpdate = json["disableUpdate"] as? Bool ?? false
+        autoUpdate = !disableUpdate
+        log("RunnerDetailView loadEditableFields disableUpdate=\(disableUpdate) → autoUpdate=\(autoUpdate)")
+
+        if displayOsArch.isEmpty {
+            let platform = json["platform"] as? String ?? ""
+            let arch = json["platformArchitecture"] as? String ?? ""
+            log("RunnerDetailView loadEditableFields platform=\(platform) arch=\(arch) (from JSON)")
+            let combined = [platform, arch].filter { !$0.isEmpty }.joined(separator: " / ")
+            if !combined.isEmpty {
+                displayOsArch = combined
+                log("RunnerDetailView loadEditableFields set displayOsArch=\(combined)")
+            } else {
+                log("RunnerDetailView loadEditableFields WARNING platform+arch both empty in JSON, displayOsArch stays empty")
+            }
+        } else {
+            log("RunnerDetailView loadEditableFields displayOsArch already seeded from model=\(displayOsArch), skipping JSON override")
+        }
+
+        if displayVersion.isEmpty {
+            if let version = json["agentVersion"] as? String, !version.isEmpty {
+                displayVersion = version
+                log("RunnerDetailView loadEditableFields set displayVersion=\(version)")
+            } else {
+                log("RunnerDetailView loadEditableFields WARNING agentVersion missing or empty in JSON keys=\(json.keys.sorted())")
+            }
+        } else {
+            log("RunnerDetailView loadEditableFields displayVersion already seeded from model=\(displayVersion), skipping JSON override")
+        }
+
+        // Proxy
         let proxyFilePath = installPath + "/.proxy"
-        proxyUrl = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
+        let proxyContent = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        proxyUrl = proxyContent
+        log("RunnerDetailView loadEditableFields proxyUrl=\(proxyUrl.isEmpty ? "<empty>" : proxyUrl)")
+
         let credPath = installPath + "/.proxycredentials"
         if let credContent = try? String(contentsOfFile: credPath, encoding: .utf8) {
             let lines = credContent.components(separatedBy: "\n")
             proxyUser = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
             proxyPassword = lines.dropFirst().first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+            log("RunnerDetailView loadEditableFields proxyUser=\(proxyUser.isEmpty ? "<empty>" : "<set>") proxyPassword=\(proxyPassword.isEmpty ? "<empty>" : "<set>")")
+        } else {
+            log("RunnerDetailView loadEditableFields no .proxycredentials file at \(credPath)")
         }
+
+        log("RunnerDetailView loadEditableFields EXIT displayOsArch=\(displayOsArch) displayVersion=\(displayVersion)")
     }
 
-    // MARK: - Save Actions (#492)
+    // MARK: - Save Actions
 
     private func saveLabels() {
         guard let agentId = runner.agentId,
@@ -605,8 +645,6 @@ struct RunnerDetailView: View {
             autoUpdateSaveState = .failure("Install path unknown"); return
         }
         autoUpdateSaveState = .saving
-        // autoUpdate = true  → disableUpdate: false
-        // autoUpdate = false → disableUpdate: true
         let disableUpdate = !autoUpdate
         DispatchQueue.global(qos: .userInitiated).async {
             let ok = patchRunnerJSON(installPath: installPath, key: "disableUpdate", boolValue: disableUpdate)
@@ -621,58 +659,43 @@ struct RunnerDetailView: View {
         }
     }
 
-    private func saveProxyUrl() {
+    // #532: unified proxy save — writes .proxy + .proxycredentials in one action
+    private func saveProxy() {
         guard let installPath = runner.installPath else {
-            proxyUrlSaveState = .failure("Install path unknown"); return
+            proxySaveState = .failure("Install path unknown"); return
         }
-        proxyUrlSaveState = .saving
-        let value = proxyUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let filePath = installPath + "/.proxy"
-            do {
-                if value.isEmpty {
-                    try? FileManager.default.removeItem(atPath: filePath)
-                } else {
-                    try value.write(toFile: filePath, atomically: true, encoding: .utf8)
-                }
-                DispatchQueue.main.async {
-                    proxyUrlSaveState = .success
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        if proxyUrlSaveState == .success { proxyUrlSaveState = .idle }
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    proxyUrlSaveState = .failure("Failed to write .proxy: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-
-    private func saveProxyCredentials() {
-        guard let installPath = runner.installPath else {
-            proxyCreditsSaveState = .failure("Install path unknown"); return
-        }
-        proxyCreditsSaveState = .saving
+        proxySaveState = .saving
+        let urlValue = proxyUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let user = proxyUser.trimmingCharacters(in: .whitespacesAndNewlines)
         let pass = proxyPassword.trimmingCharacters(in: .whitespacesAndNewlines)
         DispatchQueue.global(qos: .userInitiated).async {
-            let filePath = installPath + "/.proxycredentials"
+            var ok = true
+            let proxyFilePath = installPath + "/.proxy"
+            do {
+                if urlValue.isEmpty {
+                    if FileManager.default.fileExists(atPath: proxyFilePath) {
+                        try FileManager.default.removeItem(atPath: proxyFilePath)
+                    }
+                } else {
+                    try urlValue.write(toFile: proxyFilePath, atomically: true, encoding: .utf8)
+                }
+            } catch { ok = false }
+            let credPath = installPath + "/.proxycredentials"
             do {
                 if user.isEmpty && pass.isEmpty {
-                    try? FileManager.default.removeItem(atPath: filePath)
-                } else {
-                    try "\(user)\n\(pass)".write(toFile: filePath, atomically: true, encoding: .utf8)
-                }
-                DispatchQueue.main.async {
-                    proxyCreditsSaveState = .success
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        if proxyCreditsSaveState == .success { proxyCreditsSaveState = .idle }
+                    if FileManager.default.fileExists(atPath: credPath) {
+                        try FileManager.default.removeItem(atPath: credPath)
                     }
+                } else {
+                    try "\(user)\n\(pass)".write(toFile: credPath, atomically: true, encoding: .utf8)
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    proxyCreditsSaveState = .failure("Failed to write .proxycredentials: \(error.localizedDescription)")
+            } catch { ok = false }
+            DispatchQueue.main.async {
+                proxySaveState = ok ? .success : .failure("Failed to save proxy settings")
+                if ok {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        if proxySaveState == .success { proxySaveState = .idle }
+                    }
                 }
             }
         }
