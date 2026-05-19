@@ -29,17 +29,17 @@ final class SettingsStore: ObservableObject {
     }
 
     /// Whether to show dimmed (offline/idle) runners in the runners list.
-    /// Defaults to true (show all runners).
+    /// Retained for backwards compat but no longer surfaced in the UI (#510).
     @Published var showDimmedRunners: Bool {
         didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
     }
 
     private init() {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
-        let raw = stored > 0 ? stored : 30
+        // #511: Default changed from 30 s to 15 s for more responsive monitoring.
+        let raw = stored > 0 ? stored : 15
         pollingInterval = raw.clamped(to: Self.pollingRange)
-        // UserDefaults.bool returns false when the key is absent.
-        // Default to true (show all) unless the user has explicitly stored false.
+
         if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
             showDimmedRunners = true
         } else {

@@ -166,9 +166,13 @@ struct SettingsView: View {
         .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
     }
 
+    // #512: Description below Local Runners header (mirrors Scopes section)
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             localRunnersSectionHeader
+            Text("Self-hosted runners installed on this machine, discovered via LaunchAgent plists.")
+                .font(.caption).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
             if let errMsg = removeErrorMessage {
                 Text(errMsg).font(.caption).foregroundColor(Color.rbDanger)
                     .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
@@ -198,6 +202,7 @@ struct SettingsView: View {
         )
     }
 
+    // #507: chevron is now always the last item before the remove button (far right).
     private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
         let hasWarning = runner.lifecycleWarning != nil
         let displayStatus = runner.displayStatus
@@ -226,6 +231,7 @@ struct SettingsView: View {
                        label: { Text("Resume").font(.caption2) })
                 .buttonStyle(.bordered).help("Start runner service")
             }
+            // #507: chevron always far-right, before the remove button
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(Color.rbTextTertiary)
@@ -323,9 +329,9 @@ struct SettingsView: View {
     }
 
     /// #499: Scope row is a tappable Button that navigates to ScopeDetailView.
-    /// Inner toggle and minus use .buttonStyle(.borderless) so they receive their
-    /// own independent hit-testing without leaking the tap to the outer row Button.
-    /// This is VoiceOver-safe — each control gets its own accessibility element.
+    /// #507: chevron is now always the last item before the remove button (far right).
+    /// #508: Added Active/Paused text label adjacent to toggle.
+    /// #509: Toggle uses .tint(Color.rbSuccess) for clear on/off colour.
     private func scopeRow(_ entry: ScopeEntry) -> some View {
         let isRepo = entry.scope.contains("/")
         let displayName = ScopeSettingsStore.displayName(for: entry.scope)
@@ -346,7 +352,6 @@ struct SettingsView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if ScopeSettingsStore.alias(for: entry.scope) != nil {
-                        // Show raw scope string as subtitle when alias is set
                         Text(entry.scope)
                             .font(.caption2)
                             .foregroundColor(Color.rbTextTertiary)
@@ -356,24 +361,28 @@ struct SettingsView: View {
 
                 Spacer()
 
-                // .buttonStyle(.borderless) gives the toggle its own hit area without
-                // needing simultaneousGesture — correct fix for a11y (VoiceOver safe).
+                // #508: State label next to toggle
+                Text(entry.isEnabled ? "Active" : "Paused")
+                    .font(.caption2)
+                    .foregroundColor(entry.isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
+
+                // #509: .tint(.rbSuccess) makes the on-state visually distinct (green track)
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
                     set: { ScopeStore.shared.setEnabled(entry.id, $0); RunnerStore.shared.start() }
                 ))
                 .toggleStyle(.switch)
+                .tint(Color.rbSuccess)
                 .labelsHidden()
                 .help(entry.isEnabled ? "Pause monitoring" : "Resume monitoring")
                 .scaleEffect(0.8, anchor: .trailing)
                 .buttonStyle(.borderless)
 
-                // Chevron — visual affordance for drill-down
+                // #507: Chevron flush right, before the remove button
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
 
-                // Remove button — .buttonStyle(.borderless) ensures independent hit area.
                 Button(action: {
                     ScopeSettingsStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
@@ -403,44 +412,41 @@ struct SettingsView: View {
     }
 
     // MARK: - Notifications
+    // #509: .tint(.rbSuccess) on all notification toggles
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Notify on success").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $notifications.notifyOnSuccess).toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $notifications.notifyOnSuccess)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Notify on failure").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $notifications.notifyOnFailure).toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $notifications.notifyOnFailure)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
         }
     }
 
     // MARK: - General
+    // #510: Removed "Show offline runners" row.
+    // #509: .tint(.rbSuccess) on launch-at-login toggle.
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Launch at login").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $launchAtLogin).toggleStyle(.switch).labelsHidden()
+                Toggle("", isOn: $launchAtLogin)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
                     .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-            Divider().padding(.leading, RBSpacing.md)
-            HStack {
-                Text("Show offline runners").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $settings.showDimmedRunners).toggleStyle(.switch).labelsHidden()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
-            Text("When enabled, runners that are offline or unreachable are shown dimmed in the list.")
-                .font(.caption).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Polling interval").font(.system(size: 12)); Spacer()
