@@ -81,7 +81,6 @@ struct ScopeDetailView: View {
 
     private var headerBar: some View {
         HStack(spacing: 8) {
-            // Back label reads "‹ Settings" — intentional, mirrors RunnerDetailView.
             Button(action: onBack) {
                 HStack(spacing: 3) {
                     Image(systemName: "chevron.left").font(.caption)
@@ -247,6 +246,7 @@ struct ScopeDetailView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
+                    // swiftlint:disable:next multiple_closures_with_trailing_closure
                     Button(action: removeScope) {
                         Text("Remove").font(.caption2).foregroundColor(Color.rbDanger)
                     }
@@ -264,6 +264,7 @@ struct ScopeDetailView: View {
     @ViewBuilder
     private func threeStateToggle(value: Binding<Bool?>, onChange: @escaping (Bool?) -> Void) -> some View {
         HStack(spacing: 4) {
+            // swiftlint:disable:next multiple_closures_with_trailing_closure
             Button(action: {
                 let next: Bool? = {
                     switch value.wrappedValue {
@@ -329,9 +330,6 @@ struct ScopeDetailView: View {
 
     private func removeScope() {
         ScopeSettingsStore.cleanUp(scope: scope)
-        // ScopeStore.remove is synchronous and fires onMutate → observable.reload() before
-        // returning, so the scope is fully gone from the live store before start() polls.
-        // No removed-scope poll window exists.
         ScopeStore.shared.remove(id: scopeEntry.id)
         RunnerStore.shared.start()
         onBack()
@@ -367,6 +365,7 @@ struct ScopeDetailView: View {
                 .lineLimit(2).truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if copyable {
+                // swiftlint:disable:next multiple_closures_with_trailing_closure
                 Button(action: {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(value, forType: .string)
