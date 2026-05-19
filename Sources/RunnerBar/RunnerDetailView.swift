@@ -59,6 +59,7 @@ private enum DangerAction: Identifiable, Equatable {
     var requiresReregistration: Bool { self != .remove }
 }
 
+// swiftlint:disable:next type_body_length
 struct RunnerDetailView: View {
     let runner: RunnerModel
     let onBack: () -> Void
