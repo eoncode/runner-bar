@@ -27,6 +27,11 @@ struct ScopeDetailView: View {
     private var scope: String { scopeEntry.scope }
     private var isRepo: Bool { scope.contains("/") }
 
+    /// GitHub URL for this scope: https://github.com/<org>/<repo> or https://github.com/<org>
+    private var gitHubURL: URL? {
+        URL(string: "https://github.com/\(scope)")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -89,6 +94,29 @@ struct ScopeDetailView: View {
                 infoRow(label: "Scope", value: scope, copyable: true)
                 Divider().padding(.leading, RBSpacing.md)
                 infoRow(label: "Type", value: isRepo ? "Repository" : "Organisation")
+                if let url = gitHubURL {
+                    Divider().padding(.leading, RBSpacing.md)
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("GitHub")
+                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                            .frame(width: 100, alignment: .leading).fixedSize()
+                        // swiftlint:disable:next multiple_closures_with_trailing_closure
+                        Button(action: { NSWorkspace.shared.open(url) }) {
+                            HStack(spacing: 4) {
+                                Text("Open on GitHub")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Color.rbAccent)
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color.rbAccent)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help(url.absoluteString)
+                        Spacer()
+                    }
+                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+                }
             }
         }
     }
