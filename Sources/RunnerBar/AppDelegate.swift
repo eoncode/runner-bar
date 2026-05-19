@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let minWidth: CGFloat = 280
 
     /// The screen the status item lives on.
-    /// Falls back to NSScreen.main only if the status item’s window has no screen
+    /// Falls back to NSScreen.main only if the status item's window has no screen
     /// (e.g. before the panel has ever been shown).
     /// Using this instead of NSScreen.main ensures correct sizing on multi-monitor
     /// setups where the key window is on a different display than the menu bar.
@@ -308,7 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let posX = statusItemRect.midX - contentW / 2
         let rawPosY = topY - totalH
-        // Use the status-item’s own screen for the Y-clamp floor so the panel
+        // Use the status-item's own screen for the Y-clamp floor so the panel
         // never dips below the Dock on whichever display the menu bar is on.
         let screenMinY = statusItemScreen.visibleFrame.minY
         let posY = max(rawPosY, screenMinY)
@@ -327,6 +327,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func navigate(to view: AnyView) {
         hostingController?.rootView = view
         resizeAndRepositionPanel()
+    }
+
+    // MARK: - Make key for text input
+
+    // ⚠️ TEXT INPUT FIX (#525):
+    // The panel uses .nonactivatingPanel so it never becomes key on its own.
+    // This silently prevents NSTextField from receiving first-responder and
+    // makes all text fields non-editable. Calling makeKey() before navigating
+    // to a view that contains TextFields restores editable behaviour without
+    // changing the non-activating nature of the panel for read-only views.
+    // ❌ NEVER call this for views that have no text input (main, job detail, logs).
+    private func makeKeyForTextInput() {
+        panel?.makeKey()
     }
 
     // MARK: - Dismiss
@@ -534,6 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func settingsView() -> AnyView {
         savedNavState = .settings
+        makeKeyForTextInput()
         return wrapEnv(SettingsView(
             onBack: { [weak self] in
                 guard let self else { return }
@@ -554,6 +568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// #491: RunnerDetailView drill-down from SettingsView runner row.
     private func runnerDetailView(runner: RunnerModel) -> AnyView {
         savedNavState = .runnerDetail(runner)
+        makeKeyForTextInput()
         return wrapEnv(RunnerDetailView(
             runner: runner,
             onBack: { [weak self] in
@@ -566,6 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// #499: ScopeDetailView drill-down from SettingsView scope row.
     private func scopeDetailView(entry: ScopeEntry) -> AnyView {
         savedNavState = .scopeDetail(entry)
+        makeKeyForTextInput()
         // Re-resolve from live store so detail shows the freshest entry on restore.
         let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) ?? entry
         return wrapEnv(ScopeDetailView(
