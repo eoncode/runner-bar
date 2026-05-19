@@ -7,6 +7,7 @@ import SwiftUI
 // #491: Scaffold + read-only info block
 // #492: Editable config fields (labels, workFolder, autoUpdate, proxy)
 // #493: Danger Zone (remove only)
+// #533: Redesign — name row in info card, simplified header, always-open danger zone, single config card
 
 // MARK: - Save state helper
 private enum SaveState: Equatable {
@@ -52,7 +53,6 @@ struct RunnerDetailView: View {
     @State private var proxyCreditsSaveState: SaveState = .idle
 
     // MARK: - Danger Zone state (#493)
-    @State private var dangerZoneExpanded = true
     @State private var pendingDangerAction: DangerAction?
     @State private var dangerActionState: SaveState = .idle
 
@@ -70,7 +70,6 @@ struct RunnerDetailView: View {
             .joined(separator: ", ")
         )
         self._workFolderText = State(initialValue: runner.workFolder ?? "_work")
-        // Default to enabled; actual value loaded in onAppear
         self._autoUpdate = State(initialValue: true)
         self._proxyUrl = State(initialValue: "")
         self._proxyUser = State(initialValue: "")
@@ -101,7 +100,7 @@ struct RunnerDetailView: View {
         .sheet(item: $pendingDangerAction, content: dangerActionSheet)
     }
 
-    // MARK: - Header
+    // MARK: - Header (#533: simplified — name + stop moved into info card)
 
     private var headerBar: some View {
         HStack(spacing: 8) {
@@ -115,230 +114,223 @@ struct RunnerDetailView: View {
             }
             .buttonStyle(.plain)
             Spacer()
-            Circle().fill(dotColor).frame(width: 8, height: 8)
-            Text(runner.runnerName)
+            Text("Runner")
                 .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
             Spacer()
-            if isRunning {
-                Button(action: stopRunner) { Text("Stop").font(.caption2) }
-                    .buttonStyle(.bordered).help("Stop runner service")
-            } else {
-                Button(action: startRunner) { Text("Start").font(.caption2) }
-                    .buttonStyle(.bordered).help("Start runner service")
-            }
+            // Spacer to balance back button width
+            Color.clear.frame(width: 52, height: 1)
         }
         .padding(.horizontal, RBSpacing.md)
         .padding(.top, 12)
         .padding(.bottom, 8)
     }
 
-    // MARK: - Info Section
+    // MARK: - Info Section (#533: name row first, stop/start button inline)
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Runner Info")
             infoCard {
+                // Name row with Stop/Start button
+                nameRow
+                Divider().padding(.leading, RBSpacing.md)
+
                 if let url = runner.gitHubUrl {
-                    infoRow(label: "GitHub URL", value: url, description: "The GitHub repository or organisation this runner is registered to.", copyable: true)
+                    infoRow(label: "GitHub URL", value: url, description: nil, copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
                 }
-                if let agentId = runner.agentId {
-                    infoRow(label: "Agent ID", value: String(agentId), description: "Unique numeric ID assigned by GitHub when the runner was registered.")
-                    Divider().padding(.leading, RBSpacing.md)
-                }
+                infoRow(label: "Status", value: runner.displayStatus, description: nil)
+                Divider().padding(.leading, RBSpacing.md)
+                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No", description: nil)
                 let osArch = [runner.platform, runner.platformArchitecture]
                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
                 if !osArch.isEmpty {
-                    infoRow(label: "OS / Arch", value: osArch, description: "Operating system and CPU architecture of this runner machine.")
                     Divider().padding(.leading, RBSpacing.md)
+                    infoRow(label: "OS / Arch", value: osArch, description: nil)
                 }
                 if let version = runner.agentVersion {
-                    infoRow(label: "Version", value: version, description: "Installed GitHub Actions runner agent version.")
                     Divider().padding(.leading, RBSpacing.md)
+                    infoRow(label: "Version", value: version, description: nil)
                 }
                 if let installPath = runner.installPath {
-                    infoRow(label: "Install path", value: installPath, description: "Folder on disk where the runner agent binaries are installed.", copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
+                    infoRow(label: "Install path", value: installPath, description: nil, copyable: true)
                 }
-                infoRow(label: "Work folder", value: runner.workFolder ?? "_work", description: "Subfolder inside the install path used as the working directory for jobs.")
-                Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No", description: "Ephemeral runners de-register automatically after completing a single job.")
-                if !runner.labels.isEmpty {
-                    Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Labels", value: runner.labels.joined(separator: ", "), description: "Tags used in workflow files to route jobs to this specific runner.")
-                }
-                if let group = runner.runnerGroup {
-                    Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Runner group", value: group, description: "Organisation-level runner group this runner belongs to.")
-                }
-                Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Status", value: runner.displayStatus, description: "Current connectivity and availability state reported by GitHub.")
             }
         }
     }
 
-    // MARK: - Config Section (#492)
+    // Name row — runner name (bold) + Stop/Start button trailing
+    private var nameRow: some View {
+        HStack(spacing: 8) {
+            Text("Name")
+                .font(.system(size: 12))
+                .foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading)
+                .fixedSize()
+            Text(runner.runnerName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Color.rbTextPrimary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isRunning {
+                Button(action: stopRunner) { Text("Stop").font(.caption2) }
+                    .buttonStyle(.bordered)
+                    .help("Stop runner service")
+            } else {
+                Button(action: startRunner) { Text("Start").font(.caption2) }
+                    .buttonStyle(.bordered)
+                    .tint(Color.rbSuccess)
+                    .help("Start runner service")
+            }
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, 7)
+    }
+
+    // MARK: - Config Section (#533: single card with dividers)
 
     private var configSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Configuration")
             infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Labels")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Custom comma-separated labels to route specific workflow jobs to this runner.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("comma-separated", text: $labelsText)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: labelsSaveState, action: saveLabels)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(labelsSaveState, restartNote: false)
+                // Labels
+                configRow(
+                    label: "Labels",
+                    placeholder: "comma-separated",
+                    text: $labelsText,
+                    saveState: labelsSaveState,
+                    onSave: saveLabels
+                )
+                Divider().padding(.leading, RBSpacing.md)
+                // Work folder
+                configRow(
+                    label: "Work folder",
+                    placeholder: "_work",
+                    text: $workFolderText,
+                    saveState: workFolderSaveState,
+                    onSave: saveWorkFolder
+                )
+                Divider().padding(.leading, RBSpacing.md)
+                // Autoupdate toggle
+                HStack(spacing: 8) {
+                    Text("Autoupdate")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.rbTextSecondary)
+                        .frame(width: 100, alignment: .leading)
+                        .fixedSize()
+                    Spacer()
+                    Toggle("", isOn: $autoUpdate)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: autoUpdate) { _ in saveAutoUpdate() }
                 }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Work folder")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Directory used as the working directory during job execution. Requires runner restart.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("_work", text: $workFolderText)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: workFolderSaveState, action: saveWorkFolder)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(workFolderSaveState, restartNote: true)
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, 8)
+                Divider().padding(.leading, RBSpacing.md)
+                // Proxy URL
+                configRow(
+                    label: "Proxy URL",
+                    placeholder: "http://proxy:8080",
+                    text: $proxyUrl,
+                    saveState: proxyUrlSaveState,
+                    onSave: saveProxyUrl
+                )
+                Divider().padding(.leading, RBSpacing.md)
+                // Proxy user (no save button — saved together with password)
+                HStack(spacing: 8) {
+                    Text("Proxy user")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.rbTextSecondary)
+                        .frame(width: 100, alignment: .leading)
+                        .fixedSize()
+                    TextField("username", text: $proxyUser)
+                        .font(.system(size: 12, design: .monospaced))
+                        .textFieldStyle(.plain)
+                        .frame(maxWidth: .infinity)
                 }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Autoupdate")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 130, alignment: .leading).fixedSize()
-                            Text("Allow the runner to automatically update itself when a new version is released.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $autoUpdate)
-                            .toggleStyle(.switch).labelsHidden()
-                            .onChange(of: autoUpdate) { _ in saveAutoUpdate() }
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(autoUpdateSaveState, restartNote: true)
-                }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Proxy URL")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("HTTP/HTTPS proxy the runner uses to reach GitHub. Leave blank for a direct connection.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("http://proxy:8080", text: $proxyUrl)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: proxyUrlSaveState, action: saveProxyUrl)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(proxyUrlSaveState, restartNote: true)
-                }
-            }
-            infoCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Proxy user")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Username for authenticating with the proxy server.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        TextField("username", text: $proxyUser)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    Divider().padding(.leading, RBSpacing.md)
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Proxy pass")
-                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                                .frame(width: 100, alignment: .leading).fixedSize()
-                            Text("Password for authenticating with the proxy server.")
-                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        SecureField("password", text: $proxyPassword)
-                            .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
-                        saveButton(state: proxyCreditsSaveState, action: saveProxyCredentials)
-                    }
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-                    saveStateRow(proxyCreditsSaveState, restartNote: true)
-                }
+                .padding(.horizontal, RBSpacing.md)
+                .padding(.vertical, 8)
+                Divider().padding(.leading, RBSpacing.md)
+                // Proxy pass
+                configRow(
+                    label: "Proxy pass",
+                    placeholder: "password",
+                    text: $proxyPassword,
+                    saveState: proxyCreditsSaveState,
+                    onSave: saveProxyCredentials,
+                    secure: true
+                )
             }
         }
     }
 
-    // MARK: - Danger Zone (#493)
+    /// Generic config row: label + text field + save button
+    private func configRow(
+        label: String,
+        placeholder: String,
+        text: Binding<String>,
+        saveState: SaveState,
+        onSave: @escaping () -> Void,
+        secure: Bool = false
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading)
+                .fixedSize()
+            if secure {
+                SecureField(placeholder, text: text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity)
+            } else {
+                TextField(placeholder, text: text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity)
+            }
+            saveButton(state: saveState, action: onSave)
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Danger Zone (#533: always expanded, plain label, no chevron)
 
     private var dangerZoneSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // swiftlint:disable:next multiple_closures_with_trailing_closure
-            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { dangerZoneExpanded.toggle() } }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color.rbDanger)
-                    Text("Danger Zone")
-                        .font(RBFont.sectionHeader)
-                        .foregroundColor(Color.rbDanger)
-                    Spacer()
-                    Image(systemName: dangerZoneExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color.rbTextTertiary)
-                }
-                .padding(.horizontal, RBSpacing.md)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
+            // Plain non-interactive label — no chevron, always expanded
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.rbDanger)
+                Text("Danger Zone")
+                    .font(RBFont.sectionHeader)
+                    .foregroundColor(Color.rbDanger)
+                Spacer()
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, RBSpacing.md)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
 
-            if dangerZoneExpanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    dangerActionRow(
-                        action: .remove,
-                        description: "Permanently de-registers and removes this runner."
-                    )
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .fill(Color.rbDanger.opacity(0.05))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: RBRadius.small)
-                                .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
-                        )
+            VStack(alignment: .leading, spacing: 0) {
+                dangerActionRow(
+                    action: .remove,
+                    description: "Permanently de-registers and removes this runner."
                 )
-                .padding(.horizontal, RBSpacing.md)
-                .padding(.bottom, 8)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            .background(
+                RoundedRectangle(cornerRadius: RBRadius.small)
+                    .fill(Color.rbDanger.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: RBRadius.small)
+                            .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
+                    )
+            )
+            .padding(.horizontal, RBSpacing.md)
+            .padding(.bottom, 8)
         }
     }
 
@@ -459,18 +451,6 @@ struct RunnerDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func saveStateRow(_ state: SaveState, restartNote: Bool) -> some View {
-        if restartNote, state == .success {
-            Text("Changes take effect after the next runner restart.")
-                .font(.caption2).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
-        } else if case .failure(let msg) = state {
-            Text(msg).font(.caption2).foregroundColor(Color.rbDanger)
-                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
-        }
-    }
-
     // MARK: - Sub-view helpers
 
     private func sectionHeader(_ title: String) -> some View {
@@ -493,16 +473,9 @@ struct RunnerDetailView: View {
 
     private func infoRow(label: String, value: String, description: String? = nil, copyable: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                    .frame(width: 100, alignment: .leading).fixedSize()
-                if let description = description {
-                    Text(description)
-                        .font(.caption2).foregroundColor(Color.rbTextTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text(label)
+                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading).fixedSize()
             Text(value)
                 .font(.system(size: 12, design: .monospaced)).foregroundColor(Color.rbTextPrimary)
                 .lineLimit(2).truncationMode(.middle)
@@ -519,15 +492,6 @@ struct RunnerDetailView: View {
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
-    }
-
-    private var dotColor: Color {
-        switch runner.statusColor {
-        case .running: return Color.rbSuccess
-        case .busy:    return Color.rbWarning
-        case .idle:    return Color.rbTextTertiary
-        case .offline: return Color.rbDanger
-        }
     }
 
     // MARK: - On Appear
@@ -605,8 +569,6 @@ struct RunnerDetailView: View {
             autoUpdateSaveState = .failure("Install path unknown"); return
         }
         autoUpdateSaveState = .saving
-        // autoUpdate = true  → disableUpdate: false
-        // autoUpdate = false → disableUpdate: true
         let disableUpdate = !autoUpdate
         DispatchQueue.global(qos: .userInitiated).async {
             let ok = patchRunnerJSON(installPath: installPath, key: "disableUpdate", boolValue: disableUpdate)
