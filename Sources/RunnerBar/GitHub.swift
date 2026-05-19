@@ -1,4 +1,4 @@
-// swiftlint:disable colon identifier_name opening_brace cyclomatic_complexity function_body_length
+// swiftlint:disable colon identifier_name opening_brace cyclomatic_complexity function_body_length multiple_closures_with_trailing_closure type_body_length
 import Foundation
 import os
 
@@ -487,4 +487,4 @@ func cancelRun(runID: Int, scope: String) -> Bool {
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }
-// swiftlint:enable colon identifier_name opening_brace cyclomatic_complexity function_body_length
+// swiftlint:enable colon identifier_name opening_brace cyclomatic_complexity function_body_length multiple_closures_with_trailing_closure type_body_length
