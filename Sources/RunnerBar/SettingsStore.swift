@@ -38,7 +38,6 @@ final class SettingsStore: ObservableObject {
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
         let raw = stored > 0 ? stored : 30
         pollingInterval = raw.clamped(to: Self.pollingRange)
-
         // UserDefaults.bool returns false when the key is absent.
         // Default to true (show all) unless the user has explicitly stored false.
         if UserDefaults.standard.object(forKey: Key.showDimmedRunners) == nil {
