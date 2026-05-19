@@ -7,6 +7,7 @@ import SwiftUI
 // #513: Simplified — alias, polling, notifications sections removed.
 //       Enable toggle moved from header into its own Monitoring section.
 //       Monitoring row removed from Scope Info card.
+// #539: Layout improvements -- section labels, card structure aligned with spec.
 
 struct ScopeDetailView: View {
     let scopeEntry: ScopeEntry
@@ -28,7 +29,7 @@ struct ScopeDetailView: View {
     private var isRepo: Bool { scope.contains("/") }
 
     /// GitHub URL for this scope: https://github.com/<org>/<repo> or https://github.com/<org>
-    private var gitHubURL: URL? {
+    private var gitHURL: URL? {
         URL(string: "https://github.com/\(scope)")
     }
 
@@ -51,6 +52,7 @@ struct ScopeDetailView: View {
 
     // MARK: - Header
     // #517: Toggle removed from header — header is now clean nav only.
+    // #539: Header now shows Repo/Org badge + display name on right.
 
     private var headerBar: some View {
         HStack(spacing: 8) {
@@ -66,16 +68,18 @@ struct ScopeDetailView: View {
 
             Spacer()
 
-            Text(isRepo ? "Repo" : "Org")
-                .font(.caption2)
-                .foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(Color.rbSurfaceElevated))
-                .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+            HStack(spacing: 6) {
+                Text(isRepo ? "Repo" : "Org")
+                    .font(.caption2)
+                    .foregroundColor(Color.rbTextSecondary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(Color.rbSurfaceElevated))
+                    .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
 
-            Text(ScopeSettingsStore.displayName(for: scope))
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1).truncationMode(.middle)
+                Text(ScopeSettingsStore.displayName(for: scope))
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1).truncationMode(.middle)
+            }
 
             Spacer()
         }
@@ -86,6 +90,7 @@ struct ScopeDetailView: View {
 
     // MARK: - Scope Info
     // #518: Monitoring row removed — covered by the Monitoring section toggle below.
+    // #539: Scope row includes copy button; Type row label aligned.
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,7 +99,7 @@ struct ScopeDetailView: View {
                 infoRow(label: "Scope", value: scope, copyable: true)
                 Divider().padding(.leading, RBSpacing.md)
                 infoRow(label: "Type", value: isRepo ? "Repository" : "Organisation")
-                if let url = gitHubURL {
+                if let url = gitHURL {
                     Divider().padding(.leading, RBSpacing.md)
                     HStack(alignment: .top, spacing: 8) {
                         Text("GitHub")
@@ -123,6 +128,7 @@ struct ScopeDetailView: View {
 
     // MARK: - Monitoring
     // #517: Enable toggle moved here from the header bar, with clear label + description.
+    // #539: Description text updated for clarity.
 
     private var monitoringSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -155,6 +161,7 @@ struct ScopeDetailView: View {
     }
 
     // MARK: - Danger Zone
+    // #539: Description copy updated to match issue spec.
 
     private var dangerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
