@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - ScopeDetailView
@@ -7,6 +8,8 @@ import SwiftUI
 // #513: Simplified — alias, polling, notifications sections removed.
 //       Enable toggle moved from header into its own Monitoring section.
 //       Monitoring row removed from Scope Info card.
+// #538: Redesign — clean header (no badge/name), flattened monitoring row,
+//       red-tinted danger zone card, Type row non-monospaced.
 
 struct ScopeDetailView: View {
     let scopeEntry: ScopeEntry
@@ -19,7 +22,6 @@ struct ScopeDetailView: View {
         self.onBack = onBack
     }
 
-    // Live entry from store so toggle reflects current state.
     private var liveEntry: ScopeEntry? {
         scopeStore.entries.first(where: { $0.id == scopeEntry.id })
     }
@@ -27,7 +29,6 @@ struct ScopeDetailView: View {
     private var scope: String { scopeEntry.scope }
     private var isRepo: Bool { scope.contains("/") }
 
-    /// GitHub URL for this scope: https://github.com/<org>/<repo> or https://github.com/<org>
     private var gitHubURL: URL? {
         URL(string: "https://github.com/\(scope)")
     }
@@ -49,8 +50,7 @@ struct ScopeDetailView: View {
         .frame(idealWidth: 480, maxWidth: .infinity)
     }
 
-    // MARK: - Header
-    // #517: Toggle removed from header — header is now clean nav only.
+    // MARK: - Header (#538: clean nav only — no badge, no scope name in header)
 
     private var headerBar: some View {
         HStack(spacing: 8) {
@@ -63,21 +63,12 @@ struct ScopeDetailView: View {
                 .fixedSize()
             }
             .buttonStyle(.plain)
-
             Spacer()
-
-            Text(isRepo ? "Repo" : "Org")
-                .font(.caption2)
-                .foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(Color.rbSurfaceElevated))
-                .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-
-            Text(ScopeSettingsStore.displayName(for: scope))
+            Text("Scope")
                 .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1).truncationMode(.middle)
-
             Spacer()
+            // Balance spacer to match back button width
+            Color.clear.frame(width: 52, height: 1)
         }
         .padding(.horizontal, RBSpacing.md)
         .padding(.top, 12)
@@ -85,7 +76,6 @@ struct ScopeDetailView: View {
     }
 
     // MARK: - Scope Info
-    // #518: Monitoring row removed — covered by the Monitoring section toggle below.
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -93,7 +83,8 @@ struct ScopeDetailView: View {
             infoCard {
                 infoRow(label: "Scope", value: scope, copyable: true)
                 Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Type", value: isRepo ? "Repository" : "Organisation")
+                // #538: plain font for Type value (not monospaced)
+                infoRowPlain(label: "Type", value: isRepo ? "Repository" : "Organisation")
                 if let url = gitHubURL {
                     Divider().padding(.leading, RBSpacing.md)
                     HStack(alignment: .top, spacing: 8) {
@@ -121,8 +112,7 @@ struct ScopeDetailView: View {
         }
     }
 
-    // MARK: - Monitoring
-    // #517: Enable toggle moved here from the header bar, with clear label + description.
+    // MARK: - Monitoring (#538: flattened row — secondary label + caption2 sub + toggle)
 
     private var monitoringSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -131,12 +121,13 @@ struct ScopeDetailView: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Monitor this scope")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.rbTextSecondary)
                         Text(isEnabled
-                             ? "RunnerBar is actively polling this scope for runner status."
+                             ? "RunnerBar actively polls this scope for runner status."
                              : "Polling is paused. No runner data will be fetched for this scope.")
                             .font(.caption2)
-                            .foregroundColor(Color.rbTextSecondary)
+                            .foregroundColor(Color.rbTextTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -149,18 +140,32 @@ struct ScopeDetailView: View {
                     .labelsHidden()
                     .help(isEnabled ? "Pause monitoring this scope" : "Resume monitoring")
                 }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
             }
         }
     }
 
-    // MARK: - Danger Zone
+    // MARK: - Danger Zone (#538: icon+red label header, red-tinted card)
 
     private var dangerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            sectionHeader("Danger Zone")
-            infoCard {
-                HStack {
+            // Red icon + label row (no plain sectionHeader)
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.rbDanger)
+                Text("Danger Zone")
+                    .font(RBFont.sectionHeader)
+                    .foregroundColor(Color.rbDanger)
+                Spacer()
+            }
+            .padding(.horizontal, RBSpacing.md)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            // Red-tinted card
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Remove scope")
                             .font(.system(size: 12, weight: .medium))
@@ -176,8 +181,18 @@ struct ScopeDetailView: View {
                     }
                     .buttonStyle(.bordered)
                 }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
             }
+            .background(
+                RoundedRectangle(cornerRadius: RBRadius.small)
+                    .fill(Color.rbDanger.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: RBRadius.small)
+                            .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
+                    )
+            )
+            .padding(.horizontal, RBSpacing.md)
+            .padding(.bottom, 8)
         }
     }
 
@@ -229,6 +244,20 @@ struct ScopeDetailView: View {
                 }
                 .buttonStyle(.plain).help("Copy to clipboard")
             }
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+    }
+
+    /// Plain (non-monospaced) info row — used for human-readable labels like “Repository”
+    private func infoRowPlain(label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading).fixedSize()
+            Text(value)
+                .font(.system(size: 12)).foregroundColor(Color.rbTextPrimary)
+                .lineLimit(2).truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
     }
