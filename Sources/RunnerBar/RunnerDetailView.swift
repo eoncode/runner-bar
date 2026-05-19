@@ -140,40 +140,40 @@ struct RunnerDetailView: View {
             sectionHeader("Runner Info")
             infoCard {
                 if let url = runner.gitHubUrl {
-                    infoRow(label: "GitHub URL", value: url, copyable: true)
+                    infoRow(label: "GitHub URL", value: url, description: "The GitHub repository or organisation this runner is registered to.", copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
                 }
                 if let agentId = runner.agentId {
-                    infoRow(label: "Agent ID", value: String(agentId))
+                    infoRow(label: "Agent ID", value: String(agentId), description: "Unique numeric ID assigned by GitHub when the runner was registered.")
                     Divider().padding(.leading, RBSpacing.md)
                 }
                 let osArch = [runner.platform, runner.platformArchitecture]
                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
                 if !osArch.isEmpty {
-                    infoRow(label: "OS / Arch", value: osArch)
+                    infoRow(label: "OS / Arch", value: osArch, description: "Operating system and CPU architecture of this runner machine.")
                     Divider().padding(.leading, RBSpacing.md)
                 }
                 if let version = runner.agentVersion {
-                    infoRow(label: "Version", value: version)
+                    infoRow(label: "Version", value: version, description: "Installed GitHub Actions runner agent version.")
                     Divider().padding(.leading, RBSpacing.md)
                 }
                 if let installPath = runner.installPath {
-                    infoRow(label: "Install path", value: installPath, copyable: true)
+                    infoRow(label: "Install path", value: installPath, description: "Folder on disk where the runner agent binaries are installed.", copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
                 }
-                infoRow(label: "Work folder", value: runner.workFolder ?? "_work")
+                infoRow(label: "Work folder", value: runner.workFolder ?? "_work", description: "Subfolder inside the install path used as the working directory for jobs.")
                 Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No")
+                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No", description: "Ephemeral runners de-register automatically after completing a single job.")
                 if !runner.labels.isEmpty {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Labels", value: runner.labels.joined(separator: ", "))
+                    infoRow(label: "Labels", value: runner.labels.joined(separator: ", "), description: "Tags used in workflow files to route jobs to this specific runner.")
                 }
                 if let group = runner.runnerGroup {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Runner group", value: group)
+                    infoRow(label: "Runner group", value: group, description: "Organisation-level runner group this runner belongs to.")
                 }
                 Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Status", value: runner.displayStatus)
+                infoRow(label: "Status", value: runner.displayStatus, description: "Current connectivity and availability state reported by GitHub.")
             }
         }
     }
@@ -186,9 +186,14 @@ struct RunnerDetailView: View {
             infoCard {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Labels")
-                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                            .frame(width: 100, alignment: .leading).fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Labels")
+                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                                .frame(width: 100, alignment: .leading).fixedSize()
+                            Text("Custom comma-separated labels to route specific workflow jobs to this runner.")
+                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         TextField("comma-separated", text: $labelsText)
                             .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                         saveButton(state: labelsSaveState, action: saveLabels)
@@ -200,9 +205,14 @@ struct RunnerDetailView: View {
             infoCard {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Work folder")
-                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                            .frame(width: 100, alignment: .leading).fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Work folder")
+                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                                .frame(width: 100, alignment: .leading).fixedSize()
+                            Text("Directory used as the working directory during job execution. Requires runner restart.")
+                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         TextField("_work", text: $workFolderText)
                             .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                         saveButton(state: workFolderSaveState, action: saveWorkFolder)
@@ -214,9 +224,14 @@ struct RunnerDetailView: View {
             infoCard {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Autoupdate")
-                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                            .frame(width: 130, alignment: .leading).fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Autoupdate")
+                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                                .frame(width: 130, alignment: .leading).fixedSize()
+                            Text("Allow the runner to automatically update itself when a new version is released.")
+                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Spacer()
                         Toggle("", isOn: $autoUpdate)
                             .toggleStyle(.switch).labelsHidden()
@@ -229,9 +244,14 @@ struct RunnerDetailView: View {
             infoCard {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Proxy URL")
-                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                            .frame(width: 100, alignment: .leading).fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Proxy URL")
+                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                                .frame(width: 100, alignment: .leading).fixedSize()
+                            Text("HTTP/HTTPS proxy the runner uses to reach GitHub. Leave blank for a direct connection.")
+                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         TextField("http://proxy:8080", text: $proxyUrl)
                             .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                         saveButton(state: proxyUrlSaveState, action: saveProxyUrl)
@@ -243,18 +263,28 @@ struct RunnerDetailView: View {
             infoCard {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text("Proxy user")
-                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                            .frame(width: 100, alignment: .leading).fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Proxy user")
+                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                                .frame(width: 100, alignment: .leading).fixedSize()
+                            Text("Username for authenticating with the proxy server.")
+                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         TextField("username", text: $proxyUser)
                             .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                     }
                     .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
                     Divider().padding(.leading, RBSpacing.md)
                     HStack {
-                        Text("Proxy pass")
-                            .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                            .frame(width: 100, alignment: .leading).fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Proxy pass")
+                                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                                .frame(width: 100, alignment: .leading).fixedSize()
+                            Text("Password for authenticating with the proxy server.")
+                                .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         SecureField("password", text: $proxyPassword)
                             .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                         saveButton(state: proxyCreditsSaveState, action: saveProxyCredentials)
@@ -461,11 +491,18 @@ struct RunnerDetailView: View {
             .padding(.bottom, 8)
     }
 
-    private func infoRow(label: String, value: String, copyable: Bool = false) -> some View {
+    private func infoRow(label: String, value: String, description: String? = nil, copyable: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(label)
-                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                .frame(width: 100, alignment: .leading).fixedSize()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                    .frame(width: 100, alignment: .leading).fixedSize()
+                if let description = description {
+                    Text(description)
+                        .font(.caption2).foregroundColor(Color.rbTextTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Text(value)
                 .font(.system(size: 12, design: .monospaced)).foregroundColor(Color.rbTextPrimary)
                 .lineLimit(2).truncationMode(.middle)
