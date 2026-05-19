@@ -124,6 +124,42 @@ private enum NavState {
     case scopeDetail(ScopeEntry)
 }
 
+// MARK: - KeyablePanel
+
+// ⚠️ TEXT INPUT FIX (#525) — DO NOT REMOVE THIS CLASS.
+//
+// WHY THIS EXISTS:
+// NSPanel with .nonactivatingPanel overrides canBecomeKey to return false.
+// This is the AppKit contract: a non-activating panel intentionally never
+// steals focus from the frontmost application.
+// The side-effect is that NSTextField (and SwiftUI TextField backed by it)
+// never receives first-responder, making all text fields silently non-editable.
+//
+// FIX:
+// KeyablePanel is a minimal NSPanel subclass. It adds a single `wantsKey`
+// flag. canBecomeKey returns true only when `wantsKey == true`, so the panel
+// only becomes key for views that contain TextFields (settings, runner detail,
+// scope detail). All read-only views leave wantsKey = false, preserving the
+// non-activating behaviour everywhere else.
+//
+// USAGE IN AppDelegate:
+//   panel.wantsKey = true   — before navigating to a text-input view
+//   panel.makeKeyAndOrderFront(nil) — promotes panel to key window
+//   panel.wantsKey = false  — in closePanel(), resets for next open
+//
+// ❌ NEVER replace KeyablePanel with plain NSPanel — text fields break again.
+// ❌ NEVER set wantsKey = true globally — that makes the panel steal focus
+//    from the frontmost app whenever it is shown, defeating .nonactivatingPanel.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+// UNDER ANY CIRCUMSTANCE.
+private final class KeyablePanel: NSPanel {
+    /// Set to true immediately before navigating to a view that contains TextFields.
+    /// Reset to false in closePanel().
+    var wantsKey = false
+
+    override var canBecomeKey: Bool { wantsKey }
+}
+
 // MARK: - AppDelegate
 
 // ⚠️ @MainActor ISOLATION CONTRACT — DO NOT REMOVE THIS ANNOTATION.
@@ -147,7 +183,7 @@ private enum NavState {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var panel: NSPanel?
+    private var panel: KeyablePanel?
     private var chrome: PanelChromeView?
     private var hostingController: NSHostingController<AnyView>?
     private let observable = RunnerStoreObservable()
@@ -174,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let minWidth: CGFloat = 280
 
     /// The screen the status item lives on.
-    /// Falls back to NSScreen.main only if the status item’s window has no screen
+    /// Falls back to NSScreen.main only if the status item's window has no screen
     /// (e.g. before the panel has ever been shown).
     /// Using this instead of NSScreen.main ensures correct sizing on multi-monitor
     /// setups where the key window is on a different display than the menu bar.
@@ -235,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chromeView.addSubview(controller.view)
         chrome = chromeView
 
-        let newPanel = NSPanel(
+        let newPanel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -308,7 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let posX = statusItemRect.midX - contentW / 2
         let rawPosY = topY - totalH
-        // Use the status-item’s own screen for the Y-clamp floor so the panel
+        // Use the status-item's own screen for the Y-clamp floor so the panel
         // never dips below the Dock on whichever display the menu bar is on.
         let screenMinY = statusItemScreen.visibleFrame.minY
         let posY = max(rawPosY, screenMinY)
@@ -329,10 +365,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resizeAndRepositionPanel()
     }
 
+    // MARK: - Make key for text input
+
+    // See KeyablePanel comment block above for the full explanation.
+    // ❌ NEVER call this for views that have no text input (main, job detail, logs).
+    private func makeKeyForTextInput() {
+        panel?.wantsKey = true
+        panel?.makeKeyAndOrderFront(nil)
+    }
+
     // MARK: - Dismiss
 
     private func closePanel() {
         guard panelIsOpen else { return }
+        panel?.wantsKey = false
         panel?.orderOut(nil)
         panelIsOpen = false
         panelTopY = nil
@@ -534,6 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func settingsView() -> AnyView {
         savedNavState = .settings
+        makeKeyForTextInput()
         return wrapEnv(SettingsView(
             onBack: { [weak self] in
                 guard let self else { return }
@@ -554,6 +601,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// #491: RunnerDetailView drill-down from SettingsView runner row.
     private func runnerDetailView(runner: RunnerModel) -> AnyView {
         savedNavState = .runnerDetail(runner)
+        makeKeyForTextInput()
         return wrapEnv(RunnerDetailView(
             runner: runner,
             onBack: { [weak self] in
@@ -566,6 +614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// #499: ScopeDetailView drill-down from SettingsView scope row.
     private func scopeDetailView(entry: ScopeEntry) -> AnyView {
         savedNavState = .scopeDetail(entry)
+        makeKeyForTextInput()
         // Re-resolve from live store so detail shows the freshest entry on restore.
         let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) ?? entry
         return wrapEnv(ScopeDetailView(
