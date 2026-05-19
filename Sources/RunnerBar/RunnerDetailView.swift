@@ -52,6 +52,10 @@ struct RunnerDetailView: View {
     @State private var proxyPassword: String
     @State private var proxyCreditsSaveState: SaveState = .idle
 
+    // MARK: - Info fields loaded from .runner JSON (#533)
+    @State private var displayOsArch: String = ""
+    @State private var displayVersion: String = ""
+
     // MARK: - Danger Zone state (#493)
     @State private var pendingDangerAction: DangerAction?
     @State private var dangerActionState: SaveState = .idle
@@ -74,6 +78,11 @@ struct RunnerDetailView: View {
         self._proxyUrl = State(initialValue: "")
         self._proxyUser = State(initialValue: "")
         self._proxyPassword = State(initialValue: "")
+        // Seed from model — onAppear will override from JSON if needed
+        let osArch = [runner.platform, runner.platformArchitecture]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
+        self._displayOsArch = State(initialValue: osArch)
+        self._displayVersion = State(initialValue: runner.agentVersion ?? "")
     }
 
     var body: some View {
@@ -117,7 +126,6 @@ struct RunnerDetailView: View {
             Text("Runner")
                 .font(.system(size: 13, weight: .semibold))
             Spacer()
-            // Spacer to balance back button width
             Color.clear.frame(width: 52, height: 1)
         }
         .padding(.horizontal, RBSpacing.md)
@@ -131,36 +139,32 @@ struct RunnerDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Runner Info")
             infoCard {
-                // Name row with Stop/Start button
                 nameRow
                 Divider().padding(.leading, RBSpacing.md)
 
                 if let url = runner.gitHubUrl {
-                    infoRow(label: "GitHub URL", value: url, description: nil, copyable: true)
+                    infoRow(label: "GitHub URL", value: url, copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
                 }
-                infoRow(label: "Status", value: runner.displayStatus, description: nil)
+                infoRow(label: "Status", value: runner.displayStatus)
                 Divider().padding(.leading, RBSpacing.md)
-                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No", description: nil)
-                let osArch = [runner.platform, runner.platformArchitecture]
-                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
-                if !osArch.isEmpty {
+                infoRow(label: "Ephemeral", value: runner.isEphemeral ? "Yes" : "No")
+                if !displayOsArch.isEmpty {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "OS / Arch", value: osArch, description: nil)
+                    infoRow(label: "OS / Arch", value: displayOsArch)
                 }
-                if let version = runner.agentVersion {
+                if !displayVersion.isEmpty {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Version", value: version, description: nil)
+                    infoRow(label: "Version", value: displayVersion)
                 }
                 if let installPath = runner.installPath {
                     Divider().padding(.leading, RBSpacing.md)
-                    infoRow(label: "Install path", value: installPath, description: nil, copyable: true)
+                    infoRow(label: "Install path", value: installPath, copyable: true)
                 }
             }
         }
     }
 
-    // Name row — runner name (bold) + Stop/Start button trailing
     private var nameRow: some View {
         HStack(spacing: 8) {
             Text("Name")
@@ -194,7 +198,6 @@ struct RunnerDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Configuration")
             infoCard {
-                // Labels
                 configRow(
                     label: "Labels",
                     placeholder: "comma-separated",
@@ -203,7 +206,6 @@ struct RunnerDetailView: View {
                     onSave: saveLabels
                 )
                 Divider().padding(.leading, RBSpacing.md)
-                // Work folder
                 configRow(
                     label: "Work folder",
                     placeholder: "_work",
@@ -212,7 +214,6 @@ struct RunnerDetailView: View {
                     onSave: saveWorkFolder
                 )
                 Divider().padding(.leading, RBSpacing.md)
-                // Autoupdate toggle
                 HStack(spacing: 8) {
                     Text("Autoupdate")
                         .font(.system(size: 12))
@@ -228,7 +229,6 @@ struct RunnerDetailView: View {
                 .padding(.horizontal, RBSpacing.md)
                 .padding(.vertical, 8)
                 Divider().padding(.leading, RBSpacing.md)
-                // Proxy URL
                 configRow(
                     label: "Proxy URL",
                     placeholder: "http://proxy:8080",
@@ -237,7 +237,6 @@ struct RunnerDetailView: View {
                     onSave: saveProxyUrl
                 )
                 Divider().padding(.leading, RBSpacing.md)
-                // Proxy user (no save button — saved together with password)
                 HStack(spacing: 8) {
                     Text("Proxy user")
                         .font(.system(size: 12))
@@ -252,7 +251,6 @@ struct RunnerDetailView: View {
                 .padding(.horizontal, RBSpacing.md)
                 .padding(.vertical, 8)
                 Divider().padding(.leading, RBSpacing.md)
-                // Proxy pass
                 configRow(
                     label: "Proxy pass",
                     placeholder: "password",
@@ -265,7 +263,6 @@ struct RunnerDetailView: View {
         }
     }
 
-    /// Generic config row: label + text field + save button
     private func configRow(
         label: String,
         placeholder: String,
@@ -301,7 +298,6 @@ struct RunnerDetailView: View {
 
     private var dangerZoneSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Plain non-interactive label — no chevron, always expanded
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 11))
@@ -471,7 +467,7 @@ struct RunnerDetailView: View {
             .padding(.bottom, 8)
     }
 
-    private func infoRow(label: String, value: String, description: String? = nil, copyable: Bool = false) -> some View {
+    private func infoRow(label: String, value: String, copyable: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(label)
                 .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
@@ -503,6 +499,21 @@ struct RunnerDetailView: View {
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             let disableUpdate = json["disableUpdate"] as? Bool ?? false
             autoUpdate = !disableUpdate
+
+            // OS / Arch — fall back to reading from JSON when model fields are nil
+            if displayOsArch.isEmpty {
+                let platform = json["platform"] as? String ?? ""
+                let arch = json["platformArchitecture"] as? String ?? ""
+                let combined = [platform, arch].filter { !$0.isEmpty }.joined(separator: " / ")
+                if !combined.isEmpty { displayOsArch = combined }
+            }
+
+            // Version — same fallback
+            if displayVersion.isEmpty {
+                if let version = json["agentVersion"] as? String, !version.isEmpty {
+                    displayVersion = version
+                }
+            }
         }
         let proxyFilePath = installPath + "/.proxy"
         proxyUrl = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
