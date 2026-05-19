@@ -1,4 +1,5 @@
 import Foundation
+// swiftlint:disable vertical_whitespace_closing_braces
 
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
 struct RunnerMetrics {
