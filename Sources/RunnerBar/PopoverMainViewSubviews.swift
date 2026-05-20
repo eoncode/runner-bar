@@ -61,14 +61,14 @@ private struct RunnerTypeIcon: View {
 
 // MARK: - PopoverLocalRunnerRow
 struct PopoverLocalRunnerRow: View {
-    let runners: [Runner]
+    let runners: [RunnerModel]
     var body: some View {
-        let busy = runners.filter { $0.busy }
+        let busy = runners.filter { $0.isBusy }
         if !busy.isEmpty { runnerList(busy) }
     }
 
     @ViewBuilder
-    private func runnerList(_ busy: [Runner]) -> some View {
+    private func runnerList(_ busy: [RunnerModel]) -> some View {
         ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
         if busy.count > 3 {
             Text("+ \(busy.count - 3) more\u{2026}")
@@ -78,22 +78,15 @@ struct PopoverLocalRunnerRow: View {
         Divider()
     }
 
-    private func runnerCard(_ runner: Runner) -> some View {
+    private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
-            Text(runner.name)
+            Text(runner.runnerName)
                 .font(RBFont.label)
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .layoutPriority(1)
             Spacer()
-            if let metrics = runner.metrics {
-                StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
-                StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
-            }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color.rbTextTertiary)
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
         .background(
@@ -167,7 +160,7 @@ struct ActionRowView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        // ── Workflow-level context menu (right-click) ──────────────────────────
+        // ── Workflow-level context menu (right-click) ──────────────────────────────────────────────
         .workflowContextMenu(group: group)
         .onTapGesture {
             guard !group.jobs.isEmpty else { return }

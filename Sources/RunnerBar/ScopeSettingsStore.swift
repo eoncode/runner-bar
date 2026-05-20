@@ -137,13 +137,31 @@ enum ScopeSettingsStore {
         log("ScopeSettingsStore › localRepoPath for \(scope) = \(trimmed ?? "nil (cleared)")")
     }
 
+    // MARK: - Failure Hook Branch Filter (#560)
+
+    /// Branch to restrict the failure hook to. `nil` = fire for all branches.
+    static func failureHookBranch(for scope: String) -> String? {
+        UserDefaults.standard.string(forKey: key(scope, "failureHookBranch"))
+            .flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    static func setFailureHookBranch(_ branch: String?, for scope: String) {
+        if let value = branch, !value.isEmpty {
+            UserDefaults.standard.set(value, forKey: key(scope, "failureHookBranch"))
+        } else {
+            UserDefaults.standard.removeObject(forKey: key(scope, "failureHookBranch"))
+        }
+        log("ScopeSettingsStore › failureHookBranch for \(scope) = \(branch ?? "nil (all branches)")")
+    }
+
     // MARK: - Cleanup (#505)
 
     /// Removes all per-scope keys for `scope` from UserDefaults.
     /// Call this from `ScopeStore.remove(id:)` to avoid orphaned data.
     static func cleanUp(scope: String) {
         let fields = ["alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
-                      "failureHookEnabled", "failureHookCommand", "localRepoPath"]
+                      "failureHookEnabled", "failureHookCommand", "localRepoPath",
+                      "failureHookBranch"]
         for field in fields {
             UserDefaults.standard.removeObject(forKey: key(scope, field))
         }

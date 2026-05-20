@@ -63,7 +63,7 @@ struct PopoverMainView: View {
     }
 
     /// True when at least one local runner is present (running or idle).
-    /// Gates the Local Runners section — uses store.localRunners ([LocalRunner])
+    /// Gates the Local Runners section — uses store.localRunners ([RunnerModel])
     /// which is populated by LocalRunnerStore regardless of GitHub API status.
     private var hasLocalRunners: Bool {
         !store.localRunners.isEmpty

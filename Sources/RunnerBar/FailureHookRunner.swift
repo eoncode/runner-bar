@@ -4,6 +4,7 @@ import Foundation
 // #544: Fires the per-scope failure hook command when an ActionGroup transitions to failure.
 // #546: Resolves $LOCAL_PATH from ScopeSettingsStore.
 // #552: Fetches failed job/step details on background thread before building $FAILURE_LOG.
+// #560: Branch filter — skip if a branch filter is set and does not match group.headBranch.
 //
 // Called from RunnerStoreState.buildGroupState when a group is newly completed
 // with a failure conclusion. Resolves all $TOKEN variables then opens Terminal.app
@@ -42,6 +43,17 @@ enum FailureHookRunner {
         guard hookEnabled else {
             log("FailureHookRunner › SKIP — hook not enabled for scope=\(scope)")
             return
+        }
+
+        // #560: Branch filter — skip if a branch filter is set and doesn’t match
+        let filterBranch = ScopeSettingsStore.failureHookBranch(for: scope)
+        if let filter = filterBranch {
+            let groupBranch = group.headBranch ?? ""
+            guard groupBranch == filter else {
+                log("FailureHookRunner › SKIP — branch filter '\(filter)' ≠ group branch '\(groupBranch)'")
+                return
+            }
+            log("FailureHookRunner › branch filter '\(filter)' MATCHED group branch '\(groupBranch)'")
         }
 
         let storedCommand = ScopeSettingsStore.failureHookCommand(for: scope)

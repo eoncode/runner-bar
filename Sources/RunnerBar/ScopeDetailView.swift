@@ -13,6 +13,7 @@ import SwiftUI
 //       Popover is closed before NSOpenPanel runs and reopened after, so the
 //       panel is never obscured by the popover.
 // #559: Failure Hook section hidden for org scopes — only shown for repo scopes.
+// #560: Branch selector row added to Failure Hook section.
 
 struct ScopeDetailView: View {
     let scopeEntry: ScopeEntry
@@ -20,7 +21,9 @@ struct ScopeDetailView: View {
 
     @ObservedObject private var scopeStore = ScopeStore.shared
     @State private var showHookSheet = false
+    @State private var showBranchSheet = false
     @State private var hookEnabled: Bool
+    @State private var hookBranch: String?
     @State private var localRepoPath: String
     @State private var isEditingPath = false
 
@@ -28,6 +31,7 @@ struct ScopeDetailView: View {
         self.scopeEntry = scopeEntry
         self.onBack = onBack
         _hookEnabled = State(initialValue: ScopeSettingsStore.failureHookEnabled(for: scopeEntry.scope))
+        _hookBranch = State(initialValue: ScopeSettingsStore.failureHookBranch(for: scopeEntry.scope))
         _localRepoPath = State(initialValue: ScopeSettingsStore.localRepoPath(for: scopeEntry.scope) ?? "")
     }
 
@@ -66,6 +70,17 @@ struct ScopeDetailView: View {
         .frame(idealWidth: 480, maxWidth: .infinity)
         .sheet(isPresented: $showHookSheet) {
             FailureHookCommandSheet(scope: scope) { showHookSheet = false }
+        }
+        .sheet(isPresented: $showBranchSheet) {
+            BranchSelectorSheet(
+                scope: scope,
+                onDismiss: { showBranchSheet = false },
+                onSelect: { chosen in
+                    hookBranch = chosen
+                    ScopeSettingsStore.setFailureHookBranch(chosen, for: scope)
+                    showBranchSheet = false
+                }
+            )
         }
     }
 }
@@ -173,6 +188,8 @@ extension ScopeDetailView {
             infoCard {
                 hookToggleRow
                 Divider().padding(.leading, RBSpacing.md)
+                branchRow
+                Divider().padding(.leading, RBSpacing.md)
                 localPathRow
                 Divider().padding(.leading, RBSpacing.md)
                 commandRow
@@ -232,6 +249,45 @@ extension ScopeDetailView {
             .labelsHidden()
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
+    }
+
+    var branchRow: some View {
+        // swiftlint:disable:next multiple_closures_with_trailing_closure
+        Button(action: { showBranchSheet = true }) {
+            HStack(spacing: 8) {
+                Text("Branch")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color.rbTextSecondary)
+                    .frame(width: 100, alignment: .leading)
+                    .fixedSize()
+                if let branch = hookBranch {
+                    Text(branch)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color.rbTextPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button(action: clearBranchFilter) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.rbTextTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear branch filter")
+                } else {
+                    Text("All branches")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.rbTextTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color.rbTextTertiary)
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     var localPathRow: some View {
@@ -314,6 +370,7 @@ extension ScopeDetailView {
                     .foregroundColor(Color.rbTextTertiary)
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 9)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -333,6 +390,11 @@ extension ScopeDetailView {
         let cleaned = (trimmed == "~/") ? "" : trimmed
         localRepoPath = cleaned
         ScopeSettingsStore.setLocalRepoPath(cleaned.isEmpty ? nil : cleaned, for: scope)
+    }
+
+    func clearBranchFilter() {
+        hookBranch = nil
+        ScopeSettingsStore.setFailureHookBranch(nil, for: scope)
     }
 
     func openFolderPicker() {
