@@ -116,22 +116,22 @@ struct PopoverLocalRunnerRow: View {
 ///     set by .onAppear for in-progress runs only, OR by onChange when
 ///     the row first transitions INTO inProgress (async store population)
 ///   expandState == true  → EXPANDED (all jobs)
-///     set by user tapping the left pill
+///     set by user tapping the row
 ///
 /// Auto-collapse on transition:
 ///   When a run transitions FROM inProgress → terminal (success/failed),
 ///   expandState is reset to nil so it collapses to compact.
-///   This ONLY fires on an actual status change, NOT on every re-render.
-///   Terminal rows that are already failed/success at appear time are
-///   never auto-collapsed and remain fully user-controllable.
 ///
-/// fix: async RunnerStore population means onAppear often fires before
-///   groupStatus is inProgress. The onChange guard below catches the
-///   first transition INTO inProgress so inline jobs always appear.
+/// #455 Phase 4:
+///   - Removed chevron.right from workflow row (no navigation to ActionDetailView)
+///   - Removed Button(action: onSelect) wrapper from rowContent
+///   - Added onStepTap: (ActiveJob, JobStep) -> Void prop (threaded to InlineJobRowsView)
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
+    /// Called when user taps a step row inside this workflow's inline jobs. (#455)
+    let onStepTap: (ActiveJob, JobStep) -> Void
 
     /// nil = fully collapsed, false = auto-compact (in_progress jobs only), true = full expand
     @State private var expandState: Bool?
@@ -142,11 +142,12 @@ struct ActionRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: RBSpacing.md)
-                Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+                // #455 Phase 4: rowContent is no longer wrapped in Button.
+                // Tap-to-expand is handled by .onTapGesture on the outer VStack.
+                rowContent
             }
             if let fullExpand = expandState {
-                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
             }
         }
         .frame(maxWidth: .infinity)
@@ -167,7 +168,6 @@ struct ActionRowView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        // ── Workflow-level context menu (right-click) ──────────────────────────
         .workflowContextMenu(group: group)
         .onTapGesture {
             guard !group.jobs.isEmpty else { return }
