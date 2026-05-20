@@ -9,7 +9,7 @@ import SwiftUI
 //       Monitoring row removed from Scope Info card.
 // #539: Layout improvements -- section labels, card structure aligned with spec.
 // #544: Failure Hook section added between Monitoring and Danger Zone.
-// #546: Local Path row added to Failure Hook section for $LOCAL_PATH resolution.
+// #546: Local Path row — inline editing, NSOpenPanel folder picker, tilde pre-fill.
 
 struct ScopeDetailView: View {
     let scopeEntry: ScopeEntry
@@ -28,7 +28,6 @@ struct ScopeDetailView: View {
         _localRepoPath = State(initialValue: ScopeSettingsStore.localRepoPath(for: scopeEntry.scope) ?? "")
     }
 
-    // Live entry from store so toggle reflects current state.
     private var liveEntry: ScopeEntry? {
         scopeStore.entries.first(where: { $0.id == scopeEntry.id })
     }
@@ -40,7 +39,6 @@ struct ScopeDetailView: View {
         ScopeSettingsStore.failureHookCommand(for: scope)
     }
 
-    /// GitHub URL for this scope: https://github.com/<org>/<repo> or https://github.com/<org>
     private var gitHURL: URL? {
         URL(string: "https://github.com/\(scope)")
     }
@@ -67,8 +65,6 @@ struct ScopeDetailView: View {
     }
 
     // MARK: - Header
-    // #517: Toggle removed from header — header is now clean nav only.
-    // #539: Header now shows Repo/Org badge + display name on right.
 
     private var headerBar: some View {
         HStack(spacing: 8) {
@@ -105,8 +101,6 @@ struct ScopeDetailView: View {
     }
 
     // MARK: - Scope Info
-    // #518: Monitoring row removed — covered by the Monitoring section toggle below.
-    // #539: Scope row includes copy button; Type row label aligned.
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -143,8 +137,6 @@ struct ScopeDetailView: View {
     }
 
     // MARK: - Monitoring
-    // #517: Enable toggle moved here from the header bar, with clear label + description.
-    // #539: Description text updated for clarity.
 
     private var monitoringSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -215,6 +207,7 @@ struct ScopeDetailView: View {
                         .foregroundColor(Color.rbTextSecondary)
                         .frame(width: 100, alignment: .leading)
                         .fixedSize()
+
                     if isEditingPath {
                         TextField("~/code/org/repo", text: $localRepoPath)
                             .font(.system(size: 11, design: .monospaced))
@@ -227,8 +220,9 @@ struct ScopeDetailView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(Color.rbAccent)
                     } else {
+                        // Tap text to enter edit mode — pre-fills "~/" if empty
                         // swiftlint:disable:next multiple_closures_with_trailing_closure
-                        Button(action: { isEditingPath = true }) {
+                        Button(action: { startEditingPath() }) {
                             Text(localRepoPath.isEmpty ? "Tap to set path…" : localRepoPath)
                                 .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(localRepoPath.isEmpty ? Color.rbTextTertiary : Color.rbTextPrimary)
@@ -237,8 +231,22 @@ struct ScopeDetailView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
+
+                        // Folder picker icon
+                        Button(action: { openFolderPicker() }) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 11))
+                                .foregroundColor(Color.rbTextSecondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Browse for folder…")
+
+                        // Clear button — only when a path is set
                         if !localRepoPath.isEmpty {
-                            Button(action: { localRepoPath = ""; ScopeSettingsStore.setLocalRepoPath(nil, for: scope) }) {
+                            Button(action: {
+                                localRepoPath = ""
+                                ScopeSettingsStore.setLocalRepoPath(nil, for: scope)
+                            }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 11))
                                     .foregroundColor(Color.rbTextTertiary)
@@ -252,7 +260,7 @@ struct ScopeDetailView: View {
 
                 Divider().padding(.leading, RBSpacing.md)
 
-                // Command row — tappable, shows current command or placeholder
+                // Command row
                 // swiftlint:disable:next multiple_closures_with_trailing_closure
                 Button(action: { showHookSheet = true }) {
                     HStack(spacing: 8) {
@@ -286,7 +294,6 @@ struct ScopeDetailView: View {
     }
 
     // MARK: - Danger Zone
-    // #539: Description copy updated to match issue spec.
 
     private var dangerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -315,9 +322,46 @@ struct ScopeDetailView: View {
 
     // MARK: - Actions
 
+    /// Opens edit mode. Pre-fills "~/" if path is currently empty so user has a starting point.
+    private func startEditingPath() {
+        if localRepoPath.isEmpty { localRepoPath = "~/" }
+        isEditingPath = true
+    }
+
     private func commitLocalPath() {
         isEditingPath = false
-        ScopeSettingsStore.setLocalRepoPath(localRepoPath.isEmpty ? nil : localRepoPath, for: scope)
+        let trimmed = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Discard if user left it as just the pre-fill stub
+        let cleaned = (trimmed == "~/") ? "" : trimmed
+        localRepoPath = cleaned
+        ScopeSettingsStore.setLocalRepoPath(cleaned.isEmpty ? nil : cleaned, for: scope)
+    }
+
+    /// Opens NSOpenPanel constrained to directories and converts the result to a tilde-abbreviated path.
+    private func openFolderPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select"
+        panel.message = "Choose the local folder for \(scope)"
+        // Start in current path if set and resolvable, else home directory
+        if !localRepoPath.isEmpty {
+            let expanded = NSString(string: localRepoPath).expandingTildeInPath
+            panel.directoryURL = URL(fileURLWithPath: expanded)
+        } else {
+            panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        }
+        if panel.runModal() == .OK, let url = panel.url {
+            // Abbreviate absolute path back to ~/... form when inside home dir
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            let abs  = url.path
+            let tilde = abs.hasPrefix(home)
+                ? "~/" + abs.dropFirst(home.count + 1)
+                : abs
+            localRepoPath = tilde
+            ScopeSettingsStore.setLocalRepoPath(tilde, for: scope)
+        }
     }
 
     private func removeScope() {
