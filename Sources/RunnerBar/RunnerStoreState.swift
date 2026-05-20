@@ -170,10 +170,12 @@ extension RunnerStore {
         freezeVanishedGroups(snapPrev: snapPrevGroups, liveIDs: liveIDs, now: now,
                              into: &newCache, prevLiveGroups: snapPrevGroups)
 
-        // Cache done groups; fire failure hook for newly-completed ones.
-        // snapPrevGroups is SHA-keyed, so use headSha to detect the transition.
+        // Cache done groups; fire failure hook the first time a group is seen as completed.
+        // Uses snapGroupCache[group.id] == nil as the "newly completed" signal —
+        // snapPrevGroups is unreliable here because newPrevLiveGroups is derived from
+        // liveGroups and is always empty by the time a run first appears as completed.
         for group in doneGroups {
-            let isNew = snapPrevGroups[group.headSha] != nil && snapGroupCache[group.id] == nil
+            let isNew = snapGroupCache[group.id] == nil
             if isNew {
                 let scope = scopeFromActionGroup(group)
                 FailureHookRunner.fireIfNeeded(group: group, scope: scope)
