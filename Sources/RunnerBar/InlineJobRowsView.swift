@@ -217,8 +217,11 @@ struct InlineJobRowsView: View {
     let group: ActionGroup
     let tick: Int
     var fullExpand: Bool = false
-    // Default no-op; callers that need step navigation provide a real handler.
-    var onStepTap: (ActiveJob, JobStep) -> Void = { _, _ in /* no-op default */ }
+    // Default no-op handler; callers that need step navigation override this.
+    var onStepTap: (ActiveJob, JobStep) -> Void = { _, _ in
+        // Intentionally empty: default is a no-op.
+        // Callers that require navigation provide a real implementation.
+    }
 
     @EnvironmentObject private var popoverState: PopoverOpenState
     @State private var expandedJobIDs: Set<Int> = []
