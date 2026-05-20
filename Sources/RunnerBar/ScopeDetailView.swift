@@ -10,7 +10,8 @@ import SwiftUI
 // #539: Layout improvements -- section labels, card structure aligned with spec.
 // #544: Failure Hook section added between Monitoring and Danger Zone.
 // #546: Local Path row — inline editing, NSOpenPanel folder picker, tilde pre-fill.
-//       NSOpenPanel raised to .floating level so it appears above the popover.
+//       Popover is closed before NSOpenPanel runs and reopened after, so the
+//       panel is never obscured by the popover.
 
 struct ScopeDetailView: View {
     let scopeEntry: ScopeEntry
@@ -333,17 +334,21 @@ struct ScopeDetailView: View {
         ScopeSettingsStore.setLocalRepoPath(cleaned.isEmpty ? nil : cleaned, for: scope)
     }
 
-    /// Opens NSOpenPanel above the popover.
-    /// Status bar apps have no regular window, so NSOpenPanel defaults to appearing behind
-    /// the popover. Fix: activate the app, set panel level to .floating, then run modal.
+    /// Opens NSOpenPanel without the popover competing for z-order.
+    /// Strategy: close the popover first, run the panel, then reopen the popover
+    /// regardless of whether the user picked a folder or cancelled.
     private func openFolderPicker() {
+        let appDelegate = NSApp.delegate as? AppDelegate
+
+        // Close the popover so nothing sits behind/over the panel
+        appDelegate?.closePanel()
+
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Select"
         panel.message = "Choose the local folder for \(scope)"
-        panel.level = .floating  // float above the popover
 
         if !localRepoPath.isEmpty {
             let expanded = NSString(string: localRepoPath).expandingTildeInPath
@@ -352,17 +357,21 @@ struct ScopeDetailView: View {
             panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
         }
 
-        // Activate app so the panel can receive focus
         NSApp.activate(ignoringOtherApps: true)
 
-        if panel.runModal() == .OK, let url = panel.url {
-            let home  = FileManager.default.homeDirectoryForCurrentUser.path
-            let abs   = url.path
-            let tilde = abs.hasPrefix(home)
-                ? "~/" + abs.dropFirst(home.count + 1)
-                : abs
-            localRepoPath = tilde
-            ScopeSettingsStore.setLocalRepoPath(tilde, for: scope)
+        // Non-blocking — completion runs on main thread
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                let home  = FileManager.default.homeDirectoryForCurrentUser.path
+                let abs   = url.path
+                let tilde = abs.hasPrefix(home)
+                    ? "~/" + abs.dropFirst(home.count + 1)
+                    : abs
+                localRepoPath = tilde
+                ScopeSettingsStore.setLocalRepoPath(tilde, for: scope)
+            }
+            // Reopen the popover whether user picked or cancelled
+            appDelegate?.openPanel()
         }
     }
 
