@@ -12,6 +12,7 @@ import SwiftUI
 // #546: Local Path row — inline editing, NSOpenPanel folder picker, tilde pre-fill.
 //       Popover is closed before NSOpenPanel runs and reopened after, so the
 //       panel is never obscured by the popover.
+// #559: Failure Hook section hidden for org scopes — only shown for repo scopes.
 
 struct ScopeDetailView: View {
     let scopeEntry: ScopeEntry
@@ -53,7 +54,9 @@ struct ScopeDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     infoSection
                     monitoringSection
-                    failureHookSection
+                    if isRepo {
+                        failureHookSection
+                    }
                     dangerSection
                 }
                 .padding(.bottom, 16)
