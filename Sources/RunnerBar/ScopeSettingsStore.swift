@@ -92,12 +92,58 @@ enum ScopeSettingsStore {
         log("ScopeSettingsStore › notifyOnFailure for \(scope) = \(value.map(String.init) ?? "nil (use global)")")
     }
 
+    // MARK: - Failure Hook (#544)
+
+    /// Whether the failure hook is enabled for this scope.
+    static func failureHookEnabled(for scope: String) -> Bool {
+        UserDefaults.standard.bool(forKey: key(scope, "failureHookEnabled"))
+    }
+
+    static func setFailureHookEnabled(_ enabled: Bool, for scope: String) {
+        UserDefaults.standard.set(enabled, forKey: key(scope, "failureHookEnabled"))
+        log("ScopeSettingsStore › failureHookEnabled for \(scope) = \(enabled)")
+    }
+
+    /// The shell command to run on failure. `nil` = no command set.
+    static func failureHookCommand(for scope: String) -> String? {
+        UserDefaults.standard.string(forKey: key(scope, "failureHookCommand"))
+            .flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    static func setFailureHookCommand(_ command: String?, for scope: String) {
+        let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let value = trimmed, !value.isEmpty {
+            UserDefaults.standard.set(value, forKey: key(scope, "failureHookCommand"))
+        } else {
+            UserDefaults.standard.removeObject(forKey: key(scope, "failureHookCommand"))
+        }
+        log("ScopeSettingsStore › failureHookCommand for \(scope) = \(trimmed ?? "nil (cleared)")")
+    }
+
+    /// Local filesystem path to the repo for this scope. Used to resolve $LOCAL_PATH in hook commands.
+    /// `nil` = not set.
+    static func localRepoPath(for scope: String) -> String? {
+        UserDefaults.standard.string(forKey: key(scope, "localRepoPath"))
+            .flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    static func setLocalRepoPath(_ path: String?, for scope: String) {
+        let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let value = trimmed, !value.isEmpty {
+            UserDefaults.standard.set(value, forKey: key(scope, "localRepoPath"))
+        } else {
+            UserDefaults.standard.removeObject(forKey: key(scope, "localRepoPath"))
+        }
+        log("ScopeSettingsStore › localRepoPath for \(scope) = \(trimmed ?? "nil (cleared)")")
+    }
+
     // MARK: - Cleanup (#505)
 
     /// Removes all per-scope keys for `scope` from UserDefaults.
     /// Call this from `ScopeStore.remove(id:)` to avoid orphaned data.
     static func cleanUp(scope: String) {
-        let fields = ["alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure"]
+        let fields = ["alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
+                      "failureHookEnabled", "failureHookCommand", "localRepoPath"]
         for field in fields {
             UserDefaults.standard.removeObject(forKey: key(scope, field))
         }

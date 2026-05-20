@@ -210,10 +210,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let minWidth: CGFloat = 280
 
     /// The screen the status item lives on.
-    /// Falls back to NSScreen.main only if the status item's window has no screen
-    /// (e.g. before the panel has ever been shown).
-    /// Using this instead of NSScreen.main ensures correct sizing on multi-monitor
-    /// setups where the key window is on a different display than the menu bar.
     private var statusItemScreen: NSScreen {
         statusItem?.button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
     }
@@ -344,8 +340,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let posX = statusItemRect.midX - contentW / 2
         let rawPosY = topY - totalH
-        // Use the status-item's own screen for the Y-clamp floor so the panel
-        // never dips below the Dock on whichever display the menu bar is on.
         let screenMinY = statusItemScreen.visibleFrame.minY
         let posY = max(rawPosY, screenMinY)
 
@@ -376,7 +370,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Dismiss
 
-    private func closePanel() {
+    // Internal (not private) so ScopeDetailView can call closePanel/openPanel
+    // when presenting NSOpenPanel for the local path folder picker (#546).
+    func closePanel() {
         guard panelIsOpen else { return }
         panel?.wantsKey = false
         panel?.orderOut(nil)
@@ -615,7 +611,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func scopeDetailView(entry: ScopeEntry) -> AnyView {
         savedNavState = .scopeDetail(entry)
         makeKeyForTextInput()
-        // Re-resolve from live store so detail shows the freshest entry on restore.
         let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) ?? entry
         return wrapEnv(ScopeDetailView(
             scopeEntry: live,
@@ -667,7 +662,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let live = LocalRunnerStore.shared.runners.first(where: { $0.id == runner.id }) ?? runner
             return runnerDetailView(runner: live)
         case .scopeDetail(let entry):
-            // Re-resolve from live store; if scope was removed while panel was closed, fall back to settings.
             guard let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) else {
                 return settingsView()
             }
@@ -687,7 +681,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Open
 
-    private func openPanel() {
+    // Internal (not private) so ScopeDetailView can call openPanel() after
+    // NSOpenPanel dismisses for the local path folder picker (#546).
+    func openPanel() {
         guard let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
               let panel else { return }
