@@ -3,6 +3,7 @@ import AppKit
 
 // MARK: - FailureHookCommandSheet
 // #544: Sheet for editing the per-scope failure hook command.
+// #546: Added Test button to run the current command in Terminal.app.
 //
 // Presented from ScopeDetailView when user taps the Command row.
 // Uses TextEditor (tall, monospaced) with variable pill buttons that insert at cursor.
@@ -86,7 +87,7 @@ struct FailureHookCommandSheet: View {
             .padding(.horizontal, 16)
             .padding(.top, 10)
 
-            // Cancel / Save
+            // Cancel / Test / Save
             HStack {
                 Spacer()
                 Button("Cancel") { onDismiss() }
@@ -100,6 +101,23 @@ struct FailureHookCommandSheet: View {
                             .overlay(RoundedRectangle(cornerRadius: 6)
                                 .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
                     )
+
+                if !commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button(action: { testCommand() }) {
+                        Label("Test", systemImage: "play.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.rbAccent)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.rbSurfaceElevated)
+                            .overlay(RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 0.5))
+                    )
+                    .help("Run this command in Terminal now")
+                }
 
                 Button("Save") { save() }
                     .buttonStyle(.plain)
@@ -122,6 +140,12 @@ struct FailureHookCommandSheet: View {
     private func save() {
         ScopeSettingsStore.setFailureHookCommand(commandText, for: scope)
         onDismiss()
+    }
+
+    private func testCommand() {
+        let resolved = commandText
+            .replacingOccurrences(of: "$SCOPE", with: scope)
+        TerminalLauncher.open(command: resolved)
     }
 
     private func insertVariable(_ variable: String) {
