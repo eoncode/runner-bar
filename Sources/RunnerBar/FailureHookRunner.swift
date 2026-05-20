@@ -20,22 +20,45 @@ import Foundation
 
 enum FailureHookRunner {
 
+    /// Default command used when no command has been explicitly saved for the scope.
+    /// Shared with FailureHookCommandSheet for pre-population.
+    static let defaultCommand =
+        "cd $LOCAL_PATH && gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo"
+
     /// Call this whenever a group transitions to done with a failure conclusion.
     /// Dispatches to a background thread, fetches failed job/step details, then fires.
-    static func fireIfNeeded(group: ActionGroup, scope: String) {
-        guard ScopeSettingsStore.failureHookEnabled(for: scope) else { return }
-        guard let command = ScopeSettingsStore.failureHookCommand(for: scope),
-              !command.isEmpty else {
-            log("FailureHookRunner › hook enabled for \(scope) but no command set — skipping")
+    static func fireIfNeeded(group: ActionGroup, scope: String, callsite: String = "unknown") {
+        log("FailureHookRunner › fireIfNeeded ENTER — callsite=\(callsite) scope=\(scope) groupID=\(group.id) groupTitle=\(group.title) headSha=\(group.headSha) groupStatus=\(group.groupStatus)")
+
+        let hookEnabled = ScopeSettingsStore.failureHookEnabled(for: scope)
+        log("FailureHookRunner › failureHookEnabled for scope=\(scope) → \(hookEnabled)")
+        guard hookEnabled else {
+            log("FailureHookRunner › SKIP — hook not enabled for scope=\(scope)")
             return
         }
-        guard isFailure(group: group) else { return }
 
+        let storedCommand = ScopeSettingsStore.failureHookCommand(for: scope)
+        log("FailureHookRunner › storedCommand for scope=\(scope) → \(storedCommand ?? "<nil — will use defaultCommand>")")
+        let command = storedCommand ?? Self.defaultCommand
+        log("FailureHookRunner › resolved command (first 200): \(command.prefix(200))")
+
+        let failure = isFailure(group: group)
+        log("FailureHookRunner › isFailure=\(failure) for groupID=\(group.id) runs=\(group.runs.map { "\($0.id):\($0.conclusion ?? "nil")" })")
+        guard failure else {
+            log("FailureHookRunner › SKIP — group is not a failure, groupID=\(group.id)")
+            return
+        }
+
+        log("FailureHookRunner › ALL CHECKS PASSED — dispatching background task for scope=\(scope) groupID=\(group.id)")
         DispatchQueue.global(qos: .utility).async {
+            log("FailureHookRunner › background thread START — fetching failed jobs for groupID=\(group.id)")
             let jobs = fetchFailedJobs(group: group, scope: scope)
+            log("FailureHookRunner › background thread — fetchFailedJobs returned \(jobs.count) jobs: \(jobs.map { $0.name })")
             let resolved = resolveTokens(command, group: group, scope: scope, jobs: jobs)
-            log("FailureHookRunner › firing hook for scope=\(scope) runID=\(group.id) command=\(resolved.prefix(200))")
+            log("FailureHookRunner › background thread — resolved command (first 300): \(resolved.prefix(300))")
+            log("FailureHookRunner › background thread — calling Shell.run with timeout=300")
             Shell.run(resolved, timeout: 300)
+            log("FailureHookRunner › background thread — Shell.run returned for groupID=\(group.id)")
         }
     }
 
@@ -57,14 +80,26 @@ enum FailureHookRunner {
         var seenIDs = Set<Int>()
         for run in group.runs {
             guard let c = run.conclusion,
-                  failureConclusions.contains(c.lowercased()),
-                  let data = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100"),
-                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
-            else { continue }
+                  failureConclusions.contains(c.lowercased())
+            else {
+                log("FailureHookRunner › fetchFailedJobs — run \(run.id) conclusion=\(run.conclusion ?? "nil") — skipping (not failure)")
+                continue
+            }
+            log("FailureHookRunner › fetchFailedJobs — fetching jobs for failed run=\(run.id) conclusion=\(c)")
+            guard let data = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100") else {
+                log("FailureHookRunner › fetchFailedJobs — ghAPI returned nil for run=\(run.id)")
+                continue
+            }
+            guard let resp = try? JSONDecoder().decode(JobsResponse.self, from: data) else {
+                log("FailureHookRunner › fetchFailedJobs — JSON decode failed for run=\(run.id) dataBytes=\(data.count)")
+                continue
+            }
+            log("FailureHookRunner › fetchFailedJobs — run=\(run.id) decoded \(resp.jobs.count) jobs")
             for job in resp.jobs where seenIDs.insert(job.id).inserted {
                 result.append(job)
             }
         }
+        log("FailureHookRunner › fetchFailedJobs — total \(result.count) unique jobs returned")
         return result
     }
 
@@ -91,6 +126,7 @@ enum FailureHookRunner {
         ]
 
         guard !jobs.isEmpty else {
+            log("FailureHookRunner › buildLogContent — no jobs, falling back to run-level summary")
             for run in group.runs {
                 if let c = run.conclusion, failureConclusions.contains(c.lowercased()) {
                     lines.append("FAILED run \(run.id): conclusion=\(c) workflow=\(run.name)")
@@ -135,6 +171,8 @@ enum FailureHookRunner {
         }).map { String($0.id) } ?? group.id
         let runURL = "\(baseURL)/actions/runs/\(failedRunID)"
         let logContent = singleQuoteEscape(buildLogContent(group: group, scope: scope, jobs: jobs))
+
+        log("FailureHookRunner › resolveTokens — $LOCAL_PATH='\(localPath)' $BRANCH='\(branch)' $RUN_ID='\(failedRunID)' $COMMIT_SHA='\(sha)' logContentBytes=\(logContent.count)")
 
         return command
             .replacingOccurrences(of: "$LOCAL_PATH", with: localPath)

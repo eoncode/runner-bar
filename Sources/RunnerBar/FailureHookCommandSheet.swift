@@ -17,14 +17,18 @@ struct FailureHookCommandSheet: View {
     // $FAILURE_LOG is pre-resolved by FailureHookRunner in Swift before the command
     // reaches the shell — log content is single-quote-escaped so special characters
     // never break shell parsing. Wrap it in single quotes in your command.
-    private static let exampleCommand =
-        "cd $LOCAL_PATH && gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo"
+    //
+    // NOTE: This is the same constant as FailureHookRunner.defaultCommand.
+    // If the user never saves, FailureHookRunner falls back to this value automatically.
+    private static let exampleCommand = FailureHookRunner.defaultCommand
 
     init(scope: String, onDismiss: @escaping () -> Void) {
         self.scope = scope
         self.onDismiss = onDismiss
         let saved = ScopeSettingsStore.failureHookCommand(for: scope) ?? ""
+        log("FailureHookCommandSheet › init — scope=\(scope) savedCommand='\(saved)' isEmpty=\(saved.isEmpty)")
         _commandText = State(initialValue: saved.isEmpty ? Self.exampleCommand : saved)
+        log("FailureHookCommandSheet › init — commandText seeded with '\(saved.isEmpty ? "exampleCommand" : "savedCommand")'")
     }
 
     private let variables: [String] = [
@@ -151,7 +155,9 @@ extension FailureHookCommandSheet {
 
 extension FailureHookCommandSheet {
     func save() {
+        log("FailureHookCommandSheet › save — scope=\(scope) commandText='\(commandText.prefix(200))'")
         ScopeSettingsStore.setFailureHookCommand(commandText, for: scope)
+        log("FailureHookCommandSheet › save — done, dismissing")
         onDismiss()
     }
 
@@ -160,6 +166,7 @@ extension FailureHookCommandSheet {
         let resolved = commandText
             .replacingOccurrences(of: "$LOCAL_PATH", with: localPath)
             .replacingOccurrences(of: "$SCOPE", with: scope)
+        log("FailureHookCommandSheet › testCommand — scope=\(scope) localPath='\(localPath)' resolved='\(resolved.prefix(200))'")
         TerminalLauncher.open(command: resolved)
     }
 
