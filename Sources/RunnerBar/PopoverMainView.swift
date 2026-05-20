@@ -83,6 +83,7 @@ struct PopoverMainView: View {
             // Local Runners section — shown whenever local runners are discovered.
             if hasLocalRunners {
                 SectionHeaderLabel(title: "Local Runners")
+                // swiftlint:disable:next force_cast
                 PopoverLocalRunnerRow(runners: store.localRunners as! [Runner])
             }
             // Always trigger a refresh of local runner state on appear,
