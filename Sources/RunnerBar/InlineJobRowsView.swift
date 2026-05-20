@@ -58,9 +58,16 @@ private struct StepRowView: View {
     let isLast: Bool
     let onTap: () -> Void
 
+    // indent = 9: centers the vertical bar under the job DonutStatusView dot.
+    // Geometry: InlineJobRowsView.padding(.leading:12) + jobLeaderFrame(19) +
+    //           stepsContainer.padding(.horizontal:4) = 35 from InlineJobRowsView edge.
+    // Job dot center = 12 + 19 + 8(card hpad) + 5(half dot10) = 44.
+    // Step leader indent = 44 - 35 = 9.
+    private let dotIndent: CGFloat = 9
+
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
-            TreeLineLeader(isLast: isLast, indent: 0)
+            TreeLineLeader(isLast: isLast, indent: dotIndent)
                 .frame(maxHeight: .infinity)
             stepContent
         }
@@ -117,11 +124,11 @@ private struct JobRowCard: View {
     let onToggle: () -> Void
     let onStepTap: (JobStep) -> Void
 
-    // The DonutStatusView dot (size 10) sits at RBSpacing.sm from the card
-    // content leading edge. Its horizontal center = RBSpacing.sm + 5.
-    // We use this as `indent` so the TreeLineLeader's vertical bar is drawn
-    // exactly beneath the dot center.
-    private let dotCenterX: CGFloat = RBSpacing.sm + 5
+    // indent = 7: half of the workflow DonutStatusView dot (size 14).
+    // Geometry: card colour bar(4) + clear spacer(12) + half-dot(7) = 23 from card edge.
+    // InlineJobRowsView padding(.leading:12) + colour bar(4) = 16 from card edge.
+    // So leader barX = 23 - 16 = 7 centers under the workflow dot.
+    private let dotIndent: CGFloat = 7
 
     private var totalSteps: Int { job.steps.count }
     private var completedSteps: Int {
@@ -129,10 +136,8 @@ private struct JobRowCard: View {
     }
 
     var body: some View {
-        // spacing: 0 so the leader frame directly abuts the card VStack,
-        // keeping indent math exact (no gap to account for).
         HStack(alignment: .top, spacing: 0) {
-            TreeLineLeader(isLast: isLast && !isExpanded, indent: dotCenterX)
+            TreeLineLeader(isLast: isLast && !isExpanded, indent: dotIndent)
                 .frame(maxHeight: .infinity)
             VStack(alignment: .leading, spacing: 0) {
                 jobHeader
