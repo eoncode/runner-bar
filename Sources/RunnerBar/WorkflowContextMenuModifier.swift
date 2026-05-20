@@ -176,9 +176,10 @@ private struct JobContextMenuModifier: ViewModifier {
 // MARK: - StepContextMenuModifier
 // Adds a right-click context menu to a StepRowView (step level). (#454 spec)
 // Items per issue #454:
-//   copy log   — fetches only this step's log via fetchStepLog
-//   show on github — opens job html_url + /steps/{stepNumber}
+//   copy log        — fetches only this step's log via fetchStepLog(jobID:stepNumber:scope:)
+//   show on github  — opens job html_url (GitHub has no direct per-step URL)
 //   show log in app — fires onTap closure (navigates to StepLogView)
+// NOTE: JobStep.id IS the step sequence number (1-based) per ActionGroup.swift comment.
 private struct StepContextMenuModifier: ViewModifier {
     let step: JobStep
     let job: ActiveJob
@@ -201,12 +202,13 @@ private struct StepContextMenuModifier: ViewModifier {
         Divider()
 
         // Copy log — only this step
+        // JobStep.id is the 1-based step sequence number used by fetchStepLog.
         Button {
-            let jobID      = job.id
-            let stepNum    = step.number
+            let jobID   = job.id
+            let stepNum = step.id   // fix: was step.number — JobStep uses .id as sequence number
             let scope: String = {
                 if let urlStr = job.htmlUrl,
-                   let scope = scopeFromHtmlUrl(urlStr) { return scope }
+                   let s = scopeFromHtmlUrl(urlStr) { return s }
                 return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
             }()
             DispatchQueue.global(qos: .userInitiated).async {
@@ -223,7 +225,7 @@ private struct StepContextMenuModifier: ViewModifier {
 
         Divider()
 
-        // Show on GitHub — job page (GitHub has no direct per-step URL)
+        // Show on GitHub — opens the job page (no direct per-step GitHub URL exists)
         Button {
             guard let urlString = job.htmlUrl,
                   let url = URL(string: urlString) else { return }
