@@ -44,7 +44,7 @@ enum FailureHookRunner {
         let runID      = group.id
         let branch     = group.headBranch ?? ""
         let sha        = group.headSha
-        let workflow   = group.title ?? group.label ?? ""
+        let workflow   = group.title
         let logPath    = writeLogFile(group: group, scope: scope)
         let baseURL    = "https://github.com/\(scope)"
         let repoURL    = baseURL
@@ -54,7 +54,7 @@ enum FailureHookRunner {
         let failedRunID = group.runs.first(where: {
             guard let c = $0.conclusion else { return false }
             return ["failure", "timed_out", "cancelled", "startup_failure"].contains(c.lowercased())
-        })?.id ?? runID
+        }).map { String($0.id) } ?? runID
         let runURL     = "\(baseURL)/actions/runs/\(failedRunID)"
 
         return command
@@ -80,13 +80,13 @@ enum FailureHookRunner {
             "Scope:    \(scope)",
             "Branch:   \(group.headBranch ?? "unknown")",
             "SHA:      \(group.headSha)",
-            "Workflow: \(group.title ?? group.label ?? "unknown")",
+            "Workflow: \(group.title)",
             "---"
         ]
         for run in group.runs {
             if let conclusion = run.conclusion,
                ["failure", "timed_out", "cancelled", "startup_failure"].contains(conclusion.lowercased()) {
-                lines.append("FAILED run \(run.id): conclusion=\(conclusion) workflow=\(run.name ?? "-")")
+                lines.append("FAILED run \(run.id): conclusion=\(conclusion) workflow=\(run.name)")
             }
         }
         let content = lines.joined(separator: "\n")

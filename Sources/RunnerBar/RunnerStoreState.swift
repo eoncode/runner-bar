@@ -205,7 +205,7 @@ extension RunnerStore {
 
     /// Derives the scope string from an ActionGroup's repo field or runs.
     private func scopeFromActionGroup(_ group: ActionGroup) -> String {
-        if let repo = group.repo, !repo.isEmpty { return repo }
+        if !group.repo.isEmpty { return group.repo }
         // Fallback: derive from first run's repository_url or html_url
         if let firstRun = group.runs.first {
             let url = firstRun.htmlUrl ?? ""
