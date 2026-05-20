@@ -58,8 +58,12 @@ struct PopoverMainView: View {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
 
-    private var hasLocalRunners: Bool {
-        !store.localRunners.isEmpty
+    /// True only when at least one local runner is actively busy.
+    /// Gates both the section header and PopoverLocalRunnerRow — mirrors
+    /// PopoverLocalRunnerRow's own .isBusy filter so the header never appears
+    /// for idle-only runners.
+    private var hasBusyLocalRunners: Bool {
+        store.localRunners.contains { $0.isBusy }
     }
 
     var body: some View {
@@ -73,7 +77,7 @@ struct PopoverMainView: View {
             .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
-            if hasLocalRunners {
+            if hasBusyLocalRunners {
                 SectionHeaderLabel(title: "Local Runners")
                 PopoverLocalRunnerRow(runners: store.localRunners)
             }
