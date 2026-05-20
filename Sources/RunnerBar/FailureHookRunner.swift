@@ -91,7 +91,6 @@ enum FailureHookRunner {
         ]
 
         guard !jobs.isEmpty else {
-            // Fallback: API fetch failed, log run-level summary only.
             for run in group.runs {
                 if let c = run.conclusion, failureConclusions.contains(c.lowercased()) {
                     lines.append("FAILED run \(run.id): conclusion=\(c) workflow=\(run.name)")
@@ -123,31 +122,31 @@ enum FailureHookRunner {
         scope: String,
         jobs: [JobPayload]
     ) -> String {
-        let localPath   = ScopeSettingsStore.localRepoPath(for: scope) ?? ""
-        let branch      = group.headBranch ?? ""
-        let sha         = group.headSha
-        let workflow    = group.title
-        let baseURL     = "https://github.com/\(scope)"
-        let branchURL   = "\(baseURL)/tree/\(branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)"
-        let commitURL   = "\(baseURL)/commit/\(sha)"
+        let localPath = ScopeSettingsStore.localRepoPath(for: scope) ?? ""
+        let branch = group.headBranch ?? ""
+        let sha = group.headSha
+        let workflow = group.title
+        let baseURL = "https://github.com/\(scope)"
+        let branchURL = "\(baseURL)/tree/\(branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? branch)"
+        let commitURL = "\(baseURL)/commit/\(sha)"
         let failedRunID = group.runs.first(where: {
             guard let c = $0.conclusion else { return false }
             return failureConclusions.contains(c.lowercased())
         }).map { String($0.id) } ?? group.id
-        let runURL      = "\(baseURL)/actions/runs/\(failedRunID)"
-        let logContent  = singleQuoteEscape(buildLogContent(group: group, scope: scope, jobs: jobs))
+        let runURL = "\(baseURL)/actions/runs/\(failedRunID)"
+        let logContent = singleQuoteEscape(buildLogContent(group: group, scope: scope, jobs: jobs))
 
         return command
-            .replacingOccurrences(of: "$LOCAL_PATH",    with: localPath)
-            .replacingOccurrences(of: "$SCOPE",         with: scope)
-            .replacingOccurrences(of: "$BRANCH",        with: branch)
-            .replacingOccurrences(of: "$RUN_ID",        with: "\(failedRunID)")
-            .replacingOccurrences(of: "$COMMIT_SHA",    with: sha)
+            .replacingOccurrences(of: "$LOCAL_PATH", with: localPath)
+            .replacingOccurrences(of: "$SCOPE", with: scope)
+            .replacingOccurrences(of: "$BRANCH", with: branch)
+            .replacingOccurrences(of: "$RUN_ID", with: "\(failedRunID)")
+            .replacingOccurrences(of: "$COMMIT_SHA", with: sha)
             .replacingOccurrences(of: "$WORKFLOW_NAME", with: workflow)
-            .replacingOccurrences(of: "$FAILURE_LOG",   with: logContent)
-            .replacingOccurrences(of: "$RUN_LINK",      with: runURL)
-            .replacingOccurrences(of: "$COMMIT_LINK",   with: commitURL)
-            .replacingOccurrences(of: "$BRANCH_LINK",   with: branchURL)
-            .replacingOccurrences(of: "$REPO_LINK",     with: baseURL)
+            .replacingOccurrences(of: "$FAILURE_LOG", with: logContent)
+            .replacingOccurrences(of: "$RUN_LINK", with: runURL)
+            .replacingOccurrences(of: "$COMMIT_LINK", with: commitURL)
+            .replacingOccurrences(of: "$BRANCH_LINK", with: branchURL)
+            .replacingOccurrences(of: "$REPO_LINK", with: baseURL)
     }
 }
