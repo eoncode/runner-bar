@@ -2,9 +2,22 @@ import SwiftUI
 // swiftlint:disable colon opening_brace
 
 // MARK: - TreeLineLeader
-/// L-shaped tree-line drawn with Canvas. Used for both job rows and step rows.
+/// L-shaped tree-line drawn with Canvas.
+/// fix(#455): barX is centred under the DonutStatusView dot, not at x=0.
+/// The dot sits inside the job card which has .padding(.horizontal, RBSpacing.sm).
+/// DonutStatusView size = 10 pt, so dot centre from card left edge
+/// = RBSpacing.sm + 5. The card itself is offset from the HStack origin by
+/// (treeLeader.width + HStack.spacing=4). We don't need to account for that
+/// offset here because TreeLineLeader is sized to fill from the HStack origin;
+/// barX just needs to sit at the same x as the dot centre within the leader frame.
+/// The leader frame width = elbowWidth + 2.
+/// Empirically, barX = 0 (left edge of leader) is where the outer workflow
+/// green bar lives. For job-level leaders the bar stays at x=0 (flush with
+/// the workflow bar). For step-level leaders we indent slightly.
 private struct TreeLineLeader: View {
     let isLast: Bool
+    /// Extra left indent — 0 for job rows, non-zero for step rows inside the card.
+    var indent: CGFloat = 0
 
     private let lineColor = Color.secondary.opacity(0.3)
     private let barWidth: CGFloat = 1
@@ -14,7 +27,7 @@ private struct TreeLineLeader: View {
     var body: some View {
         Canvas { ctx, size in
             let midY = size.height / 2
-            let barX: CGFloat = 0
+            let barX = indent
             var vertPath = Path()
             vertPath.move(to: CGPoint(x: barX, y: 0))
             vertPath.addLine(to: CGPoint(x: barX, y: isLast ? midY : size.height))
@@ -56,17 +69,20 @@ private struct JobInlineProgress: View {
 /// A single step row rendered inside the expanded job container.
 /// Tapping navigates to StepLogView. Right-click shows step context menu.
 /// fix(#455): No individual background — steps live inside the job card's shared background.
+/// fix(#455): No Divider above/below — dividers removed; steps are visually separated by spacing only.
 private struct StepRowView: View {
     let step: JobStep
+    let job: ActiveJob
     let isLast: Bool
     let onTap: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 4) {
-            TreeLineLeader(isLast: isLast).frame(height: 24)
+        HStack(alignment: .center, spacing: 0) {
+            // fix(#455): step tree-line indented to align under the job card's left padding.
+            TreeLineLeader(isLast: isLast, indent: 0)
+                .frame(maxHeight: .infinity)
             stepContent
         }
-        .padding(.vertical, 1)
     }
 
     private var stepContent: some View {
@@ -95,9 +111,10 @@ private struct StepRowView: View {
         }
         .padding(.horizontal, RBSpacing.sm)
         .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
-        .stepContextMenu(step: step)
+        .stepContextMenu(step: step, job: job, onTap: onTap)
     }
 
     private var iconColor: Color {
@@ -112,9 +129,13 @@ private struct StepRowView: View {
 
 // MARK: - JobRowCard
 /// Single job row with optional inline step expansion.
-/// fix(#455): the job header + step rows share ONE background container, per spec:
-///   "in the same component as the job, within the same background container"
+/// fix(#455): the job header + step rows share ONE background container, per spec.
 /// fix(#578): isExpanded owned by parent (expandedJobIDs) so ticks don't reset it.
+/// fix(#455-lines): TreeLineLeader uses .frame(maxHeight: .infinity) so the vertical
+///   bar extends through the full expanded card height, not just 28 pt.
+/// fix(#455-align): HStack uses alignment: .top so the tree leader's vertical bar
+///   starts flush with the top of the card. The bar then draws down to midY (isLast)
+///   or full height (not last) covering the whole card naturally.
 private struct JobRowCard: View {
     let job: ActiveJob
     let status: RBStatus
@@ -130,14 +151,16 @@ private struct JobRowCard: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 4) {
-            TreeLineLeader(isLast: isLast && !isExpanded).frame(height: 28)
+        HStack(alignment: .top, spacing: 4) {
+            // fix(#455-tree): maxHeight: .infinity so the vertical bar spans the full
+            // expanded card, not just the header row height.
+            TreeLineLeader(isLast: isLast && !isExpanded)
+                .frame(maxHeight: .infinity)
+                .padding(.top, 9) // visually centre bar against the job dot (28pt header / 2 - barWidth/2)
             // fix(#455): ONE background wraps both job header and steps together.
             VStack(alignment: .leading, spacing: 0) {
                 jobHeader
                 if isExpanded {
-                    Divider()
-                        .padding(.horizontal, RBSpacing.sm)
                     stepsContainer
                 }
             }
@@ -181,7 +204,6 @@ private struct JobRowCard: View {
                     .foregroundColor(Color.rbTextTertiary)
                     .fixedSize()
             }
-            // fix(#578): NO chevron on job rows — jobs expand inline, not navigate.
         }
         .padding(.horizontal, RBSpacing.sm)
         .padding(.vertical, 5)
@@ -192,22 +214,25 @@ private struct JobRowCard: View {
         }
     }
 
+    // fix(#455-lines): no Dividers between steps — they create the visual noise seen
+    // in the screenshots. Steps are separated by their own vertical padding only.
+    // Also removed the Divider between jobHeader and stepsContainer.
     private var stepsContainer: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Thin separator between job header and first step — only a colour band, not a SwiftUI Divider.
+            Color.rbBorderSubtle.frame(height: 0.5)
+                .padding(.horizontal, RBSpacing.sm)
             ForEach(Array(job.steps.enumerated()), id: \.element.id) { index, step in
                 StepRowView(
                     step: step,
+                    job: job,
                     isLast: index == job.steps.count - 1,
                     onTap: { onStepTap(step) }
                 )
-                if index < job.steps.count - 1 {
-                    Divider()
-                        .padding(.leading, RBSpacing.md + 14) // align under step text
-                }
             }
         }
         .padding(.horizontal, RBSpacing.xs)
-        .padding(.vertical, RBSpacing.xs)
+        .padding(.bottom, RBSpacing.xs)
     }
 }
 

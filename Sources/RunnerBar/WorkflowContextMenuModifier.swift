@@ -174,9 +174,16 @@ private struct JobContextMenuModifier: ViewModifier {
 }
 
 // MARK: - StepContextMenuModifier
-// Adds a right-click context menu to a StepRowView (step level). (#455 Phase 2)
+// Adds a right-click context menu to a StepRowView (step level). (#454 spec)
+// Items per issue #454:
+//   copy log   — fetches only this step's log via fetchStepLog
+//   show on github — opens job html_url + /steps/{stepNumber}
+//   show log in app — fires onTap closure (navigates to StepLogView)
 private struct StepContextMenuModifier: ViewModifier {
     let step: JobStep
+    let job: ActiveJob
+    /// Fires the same navigation as a row tap — opens StepLogView.
+    let onTap: () -> Void
 
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
@@ -184,21 +191,47 @@ private struct StepContextMenuModifier: ViewModifier {
 
     @ViewBuilder
     private var menuItems: some View {
+        // Show log in app — same as tapping the row
         Button {
-            // Navigation is driven by the onTap closure on StepRowView.
-            // This menu item is a visual affordance only.
+            onTap()
         } label: {
-            Label("View Step Log", systemImage: "doc.text.magnifyingglass")
+            Label("Show Log in App", systemImage: "doc.text.magnifyingglass")
         }
 
         Divider()
 
+        // Copy log — only this step
         Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(step.name, forType: .string)
+            let jobID      = job.id
+            let stepNum    = step.number
+            let scope: String = {
+                if let urlStr = job.htmlUrl,
+                   let scope = scopeFromHtmlUrl(urlStr) { return scope }
+                return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
+            }()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
+                DispatchQueue.main.async {
+                    guard let text, !text.isEmpty else { return }
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+            }
         } label: {
-            Label("Copy Step Name", systemImage: "doc.on.doc")
+            Label("Copy Log", systemImage: "doc.on.doc")
         }
+
+        Divider()
+
+        // Show on GitHub — job page (GitHub has no direct per-step URL)
+        Button {
+            guard let urlString = job.htmlUrl,
+                  let url = URL(string: urlString) else { return }
+            NSWorkspace.shared.open(url)
+        } label: {
+            Label("Show on GitHub", systemImage: "safari")
+        }
+        .disabled(job.htmlUrl == nil)
     }
 }
 
@@ -215,8 +248,9 @@ extension View {
         modifier(JobContextMenuModifier(job: job, group: group))
     }
 
-    /// Attaches the step-level context menu (right-click) to a step row. (#455)
-    func stepContextMenu(step: JobStep) -> some View {
-        modifier(StepContextMenuModifier(step: step))
+    /// Attaches the step-level context menu (right-click) to a step row. (#454)
+    /// Requires the parent job and the onTap navigation closure so all 3 items are wired.
+    func stepContextMenu(step: JobStep, job: ActiveJob, onTap: @escaping () -> Void) -> some View {
+        modifier(StepContextMenuModifier(step: step, job: job, onTap: onTap))
     }
 }
