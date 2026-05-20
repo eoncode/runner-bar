@@ -84,10 +84,16 @@ final class RunnerStore {
         fetch()
     }
 
-    private func scheduleTimer() {
+    /// Schedule the next poll. Pass `liveActions` to evaluate hasActive against
+    /// only the freshly-fetched live groups — NOT the display cache which may
+    /// still contain frozen/completed groups and would keep hasActive=true forever.
+    private func scheduleTimer(liveActions: [ActionGroup]? = nil) {
         timer?.invalidate()
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
-        let hasActiveActions = actions.contains {
+        // Use the caller-supplied live snapshot when available; fall back to self.actions
+        // only for manual reschedules (e.g. pollingInterval changes) where no fresh data exists.
+        let actionsToCheck = liveActions ?? self.actions
+        let hasActiveActions = actionsToCheck.contains {
             $0.groupStatus == .inProgress || $0.groupStatus == .queued
         }
         let hasActive = hasActiveJobs || hasActiveActions
@@ -138,7 +144,10 @@ final class RunnerStore {
                 self.isRateLimited = ghIsRateLimited
                 log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited)")
                 self.onChange?()
-                self.scheduleTimer()
+                // Pass the freshly-fetched live groups so scheduleTimer evaluates
+                // hasActive against real GitHub state, not the display cache which
+                // may still contain frozen/completed groups.
+                self.scheduleTimer(liveActions: groupResult.newPrevLiveGroups.map { $0.value })
             }
         }
     }
