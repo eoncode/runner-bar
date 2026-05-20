@@ -13,10 +13,16 @@ struct FailureHookCommandSheet: View {
 
     @State private var commandText: String = ""
 
+    private static let exampleCommand =
+        "cd ~/repos/$SCOPE && gemini -p \"$(cat $FAILURE_LOG)\" \\\n" +
+        "  --context \"repo=$SCOPE branch=$BRANCH run=$RUN_LINK commit=$COMMIT_LINK\" \\\n" +
+        "  --model=gemini-2.5-flash --approval-mode=yolo"
+
     init(scope: String, onDismiss: @escaping () -> Void) {
         self.scope = scope
         self.onDismiss = onDismiss
-        _commandText = State(initialValue: ScopeSettingsStore.failureHookCommand(for: scope) ?? "")
+        let saved = ScopeSettingsStore.failureHookCommand(for: scope) ?? ""
+        _commandText = State(initialValue: saved.isEmpty ? Self.exampleCommand : saved)
     }
 
     private let variables: [String] = [
