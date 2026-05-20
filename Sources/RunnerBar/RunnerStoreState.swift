@@ -171,8 +171,9 @@ extension RunnerStore {
                              into: &newCache, prevLiveGroups: snapPrevGroups)
 
         // Cache done groups; fire failure hook for newly-completed ones.
+        // snapPrevGroups is SHA-keyed, so use headSha to detect the transition.
         for group in doneGroups {
-            let isNew = snapPrevGroups[group.id] != nil && snapGroupCache[group.id] == nil
+            let isNew = snapPrevGroups[group.headSha] != nil && snapGroupCache[group.id] == nil
             if isNew {
                 let scope = scopeFromActionGroup(group)
                 FailureHookRunner.fireIfNeeded(group: group, scope: scope)
