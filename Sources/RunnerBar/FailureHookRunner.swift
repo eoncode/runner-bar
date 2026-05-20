@@ -3,6 +3,7 @@ import Foundation
 // MARK: - FailureHookRunner
 // #544: Fires the per-scope failure hook command when an ActionGroup transitions to failure.
 // #546: Resolves $LOCAL_PATH from ScopeSettingsStore.
+// #552: Fetches failed job/step details on background thread before building $FAILURE_LOG.
 //
 // Called from RunnerStoreState.buildGroupState when a group is newly completed
 // with a failure conclusion. Resolves all $TOKEN variables then shells out fire-and-forget.
@@ -13,12 +14,14 @@ import Foundation
 // command by the time it reaches the shell — special characters in log content,
 // branch names, etc. would break shell parsing.
 //
-// $FAILURE_LOG inlines the log content directly, single-quote-escaped:
+// $FAILURE_LOG inlines only the failed job/step names — succeeded steps are omitted.
+// Wrap it in single quotes in your command:
 //   gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo
 
 enum FailureHookRunner {
 
     /// Call this whenever a group transitions to done with a failure conclusion.
+    /// Dispatches to a background thread, fetches failed job/step details, then fires.
     static func fireIfNeeded(group: ActionGroup, scope: String) {
         guard ScopeSettingsStore.failureHookEnabled(for: scope) else { return }
         guard let command = ScopeSettingsStore.failureHookCommand(for: scope),
@@ -28,33 +31,56 @@ enum FailureHookRunner {
         }
         guard isFailure(group: group) else { return }
 
-        let resolved = resolveTokens(command, group: group, scope: scope)
-        log("FailureHookRunner › firing hook for scope=\(scope) runID=\(group.id) command=\(resolved.prefix(200))")
-
         DispatchQueue.global(qos: .utility).async {
+            let jobs = fetchFailedJobs(group: group, scope: scope)
+            let resolved = resolveTokens(command, group: group, scope: scope, jobs: jobs)
+            log("FailureHookRunner › firing hook for scope=\(scope) runID=\(group.id) command=\(resolved.prefix(200))")
             Shell.run(resolved, timeout: 300)
         }
     }
 
     // MARK: - Private
 
+    private static let failureConclusions: Set<String> = ["failure", "timed_out", "cancelled", "startup_failure"]
+
     private static func isFailure(group: ActionGroup) -> Bool {
-        let failureConclusions: Set<String> = ["failure", "timed_out", "cancelled", "startup_failure"]
-        return group.runs.contains { run in
-            guard let conclusion = run.conclusion else { return false }
-            return failureConclusions.contains(conclusion.lowercased())
+        group.runs.contains {
+            guard let c = $0.conclusion else { return false }
+            return failureConclusions.contains(c.lowercased())
         }
     }
 
+    /// Fetches jobs (with steps) for all failed runs in the group.
+    /// Blocking — must be called from a background thread.
+    private static func fetchFailedJobs(group: ActionGroup, scope: String) -> [JobPayload] {
+        var result: [JobPayload] = []
+        var seenIDs = Set<Int>()
+        for run in group.runs {
+            guard let c = run.conclusion,
+                  failureConclusions.contains(c.lowercased()),
+                  let data = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100"),
+                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
+            else { continue }
+            for job in resp.jobs where seenIDs.insert(job.id).inserted {
+                result.append(job)
+            }
+        }
+        return result
+    }
+
     /// Escapes a string so it is safe to embed between single-quotes in a shell command.
-    /// The only character that cannot appear inside single-quotes is a single-quote itself;
-    /// we escape it by ending the quoted segment, inserting an escaped quote, then
-    /// reopening: '\'' — the surrounding single-quotes are supplied by the user's template.
     private static func singleQuoteEscape(_ s: String) -> String {
         s.replacingOccurrences(of: "'", with: "'\\''")
     }
 
-    private static func buildLogContent(group: ActionGroup, scope: String) -> String {
+    /// Builds the failure log string. Only includes jobs and steps that failed —
+    /// succeeded/skipped steps are omitted to keep the prompt tight.
+    /// Falls back to run-level summary if job fetch returned nothing.
+    private static func buildLogContent(
+        group: ActionGroup,
+        scope: String,
+        jobs: [JobPayload]
+    ) -> String {
         var lines: [String] = [
             "RunnerBar Failure Hook",
             "Scope:    \(scope)",
@@ -63,16 +89,40 @@ enum FailureHookRunner {
             "Workflow: \(group.title)",
             "---"
         ]
-        for run in group.runs {
-            if let conclusion = run.conclusion,
-               ["failure", "timed_out", "cancelled", "startup_failure"].contains(conclusion.lowercased()) {
-                lines.append("FAILED run \(run.id): conclusion=\(conclusion) workflow=\(run.name)")
+
+        guard !jobs.isEmpty else {
+            // Fallback: API fetch failed, log run-level summary only.
+            for run in group.runs {
+                if let c = run.conclusion, failureConclusions.contains(c.lowercased()) {
+                    lines.append("FAILED run \(run.id): conclusion=\(c) workflow=\(run.name)")
+                }
+            }
+            return lines.joined(separator: "\n")
+        }
+
+        for job in jobs {
+            let jobConclusion = job.conclusion ?? "unknown"
+            lines.append("\nJOB: \(job.name) [\(jobConclusion)]")
+            let failedSteps = (job.steps ?? []).filter {
+                failureConclusions.contains(($0.conclusion ?? "").lowercased())
+            }
+            if failedSteps.isEmpty {
+                lines.append("  (no failed steps reported)")
+            } else {
+                for step in failedSteps {
+                    lines.append("  ✗ Step \(step.number): \(step.name) — \(step.conclusion ?? step.status)")
+                }
             }
         }
         return lines.joined(separator: "\n")
     }
 
-    private static func resolveTokens(_ command: String, group: ActionGroup, scope: String) -> String {
+    private static func resolveTokens(
+        _ command: String,
+        group: ActionGroup,
+        scope: String,
+        jobs: [JobPayload]
+    ) -> String {
         let localPath   = ScopeSettingsStore.localRepoPath(for: scope) ?? ""
         let branch      = group.headBranch ?? ""
         let sha         = group.headSha
@@ -82,12 +132,10 @@ enum FailureHookRunner {
         let commitURL   = "\(baseURL)/commit/\(sha)"
         let failedRunID = group.runs.first(where: {
             guard let c = $0.conclusion else { return false }
-            return ["failure", "timed_out", "cancelled", "startup_failure"].contains(c.lowercased())
+            return failureConclusions.contains(c.lowercased())
         }).map { String($0.id) } ?? group.id
         let runURL      = "\(baseURL)/actions/runs/\(failedRunID)"
-
-        // Build log content in Swift and escape for safe single-quote embedding.
-        let logContent  = singleQuoteEscape(buildLogContent(group: group, scope: scope))
+        let logContent  = singleQuoteEscape(buildLogContent(group: group, scope: scope, jobs: jobs))
 
         return command
             .replacingOccurrences(of: "$LOCAL_PATH",    with: localPath)
