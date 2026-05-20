@@ -42,6 +42,8 @@ struct PopoverMainView: View {
     @ObservedObject var store: RunnerStoreObservable
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
+    /// Called when user taps a step row in an inline job list. (#455)
+    let onStepTap: (ActiveJob, JobStep) -> Void
     let onSelectSettings: () -> Void
 
     @EnvironmentObject private var popoverOpenState: PopoverOpenState
@@ -52,21 +54,16 @@ struct PopoverMainView: View {
     @State private var displayTick: Int = 0
     @State private var displayTickTimer: Timer?
 
-    /// Maximum height for the scrollable actions list.
-    /// 80% of the visible screen height — matches AppDelegate's 85% panel cap
-    /// minus ~5% headroom for the fixed header + runner rows above the list.
-    /// Computed fresh on each body evaluation so it always reflects current screen.
-    /// ❌ NEVER replace with a GeometryReader/preference approach — it freezes
-    ///    at initial layout height and breaks scrolling for expanded rows.
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
 
-    /// True when at least one local runner is present (running or idle).
-    /// Gates the Local Runners section — uses store.localRunners ([RunnerModel])
-    /// which is populated by LocalRunnerStore regardless of GitHub API status.
-    private var hasLocalRunners: Bool {
-        !store.localRunners.isEmpty
+    /// True only when at least one local runner is actively busy.
+    /// Gates both the section header and PopoverLocalRunnerRow — mirrors
+    /// PopoverLocalRunnerRow's own .isBusy filter so the header never appears
+    /// for idle-only runners.
+    private var hasBusyLocalRunners: Bool {
+        store.localRunners.contains { $0.isBusy }
     }
 
     var body: some View {
@@ -80,18 +77,14 @@ struct PopoverMainView: View {
             .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
-            // Local Runners section — shown whenever local runners are discovered.
-            if hasLocalRunners {
+            if hasBusyLocalRunners {
                 SectionHeaderLabel(title: "Local Runners")
                 PopoverLocalRunnerRow(runners: store.localRunners)
             }
-            // Always trigger a refresh of local runner state on appear,
-            // regardless of whether the section is currently visible.
             Color.clear.frame(width: 0, height: 0)
                 .onAppear {
                     Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
                 }
-            // RULE 5: scrollable actions list, capped at screenScrollMaxHeight.
             actionsSectionScrollable
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
@@ -104,9 +97,6 @@ struct PopoverMainView: View {
             systemStats.stop()
             stopDisplayTickTimer()
         }
-        // RULE 6: stop stats polling while panel is open to prevent
-        // KVO storm (systemStats fires every 2s → preferredContentSize
-        // changes → resizeAndRepositionPanel() called on every tick).
         .onChange(of: popoverOpenState.isOpen) { open in
             if open { systemStats.stop() } else { systemStats.start() }
         }
@@ -124,7 +114,6 @@ struct PopoverMainView: View {
 
     private var actionsSectionContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Workflows header is always visible, even when the list is empty.
             SectionHeaderLabel(title: "Workflows")
             if store.actions.isEmpty {
                 Text("No recent workflows")
@@ -133,7 +122,12 @@ struct PopoverMainView: View {
             } else {
                 let visible = Array(store.actions.prefix(visibleCount))
                 ForEach(visible) { group in
-                    ActionRowView(group: group, tick: displayTick, onSelect: { onSelectAction(group) })
+                    ActionRowView(
+                        group: group,
+                        tick: displayTick,
+                        onSelect: { onSelectAction(group) },
+                        onStepTap: onStepTap
+                    )
                 }
                 loadMoreButton
             }

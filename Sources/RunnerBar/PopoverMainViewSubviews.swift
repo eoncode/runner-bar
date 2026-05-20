@@ -66,7 +66,6 @@ struct PopoverLocalRunnerRow: View {
         let busy = runners.filter { $0.isBusy }
         if !busy.isEmpty { runnerList(busy) }
     }
-
     @ViewBuilder
     private func runnerList(_ busy: [RunnerModel]) -> some View {
         ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
@@ -77,7 +76,6 @@ struct PopoverLocalRunnerRow: View {
         }
         Divider()
     }
-
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
@@ -102,44 +100,23 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// Expand behaviour (spec):
-///   expandState == nil   → COMPACT (no jobs shown)
-///     terminal rows (success/failed/queued) start here
-///   expandState == false → AUTO-COMPACT (in_progress jobs only)
-///     set by .onAppear for in-progress runs only, OR by onChange when
-///     the row first transitions INTO inProgress (async store population)
-///   expandState == true  → EXPANDED (all jobs)
-///     set by user tapping the left pill
-///
-/// Auto-collapse on transition:
-///   When a run transitions FROM inProgress → terminal (success/failed),
-///   expandState is reset to nil so it collapses to compact.
-///   This ONLY fires on an actual status change, NOT on every re-render.
-///   Terminal rows that are already failed/success at appear time are
-///   never auto-collapsed and remain fully user-controllable.
-///
-/// fix: async RunnerStore population means onAppear often fires before
-///   groupStatus is inProgress. The onChange guard below catches the
-///   first transition INTO inProgress so inline jobs always appear.
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
+    let onStepTap: (ActiveJob, JobStep) -> Void
 
-    /// nil = fully collapsed, false = auto-compact (in_progress jobs only), true = full expand
     @State private var expandState: Bool?
-    /// Tracks the last-seen status so onChange only reacts to genuine transitions.
     @State private var previousStatus: RBStatus?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: RBSpacing.md)
-                Button(action: onSelect, label: { rowContent }).buttonStyle(.plain)
-                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary).padding(.trailing, 12)
+                rowContent
             }
             if let fullExpand = expandState {
-                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand)
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
             }
         }
         .frame(maxWidth: .infinity)
@@ -160,7 +137,6 @@ struct ActionRowView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        // ── Workflow-level context menu (right-click) ──────────────────────────────────────────────
         .workflowContextMenu(group: group)
         .onTapGesture {
             guard !group.jobs.isEmpty else { return }
@@ -190,17 +166,15 @@ struct ActionRowView: View {
         }
     }
 
-    // MARK: - Helpers
-
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
-        case .queued:     return .queued
+        case .queued: return .queued
         case .completed:
             switch group.conclusion {
-            case "success":  return .success
-            case "failure":  return .failed
-            default:         return .unknown
+            case "success": return .success
+            case "failure": return .failed
+            default: return .unknown
             }
         }
     }
@@ -264,12 +238,12 @@ struct ActionRowView: View {
     private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
-        case .queued:     StatusBadge(status: .queued, text: "QUEUED")
+        case .queued: StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             switch group.conclusion {
             case "success": StatusBadge(status: .success, text: "SUCCESS")
             case "failure": StatusBadge(status: .failed, text: "FAILED")
-            default:        StatusBadge(status: .unknown, text: "DONE")
+            default: StatusBadge(status: .unknown, text: "DONE")
             }
         }
     }

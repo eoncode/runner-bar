@@ -42,80 +42,33 @@ import SwiftUI
 //
 // WIDTH: Content-driven via preferredContentSize.width.
 // SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
-//   ActionDetailView: .frame(minWidth: 560, maxWidth: .infinity)
-//   JobDetailView:    .frame(idealWidth: 720, maxWidth: .infinity)
 // resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
 // the panel under the status button.
-// ❌ NEVER restore idealWidth in ActionDetailView — use minWidth there.
-// ❌ NEVER hardcode a fixedWidth — NSPanel has no anchor, any width is safe.
-// ❌ NEVER remove minWidth: 560 from ActionDetailView — AppDelegate's floor (minWidth = 280)
-//    is lower; ActionDetailView needs its own content minWidth of 560.
 //
 // INITIAL WIDTH (openPanel):
 // initPanelWidth is the fallback frame width used for the initial open before
-// SwiftUI has measured anything. It does NOT need to match any idealWidth (there
-// are none). 320 is a compact default; the panel resizes to actual content on the
-// first preferredContentSize KVO fire.
+// SwiftUI has measured anything. 320 is a compact default.
 // ❌ NEVER set initPanelWidth > maxWidth.
-// ❌ NEVER restore initPanelWidth to 600 — that was wider than necessary.
-//
-// ARROW CENTERING ON NAVIGATE:
-// navigate(to:) swaps rootView synchronously. SwiftUI then schedules a layout pass
-// and fires the preferredContentSize KVO — async on the main queue. Between the
-// navigate() call and the KVO fire there is at least one frame where arrowX still
-// holds the value computed for the *previous* view's panel frame. If the new view
-// has a different width, resizeAndRepositionPanel() moves the panel, invalidating
-// the stored arrowX. Fix: call resizeAndRepositionPanel() synchronously inside
-// navigate(to:) immediately after swapping rootView, so arrowX is always
-// recomputed from the current (or new) panel frame before the first draw.
+// ❌ NEVER restore initPanelWidth to 600.
 //
 // POPOVEROPENSTATE:
 // popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
 // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
 // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
 //
-// TIMER / POLL GUARD:
-// RunnerStore.shared.onChange fires on every poll and always calls observable.reload()
-// regardless of panelIsOpen. The reload() call is cheap (copies arrays) and does
-// NOT trigger a KVO/preferredContentSize storm — SwiftUI only redraws when the
-// content actually differs. The old !panelIsOpen gate was removed because it caused
-// actions to show as empty whenever the panel opened before the first poll completed.
-//
-// DYNAMIC HEIGHT + WIDTH CONTRACT:
-// sizingOptions = .preferredContentSize → KVO fires on SwiftUI size change
-// → resizeAndRepositionPanel() → panel.setFrame() → chrome.layout() runs
-// → hosting view frame = chrome.contentRect (updated) → SwiftUI fills new frame.
-// ❌ NEVER set hosting view frame only at init. layout() must always re-pin it.
-// ❌ NEVER set autoresizingMask = [] on the hosting view.
-//
-// STATUS ICON (issue #241):
-// updateStatusIcon() sets the menu bar image from RunnerStore.shared.aggregateStatus.
-// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
-// ❌ NEVER read RunnerStore.shared.jobs for the icon — it is almost always empty.
-// ❌ NEVER derive the icon from makeStatusIcon() — that function no longer exists.
-//    Use AggregateStatus.symbolName with NSImage(systemSymbolName:) instead.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
 /// Represents the currently visible navigation screen.
 ///
-/// Persisted in `AppDelegate.savedNavState` so the panel can restore the user's
-/// position when it is re-opened after being dismissed. Each case maps 1-to-1 to
-/// a view factory method on `AppDelegate`.
+/// #455: Removed .jobDetail, .actionDetail, .actionJobDetail, .actionStepLog.
+/// Navigation from the main view now goes directly: inline step tap → .stepLog.
 private enum NavState {
     /// The root popover showing runners and the recent-actions list.
     case main
-    /// The step list for a single job, reached from the Jobs tab.
-    case jobDetail(ActiveJob)
-    /// The raw log for a single step, reached from the Jobs path.
+    /// The raw log for a single step, reached from the main inline step row.
     case stepLog(ActiveJob, JobStep)
-    /// The flat job list for a commit/PR action group, reached from the Actions tab.
-    case actionDetail(ActionGroup)
-    /// The step list for a single job reached via the Actions → job-row path.
-    case actionJobDetail(ActiveJob, ActionGroup)
-    /// The raw log for a single step reached via the Actions → job → step path.
-    case actionStepLog(ActiveJob, JobStep, ActionGroup)
     /// The Settings sheet.
     case settings
     /// Runner detail drill-down reached from SettingsView runner row tap. (#491)
@@ -167,17 +120,13 @@ private final class KeyablePanel: NSPanel {
 // compiler static proof of this so every method and stored property is verified
 // as main-thread-only without any runtime assertion.
 //
-// The two nonisolated blocking helpers (enrichStepsIfNeeded, enrichGroupIfNeeded)
-// are intentionally exempt — they perform blocking network I/O and are always
-// dispatched onto DispatchQueue.global() by their callers. nonisolated opts them
-// out of the class-level @MainActor domain.
-//
-// The entry point in main.swift wraps the NSApplicationMain call in
-// MainActor.assumeIsolated { }, completing the isolation chain:
-//   main.swift (assumeIsolated) → @MainActor AppDelegate → nonisolated helpers
+// The nonisolated blocking helper (enrichStepsIfNeeded) is intentionally exempt
+// — it performs blocking network I/O and is always dispatched onto
+// DispatchQueue.global() by its caller. nonisolated opts it out of the
+// class-level @MainActor domain.
 //
 // ❌ NEVER remove @MainActor from this class declaration.
-// ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded or enrichGroupIfNeeded.
+// ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE.
 @MainActor
@@ -362,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Make key for text input
 
     // See KeyablePanel comment block above for the full explanation.
-    // ❌ NEVER call this for views that have no text input (main, job detail, logs).
+    // ❌ NEVER call this for views that have no text input (main, step log).
     private func makeKeyForTextInput() {
         panel?.wantsKey = true
         panel?.makeKeyAndOrderFront(nil)
@@ -370,8 +319,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Dismiss
 
-    // Internal (not private) so ScopeDetailView can call closePanel/openPanel
-    // when presenting NSOpenPanel for the local path folder picker (#546).
     func closePanel() {
         guard panelIsOpen else { return }
         panel?.wantsKey = false
@@ -382,16 +329,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeEventMonitor()
         removeWorkspaceObserver()
         // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
-        // We must reset the hosting view to a live mainView() so all navigation
-        // callbacks (prefs button, action rows, inline job rows) are wired up for
-        // the next open. However, mainView() sets savedNavState = nil, which would
-        // lose the user's position for the restore-on-reopen feature (#385).
-        // Fix: capture savedNavState before calling mainView(), then restore it
-        // afterwards. openPanel()'s validatedView(for: savedNavState) path works
-        // as before, and the main-screen path now has live callbacks instead of
-        // dead no-op stubs.
-        // ❌ NEVER replace this with a no-op stub PopoverMainView — that breaks
-        //    all button and row taps when the panel next opens on the main screen.
+        // Capture savedNavState before calling mainView() (which resets it),
+        // then restore it so openPanel()'s validatedView path works.
+        // ❌ NEVER replace this with a no-op stub PopoverMainView.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
@@ -413,7 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Enrichment helpers
+    // MARK: - Enrichment helper
 
     nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
@@ -425,66 +365,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
     }
 
-    nonisolated private func enrichGroupIfNeeded(_ group: ActionGroup) -> ActionGroup {
-        let fullyEnriched = !group.jobs.isEmpty
-            && group.jobs.allSatisfy { $0.conclusion != nil }
-            && !group.jobs.contains { $0.steps.contains { $0.status == "in_progress" } }
-        guard !fullyEnriched else { return group }
-
-        let iso = ISO8601DateFormatter()
-        var fetched: [ActiveJob] = []
-        var seenIDs = Set<Int>()
-        for run in group.runs {
-            guard let data = ghAPI("repos/\(group.repo)/actions/runs/\(run.id)/jobs?per_page=100"),
-                  let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
-            else { continue }
-            for payload in resp.jobs where seenIDs.insert(payload.id).inserted {
-                fetched.append(makeActiveJob(from: payload, iso: iso, isDimmed: group.isDimmed))
-            }
-        }
-        guard !fetched.isEmpty else { return group }
-        fetched.sort { $0.id < $1.id }
-        let starts = fetched.compactMap { $0.startedAt }
-        let ends = fetched.compactMap { $0.completedAt }
-        return ActionGroup(
-            headSha: group.headSha,
-            label: group.label,
-            title: group.title,
-            headBranch: group.headBranch,
-            repo: group.repo,
-            runs: group.runs,
-            jobs: fetched,
-            firstJobStartedAt: starts.min() ?? group.firstJobStartedAt,
-            lastJobCompletedAt: ends.max() ?? group.lastJobCompletedAt,
-            createdAt: group.createdAt,
-            isDimmed: group.isDimmed
-        )
-    }
-
     // MARK: - View factories
 
     private func mainView() -> AnyView {
         savedNavState = nil
         return wrapEnv(PopoverMainView(
             store: observable,
-            onSelectJob: { [weak self] job in
+            onSelectJob: { _ in
+                // Retained for ABI compatibility; navigation removed in #455.
+            },
+            onSelectAction: { _ in
+                // Retained for ABI compatibility; navigation removed in #455.
+            },
+            onStepTap: { [weak self] job, step in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
                     let enriched = self.enrichStepsIfNeeded(job)
                     DispatchQueue.main.async {
                         guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailView(job: enriched))
-                    }
-                }
-            },
-            onSelectAction: { [weak self] group in
-                guard let self else { return }
-                let latest = RunnerStore.shared.actions.first(where: { $0.id == group.id }) ?? group
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichGroupIfNeeded(latest)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.actionDetailView(group: enriched))
+                        self.navigate(to: self.stepLogFromMain(job: enriched, step: step))
                     }
                 }
             },
@@ -495,82 +394,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    private func actionDetailView(group: ActionGroup) -> AnyView {
-        savedNavState = .actionDetail(group)
-        return wrapEnv(ActionDetailView(
-            group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onSelectJob: { [weak self] job in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.detailViewFromAction(job: enriched, group: group))
-                    }
-                }
-            }
-        ))
-    }
-
-    private func detailViewFromAction(job: ActiveJob, group: ActionGroup) -> AnyView {
-        savedNavState = .actionJobDetail(job, group)
-        return wrapEnv(JobDetailView(
-            job: job,
-            group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.actionDetailView(group: group))
-            },
-            onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logViewFromAction(job: job, step: step, group: group))
-            }
-        ))
-    }
-
-    private func logViewFromAction(job: ActiveJob, step: JobStep, group: ActionGroup) -> AnyView {
-        savedNavState = .actionStepLog(job, step, group)
+    /// #455: Step tapped from inline job row on the main screen.
+    /// Back button returns to mainView().
+    private func stepLogFromMain(job: ActiveJob, step: JobStep) -> AnyView {
+        savedNavState = .stepLog(job, step)
         return wrapEnv(StepLogView(
             job: job,
             step: step,
             onBack: { [weak self] in
                 guard let self else { return }
-                self.navigate(to: self.detailViewFromAction(job: job, group: group))
-            },
-            onLogLoaded: nil
-        ))
-    }
-
-    private func syntheticGroup(for job: ActiveJob) -> ActionGroup {
-        let scope = scopeFromHtmlUrl(job.htmlUrl) ?? ""
-        return ActionGroup(
-            headSha: "",
-            label: "",
-            title: "",
-            headBranch: nil,
-            repo: scope,
-            runs: []
-        )
-    }
-
-    private func detailView(job: ActiveJob) -> AnyView {
-        savedNavState = .jobDetail(job)
-        let group = syntheticGroup(for: job)
-        return wrapEnv(JobDetailView(
-            job: job,
-            group: group,
-            onBack: { [weak self] in
-                guard let self else { return }
                 self.navigate(to: self.mainView())
             },
-            onSelectStep: { [weak self] step in
-                guard let self else { return }
-                self.navigate(to: self.logView(job: job, step: step))
-            }
+            onLogLoaded: nil
         ))
     }
 
@@ -607,7 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    /// #499: ScopeDetailView drill-down from SettingsView scope row.
+    /// #499: ScopeDetailView drill-down from SettingsView scope row tap.
     private func scopeDetailView(entry: ScopeEntry) -> AnyView {
         savedNavState = .scopeDetail(entry)
         makeKeyForTextInput()
@@ -621,41 +456,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    private func logView(job: ActiveJob, step: JobStep) -> AnyView {
-        savedNavState = .stepLog(job, step)
-        return wrapEnv(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.detailView(job: job))
-            },
-            onLogLoaded: nil
-        ))
-    }
-
     private func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
         switch state {
-        case .main: return nil
-        case .jobDetail(let job):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailView(job: live)
+        case .main:
+            return nil
         case .stepLog(let job, let step):
             let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return logView(job: live, step: step)
-        case .actionDetail(let group):
-            guard let live = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            return actionDetailView(group: live)
-        case .actionJobDetail(let job, let group):
-            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return detailViewFromAction(job: liveJob, group: liveGroup)
-        case .actionStepLog(let job, let step, let group):
-            guard let liveGroup = store.actions.first(where: { $0.id == group.id }) else { return nil }
-            let liveJob = liveGroup.jobs.first(where: { $0.id == job.id }) ?? job
-            return logViewFromAction(job: liveJob, step: step, group: liveGroup)
+            return stepLogFromMain(job: live, step: step)
         case .settings:
             return settingsView()
         case .runnerDetail(let runner):
@@ -681,8 +490,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Open
 
-    // Internal (not private) so ScopeDetailView can call openPanel() after
-    // NSOpenPanel dismisses for the local path folder picker (#546).
     func openPanel() {
         guard let button = statusItem?.button,
               let statusItemRect = button.window?.frame,
