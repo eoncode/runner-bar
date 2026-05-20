@@ -115,12 +115,22 @@ struct AddScopeSheet: View {
 
             // ── Button row ─────────────────────────────────────────────────
             HStack {
-                // CancelButton requires a completion-based action closure.
-                CancelButton(action: { completion in
-                    isPresented = false
-                    completion(true)
-                })
+                // Proper dismiss button — no async machinery needed for sheet dismissal.
+                Button(action: { isPresented = false }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark.circle")
+                            .font(.caption)
+                        Text("Cancel")
+                            .font(.caption)
+                            .fixedSize()
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+
                 Spacer()
+
                 Button(action: confirmAdd) {
                     Text("Add Scope")
                         .font(.system(size: 13, weight: .medium))
