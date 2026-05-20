@@ -81,7 +81,6 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         Button {
             guard let htmlUrl = group.runs.first?.htmlUrl,
                   let runUrl = URL(string: htmlUrl) else { return }
-            // Derive the workflow file URL: strip /runs/<id> and replace with /workflow
             NSWorkspace.shared.open(runUrl)
         } label: {
             Label("Show Workflow on GitHub", systemImage: "doc.text")
@@ -102,11 +101,6 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 
 // MARK: - JobContextMenuModifier
 // Adds a right-click context menu to a JobRowCard (job level).
-// Actions mirror those in JobDetailView's header bar:
-//   re-run   (concluded only)
-//   cancel   (in_progress only)
-//   copy log (always)
-//   show on GitHub (always)
 private struct JobContextMenuModifier: ViewModifier {
     let job: ActiveJob
     let group: ActionGroup
@@ -124,13 +118,11 @@ private struct JobContextMenuModifier: ViewModifier {
         Button {
             let scope = group.repo
             let jobID = job.id
-            // GitHub doesn't expose a single-job re-run; re-run the whole run that
-            // owns this job. Use rerun-failed-jobs so only failed jobs re-run.
             guard let run = group.runs.first(where: { _ in true }) else { return }
             let runID = run.id
             DispatchQueue.global(qos: .userInitiated).async {
                 ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
-                _ = jobID  // suppress unused-capture warning
+                _ = jobID
             }
         } label: {
             Label("Re-run Job", systemImage: "arrow.clockwise")
@@ -181,6 +173,35 @@ private struct JobContextMenuModifier: ViewModifier {
     }
 }
 
+// MARK: - StepContextMenuModifier
+// Adds a right-click context menu to a StepRowView (step level). (#455 Phase 2)
+private struct StepContextMenuModifier: ViewModifier {
+    let step: JobStep
+
+    func body(content: Content) -> some View {
+        content.contextMenu { menuItems }
+    }
+
+    @ViewBuilder
+    private var menuItems: some View {
+        Button {
+            // Navigation is driven by the onTap closure on StepRowView.
+            // This menu item is a visual affordance only.
+        } label: {
+            Label("View Step Log", systemImage: "doc.text.magnifyingglass")
+        }
+
+        Divider()
+
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(step.name, forType: .string)
+        } label: {
+            Label("Copy Step Name", systemImage: "doc.on.doc")
+        }
+    }
+}
+
 // MARK: - View extensions
 
 extension View {
@@ -192,5 +213,10 @@ extension View {
     /// Attaches the job-level context menu (right-click) to a job row.
     func jobContextMenu(job: ActiveJob, group: ActionGroup) -> some View {
         modifier(JobContextMenuModifier(job: job, group: group))
+    }
+
+    /// Attaches the step-level context menu (right-click) to a step row. (#455)
+    func stepContextMenu(step: JobStep) -> some View {
+        modifier(StepContextMenuModifier(step: step))
     }
 }
