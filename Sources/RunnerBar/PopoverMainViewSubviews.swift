@@ -60,14 +60,12 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PopoverLocalRunnerRow
-// Merged: adopts [RunnerModel] / .isBusy / .runnerName from main (#567).
 struct PopoverLocalRunnerRow: View {
     let runners: [RunnerModel]
     var body: some View {
         let busy = runners.filter { $0.isBusy }
         if !busy.isEmpty { runnerList(busy) }
     }
-
     @ViewBuilder
     private func runnerList(_ busy: [RunnerModel]) -> some View {
         ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
@@ -78,7 +76,6 @@ struct PopoverLocalRunnerRow: View {
         }
         Divider()
     }
-
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
@@ -103,81 +100,43 @@ struct PopoverLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// Expand behaviour (spec):
-///   expandState == nil   → COMPACT (no jobs shown)
-///     terminal rows (success/failed/queued) start here
-///   expandState == false → AUTO-COMPACT (in_progress jobs only)
-///     set by .onAppear for in-progress runs only, OR by onChange when
-///     the row first transitions INTO inProgress (async store population)
-///   expandState == true  → EXPANDED (all jobs)
-///     set by user tapping the row
-///
-/// Auto-collapse on transition:
-///   When a run transitions FROM inProgress → terminal (success/failed),
-///   expandState is reset to nil so it collapses to compact.
-///
-/// #455 Phase 4:
-///   - Removed chevron.right from workflow row (no navigation to ActionDetailView)
-///   - Removed Button(action: onSelect) wrapper from rowContent
-///   - Added onStepTap: (ActiveJob, JobStep) -> Void prop (threaded to InlineJobRowsView)
 struct ActionRowView: View {
     let group: ActionGroup
     let tick: Int
     let onSelect: () -> Void
-    /// Called when user taps a step row inside this workflow's inline jobs. (#455)
     let onStepTap: (ActiveJob, JobStep) -> Void
 
-    /// nil = fully collapsed, false = auto-compact (in_progress jobs only), true = full expand
     @State private var expandState: Bool?
-    /// Tracks the last-seen status so onChange only reacts to genuine transitions.
     @State private var previousStatus: RBStatus?
 
     var body: some View {
-        // fix(#455-gap): The status bar must NOT be inside clipShape — that caused rounded
-        // corners to cut the bar and the outer .padding(.vertical) to create gaps between
-        // consecutive workflow cards' bars. Solution: draw the card background + clip first,
-        // then overlay the status bar in a ZStack that covers the full padded height including
-        // the vertical padding slots between cards.
-        //
-        // We achieve seamless connection by:
-        //   1. Removing .padding(.vertical) from the card itself.
-        //   2. Adding top/bottom padding INSIDE the card content instead.
-        //   3. Drawing the status bar as a leading overlay on the outer ZStack that includes
-        //      the horizontal padding, so it fills the full rendered height with no gaps.
-        ZStack(alignment: .leading) {
-            // Card background (clipped, no status bar inside)
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 0) {
-                    // Left spacer to clear the status bar width (4pt) + its leading offset (RBSpacing.md)
-                    // so rowContent starts at the same x as before.
-                    Color.clear.frame(width: RBSpacing.md)
-                    rowContent
-                }
-                if let fullExpand = expandState {
-                    InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: RBSpacing.md)
+                rowContent
             }
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
-                    .fill(Color.rbSurfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
-                            .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-
-            // fix(#455-gap): Status bar drawn OUTSIDE clipShape, spanning the full height
-            // including vertical padding. This ensures consecutive cards' bars connect
-            // with zero gap regardless of card spacing.
-            Rectangle()
-                .fill(rowStatus.color)
-                .frame(width: 4)
-                .frame(maxHeight: .infinity)
-                .padding(.leading, RBSpacing.md)
+            if let fullExpand = expandState {
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
+            }
         }
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+                .overlay(
+                    Rectangle()
+                        .fill(rowStatus.color)
+                        .frame(width: 4)
+                        .frame(maxHeight: .infinity),
+                    alignment: .leading
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .workflowContextMenu(group: group)
         .onTapGesture {
             guard !group.jobs.isEmpty else { return }
@@ -207,17 +166,15 @@ struct ActionRowView: View {
         }
     }
 
-    // MARK: - Helpers
-
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
-        case .queued:     return .queued
+        case .queued: return .queued
         case .completed:
             switch group.conclusion {
-            case "success":  return .success
-            case "failure":  return .failed
-            default:         return .unknown
+            case "success": return .success
+            case "failure": return .failed
+            default: return .unknown
             }
         }
     }
@@ -281,12 +238,12 @@ struct ActionRowView: View {
     private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
-        case .queued:     StatusBadge(status: .queued, text: "QUEUED")
+        case .queued: StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             switch group.conclusion {
             case "success": StatusBadge(status: .success, text: "SUCCESS")
             case "failure": StatusBadge(status: .failed, text: "FAILED")
-            default:        StatusBadge(status: .unknown, text: "DONE")
+            default: StatusBadge(status: .unknown, text: "DONE")
             }
         }
     }
