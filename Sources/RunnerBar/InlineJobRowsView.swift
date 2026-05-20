@@ -1,5 +1,4 @@
 import SwiftUI
-// swiftlint:disable colon opening_brace
 
 // MARK: - TreeLineLeader
 private struct TreeLineLeader: View {
