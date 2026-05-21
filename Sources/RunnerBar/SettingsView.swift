@@ -465,10 +465,15 @@ struct SettingsView: View {
     //
     // Three states:
     // 1. OAuth (Keychain token present): green dot · Authenticated · Sign out
-    // 2. CLI only (gh token, no Keychain): grey dot · gh CLI · Sign in with GitHub
-    // 3. No token: Sign in with GitHub
+    // 2. CLI only (gh token, no Keychain): grey dot · gh CLI · Sign in with GitHub (button)
+    // 3. No token: Sign in with GitHub (button)
     // isOAuthAuthenticated and isCLIAuthenticated are mutually exclusive.
     // Sign in with GitHub is always visible when not on OAuth (states 2 and 3).
+    //
+    // BUTTON STYLING NOTE:
+    // "Sign in with GitHub" uses a filled capsule background so it reads as a
+    // button, not a plain text label. Do NOT revert to .buttonStyle(.plain) without
+    // a replacement visual affordance — bare text is indistinguishable from a label.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -502,9 +507,16 @@ struct SettingsView: View {
                                 Text("gh CLI").font(.caption).foregroundColor(Color.rbTextSecondary)
                             }
                         }
+                        // Bordered capsule so this reads as a button, not a label.
                         Button(action: signInWithGitHub) {
-                            Text("Sign in with GitHub").font(.caption).foregroundColor(Color.rbWarning)
-                        }.buttonStyle(.plain)
+                            Text("Sign in with GitHub")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.rbWarning))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
