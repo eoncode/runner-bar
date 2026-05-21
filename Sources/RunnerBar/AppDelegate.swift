@@ -4,8 +4,8 @@ import SwiftUI
 
 // swiftlint:disable type_body_length file_length
 
-// MARK: - NavState
-
+// MARK: - NSPanel architecture note
+//
 // ⚠️ ARCHITECTURE: NSPanel (Pattern 2 from #377) — READ BEFORE CHANGING.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -59,23 +59,6 @@ import SwiftUI
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
-
-/// Represents the currently visible navigation screen.
-///
-/// #455: Removed .jobDetail, .actionDetail, .actionJobDetail, .actionStepLog.
-/// Navigation from the main view now goes directly: inline step tap → .stepLog.
-private enum NavState {
-    /// The root popover showing runners and the recent-actions list.
-    case main
-    /// The raw log for a single step, reached from the main inline step row.
-    case stepLog(ActiveJob, JobStep)
-    /// The Settings sheet.
-    case settings
-    /// Runner detail drill-down reached from SettingsView runner row tap. (#491)
-    case runnerDetail(RunnerModel)
-    /// Scope detail drill-down reached from SettingsView scope row tap. (#499)
-    case scopeDetail(ScopeEntry)
-}
 
 // MARK: - KeyablePanel
 
