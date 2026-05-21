@@ -48,6 +48,14 @@ final class LocalRunnerStore: ObservableObject {
                 log("LocalRunnerStore > refresh() background — no token, skipping enricher")
             }
 
+            // Phase 3 (#591): enrich each busy runner with per-runner CPU/MEM metrics.
+            // Matched by installPath so each runner gets its own process metrics, not slot-index.
+            for idx in enriched.indices {
+                guard enriched[idx].isBusy, let installPath = enriched[idx].installPath else { continue }
+                enriched[idx].metrics = metricsForRunner(installPath: installPath)
+                log("LocalRunnerStore > refresh() background — metrics for \(enriched[idx].runnerName): \(String(describing: enriched[idx].metrics))")
+            }
+
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 log("LocalRunnerStore > refresh() main — assigning \(enriched.count) runner(s) to self.runners (was \(self.runners.count))")

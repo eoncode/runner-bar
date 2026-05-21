@@ -46,6 +46,11 @@ struct RunnerModel: Identifiable, Equatable {
     /// Cleared automatically the next time refresh() replaces the runner array.
     var lifecycleWarning: String?
 
+    /// CPU/memory utilisation from the local `ps aux` snapshot, matched by installPath.
+    /// `nil` if no matching process was found for this runner, or the runner is not busy.
+    /// Populated by `LocalRunnerStore.refresh()` after scanning.
+    var metrics: RunnerMetrics?
+
     // MARK: - Init
 
     init(
@@ -64,7 +69,8 @@ struct RunnerModel: Identifiable, Equatable {
         platformArchitecture: String? = nil,
         agentVersion: String? = nil,
         isEphemeral: Bool = false,
-        runnerGroup: String? = nil
+        runnerGroup: String? = nil,
+        metrics: RunnerMetrics? = nil
     ) {
         self.id = id ?? runnerName
         self.runnerName = runnerName
@@ -82,6 +88,7 @@ struct RunnerModel: Identifiable, Equatable {
         self.agentVersion = agentVersion
         self.isEphemeral = isEphemeral
         self.runnerGroup = runnerGroup
+        self.metrics = metrics
     }
 
     // MARK: - Derived display

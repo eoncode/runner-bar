@@ -85,6 +85,10 @@ struct PopoverLocalRunnerRow: View {
                 .lineLimit(1)
                 .layoutPriority(1)
             Spacer()
+            if let metrics = runner.metrics {
+                StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
+                StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
+            }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
         .background(

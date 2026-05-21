@@ -58,12 +58,12 @@ struct PopoverMainView: View {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
 
-    /// True only when at least one local runner is actively busy.
-    /// Gates both the section header and PopoverLocalRunnerRow — mirrors
-    /// PopoverLocalRunnerRow's own .isBusy filter so the header never appears
-    /// for idle-only runners.
+    /// True only when at least one local runner is actively busy AND there is
+    /// at least one in-progress workflow. Gates both the section header and
+    /// PopoverLocalRunnerRow so the section never appears without an active run.
     private var hasBusyLocalRunners: Bool {
         store.localRunners.contains { $0.isBusy }
+            && store.actions.contains { $0.groupStatus == .inProgress }
     }
 
     var body: some View {
