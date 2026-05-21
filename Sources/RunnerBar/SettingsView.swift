@@ -42,7 +42,11 @@ struct SettingsView: View {
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
     @ObservedObject private var scopeStore = ScopeStore.shared
     @State private var launchAtLogin = LoginItem.isEnabled
-    @State private var isAuthenticated = (githubToken() != nil)
+    // isOAuthAuthenticated: true only when a token is stored in Keychain via native OAuth.
+    // isCLIAuthenticated: true when gh CLI provides a token but no Keychain OAuth token exists.
+    // These two are mutually exclusive. Sign in button is shown whenever isOAuthAuthenticated == false.
+    @State private var isOAuthAuthenticated = (Keychain.token != nil)
+    @State private var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
     @State private var isSigningIn = false
     @State private var hasLoadedOnce = false
     @State private var runnerPendingRemoval: RunnerModel?
@@ -94,7 +98,7 @@ struct SettingsView: View {
                 get: { runnerPendingRemoval != nil },
                 set: { if !$0 { runnerPendingRemoval = nil } }
             ),
-            isAuthenticated: isAuthenticated,
+            isAuthenticated: isOAuthAuthenticated || isCLIAuthenticated,
             onCancel: { runnerPendingRemoval = nil },
             onConfirm: performRemoval
         )
@@ -118,11 +122,13 @@ struct SettingsView: View {
     }
 
     private func onAppearAction() {
-        isAuthenticated = (githubToken() != nil)
+        isOAuthAuthenticated = (Keychain.token != nil)
+        isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
         // Register onCompletion ONCE here — do NOT re-assign in signInWithGitHub().
         // Re-assigning mid-flow would race with an in-flight callback.
         OAuthService.shared.onCompletion = { success in
-            isAuthenticated = success
+            isOAuthAuthenticated = success
+            isCLIAuthenticated = !success && githubToken() != nil
             isSigningIn = false
         }
         ScopeStore.shared.onMutate = { [weak store] in store?.reload() }
@@ -457,15 +463,25 @@ struct SettingsView: View {
 
     // MARK: - Account
     //
-    // Uses OAuthService for native GitHub OAuth Authorization Code flow.
-    // onCompletion is registered once in onAppearAction() — not here.
+    // Three states:
+    // 1. OAuth (Keychain token present): green dot · Authenticated · Sign out
+    // 2. CLI only (gh token, no Keychain): grey dot · gh CLI · Sign in with GitHub
+    // 3. No token: Sign in with GitHub
+    // isOAuthAuthenticated and isCLIAuthenticated are mutually exclusive.
+    // Sign in with GitHub is always visible when not on OAuth (states 2 and 3).
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("GitHub").font(.system(size: 12)); Spacer()
-                if isAuthenticated {
+                if isSigningIn {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.7)
+                        Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
+                    }
+                } else if isOAuthAuthenticated {
+                    // OAuth state: Keychain token present
                     HStack(spacing: 8) {
                         HStack(spacing: 4) {
                             Circle().fill(Color.rbSuccess).frame(width: 8, height: 8)
@@ -475,17 +491,21 @@ struct SettingsView: View {
                             Text("Sign out").font(.caption).foregroundColor(Color.rbDanger)
                         }
                         .buttonStyle(.plain)
-                        .help("Remove token from Keychain and disconnect RunnerBar from GitHub")
-                    }
-                } else if isSigningIn {
-                    HStack(spacing: 6) {
-                        ProgressView().scaleEffect(0.7)
-                        Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
+                        .help("Remove OAuth token from Keychain. gh CLI token will be used as fallback if available.")
                     }
                 } else {
-                    Button(action: signInWithGitHub) {
-                        Text("Sign in with GitHub").font(.caption).foregroundColor(Color.rbWarning)
-                    }.buttonStyle(.plain)
+                    // CLI or no token: always show sign-in button
+                    HStack(spacing: 8) {
+                        if isCLIAuthenticated {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.rbTextTertiary).frame(width: 8, height: 8)
+                                Text("gh CLI").font(.caption).foregroundColor(Color.rbTextSecondary)
+                            }
+                        }
+                        Button(action: signInWithGitHub) {
+                            Text("Sign in with GitHub").font(.caption).foregroundColor(Color.rbWarning)
+                        }.buttonStyle(.plain)
+                    }
                 }
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
@@ -515,8 +535,9 @@ struct SettingsView: View {
     }
 
     private func signOutOfGitHub() {
-        // OAuthService.signOut() calls onCompletion?(false) which sets isAuthenticated = false
-        // via the closure registered in onAppearAction(). No need to set it again here.
+        // OAuthService.signOut() wipes Keychain token and calls onCompletion?(false).
+        // onCompletion re-evaluates both isOAuthAuthenticated and isCLIAuthenticated,
+        // so the UI will flip to CLI state automatically if gh CLI token is still present.
         OAuthService.shared.signOut()
     }
 
