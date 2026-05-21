@@ -2,8 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-// swiftlint:disable type_body_length
-
 // MARK: - NSPanel architecture note
 //
 // ⚠️ ARCHITECTURE: NSPanel (Pattern 2 from #377) — READ BEFORE CHANGING.
@@ -423,4 +421,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length

@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - NavState
 //
 // Represents the currently visible navigation screen inside the RunnerBar panel.
