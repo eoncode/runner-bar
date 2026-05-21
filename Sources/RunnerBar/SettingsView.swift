@@ -210,7 +210,6 @@ struct SettingsView: View {
     private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
         let hasWarning = runner.lifecycleWarning != nil
         let displayStatus = runner.displayStatus
-        let statusColor = runner.statusColor
         return HStack(spacing: 6) {
             Circle().fill(localRunnerDotColor(for: runner)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
@@ -241,7 +240,6 @@ struct SettingsView: View {
                    label: { Image(systemName: "minus.circle").font(.caption2).foregroundColor(Color.rbDanger) })
             .buttonStyle(.plain).help("Remove runner")
         }
-        .environment(\.statusColor, statusColor)
     }
 
     // MARK: - Resume / Stop actions
