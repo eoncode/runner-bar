@@ -211,7 +211,6 @@ struct SettingsView: View {
         let hasWarning = runner.lifecycleWarning != nil
         let displayStatus = runner.displayStatus
         let statusColor = runner.statusColor
-        log("SettingsView > localRunnerRowContent rendering runner=\(runner.runnerName) isRunning=\(runner.isRunning) githubStatus=\(runner.githubStatus ?? "none") lifecycleWarning=\(runner.lifecycleWarning ?? "none") displayStatus=\(displayStatus) statusColor=\(statusColor) hasWarning=\(hasWarning)")
         return HStack(spacing: 6) {
             Circle().fill(localRunnerDotColor(for: runner)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
@@ -242,6 +241,7 @@ struct SettingsView: View {
                    label: { Image(systemName: "minus.circle").font(.caption2).foregroundColor(Color.rbDanger) })
             .buttonStyle(.plain).help("Remove runner")
         }
+        .environment(\.statusColor, statusColor)
     }
 
     // MARK: - Resume / Stop actions
@@ -517,8 +517,9 @@ struct SettingsView: View {
     }
 
     private func signOutOfGitHub() {
+        // OAuthService.signOut() calls onCompletion?(false) which sets isAuthenticated = false
+        // via the closure registered in onAppearAction(). No need to set it again here.
         OAuthService.shared.signOut()
-        isAuthenticated = false
     }
 
     private func performRemoval() {

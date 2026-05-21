@@ -5,6 +5,12 @@ import Foundation
 //
 // Implements the GitHub OAuth Authorization Code flow.
 //
+// @MainActor ensures all access to `pendingState` and `onCompletion` is
+// serialised on the main thread. This matches how AppKit delivers
+// application(_:open:) callbacks and how SwiftUI reads `isSignedIn`.
+// It also silences the -strict-concurrency warning about non-Sendable
+// captures of `self` in DispatchQueue.main.async closures.
+//
 // Flow:
 //   1. signIn() generates a random state nonce, stores it, opens the GitHub
 //      authorization URL (with state= param) in the default browser.
@@ -19,6 +25,7 @@ import Foundation
 // Client credentials are in Secrets.swift — see that file for why they are
 // intentionally committed (open-source native app industry standard).
 
+@MainActor
 final class OAuthService {
     static let shared = OAuthService()
     private init() {}
@@ -57,7 +64,7 @@ final class OAuthService {
     func signOut() {
         pendingState = nil
         Keychain.delete()          // also calls invalidateTokenCache()
-        DispatchQueue.main.async { self.onCompletion?(false) }
+        onCompletion?(false)
     }
 
     // MARK: Callback Handler
@@ -67,16 +74,16 @@ final class OAuthService {
             let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
             let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
         else {
-            DispatchQueue.main.async { self.onCompletion?(false) }
+            onCompletion?(false)
             return
         }
 
         // CSRF: verify the returned state matches what we sent.
         let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value
-        guard returnedState != nil, returnedState == pendingState else {
+        guard let returnedState, returnedState == pendingState else {
             log("OAuthService › handleCallback: state mismatch — possible CSRF attempt, rejecting")
             pendingState = nil
-            DispatchQueue.main.async { self.onCompletion?(false) }
+            onCompletion?(false)
             return
         }
         pendingState = nil
@@ -104,11 +111,11 @@ final class OAuthService {
             let token = json["access_token"] as? String,
             !token.isEmpty
         else {
-            DispatchQueue.main.async { self.onCompletion?(false) }
+            onCompletion?(false)
             return
         }
 
         Keychain.save(token)        // also calls invalidateTokenCache()
-        DispatchQueue.main.async { self.onCompletion?(true) }
+        onCompletion?(true)
     }
 }
