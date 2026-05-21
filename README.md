@@ -8,17 +8,17 @@
 
 ## Features
 
-**Workflow status**
+**🚦 Workflow status**
 - Live run status across all your repos and orgs
 - Drill into jobs and steps, copy logs at any level
 - Re-run, re-run failed, or cancel from the popover
 - Right-click a run to copy YAML, SHA, or open in browser
 
-**Local runner manager**
+**🏃 Local runner manager**
 - Auto-discovers runners on this Mac (LaunchAgents, `.runner` files, launchctl)
 - Start, stop, add, and remove runners without touching Terminal
 
-**Failure hooks**
+**🪝 Failure hooks**
 - When a run fails, automatically fire a shell command in Terminal
 - Tokens like `$FAILURE_LOG`, `$LOCAL_PATH`, `$BRANCH`, `$RUN_LINK` are substituted before the command runs
 - Default: `cd $LOCAL_PATH && gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo`
