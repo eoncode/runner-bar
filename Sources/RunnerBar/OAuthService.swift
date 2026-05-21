@@ -20,7 +20,7 @@ import Foundation
 //   5. handleCallback verifies the state param matches pendingState (CSRF guard),
 //      then exchanges the code for an access token via POST to GitHub.
 //   6. Token is saved to Keychain (which also invalidates the token cache).
-//      onCompletion is called on the main thread.
+//      onCompletion is called on the main thread with the actual save result.
 //
 // Client credentials are in Secrets.swift — see that file for why they are
 // intentionally committed (open-source native app industry standard).
@@ -63,7 +63,10 @@ final class OAuthService {
 
     func signOut() {
         pendingState = nil
-        Keychain.delete()          // also calls invalidateTokenCache()
+        // Keychain.delete() returns false if SecItemDelete failed (token may still exist).
+        // Only report sign-out success when the token was actually removed.
+        let deleted = Keychain.delete()
+        if !deleted { log("OAuthService › signOut: Keychain.delete failed") }
         onCompletion?(false)
     }
 
@@ -115,7 +118,11 @@ final class OAuthService {
             return
         }
 
-        Keychain.save(token)        // also calls invalidateTokenCache()
-        onCompletion?(true)
+        // Gate success on whether the token was actually persisted to Keychain.
+        // If Keychain.save fails, report failure so the UI does not show signed-in
+        // while Keychain.token remains nil and subsequent API calls lack auth.
+        let saved = Keychain.save(token)
+        if !saved { log("OAuthService › exchangeCode: Keychain.save failed") }
+        onCompletion?(saved)
     }
 }

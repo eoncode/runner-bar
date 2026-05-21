@@ -1,7 +1,7 @@
 import Foundation
 
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
-struct RunnerMetrics {
+struct RunnerMetrics: Equatable {
     let cpu: Double
     let mem: Double
 }

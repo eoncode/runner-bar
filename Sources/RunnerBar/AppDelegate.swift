@@ -2,10 +2,8 @@ import AppKit
 import Combine
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length
-
-// MARK: - NavState
-
+// MARK: - NSPanel architecture note
+//
 // ⚠️ ARCHITECTURE: NSPanel (Pattern 2 from #377) — READ BEFORE CHANGING.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -60,58 +58,9 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
-/// Represents the currently visible navigation screen.
-///
-/// #455: Removed .jobDetail, .actionDetail, .actionJobDetail, .actionStepLog.
-/// Navigation from the main view now goes directly: inline step tap → .stepLog.
-private enum NavState {
-    /// The root popover showing runners and the recent-actions list.
-    case main
-    /// The raw log for a single step, reached from the main inline step row.
-    case stepLog(ActiveJob, JobStep)
-    /// The Settings sheet.
-    case settings
-    /// Runner detail drill-down reached from SettingsView runner row tap. (#491)
-    case runnerDetail(RunnerModel)
-    /// Scope detail drill-down reached from SettingsView scope row tap. (#499)
-    case scopeDetail(ScopeEntry)
-}
-
-// MARK: - KeyablePanel
-
-// ⚠️ TEXT INPUT FIX (#525) — DO NOT REMOVE THIS CLASS.
-//
-// WHY THIS EXISTS:
-// NSPanel with .nonactivatingPanel overrides canBecomeKey to return false.
-// This is the AppKit contract: a non-activating panel intentionally never
-// steals focus from the frontmost application.
-// The side-effect is that NSTextField (and SwiftUI TextField backed by it)
-// never receives first-responder, making all text fields silently non-editable.
-//
-// FIX:
-// KeyablePanel is a minimal NSPanel subclass. It adds a single `wantsKey`
-// flag. canBecomeKey returns true only when `wantsKey == true`, so the panel
-// only becomes key for views that contain TextFields (settings, runner detail,
-// scope detail). All read-only views leave wantsKey = false, preserving the
-// non-activating behaviour everywhere else.
-//
-// USAGE IN AppDelegate:
-//   panel.wantsKey = true   — before navigating to a text-input view
-//   panel.makeKeyAndOrderFront(nil) — promotes panel to key window
-//   panel.wantsKey = false  — in closePanel(), resets for next open
-//
-// ❌ NEVER replace KeyablePanel with plain NSPanel — text fields break again.
-// ❌ NEVER set wantsKey = true globally — that makes the panel steal focus
-//    from the frontmost app whenever it is shown, defeating .nonactivatingPanel.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE.
-private final class KeyablePanel: NSPanel {
-    /// Set to true immediately before navigating to a view that contains TextFields.
-    /// Reset to false in closePanel().
-    var wantsKey = false
-
-    override var canBecomeKey: Bool { wantsKey }
-}
+// NOTE: KeyablePanel is defined in KeyablePanel.swift (internal access level).
+// It must NOT be private or fileprivate — AppDelegate+Navigation.swift accesses
+// `panel: KeyablePanel?` from a separate file.
 
 // MARK: - AppDelegate
 
@@ -120,10 +69,9 @@ private final class KeyablePanel: NSPanel {
 // compiler static proof of this so every method and stored property is verified
 // as main-thread-only without any runtime assertion.
 //
-// The nonisolated blocking helper (enrichStepsIfNeeded) is intentionally exempt
-// — it performs blocking network I/O and is always dispatched onto
-// DispatchQueue.global() by its caller. nonisolated opts it out of the
-// class-level @MainActor domain.
+// The nonisolated blocking helper (enrichStepsIfNeeded) lives in
+// AppDelegate+Navigation.swift and is intentionally exempt — it performs
+// blocking network I/O and is always dispatched onto DispatchQueue.global().
 //
 // ❌ NEVER remove @MainActor from this class declaration.
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded.
@@ -131,58 +79,62 @@ private final class KeyablePanel: NSPanel {
 // UNDER ANY CIRCUMSTANCE.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem?
-    private var panel: KeyablePanel?
-    private var chrome: PanelChromeView?
-    private var hostingController: NSHostingController<AnyView>?
-    private let observable = RunnerStoreObservable()
-    private var savedNavState: NavState?
-    private var panelIsOpen = false
+    // NOTE: The properties and methods below are `internal` (not `private`) because
+    // Swift `private` does not cross file boundaries. AppDelegate+Navigation.swift
+    // requires read/write access to all of them. Do not widen beyond `internal`.
 
-    private var eventMonitor: Any?
-    private var sizeObservation: NSKeyValueObservation?
-    private var workspaceObserver: Any?
-    private var cancellables = Set<AnyCancellable>()
+    var statusItem: NSStatusItem?           // internal: required for AppDelegate+Navigation
+    var panel: KeyablePanel?               // internal: required for AppDelegate+Navigation
+    var chrome: PanelChromeView?           // internal: required for AppDelegate+Navigation
+    var hostingController: NSHostingController<AnyView>? // internal: required for AppDelegate+Navigation
+    let observable = RunnerStoreObservable() // internal: required for AppDelegate+Navigation
+    var savedNavState: NavState?           // internal: required for AppDelegate+Navigation
+    var panelIsOpen = false                // internal: required for AppDelegate+Navigation
+
+    var eventMonitor: Any?                 // internal: required for AppDelegate+Navigation
+    var sizeObservation: NSKeyValueObservation?
+    var workspaceObserver: Any?
+    var cancellables = Set<AnyCancellable>()
 
     /// Top anchor (screen coords) captured once in openPanel().
     /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
-    private var panelTopY: CGFloat?
+    var panelTopY: CGFloat?                // internal: required for AppDelegate+Navigation
 
     // ⚠️ REGRESSION GUARD (ref #377):
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
     // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     // ALLOWED UNDER ANY CIRCUMSTANCE.
-    private let popoverOpenState = PopoverOpenState()
+    let popoverOpenState = PopoverOpenState() // internal: required for AppDelegate+Navigation
 
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
-    private static let minWidth: CGFloat = 280
+    static let minWidth: CGFloat = 280
 
     /// The screen the status item lives on.
-    private var statusItemScreen: NSScreen {
+    var statusItemScreen: NSScreen {       // internal: required for AppDelegate+Navigation
         statusItem?.button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
-    private var maxWidth: CGFloat {
+    var maxWidth: CGFloat {                // internal: required for AppDelegate+Navigation
         let screenMax = statusItemScreen.visibleFrame.width * 0.9
         return min(900, screenMax)
     }
 
-    private var maxHeight: CGFloat {
+    var maxHeight: CGFloat {               // internal: required for AppDelegate+Navigation
         statusItemScreen.visibleFrame.height * 0.85
     }
 
-    private static let gap: CGFloat = 2
+    static let gap: CGFloat = 2
 
     /// Initial panel width used before SwiftUI has measured content.
-    private static let initPanelWidth: CGFloat = 320
+    static let initPanelWidth: CGFloat = 320
 
     // MARK: - Environment injection
 
     /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
-    private func wrapEnv<V: View>(_ view: V) -> AnyView {
+    func wrapEnv<V: View>(_ view: V) -> AnyView { // internal: required for AppDelegate+Navigation
         AnyView(view.environmentObject(popoverOpenState))
     }
 
@@ -292,7 +244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER call from a background thread.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
-    private func resizeAndRepositionPanel() {
+    func resizeAndRepositionPanel() { // internal: required for AppDelegate+Navigation
         guard panelIsOpen,
               let panel,
               let chrome,
@@ -322,16 +274,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
-    private func navigate(to view: AnyView) {
+    func navigate(to view: AnyView) { // internal: required for AppDelegate+Navigation
         hostingController?.rootView = view
         resizeAndRepositionPanel()
     }
 
     // MARK: - Make key for text input
 
-    // See KeyablePanel comment block above for the full explanation.
+    // See KeyablePanel.swift for the full explanation.
     // ❌ NEVER call this for views that have no text input (main, step log).
-    private func makeKeyForTextInput() {
+    func makeKeyForTextInput() { // internal: required for AppDelegate+Navigation
         panel?.wantsKey = true
         panel?.makeKeyAndOrderFront(nil)
     }
@@ -361,139 +313,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func removeEventMonitor() {
+    func removeEventMonitor() {
         if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
     }
 
-    private func removeWorkspaceObserver() {
+    func removeWorkspaceObserver() {
         if let opt = workspaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(opt)
             workspaceObserver = nil
-        }
-    }
-
-    // MARK: - Enrichment helper
-
-    nonisolated private func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
-        guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
-              let scope = scopeFromHtmlUrl(job.htmlUrl),
-              let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
-              let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
-        else { return job }
-        let iso = ISO8601DateFormatter()
-        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
-    }
-
-    // MARK: - View factories
-
-    private func mainView() -> AnyView {
-        savedNavState = nil
-        return wrapEnv(PopoverMainView(
-            store: observable,
-            onSelectJob: { _ in
-                // Retained for ABI compatibility; navigation removed in #455.
-            },
-            onSelectAction: { _ in
-                // Retained for ABI compatibility; navigation removed in #455.
-            },
-            onStepTap: { [weak self] job, step in
-                guard let self else { return }
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let enriched = self.enrichStepsIfNeeded(job)
-                    DispatchQueue.main.async {
-                        guard self.panelIsOpen else { return }
-                        self.navigate(to: self.stepLogFromMain(job: enriched, step: step))
-                    }
-                }
-            },
-            onSelectSettings: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
-        ))
-    }
-
-    /// #455: Step tapped from inline job row on the main screen.
-    /// Back button returns to mainView().
-    private func stepLogFromMain(job: ActiveJob, step: JobStep) -> AnyView {
-        savedNavState = .stepLog(job, step)
-        return wrapEnv(StepLogView(
-            job: job,
-            step: step,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onLogLoaded: nil
-        ))
-    }
-
-    private func settingsView() -> AnyView {
-        savedNavState = .settings
-        makeKeyForTextInput()
-        return wrapEnv(SettingsView(
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.mainView())
-            },
-            onSelectRunner: { [weak self] runner in
-                guard let self else { return }
-                self.navigate(to: self.runnerDetailView(runner: runner))
-            },
-            onSelectScope: { [weak self] entry in
-                guard let self else { return }
-                self.navigate(to: self.scopeDetailView(entry: entry))
-            },
-            store: observable
-        ))
-    }
-
-    /// #491: RunnerDetailView drill-down from SettingsView runner row.
-    private func runnerDetailView(runner: RunnerModel) -> AnyView {
-        savedNavState = .runnerDetail(runner)
-        makeKeyForTextInput()
-        return wrapEnv(RunnerDetailView(
-            runner: runner,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
-        ))
-    }
-
-    /// #499: ScopeDetailView drill-down from SettingsView scope row tap.
-    private func scopeDetailView(entry: ScopeEntry) -> AnyView {
-        savedNavState = .scopeDetail(entry)
-        makeKeyForTextInput()
-        let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) ?? entry
-        return wrapEnv(ScopeDetailView(
-            scopeEntry: live,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
-        ))
-    }
-
-    private func validatedView(for state: NavState) -> AnyView? {
-        savedNavState = nil
-        let store = RunnerStore.shared
-        switch state {
-        case .main:
-            return nil
-        case .stepLog(let job, let step):
-            let live = store.jobs.first(where: { $0.id == job.id }) ?? job
-            return stepLogFromMain(job: live, step: step)
-        case .settings:
-            return settingsView()
-        case .runnerDetail(let runner):
-            let live = LocalRunnerStore.shared.runners.first(where: { $0.id == runner.id }) ?? runner
-            return runnerDetailView(runner: live)
-        case .scopeDetail(let entry):
-            guard let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) else {
-                return settingsView()
-            }
-            return scopeDetailView(entry: live)
         }
     }
 
@@ -562,4 +389,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-// swiftlint:enable type_body_length

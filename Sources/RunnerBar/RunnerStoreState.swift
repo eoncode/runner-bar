@@ -6,7 +6,7 @@ import Foundation
 struct JobPollResult {
     // Jobs to display in the popover (in_progress → queued → cached done).
     let display: [ActiveJob]
-    // Updated completed-job cache, trimmed to 3 entries.
+    // Updated completed-job cache, trimmed to jobCacheLimit entries.
     let newCache: [Int: ActiveJob]
     // Live-job snapshot for the next poll's diff.
     let newPrevLive: [Int: ActiveJob]
@@ -16,11 +16,19 @@ struct JobPollResult {
 struct GroupPollResult {
     // Action groups to display in the popover.
     let display: [ActionGroup]
-    // Updated group cache, trimmed to 30 entries.
+    // Updated group cache, trimmed to groupCacheLimit entries.
     let newGroupCache: [String: ActionGroup]
     // Live-group snapshot for the next poll's diff.
     let newPrevLiveGroups: [String: ActionGroup]
 }
+
+// MARK: - Cache limits
+
+/// Maximum number of completed jobs retained in the display cache.
+private let jobCacheLimit = 3
+
+/// Maximum number of completed action groups retained in the display cache.
+private let groupCacheLimit = 30
 
 // MARK: - Job state builder
 
@@ -58,7 +66,7 @@ extension RunnerStore {
             )
         }
 
-        trimJobCache(&newCache, limit: 3)
+        trimJobCache(&newCache, limit: jobCacheLimit)
         backfillSteps(into: &newCache)
 
         let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
@@ -130,9 +138,9 @@ extension RunnerStore {
             (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
         }
         var display: [ActiveJob] = []
-        for job in inProgress where display.count < 3 { display.append(job) }
-        for job in queued     where display.count < 3 { display.append(job) }
-        for job in cached     where display.count < 3 { display.append(job) }
+        for job in inProgress where display.count < jobCacheLimit { display.append(job) }
+        for job in queued     where display.count < jobCacheLimit { display.append(job) }
+        for job in cached     where display.count < jobCacheLimit { display.append(job) }
         return display
     }
 }
@@ -175,7 +183,7 @@ extension RunnerStore {
                              into: &newCache, prevLiveGroups: snapPrevGroups)
 
         // Cache done groups; fire failure hook the first time a group is seen as completed.
-        // Uses snapGroupCache[group.id] == nil as the "newly completed" signal.
+        // Uses snapGroupCache[group.id] == nil as the “newly completed” signal.
         for group in doneGroups {
             let isNew = snapGroupCache[group.id] == nil
             let runSummary = group.runs.map { "\($0.id):\($0.conclusion ?? "nil")" }.joined(separator: ", ")
@@ -191,7 +199,7 @@ extension RunnerStore {
             dimmed.isDimmed = true
             newCache[group.id] = dimmed
         }
-        trimGroupCache(&newCache, limit: 30)
+        trimGroupCache(&newCache, limit: groupCacheLimit)
 
         let newPrevLive = Dictionary(uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
         let display     = buildGroupDisplay(live: liveGroups, cache: newCache)
@@ -220,15 +228,10 @@ extension RunnerStore {
             log("RunnerStore › scopeFromActionGroup — using group.repo='\(group.repo)'")
             return group.repo
         }
-        // Fallback: derive from first run's repository_url or html_url
-        if let firstRun = group.runs.first {
-            let url = firstRun.htmlUrl ?? ""
+        // Fallback: derive from first run's html_url using the shared scopeFromHtmlUrl helper.
+        if let firstRun = group.runs.first, let url = firstRun.htmlUrl {
             log("RunnerStore › scopeFromActionGroup — group.repo empty, trying htmlUrl='\(url)'")
-            let parts = url
-                .replacingOccurrences(of: "https://github.com/", with: "")
-                .components(separatedBy: "/")
-            if parts.count >= 2 {
-                let derived = "\(parts[0])/\(parts[1])"
+            if let derived = scopeFromHtmlUrl(url) {
                 log("RunnerStore › scopeFromActionGroup — derived scope='\(derived)' from htmlUrl")
                 return derived
             }
@@ -325,9 +328,9 @@ extension RunnerStore {
             > (rhs.lastJobCompletedAt ?? rhs.createdAt ?? .distantPast)
         })
         var display: [ActionGroup] = []
-        for grp in inProgress where display.count < 30 { display.append(grp) }
-        for grp in queued     where display.count < 30 { display.append(grp) }
-        for grp in cached     where display.count < 30 && !liveDisplayIDs.contains(grp.id) { display.append(grp) }
+        for grp in inProgress where display.count < groupCacheLimit { display.append(grp) }
+        for grp in queued     where display.count < groupCacheLimit { display.append(grp) }
+        for grp in cached     where display.count < groupCacheLimit && !liveDisplayIDs.contains(grp.id) { display.append(grp) }
         return display
     }
 }
