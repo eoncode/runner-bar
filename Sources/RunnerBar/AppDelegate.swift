@@ -256,6 +256,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunnerStore.shared.start()
     }
 
+    // MARK: - OAuth URL callback (#326)
+    //
+    // Handles the runnerbar://oauth/callback?code=... redirect from GitHub after
+    // the user authorizes the app in the browser. Forwards to OAuthService which
+    // exchanges the code for a token and saves it to Keychain.
+    //
+    // OAuthService.onCompletion is wired in SettingsView so the Account section
+    // updates automatically once the token arrives.
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first,
+              url.scheme == "runnerbar",
+              url.host == "oauth"
+        else { return }
+        OAuthService.shared.handleCallback(url)
+    }
+
     // MARK: - Status icon
 
     /// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
