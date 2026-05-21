@@ -16,7 +16,7 @@
 
 **🏃 Local runner manager**
 - Auto-discovers runners on this Mac (LaunchAgents, `.runner` files, launchctl)
-- Start, stop, add, and remove runners without touching Terminal
+- Start, stop, add, and remove runners without touching Terminal or github.com
 
 **🪝 Failure hooks**
 - When a run fails, automatically fire a shell command in Terminal
