@@ -21,6 +21,17 @@ var ghIsRateLimited: Bool {
 
 private let apiBase = "https://api.github.com"
 
+// MARK: - Request builder
+
+/// Builds a pre-configured URLRequest with standard GitHub API headers.
+private func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
+    var req = URLRequest(url: url, timeoutInterval: timeout)
+    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    return req
+}
+
 /// Fetches a single GitHub API page synchronously (blocking the calling thread).
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
@@ -36,10 +47,7 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         log("urlSessionAPI › invalid URL: \(urlString)")
         return nil
     }
-    var req = URLRequest(url: url, timeoutInterval: timeout)
-    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-    req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    let req = makeRequest(url: url, token: token, timeout: timeout)
 
     let sem = DispatchSemaphore(value: 0)
     var result: Data?
@@ -79,10 +87,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
 
     while let urlString = nextURL {
         guard let url = URL(string: urlString) else { break }
-        var req = URLRequest(url: url, timeoutInterval: timeout)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        let req = makeRequest(url: url, token: token, timeout: timeout)
 
         let sem = DispatchSemaphore(value: 0)
         var pageData: Data?
