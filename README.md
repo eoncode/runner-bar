@@ -2,7 +2,7 @@
 
 > GitHub Actions, local runners, and AI failure recovery — in your macOS menu bar.
 
-<img src="scrnsht.png" width="50%" alt="RunnerBar screenshot" />
+<img src="scrnsht.png" width="100%" alt="RunnerBar screenshot" />
 
 ---
 
