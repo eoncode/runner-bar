@@ -4,8 +4,8 @@ import Security
 // MARK: - Keychain
 //
 // Wraps Security.framework to store and retrieve the OAuth token.
-// Uses SecItemAdd (with kSecAttrUpdateItemIfExistentKey to upsert),
-// SecItemCopyMatching, and SecItemDelete — no subprocess required.
+// Uses SecItemUpdate/SecItemAdd (upsert pattern) with errSecDuplicateItem
+// retry guard, SecItemCopyMatching, and SecItemDelete.
 
 enum Keychain {
     private static let service = "runner-bar"
@@ -38,13 +38,16 @@ enum Keychain {
     }
 
     /// Saves (or overwrites) the token and invalidates the in-memory token cache.
-    static func save(_ token: String) {
-        guard let data = token.data(using: .utf8) else { return }
+    /// Returns true if the token was successfully persisted.
+    @discardableResult
+    static func save(_ token: String) -> Bool {
+        guard let data = token.data(using: .utf8) else { return false }
         // Try update first; fall back to add if item does not exist.
         let updateStatus = SecItemUpdate(
             baseQuery() as CFDictionary,
             [kSecValueData as String: data] as CFDictionary
         )
+        var succeeded = updateStatus == errSecSuccess
         if updateStatus == errSecItemNotFound {
             var addQuery = baseQuery()
             addQuery[kSecValueData as String] = data
@@ -54,21 +57,42 @@ enum Keychain {
             // kSecAttrAccessibleWhenUnlocked would block token reads at launch.
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            if addStatus != errSecSuccess {
+            if addStatus == errSecDuplicateItem {
+                // A concurrent writer inserted the item between our update and add.
+                // Retry the update now that the item exists.
+                let retryStatus = SecItemUpdate(
+                    baseQuery() as CFDictionary,
+                    [kSecValueData as String: data] as CFDictionary
+                )
+                if retryStatus == errSecSuccess {
+                    succeeded = true
+                } else {
+                    log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)")
+                }
+            } else if addStatus == errSecSuccess {
+                succeeded = true
+            } else {
                 log("Keychain.save › SecItemAdd failed: \(addStatus)")
             }
-        } else if updateStatus != errSecSuccess {
+        } else if !succeeded {
             log("Keychain.save › SecItemUpdate failed: \(updateStatus)")
         }
-        invalidateTokenCache()
+        if succeeded { invalidateTokenCache() }
+        return succeeded
     }
 
-    /// Deletes the stored token and invalidates the in-memory token cache.
-    static func delete() {
+    /// Deletes the stored token.
+    /// Invalidates the in-memory token cache only when deletion actually succeeds
+    /// (or the item was already absent). Returns true on success.
+    @discardableResult
+    static func delete() -> Bool {
         let status = SecItemDelete(baseQuery() as CFDictionary)
-        if status != errSecSuccess && status != errSecItemNotFound {
+        let succeeded = status == errSecSuccess || status == errSecItemNotFound
+        if !succeeded {
             log("Keychain.delete › SecItemDelete failed: \(status)")
+            return false
         }
         invalidateTokenCache()
+        return true
     }
 }
