@@ -58,43 +58,9 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
-// MARK: - KeyablePanel
-
-// ⚠️ TEXT INPUT FIX (#525) — DO NOT REMOVE THIS CLASS.
-//
-// WHY THIS EXISTS:
-// NSPanel with .nonactivatingPanel overrides canBecomeKey to return false.
-// This is the AppKit contract: a non-activating panel intentionally never
-// steals focus from the frontmost application.
-// The side-effect is that NSTextField (and SwiftUI TextField backed by it)
-// never receives first-responder, making all text fields silently non-editable.
-//
-// FIX:
-// KeyablePanel is a minimal NSPanel subclass. It adds a single `wantsKey`
-// flag. canBecomeKey returns true only when `wantsKey == true`, so the panel
-// only becomes key for views that contain TextFields (settings, runner detail,
-// scope detail). All read-only views leave wantsKey = false, preserving the
-// non-activating behaviour everywhere else.
-//
-// USAGE IN AppDelegate:
-//   panel.wantsKey = true   — before navigating to a text-input view
-//   panel.makeKeyAndOrderFront(nil) — promotes panel to key window
-//   panel.wantsKey = false  — in closePanel(), resets for next open
-//
-// ❌ NEVER replace KeyablePanel with plain NSPanel — text fields break again.
-// ❌ NEVER set wantsKey = true globally — that makes the panel steal focus
-//    from the frontmost app whenever it is shown, defeating .nonactivatingPanel.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE.
-// fileprivate (not private) so that AppDelegate's internal `panel` property
-// can reference this type across the file without a visibility mismatch.
-fileprivate final class KeyablePanel: NSPanel {
-    /// Set to true immediately before navigating to a view that contains TextFields.
-    /// Reset to false in closePanel().
-    var wantsKey = false
-
-    override var canBecomeKey: Bool { wantsKey }
-}
+// NOTE: KeyablePanel is defined in KeyablePanel.swift (internal access level).
+// It must NOT be private or fileprivate — AppDelegate+Navigation.swift accesses
+// `panel: KeyablePanel?` from a separate file.
 
 // MARK: - AppDelegate
 
@@ -315,7 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Make key for text input
 
-    // See KeyablePanel comment block above for the full explanation.
+    // See KeyablePanel.swift for the full explanation.
     // ❌ NEVER call this for views that have no text input (main, step log).
     func makeKeyForTextInput() { // internal: required for AppDelegate+Navigation
         panel?.wantsKey = true
