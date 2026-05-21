@@ -463,60 +463,82 @@ struct SettingsView: View {
 
     // MARK: - Account
     //
-    // Three states:
-    // 1. OAuth (Keychain token present): green dot · Authenticated · Sign out
-    // 2. CLI only (gh token, no Keychain): grey dot · gh CLI · Sign in with GitHub (button)
-    // 3. No token: Sign in with GitHub (button)
-    // isOAuthAuthenticated and isCLIAuthenticated are mutually exclusive.
-    // Sign in with GitHub is always visible when not on OAuth (states 2 and 3).
+    // Three visible states:
     //
-    // BUTTON STYLING NOTE:
-    // "Sign in with GitHub" uses a filled capsule background so it reads as a
-    // button, not a plain text label. Do NOT revert to .buttonStyle(.plain) without
-    // a replacement visual affordance — bare text is indistinguishable from a label.
+    //  1. Signing in (in-flight):  spinner + "Waiting for browser…"
+    //
+    //  2. OAuth (Keychain token):  ● green  "OAuth token"
+    //                              caption: "stored in Keychain"
+    //                              [Sign out] bordered danger button
+    //
+    //  3. gh CLI only:             ● grey   "gh CLI token"
+    //                              caption: "via gh CLI · sign in for full access"
+    //                              [Sign in with GitHub] bordered button
+    //
+    //  4. No token at all:         [Sign in with GitHub] bordered button
+    //
+    // Button styling:
+    //   "Sign in with GitHub" — .buttonStyle(.bordered), .font(.caption2)
+    //     Matches Stop/Resume buttons in the runner rows exactly.
+    //   "Sign out" — .buttonStyle(.bordered), .tint(.rbDanger), .font(.caption2)
+    //     Uses system bordered style with a danger tint for destructive semantics.
+    //
+    // ❌ NEVER revert buttons to .buttonStyle(.plain) without a visual affordance —
+    //   bare text is indistinguishable from a label.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
-            HStack {
-                Text("GitHub").font(.system(size: 12)); Spacer()
+            HStack(alignment: .center) {
+                Text("GitHub").font(.system(size: 12))
+                Spacer()
                 if isSigningIn {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7)
                         Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
                     }
                 } else if isOAuthAuthenticated {
-                    // OAuth state: Keychain token present
-                    HStack(spacing: 8) {
+                    // State 2: OAuth token present in Keychain.
+                    HStack(spacing: 10) {
                         HStack(spacing: 4) {
-                            Circle().fill(Color.rbSuccess).frame(width: 8, height: 8)
-                            Text("Authenticated").font(.caption).foregroundColor(Color.rbTextSecondary)
-                        }
-                        Button(action: signOutOfGitHub) {
-                            Text("Sign out").font(.caption).foregroundColor(Color.rbDanger)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Remove OAuth token from Keychain. gh CLI token will be used as fallback if available.")
-                    }
-                } else {
-                    // CLI or no token: always show sign-in button
-                    HStack(spacing: 8) {
-                        if isCLIAuthenticated {
-                            HStack(spacing: 4) {
-                                Circle().fill(Color.rbTextTertiary).frame(width: 8, height: 8)
-                                Text("gh CLI").font(.caption).foregroundColor(Color.rbTextSecondary)
+                            Circle().fill(Color.rbSuccess).frame(width: 7, height: 7)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("OAuth token")
+                                    .font(.caption)
+                                    .foregroundColor(Color.rbTextSecondary)
+                                Text("stored in Keychain")
+                                    .font(.caption2)
+                                    .foregroundColor(Color.rbTextTertiary)
                             }
                         }
-                        // Bordered capsule so this reads as a button, not a label.
-                        Button(action: signInWithGitHub) {
-                            Text("Sign in with GitHub")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Capsule().fill(Color.rbWarning))
+                        Button(action: signOutOfGitHub) {
+                            Text("Sign out").font(.caption2)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.bordered)
+                        .tint(Color.rbDanger)
+                        .help("Remove OAuth token from Keychain. gh CLI token used as fallback if available.")
+                    }
+                } else {
+                    // State 3 / 4: gh CLI only or unauthenticated.
+                    HStack(spacing: 10) {
+                        if isCLIAuthenticated {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.rbTextTertiary).frame(width: 7, height: 7)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("gh CLI token")
+                                        .font(.caption)
+                                        .foregroundColor(Color.rbTextSecondary)
+                                    Text("via gh CLI · sign in for full access")
+                                        .font(.caption2)
+                                        .foregroundColor(Color.rbTextTertiary)
+                                }
+                            }
+                        }
+                        Button(action: signInWithGitHub) {
+                            Text("Sign in with GitHub").font(.caption2)
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
                     }
                 }
             }
