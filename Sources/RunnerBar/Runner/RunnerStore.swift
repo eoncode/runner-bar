@@ -50,6 +50,7 @@ final class RunnerStore {
             }
     }
 
+    @MainActor
     func start() {
         let scopes = ScopeStore.shared.activeScopes
         log("RunnerStore › start — activeScopes=\(scopes)")
@@ -76,14 +77,15 @@ final class RunnerStore {
             withTimeInterval: interval,
             repeats: false
         ) { [weak self] _ in
-            log("RunnerStore › timer fired — calling fetch()")
-            self?.fetch()
+            log("RunnerStore › timer fired — hopping to main then calling fetch()")
+            DispatchQueue.main.async {
+                self?.fetch()
+            }
         }
     }
 
-    /// Always called on the main thread (timer callbacks, start(), Combine sinks all
-    /// deliver on DispatchQueue.main). Marked @MainActor so we can read
-    /// LocalRunnerStore.shared.runners without a hop.
+    /// Always called on the main thread. @MainActor allows reading
+    /// LocalRunnerStore.shared.runners without an actor hop.
     @MainActor
     func fetch() {
         let scopesSnapshot = ScopeStore.shared.activeScopes
@@ -96,7 +98,6 @@ final class RunnerStore {
         let snapPrevGroups = prevLiveGroups
         let snapGroupCache = actionGroupCache
 
-        // Snapshot LocalRunnerStore.runners here on main before the background dispatch.
         let installPathByName = buildInstallPathMap(
             scopes: scopesSnapshot,
             localRunners: LocalRunnerStore.shared.runners
@@ -128,8 +129,6 @@ final class RunnerStore {
         }
     }
 
-    /// Nonisolated — safe to call from any thread. Caller must pass a pre-snapshotted
-    /// `localRunners` array captured on the main thread.
     private func buildInstallPathMap(scopes: [String], localRunners: [RunnerModel]) -> [String: String] {
         var map: [String: String] = [:]
         for localRunner in localRunners {
