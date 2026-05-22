@@ -38,6 +38,9 @@ struct LocalRunnerScanner {
         let ephemeral: Bool?
     }
 
+    // MARK: - Filesystem path constants
+    private static let findBinary    = "/usr/bin/find"
+
     // MARK: - Public API
 
     /// Performs the full 3-source scan and returns deduplicated `RunnerModel` results.
@@ -108,12 +111,12 @@ struct LocalRunnerScanner {
                 let owner = parts[0]
                 let repo = parts[1]
                 if !owner.isEmpty && !repo.isEmpty {
-                    plistGitHubUrl = "https://github.com/\(owner)/\(repo)"
+                    plistGitHubUrl = "\(GitHubConstants.base)/\(owner)/\(repo)"
                 }
             } else if parts.count == 2 {
                 // Org-scoped runner: actions.runner.<org>.<runnerName>
                 let org = parts[0]
-                if !org.isEmpty { plistGitHubUrl = "https://github.com/\(org)" }
+                if !org.isEmpty { plistGitHubUrl = "\(GitHubConstants.base)/\(org)" }
             }
             if let plist = NSDictionary(contentsOf: url),
                let workDir = plist["WorkingDirectory"] as? String,
@@ -150,7 +153,7 @@ struct LocalRunnerScanner {
         // Paths are passed as separate elements so special characters are handled safely.
         let task = Process()
         let pipe = Pipe()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/find")
+        task.executableURL = URL(fileURLWithPath: Self.findBinary)
         task.arguments = rawPaths + ["-maxdepth", "6", "-name", ".runner"]
         task.standardOutput = pipe
         task.standardError = Pipe()

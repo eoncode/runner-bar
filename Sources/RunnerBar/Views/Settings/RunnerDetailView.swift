@@ -104,8 +104,8 @@ struct RunnerDetailView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear(perform: loadEditableFields)
-        .onChange(of: localRunnerStore.runners) { updated in
-            if let fresh = updated.first(where: { $0.id == runner.id }) {
+        .onChange(of: localRunnerStore.runners) { _ in
+            if let fresh = localRunnerStore.runners.first(where: { $0.id == runner.id }) {
                 isRunning = fresh.isRunning
                 displayStatus = fresh.displayStatus
             }
@@ -709,9 +709,9 @@ struct RunnerDetailView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let result = RunnerLifecycleService.shared.start(runner: runner)
             DispatchQueue.main.async {
-                switch result {
-                case .success: break
-                default:
+                if case .success = result {
+                    // success — no additional action needed
+                } else {
                     isRunning = false
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
                 }
@@ -726,9 +726,9 @@ struct RunnerDetailView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let result = RunnerLifecycleService.shared.stop(runner: runner)
             DispatchQueue.main.async {
-                switch result {
-                case .success: break
-                default:
+                if case .success = result {
+                    // success — no additional action needed
+                } else {
                     isRunning = true
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
                 }

@@ -10,16 +10,16 @@ import Foundation
 //   - OAuthService.signOut() via invalidateTokenCache()
 //   - Keychain.save()         via invalidateTokenCache()
 //
-// Thread-safety: read/write guarded by _tokenCacheLock (OSAllocatedUnfairLock).
+// Thread-safety: read/write guarded by tokenCacheLock (OSAllocatedUnfairLock).
 
 import os
 
-private let _tokenCacheLock = OSAllocatedUnfairLock(initialState: Optional<String>.none)
+private let tokenCacheLock = OSAllocatedUnfairLock(initialState: Optional<String>.none)
 
 /// Clears the in-memory token cache. Call after saving a new token to Keychain
 /// or after signing out so the next githubToken() call re-resolves from source.
 func invalidateTokenCache() {
-    _tokenCacheLock.withLock { $0 = nil }
+    tokenCacheLock.withLock { $0 = nil }
     log("Auth › token cache invalidated")
 }
 
@@ -36,10 +36,10 @@ func invalidateTokenCache() {
 /// Returns `nil` if no token is available from any source.
 func githubToken() -> String? {
     // 1. In-memory cache
-    if let cached = _tokenCacheLock.withLock({ $0 }) { return cached }
+    if let cached = tokenCacheLock.withLock({ $0 }) { return cached }
     // 2. Keychain — preferred; set by OAuthService after native OAuth sign-in
     if let token = Keychain.token {
-        _tokenCacheLock.withLock { $0 = token }
+        tokenCacheLock.withLock { $0 = token }
         return token
     }
     // 3. gh CLI fallback — existing users keep working without re-authenticating
@@ -47,14 +47,14 @@ func githubToken() -> String? {
         let result = shell("\(ghPath) auth token", timeout: 10)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !result.isEmpty && !result.hasPrefix("error") {
-            _tokenCacheLock.withLock { $0 = result }
+            tokenCacheLock.withLock { $0 = result }
             return result
         }
     }
     // 4–5. CI / environment variable fallbacks
     for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
         if let token = ProcessInfo.processInfo.environment[key], !token.isEmpty {
-            _tokenCacheLock.withLock { $0 = token }
+            tokenCacheLock.withLock { $0 = token }
             return token
         }
     }

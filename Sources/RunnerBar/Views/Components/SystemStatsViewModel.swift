@@ -37,7 +37,7 @@ final class SystemStatsViewModel: ObservableObject {
     private var prevCPUInfo: processor_info_array_t?
     private var prevNumCPUInfo: mach_msg_type_number_t = 0
     /// Root volume path used for disk-space queries.
-    private static let rootVolumePath = "/"
+    private static let rootVolumePath = NSOpenStepRootDirectory()
 
     init() {
         // No custom initialisation needed; all properties have defaults.

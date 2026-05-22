@@ -134,22 +134,35 @@ final class RunnerStore {
                 jobCache: jobResult.newCache
             )
             DispatchQueue.main.async {
-                self.runners = enrichedRunners
-                self.jobs = jobResult.display
-                self.completedCache = jobResult.newCache
-                self.prevLiveJobs = jobResult.newPrevLive
-                self.actions = groupResult.display
-                self.actionGroupCache = groupResult.newGroupCache
-                self.prevLiveGroups = groupResult.newPrevLiveGroups
-                self.isRateLimited = ghIsRateLimited
-                log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited)")
-                self.onChange?()
-                // Pass the freshly-fetched live groups so scheduleTimer evaluates
-                // hasActive against real GitHub state, not the display cache which
-                // may still contain frozen/completed groups.
-                self.scheduleTimer(liveActions: groupResult.newPrevLiveGroups.map { $0.value })
+                self.applyFetchResult(
+                    enrichedRunners: enrichedRunners,
+                    jobResult: jobResult,
+                    groupResult: groupResult
+                )
             }
         }
+    }
+
+    /// Applies a completed fetch result on the main thread.
+    private func applyFetchResult(
+        enrichedRunners: [Runner],
+        jobResult: JobPollResult,
+        groupResult: GroupPollResult
+    ) {
+        runners = enrichedRunners
+        jobs = jobResult.display
+        completedCache = jobResult.newCache
+        prevLiveJobs = jobResult.newPrevLive
+        actions = groupResult.display
+        actionGroupCache = groupResult.newGroupCache
+        prevLiveGroups = groupResult.newPrevLiveGroups
+        isRateLimited = ghIsRateLimited
+        log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited)")
+        onChange?()
+        // Pass the freshly-fetched live groups so scheduleTimer evaluates
+        // hasActive against real GitHub state, not the display cache which
+        // may still contain frozen/completed groups.
+        scheduleTimer(liveActions: groupResult.newPrevLiveGroups.map { $0.value })
     }
 
     func fetchAndEnrichRunners() -> [Runner] {

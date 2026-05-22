@@ -25,7 +25,9 @@ final class RunnerStoreObservable: ObservableObject {
     @Published private(set) var localRunners: [RunnerModel] = []
 
     /// Creates a new instance; initial state is populated on first `reload(localRunnerStore:)` call.
-    init() {}
+    init() {
+        // No custom initialisation needed; all state is populated via reload(localRunnerStore:).
+    }
 
     /// Pulls the current state from `RunnerStore.shared` and `LocalRunnerStore` with no animation
     /// (see REGRESSION GUARD in PopoverMainView — NEVER add animation here).

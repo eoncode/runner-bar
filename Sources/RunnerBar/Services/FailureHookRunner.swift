@@ -146,7 +146,7 @@ enum FailureHookRunner {
     /// Falls back to job/step names if no log was fetched.
     private static func buildLogContent(
         group: ActionGroup,
-        scope: String,
+        scope _: String,
         jobs: [FailedJobResult]
     ) -> String {
         guard !jobs.isEmpty else {

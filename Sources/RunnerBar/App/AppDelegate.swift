@@ -221,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // urls.first — macOS may deliver multiple URLs and the callback may not be
     // first, which would leave the sign-in spinner stuck. (#597)
 
-    func application(_ application: NSApplication, open urls: [URL]) {
+    func application(_ _: NSApplication, open urls: [URL]) {
         guard let url = urls.first(where: { $0.scheme == "runnerbar" && $0.host == "oauth" })
         else { return }
         OAuthService.shared.handleCallback(url)

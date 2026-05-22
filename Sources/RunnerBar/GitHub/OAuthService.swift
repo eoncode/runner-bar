@@ -28,10 +28,16 @@ import Foundation
 @MainActor
 final class OAuthService {
     static let shared = OAuthService()
-    private init() {}
+    private init() {
+        // Singleton — intentionally empty; default property values are sufficient.
+    }
 
     private let redirectURI = "runnerbar://oauth/callback"
     private let scopes = "repo read:org"
+
+    // MARK: - OAuth endpoint constants
+    private let authorizeURL    = "\(GitHubConstants.base)/login/oauth/authorize"
+    private let accessTokenURL  = "\(GitHubConstants.base)/login/oauth/access_token"
 
     /// CSRF nonce generated in signIn(), verified in handleCallback().
     /// Cleared after use or on sign-out.
@@ -48,7 +54,7 @@ final class OAuthService {
     func signIn() {
         let state = UUID().uuidString
         pendingState = state
-        var comps = URLComponents(string: "https://github.com/login/oauth/authorize")!
+        var comps = URLComponents(string: authorizeURL)!
         comps.queryItems = [
             URLQueryItem(name: "client_id", value: Secrets.clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
@@ -91,7 +97,7 @@ final class OAuthService {
     // MARK: Token Exchange
 
     private func exchangeCode(_ code: String) async {
-        guard let url = URL(string: "https://github.com/login/oauth/access_token") else { return }
+        guard let url = URL(string: accessTokenURL) else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")

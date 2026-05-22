@@ -253,7 +253,7 @@ extension RunnerStore {
         liveIDs: Set<String>,
         now: Date,
         into cache: inout [String: ActionGroup],
-        prevLiveGroups: [String: ActionGroup]
+        prevLiveGroups _: [String: ActionGroup]
     ) {
         log("RunnerStore › freezeVanishedGroups — snapPrev.count=\(snapPrev.count) liveIDs=\(liveIDs)")
         for (sha, group) in snapPrev where !liveIDs.contains(sha) {
