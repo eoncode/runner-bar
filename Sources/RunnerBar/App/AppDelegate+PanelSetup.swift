@@ -57,7 +57,7 @@ extension AppDelegate {
             options: [.new]
         ) { [weak self] _, change in
             guard let size = change.newValue, size.height > 0 else { return }
-            DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
+            DispatchQueue.main.async { [weak self] in self?.resizeAndRepositionPanel() }
         }
     }
 
