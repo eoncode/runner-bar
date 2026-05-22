@@ -1,2 +1,3 @@
-// This file has been moved to Sources/RunnerBar/Preferences/LegalPrefsStore.swift (#668).
-// It is intentionally left empty. Delete this file from the repository.
+// This file is intentionally empty.
+// LegalPrefsStore is defined in Sources/RunnerBar/Preferences/LegalPrefsStore.swift
+// swiftlint:disable all

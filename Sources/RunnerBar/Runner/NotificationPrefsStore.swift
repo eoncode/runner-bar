@@ -1,2 +1,3 @@
-// This file has been moved to Sources/RunnerBar/Preferences/NotificationPrefsStore.swift (#668).
-// It is intentionally left empty. Delete this file from the repository.
+// This file is intentionally empty.
+// NotificationPrefsStore is defined in Sources/RunnerBar/Preferences/NotificationPrefsStore.swift
+// swiftlint:disable all
