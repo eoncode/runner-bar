@@ -161,7 +161,7 @@ struct PopoverMainView: View {
     }
     // MARK: - Helpers
     private func signInWithGitHub() {
-        let urlString = "https://docs.github.com/en/authentication/"
+        let urlString = "\(GitHubConstants.base)/en/authentication/"
             + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)

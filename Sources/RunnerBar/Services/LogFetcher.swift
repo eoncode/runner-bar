@@ -1,5 +1,8 @@
 import Foundation
 
+// MARK: - Filesystem path constants
+private let unzipBinaryPath = "/usr/bin/unzip"
+
 // MARK: - Raw binary/text fetch via gh CLI
 
 /// Calls `gh api` with `Accept: application/vnd.github.v3.raw` so log endpoints
@@ -91,7 +94,7 @@ func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
         try zipData.write(to: zipFile)
     } catch { return [] }
     let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+    proc.executableURL = URL(fileURLWithPath: unzipBinaryPath)
     proc.arguments = ["-q", zipFile.path, "-d", tmp.path]
     proc.standardOutput = FileHandle.nullDevice
     proc.standardError = FileHandle.nullDevice

@@ -1,6 +1,9 @@
 // swiftlint:disable function_body_length
 import Foundation
 
+// MARK: - Filesystem path constants
+private let zshBinaryPath = "/bin/zsh"
+
 // Executes shell commands synchronously.
 enum Shell {
 
@@ -49,7 +52,7 @@ enum Shell {
 
     private static func makeProcess(_ command: String) -> Process {
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        p.executableURL = URL(fileURLWithPath: zshBinaryPath)
         p.arguments = ["-c", command]
         return p
     }

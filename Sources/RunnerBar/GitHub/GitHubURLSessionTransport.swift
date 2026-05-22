@@ -18,8 +18,6 @@ var ghIsRateLimited: Bool {
 // ⚠️ Must always be called from a background thread.
 // All existing call sites dispatch via DispatchQueue.global().
 
-private let apiBase = "https://api.github.com"
-
 // MARK: - Request builder
 
 /// Builds a pre-configured URLRequest with standard GitHub API headers.
@@ -41,7 +39,7 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     }
     let urlString = endpoint.hasPrefix("http")
         ? endpoint
-        : "\(apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+        : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
     guard let url = URL(string: urlString) else {
         log("urlSessionAPI › invalid URL: \(urlString)")
         return nil
@@ -74,7 +72,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
     }
     var nextURL: String? = endpoint.hasPrefix("http")
         ? endpoint
-        : "\(apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+        : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
     var allItems: [[String: Any]] = []
     while let urlString = nextURL {
         guard let url = URL(string: urlString) else { break }
