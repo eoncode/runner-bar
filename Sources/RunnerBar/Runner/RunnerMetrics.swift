@@ -62,7 +62,7 @@ func allWorkerMetrics() -> [RunnerMetrics] {
     log("allWorkerMetrics › ENTER — using pgrep + targeted ps")
 
     // Step 1: find matching PIDs only — fast, doesn't walk full process table
-    let pidsOutput = shell("pgrep -f 'Runner\.Worker|Runner\.Listener'", timeout: 3)
+    let pidsOutput = shell("pgrep -f 'Runner\\.Worker|Runner\\.Listener'", timeout: 3)
     guard !pidsOutput.isEmpty else {
         log("allWorkerMetrics › no Runner.Worker / Runner.Listener processes found — returning []")
         return []
