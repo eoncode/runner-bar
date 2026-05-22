@@ -80,22 +80,21 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // NOTE: The properties and methods below are `internal` (not `private`) because
-    // Swift `private` does not cross file boundaries. AppDelegate+Navigation.swift,
-    // AppDelegate+PanelSetup.swift, and AppDelegate+StatusItem.swift all require
-    // read/write access to them. Do not widen beyond `internal`.
+    // Swift `private` does not cross file boundaries. AppDelegate+Navigation.swift
+    // requires read/write access to all of them. Do not widen beyond `internal`.
 
-    var statusItem: NSStatusItem?           // internal: required for AppDelegate+Navigation / +StatusItem
-    var panel: KeyablePanel?               // internal: required for AppDelegate+Navigation / +PanelSetup
-    var chrome: PanelChromeView?           // internal: required for AppDelegate+Navigation / +PanelSetup
-    var hostingController: NSHostingController<AnyView>? // internal: required for AppDelegate+Navigation / +PanelSetup
-    let observable = RunnerStoreObservable() // internal: required for AppDelegate+Navigation
+    var statusItem: NSStatusItem?           // internal: required for AppDelegate+Navigation
+    var panel: KeyablePanel?               // internal: required for AppDelegate+Navigation
+    var chrome: PanelChromeView?           // internal: required for AppDelegate+Navigation
+    var hostingController: NSHostingController<AnyView>? // internal: required for AppDelegate+Navigation
+    let observable = RunnerViewModel()      // internal: required for AppDelegate+Navigation
     var savedNavState: NavState?           // internal: required for AppDelegate+Navigation
     var panelIsOpen = false                // internal: required for AppDelegate+Navigation
 
     var eventMonitor: Any?                 // internal: required for AppDelegate+Navigation
-    var sizeObservation: NSKeyValueObservation? // internal: required for AppDelegate+PanelSetup
+    var sizeObservation: NSKeyValueObservation?
     var workspaceObserver: Any?
-    var cancellables = Set<AnyCancellable>() // internal: required for AppDelegate+PanelSetup
+    var cancellables = Set<AnyCancellable>()
 
     /// Top anchor (screen coords) captured once in openPanel().
     /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
@@ -139,11 +138,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AnyView(view.environmentObject(popoverOpenState))
     }
 
+    // MARK: - Status icon helpers
+
+    private func menuBarImage(for status: AggregateStatus) -> NSImage {
+        NSImage(systemSymbolName: status.symbolName, accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
+            ?? NSImage()
+    }
+
     // MARK: - App lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        setupStatusItem()
-        setupPanel()
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem?.button {
+            button.image = menuBarImage(for: .allOffline)
+            button.action = #selector(togglePanel)
+            button.target = self
+        }
+
+        let controller = NSHostingController(rootView: mainView())
+        controller.sizingOptions = .preferredContentSize
+        controller.view.autoresizingMask = [.width, .height]
+        hostingController = controller
+
+        let initW = Self.initPanelWidth
+        let chromeView = PanelChromeView(
+            frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight)
+        )
+        chromeView.addSubview(controller.view)
+        chrome = chromeView
+
+        let newPanel = KeyablePanel(
+            contentRect: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        newPanel.contentView = chromeView
+        newPanel.isOpaque = false
+        newPanel.backgroundColor = NSColor(white: 1, alpha: 0.001)
+        newPanel.hasShadow = true
+        newPanel.level = .popUpMenu
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        newPanel.animationBehavior = .none
+        panel = newPanel
+
+        sizeObservation = controller.observe(
+            \.preferredContentSize,
+            options: [.new]
+        ) { [weak self] _, change in
+            guard let size = change.newValue, size.height > 0 else { return }
+            DispatchQueue.main.async { self?.resizeAndRepositionPanel() }
+        }
+
+        LocalRunnerStore.shared.$runners
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
+            }
+            .store(in: &cancellables)
+
+        RunnerStore.shared.didUpdate
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                log("AppDelegate › didUpdate fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
+                self.updateStatusIcon()
+                self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
+            }
+            .store(in: &cancellables)
+
+        RunnerStore.shared.start()
     }
 
     // MARK: - OAuth URL callback (#326)
@@ -163,6 +229,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let url = urls.first(where: { $0.scheme == "runnerbar" && $0.host == "oauth" })
         else { return }
         OAuthService.shared.handleCallback(url)
+    }
+
+    // MARK: - Status icon
+
+    /// ❌ NEVER filter by !isDimmed only — dimmed groups can still have in-progress jobs.
+    /// ❌ NEVER read RunnerStore.shared.jobs here — it is almost always empty.
+    /// ❌ NEVER call makeStatusIcon() — it no longer exists; use menuBarImage(for:).
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
+    private func updateStatusIcon() {
+        statusItem?.button?.image = menuBarImage(for: RunnerStore.shared.aggregateStatus)
     }
 
     // MARK: - Panel resize
@@ -253,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Toggle
 
-    @objc func togglePanel() {
+    @objc private func togglePanel() {
         if panelIsOpen {
             closePanel()
         } else {

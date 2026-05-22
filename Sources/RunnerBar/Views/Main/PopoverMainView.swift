@@ -10,7 +10,7 @@ import SwiftUI
 //
 // RULE 2: ALL rows use .padding(.horizontal, 12)
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
-// RULE 4: RunnerStoreObservable.reload() uses withAnimation(nil).
+// RULE 4: RunnerViewModel.reload() uses withAnimation(nil).
 //
 // RULE 5: actionsSection is wrapped in a ScrollView capped at screenScrollMaxHeight.
 // screenScrollMaxHeight = NSScreen.main.visibleFrame.height * 0.80.
@@ -37,7 +37,7 @@ import SwiftUI
 /// Owns the display-tick timer and system-stats lifecycle.
 /// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
 struct PopoverMainView: View {
-    @ObservedObject var store: RunnerStoreObservable
+    @ObservedObject var store: RunnerViewModel
     let onSelectJob: (ActiveJob) -> Void
     let onSelectAction: (ActionGroup) -> Void
     /// Called when user taps a step row in an inline job list. (#455)
