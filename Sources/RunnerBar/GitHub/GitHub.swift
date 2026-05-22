@@ -24,15 +24,17 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 
 // MARK: - Fetch all jobs from active runs
 
-func fetchActiveJobs(for scope: String) -> [ActiveJob] {
+func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
+    guard let scope = Scope.parse(scopeString) else {
+        log("fetchActiveJobs › invalid scope: \(scopeString)")
+        return []
+    }
     let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
     func runsEndpoint(status: String) -> String {
-        scope.contains("/")
-            ? "repos/\(scope)/actions/runs?status=\(status)&per_page=50"
-            : "orgs/\(scope)/actions/runs?status=\(status)&per_page=50"
+        "\(scope.apiPrefix)/actions/runs?status=\(status)&per_page=50"
     }
 
     for status in ["in_progress", "queued"] {
@@ -49,8 +51,8 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
     var jobs: [ActiveJob] = []
     var seenJobIDs = Set<Int>()
     for runID in runIDs {
-        guard scope.contains("/") else { continue }
-        guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
+        guard case .repo = scope else { continue }
+        guard let data = ghAPI("\(scope.apiPrefix)/actions/runs/\(runID)/jobs?per_page=100"),
               let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
         else { continue }
         for payload in resp.jobs {
@@ -58,7 +60,7 @@ func fetchActiveJobs(for scope: String) -> [ActiveJob] {
             jobs.append(makeActiveJob(from: payload, iso: iso, isDimmed: false))
         }
     }
-    log("fetchActiveJobs › \(jobs.count) job(s) for \(scope)")
+    log("fetchActiveJobs › \(jobs.count) job(s) for \(scopeString)")
     return jobs
 }
 
@@ -73,20 +75,22 @@ private struct WorkflowRun: Codable { let id: Int }
 
 // MARK: - Runners
 
-func fetchRunners(for scope: String) -> [Runner] {
-    let endpoint = scope.contains("/")
-        ? "repos/\(scope)/actions/runners"
-        : "orgs/\(scope)/actions/runners"
+func fetchRunners(for scopeString: String) -> [Runner] {
+    guard let scope = Scope.parse(scopeString) else {
+        log("fetchRunners › invalid scope: \(scopeString)")
+        return []
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/runners"
     log("fetchRunners › \(endpoint)")
     guard let data = ghAPI(endpoint) else {
-        log("fetchRunners › no data for scope: \(scope)")
+        log("fetchRunners › no data for scope: \(scopeString)")
         return []
     }
     guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
-        log("fetchRunners › decode failed for scope: \(scope)")
+        log("fetchRunners › decode failed for scope: \(scopeString)")
         return []
     }
-    log("fetchRunners › found \(response.runners.count) runner(s) for \(scope)")
+    log("fetchRunners › found \(response.runners.count) runner(s) for \(scopeString)")
     return response.runners
 }
 
@@ -113,12 +117,16 @@ func fetchUserRepos() -> [String] {
 
 // MARK: - Step log
 
-func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
-    guard scope.contains("/") else {
-        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
+func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
+    guard let scope = Scope.parse(scopeString) else {
+        log("fetchStepLog › invalid scope: \(scopeString)")
         return nil
     }
-    let endpoint = "repos/\(scope)/actions/jobs/\(jobID)/logs"
+    guard case .repo = scope else {
+        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scopeString))")
+        return nil
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
     let (data, _) = runGHProcess(
         arguments: ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"],

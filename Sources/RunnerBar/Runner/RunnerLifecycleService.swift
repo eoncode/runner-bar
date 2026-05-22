@@ -126,10 +126,10 @@ struct RunnerLifecycleService {
             log("RunnerLifecycle > REMOVE abort — no gitHubUrl on runner \(runner.runnerName)")
             return false
         }
-        let scope = scopeFromGitHubUrl(gitHubUrl)
-        log("RunnerLifecycle > REMOVE step2: fetching removal token for scope=\(scope)")
-        guard let token = fetchRemovalToken(scope: scope) else {
-            log("RunnerLifecycle > REMOVE abort — fetchRemovalToken returned nil for scope=\(scope)")
+        let scopeString = scopeFromGitHubUrl(gitHubUrl)
+        log("RunnerLifecycle > REMOVE step2: fetching removal token for scope=\(scopeString)")
+        guard let token = fetchRemovalToken(scope: scopeString) else {
+            log("RunnerLifecycle > REMOVE abort — fetchRemovalToken returned nil for scope=\(scopeString)")
             return false
         }
         log("RunnerLifecycle > REMOVE step2: got token len=\(token.count)")
@@ -143,8 +143,8 @@ struct RunnerLifecycleService {
                 || cfgOutput.contains("must run from runner root")
             log("RunnerLifecycle > REMOVE step3b: config.sh failed isCorrupt=\(isCorrupt) — trying API DELETE fallback")
             if let agentId = runner.agentId {
-                log("RunnerLifecycle > REMOVE step3b: calling deleteRunnerByID scope=\(scope) agentId=\(agentId)")
-                let apiOk = deleteRunnerByID(scope: scope, runnerID: agentId)
+                log("RunnerLifecycle > REMOVE step3b: calling deleteRunnerByID scope=\(scopeString) agentId=\(agentId)")
+                let apiOk = deleteRunnerByID(scope: scopeString, runnerID: agentId)
                 log("RunnerLifecycle > REMOVE step3b: deleteRunnerByID result=\(apiOk)")
                 removeOk = apiOk
             } else {

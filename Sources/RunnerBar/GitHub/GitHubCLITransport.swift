@@ -81,10 +81,12 @@ func ghAPIPaginatedCLI(_ endpoint: String, timeout: TimeInterval = 60) -> Data? 
 /// Returns true if gh exited 0 (success) or produced no output (HTTP 204 No Content).
 /// Returns false if gh failed to launch, timed out, or exited non-zero with output.
 @discardableResult
-func deleteRunnerByID(scope: String, runnerID: Int) -> Bool {
-    let endpoint = scope.contains("/")
-        ? "repos/\(scope)/actions/runners/\(runnerID)"
-        : "orgs/\(scope)/actions/runners/\(runnerID)"
+func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
+    guard let scope = Scope.parse(scopeString) else {
+        log("deleteRunnerByID › invalid scope: \(scopeString)")
+        return false
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)"
     log("deleteRunnerByID › DELETE \(endpoint) runnerID=\(runnerID)")
     let args: [String] = ["api", "--method", "DELETE",
                           "-H", "Accept: application/vnd.github+json", endpoint]
@@ -103,10 +105,12 @@ func deleteRunnerByID(scope: String, runnerID: Int) -> Bool {
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
 /// Returns the updated label names on success, or nil on failure.
 @discardableResult
-func patchRunnerLabels(scope: String, runnerID: Int, labels: [String]) -> [String]? {
-    let endpoint = scope.contains("/")
-        ? "repos/\(scope)/actions/runners/\(runnerID)/labels"
-        : "orgs/\(scope)/actions/runners/\(runnerID)/labels"
+func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) -> [String]? {
+    guard let scope = Scope.parse(scopeString) else {
+        log("patchRunnerLabels › invalid scope: \(scopeString)")
+        return nil
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
     log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
     guard let bodyData = try? JSONSerialization.data(withJSONObject: ["labels": labels])
     else { log("patchRunnerLabels › failed to serialise request body"); return nil }
@@ -137,10 +141,12 @@ func patchRunnerLabels(scope: String, runnerID: Int, labels: [String]) -> [Strin
 // MARK: - Token helpers
 
 /// Fetches a short-lived runner registration token for the given scope.
-func fetchRegistrationToken(scope: String) -> String? {
-    let endpoint = scope.contains("/")
-        ? "repos/\(scope)/actions/runners/registration-token"
-        : "orgs/\(scope)/actions/runners/registration-token"
+func fetchRegistrationToken(scope scopeString: String) -> String? {
+    guard let scope = Scope.parse(scopeString) else {
+        log("fetchRegistrationToken › invalid scope: \(scopeString)")
+        return nil
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/runners/registration-token"
     log("fetchRegistrationToken › POSTing \(endpoint)")
     let args = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
     let (outputData, _) = runGHProcess(arguments: args, timeout: 30)
@@ -155,10 +161,12 @@ func fetchRegistrationToken(scope: String) -> String? {
 }
 
 /// Fetches a runner removal token for the given scope.
-func fetchRemovalToken(scope: String) -> String? {
-    let endpoint = scope.contains("/")
-        ? "repos/\(scope)/actions/runners/remove-token"
-        : "orgs/\(scope)/actions/runners/remove-token"
+func fetchRemovalToken(scope scopeString: String) -> String? {
+    guard let scope = Scope.parse(scopeString) else {
+        log("fetchRemovalToken › invalid scope: \(scopeString)")
+        return nil
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/runners/remove-token"
     log("fetchRemovalToken › POSTing \(endpoint)")
     let args = ["api", "--method", "POST", "-H", "Accept: application/vnd.github+json", endpoint]
     let (outputData, _) = runGHProcess(arguments: args, timeout: 30)
