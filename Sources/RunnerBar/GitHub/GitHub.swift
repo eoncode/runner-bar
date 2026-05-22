@@ -139,7 +139,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
         timeout: 30
     )
     guard let data, let raw = String(data: data, encoding: .utf8),
-          !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          !raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty response for job \(jobID)")
         return nil
     }

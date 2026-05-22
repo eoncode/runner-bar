@@ -24,7 +24,7 @@ func ghBinaryPath() -> String? { _ghBinaryPath }
 /// output is nil when the process produces no stdout (e.g. HTTP 204 No Content).
 /// exitCode is Int32.max on launch failure.
 /// Pass `stdin` to write data to the process's standard input (e.g. for `--input -`).
-private func runGHProcess(
+func runGHProcess(
     arguments: [String],
     stdin: Data? = nil,
     timeout: TimeInterval = 20
