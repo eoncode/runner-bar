@@ -1,7 +1,7 @@
 // swiftlint:disable file_length
 import Foundation
 
-// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment
+// swiftlint:disable opening_brace identifier_name missing_docs orphaned_doc_comment type_body_length
 
 // MARK: - File-level formatter
 
@@ -436,5 +436,5 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     }
 }
 
-// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment
+// swiftlint:enable opening_brace identifier_name missing_docs orphaned_doc_comment type_body_length
 // swiftlint:enable file_length
