@@ -1,4 +1,5 @@
 // swiftlint:disable orphaned_doc_comment
+import Combine
 import ServiceManagement
 import SwiftUI
 
@@ -51,6 +52,8 @@ struct SettingsView: View {
     @State private var showAddRunnerSheet = false
     @State private var showAddScopeSheet = false
     @State private var removeErrorMessage: String?
+    /// Retains the Combine subscription for ScopeStore.didMutate.
+    @State private var scopeMutateCancellable: AnyCancellable?
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -130,6 +133,11 @@ struct SettingsView: View {
             isOAuthAuthenticated = false
             isCLIAuthenticated = githubToken() != nil
         }
+        // #695: Subscribe to ScopeStore.didMutate via Combine instead of the old
+        // onMutate closure (which no longer exists after the Combine migration).
+        scopeMutateCancellable = ScopeStore.shared.didMutate
+            .receive(on: DispatchQueue.main)
+            .sink { [weak store] in store?.reload() }
         localRunnerStore.refresh()
     }
 
