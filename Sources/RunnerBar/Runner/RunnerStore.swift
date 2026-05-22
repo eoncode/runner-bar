@@ -43,7 +43,11 @@ final class RunnerStore {
     private var timer: Timer?
     private var intervalCancellable: AnyCancellable?
     private var scopeCancellable: AnyCancellable?
-    var onChange: (() -> Void)?
+
+    /// Emits whenever a fetch cycle completes and the store's state has been updated.
+    /// Callers subscribe with `.sink { ... }` and store the returned `AnyCancellable`
+    /// to control the subscription lifetime — no manual weak-capture required.
+    let didUpdate = PassthroughSubject<Void, Never>()
 
     var aggregateStatus: AggregateStatus {
         guard !runners.isEmpty else { return .allOffline }
@@ -158,7 +162,7 @@ final class RunnerStore {
         prevLiveGroups = groupResult.newPrevLiveGroups
         isRateLimited = ghIsRateLimited
         log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited)")
-        onChange?()
+        didUpdate.send()
         // Pass the freshly-fetched live groups so scheduleTimer evaluates
         // hasActive against real GitHub state, not the display cache which
         // may still contain frozen/completed groups.
