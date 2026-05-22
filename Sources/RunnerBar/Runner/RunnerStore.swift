@@ -26,7 +26,6 @@ enum AggregateStatus {
 
 // MARK: - RunnerStore
 
-// swiftlint:disable:next type_body_length
 final class RunnerStore {
     static let shared = RunnerStore()
 
@@ -67,8 +66,7 @@ final class RunnerStore {
                 log("RunnerStore › pollingInterval changed to \(newInterval) — rescheduling timer")
                 self?.scheduleTimer()
             }
-        // Restart polling when any scope's isEnabled flag changes (Phase 4 — #503).
-        // dropFirst(1) skips the initial emission on subscription.
+        // Restart polling when any scope's isEnabled flag changes.
         scopeCancellable = ScopeStore.shared.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -94,8 +92,6 @@ final class RunnerStore {
     private func scheduleTimer(liveActions: [ActionGroup]? = nil) {
         timer?.invalidate()
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
-        // Use the caller-supplied live snapshot when available; fall back to self.actions
-        // only for manual reschedules (e.g. pollingInterval changes) where no fresh data exists.
         let actionsToCheck = liveActions ?? self.actions
         let hasActiveActions = actionsToCheck.contains {
             $0.groupStatus == .inProgress || $0.groupStatus == .queued
@@ -114,7 +110,6 @@ final class RunnerStore {
     }
 
     func fetch() {
-        // Phase 4 (#503): use activeScopes — disabled scopes are skipped.
         let scopesSnapshot = ScopeStore.shared.activeScopes
         log("RunnerStore › fetch ENTER — activeScopesSnapshot=\(scopesSnapshot) thread=\(Thread.isMainThread ? "main" : "bg")")
         if scopesSnapshot.isEmpty {
@@ -163,16 +158,12 @@ final class RunnerStore {
         isRateLimited = ghIsRateLimited
         log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited)")
         didUpdate.send()
-        // Pass the freshly-fetched live groups so scheduleTimer evaluates
-        // hasActive against real GitHub state, not the display cache which
-        // may still contain frozen/completed groups.
         scheduleTimer(liveActions: groupResult.newPrevLiveGroups.map { $0.value })
     }
 
     func fetchAndEnrichRunners() -> [Runner] {
         log("RunnerStore › fetchAndEnrichRunners ENTER")
         var allRunners: [Runner] = []
-        // Phase 4 (#503): activeScopes only.
         let scopes = ScopeStore.shared.activeScopes
         log("RunnerStore › fetchAndEnrichRunners — activeScopes=\(scopes)")
         for scope in scopes {
@@ -180,12 +171,6 @@ final class RunnerStore {
             log("RunnerStore › fetchAndEnrichRunners — scope=\(scope) returned \(fetched.count) runner(s)")
             allRunners.append(contentsOf: fetched)
         }
-
-        // Build a name→installPath lookup from LocalRunnerStore so metrics are matched
-        // by installPath rather than slot index. The Runner API type has no installPath,
-        // but the runner name matches the directory name used by the local install.
-        // Accessing LocalRunnerStore.shared.runners must be done on the main thread;
-        // we snapshot it here while still on the background queue via a sync hop.
         var installPathByName: [String: String] = [:]
         DispatchQueue.main.sync {
             for localRunner in LocalRunnerStore.shared.runners {
@@ -195,9 +180,6 @@ final class RunnerStore {
             }
         }
         log("RunnerStore › fetchAndEnrichRunners — installPathByName keys=\(installPathByName.keys.sorted())")
-
-        // Assign metrics per-runner by installPath. Only busy runners have an active
-        // Worker/Listener process, so idle runners always receive nil.
         var result = allRunners
         for idx in result.indices {
             guard result[idx].busy else {
@@ -213,7 +195,6 @@ final class RunnerStore {
             result[idx].metrics = metricsForRunner(installPath: installPath)
             log("RunnerStore › fetchAndEnrichRunners — \(result[idx].name) metrics=\(String(describing: result[idx].metrics))")
         }
-
         log("RunnerStore › fetchAndEnrichRunners EXIT — returning \(result.count) runner(s)")
         return result
     }
