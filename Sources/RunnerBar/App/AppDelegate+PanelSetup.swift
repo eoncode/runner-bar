@@ -92,7 +92,6 @@ extension AppDelegate {
             .sink { [weak self] in
                 guard let self else { return }
                 log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore")
-                RunnerStore.shared.stop()
                 RunnerStore.shared.start()
             }
             .store(in: &cancellables)
