@@ -199,17 +199,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        RunnerStore.shared.didUpdate
+        RunnerStore.shared.onChange = { [weak self] in
+            guard let self else { return }
+            log("AppDelegate › onChange fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
+            self.updateStatusIcon()
+            self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
+        }
+        RunnerStore.shared.start()
+
+        ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard let self else { return }
-                log("AppDelegate › didUpdate fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
-                self.updateStatusIcon()
-                self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
+                log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore")
+                RunnerStore.shared.restart()
             }
             .store(in: &cancellables)
-
-        RunnerStore.shared.start()
     }
 
     // MARK: - OAuth URL callback (#326)
