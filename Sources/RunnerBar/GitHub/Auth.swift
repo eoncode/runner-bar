@@ -7,8 +7,8 @@ import Foundation
 // (security + gh auth token), flooding the log and wasting threads.
 //
 // The cache is populated on first successful resolution and cleared by:
-// - OAuthService.signOut() via invalidateTokenCache()
-// - Keychain.save() via invalidateTokenCache()
+//   - OAuthService.signOut() via invalidateTokenCache()
+//   - Keychain.save()         via invalidateTokenCache()
 //
 // Thread-safety: read/write guarded by _tokenCacheLock (OSAllocatedUnfairLock).
 

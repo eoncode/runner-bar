@@ -44,10 +44,17 @@ struct LocalRunnerScanner {
     /// Synchronous and blocking — always invoke from a background thread.
     func scan() -> [RunnerModel] {
         var models: [String: RunnerModel] = [:]
+
+        // Source 1: extract WorkingDirectory paths and plist-derived gitHubUrl fallbacks.
         let (launchAgentModels, launchAgentPaths) = scanLaunchAgents()
+
+        // Build a name → fallback-URL map from Source 1 so Source 2 can use it.
         let plistFallbackURLs: [String: String] = launchAgentModels.reduce(into: [:]) { dict, m in
             if let url = m.gitHubUrl { dict[m.runnerName] = url }
         }
+
+        // Source 2: .runner JSON is authoritative — provides correct gitHubUrl when present.
+        // If gitHubUrl is nil/empty in the JSON, patch it from the plist-derived fallback.
         for var model in scanRunnerJSONFiles(extraRoots: launchAgentPaths) {
             if (model.gitHubUrl ?? "").isEmpty, let fallback = plistFallbackURLs[model.runnerName] {
                 model.gitHubUrl = fallback
@@ -55,11 +62,18 @@ struct LocalRunnerScanner {
             }
             models[model.id] = model
         }
+
+        // Collect the set of runnerNames already covered by JSON models.
+        // LaunchAgent stubs are only added when NO JSON model shares the same
+        // runnerName — prevents duplicates when the same runner name appears
+        // in both a plist filename and a .runner JSON file.
         let jsonRunnerNames = Set(models.values.map { $0.runnerName })
         for model in launchAgentModels {
             guard !jsonRunnerNames.contains(model.runnerName) else { continue }
             if models[model.runnerName] == nil { models[model.runnerName] = model }
         }
+
+        // Source 3: mark which runners are currently live.
         let liveLabels = scanLiveServices()
         for key in models.keys {
             if let model = models[key] {

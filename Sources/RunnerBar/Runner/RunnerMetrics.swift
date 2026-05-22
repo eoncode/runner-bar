@@ -15,6 +15,7 @@ struct RunnerMetrics: Equatable {
 /// Returns `nil` when no matching process is found.
 func metricsForRunner(installPath: String) -> RunnerMetrics? {
     log("metricsForRunner › ENTER installPath=\(installPath)")
+    // Escape single-quotes in path for shell safety
     let escaped = installPath.replacingOccurrences(of: "'", with: "'\\''")
     let pidsOutput = shell("pgrep -f '\(escaped)'", timeout: 3)
     guard !pidsOutput.isEmpty else {
@@ -32,7 +33,7 @@ func metricsForRunner(installPath: String) -> RunnerMetrics? {
         log("metricsForRunner › ps returned empty for installPath=\(installPath)")
         return nil
     }
-    let lines = output.components(separatedBy: "\n").dropFirst()
+    let lines = output.components(separatedBy: "\n").dropFirst() // drop header
     var totalCPU = 0.0
     var totalMEM = 0.0
     var count = 0
@@ -59,6 +60,8 @@ func metricsForRunner(installPath: String) -> RunnerMetrics? {
 
 func allWorkerMetrics() -> [RunnerMetrics] {
     log("allWorkerMetrics › ENTER — using pgrep + targeted ps")
+
+    // Step 1: find matching PIDs only — fast, doesn't walk full process table
     let pidsOutput = shell("pgrep -f 'Runner\.Worker|Runner\.Listener'", timeout: 3)
     guard !pidsOutput.isEmpty else {
         log("allWorkerMetrics › no Runner.Worker / Runner.Listener processes found — returning []")
@@ -70,13 +73,15 @@ func allWorkerMetrics() -> [RunnerMetrics] {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("allWorkerMetrics › found pids=\(pidList)")
+
+    // Step 2: ps scoped to only those PIDs
     let output = shell("ps -p \(pidList) -o pid,%cpu,%mem,command", timeout: 5)
     log("allWorkerMetrics › ps returned — outputBytes=\(output.count) isEmpty=\(output.isEmpty)")
     guard !output.isEmpty else {
         log("allWorkerMetrics › ps returned empty — returning []")
         return []
     }
-    let lines = output.components(separatedBy: "\n").dropFirst()
+    let lines = output.components(separatedBy: "\n").dropFirst() // drop header
     log("allWorkerMetrics › scanning \(lines.count) line(s)")
     var results: [RunnerMetrics] = []
     for line in lines {

@@ -42,6 +42,7 @@ enum Keychain {
     @discardableResult
     static func save(_ token: String) -> Bool {
         guard let data = token.data(using: .utf8) else { return false }
+        // Try update first; fall back to add if item does not exist.
         let updateStatus = SecItemUpdate(
             baseQuery() as CFDictionary,
             [kSecValueData as String: data] as CFDictionary
