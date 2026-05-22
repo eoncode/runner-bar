@@ -51,8 +51,6 @@ extension AppDelegate {
 
     // MARK: KVO
 
-    /// Observes `preferredContentSize` on the hosting controller so that any
-    /// SwiftUI layout change triggers a panel reposition without a visible jump.
     private func setupKVO(controller: NSHostingController<AnyView>) {
         sizeObservation = controller.observe(
             \.preferredContentSize,
@@ -65,7 +63,6 @@ extension AppDelegate {
 
     // MARK: Combine subscriptions
 
-    /// Wires all Combine publishers that need to react during the app lifetime.
     private func setupCombineSubscriptions() {
         LocalRunnerStore.shared.$runners
             .receive(on: DispatchQueue.main)
@@ -79,7 +76,7 @@ extension AppDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard let self else { return }
-                log("AppDelegate \u203a didUpdate fired \u2014 panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
+                log("AppDelegate › didUpdate fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
                 self.updateStatusIcon()
                 self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
             }
@@ -91,8 +88,7 @@ extension AppDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard let self else { return }
-                log("AppDelegate \u203a ScopeStore.didMutate \u2014 restarting RunnerStore")
-                // start() invalidates any existing timer and begins a fresh fetch cycle.
+                log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore")
                 RunnerStore.shared.start()
             }
             .store(in: &cancellables)
