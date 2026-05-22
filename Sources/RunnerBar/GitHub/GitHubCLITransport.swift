@@ -8,12 +8,15 @@ import Foundation
 
 // MARK: - Shared gh binary path
 
-func ghBinaryPath() -> String? {
+/// Resolved once at first use; the gh binary location does not change at runtime.
+private let _ghBinaryPath: String? = {
     let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
     let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
     if found == nil { log("ghBinaryPath › gh not found in \(candidates)") }
     return found
-}
+}()
+
+func ghBinaryPath() -> String? { _ghBinaryPath }
 
 // MARK: - Core subprocess primitive
 
