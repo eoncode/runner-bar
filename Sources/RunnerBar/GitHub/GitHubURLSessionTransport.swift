@@ -121,11 +121,18 @@ private func extractNextURL(from header: String?) -> String? {
 // MARK: - Public API entry points
 //
 // Prefer URLSession (native OAuth token) when available; fall back to gh CLI subprocess.
+// The CLI fallback is skipped when ghIsRateLimited is true — a rate-limit hit on the
+// URLSession path must not trigger a second outbound request via the CLI on the same cycle.
 
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPI(endpoint, timeout: timeout)
-        if data != nil { return data }
+        // If the URLSession call set ghIsRateLimited, bail out immediately.
+        // Falling through to the CLI would fire another request against a rate-limited API.
+        if data != nil || ghIsRateLimited {
+            if ghIsRateLimited { log("ghAPI › rate limited, skipping CLI fallback for: \(endpoint)") }
+            return data
+        }
     }
     return ghAPICLI(endpoint, timeout: timeout)
 }
@@ -133,7 +140,11 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPIPaginated(endpoint, timeout: timeout)
-        if data != nil { return data }
+        // If the URLSession call set ghIsRateLimited, bail out immediately.
+        if data != nil || ghIsRateLimited {
+            if ghIsRateLimited { log("ghAPIPaginated › rate limited, skipping CLI fallback for: \(endpoint)") }
+            return data
+        }
     }
     return ghAPIPaginatedCLI(endpoint, timeout: timeout)
 }
