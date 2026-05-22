@@ -118,13 +118,14 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope: String) -> String? {
         log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scope))")
         return nil
     }
-    guard let ghPath = ghBinaryPath() else { log("fetchStepLog › gh not found"); return nil }
     let endpoint = "repos/\(scope)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
-    let raw = shell(
-        "\(ghPath) api \(endpoint) --header \"Accept: application/vnd.github.v3.raw\""
+    let (data, _) = runGHProcess(
+        arguments: ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"],
+        timeout: 30
     )
-    guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    guard let data, let raw = String(data: data, encoding: .utf8),
+          !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty response for job \(jobID)")
         return nil
     }
