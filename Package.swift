@@ -11,7 +11,7 @@ let package = Package(
         ),
         .testTarget(
             name: "RunnerBarTests",
-            dependencies: [],
+            dependencies: ["RunnerBar"],
             path: "Tests/RunnerBarTests"
         )
     ]

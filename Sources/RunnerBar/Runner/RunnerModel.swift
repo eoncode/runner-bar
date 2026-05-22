@@ -1,3 +1,4 @@
+// swiftlint:disable type_body_length
 import Foundation
 import SwiftUI
 
@@ -124,3 +125,4 @@ struct RunnerModel: Identifiable, Equatable {
         }
     }
 }
+// swiftlint:enable type_body_length

@@ -1,3 +1,4 @@
+// swiftlint:disable function_parameter_count
 import Foundation
 
 // MARK: - RunnerStatusEnricher
@@ -100,3 +101,4 @@ final class RunnerStatusEnricher {
         )
     }
 }
+// swiftlint:enable function_parameter_count
