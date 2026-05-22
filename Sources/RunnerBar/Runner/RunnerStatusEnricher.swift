@@ -1,4 +1,4 @@
-// swiftlint:disable function_parameter_count
+// swiftlint:disable function_parameter_count type_body_length
 import Foundation
 
 // MARK: - RunnerStatusEnricher
@@ -109,4 +109,4 @@ final class RunnerStatusEnricher: @unchecked Sendable {
         )
     }
 }
-// swiftlint:enable function_parameter_count
+// swiftlint:enable function_parameter_count type_body_length

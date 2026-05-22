@@ -1,4 +1,3 @@
-// swiftlint:disable orphaned_doc_comment
 import Foundation
 
 // MARK: - ScopeSettingsStore
@@ -169,4 +168,3 @@ enum ScopeSettingsStore {
         log("ScopeSettingsStore › cleaned up all keys for scope: \(scope)")
     }
 }
-// swiftlint:enable orphaned_doc_comment
