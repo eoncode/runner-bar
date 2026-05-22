@@ -3,10 +3,10 @@ import os
 
 // MARK: - Rate limit flag
 
-private let _rateLimitLock = OSAllocatedUnfairLock(initialState: false)
+private let rateLimitLock = OSAllocatedUnfairLock(initialState: false)
 var ghIsRateLimited: Bool {
-    get { _rateLimitLock.withLock { $0 } }
-    set { _rateLimitLock.withLock { $0 = newValue } }
+    get { rateLimitLock.withLock { $0 } }
+    set { rateLimitLock.withLock { $0 = newValue } }
 }
 
 // MARK: - URLSession transport
