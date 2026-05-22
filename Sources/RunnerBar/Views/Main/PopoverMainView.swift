@@ -14,7 +14,7 @@ import SwiftUI
 //
 // RULE 5: actionsSection is wrapped in a ScrollView capped at screenScrollMaxHeight.
 // screenScrollMaxHeight = NSScreen.main.visibleFrame.height * 0.80.
-// This mirrors AppDelegate's 85% panel ceiling minus headroom for the header
+// This mirrors AppDelegate’s 85% panel ceiling minus headroom for the header
 // and runner rows above the list. The ScrollView is transparent for short lists
 // (content fits, no scroll indicator) and activates only when expanded rows
 // would push content off screen.
@@ -35,11 +35,9 @@ import SwiftUI
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 /// Root popover view rendered inside the NSPanel.
 /// Owns the display-tick timer and system-stats lifecycle.
-/// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
+/// API polling is owned entirely by RunnerStore’s adaptive self-scheduling timer.
 struct PopoverMainView: View {
     @ObservedObject var store: RunnerViewModel
-    let onSelectJob: (ActiveJob) -> Void
-    let onSelectAction: (ActionGroup) -> Void
     /// Called when user taps a step row in an inline job list. (#455)
     let onStepTap: (ActiveJob, JobStep) -> Void
     let onSelectSettings: () -> Void
@@ -115,7 +113,7 @@ struct PopoverMainView: View {
                     ActionRowView(
                         group: group,
                         tick: displayTick,
-                        onSelect: { onSelectAction(group) },
+                        onSelect: { },
                         onStepTap: onStepTap
                     )
                 }

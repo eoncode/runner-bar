@@ -30,12 +30,6 @@ extension AppDelegate {
         savedNavState = nil
         return wrapEnv(PopoverMainView(
             store: observable,
-            onSelectJob: { _ in
-                // Retained for ABI compatibility; navigation removed in #455.
-            },
-            onSelectAction: { _ in
-                // Retained for ABI compatibility; navigation removed in #455.
-            },
             onStepTap: { [weak self] job, step in
                 guard let self else { return }
                 DispatchQueue.global(qos: .userInitiated).async {
