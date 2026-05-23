@@ -284,7 +284,6 @@ public struct StepPayload: Decodable {
 
 // MARK: - ActiveJob factory
 
-
 // MARK: - Codable helpers
 
 /// A value type representing JobsResponse.

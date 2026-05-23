@@ -9,6 +9,7 @@ public struct RunnerMetrics: Equatable {
     /// The mem constant.
     public let mem: Double
 
+    /// Creates a new instance.
     public init(cpu: Double, mem: Double) {
         self.cpu = cpu
         self.mem = mem
