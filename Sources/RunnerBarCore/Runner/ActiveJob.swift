@@ -198,7 +198,7 @@ public func makeActiveJob(
             name:        s.name,
             status:      s.status,
             conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap  { iso.date(from: $0) },
+            startedAt:   s.startedAt.flatMap { iso.date(from: $0) },
             completedAt: s.completedAt.flatMap { iso.date(from: $0) },
             number:      s.number
         )
@@ -212,7 +212,7 @@ public func makeActiveJob(
         isDimmed:    isDimmed,
         runnerName:  payload.runnerName,
         scope:       nil,
-        startedAt:   payload.startedAt.flatMap  { iso.date(from: $0) },
+        startedAt:   payload.startedAt.flatMap { iso.date(from: $0) },
         completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
         steps:       steps
     )
