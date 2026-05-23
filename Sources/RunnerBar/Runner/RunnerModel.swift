@@ -109,7 +109,7 @@ struct RunnerModel: Identifiable, Equatable {
     var displayStatus: String {
         if let warning = lifecycleWarning { return warning }
         if isRunning {
-            if isBusy || githubStatus == "busy" { return "busy" }
+            if isBusy || githubStatus == "busy" { return "running" }
             return "running"
         } else {
             switch githubStatus {
@@ -126,7 +126,7 @@ struct RunnerModel: Identifiable, Equatable {
         case running, busy, idle, offline
     }
 
-    /// Dot color category used by `SettingsView.localRunnerDotColor(for:)`.\
+    /// Dot color category used by `SettingsView.localRunnerDotColor(for:)`.
     var statusColor: StatusColor {
         if lifecycleWarning != nil { return .offline }
         if isRunning {
