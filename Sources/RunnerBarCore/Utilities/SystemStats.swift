@@ -34,7 +34,7 @@ public struct SystemStats {
     }
 
     /// Zero-initialised snapshot used as the default before the first sample arrives.
-    static let zero = SystemStats(
+    public static let zero = SystemStats(
         cpuPct: 0, memUsedGB: 0, memTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0
     )
 }
