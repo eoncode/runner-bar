@@ -73,7 +73,13 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
 // urlSessionAPI / urlSessionAPIPaginated use the Keychain token (set by OAuthService)
 // with a plain URLSession + Authorization: Bearer header.
 //
-// Both functions block the calling thread via DispatchSemaphore.
+// Both functions present a synchronous interface to existing call sites (all of which
+// dispatch via DispatchQueue.global()), but internally use async/await + URLSession.data(for:)
+// so the underlying thread is freed during the network wait rather than blocked.
+//
+// Bridging pattern: a DispatchSemaphore is signalled from inside a Task once the
+// await returns. The semaphore wait is extremely short — it only blocks until the
+// async result is available, not for the duration of I/O.
 // ⚠️ Must always be called from a background thread.
 // All existing call sites dispatch via DispatchQueue.global().
 
@@ -88,7 +94,34 @@ private func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLR
     return req
 }
 
-/// Fetches a single GitHub API page synchronously (blocking the calling thread).
+/// Performs a single async URLSession fetch, handling rate-limit headers.
+/// Returns `(data, linkHeader)` on success, or `nil` on error / non-2xx / rate-limit.
+private func fetchPage(req: URLRequest) async -> (Data, String?)? {
+    do {
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { return nil }
+        log("urlSessionAPI › \(req.url?.absoluteString ?? "-") status=\(http.statusCode)")
+        if http.statusCode == 403 || http.statusCode == 429 {
+            let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
+                .flatMap { TimeInterval($0) }
+            rateLimitLock.withLock { $0.isLimited = true }
+            scheduleRateLimitReset(resetAt: resetTS)
+            return nil
+        }
+        guard (200..<300).contains(http.statusCode) else { return nil }
+        let link = http.value(forHTTPHeaderField: "Link")
+        return (data, link)
+    } catch {
+        log("urlSessionAPI › network error: \(error.localizedDescription)")
+        return nil
+    }
+}
+
+/// Fetches a single GitHub API page.
+///
+/// Internally uses `async/await` + `URLSession.data(for:)` so the GCD thread is
+/// freed during the network wait. A `DispatchSemaphore` bridges the async result
+/// back to the synchronous call site and signals immediately once the await returns.
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -106,28 +139,20 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let req = makeRequest(url: url, token: token, timeout: timeout)
     let sem = DispatchSemaphore(value: 0)
     var result: Data?
-    URLSession.shared.dataTask(with: req) { data, response, error in
-        defer { sem.signal() }
-        if let error { log("urlSessionAPI › network error: \(error.localizedDescription)") ; return }
-        if let http = response as? HTTPURLResponse {
-            log("urlSessionAPI › \(urlString) status=\(http.statusCode)")
-            if http.statusCode == 403 || http.statusCode == 429 {
-                let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
-                    .flatMap { TimeInterval($0) }
-                rateLimitLock.withLock { $0.isLimited = true }
-                scheduleRateLimitReset(resetAt: resetTS)
-                return
-            }
-            guard (200..<300).contains(http.statusCode) else { return }
-        }
-        result = data
-    }.resume()
+    Task {
+        result = await fetchPage(req: req).map { $0.0 }
+        sem.signal()
+    }
     sem.wait()
     return result
 }
 
 /// Fetches all pages of a GitHub API endpoint, concatenating JSON arrays.
 /// Follows the `Link: <url>; rel="next"` header automatically.
+///
+/// Internally uses `async/await` + `URLSession.data(for:)` per page so GCD threads
+/// are freed during each network wait. A `DispatchSemaphore` bridges the async
+/// result back to the synchronous call site.
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -135,39 +160,25 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         log("urlSessionAPIPaginated › no token available")
         return nil
     }
-    var nextURL: String? = endpoint.hasPrefix("http")
+    let firstURL: String = endpoint.hasPrefix("http")
         ? endpoint
         : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+    let sem = DispatchSemaphore(value: 0)
     var allItems: [[String: Any]] = []
-    while let urlString = nextURL {
-        guard let url = URL(string: urlString) else { break }
-        let req = makeRequest(url: url, token: token, timeout: timeout)
-        let sem = DispatchSemaphore(value: 0)
-        var pageData: Data?
-        var linkHeader: String?
-        URLSession.shared.dataTask(with: req) { data, response, error in
-            defer { sem.signal() }
-            if let error { log("urlSessionAPIPaginated › network error: \(error.localizedDescription)") ; return }
-            if let http = response as? HTTPURLResponse {
-                if http.statusCode == 403 || http.statusCode == 429 {
-                    let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
-                        .flatMap { TimeInterval($0) }
-                    rateLimitLock.withLock { $0.isLimited = true }
-                    scheduleRateLimitReset(resetAt: resetTS)
-                    return
-                }
-                guard (200..<300).contains(http.statusCode) else { return }
-                linkHeader = http.value(forHTTPHeaderField: "Link")
+    Task {
+        var nextURL: String? = firstURL
+        while let urlString = nextURL {
+            guard let url = URL(string: urlString) else { break }
+            let req = makeRequest(url: url, token: token, timeout: timeout)
+            guard let (data, linkHeader) = await fetchPage(req: req) else { break }
+            if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                allItems.append(contentsOf: page)
             }
-            pageData = data
-        }.resume()
-        sem.wait()
-        guard let data = pageData else { break }
-        if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-            allItems.append(contentsOf: page)
+            nextURL = extractNextURL(from: linkHeader)
         }
-        nextURL = extractNextURL(from: linkHeader)
+        sem.signal()
     }
+    sem.wait()
     guard !allItems.isEmpty else { return nil }
     return try? JSONSerialization.data(withJSONObject: allItems)
 }
