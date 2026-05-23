@@ -14,7 +14,9 @@ private let iso8601 = ISO8601DateFormatter()
 private struct ActionRunsResponse: Codable {
     /// The array of workflow run payloads returned by the API.
     let workflowRuns: [RunPayload]
+    /// Maps Swift property names to JSON keys.
     enum CodingKeys: String, CodingKey {
+        /// Maps `workflowRuns` to `workflow_runs`.
         case workflowRuns = "workflow_runs"
     }
 }
@@ -45,15 +47,31 @@ private struct RunPayload: Codable {
     let headCommit: HeadCommit?
     /// Pull requests associated with this run, if any.
     let pullRequests: [PRRef]?
+    /// Maps Swift property names to their snake_case JSON keys.
     enum CodingKeys: String, CodingKey {
-        case id, name, status, conclusion
+        /// Maps to `id`.
+        case id
+        /// Maps to `name`.
+        case name
+        /// Maps to `status`.
+        case status
+        /// Maps to `conclusion`.
+        case conclusion
+        /// Maps `headBranch` to `head_branch`.
         case headBranch    = "head_branch"
+        /// Maps `headSha` to `head_sha`.
         case headSha       = "head_sha"
+        /// Maps `displayTitle` to `display_title`.
         case displayTitle  = "display_title"
+        /// Maps `createdAt` to `created_at`.
         case createdAt     = "created_at"
+        /// Maps `updatedAt` to `updated_at`.
         case updatedAt     = "updated_at"
+        /// Maps `htmlUrl` to `html_url`.
         case htmlUrl       = "html_url"
+        /// Maps `headCommit` to `head_commit`.
         case headCommit    = "head_commit"
+        /// Maps `pullRequests` to `pull_requests`.
         case pullRequests  = "pull_requests"
     }
 }
