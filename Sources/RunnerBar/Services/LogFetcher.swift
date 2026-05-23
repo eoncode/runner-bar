@@ -56,7 +56,7 @@ func fetchJobLog(jobID: Int, scope: String) -> String? {
 
 /// Fetches and concatenates all job logs for every run in a group.
 /// Each run: 1 API call → ZIP → extract → read .txt files.
-func fetchActionLogs(group: ActionGroup) -> String? {
+func fetchActionLogs(group: WorkflowActionGroup) -> String? {
     let scope = group.repo
     guard scope.contains("/") else { return nil }
     let runIDs = group.runs.map { $0.id }

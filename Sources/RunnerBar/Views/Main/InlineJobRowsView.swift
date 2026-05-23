@@ -114,7 +114,7 @@ private struct JobRowCard: View {
     let job: ActiveJob
     let status: RBStatus
     let isLast: Bool
-    let group: ActionGroup
+    let group: WorkflowActionGroup
     let isExpanded: Bool
     let onToggle: () -> Void
     let onStepTap: (JobStep) -> Void
@@ -205,7 +205,7 @@ private struct JobRowCard: View {
 
 // MARK: - InlineJobRowsView
 struct InlineJobRowsView: View {
-    let group: ActionGroup
+    let group: WorkflowActionGroup
     let tick: Int
     var fullExpand: Bool = false
     // Default no-op handler; callers that need step navigation override this.

@@ -18,7 +18,7 @@ final class RunnerViewModel: ObservableObject {
     /// Mirrors `RunnerStore.shared.jobs`.
     @Published private(set) var jobs: [ActiveJob] = []
     /// Mirrors `RunnerStore.shared.actions`.
-    @Published private(set) var actions: [ActionGroup] = []
+    @Published private(set) var actions: [WorkflowActionGroup] = []
     /// Mirrors `RunnerStore.shared.isRateLimited`.
     @Published private(set) var isRateLimited = false
     /// Mirrors `LocalRunnerStore.shared.runners` (local self-hosted runners).

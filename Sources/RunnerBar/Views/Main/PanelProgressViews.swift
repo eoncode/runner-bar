@@ -164,9 +164,9 @@ enum RelativeTimeFormatter {
     }
 }
 
-// MARK: - ActionGroup + progressFraction
-/// Adds a pie-progress fraction property to `ActionGroup` for use with `PieProgressDot`.
-extension ActionGroup {
+// MARK: - WorkflowActionGroup + progressFraction
+/// Adds a pie-progress fraction property to `WorkflowActionGroup` for use with `PieProgressDot`.
+extension WorkflowActionGroup {
     /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
     var progressFraction: Double? {
         switch groupStatus {

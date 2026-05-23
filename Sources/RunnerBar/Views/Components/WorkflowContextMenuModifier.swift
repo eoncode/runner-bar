@@ -19,7 +19,7 @@ private func copyToPasteboard(_ text: String) {
 //   show workflow file on GitHub (always, opens first run's html_url)
 //   show GitHub SHA (always, opens commit)
 private struct WorkflowContextMenuModifier: ViewModifier {
-    let group: ActionGroup
+    let group: WorkflowActionGroup
 
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
@@ -107,7 +107,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 // Adds a right-click context menu to a JobRowCard (job level).
 private struct JobContextMenuModifier: ViewModifier {
     let job: ActiveJob
-    let group: ActionGroup
+    let group: WorkflowActionGroup
 
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
@@ -176,7 +176,7 @@ private struct JobContextMenuModifier: ViewModifier {
 //   copy log  — fetches only this step's log via fetchStepLog(jobID:stepNumber:scope:)
 //   show on github — opens job html_url (GitHub has no direct per-step URL)
 //   show log in app — fires onTap closure (navigates to StepLogView)
-// NOTE: JobStep.id IS the step sequence number (1-based) per ActionGroup.swift comment.
+// NOTE: JobStep.id IS the step sequence number (1-based) per WorkflowActionGroup.swift comment.
 private struct StepContextMenuModifier: ViewModifier {
     let step: JobStep
     let job: ActiveJob
@@ -230,12 +230,12 @@ private struct StepContextMenuModifier: ViewModifier {
 // MARK: - View extensions
 extension View {
     /// Attaches the workflow-level context menu (right-click) to an action row.
-    func workflowContextMenu(group: ActionGroup) -> some View {
+    func workflowContextMenu(group: WorkflowActionGroup) -> some View {
         modifier(WorkflowContextMenuModifier(group: group))
     }
 
     /// Attaches the job-level context menu (right-click) to a job row.
-    func jobContextMenu(job: ActiveJob, group: ActionGroup) -> some View {
+    func jobContextMenu(job: ActiveJob, group: WorkflowActionGroup) -> some View {
         modifier(JobContextMenuModifier(job: job, group: group))
     }
 

@@ -103,7 +103,7 @@ struct PanelLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 struct ActionRowView: View {
-    let group: ActionGroup
+    let group: WorkflowActionGroup
     let tick: Int
     let onStepTap: (ActiveJob, JobStep) -> Void
     @State private var expandState: Bool?

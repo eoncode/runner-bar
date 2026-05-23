@@ -72,16 +72,16 @@ struct PollResultBuilder {
     ///   - snapGroupCache: Completed-group cache from the previous poll.
     ///   - jobCache: Completed-job cache used to enrich group jobs.
     ///   - fetchGroups: Closure that fetches live groups for every active scope.
-    ///   - scopeFromGroup: Closure that derives a scope string from an ActionGroup.
+    ///   - scopeFromGroup: Closure that derives a scope string from an WorkflowActionGroup.
     ///   - fireFailureHook: Closure invoked the first time a group is seen as completed.
     ///   - enrichJobs: Closure that enriches a job list from the job cache.
     static func buildGroupState(
-        snapPrevGroups: [String: ActionGroup],
-        snapGroupCache: [String: ActionGroup],
+        snapPrevGroups: [String: WorkflowActionGroup],
+        snapGroupCache: [String: WorkflowActionGroup],
         jobCache: [Int: ActiveJob],
-        fetchGroups: ([String: ActionGroup]) -> [ActionGroup],
-        scopeFromGroup: (ActionGroup) -> String,
-        fireFailureHook: (ActionGroup, String) -> Void,
+        fetchGroups: ([String: WorkflowActionGroup]) -> [WorkflowActionGroup],
+        scopeFromGroup: (WorkflowActionGroup) -> String,
+        fireFailureHook: (WorkflowActionGroup, String) -> Void,
         enrichJobs: ([ActiveJob]) -> [ActiveJob]
     ) -> GroupPollResult {
         log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count)")
@@ -186,7 +186,7 @@ struct PollResultBuilder {
 
     // MARK: - Private group helpers
 
-    static func makeShaKeyedCache(_ cache: [String: ActionGroup]) -> [String: ActionGroup] {
+    static func makeShaKeyedCache(_ cache: [String: WorkflowActionGroup]) -> [String: WorkflowActionGroup] {
         Dictionary(
             cache.values.map { ($0.headSha, $0) },
             uniquingKeysWith: { lhs, rhs in lhs.id > rhs.id ? lhs : rhs }
@@ -194,9 +194,9 @@ struct PollResultBuilder {
     }
 
     static func evictFreshShas(
-        from cache: [String: ActionGroup],
-        freshGroups: [ActionGroup]
-    ) -> [String: ActionGroup] {
+        from cache: [String: WorkflowActionGroup],
+        freshGroups: [WorkflowActionGroup]
+    ) -> [String: WorkflowActionGroup] {
         let freshShas = Set(freshGroups.map { $0.headSha })
         return cache.filter { !freshShas.contains($0.value.headSha) }
     }
@@ -205,21 +205,21 @@ struct PollResultBuilder {
     /// vanished from the live feed (i.e. completed without appearing in fetchGroups).
     ///
     /// - Important: Both `snapPrev` and the `cache` parameter are keyed by
-    ///   `ActionGroup.id`, **not** by `headSha`. `liveIDs` must also be a
-    ///   `Set<String>` of `ActionGroup.id` values for the containment check to
+    ///   `WorkflowActionGroup.id`, **not** by `headSha`. `liveIDs` must also be a
+    ///   `Set<String>` of `WorkflowActionGroup.id` values for the containment check to
     ///   be correct. Do not rekey either dictionary by headSha without updating
     ///   all three sites consistently.
     static func freezeVanishedGroups(
-        snapPrev: [String: ActionGroup],
+        snapPrev: [String: WorkflowActionGroup],
         liveIDs: Set<String>,
         now: Date,
-        into cache: inout [String: ActionGroup],
-        scopeFromGroup: (ActionGroup) -> String,
-        fireFailureHook: (ActionGroup, String) -> Void
+        into cache: inout [String: WorkflowActionGroup],
+        scopeFromGroup: (WorkflowActionGroup) -> String,
+        fireFailureHook: (WorkflowActionGroup, String) -> Void
     ) {
         log("PollResultBuilder › freezeVanishedGroups — snapPrev=\(snapPrev.count) liveIDs=\(liveIDs)")
-        // groupID is ActionGroup.id — the dictionary key for both snapPrev and cache.
-        // (Do not confuse with headSha, which is a separate property on ActionGroup.)
+        // groupID is WorkflowActionGroup.id — the dictionary key for both snapPrev and cache.
+        // (Do not confuse with headSha, which is a separate property on WorkflowActionGroup.)
         for (groupID, group) in snapPrev where !liveIDs.contains(groupID) {
             log("PollResultBuilder › freezeVanishedGroups — vanished groupID=\(group.id) inCache=\(cache[groupID] != nil)")
             if let existing = cache[groupID], existing.isDimmed, existing.jobs.count >= group.jobs.count {
@@ -234,7 +234,7 @@ struct PollResultBuilder {
             var frozen = group
             frozen.isDimmed = true
             if frozen.lastJobCompletedAt == nil {
-                frozen = ActionGroup(
+                frozen = WorkflowActionGroup(
                     headSha: frozen.headSha,
                     label: frozen.label,
                     title: frozen.title,
@@ -252,20 +252,20 @@ struct PollResultBuilder {
         }
     }
 
-    static func trimGroupCache(_ cache: inout [String: ActionGroup], limit: Int) {
+    static func trimGroupCache(_ cache: inout [String: WorkflowActionGroup], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
-        // Cache is keyed by ActionGroup.id — preserve that key when rebuilding.
+        // Cache is keyed by WorkflowActionGroup.id — preserve that key when rebuilding.
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
     static func buildGroupDisplay(
-        live: [ActionGroup],
-        cache: [String: ActionGroup]
-    ) -> [ActionGroup] {
+        live: [WorkflowActionGroup],
+        cache: [String: WorkflowActionGroup]
+    ) -> [WorkflowActionGroup] {
         let inProgress = live.filter { $0.groupStatus == .inProgress }
         let queued     = live.filter { $0.groupStatus == .queued }
         let liveIDs    = Set((inProgress + queued).map { $0.id })
@@ -273,7 +273,7 @@ struct PollResultBuilder {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
-        var display: [ActionGroup] = []
+        var display: [WorkflowActionGroup] = []
         for grp in inProgress where display.count < groupCacheLimit                           { display.append(grp) }
         for grp in queued     where display.count < groupCacheLimit                           { display.append(grp) }
         for grp in cached     where display.count < groupCacheLimit && !liveIDs.contains(grp.id) { display.append(grp) }

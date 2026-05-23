@@ -11,12 +11,12 @@ final class RunnerStore {
 
     private(set) var runners: [Runner] = []
     private(set) var jobs: [ActiveJob] = []
-    private(set) var actions: [ActionGroup] = []
+    private(set) var actions: [WorkflowActionGroup] = []
 
     private var prevLiveJobs: [Int: ActiveJob] = [:]
     private var completedCache: [Int: ActiveJob] = [:]
-    private var prevLiveGroups: [String: ActionGroup] = [:]
-    private var actionGroupCache: [String: ActionGroup] = [:]
+    private var prevLiveGroups: [String: WorkflowActionGroup] = [:]
+    private var actionGroupCache: [String: WorkflowActionGroup] = [:]
 
     private(set) var isRateLimited = false
     private var timer: Timer?
@@ -62,7 +62,7 @@ final class RunnerStore {
         fetch()
     }
 
-    private func scheduleTimer(liveActions: [ActionGroup]? = nil) {
+    private func scheduleTimer(liveActions: [WorkflowActionGroup]? = nil) {
         timer?.invalidate()
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
         let actionsToCheck = liveActions ?? self.actions
