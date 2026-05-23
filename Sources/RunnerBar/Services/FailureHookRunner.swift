@@ -61,7 +61,7 @@ enum FailureHookRunner {
         let command = storedCommand ?? Self.defaultCommand
         log("FailureHookRunner › resolved command (first 200): \(command.prefix(200))")
         let failure = isFailure(group: group)
-        log("FailureHookRunner › isFailure=\(failure) for groupID=\(group.id) runs=\(group.runs.map { "\($0.id):\($0.conclusion ?? "nil")" })")
+        log("FailureHookRunner › isFailure=\(failure) for groupID=\(group.id) runs=\(group.runs.map { "\($0.id):\($0.conclusion?.rawValue ?? "nil")" })")
         guard failure else {
             log("FailureHookRunner › SKIP — group is not a failure, groupID=\(group.id)")
             return
@@ -84,14 +84,14 @@ enum FailureHookRunner {
     // MARK: - Private
 
     /// The failureConclusions constant.
-    private static let failureConclusions: Set = ["failure", "timed_out", "cancelled", "startup_failure"]
+    private static let failureConclusions: Set<JobConclusion> = [.failure, .timedOut, .cancelled, .startupFailure]
 
     /// Returns `true` when at least one run in `group` has a failure-class conclusion
     /// (`failure`, `timed_out`, `cancelled`, or `startup_failure`).
     private static func isFailure(group: WorkflowActionGroup) -> Bool {
         group.runs.contains {
             guard let c = $0.conclusion else { return false }
-            return failureConclusions.contains(c.lowercased())
+            return failureConclusions.contains(c)
         }
     }
 
@@ -109,8 +109,8 @@ enum FailureHookRunner {
         var result: [FailedJobResult] = []
         var seenIDs = Set<Int>()
         for run in group.runs {
-            guard let c = run.conclusion, failureConclusions.contains(c.lowercased()) else {
-                log("FailureHookRunner › fetchFailedJobs — run \(run.id) conclusion=\(run.conclusion ?? "nil") — skipping (not failure)")
+            guard let c = run.conclusion, failureConclusions.contains(c) else {
+                log("FailureHookRunner › fetchFailedJobs — run \(run.id) conclusion=\(run.conclusion?.rawValue ?? "nil") — skipping (not failure)")
                 continue
             }
             log("FailureHookRunner › fetchFailedJobs — fetching jobs for failed run=\(run.id) conclusion=\(c)")
@@ -125,7 +125,7 @@ enum FailureHookRunner {
             log("FailureHookRunner › fetchFailedJobs — run=\(run.id) decoded \(resp.jobs.count) jobs")
             for job in resp.jobs where seenIDs.insert(job.id).inserted {
                 let tail: String?
-                if failureConclusions.contains((job.conclusion ?? "").lowercased()) {
+                if let jobConclusion = job.conclusion, failureConclusions.contains(jobConclusion) {
                     log("FailureHookRunner › fetchFailedJobs — fetching log for failed jobID=\(job.id) name=\(job.name)")
                     if let fullLog = fetchJobLog(jobID: job.id, scope: scope) {
                         let lines = fullLog.components(separatedBy: "\n")
@@ -163,8 +163,8 @@ enum FailureHookRunner {
             log("FailureHookRunner › buildLogContent — no jobs, falling back to run-level summary")
             var lines: [String] = []
             for run in group.runs {
-                if let c = run.conclusion, failureConclusions.contains(c.lowercased()) {
-                    lines.append("FAILED run \(run.id): conclusion=\(c) workflow=\(run.name)")
+                if let c = run.conclusion, failureConclusions.contains(c) {
+                    lines.append("FAILED run \(run.id): conclusion=\(c.rawValue) workflow=\(run.name)")
                 }
             }
             return lines.joined(separator: "\n")
@@ -176,13 +176,16 @@ enum FailureHookRunner {
                 parts.append(tail)
             } else {
                 // No log available — fall back to step names so the agent has something
-                let failedSteps = (job.steps ?? []).filter { failureConclusions.contains(($0.conclusion ?? "").lowercased()) }
+                let failedSteps = job.steps.filter {
+                    guard let c = $0.conclusion else { return false }
+                    return failureConclusions.contains(c)
+                }
                 var lines: [String] = ["Job: \(job.name) [failed]"]
                 if failedSteps.isEmpty {
                     lines.append("  (no failed steps reported)")
                 } else {
                     for step in failedSteps {
-                        lines.append("  ✗ Step \(step.number): \(step.name) — \(step.conclusion ?? step.status)")
+                        lines.append("  ✗ Step \(step.number): \(step.name) — \(step.conclusion?.rawValue ?? step.status.rawValue)")
                     }
                 }
                 parts.append(lines.joined(separator: "\n"))
@@ -219,7 +222,7 @@ enum FailureHookRunner {
         let commitURL = "\(baseURL)/commit/\(sha)"
         let failedRunID = group.runs.first(where: {
             guard let c = $0.conclusion else { return false }
-            return failureConclusions.contains(c.lowercased())
+            return failureConclusions.contains(c)
         }).map { String($0.id) } ?? group.id
         let runURL = "\(baseURL)/actions/runs/\(failedRunID)"
         let logContent = singleQuoteEscape(buildLogContent(group: group, scope: scope, jobs: jobs))
