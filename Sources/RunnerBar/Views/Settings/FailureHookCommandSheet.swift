@@ -8,6 +8,8 @@ import SwiftUI
 // Presented from ScopeDetailView when user taps the Command row.
 // Uses TextEditor (tall, monospaced) with variable pill buttons that insert at cursor.
 
+/// Sheet for editing the shell command run by `FailureHookRunner` when a workflow fails.
+/// Provides a monospaced `TextEditor` and variable-insertion pill buttons.
 struct FailureHookCommandSheet: View {
     let scope: String
     let onDismiss: () -> Void
@@ -37,6 +39,7 @@ struct FailureHookCommandSheet: View {
         "$RUN_LINK", "$COMMIT_LINK", "$BRANCH_LINK", "$REPO_LINK"
     ]
 
+    /// Lays out the header, command editor, variable pills, and footer action buttons.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerSection
@@ -154,6 +157,7 @@ extension FailureHookCommandSheet {
 // MARK: - Actions
 
 extension FailureHookCommandSheet {
+    /// Persists `commandText` to `ScopePreferencesStore` for this scope and dismisses the sheet.
     func save() {
         log("FailureHookCommandSheet \u{203a} save — scope=\(scope) commandText='\(commandText.prefix(200))'")
         ScopePreferencesStore.setFailureHookCommand(commandText, for: scope)
@@ -161,6 +165,7 @@ extension FailureHookCommandSheet {
         onDismiss()
     }
 
+    /// Resolves `$LOCAL_PATH` and `$SCOPE` in `commandText` and opens the result in Terminal for a dry run.
     func testCommand() {
         let localPath = ScopePreferencesStore.localRepoPath(for: scope) ?? ""
         let resolved = commandText
@@ -170,6 +175,7 @@ extension FailureHookCommandSheet {
         TerminalLauncher.open(command: resolved)
     }
 
+    /// Appends `variable` to `commandText`, separated by a space (or sets it directly if empty).
     func insertVariable(_ variable: String) {
         if commandText.isEmpty {
             commandText = variable
@@ -180,11 +186,13 @@ extension FailureHookCommandSheet {
 }
 
 // MARK: - FlowLayout
-// Simple wrapping HStack for variable pills.
 
+/// A custom `Layout` that wraps child views into rows like a word-wrapped line of text.
+/// Used to arrange variable-insertion pill buttons beneath the command editor.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6
 
+    /// Calculates the total height required to fit all subviews within the proposed width.
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let width = proposal.width ?? 400
         var x: CGFloat = 0
@@ -199,6 +207,7 @@ struct FlowLayout: Layout {
         return CGSize(width: width, height: y + rowH)
     }
 
+    /// Places each subview left-to-right, wrapping to the next row when the available width is exceeded.
     func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         var x: CGFloat = bounds.minX
         var y: CGFloat = bounds.minY

@@ -7,20 +7,27 @@ private let zshBinaryPath = "/bin/zsh"
 // Executes shell commands synchronously.
 enum Shell {
 
-    // Result of a shell command execution.
+    /// The output and exit code produced by a shell command execution.
     struct Result {
         let output: String
         let exitCode: Int32
     }
 
-    // Runs `command` in `/bin/zsh -c` and returns the trimmed output + exit code.
-    // `timeout` is enforced via a DispatchSemaphore — if the process does not exit
-    // within `timeout` seconds it is terminated and an empty result is returned.
-    // ⚠️ NEVER call process.waitUntilExit() directly here — it has no deadline and
-    // will block the calling thread forever if the subprocess hangs (e.g. ps aux on
-    // a zombie process, or zsh startup loading a slow .zshrc).
-    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    // UNDER ANY CIRCUMSTANCE.
+    /// Runs `command` in `/bin/zsh -c` and returns the trimmed stdout + exit code.
+    ///
+    /// Timeout is enforced via a `DispatchSemaphore`; if the process does not exit
+    /// within `timeout` seconds it is terminated and an empty result is returned.
+    ///
+    /// ⚠️ NEVER call `process.waitUntilExit()` directly here — it has no deadline and
+    /// will block the calling thread forever if the subprocess hangs (e.g. `ps aux` on
+    /// a zombie process, or zsh startup loading a slow `.zshrc`).
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+    /// UNDER ANY CIRCUMSTANCE.
+    ///
+    /// - Parameters:
+    ///   - command: The shell command string to execute via `/bin/zsh -c`.
+    ///   - timeout: Maximum seconds to wait before terminating the process. Defaults to `20`.
+    /// - Returns: A ``Result`` containing trimmed stdout and the process exit code (`-1` on timeout or launch failure).
     @discardableResult
     static func run(_ command: String, timeout: TimeInterval = 20) -> Result {
         log("Shell.run › ENTER command=\(command) timeout=\(timeout)s thread=\(Thread.current)")
@@ -50,6 +57,9 @@ enum Shell {
         return Result(output: output, exitCode: process.terminationStatus)
     }
 
+    /// Creates a `Process` configured to run `command` via `/bin/zsh -c`.
+    /// - Parameter command: The shell command string.
+    /// - Returns: A configured but not yet launched `Process`.
     private static func makeProcess(_ command: String) -> Process {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: zshBinaryPath)
@@ -57,6 +67,9 @@ enum Shell {
         return p
     }
 
+    /// Attaches stdout and stderr `Pipe`s to `process` and returns them.
+    /// - Parameter process: The `Process` to attach pipes to.
+    /// - Returns: A tuple of `(stdout pipe, stderr pipe)`.
     private static func attachPipes(to process: Process) -> (Pipe, Pipe) {
         let out = Pipe()
         let err = Pipe()
@@ -65,6 +78,9 @@ enum Shell {
         return (out, err)
     }
 
+    /// Reads all available data from `pipe`'s read handle and returns it as a trimmed UTF-8 string.
+    /// - Parameter pipe: The `Pipe` whose stdout data should be read.
+    /// - Returns: Trimmed UTF-8 string from the pipe, or an empty string if decoding fails.
     private static func readOutput(from pipe: Pipe) -> String {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?
@@ -73,11 +89,18 @@ enum Shell {
 }
 // swiftlint:enable function_body_length
 
-// Backward-compatibility shim.
-// timeout is now forwarded to Shell.run which enforces it via DispatchSemaphore.
-// ⚠️ NEVER ignore the timeout parameter here again — that was the bug (ref #477).
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE.
+/// Backward-compatibility shim that delegates to ``Shell/run(_:timeout:)`` and returns stdout as a string.
+///
+/// `timeout` is forwarded to `Shell.run`, which enforces it via `DispatchSemaphore`.
+///
+/// ⚠️ NEVER ignore the `timeout` parameter here again — that was the bug (ref #477).
+/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+/// UNDER ANY CIRCUMSTANCE.
+///
+/// - Parameters:
+///   - command: The shell command string to execute via `/bin/zsh -c`.
+///   - timeout: Maximum seconds to wait. Defaults to `20`.
+/// - Returns: Trimmed stdout string, or empty on timeout/failure.
 @discardableResult
 func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell() shim › command=\(command) timeout=\(timeout)")

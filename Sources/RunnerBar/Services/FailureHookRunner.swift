@@ -81,6 +81,8 @@ enum FailureHookRunner {
 
     private static let failureConclusions: Set = ["failure", "timed_out", "cancelled", "startup_failure"]
 
+    /// Returns `true` when at least one run in `group` has a failure-class conclusion
+    /// (`failure`, `timed_out`, `cancelled`, or `startup_failure`).
     private static func isFailure(group: WorkflowActionGroup) -> Bool {
         group.runs.contains {
             guard let c = $0.conclusion else { return false }
@@ -181,6 +183,19 @@ enum FailureHookRunner {
         return parts.joined(separator: "\n\n")
     }
 
+    /// Replaces all `$TOKEN` placeholders in `command` with their resolved values.
+    ///
+    /// Tokens resolved: `$LOCAL_PATH`, `$SCOPE`, `$BRANCH`, `$COMMIT_SHA`,
+    /// `$RUN_ID`, `$WORKFLOW_NAME`, `$FAILURE_LOG`, `$RUN_LINK`,
+    /// `$COMMIT_LINK`, `$BRANCH_LINK`, `$REPO_LINK`.
+    /// `$FAILURE_LOG` is single-quote-escaped so it is safe to embed between
+    /// `'…'` in a shell command without breaking the argument boundary.
+    /// - Parameters:
+    ///   - command: The raw command string containing `$TOKEN` placeholders.
+    ///   - group: The workflow group that triggered the failure hook.
+    ///   - scope: The raw scope identifier (e.g. `owner/repo`).
+    ///   - jobs: Pre-fetched failed job results used to build `$FAILURE_LOG`.
+    /// - Returns: The command string with all tokens substituted.
     private static func resolveTokens(
         _ command: String,
         group: WorkflowActionGroup,

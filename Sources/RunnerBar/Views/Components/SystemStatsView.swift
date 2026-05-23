@@ -21,6 +21,12 @@ struct SystemStatsView: View {
         .onDisappear { viewModel.stop() }
     }
 
+    /// Returns a single label/value row: left-aligned monospaced label in secondary colour,
+    /// right-aligned monospaced value, separated by a `Spacer`.
+    /// - Parameters:
+    ///   - label: The metric name (e.g. `"CPU"`, `"Memory Used"`).
+    ///   - value: The pre-formatted value string (e.g. `"41.2%"`, `"7.0 GB"`).
+    /// - Returns: An `HStack` row view.
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)

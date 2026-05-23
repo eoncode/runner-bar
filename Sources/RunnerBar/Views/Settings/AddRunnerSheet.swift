@@ -46,6 +46,7 @@ struct AddRunnerSheet: View {
 
     // MARK: Scope state (Add new only)
 
+    /// Determines whether the runner is registered at repo or organisation scope.
     enum ScopeType: String, CaseIterable, Identifiable {
         case repo = "Repository"
         case org  = "Organisation"
@@ -128,6 +129,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - Add New Form Body
 
+    /// Form fields shown when the user selects the "Add new" mode:
+    /// scope picker, repo/org selector, token field, runner name, and install path.
     @ViewBuilder
     private var addNewFormBody: some View {
         Picker("Scope", selection: $scopeType) {
@@ -239,6 +242,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - Add Pre-Existing Form Body
 
+    /// Form fields shown when the user selects the "Add pre-existing" mode:
+    /// folder picker, detected runner name, and GitHub URL display/override.
     @ViewBuilder
     private var addExistingFormBody: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -352,6 +357,7 @@ struct AddRunnerSheet: View {
         }
     }
 
+    /// Helper that renders a caption label above a `TextField` with rounded-border style.
     @ViewBuilder
     private func labeledField(_ title: String, placeholder: String,
                               text: Binding<String>) -> some View {
@@ -385,6 +391,8 @@ struct AddRunnerSheet: View {
 
     private var effectiveScope: String { scopeType == .repo ? selectedRepo : selectedOrg }
 
+    /// Returns `true` when the chosen install directory already contains a `.runner` file,
+    /// preventing accidental double-registration of the same path.
     private var dirAlreadyConfigured: Bool {
         let dir = installDir.trimmingCharacters(in: .whitespaces)
         guard !dir.isEmpty else { return false }
@@ -393,6 +401,8 @@ struct AddRunnerSheet: View {
         )
     }
 
+    /// Guards the Register button: requires a non-empty runner name, a selected scope,
+    /// and an install directory that has not already been configured.
     private var canRegister: Bool {
         !runnerName.trimmingCharacters(in: .whitespaces).isEmpty
             && !effectiveScope.isEmpty
@@ -407,6 +417,8 @@ struct AddRunnerSheet: View {
                                   : detectedGitHubURL
     }
 
+    /// Guards the Import button: requires a detected runner name, no parse error,
+    /// no duplicate plist, and a non-empty GitHub URL.
     private var canImport: Bool {
         !detectedName.isEmpty
             && existingError == nil
@@ -427,6 +439,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - Actions (Add pre-existing)
 
+    /// Opens an `NSOpenPanel` to let the user select a pre-configured runner directory.
+    /// On confirmation, delegates validation to `handlePickedFolder(_:)`.
     private func pickExistingFolder() {
         let openPanel = NSOpenPanel()
         openPanel.canChooseFiles = false
@@ -500,6 +514,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - State reset helpers
 
+    /// Resets all "Add new" form fields to their default values and triggers
+    /// `loadScopes()` if no repos/orgs have been fetched yet.
     private func resetAddNewState() {
         runnerName       = ""
         labelsText       = "self-hosted,macOS"
@@ -517,6 +533,7 @@ struct AddRunnerSheet: View {
         }
     }
 
+    /// Clears all "Add pre-existing" detection state so a fresh folder can be picked.
     private func resetExistingState() {
         existingDir       = ""
         detectedName      = ""
@@ -528,6 +545,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - Scopes loader
 
+    /// Fetches the user's repos and organisations on a background thread and
+    /// populates `repos`/`orgs`, then sets `isLoadingScopes = false` on the main thread.
     private func loadScopes() {
         isLoadingScopes = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -543,12 +562,15 @@ struct AddRunnerSheet: View {
         }
     }
 
+    /// Updates `registrationStep` on the main thread for display in the progress UI.
     private func setStep(_ msg: String) {
         DispatchQueue.main.async { registrationStep = msg }
     }
 
     // MARK: - Register (Add new)
 
+    /// Downloads, unpacks, and configures a new runner, then writes the LaunchAgent plist and dismisses.
+    /// Runs entirely on a background thread; updates `registrationStep` via `setStep(_:)`.
     // swiftlint:disable:next function_body_length cyclomatic_complexity
     private func register() {
         guard canRegister else { return }
@@ -651,6 +673,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - Plist writer (shared by both modes)
 
+    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/` so `LocalRunnerScanner`
+    /// can discover the runner on every app launch. Used by both Add-new and Add-pre-existing flows.
     func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
@@ -677,6 +701,8 @@ struct AddRunnerSheet: View {
 
     // MARK: - Process helpers (Add new)
 
+    /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
+    /// Returns the process exit code; non-zero indicates a configuration failure.
     private func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) -> Int32 {
@@ -715,6 +741,7 @@ struct AddRunnerSheet: View {
         return task.terminationStatus
     }
 
+    /// Launches `executable` with `args` synchronously and returns the termination status.
     private func runSimpleProcess(_ executable: String, args: [String]) -> Int32 {
         let task = Process()
         task.executableURL  = URL(fileURLWithPath: executable)
@@ -737,6 +764,8 @@ struct AddRunnerSheet: View {
 
 // MARK: - Runner download URL
 
+/// Queries the GitHub API for the latest macOS runner release and returns the `.tar.gz` download URL
+/// matching the current CPU architecture (`arm64` or `x64`).
 private func fetchRunnerDownloadURL() -> String? {
     let archTask = Process()
     archTask.executableURL  = URL(fileURLWithPath: "/usr/bin/uname")

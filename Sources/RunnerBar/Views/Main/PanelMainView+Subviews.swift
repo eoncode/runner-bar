@@ -2,6 +2,8 @@
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
+/// Uppercase small-caps label used as a section divider inside the panel.
+/// Displays a title string in the muted secondary style.
 struct SectionHeaderLabel: View {
     let title: String
     var body: some View {
@@ -15,6 +17,8 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PanelHeaderView
+/// Top bar of the popover panel showing the RunnerBar logo, sign-in state,
+/// and the settings gear button.
 struct PanelHeaderView: View {
     @ObservedObject var statsVM: SystemStatsViewModel
     let isAuthenticated: Bool
@@ -49,6 +53,8 @@ struct PanelHeaderView: View {
 }
 
 // MARK: - RunnerTypeIcon
+/// Small SF Symbol icon indicating whether a runner is local (self-hosted)
+/// or a GitHub-hosted cloud runner.
 private struct RunnerTypeIcon: View {
     let isLocal: Bool
     var body: some View {
@@ -59,12 +65,15 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PanelLocalRunnerRow
+/// Row displaying a single local self-hosted runner: name, status badge, and
+/// CPU/memory stats. Only shown when `showLocalRunnerSection` is true.
 struct PanelLocalRunnerRow: View {
     let runners: [RunnerModel]
     var body: some View {
         let busy = runners.filter { $0.isBusy }
         if !busy.isEmpty { runnerList(busy) }
     }
+    /// Renders a vertical stack of `runnerCard` views for each busy local runner.
     @ViewBuilder private func runnerList(_ busy: [RunnerModel]) -> some View {
         ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
         if busy.count > 3 {
@@ -74,6 +83,7 @@ struct PanelLocalRunnerRow: View {
         }
         Divider()
     }
+    /// Compact card showing a single runner's name, status badge, and CPU/memory stats.
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
@@ -102,6 +112,8 @@ struct PanelLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
+/// Row representing one GitHub Actions workflow run.
+/// Tapping expands inline job rows; long-press opens the run URL in Safari.
 struct ActionRowView: View {
     let group: WorkflowActionGroup
     let tick: Int
@@ -164,6 +176,7 @@ struct ActionRowView: View {
             previousStatus = newStatus
         }
     }
+    /// Resolves the effective display status, preferring the overridden `expandState` when set.
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
@@ -176,6 +189,7 @@ struct ActionRowView: View {
             }
         }
     }
+    /// Main body of the action row: workflow name, repo, branch, and trailing meta info.
     private var rowContent: some View {
         let tickSnapshot = tick
         return HStack(spacing: 6) {
@@ -209,6 +223,7 @@ struct ActionRowView: View {
         .padding(.trailing, RBSpacing.xs)
         .padding(.vertical, 4)
     }
+    /// Trailing meta area: elapsed time or conclusion label, keyed off `tickSnapshot` for live updates.
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
@@ -228,6 +243,7 @@ struct ActionRowView: View {
             .fixedSize(horizontal: true, vertical: false)
         statusBadge
     }
+    /// Colored pill badge reflecting the current run status (queued, in-progress, success, failure, etc.).
     @ViewBuilder private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")

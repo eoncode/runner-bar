@@ -11,6 +11,7 @@ import SwiftUI
 // #533: OS/Arch + Version rows in Runner Info; Danger Zone always expanded
 
 // MARK: - Save state helper
+/// Tracks the lifecycle of an async save operation for a single editable field.
 private enum SaveState: Equatable {
     case idle
     case saving
@@ -19,6 +20,7 @@ private enum SaveState: Equatable {
 }
 
 // MARK: - Danger action
+/// Represents a destructive action the user can trigger from the Danger Zone section.
 private enum DangerAction: Identifiable, Equatable {
     case remove
 
@@ -32,6 +34,7 @@ private enum DangerAction: Identifiable, Equatable {
 }
 
 // swiftlint:disable:next type_body_length
+/// Detail screen for a single self-hosted runner: displays info, editable config fields, and the Danger Zone.
 struct RunnerDetailView: View {
     let runner: RunnerModel
     let onBack: () -> Void
@@ -88,6 +91,7 @@ struct RunnerDetailView: View {
         self._displayVersion = State(initialValue: runner.agentVersion ?? "")
     }
 
+    /// Root settings detail layout containing the header, runner info, editable configuration, and Danger Zone.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -115,6 +119,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Header (#532: two-row layout)
 
+    /// Two-row header with a back button, runner name, status dot, and start/stop control.
     private var headerBar: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button(action: onBack) {
@@ -148,6 +153,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Info Section (#532 / #533)
 
+    /// Read-only runner information card showing GitHub URL, work folder, ephemeral flag, OS/Arch, version, and status.
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Runner Info")
@@ -173,6 +179,7 @@ struct RunnerDetailView: View {
         }
     }
 
+    /// Status row used inside the info card, pairing the current `displayStatus` with a colored dot.
     private var statusRow: some View {
         HStack(alignment: .top, spacing: 8) {
             Text("Status")
@@ -192,6 +199,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Config Section (#532 / #533: single card with dividers)
 
+    /// Editable configuration card for labels, work folder, auto-update, and proxy credentials.
     private var configSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Configuration")
@@ -273,6 +281,7 @@ struct RunnerDetailView: View {
         }
     }
 
+    /// Reusable editable config row with a label, text field or secure field, and trailing save button.
     private func configRow(
         label: String,
         placeholder: String,
@@ -306,6 +315,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Danger Zone (#493 / #533: always expanded)
 
+    /// Always-expanded destructive-actions section used for runner removal.
     private var dangerZoneSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -340,6 +350,7 @@ struct RunnerDetailView: View {
         }
     }
 
+    /// Row inside the Danger Zone card showing the action title, description, and a trigger button.
     private func dangerActionRow(action: DangerAction, description: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -366,6 +377,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Danger Zone Action Sheet
 
+    /// Confirmation sheet presented before executing a destructive `DangerAction`.
     @ViewBuilder
     private func dangerActionSheet(_ action: DangerAction) -> some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -409,16 +421,19 @@ struct RunnerDetailView: View {
         .frame(minWidth: 380)
     }
 
+    /// Sets `pendingDangerAction` to show the confirmation sheet for the given action.
     private func triggerDangerAction(_ action: DangerAction) {
         dangerActionState = .idle
         pendingDangerAction = action
     }
 
+    /// Dispatches to the appropriate handler based on the confirmed `DangerAction`.
     private func executeDangerAction(_ action: DangerAction) {
         dangerActionState = .saving
         performRemove()
     }
 
+    /// De-registers the runner via the GitHub API and removes it from `LocalRunnerStore`.
     private func performRemove() {
         DispatchQueue.global(qos: .userInitiated).async {
             let ok = RunnerLifecycleService.shared.remove(runner: runner)
@@ -440,6 +455,7 @@ struct RunnerDetailView: View {
     // MARK: - Save button helper
 
     @ViewBuilder
+    /// Small "Save" button that shows a spinner while saving and is hidden when idle.
     private func saveButton(state: SaveState, action: @escaping () -> Void) -> some View {
         switch state {
         case .saving:
@@ -456,6 +472,7 @@ struct RunnerDetailView: View {
     }
 
     @ViewBuilder
+    /// Feedback row shown below a config card: success checkmark, failure message, or optional restart note.
     private func saveStateRow(_ state: SaveState, restartNote: Bool) -> some View {
         if restartNote, state == .success {
             Text("Changes take effect after the next runner restart.")
@@ -469,12 +486,14 @@ struct RunnerDetailView: View {
 
     // MARK: - Sub-view helpers
 
+    /// Styled section title label used above each settings card.
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
             .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 4)
     }
 
+    /// Rounded card container with a subtle border used to group related info or config rows.
     private func infoCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) { content() }
             .background(
@@ -487,6 +506,7 @@ struct RunnerDetailView: View {
             .padding(.bottom, 8)
     }
 
+    /// Label/value row inside an `infoCard`; when `copyable` is true a copy-to-clipboard button appears.
     private func infoRow(label: String, value: String, copyable: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(label)
@@ -511,6 +531,7 @@ struct RunnerDetailView: View {
     }
 
     // dotColor is derived from live isRunning state, not the frozen runner snapshot
+    /// Status indicator color: green when running, red when offline, yellow otherwise.
     private var dotColor: Color {
         isRunning ? Color.rbSuccess : Color.rbDanger
     }
@@ -518,6 +539,7 @@ struct RunnerDetailView: View {
     // MARK: - On Appear
 
     // swiftlint:disable:next function_body_length
+    /// Reads the runner's `.runner` JSON file and seeds `autoUpdate`, `proxyUrl`, `proxyUser`, `proxyPassword`, `displayOsArch`, and `displayVersion`.
     private func loadEditableFields() {
         log("RunnerDetailView loadEditableFields ENTER runner=\(runner.runnerName) installPath=\(runner.installPath ?? "<nil>") platform=\(runner.platform ?? "<nil>") platformArch=\(runner.platformArchitecture ?? "<nil>") agentVersion=\(runner.agentVersion ?? "<nil>") displayOsArch=\(displayOsArch) displayVersion=\(displayVersion)")
 
@@ -593,6 +615,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Save Actions
 
+    /// Patches the runner's labels via `patchRunnerJSON` and updates `labelsSaveState`.
     private func saveLabels() {
         guard let agentId = runner.agentId,
               let gitHubUrl = runner.gitHubUrl,
@@ -621,6 +644,7 @@ struct RunnerDetailView: View {
         }
     }
 
+    /// Patches the runner's work folder path via `patchRunnerJSON` and updates `workFolderSaveState`.
     private func saveWorkFolder() {
         guard let installPath = runner.installPath else {
             workFolderSaveState = .failure("Install path unknown"); return
@@ -640,6 +664,7 @@ struct RunnerDetailView: View {
         }
     }
 
+    /// Writes the `disableUpdate` flag to the runner JSON and updates `autoUpdateSaveState`.
     private func saveAutoUpdate() {
         guard let installPath = runner.installPath else {
             autoUpdateSaveState = .failure("Install path unknown"); return
@@ -660,6 +685,7 @@ struct RunnerDetailView: View {
     }
 
     // #532: unified proxy save — writes .proxy + .proxycredentials in one action
+    /// Persists proxy URL, username, and password to the runner JSON and updates `proxySaveState`.
     private func saveProxy() {
         guard let installPath = runner.installPath else {
             proxySaveState = .failure("Install path unknown"); return
@@ -703,6 +729,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Start / Stop
 
+    /// Launches the runner service via `LocalRunnerStore` and sets `isRunning` to true.
     private func startRunner() {
         isRunning = true
         LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
@@ -720,6 +747,7 @@ struct RunnerDetailView: View {
         }
     }
 
+    /// Stops the runner service via `LocalRunnerStore` and sets `isRunning` to false.
     private func stopRunner() {
         isRunning = false
         LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
@@ -740,6 +768,7 @@ struct RunnerDetailView: View {
 
 // MARK: - .runner JSON patch helper
 
+/// Reads the `.runner` JSON at `path`, merges `patch` keys, and writes the result back to disk.
 private func patchRunnerJSON(
     installPath: String,
     key: String,

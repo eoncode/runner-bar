@@ -30,14 +30,18 @@ struct AddScopeSheet: View {
     @State private var usePicker = false
     @State private var showScopeSelector = false
 
+    /// The list of picker options matching the current `scopeType` (orgs or repos).
     private var pickerItems: [String] {
         scopeType == .org ? orgs : repos
     }
 
+    /// The scope string that will be saved: the selected picker value when `usePicker` is true,
+    /// otherwise the trimmed manual text-field input.
     private var effectiveScope: String {
         usePicker ? selectedScope : manualScope.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Guards the Add button: `true` when `effectiveScope` is non-empty.
     private var canAdd: Bool { !effectiveScope.isEmpty }
 
     var body: some View {
@@ -181,6 +185,8 @@ struct AddScopeSheet: View {
 
     // MARK: - Actions
 
+    /// Fetches orgs and repos from GitHub on a background thread.
+    /// Falls back to manual text entry when no token is present or the fetch returns empty results.
     private func fetchScopeOptions() {
         guard githubToken() != nil else {
             log("AddScopeSheet \u{203a} no token \u{2014} falling back to text field")
@@ -209,6 +215,7 @@ struct AddScopeSheet: View {
         }
     }
 
+    /// Persists `effectiveScope` to `ScopeStore`, triggers `onAdd`, and dismisses the sheet.
     private func confirmAdd() {
         let scope = effectiveScope
         guard !scope.isEmpty else { return }

@@ -57,6 +57,7 @@ struct PanelMainView: View {
         store.localRunners.contains { $0.isBusy }
             && store.actions.contains { $0.groupStatus == .inProgress }
     }
+    /// Root body: stacks the header, optional rate-limit banner, local-runner section, and scrollable actions list.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PanelHeaderView(
@@ -94,12 +95,14 @@ struct PanelMainView: View {
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
     // MARK: - Scrollable actions section (RULE 5)
+    /// Wraps `actionsSectionContent` in a `ScrollView` capped at `screenScrollMaxHeight`.
     private var actionsSectionScrollable: some View {
         ScrollView(.vertical, showsIndicators: true) {
             actionsSectionContent
         }
         .frame(maxHeight: screenScrollMaxHeight)
     }
+    /// Vertical stack of the Workflows section header, `ActionRowView` items, and the load-more button.
     private var actionsSectionContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeaderLabel(title: "Workflows")
@@ -121,6 +124,7 @@ struct PanelMainView: View {
         }
         .padding(.vertical, 4)
     }
+    /// Button that appends the next batch of up to 10 workflow rows; hidden when all rows are visible.
     @ViewBuilder private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
         if nextBatch > 0 {
@@ -136,17 +140,20 @@ struct PanelMainView: View {
         }
     }
     // MARK: - Display tick timer (RULE 9 — ungated, 1s)
+    /// Schedules a 1-second repeating timer that increments `displayTick`, driving elapsed-time labels.
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
         displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             self.displayTick &+= 1
         }
     }
+    /// Invalidates and nils the display-tick timer.
     private func stopDisplayTickTimer() {
         displayTickTimer?.invalidate()
         displayTickTimer = nil
     }
     // MARK: - Rate limit banner
+    /// Warning strip shown at the top of the actions list when GitHub's rate limit has been hit.
     private var rateLimitBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -157,6 +164,7 @@ struct PanelMainView: View {
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
     // MARK: - Helpers
+    /// Opens the GitHub personal-access-token documentation page in the default browser.
     private func signInWithGitHub() {
         let urlString = "\(GitHubConstants.base)/en/authentication/"
             + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"

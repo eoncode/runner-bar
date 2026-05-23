@@ -17,6 +17,11 @@ enum ScopePreferencesStore {
 
     // MARK: - Key builders
 
+    /// Builds the `UserDefaults` key for a per-scope field.
+    /// - Parameters:
+    ///   - scope: The raw scope identifier, such as `owner` or `owner/repo`.
+    ///   - field: The field name stored under that scope.
+    /// - Returns: A namespaced key in the form `scope.<scope>.<field>`.
     private static func key(_ scope: String, _ field: String) -> String {
         "scope.\(scope).\(field)"
     }
@@ -29,6 +34,11 @@ enum ScopePreferencesStore {
             .flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Persists a human-readable alias for a scope.
+    /// Trims whitespace and clears the stored value when the result is empty.
+    /// - Parameters:
+    ///   - alias: The alias to store, or `nil` to clear it.
+    ///   - scope: The scope whose alias is being updated.
     static func setAlias(_ alias: String?, for scope: String) {
         let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let value = trimmed, !value.isEmpty {
@@ -52,6 +62,11 @@ enum ScopePreferencesStore {
         return stored as? Int
     }
 
+    /// Persists a per-scope polling-interval override.
+    /// Removes the override when `interval` is `nil` so the global app setting is used.
+    /// - Parameters:
+    ///   - interval: The polling interval in seconds, or `nil` to use the global default.
+    ///   - scope: The scope whose override is being updated.
     static func setPollingInterval(_ interval: Int?, for scope: String) {
         if let value = interval {
             UserDefaults.standard.set(value, forKey: key(scope, "pollingInterval"))
@@ -69,6 +84,11 @@ enum ScopePreferencesStore {
         return UserDefaults.standard.bool(forKey: key(scope, "notifyOnSuccess"))
     }
 
+    /// Persists a per-scope notify-on-success override.
+    /// Removes the override when `value` is `nil` so the global setting is used.
+    /// - Parameters:
+    ///   - value: The override to store, or `nil` to inherit the global setting.
+    ///   - scope: The scope whose override is being updated.
     static func setNotifyOnSuccess(_ value: Bool?, for scope: String) {
         if let v = value {
             UserDefaults.standard.set(v, forKey: key(scope, "notifyOnSuccess"))
@@ -84,6 +104,11 @@ enum ScopePreferencesStore {
         return UserDefaults.standard.bool(forKey: key(scope, "notifyOnFailure"))
     }
 
+    /// Persists a per-scope notify-on-failure override.
+    /// Removes the override when `value` is `nil` so the global setting is used.
+    /// - Parameters:
+    ///   - value: The override to store, or `nil` to inherit the global setting.
+    ///   - scope: The scope whose override is being updated.
     static func setNotifyOnFailure(_ value: Bool?, for scope: String) {
         if let v = value {
             UserDefaults.standard.set(v, forKey: key(scope, "notifyOnFailure"))
@@ -100,6 +125,10 @@ enum ScopePreferencesStore {
         UserDefaults.standard.bool(forKey: key(scope, "failureHookEnabled"))
     }
 
+    /// Persists whether the failure hook is enabled for a scope.
+    /// - Parameters:
+    ///   - enabled: `true` to enable the failure hook, `false` to disable it.
+    ///   - scope: The scope whose failure-hook toggle is being updated.
     static func setFailureHookEnabled(_ enabled: Bool, for scope: String) {
         UserDefaults.standard.set(enabled, forKey: key(scope, "failureHookEnabled"))
         log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)")
@@ -111,6 +140,11 @@ enum ScopePreferencesStore {
             .flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Persists the shell command to run when a failure hook fires.
+    /// Trims whitespace and clears the stored command when the result is empty.
+    /// - Parameters:
+    ///   - command: The command to store, or `nil` to clear it.
+    ///   - scope: The scope whose failure-hook command is being updated.
     static func setFailureHookCommand(_ command: String?, for scope: String) {
         let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let value = trimmed, !value.isEmpty {
@@ -128,6 +162,11 @@ enum ScopePreferencesStore {
             .flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Persists the local repository path used for this scope's failure hook.
+    /// Trims whitespace and clears the stored path when the result is empty.
+    /// - Parameters:
+    ///   - path: The local filesystem path, or `nil` to clear it.
+    ///   - scope: The scope whose local repository path is being updated.
     static func setLocalRepoPath(_ path: String?, for scope: String) {
         let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let value = trimmed, !value.isEmpty {
@@ -146,6 +185,11 @@ enum ScopePreferencesStore {
             .flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Persists the branch filter used by the failure hook.
+    /// Stores a non-empty branch name or removes the filter when `branch` is `nil` or empty.
+    /// - Parameters:
+    ///   - branch: The branch name to match, or `nil` to allow all branches.
+    ///   - scope: The scope whose failure-hook branch filter is being updated.
     static func setFailureHookBranch(_ branch: String?, for scope: String) {
         if let value = branch, !value.isEmpty {
             UserDefaults.standard.set(value, forKey: key(scope, "failureHookBranch"))

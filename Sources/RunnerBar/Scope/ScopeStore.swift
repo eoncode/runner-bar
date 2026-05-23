@@ -59,12 +59,16 @@ final class ScopeStore: ObservableObject {
     /// `true` when no entries have been added yet.
     var isEmpty: Bool { entries.isEmpty }
 
+    /// Initialises the store by loading persisted entries (or migrating the
+    /// legacy `[String]` key if present).
     private init() {
         entries = loadEntries()
     }
 
     // MARK: - Persistence
 
+    /// Loads `[ScopeEntry]` from `UserDefaults`, migrating the legacy
+    /// `[String]` key when found. Returns an empty array on decode failure.
     private func loadEntries() -> [ScopeEntry] {
         // Migration: convert legacy [String] key if present.
         if let legacy = UserDefaults.standard.stringArray(forKey: legacyKey),
@@ -89,6 +93,9 @@ final class ScopeStore: ObservableObject {
         }
     }
 
+    /// JSON-encodes `newEntries` and writes them to `UserDefaults`.
+    /// Logs an error and no-ops when encoding fails.
+    /// - Parameter newEntries: The complete list of entries to persist.
     private func save(_ newEntries: [ScopeEntry]) {
         do {
             let data = try JSONEncoder().encode(newEntries)
@@ -99,6 +106,7 @@ final class ScopeStore: ObservableObject {
         }
     }
 
+    /// Persists the current in-memory `entries` array to `UserDefaults`.
     private func persist() { save(entries) }
 
     // MARK: - Mutations

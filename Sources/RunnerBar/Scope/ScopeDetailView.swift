@@ -15,8 +15,14 @@ import SwiftUI
 //       panel is never obscured by the popover.
 // #559: Failure Hook section hidden for org scopes — only shown for repo scopes.
 // #560: Branch selector row added to Failure Hook section.
+/// Detail settings screen for a single scope (org or repo).
+/// Rendered when the user taps a scope row in `SettingsView`.
 struct ScopeDetailView: View {
+    /// The scope entry being inspected. Treated as a snapshot; live state is
+    /// re-read from `ScopeStore` via `liveEntry`.
     let scopeEntry: ScopeEntry
+    /// Callback invoked when the user taps the back button to return to
+    /// `SettingsView`.
     let onBack: () -> Void
 
     @ObservedObject private var scopeStore = ScopeStore.shared
@@ -27,6 +33,11 @@ struct ScopeDetailView: View {
     @State private var localRepoPath: String
     @State private var isEditingPath = false
 
+    /// Creates the view, seeding `@State` values from `ScopePreferencesStore`
+    /// so they reflect persisted user preferences on first render.
+    /// - Parameters:
+    ///   - scopeEntry: The scope whose settings this view manages.
+    ///   - onBack: Closure called when the user navigates back.
     init(scopeEntry: ScopeEntry, onBack: @escaping () -> Void) {
         self.scopeEntry = scopeEntry
         self.onBack = onBack
@@ -35,13 +46,22 @@ struct ScopeDetailView: View {
         _localRepoPath = State(initialValue: ScopePreferencesStore.localRepoPath(for: scopeEntry.scope) ?? "")
     }
 
+    /// The up-to-date entry from `ScopeStore`, or `nil` if the scope has been
+    /// removed since this view was created.
     private var liveEntry: ScopeEntry? {
         scopeStore.entries.first(where: { $0.id == scopeEntry.id })
     }
+    /// Whether monitoring is currently enabled for this scope.
+    /// Falls back to the snapshot value if the live entry is unavailable.
     private var isEnabled: Bool { liveEntry?.isEnabled ?? scopeEntry.isEnabled }
+    /// The raw scope string (e.g. `"owner/repo"` or `"owner"`).
     private var scope: String { scopeEntry.scope }
+    /// `true` when the scope string contains a slash, indicating a repository
+    /// scope rather than an organisation scope.
     private var isRepo: Bool { scope.contains("/") }
+    /// The persisted failure-hook terminal command for this scope, if set.
     private var hookCommand: String? { ScopePreferencesStore.failureHookCommand(for: scope) }
+    /// The GitHub web URL for this scope, used to render the "Open on GitHub" link.
     private var gitHURL: URL? { URL(string: "https://github.com/\(scope)") }
 
     var body: some View {
@@ -79,6 +99,7 @@ struct ScopeDetailView: View {
 
 // MARK: - Sections
 extension ScopeDetailView {
+    /// Top navigation bar showing a back button and the scope display name.
     var headerBar: some View {
         HStack(spacing: 8) {
             Button(action: onBack) {
@@ -109,6 +130,8 @@ extension ScopeDetailView {
         .padding(.bottom, 8)
     }
 
+    /// Card section displaying read-only scope metadata: raw scope string,
+    /// type (repo vs org), and a link to open the scope on GitHub.
     var infoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Scope Info")
@@ -143,6 +166,7 @@ extension ScopeDetailView {
         }
     }
 
+    /// Card section with a toggle to enable or disable polling for this scope.
     var monitoringSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Monitoring")
@@ -173,6 +197,8 @@ extension ScopeDetailView {
         }
     }
 
+    /// Card section for configuring the failure-hook command.
+    /// Only rendered for repository scopes (`isRepo == true`).
     var failureHookSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Failure Hook")
@@ -188,6 +214,7 @@ extension ScopeDetailView {
         }
     }
 
+    /// Card section with a destructive "Remove scope" action.
     var dangerSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Danger Zone")
@@ -216,6 +243,7 @@ extension ScopeDetailView {
 
 // MARK: - Failure Hook Rows
 extension ScopeDetailView {
+    /// Toggle row enabling or disabling the failure-hook for this scope.
     var hookToggleRow: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -241,6 +269,8 @@ extension ScopeDetailView {
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
     }
 
+    /// Row for selecting the branch filter applied by the failure hook.
+    /// Tapping opens `BranchSelectorSheet`; an ×-button clears the filter.
     var branchRow: some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         Button(action: { showBranchSheet = true }) {
@@ -280,6 +310,8 @@ extension ScopeDetailView {
         .buttonStyle(.plain)
     }
 
+    /// Row for setting the local repository path used by the failure hook.
+    /// Supports inline text editing and an NSOpenPanel folder-picker.
     var localPathRow: some View {
         HStack(spacing: 8) {
             Text("Local Path")
@@ -333,6 +365,8 @@ extension ScopeDetailView {
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 9)
     }
 
+    /// Row for configuring the hook command. Tapping opens
+    /// `FailureHookCommandSheet` where the user can enter or edit the command.
     var commandRow: some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         Button(action: { showHookSheet = true }) {
@@ -368,11 +402,15 @@ extension ScopeDetailView {
 
 // MARK: - Actions
 extension ScopeDetailView {
+    /// Enters inline editing mode for the local-path field, pre-filling `~/`
+    /// if the path is currently empty.
     func startEditingPath() {
         if localRepoPath.isEmpty { localRepoPath = "~/" }
         isEditingPath = true
     }
 
+    /// Commits the edited local path: trims whitespace, clears the `~/`
+    /// placeholder, and persists the result to `ScopePreferencesStore`.
     func commitLocalPath() {
         isEditingPath = false
         let trimmed = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -381,11 +419,15 @@ extension ScopeDetailView {
         ScopePreferencesStore.setLocalRepoPath(cleaned.isEmpty ? nil : cleaned, for: scope)
     }
 
+    /// Clears the branch filter for the failure hook and persists the change.
     func clearBranchFilter() {
         hookBranch = nil
         ScopePreferencesStore.setFailureHookBranch(nil, for: scope)
     }
 
+    /// Presents an `NSOpenPanel` to let the user pick the local repository
+    /// folder. Closes the panel before opening the picker so the floating
+    /// window does not obscure the sheet (#546).
     func openFolderPicker() {
         let appDelegate = NSApp.delegate as? AppDelegate
         appDelegate?.closePanel()
@@ -414,6 +456,8 @@ extension ScopeDetailView {
         }
     }
 
+    /// Removes the scope: cleans up its `UserDefaults` keys, removes it from
+    /// `ScopeStore`, restarts the runner polling cycle, and navigates back.
     func removeScope() {
         ScopePreferencesStore.cleanUp(scope: scope)
         ScopeStore.shared.remove(id: scopeEntry.id)
@@ -424,12 +468,17 @@ extension ScopeDetailView {
 
 // MARK: - Sub-view helpers
 extension ScopeDetailView {
+    /// Renders a styled section-header label.
+    /// - Parameter title: The display text for the section heading.
     func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
             .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 4)
     }
 
+    /// Wraps `content` in the standard rounded-card background used across all
+    /// settings sections.
+    /// - Parameter content: The view builder producing the card's contents.
     func infoCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
@@ -444,6 +493,11 @@ extension ScopeDetailView {
         .padding(.bottom, 8)
     }
 
+    /// Renders a label–value row inside an info card.
+    /// - Parameters:
+    ///   - label: The left-aligned field name (fixed 100 pt width).
+    ///   - value: The monospaced value string displayed to the right.
+    ///   - copyable: When `true`, a copy-to-clipboard button is appended.
     func infoRow(label: String, value: String, copyable: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(label)
