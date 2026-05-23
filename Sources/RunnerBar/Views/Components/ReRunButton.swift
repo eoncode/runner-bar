@@ -49,6 +49,8 @@ struct ReRunButton: View {
     }
 
     // MARK: - Actions
+    /// Transitions the button to `.loading`, invokes `action`, then transitions
+    /// to `.done` or `.failed` based on the success flag before resetting to `.idle` after 1.5 s.
     private func startRerun() {
         guard phase == .idle else { return }
         phase = .loading
