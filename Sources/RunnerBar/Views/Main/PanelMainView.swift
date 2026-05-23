@@ -26,8 +26,8 @@ import SwiftUI
 // at the initial layout height and prevents scrolling to expanded content.
 // ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
 //
-// RULE 6: systemStats MUST be stopped while the panel is open.
-// RULE 6b: systemStats must RESTART when the main view becomes visible again.
+// RULE 6: systemStats MUST run only while the panel is open — stop it when the panel closes.
+// RULE 6b: systemStats must START when the panel opens so charts are live while the user views them.
 //
 // RULE 7: RunnerStore self-schedules via its own adaptive timer after each fetch().
 // ❌ NEVER add a second repeating timer in PanelMainView that calls
@@ -94,7 +94,7 @@ struct PanelMainView: View {
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            if !panelVisibilityState.isOpen { systemStats.start() }
+            if panelVisibilityState.isOpen { systemStats.start() }
             startDisplayTickTimer()
         }
         .onDisappear {
@@ -102,7 +102,7 @@ struct PanelMainView: View {
             stopDisplayTickTimer()
         }
         .onChange(of: panelVisibilityState.isOpen) { open in
-            if open { systemStats.stop() } else { systemStats.start() }
+            if open { systemStats.start() } else { systemStats.stop() }
         }
         .onChange(of: store.actions) { _ in visibleCount = 10 }
     }
