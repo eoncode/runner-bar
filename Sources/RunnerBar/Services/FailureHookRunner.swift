@@ -140,7 +140,7 @@ enum FailureHookRunner {
 
     /// Escapes a string so it is safe to embed between single-quotes in a shell command.
     private static func singleQuoteEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "'", with: "'\\''") 
+        s.replacingOccurrences(of: "'", with: "'\\''")
     }
 
     /// Builds the $FAILURE_LOG content.
