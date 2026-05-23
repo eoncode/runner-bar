@@ -16,6 +16,7 @@ private struct ActionRunsResponse: Codable {
     let workflowRuns: [RunPayload]
     /// Maps Swift property names to their JSON keys.
     enum CodingKeys: String, CodingKey {
+        /// Maps `workflowRuns` to `workflow_runs`.
         case workflowRuns = "workflow_runs"
     }
 }
@@ -48,14 +49,29 @@ private struct RunPayload: Codable {
     let pullRequests: [PRRef]?
     /// Maps Swift property names to their snake_case JSON keys.
     enum CodingKeys: String, CodingKey {
-        case id, name, status, conclusion
+        /// Maps `id`.
+        case id
+        /// Maps `name`.
+        case name
+        /// Maps `status`.
+        case status
+        /// Maps `conclusion`.
+        case conclusion
+        /// Maps `headBranch` to `head_branch`.
         case headBranch   = "head_branch"
+        /// Maps `headSha` to `head_sha`.
         case headSha      = "head_sha"
+        /// Maps `displayTitle` to `display_title`.
         case displayTitle = "display_title"
+        /// Maps `createdAt` to `created_at`.
         case createdAt    = "created_at"
+        /// Maps `updatedAt` to `updated_at`.
         case updatedAt    = "updated_at"
+        /// Maps `htmlUrl` to `html_url`.
         case htmlUrl      = "html_url"
+        /// Maps `headCommit` to `head_commit`.
         case headCommit   = "head_commit"
+        /// Maps `pullRequests` to `pull_requests`.
         case pullRequests = "pull_requests"
     }
 }

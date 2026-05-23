@@ -6,7 +6,7 @@ import Foundation
 // MARK: - ActiveJob model
 
 /// Represents a single GitHub Actions job that is live or recently completed.
-public struct ActiveJob: Identifiable, Codable, Equatable {
+public struct ActiveJob: Identifiable, Codable, Equatable, Sendable {
     /// GitHub-assigned job identifier.
     public let id: Int
     /// Display name of the job.
@@ -80,7 +80,6 @@ public struct ActiveJob: Identifiable, Codable, Equatable {
     }
 
     /// Creates a new instance.
-    /// Creates a new instance.
     public init(
         id: Int,
         name: String,
@@ -132,7 +131,7 @@ public struct ActiveJob: Identifiable, Codable, Equatable {
 // MARK: - JobStep
 
 /// A single step within an `ActiveJob`, matching the GitHub API `steps` array.
-public struct JobStep: Identifiable, Codable, Equatable {
+public struct JobStep: Identifiable, Codable, Equatable, Sendable {
     /// Step sequence number (1-based).
     public let id: Int
     /// Display name of the step.
@@ -147,12 +146,6 @@ public struct JobStep: Identifiable, Codable, Equatable {
     public let completedAt: Date?
 
     /// A single Unicode character summarising the step's outcome for display in the UI.
-    ///
-    /// - `✓` success
-    /// - `➗` failure
-    /// - `⊘` skipped or cancelled
-    /// - `▶` currently in progress
-    /// - `·` pending / unknown
     public var conclusionIcon: String {
         switch conclusion {
         case "success": return "\u{2713}"
@@ -164,9 +157,6 @@ public struct JobStep: Identifiable, Codable, Equatable {
     }
 
     /// Human-readable elapsed duration for this step in `MM:SS` format.
-    ///
-    /// Uses `startedAt` and `completedAt` when available; falls back to
-    /// `Date()` for either bound so in-progress steps show a live counter.
     public var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
@@ -177,7 +167,6 @@ public struct JobStep: Identifiable, Codable, Equatable {
         return String(format: "%02d:%02d", m, s)
     }
 
-    /// Creates a new instance.
     /// Creates a new instance.
     public init(
         id: Int,
@@ -211,11 +200,6 @@ public struct JobStep: Identifiable, Codable, Equatable {
 // MARK: - JobPayload (API decoding)
 
 /// Raw Decodable mirror of the GitHub Actions jobs API response object.
-///
-/// All date fields arrive as ISO-8601 strings and are converted to `Date` by
-/// `RunnerStore.makeActiveJob(from:iso:isDimmed:)` before being stored in
-/// `ActiveJob`. This type is intentionally separate from `ActiveJob` so the
-/// domain model stays free of JSON-parsing concerns.
 public struct JobPayload: Decodable {
     /// The id constant.
     public let id: Int
@@ -258,9 +242,6 @@ public struct JobPayload: Decodable {
 // MARK: - StepPayload (API decoding)
 
 /// Raw Decodable mirror of a single step entry within a `JobPayload`.
-///
-/// Converted to `JobStep` (with proper `Date` values) by
-/// `RunnerStore.makeActiveJob(from:iso:isDimmed:)`.
 public struct StepPayload: Decodable {
     /// The number constant.
     public let number: Int
@@ -285,8 +266,6 @@ public struct StepPayload: Decodable {
         case completedAt = "completed_at"
     }
 }
-
-// MARK: - ActiveJob factory
 
 // MARK: - Codable helpers
 

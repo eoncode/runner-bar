@@ -2,6 +2,7 @@
 // RunnerBar
 // swiftlint:disable orphaned_doc_comment
 import Combine
+import RunnerBarCore
 import ServiceManagement
 import SwiftUI
 

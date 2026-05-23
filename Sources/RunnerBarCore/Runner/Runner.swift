@@ -11,17 +11,17 @@ public struct Runner: Codable, Identifiable {
     /// GitHub's unique numeric ID for this runner.
     public let id: Int
     /// Human-readable runner name as configured on the host machine.
-    let name: String
+    public let name: String
     /// Runner connectivity status as reported by the GitHub API: `"online"` or `"offline"`.
-    let status: String
+    public let status: String
     /// `true` when the runner is currently executing a job.
     /// A busy+online runner shows a yellow dot in the UI.
-    let busy: Bool
+    public let busy: Bool
     /// CPU/memory utilisation from the local `ps aux` snapshot.
     /// `nil` if no matching `Runner.Worker` process was found for this runner's slot.
     /// Populated by `RunnerStore.fetch()` after the API response is decoded —
     /// not present in the JSON payload.
-    var metrics: RunnerMetrics?
+    public var metrics: RunnerMetrics?
 
     /// Excludes `metrics` from JSON decoding — it is assigned locally after fetch,
     /// not returned by the GitHub API.

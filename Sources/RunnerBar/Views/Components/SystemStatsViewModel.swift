@@ -3,6 +3,7 @@
 import Combine
 import Darwin
 import Foundation
+import RunnerBarCore
 
 // MARK: - RingBuffer
 /// Fixed-capacity circular buffer whose `values` property returns elements oldest-first.

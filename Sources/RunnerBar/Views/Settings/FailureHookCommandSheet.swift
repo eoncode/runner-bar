@@ -1,6 +1,7 @@
 // FailureHookCommandSheet.swift
 // RunnerBar
 import AppKit
+import RunnerBarCore
 import SwiftUI
 
 // MARK: - FailureHookCommandSheet

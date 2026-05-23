@@ -1,6 +1,7 @@
 // LocalRunnerScanner.swift
 // RunnerBar
 import Foundation
+import RunnerBarCore
 
 // MARK: - LocalRunnerScanner
 

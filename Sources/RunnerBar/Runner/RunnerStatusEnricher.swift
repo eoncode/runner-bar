@@ -2,6 +2,7 @@
 // RunnerBar
 // swiftlint:disable function_parameter_count type_body_length
 import Foundation
+import RunnerBarCore
 
 // MARK: - RunnerStatusEnricher
 //
