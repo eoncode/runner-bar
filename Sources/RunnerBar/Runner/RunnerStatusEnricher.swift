@@ -19,10 +19,15 @@ import Foundation
 // NOTE: ghAPI returns Data?. fetchRunnersForScope decodes it via JSONSerialization
 // rather than casting directly — a direct `as? [String: Any]` cast from Data? always
 // fails at runtime because Data and Dictionary are unrelated types.
+//
+// All methods are synchronous and blocking — always call from a background thread.
+struct RunnerStatusEnricher {
+    // MARK: - Shared singleton
 
-final class RunnerStatusEnricher: @unchecked Sendable {
+    // The shared `RunnerStatusEnricher` instance used throughout the app.
+    // Declared as a static let on the struct for convenient access; callers
+    // may also construct a local instance (e.g. in tests) without side effects.
     static let shared = RunnerStatusEnricher()
-    private init() {}
 
     func enrich(runners: [RunnerModel]) -> [RunnerModel] {
         // Step 1: collect unique scope URLs and the runners belonging to each.
