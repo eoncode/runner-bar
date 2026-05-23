@@ -13,9 +13,9 @@ public struct PollResultBuilder {
     // MARK: - Cache limits
 
     /// The jobCacheLimit constant.
-    static let jobCacheLimit = 3
+    public static let jobCacheLimit = 3
     /// The groupCacheLimit constant.
-    static let groupCacheLimit = 30
+    public static let groupCacheLimit = 30
 
     // MARK: - Job state
 
@@ -26,7 +26,7 @@ public struct PollResultBuilder {
     ///   - snapCache: Completed-job cache from the previous poll.
     ///   - fetchJobs: Closure that fetches live jobs for every active scope.
     ///   - backfill: Closure that backfills step data into a completed-job cache entry.
-    static func buildJobState(
+    public static func buildJobState(
         snapPrev: [Int: ActiveJob],
         snapCache: [Int: ActiveJob],
         fetchJobs: () -> [ActiveJob],
@@ -75,10 +75,10 @@ public struct PollResultBuilder {
     ///   - snapPrevGroups: Live-group snapshot from the previous poll.
     ///   - snapGroupCache: Completed-group cache from the previous poll.
     ///   - fetchGroups: Closure that fetches live groups for every active scope.
-    ///   - scopeFromGroup: Closure that derives a scope string from an WorkflowActionGroup.
+    ///   - scopeFromGroup: Closure that derives a scope string from a WorkflowActionGroup.
     ///   - fireFailureHook: Closure invoked the first time a group is seen as completed.
     ///   - enrichJobs: Closure that enriches a job list from the job cache.
-    static func buildGroupState(
+    public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
         fetchGroups: ([String: WorkflowActionGroup]) -> [WorkflowActionGroup],
@@ -89,8 +89,6 @@ public struct PollResultBuilder {
         log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count)")
         let shaKeyedCache = makeShaKeyedCache(snapGroupCache)
         let allFetched = fetchGroups(shaKeyedCache)
-        // Early-exit diagnostic: if fetchGroups returned nothing, active scopes are
-        // likely empty or misconfigured. Log clearly so it's easy to diagnose.
         if allFetched.isEmpty {
             log("PollResultBuilder › buildGroupState — ⚠️ fetchGroups returned 0 groups; activeScopes may be empty or all scopes are unreachable")
         }
@@ -141,8 +139,7 @@ public struct PollResultBuilder {
 
     // MARK: - Private job helpers
 
-    /// Performs the applyVanishedJobs operation.
-    static func applyVanishedJobs(
+    public static func applyVanishedJobs(
         snapPrev: [Int: ActiveJob],
         liveIDs: Set<Int>,
         now: Date,
@@ -166,8 +163,7 @@ public struct PollResultBuilder {
         }
     }
 
-    /// Performs the trimJobCache operation.
-    static func trimJobCache(_ cache: inout [Int: ActiveJob], limit: Int) {
+    public static func trimJobCache(_ cache: inout [Int: ActiveJob], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted {
             ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
@@ -175,8 +171,7 @@ public struct PollResultBuilder {
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
-    /// Performs the buildJobDisplay operation.
-    static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
+    public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress = live.filter { $0.status == "in_progress" }
         let queued     = live.filter { $0.status == "queued" }
         let cached     = cache.values.sorted {
@@ -191,16 +186,14 @@ public struct PollResultBuilder {
 
     // MARK: - Private group helpers
 
-    /// Performs the makeShaKeyedCache operation.
-    static func makeShaKeyedCache(_ cache: [String: WorkflowActionGroup]) -> [String: WorkflowActionGroup] {
+    public static func makeShaKeyedCache(_ cache: [String: WorkflowActionGroup]) -> [String: WorkflowActionGroup] {
         Dictionary(
             cache.values.map { ($0.headSha, $0) },
             uniquingKeysWith: { lhs, rhs in lhs.id > rhs.id ? lhs : rhs }
         )
     }
 
-    /// Performs the evictFreshShas operation.
-    static func evictFreshShas(
+    public static func evictFreshShas(
         from cache: [String: WorkflowActionGroup],
         freshGroups: [WorkflowActionGroup]
     ) -> [String: WorkflowActionGroup] {
@@ -214,9 +207,8 @@ public struct PollResultBuilder {
     /// - Important: Both `snapPrev` and the `cache` parameter are keyed by
     ///   `WorkflowActionGroup.id`, **not** by `headSha`. `liveIDs` must also be a
     ///   `Set<String>` of `WorkflowActionGroup.id` values for the containment check to
-    ///   be correct. Do not rekey either dictionary by headSha without updating
-    ///   all three sites consistently.
-    static func freezeVanishedGroups(
+    ///   be correct.
+    public static func freezeVanishedGroups(
         snapPrev: [String: WorkflowActionGroup],
         liveIDs: Set<String>,
         now: Date,
@@ -225,8 +217,6 @@ public struct PollResultBuilder {
         fireFailureHook: (WorkflowActionGroup, String) -> Void
     ) {
         log("PollResultBuilder › freezeVanishedGroups — snapPrev=\(snapPrev.count) liveIDs=\(liveIDs)")
-        // groupID is WorkflowActionGroup.id — the dictionary key for both snapPrev and cache.
-        // (Do not confuse with headSha, which is a separate property on WorkflowActionGroup.)
         for (groupID, group) in snapPrev where !liveIDs.contains(groupID) {
             log("PollResultBuilder › freezeVanishedGroups — vanished groupID=\(group.id) inCache=\(cache[groupID] != nil)")
             if let existing = cache[groupID], existing.isDimmed, existing.jobs.count >= group.jobs.count {
@@ -259,19 +249,16 @@ public struct PollResultBuilder {
         }
     }
 
-    /// Performs the trimGroupCache operation.
-    static func trimGroupCache(_ cache: inout [String: WorkflowActionGroup], limit: Int) {
+    public static func trimGroupCache(_ cache: inout [String: WorkflowActionGroup], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
-        // Cache is keyed by WorkflowActionGroup.id — preserve that key when rebuilding.
         cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
-    /// Performs the buildGroupDisplay operation.
-    static func buildGroupDisplay(
+    public static func buildGroupDisplay(
         live: [WorkflowActionGroup],
         cache: [String: WorkflowActionGroup]
     ) -> [WorkflowActionGroup] {
@@ -283,8 +270,8 @@ public struct PollResultBuilder {
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
         var display: [WorkflowActionGroup] = []
-        for grp in inProgress where display.count < groupCacheLimit                           { display.append(grp) }
-        for grp in queued     where display.count < groupCacheLimit                           { display.append(grp) }
+        for grp in inProgress where display.count < groupCacheLimit                               { display.append(grp) }
+        for grp in queued     where display.count < groupCacheLimit                               { display.append(grp) }
         for grp in cached     where display.count < groupCacheLimit && !liveIDs.contains(grp.id) { display.append(grp) }
         return display
     }
