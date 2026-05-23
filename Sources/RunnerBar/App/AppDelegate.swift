@@ -49,10 +49,10 @@ import SwiftUI
 // ❌ NEVER set initPanelWidth > maxWidth.
 // ❌ NEVER restore initPanelWidth to 600.
 //
-// POPOVEROPENSTATE:
+// PANELVISIBILITYSTATE:
 // popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
 // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-// ❌ NEVER pass as a plain Bool prop to PopoverMainView.
+// ❌ NEVER pass as a plain Bool prop to PanelMainView.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -102,10 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // ⚠️ REGRESSION GUARD (ref #377):
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-    // ❌ NEVER pass as a plain Bool prop to PopoverMainView.
+    // ❌ NEVER pass as a plain Bool prop to PanelMainView.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     // ALLOWED UNDER ANY CIRCUMSTANCE.
-    let popoverOpenState = PopoverOpenState() // internal: required for AppDelegate+Navigation
+    let popoverOpenState = PanelVisibilityState() // internal: required for AppDelegate+Navigation
 
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     static let minWidth: CGFloat = 280
@@ -228,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
         // Capture savedNavState before calling mainView() (which resets it),
         // then restore it so openPanel()'s validatedView path works.
-        // ❌ NEVER replace this with a no-op stub PopoverMainView.
+        // ❌ NEVER replace this with a no-op stub PanelMainView.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE.
         DispatchQueue.main.async { [weak self] in
