@@ -7,12 +7,12 @@ import XCTest
 
 final class ActiveJobElapsedTests: XCTestCase {
 
-    func test_elapsed_queued_returnsZero() {
+    func testElapsedQueuedReturnsZero() {
         let job = ActiveJob(id: 1, name: "J", status: "queued")
         XCTAssertEqual(job.elapsed, "00:00")
     }
 
-    func test_elapsed_completedWithTimes() {
+    func testElapsedCompletedWithTimes() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         let end   = Date(timeIntervalSinceReferenceDate: 125)
         let job = ActiveJob(
@@ -24,12 +24,12 @@ final class ActiveJobElapsedTests: XCTestCase {
         XCTAssertEqual(job.elapsed, "02:05")
     }
 
-    func test_elapsed_completedMissingTimes_returnsDashes() {
+    func testElapsedCompletedMissingTimesReturnsDashes() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", conclusion: "success")
         XCTAssertEqual(job.elapsed, "--:--")
     }
 
-    func test_elapsed_inProgress_usesStartedAt() {
+    func testElapsedInProgressUsesStartedAt() {
         let start = Date(timeIntervalSinceNow: -90)
         let job = ActiveJob(id: 1, name: "J", status: "in_progress", startedAt: start)
         let mins = Int(job.elapsed.prefix(2))!
@@ -44,22 +44,22 @@ final class ActiveJobElapsedTests: XCTestCase {
 
 final class ActiveJobIsLocalRunnerTests: XCTestCase {
 
-    func test_isLocalRunner_nil_whenNoRunnerName() {
+    func testIsLocalRunnerNilWhenNoRunnerName() {
         let job = ActiveJob(id: 1, name: "J", status: "queued")
         XCTAssertNil(job.isLocalRunner)
     }
 
-    func test_isLocalRunner_false_forUbuntuHosted() {
+    func testIsLocalRunnerFalseForUbuntuHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "ubuntu-latest")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    func test_isLocalRunner_false_forMacOSHosted() {
+    func testIsLocalRunnerFalseForMacOSHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "macos-14")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    func test_isLocalRunner_true_forSelfHosted() {
+    func testIsLocalRunnerTrueForSelfHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "my-mac-mini")
         XCTAssertEqual(job.isLocalRunner, true)
     }
@@ -88,23 +88,23 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
         )
     }
 
-    func test_displayStatus_running() {
+    func testDisplayStatusRunning() {
         XCTAssertEqual(makeRunner(isRunning: true).displayStatus, "running")
     }
 
-    func test_displayStatus_busy() {
+    func testDisplayStatusBusy() {
         XCTAssertEqual(makeRunner(isRunning: true, isBusy: true).displayStatus, "running")
     }
 
-    func test_displayStatus_online() {
+    func testDisplayStatusOnline() {
         XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "online").displayStatus, "online")
     }
 
-    func test_displayStatus_offline() {
+    func testDisplayStatusOffline() {
         XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "offline").displayStatus, "offline")
     }
 
-    func test_displayStatus_lifecycleWarningTakesPriority() {
+    func testDisplayStatusLifecycleWarningTakesPriority() {
         let runner = makeRunner(isRunning: true, lifecycleWarning: "update required")
         XCTAssertEqual(runner.displayStatus, "update required")
     }
@@ -114,19 +114,19 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
 
 final class RunnerMetricsTests: XCTestCase {
 
-    func test_equatable_sameValues() {
+    func testEquatableSameValues() {
         let a = RunnerMetrics(cpu: 12.5, mem: 3.0)
         let b = RunnerMetrics(cpu: 12.5, mem: 3.0)
         XCTAssertEqual(a, b)
     }
 
-    func test_equatable_differentCPU() {
+    func testEquatableDifferentCPU() {
         let a = RunnerMetrics(cpu: 10.0, mem: 3.0)
         let b = RunnerMetrics(cpu: 20.0, mem: 3.0)
         XCTAssertNotEqual(a, b)
     }
 
-    func test_equatable_differentMem() {
+    func testEquatableDifferentMem() {
         let a = RunnerMetrics(cpu: 10.0, mem: 1.0)
         let b = RunnerMetrics(cpu: 10.0, mem: 2.0)
         XCTAssertNotEqual(a, b)
@@ -137,27 +137,27 @@ final class RunnerMetricsTests: XCTestCase {
 
 final class AggregateStatusTests: XCTestCase {
 
-    func test_dot_allOnline() {
+    func testDotAllOnline() {
         XCTAssertEqual(AggregateStatus.allOnline.dot, "🟢")
     }
 
-    func test_dot_someOffline() {
+    func testDotSomeOffline() {
         XCTAssertEqual(AggregateStatus.someOffline.dot, "🟡")
     }
 
-    func test_dot_allOffline() {
+    func testDotAllOffline() {
         XCTAssertEqual(AggregateStatus.allOffline.dot, "⚫")
     }
 
-    func test_symbolName_allOnline() {
+    func testSymbolNameAllOnline() {
         XCTAssertEqual(AggregateStatus.allOnline.symbolName, "circle.fill")
     }
 
-    func test_symbolName_someOffline() {
+    func testSymbolNameSomeOffline() {
         XCTAssertEqual(AggregateStatus.someOffline.symbolName, "circle.lefthalf.filled")
     }
 
-    func test_symbolName_allOffline() {
+    func testSymbolNameAllOffline() {
         XCTAssertEqual(AggregateStatus.allOffline.symbolName, "circle")
     }
 }
@@ -168,7 +168,7 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: trimJobCache
 
-    func test_trimJobCache_removesOldestWhenOverLimit() {
+    func testTrimJobCacheRemovesOldestWhenOverLimit() {
         var cache: [Int: ActiveJob] = [
             1: ActiveJob(id: 1, name: "A", status: "completed", completedAt: Date(timeIntervalSinceReferenceDate: 100)),
             2: ActiveJob(id: 2, name: "B", status: "completed", completedAt: Date(timeIntervalSinceReferenceDate: 200)),
@@ -180,7 +180,7 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertNil(cache[1], "Oldest entry should be evicted")
     }
 
-    func test_trimJobCache_noopWhenUnderLimit() {
+    func testTrimJobCacheNoopWhenUnderLimit() {
         var cache: [Int: ActiveJob] = [
             1: ActiveJob(id: 1, name: "A", status: "completed"),
             2: ActiveJob(id: 2, name: "B", status: "completed"),
@@ -191,7 +191,7 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: buildJobDisplay
 
-    func test_buildJobDisplay_liveJobsFirst() {
+    func testBuildJobDisplayLiveJobsFirst() {
         let live: [ActiveJob] = [
             ActiveJob(id: 10, name: "Live", status: "in_progress")
         ]
@@ -203,31 +203,31 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertTrue(display.contains(where: { $0.id == 20 }))
     }
 
-    func test_buildJobDisplay_emptyLiveAndCache_isEmpty() {
+    func testBuildJobDisplayEmptyLiveAndCacheIsEmpty() {
         let display = PollResultBuilder.buildJobDisplay(live: [], cache: [:])
         XCTAssertTrue(display.isEmpty)
     }
 
     // MARK: buildJobState
 
-    func test_buildJobState_liveJobAppearsInDisplay() {
+    func testBuildJobStateLiveJobAppearsInDisplay() {
         let liveJob = ActiveJob(id: 99, name: "CI", status: "in_progress")
         let result = PollResultBuilder.buildJobState(
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [liveJob] },
-            backfill: { _ in }
+            backfill: { _ in } // no-op: backfill not required for this test case
         )
         XCTAssertTrue(result.display.contains(where: { $0.id == 99 }))
     }
 
-    func test_buildJobState_completedJobMovesToCache() {
+    func testBuildJobStateCompletedJobMovesToCache() {
         let doneJob = ActiveJob(id: 42, name: "Deploy", status: "completed", conclusion: "success")
         let result = PollResultBuilder.buildJobState(
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [doneJob] },
-            backfill: { _ in }
+            backfill: { _ in } // no-op: backfill not required for this test case
         )
         XCTAssertTrue(result.newCache.keys.contains(42))
         XCTAssertEqual(result.newCache[42]?.isDimmed, true)

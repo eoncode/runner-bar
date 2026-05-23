@@ -74,7 +74,6 @@ public struct PollResultBuilder {
     /// - Parameters:
     ///   - snapPrevGroups: Live-group snapshot from the previous poll.
     ///   - snapGroupCache: Completed-group cache from the previous poll.
-    ///   - jobCache: Completed-job cache used to enrich group jobs.
     ///   - fetchGroups: Closure that fetches live groups for every active scope.
     ///   - scopeFromGroup: Closure that derives a scope string from an WorkflowActionGroup.
     ///   - fireFailureHook: Closure invoked the first time a group is seen as completed.
@@ -82,7 +81,6 @@ public struct PollResultBuilder {
     static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
-        jobCache: [Int: ActiveJob],
         fetchGroups: ([String: WorkflowActionGroup]) -> [WorkflowActionGroup],
         scopeFromGroup: (WorkflowActionGroup) -> String,
         fireFailureHook: (WorkflowActionGroup, String) -> Void,
