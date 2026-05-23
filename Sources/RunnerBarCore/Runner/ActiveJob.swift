@@ -6,31 +6,31 @@ import Foundation
 // MARK: - ActiveJob model
 
 /// Represents a single GitHub Actions job that is live or recently completed.
-struct ActiveJob: Identifiable, Codable, Equatable {
+public struct ActiveJob: Identifiable, Codable, Equatable {
     /// GitHub-assigned job identifier.
-    let id: Int
+    public let id: Int
     /// Display name of the job.
-    let name: String
+    public let name: String
     /// Current lifecycle status (`queued`, `in_progress`, `completed`).
-    let status: String
+    public let status: String
     /// Final outcome once the job finishes (`success`, `failure`, `cancelled`, etc.).
-    let conclusion: String?
+    public let conclusion: String?
     /// When the job runner picked up the job.
-    let startedAt: Date?
+    public let startedAt: Date?
     /// When the job was added to the queue.
-    let createdAt: Date?
+    public let createdAt: Date?
     /// When the job finished.
-    let completedAt: Date?
+    public let completedAt: Date?
     /// Deep-link URL on github.com for this job.
-    let htmlUrl: String?
+    public let htmlUrl: String?
     /// `true` when the job is shown as a dimmed historical entry.
-    let isDimmed: Bool
+    public let isDimmed: Bool
     /// Ordered list of steps within this job.
-    let steps: [JobStep]
+    public let steps: [JobStep]
     /// Name of the runner that picked up this job.
     /// `nil` when the job is still queued and hasn't been assigned yet.
     /// Used to determine local vs cloud icon on action rows.
-    let runnerName: String?
+    public let runnerName: String?
 
     /// Human-readable elapsed wall-clock string for this job in `MM:SS` format.
     ///
@@ -40,7 +40,7 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     /// - Live (`in_progress`) jobs use `startedAt` if available, falling back to
     ///   `createdAt` while the runner assignment is still pending, and measures
     ///   up to `Date()` (wall clock).
-    var elapsed: String {
+    public var elapsed: String {
         guard status != "queued" else { return "00:00" }
         if conclusion != nil {
             guard let start = startedAt, let end = completedAt else { return "--:--" }
@@ -64,7 +64,7 @@ struct ActiveJob: Identifiable, Codable, Equatable {
     /// Returns `nil` when `runnerName` is not yet known (job still queued and
     /// unassigned). Returns `false` for well-known GitHub-hosted runner name
     /// prefixes (`ubuntu-`, `macos-`, `windows-`, etc.).
-    var isLocalRunner: Bool? {
+    public var isLocalRunner: Bool? {
         guard let name = runnerName else { return nil }
         let lower = name.lowercased()
         let githubPrefixes = [
@@ -77,6 +77,34 @@ struct ActiveJob: Identifiable, Codable, Equatable {
         ]
         let isHosted = githubPrefixes.contains { lower.hasPrefix($0) }
         return !isHosted
+    }
+
+    /// Creates a new instance.
+    /// Creates a new instance.
+    public init(
+        id: Int,
+        name: String,
+        status: String,
+        conclusion: String? = nil,
+        startedAt: Date? = nil,
+        createdAt: Date? = nil,
+        completedAt: Date? = nil,
+        htmlUrl: String? = nil,
+        isDimmed: Bool = false,
+        steps: [JobStep] = [],
+        runnerName: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.conclusion = conclusion
+        self.startedAt = startedAt
+        self.createdAt = createdAt
+        self.completedAt = completedAt
+        self.htmlUrl = htmlUrl
+        self.isDimmed = isDimmed
+        self.steps = steps
+        self.runnerName = runnerName
     }
 
     // MARK: Codable
@@ -104,19 +132,19 @@ struct ActiveJob: Identifiable, Codable, Equatable {
 // MARK: - JobStep
 
 /// A single step within an `ActiveJob`, matching the GitHub API `steps` array.
-struct JobStep: Identifiable, Codable, Equatable {
+public struct JobStep: Identifiable, Codable, Equatable {
     /// Step sequence number (1-based).
-    let id: Int
+    public let id: Int
     /// Display name of the step.
-    let name: String
+    public let name: String
     /// Lifecycle status of the step.
-    let status: String
+    public let status: String
     /// Conclusion of the step once finished.
-    let conclusion: String?
+    public let conclusion: String?
     /// When this step started.
-    let startedAt: Date?
+    public let startedAt: Date?
     /// When this step finished.
-    let completedAt: Date?
+    public let completedAt: Date?
 
     /// A single Unicode character summarising the step's outcome for display in the UI.
     ///
@@ -125,7 +153,7 @@ struct JobStep: Identifiable, Codable, Equatable {
     /// - `⊘` skipped or cancelled
     /// - `▶` currently in progress
     /// - `·` pending / unknown
-    var conclusionIcon: String {
+    public var conclusionIcon: String {
         switch conclusion {
         case "success": return "\u{2713}"
         case "failure": return "\u{2797}"
@@ -139,7 +167,7 @@ struct JobStep: Identifiable, Codable, Equatable {
     ///
     /// Uses `startedAt` and `completedAt` when available; falls back to
     /// `Date()` for either bound so in-progress steps show a live counter.
-    var elapsed: String {
+    public var elapsed: String {
         let start = startedAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
@@ -147,6 +175,24 @@ struct JobStep: Identifiable, Codable, Equatable {
         let m = secs / 60
         let s = secs % 60
         return String(format: "%02d:%02d", m, s)
+    }
+
+    /// Creates a new instance.
+    /// Creates a new instance.
+    public init(
+        id: Int,
+        name: String,
+        status: String,
+        conclusion: String? = nil,
+        startedAt: Date? = nil,
+        completedAt: Date? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.conclusion = conclusion
+        self.startedAt = startedAt
+        self.completedAt = completedAt
     }
 
     /// UserDefaults key constants.
@@ -170,27 +216,27 @@ struct JobStep: Identifiable, Codable, Equatable {
 /// `RunnerStore.makeActiveJob(from:iso:isDimmed:)` before being stored in
 /// `ActiveJob`. This type is intentionally separate from `ActiveJob` so the
 /// domain model stays free of JSON-parsing concerns.
-struct JobPayload: Decodable {
+public struct JobPayload: Decodable {
     /// The id constant.
-    let id: Int
+    public let id: Int
     /// The name constant.
-    let name: String
+    public let name: String
     /// The status constant.
-    let status: String
+    public let status: String
     /// The conclusion constant.
-    let conclusion: String?
+    public let conclusion: String?
     /// The startedAt constant.
-    let startedAt: String?
+    public let startedAt: String?
     /// The createdAt constant.
-    let createdAt: String?
+    public let createdAt: String?
     /// The completedAt constant.
-    let completedAt: String?
+    public let completedAt: String?
     /// The htmlUrl constant.
-    let htmlUrl: String?
+    public let htmlUrl: String?
     /// The steps constant.
-    let steps: [StepPayload]?
+    public let steps: [StepPayload]?
     /// The runnerName constant.
-    let runnerName: String?
+    public let runnerName: String?
 
     /// UserDefaults key constants.
     enum CodingKeys: String, CodingKey {
@@ -215,19 +261,19 @@ struct JobPayload: Decodable {
 ///
 /// Converted to `JobStep` (with proper `Date` values) by
 /// `RunnerStore.makeActiveJob(from:iso:isDimmed:)`.
-struct StepPayload: Decodable {
+public struct StepPayload: Decodable {
     /// The number constant.
-    let number: Int
+    public let number: Int
     /// The name constant.
-    let name: String
+    public let name: String
     /// The status constant.
-    let status: String
+    public let status: String
     /// The conclusion constant.
-    let conclusion: String?
+    public let conclusion: String?
     /// The startedAt constant.
-    let startedAt: String?
+    public let startedAt: String?
     /// The completedAt constant.
-    let completedAt: String?
+    public let completedAt: String?
 
     /// UserDefaults key constants.
     enum CodingKeys: String, CodingKey {
@@ -242,44 +288,11 @@ struct StepPayload: Decodable {
 
 // MARK: - ActiveJob factory
 
-/// Extension adding functionality to `RunnerStore`.
-extension RunnerStore {
-    /// Performs the makeActiveJob operation.
-    nonisolated func makeActiveJob(
-        from payload: JobPayload,
-        iso: ISO8601DateFormatter,
-        isDimmed: Bool
-    ) -> ActiveJob {
-        ActiveJob(
-            id: payload.id,
-            name: payload.name,
-            status: payload.status,
-            conclusion: payload.conclusion,
-            startedAt: payload.startedAt.flatMap { iso.date(from: $0) },
-            createdAt: payload.createdAt.flatMap { iso.date(from: $0) },
-            completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
-            htmlUrl: payload.htmlUrl,
-            isDimmed: isDimmed,
-            steps: (payload.steps ?? []).map { stepPayload in
-                JobStep(
-                    id: stepPayload.number,
-                    name: stepPayload.name,
-                    status: stepPayload.status,
-                    conclusion: stepPayload.conclusion,
-                    startedAt: stepPayload.startedAt.flatMap { iso.date(from: $0) },
-                    completedAt: stepPayload.completedAt.flatMap { iso.date(from: $0) }
-                )
-            },
-            runnerName: payload.runnerName
-        )
-    }
-}
-
 // MARK: - Codable helpers
 
 /// A value type representing JobsResponse.
-struct JobsResponse: Decodable {
+public struct JobsResponse: Decodable {
     /// The `jobs` property.
-    let jobs: [JobPayload]
+    public let jobs: [JobPayload]
 }
 // swiftlint:enable identifier_name opening_brace colon function_parameter_count

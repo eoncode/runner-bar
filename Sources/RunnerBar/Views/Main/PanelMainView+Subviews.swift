@@ -1,8 +1,9 @@
 // PanelMainView+Subviews.swift
 // RunnerBar
 // swiftlint:disable colon opening_brace
-import SwiftUI
 
+import RunnerBarCore
+import SwiftUI
 // MARK: - SectionHeaderLabel
 /// Uppercase small-caps label used as a section divider inside the panel.
 /// Displays a title string in the muted secondary style.

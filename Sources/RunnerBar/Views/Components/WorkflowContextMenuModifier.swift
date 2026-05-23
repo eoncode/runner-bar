@@ -1,7 +1,10 @@
 // WorkflowContextMenuModifier.swift
 // RunnerBar
-import AppKit
+
+import RunnerBarCore
 import SwiftUI
+
+// swiftlint:disable missing_docs
 
 // MARK: - Pasteboard helper
 /// Copies `text` to the general pasteboard on the main thread.
@@ -20,18 +23,13 @@ private func copyToPasteboard(_ text: String) {
 //   copy log (always)
 //   show workflow file on GitHub (always, opens first run's html_url)
 //   show GitHub SHA (always, opens commit)
-/// A value type representing WorkflowContextMenuModifier.
 private struct WorkflowContextMenuModifier: ViewModifier {
-    /// The group constant.
     let group: WorkflowActionGroup
 
-    /// Performs the body operation.
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
-    /// The menuItems computed view.
     }
 
-    /// The menuItems computed view.
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = group.groupStatus == .completed
@@ -112,39 +110,32 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 
 // MARK: - JobContextMenuModifier
 // Adds a right-click context menu to a JobRowCard (job level).
-/// A value type representing JobContextMenuModifier.
 private struct JobContextMenuModifier: ViewModifier {
-    /// The job constant.
     let job: ActiveJob
-    /// The group constant.
     let group: WorkflowActionGroup
 
-    /// Performs the body operation.
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
-    /// The menuItems computed view.
     }
 
-    /// The menuItems computed view.
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = job.conclusion != nil
         let isLive      = job.status == "in_progress"
 
-        // Re-run failed jobs in the run (GitHub Actions API has no single-job rerun endpoint).
+        // Re-run failed
         Button {
             let scope = group.repo
-            guard let run = group.runs.first else { return }
-            let runID = run.id
+            let jobID = job.id
             DispatchQueue.global(qos: .userInitiated).async {
-                ghPost("repos/\(scope)/actions/runs/\(runID)/rerun-failed-jobs")
+                ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
             }
         } label: {
-            Label("Re-run Failed Jobs", systemImage: "arrow.clockwise")
+            Label("Re-run Job", systemImage: "arrow.counterclockwise")
         }
         .disabled(!isConcluded)
 
-        // Cancel
+        // Cancel — ActiveJob has no runId; cancel all runs in the parent group
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
@@ -160,10 +151,10 @@ private struct JobContextMenuModifier: ViewModifier {
 
         // Copy log
         Button {
-            let jobID = job.id
+            let j = job
             let scope = group.repo
             DispatchQueue.global(qos: .userInitiated).async {
-                guard let text = fetchJobLog(jobID: jobID, scope: scope), !text.isEmpty else { return }
+                guard let text = fetchJobLog(jobID: j.id, scope: scope), !text.isEmpty else { return }
                 DispatchQueue.main.async { copyToPasteboard(text) }
             }
         } label: {
@@ -172,96 +163,52 @@ private struct JobContextMenuModifier: ViewModifier {
 
         Divider()
 
-        // Show on GitHub
+        // Show job on GitHub
         Button {
-            guard let urlString = job.htmlUrl, let url = URL(string: urlString) else { return }
+            guard let htmlUrl = job.htmlUrl,
+                  let url = URL(string: htmlUrl) else { return }
             NSWorkspace.shared.open(url)
         } label: {
-            Label("Show on GitHub", systemImage: "safari")
-        }
-        .disabled(job.htmlUrl == nil)
-    }
-}
-
-// MARK: - StepContextMenuModifier
-// Adds a right-click context menu to a StepRowView (step level). (#454 spec)
-// Items per issue #454:
-//   copy log  — fetches only this step's log via fetchStepLog(jobID:stepNumber:scope:)
-//   show on github — opens job html_url (GitHub has no direct per-step URL)
-//   show log in app — fires onTap closure (navigates to StepLogView)
-// NOTE: JobStep.id IS the step sequence number (1-based) per WorkflowActionGroup.swift comment.
-/// A value type representing StepContextMenuModifier.
-private struct StepContextMenuModifier: ViewModifier {
-    /// The step constant.
-    let step: JobStep
-    /// The job constant.
-    let job: ActiveJob
-    /// Fires the same navigation as a row tap — opens StepLogView.
-    let onTap: () -> Void
-
-    /// Performs the body operation.
-    func body(content: Content) -> some View {
-        content.contextMenu { menuItems }
-    /// The menuItems computed view.
-    }
-
-    /// The menuItems computed view.
-    @ViewBuilder
-    private var menuItems: some View {
-        // Show log in app — same as tapping the row
-        Button { onTap() } label: {
-            Label("Show Log in App", systemImage: "doc.text.magnifyingglass")
-        }
-
-        Divider()
-
-        // Copy log — only this step
-        // JobStep.id is the 1-based step sequence number used by fetchStepLog.
-        Button {
-            let jobID   = job.id
-            let stepNum = step.id  // fix: was step.number — JobStep uses .id as sequence number
-            let scope: String = {
-                if let urlStr = job.htmlUrl, let s = scopeFromHtmlUrl(urlStr) { return s }
-                return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
-            }()
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope),
-                      !text.isEmpty else { return }
-                DispatchQueue.main.async { copyToPasteboard(text) }
-            }
-        } label: {
-            Label("Copy Log", systemImage: "doc.on.doc")
-        }
-
-        Divider()
-
-        // Show on GitHub — opens the job page (no direct per-step GitHub URL exists)
-        Button {
-            guard let urlString = job.htmlUrl, let url = URL(string: urlString) else { return }
-            NSWorkspace.shared.open(url)
-        } label: {
-            Label("Show on GitHub", systemImage: "safari")
+            Label("Show Job on GitHub", systemImage: "doc.text")
         }
         .disabled(job.htmlUrl == nil)
     }
 }
 
 // MARK: - View extensions
-/// Extension adding functionality to `View`.
 extension View {
-    /// Attaches the workflow-level context menu (right-click) to an action row.
     func workflowContextMenu(group: WorkflowActionGroup) -> some View {
         modifier(WorkflowContextMenuModifier(group: group))
     }
 
-    /// Attaches the job-level context menu (right-click) to a job row.
     func jobContextMenu(job: ActiveJob, group: WorkflowActionGroup) -> some View {
         modifier(JobContextMenuModifier(job: job, group: group))
     }
 
-    /// Attaches the step-level context menu (right-click) to a step row. (#454)
-    /// Requires the parent job and the onTap navigation closure so all 3 items are wired.
     func stepContextMenu(step: JobStep, job: ActiveJob, onTap: @escaping () -> Void) -> some View {
         modifier(StepContextMenuModifier(step: step, job: job, onTap: onTap))
     }
 }
+
+// MARK: - StepContextMenuModifier
+
+private struct StepContextMenuModifier: ViewModifier {
+    let step: JobStep
+    let job: ActiveJob
+    let onTap: () -> Void
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(step.name, forType: .string)
+            } label: {
+                Label("Copy Step Name", systemImage: "doc.on.doc")
+            }
+            Button(action: onTap) {
+                Label("View Log", systemImage: "text.alignleft")
+            }
+        }
+    }
+}
+// swiftlint:enable missing_docs

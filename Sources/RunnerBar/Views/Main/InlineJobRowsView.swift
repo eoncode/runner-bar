@@ -1,7 +1,8 @@
 // InlineJobRowsView.swift
 // RunnerBar
-import SwiftUI
 
+import RunnerBarCore
+import SwiftUI
 // MARK: - TreeLineLeader
 /// Vertical tree-connector line drawn to the left of a job or step row.
 /// Renders a straight bar with an elbow arrow at the bottom for the last item.

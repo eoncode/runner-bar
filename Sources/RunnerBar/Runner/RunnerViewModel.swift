@@ -2,6 +2,7 @@
 // RunnerBar
 import Combine
 import Foundation
+import RunnerBarCore
 import SwiftUI
 
 // MARK: - RunnerViewModel

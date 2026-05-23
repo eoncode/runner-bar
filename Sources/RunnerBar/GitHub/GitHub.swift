@@ -1,6 +1,7 @@
 // GitHub.swift
 // RunnerBar
 import Foundation
+import RunnerBarCore
 
 // MARK: - URL helpers
 
@@ -139,9 +140,8 @@ func fetchUserRepos() -> [String] {
 
 // MARK: - Step log
 
-// swiftlint:disable:next force_try
-/// Compiled once at load time. The pattern is a string literal and never fails.
-private let _ansiRegex = try NSRegularExpression(
+// swiftlint:disable:next force_try missing_docs
+private let _ansiRegex = try! NSRegularExpression( // Compiled once; literal pattern never fails.
     pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
 )
 

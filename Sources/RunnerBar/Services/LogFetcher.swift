@@ -1,6 +1,7 @@
 // LogFetcher.swift
 // RunnerBar
 import Foundation
+import RunnerBarCore
 
 // MARK: - Filesystem path constants
 /// The unzipBinaryPath constant.
