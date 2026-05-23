@@ -29,13 +29,17 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 
 // MARK: - Fetch all jobs from active runs
 
+/// Shared ISO-8601 date formatter.
+/// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
+/// keeping one file-level instance avoids repeated allocation on every fetch call.
+private let iso8601 = ISO8601DateFormatter()
+
 /// Performs the fetchActiveJobs operation.
 func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchActiveJobs › invalid scope: \(scopeString)")
         return []
     }
-    let iso = ISO8601DateFormatter()
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
@@ -63,7 +67,7 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
         else { continue }
         for payload in resp.jobs {
             guard seenJobIDs.insert(payload.id).inserted else { continue }
-            jobs.append(makeActiveJob(from: payload, iso: iso, isDimmed: false))
+            jobs.append(makeActiveJob(from: payload, iso: iso8601, isDimmed: false))
         }
     }
     log("fetchActiveJobs › \(jobs.count) job(s) for \(scopeString)")

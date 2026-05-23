@@ -7,6 +7,12 @@ import RunnerBarCore
 
 // These extensions delegate to PollResultBuilder so RunnerStore.fetch() call
 // sites are unchanged while the logic lives in the independently testable builder.
+
+/// Shared ISO-8601 date formatter for this file.
+/// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
+/// keeping one file-level instance avoids repeated allocation on every poll cycle.
+private let iso8601 = ISO8601DateFormatter()
+
 /// Extension adding functionality to `RunnerStore`.
 extension RunnerStore {
 
@@ -56,7 +62,6 @@ extension RunnerStore {
 
     /// Performs the backfillSteps operation.
     nonisolated func backfillSteps(into cache: inout [Int: ActiveJob]) {
-        let iso = ISO8601DateFormatter()
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil,
@@ -67,7 +72,7 @@ extension RunnerStore {
                   let rawSteps = fresh.steps,
                   !rawSteps.isEmpty
             else { continue }
-            cache[cacheID] = makeActiveJob(from: fresh, iso: iso, isDimmed: true)
+            cache[cacheID] = makeActiveJob(from: fresh, iso: iso8601, isDimmed: true)
         }
     }
 

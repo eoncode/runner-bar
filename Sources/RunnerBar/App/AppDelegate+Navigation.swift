@@ -9,6 +9,11 @@ import SwiftUI
 // All view factory methods and the enrichment helper live here so AppDelegate.swift
 // can focus on panel lifecycle, status item, and event monitor concerns.
 
+/// Shared ISO-8601 date formatter for this file.
+/// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
+/// keeping one file-level instance avoids repeated allocation on every step enrichment call.
+private let iso8601 = ISO8601DateFormatter()
+
 /// Extension adding functionality to `AppDelegate`.
 extension AppDelegate {
 
@@ -25,8 +30,7 @@ extension AppDelegate {
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
               let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)
         else { return job }
-        let iso = ISO8601DateFormatter()
-        return makeActiveJob(from: fresh, iso: iso, isDimmed: job.isDimmed)
+        return makeActiveJob(from: fresh, iso: iso8601, isDimmed: job.isDimmed)
     }
 
     // MARK: - View factories

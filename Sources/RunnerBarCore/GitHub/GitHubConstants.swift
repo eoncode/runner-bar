@@ -11,7 +11,7 @@ import Foundation
 /// Shared base URLs used across GitHub transports, OAuth, and links.
 public enum GitHubConstants {
     /// Base URL for the GitHub REST API.
-    static let apiBase = "https://api.github.com" // NOSONAR — intentional centralisation of hardcoded URI
+    public static let apiBase = "https://api.github.com" // NOSONAR — intentional centralisation of hardcoded URI
     /// Base URL for the GitHub web interface.
-    static let base    = "https://github.com" // NOSONAR — intentional centralisation of hardcoded URI
+    public static let base    = "https://github.com" // NOSONAR — intentional centralisation of hardcoded URI
 }

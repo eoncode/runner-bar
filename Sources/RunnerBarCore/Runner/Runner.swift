@@ -23,6 +23,15 @@ public struct Runner: Codable, Identifiable {
     /// not present in the JSON payload.
     public var metrics: RunnerMetrics?
 
+    /// Creates a new instance.
+    public init(id: Int, name: String, status: String, busy: Bool, metrics: RunnerMetrics? = nil) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.busy = busy
+        self.metrics = metrics
+    }
+
     /// Excludes `metrics` from JSON decoding — it is assigned locally after fetch,
     /// not returned by the GitHub API.
     enum CodingKeys: String, CodingKey {
@@ -36,7 +45,7 @@ public struct Runner: Codable, Identifiable {
     /// - `"offline"` — runner is not connected
     /// - `"idle (CPU: — MEM: —)"` — online but no matching process found
     /// - `"active (CPU: 12.3% MEM: 4.5%)"` — online and executing a job
-    var displayStatus: String {
+    public var displayStatus: String {
         if status == "offline" { return "offline" }
         let label = busy ? "active" : "idle"
         guard let runnerMetrics = metrics else { return "\(label) (CPU: \u{2014} MEM: \u{2014})" }
