@@ -213,7 +213,7 @@ struct InlineJobRowsView: View {
         // Intentionally empty: default is a no-op.
         // Callers that require navigation provide a real implementation.
     }
-    @EnvironmentObject private var popoverState: PopoverOpenState
+    @EnvironmentObject private var popoverState: PanelVisibilityState
     @State private var expandedJobIDs: Set<Int> = []
     private var tickSnapshot: Int { tick }
     var body: some View {

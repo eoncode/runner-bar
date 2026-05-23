@@ -28,7 +28,7 @@ extension AppDelegate {
 
     func mainView() -> AnyView {
         savedNavState = nil
-        return wrapEnv(PopoverMainView(
+        return wrapEnv(PanelMainView(
             store: observable,
             onStepTap: { [weak self] job, step in
                 guard let self else { return }
