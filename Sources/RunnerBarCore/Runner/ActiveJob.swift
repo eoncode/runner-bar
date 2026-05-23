@@ -51,14 +51,22 @@ public struct ActiveJob: Identifiable, Equatable {
     }
 
     /// `true` when this job ran on a self-hosted (non GitHub-hosted) runner.
-    public var isLocalRunner: Bool {
-        guard let name = runnerName?.lowercased() else { return false }
-        let hostedPrefixes = ["ubuntu-", "macos-", "windows-", "buildjet-", "depot-"]
+    public var isLocalRunner: Bool? {
+        guard let name = runnerName?.lowercased() else { return nil }
+        let hostedPrefixes = ["ubuntu-", "macos-", "windows-", "buildjet-", "depot-", "github actions "]
         return !hostedPrefixes.contains(where: { name.hasPrefix($0) })
     }
 
     /// Display title used in the panel row.
     public var displayTitle: String { name }
+
+    /// Fraction of steps that have a conclusion (0.0–1.0).
+    /// Returns `nil` when the step list is empty (jobs not yet enriched).
+    public var progressFraction: Double? {
+        guard !steps.isEmpty else { return nil }
+        let done = steps.filter { $0.conclusion != nil }.count
+        return Double(done) / Double(steps.count)
+    }
 }
 
 // MARK: - Job step
@@ -87,6 +95,17 @@ public struct JobStep: Identifiable, Equatable {
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         return String(format: "%02d:%02d", secs / 60, secs % 60)
+    }
+
+    /// A single Unicode character summarising the step's outcome for display in the UI.
+    public var conclusionIcon: String {
+        switch conclusion {
+        case .success:              return "\u{2713}"  // ✓
+        case .failure:              return "\u{2797}"  // ❗
+        case .skipped, .cancelled:  return "\u{2298}"  // ⊘
+        case .none, .some:
+            return status == .inProgress ? "\u{25B6}" : "\u{00B7}"
+        }
     }
 }
 
