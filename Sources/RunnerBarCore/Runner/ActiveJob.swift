@@ -34,17 +34,78 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     public let startedAt: Date?
     /// The UTC date/time at which the job finished (nil while running).
     public let completedAt: Date?
+    /// The UTC date/time at which the job was created/queued.
+    public let createdAt: Date?
 
     // MARK: Steps
     /// The ordered list of steps belonging to this job.
     public let steps: [JobStep]
 
+    // MARK: Designated init
+    public init(
+        id: Int,
+        name: String,
+        htmlUrl: String? = nil,
+        status: JobStatus,
+        conclusion: JobConclusion? = nil,
+        isDimmed: Bool = false,
+        runnerName: String? = nil,
+        scope: String? = nil,
+        startedAt: Date? = nil,
+        completedAt: Date? = nil,
+        createdAt: Date? = nil,
+        steps: [JobStep] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.htmlUrl = htmlUrl
+        self.status = status
+        self.conclusion = conclusion
+        self.isDimmed = isDimmed
+        self.runnerName = runnerName
+        self.scope = scope
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.createdAt = createdAt
+        self.steps = steps
+    }
+
+    // MARK: String-based convenience init (for tests and legacy callers)
+    public init(
+        id: Int,
+        name: String,
+        htmlUrl: String? = nil,
+        status: String,
+        conclusion: String? = nil,
+        isDimmed: Bool = false,
+        runnerName: String? = nil,
+        scope: String? = nil,
+        startedAt: Date? = nil,
+        completedAt: Date? = nil,
+        createdAt: Date? = nil,
+        steps: [JobStep] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.htmlUrl = htmlUrl
+        self.status = JobStatus(rawString: status)
+        self.conclusion = conclusion.map { JobConclusion(rawString: $0) }
+        self.isDimmed = isDimmed
+        self.runnerName = runnerName
+        self.scope = scope
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.createdAt = createdAt
+        self.steps = steps
+    }
+
     // MARK: Derived
 
     /// Human-readable elapsed duration, e.g. `"02:47"`.
-    /// Returns `"--:--"` when `startedAt` is nil.
+    /// Uses `startedAt` if available, falls back to `createdAt`, returns `"00:00"` if both nil.
     public var elapsed: String {
-        guard let start = startedAt else { return "--:--" }
+        let start = startedAt ?? createdAt
+        guard let start else { return "00:00" }
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         return String(format: "%02d:%02d", secs / 60, secs % 60)
@@ -88,10 +149,48 @@ public struct JobStep: Identifiable, Equatable, Sendable {
     /// The 1-based step number as returned by the API.
     public let number: Int
 
+    // MARK: Designated init
+    public init(
+        id: Int,
+        name: String,
+        status: JobStatus,
+        conclusion: JobConclusion? = nil,
+        startedAt: Date? = nil,
+        completedAt: Date? = nil,
+        number: Int = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.conclusion = conclusion
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.number = number
+    }
+
+    // MARK: String-based convenience init (for tests and legacy callers)
+    public init(
+        id: Int,
+        name: String,
+        status: String,
+        conclusion: String? = nil,
+        startedAt: Date? = nil,
+        completedAt: Date? = nil,
+        number: Int = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.status = JobStatus(rawString: status)
+        self.conclusion = conclusion.map { JobConclusion(rawString: $0) }
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.number = number
+    }
+
     /// Human-readable elapsed duration for this step.
-    /// Returns `"--:--"` when `startedAt` is nil.
+    /// Returns `"00:00"` when `startedAt` is nil.
     public var elapsed: String {
-        guard let start = startedAt else { return "--:--" }
+        guard let start = startedAt else { return "00:00" }
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         return String(format: "%02d:%02d", secs / 60, secs % 60)
@@ -114,23 +213,14 @@ public struct JobStep: Identifiable, Equatable, Sendable {
 /// Raw API payload decoded from `/actions/runs/{id}/jobs` responses.
 /// Converted to `ActiveJob` via `makeActiveJob(from:iso:isDimmed:)`.
 public struct JobPayload: Decodable {
-    /// The unique GitHub job ID.
     public let id: Int
-    /// The display name of the job.
     public let name: String
-    /// Typed lifecycle status decoded from JSON.
     public let status: JobStatus
-    /// Typed conclusion decoded from JSON (nil while the job is running).
     public let conclusion: JobConclusion?
-    /// ISO-8601 start timestamp string as returned by the API.
     public let startedAt: String?
-    /// ISO-8601 completion timestamp string as returned by the API.
     public let completedAt: String?
-    /// The GitHub web URL for this job.
     public let htmlUrl: String?
-    /// The name of the runner that executed or is executing this job.
     public let runnerName: String?
-    /// The steps belonging to this job.
     public let steps: [StepPayload]
 
     enum CodingKeys: String, CodingKey {
@@ -146,19 +236,13 @@ public struct JobPayload: Decodable {
     }
 }
 
-/// Raw API payload for a single job step, decoded from the `steps` array in a jobs response.
+/// Raw API payload for a single job step.
 public struct StepPayload: Decodable {
-    /// The display name of the step.
     public let name: String
-    /// Typed lifecycle status of the step.
     public let status: JobStatus
-    /// Typed conclusion of the step (nil while the step is running).
     public let conclusion: JobConclusion?
-    /// The 1-based step number.
     public let number: Int
-    /// ISO-8601 start timestamp string as returned by the API.
     public let startedAt: String?
-    /// ISO-8601 completion timestamp string as returned by the API.
     public let completedAt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -173,7 +257,6 @@ public struct StepPayload: Decodable {
 
 /// Wraps the top-level JSON object returned by `/actions/runs/{id}/jobs`.
 public struct JobsResponse: Decodable {
-    /// The array of job payloads contained in the response.
     public let jobs: [JobPayload]
 }
 // swiftlint:enable missing_docs
@@ -181,12 +264,6 @@ public struct JobsResponse: Decodable {
 // MARK: - Factory
 
 /// Converts a raw `JobPayload` into a fully-typed `ActiveJob`.
-///
-/// - Parameters:
-///   - payload: The decoded API payload.
-///   - iso: A shared `ISO8601DateFormatter` instance (expensive to allocate — pass a cached one).
-///   - isDimmed: Pass `true` for recently-completed jobs shown as faded history entries.
-/// - Returns: A fully-populated `ActiveJob`.
 public func makeActiveJob(
     from payload: JobPayload,
     iso: ISO8601DateFormatter,
