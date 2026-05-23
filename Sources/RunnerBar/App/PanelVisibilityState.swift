@@ -18,26 +18,26 @@ import SwiftUI
 //
 // HEIGHT CALLBACK (onHeightReady):
 // AppDelegate sets onHeightReady BEFORE show(). PanelMainView calls it ONCE
-// via .onPreferenceChange(PopoverHeightKey.self), guarded by heightReported.
-// AppDelegate's callback calls popover.setContentSize(). animates=false = no jump.
+// via .onPreferenceChange(PanelHeightKey.self), guarded by heightReported.
+// AppDelegate's callback calls panel.setFrame(). animates=false = no jump.
 // After the callback fires, heightReported = true prevents repeated calls.
 //
 // USAGE:
 // AppDelegate:
-//   popoverOpenState.isOpen = true
-//   popoverOpenState.heightReported = false
-//   popoverOpenState.onHeightReady = { [weak popover] h in
+//   panelVisibilityState.isOpen = true
+//   panelVisibilityState.heightReported = false
+//   panelVisibilityState.onHeightReady = { [weak panel] h in
 //       let w = AppDelegate.fixedWidth
 //       let max = self.maxHeight
-//       popover?.setContentSize(NSSize(width: w, height: min(h, max)))
+//       panel?.setFrame(NSRect(...))
 //   }
-//   popover.show(...)
+//   panel.orderFront(nil)
 //
 // PanelMainView:
-//   .onPreferenceChange(PopoverHeightKey.self) { h in
-//       guard h > 10, !popoverOpenState.heightReported else { return }
-//       popoverOpenState.heightReported = true
-//       popoverOpenState.onHeightReady?(h)
+//   .onPreferenceChange(PanelHeightKey.self) { h in
+//       guard h > 10, !panelVisibilityState.heightReported else { return }
+//       panelVisibilityState.heightReported = true
+//       panelVisibilityState.onHeightReady?(h)
 //   }
 //
 // ⚠️ CONTRACT:
@@ -61,7 +61,7 @@ final class PanelVisibilityState: ObservableObject {
     var heightReported: Bool = false
 
     /// Called ONCE after the first real rendered height is known.
-    /// Set by AppDelegate before show(). Calls popover.setContentSize().
+    /// Set by AppDelegate before show(). Calls panel.setFrame().
     /// ❌ NEVER call more than once per open.
     var onHeightReady: ((CGFloat) -> Void)?
 }

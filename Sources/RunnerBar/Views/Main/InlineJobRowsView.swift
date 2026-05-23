@@ -213,12 +213,12 @@ struct InlineJobRowsView: View {
         // Intentionally empty: default is a no-op.
         // Callers that require navigation provide a real implementation.
     }
-    @EnvironmentObject private var popoverState: PanelVisibilityState
+    @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
     @State private var expandedJobIDs: Set<Int> = []
     private var tickSnapshot: Int { tick }
     var body: some View {
         Group {
-            if popoverState.isOpen {
+            if panelVisibilityState.isOpen {
                 let jobs = fullExpand ? group.jobs : group.jobs.filter { $0.status == "in_progress" }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in

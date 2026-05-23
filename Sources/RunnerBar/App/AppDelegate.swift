@@ -50,7 +50,7 @@ import SwiftUI
 // ❌ NEVER restore initPanelWidth to 600.
 //
 // PANELVISIBILITYSTATE:
-// popoverOpenState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
+// panelVisibilityState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
 // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
 // ❌ NEVER pass as a plain Bool prop to PanelMainView.
 //
@@ -105,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // ❌ NEVER pass as a plain Bool prop to PanelMainView.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     // ALLOWED UNDER ANY CIRCUMSTANCE.
-    let popoverOpenState = PanelVisibilityState() // internal: required for AppDelegate+Navigation
+    let panelVisibilityState = PanelVisibilityState() // internal: required for AppDelegate+Navigation
 
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     static let minWidth: CGFloat = 280
@@ -131,11 +131,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Environment injection
 
-    /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(popoverOpenState).
+    /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(panelVisibilityState).
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
     /// ALLOWED UNDER ANY CIRCUMSTANCE.
     func wrapEnv<V: View>(_ view: V) -> AnyView { // internal: required for AppDelegate+Navigation
-        AnyView(view.environmentObject(popoverOpenState))
+        AnyView(view.environmentObject(panelVisibilityState))
     }
 
     // MARK: - App lifecycle
@@ -222,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel?.orderOut(nil)
         panelIsOpen = false
         panelTopY = nil
-        popoverOpenState.isOpen = false
+        panelVisibilityState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
         // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
@@ -273,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observable.reload(localRunnerStore: LocalRunnerStore.shared)
 
         panelIsOpen = true
-        popoverOpenState.isOpen = true
+        panelVisibilityState.isOpen = true
         panelTopY = statusItemRect.minY - Self.gap
 
         let initW = Self.initPanelWidth

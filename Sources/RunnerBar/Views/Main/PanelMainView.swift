@@ -41,7 +41,7 @@ struct PanelMainView: View {
     /// Called when user taps a step row in an inline job list. (#455)
     let onStepTap: (ActiveJob, JobStep) -> Void
     let onSelectSettings: () -> Void
-    @EnvironmentObject private var popoverOpenState: PanelVisibilityState
+    @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
     @State private var isAuthenticated = (githubToken() != nil)
     @StateObject private var systemStats = SystemStatsViewModel()
     @State private var visibleCount: Int = 10
@@ -81,14 +81,14 @@ struct PanelMainView: View {
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
-            if !popoverOpenState.isOpen { systemStats.start() }
+            if !panelVisibilityState.isOpen { systemStats.start() }
             startDisplayTickTimer()
         }
         .onDisappear {
             systemStats.stop()
             stopDisplayTickTimer()
         }
-        .onChange(of: popoverOpenState.isOpen) { open in
+        .onChange(of: panelVisibilityState.isOpen) { open in
             if open { systemStats.stop() } else { systemStats.start() }
         }
         .onChange(of: store.actions) { _ in visibleCount = 10 }
