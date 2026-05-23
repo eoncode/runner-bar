@@ -29,14 +29,12 @@ private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInte
     let outPipe = Pipe()
     process.standardOutput = outPipe
     process.standardError = Pipe()
-    do {
-        try process.run()
-    } catch {
+    do { try process.run() } catch {
         log("runProcess › launch failed path=\(path) args=\(arguments) error=\(error)")
         return ""
     }
     let sema = DispatchSemaphore(value: 0)
-    DispatchQueue.global(qos: .utility).async {
+    DispatchQueue.global(qos: .utility).async { [sema] in
         process.waitUntilExit()
         sema.signal()
     }

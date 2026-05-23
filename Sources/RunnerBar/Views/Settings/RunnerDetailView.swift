@@ -485,7 +485,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Save button helper
 
-    /// Inline save-state indicator: spinner while saving, checkmark on success, X on failure, Save button when idle.
+    /// Returns a view representing the current save state: spinner, checkmark, error icon, or Save button.
     @ViewBuilder
     private func saveButton(state: SaveState, action: @escaping () -> Void) -> some View {
         switch state {
@@ -502,7 +502,7 @@ struct RunnerDetailView: View {
         }
     }
 
-    /// Shows a restart note or error message below a config card after a save attempt.
+    /// Shows a restart note or failure message below a config card based on the current save state.
     @ViewBuilder
     private func saveStateRow(_ state: SaveState, restartNote: Bool) -> some View {
         if restartNote, state == .success {
