@@ -16,6 +16,40 @@ public struct RunnerMetrics: Equatable {
     }
 }
 
+// MARK: - Direct-execution helper
+
+/// Runs an executable at `path` with `arguments` directly — no shell wrapper.
+/// Avoids `/bin/zsh -c` overhead, shell quoting edge-cases, and command-injection risk.
+/// Timeout is enforced via `DispatchSemaphore`; the process is terminated on expiry.
+/// Returns trimmed stdout, or an empty string on timeout / launch failure.
+private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInterval = 5) -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: path)
+    process.arguments = arguments
+    let outPipe = Pipe()
+    process.standardOutput = outPipe
+    process.standardError = Pipe()
+    do { try process.run() } catch {
+        log("runProcess › launch failed path=\(path) args=\(arguments) error=\(error)")
+        return ""
+    }
+    let sema = DispatchSemaphore(value: 0)
+    DispatchQueue.global(qos: .utility).async {
+        process.waitUntilExit()
+        sema.signal()
+    }
+    guard sema.wait(timeout: .now() + timeout) == .success else {
+        log("runProcess › timeout after \(timeout)s — terminating \(path)")
+        process.terminate()
+        return ""
+    }
+    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+    return String(data: data, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+}
+
+// MARK: - Per-runner metrics
+
 /// Returns CPU+MEM metrics for the `Runner.Worker` / `Runner.Listener` processes
 /// that belong to the runner installed at `installPath`.
 ///
@@ -25,9 +59,7 @@ public struct RunnerMetrics: Equatable {
 /// Returns `nil` when no matching process is found.
 public func metricsForRunner(installPath: String) -> RunnerMetrics? {
     log("metricsForRunner › ENTER installPath=\(installPath)")
-    // Escape single-quotes in path for shell safety
-    let escaped = installPath.replacingOccurrences(of: "'", with: "'\\''")
-    let pidsOutput = shell("pgrep -f '\(escaped)'", timeout: 3)
+    let pidsOutput = runProcess("/usr/bin/pgrep", ["-f", installPath], timeout: 3)
     guard !pidsOutput.isEmpty else {
         log("metricsForRunner › no processes found for installPath=\(installPath)")
         return nil
@@ -38,7 +70,7 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("metricsForRunner › found pids=\(pidList) for installPath=\(installPath)")
-    let output = shell("ps -p \(pidList) -o pid,%cpu,%mem,command", timeout: 5)
+    let output = runProcess("/bin/ps", ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
     guard !output.isEmpty else {
         log("metricsForRunner › ps returned empty for installPath=\(installPath)")
         return nil
@@ -68,12 +100,16 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
     return result
 }
 
+// MARK: - All-worker metrics
+
 /// Performs the allWorkerMetrics operation.
 public func allWorkerMetrics() -> [RunnerMetrics] {
-    log("allWorkerMetrics › ENTER — using pgrep + targeted ps")
+    log("allWorkerMetrics › ENTER — using direct pgrep + ps (no shell wrapper)")
 
     // Step 1: find matching PIDs only — fast, doesn't walk full process table
-    let pidsOutput = shell("pgrep -f 'Runner\\.Worker|Runner\\.Listener'", timeout: 3)
+    let pidsOutput = runProcess(
+        "/usr/bin/pgrep", ["-f", "Runner.Worker|Runner.Listener"], timeout: 3
+    )
     guard !pidsOutput.isEmpty else {
         log("allWorkerMetrics › no Runner.Worker / Runner.Listener processes found — returning []")
         return []
@@ -86,7 +122,7 @@ public func allWorkerMetrics() -> [RunnerMetrics] {
     log("allWorkerMetrics › found pids=\(pidList)")
 
     // Step 2: ps scoped to only those PIDs
-    let output = shell("ps -p \(pidList) -o pid,%cpu,%mem,command", timeout: 5)
+    let output = runProcess("/bin/ps", ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
     log("allWorkerMetrics › ps returned — outputBytes=\(output.count) isEmpty=\(output.isEmpty)")
     guard !output.isEmpty else {
         log("allWorkerMetrics › ps returned empty — returning []")
