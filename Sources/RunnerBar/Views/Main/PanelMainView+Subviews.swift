@@ -73,6 +73,7 @@ struct PanelLocalRunnerRow: View {
         let busy = runners.filter { $0.isBusy }
         if !busy.isEmpty { runnerList(busy) }
     }
+    /// Renders a vertical stack of `runnerCard` views for each busy local runner.
     @ViewBuilder private func runnerList(_ busy: [RunnerModel]) -> some View {
         ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
         if busy.count > 3 {
@@ -82,6 +83,7 @@ struct PanelLocalRunnerRow: View {
         }
         Divider()
     }
+    /// Compact card showing a single runner's name, status badge, and CPU/memory stats.
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
@@ -174,6 +176,7 @@ struct ActionRowView: View {
             previousStatus = newStatus
         }
     }
+    /// Resolves the effective display status, preferring the overridden `expandState` when set.
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
@@ -186,6 +189,7 @@ struct ActionRowView: View {
             }
         }
     }
+    /// Main body of the action row: workflow name, repo, branch, and trailing meta info.
     private var rowContent: some View {
         let tickSnapshot = tick
         return HStack(spacing: 6) {
@@ -219,6 +223,7 @@ struct ActionRowView: View {
         .padding(.trailing, RBSpacing.xs)
         .padding(.vertical, 4)
     }
+    /// Trailing meta area: elapsed time or conclusion label, keyed off `tickSnapshot` for live updates.
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
@@ -238,6 +243,7 @@ struct ActionRowView: View {
             .fixedSize(horizontal: true, vertical: false)
         statusBadge
     }
+    /// Colored pill badge reflecting the current run status (queued, in-progress, success, failure, etc.).
     @ViewBuilder private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
