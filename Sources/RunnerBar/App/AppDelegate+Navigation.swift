@@ -25,7 +25,8 @@ extension AppDelegate {
     // Marked nonisolated to opt out of @MainActor isolation.
     /// Performs the enrichStepsIfNeeded operation.
     nonisolated func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
-        guard job.steps.isEmpty || job.steps.contains(where: { $0.status == "in_progress" }),
+        // ActiveJob.steps[].status is typed as JobStatus — compare against enum case.
+        guard job.steps.isEmpty || job.steps.contains(where: { $0.status == .inProgress }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
               let fresh = try? JSONDecoder().decode(JobPayload.self, from: data)

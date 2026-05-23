@@ -178,7 +178,7 @@ struct PanelMainView: View {
     /// same mechanism used by elapsed-time labels in `ActionRowView`.
     private var rateLimitBanner: some View {
         // Capture tick to force a re-evaluation every second.
-        let _ = displayTick
+        _ = displayTick // swiftlint:disable:this redundant_discardable_let
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
             let remaining = max(0, resetDate.timeIntervalSinceNow)

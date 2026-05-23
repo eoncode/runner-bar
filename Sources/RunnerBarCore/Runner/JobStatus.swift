@@ -46,8 +46,8 @@ public enum JobStatus: Hashable {
     }
 }
 
+// swiftlint:disable missing_docs
 extension JobStatus: Codable {
-    /// Creates a `JobStatus` by decoding a single raw string value.
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         switch raw {
@@ -61,12 +61,12 @@ extension JobStatus: Codable {
         }
     }
 
-    /// Encodes the receiver as its raw string value.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
 }
+// swiftlint:enable missing_docs
 
 extension JobStatus: CustomStringConvertible {
     /// A human-readable description equal to `rawValue`.
@@ -126,8 +126,8 @@ public enum JobConclusion: Hashable {
     }
 }
 
+// swiftlint:disable missing_docs
 extension JobConclusion: Codable {
-    /// Creates a `JobConclusion` by decoding a single raw string value.
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         switch raw {
@@ -144,12 +144,12 @@ extension JobConclusion: Codable {
         }
     }
 
-    /// Encodes the receiver as its raw string value.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
 }
+// swiftlint:enable missing_docs
 
 extension JobConclusion: CustomStringConvertible {
     /// A human-readable description equal to `rawValue`.
