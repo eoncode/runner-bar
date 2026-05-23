@@ -159,7 +159,7 @@ func fetchActionGroups(for scope: String, cache: [String: WorkflowActionGroup] =
         if let cached = cache[sha],
            !cached.jobs.isEmpty,
            cached.jobs.allSatisfy({ $0.conclusion != nil }) &&
-           !cached.jobs.contains(where: { $0.steps.contains { $0.status == "in_progress" } }) {
+           !cached.jobs.contains(where: { $0.steps.contains { $0.status == .inProgress } }) {
             allJobs = cached.jobs
         } else {
             var fetched: [ActiveJob] = []
@@ -206,28 +206,29 @@ func fetchActionGroups(for scope: String, cache: [String: WorkflowActionGroup] =
 func makeActiveJob(from jobPayload: JobPayload,
                    iso: ISO8601DateFormatter,
                    isDimmed: Bool = false) -> ActiveJob {
-    let steps: [JobStep] = (jobPayload.steps ?? []).map { step in
+    let steps: [JobStep] = (jobPayload.steps).map { step in
         JobStep(
-            id: step.number,
-            name: step.name,
-            status: step.status,
-            conclusion: step.conclusion,
-            startedAt: step.startedAt.flatMap { iso.date(from: $0) },
-            completedAt: step.completedAt.flatMap { iso.date(from: $0) }
+            id:          step.number,
+            name:        step.name,
+            status:      step.status,
+            conclusion:  step.conclusion,
+            startedAt:   step.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: step.completedAt.flatMap { iso.date(from: $0) },
+            number:      step.number
         )
     }
     return ActiveJob(
-        id: jobPayload.id,
-        name: jobPayload.name,
-        status: jobPayload.status,
-        conclusion: jobPayload.conclusion,
-        startedAt: jobPayload.startedAt.flatMap { iso.date(from: $0) },
-        createdAt: jobPayload.createdAt.flatMap { iso.date(from: $0) },
+        id:          jobPayload.id,
+        name:        jobPayload.name,
+        htmlUrl:     jobPayload.htmlUrl,
+        status:      jobPayload.status,
+        conclusion:  jobPayload.conclusion,
+        isDimmed:    isDimmed,
+        runnerName:  jobPayload.runnerName,
+        scope:       nil,
+        startedAt:   jobPayload.startedAt.flatMap { iso.date(from: $0) },
         completedAt: jobPayload.completedAt.flatMap { iso.date(from: $0) },
-        htmlUrl: jobPayload.htmlUrl,
-        isDimmed: isDimmed,
-        steps: steps,
-        runnerName: jobPayload.runnerName
+        steps:       steps
     )
 }
 
@@ -244,7 +245,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     var refreshCount = 0
     for idx in result.indices {
         let job = result[idx]
-        let needsRefresh = job.conclusion == nil || job.steps.contains { $0.status == "in_progress" }
+        let needsRefresh = job.conclusion == nil || job.steps.contains { $0.status == .inProgress }
         guard needsRefresh, refreshCount < 3 else { continue }
         refreshCount += 1
         guard let freshData = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
@@ -252,20 +253,20 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
         else { continue }
         let freshJob = makeActiveJob(from: fresh, iso: iso8601)
         if fresh.conclusion != nil { result[idx] = freshJob; continue }
-        let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == "in_progress" }
+        let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == .inProgress }
         if betterSteps {
             result[idx] = ActiveJob(
-                id: job.id,
-                name: job.name,
-                status: job.status,
-                conclusion: job.conclusion,
-                startedAt: freshJob.startedAt ?? job.startedAt,
-                createdAt: freshJob.createdAt ?? job.createdAt,
+                id:          job.id,
+                name:        job.name,
+                htmlUrl:     job.htmlUrl,
+                status:      job.status,
+                conclusion:  job.conclusion,
+                isDimmed:    job.isDimmed,
+                runnerName:  freshJob.runnerName ?? job.runnerName,
+                scope:       job.scope,
+                startedAt:   freshJob.startedAt ?? job.startedAt,
                 completedAt: freshJob.completedAt ?? job.completedAt,
-                htmlUrl: job.htmlUrl,
-                isDimmed: job.isDimmed,
-                steps: freshJob.steps,
-                runnerName: freshJob.runnerName ?? job.runnerName
+                steps:       freshJob.steps
             )
         }
     }
