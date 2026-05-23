@@ -154,7 +154,36 @@ private let _ansiRegex = try! NSRegularExpression( // Compiled once; literal pat
     pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
 )
 
-/// Performs the fetchStepLog operation.
+/// URLSession configured to NOT follow redirects.
+/// Used for the first leg of fetchStepLog so we can capture the pre-signed S3
+/// Location URL from the GitHub 302 response before fetching the log body.
+private class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil) // Cancel the redirect; we want the 302 Location header.
+    }
+}
+private let noRedirectDelegate = NoRedirectDelegate()
+private let noRedirectSession = URLSession(
+    configuration: .default,
+    delegate: noRedirectDelegate,
+    delegateQueue: nil
+)
+
+/// Fetches step logs for a given job via URLSession (token path) or gh CLI (fallback).
+///
+/// The GitHub `/actions/jobs/{id}/logs` endpoint returns a **302 redirect** to a
+/// pre-signed S3 URL. We handle this in two steps:
+/// 1. Issue a GET with redirects disabled to capture the `Location` header.
+/// 2. Fetch the raw log from the S3 URL without `Authorization` headers
+///    (pre-signed URLs reject extra auth headers with a 400 SignatureDoesNotMatch error).
+///
+/// Falls back to `runGHProcess` when no token is available.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchStepLog › invalid scope: \(scopeString)")
@@ -166,12 +195,16 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
     }
     let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
-    let (data, _) = runGHProcess(
-        arguments: ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"],
-        timeout: 30
-    )
-    guard let data, let raw = String(data: data, encoding: .utf8),
-          !raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty else {
+
+    let raw: String?
+    if let token = githubToken() {
+        raw = fetchStepLogViaURLSession(endpoint: endpoint, token: token)
+    } else {
+        log("fetchStepLog › no token, falling back to gh CLI")
+        raw = fetchStepLogViaCLI(endpoint: endpoint)
+    }
+
+    guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty response for job \(jobID)")
         return nil
     }
@@ -179,6 +212,84 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
         log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
         return nil
     }
+    return parseStepLog(raw, stepNumber: stepNumber)
+}
+
+/// Step 1+2: resolve the 302 redirect then fetch the raw log body.
+private func fetchStepLogViaURLSession(endpoint: String, token: String) -> String? {
+    let urlString = endpoint.hasPrefix("http")
+        ? endpoint
+        : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+    guard let url = URL(string: urlString) else {
+        log("fetchStepLogViaURLSession › invalid URL: \(urlString)")
+        return nil
+    }
+
+    // Step 1: GET with redirects disabled — capture the Location header.
+    var redirectURL: URL?
+    var step1Request = URLRequest(url: url, timeoutInterval: 20)
+    step1Request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    step1Request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    step1Request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    let sem1 = DispatchSemaphore(value: 0)
+    noRedirectSession.dataTask(with: step1Request) { _, response, error in
+        defer { sem1.signal() }
+        if let error {
+            log("fetchStepLogViaURLSession › step1 error: \(error.localizedDescription)")
+            return
+        }
+        if let http = response as? HTTPURLResponse {
+            log("fetchStepLogViaURLSession › step1 status=\(http.statusCode)")
+            if let location = http.value(forHTTPHeaderField: "Location"),
+               let locURL = URL(string: location) {
+                redirectURL = locURL
+            }
+        }
+    }.resume()
+    sem1.wait()
+
+    guard let s3URL = redirectURL else {
+        log("fetchStepLogViaURLSession › no Location header, falling back to CLI")
+        return nil
+    }
+
+    // Step 2: Fetch the raw log from the pre-signed S3 URL.
+    // Do NOT send Authorization header — pre-signed URLs use their own signature
+    // and reject extra auth headers with 400 SignatureDoesNotMatch.
+    let sem2 = DispatchSemaphore(value: 0)
+    var logData: Data?
+    var plainRequest = URLRequest(url: s3URL, timeoutInterval: 30)
+    plainRequest.setValue("text/plain", forHTTPHeaderField: "Accept")
+    URLSession.shared.dataTask(with: plainRequest) { data, response, error in
+        defer { sem2.signal() }
+        if let error {
+            log("fetchStepLogViaURLSession › step2 error: \(error.localizedDescription)")
+            return
+        }
+        if let http = response as? HTTPURLResponse {
+            log("fetchStepLogViaURLSession › step2 status=\(http.statusCode)")
+            guard (200..<300).contains(http.statusCode) else { return }
+        }
+        logData = data
+    }.resume()
+    sem2.wait()
+
+    guard let data = logData else { return nil }
+    return String(data: data, encoding: .utf8)
+}
+
+/// CLI fallback for token-less configurations.
+private func fetchStepLogViaCLI(endpoint: String) -> String? {
+    let (data, _) = runGHProcess(
+        arguments: ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"],
+        timeout: 30
+    )
+    guard let data else { return nil }
+    return String(data: data, encoding: .utf8)
+}
+
+/// Parses a raw log string into sections and returns the section for `stepNumber`.
+private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
     let cleaned = stripAnsi(raw)
     let lines = cleaned.components(separatedBy: "\n")
     var sections: [String] = []
@@ -192,21 +303,21 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
         }
     }
     if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
-    log("fetchStepLog › parsed \(sections.count) section(s) from log")
+    log("parseStepLog › parsed \(sections.count) section(s) from log")
     if sections.isEmpty || (sections.count == 1 && !sections[0].contains("##[group]")) {
-        log("fetchStepLog › no group markers, returning full raw log")
+        log("parseStepLog › no group markers, returning full raw log")
         return cleaned
     }
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
         log(
-            "fetchStepLog › stepNumber \(stepNumber) out of range "
+            "parseStepLog › stepNumber \(stepNumber) out of range "
             + "(sections=\(sections.count)), returning full log"
         )
         return cleaned
     }
     let section = sections[index]
-    log("fetchStepLog › step \(stepNumber) → \(section.count)ch")
+    log("parseStepLog › step \(stepNumber) → \(section.count)ch")
     return section.isEmpty ? cleaned : section
 }
 
