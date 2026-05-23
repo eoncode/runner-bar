@@ -107,7 +107,7 @@ public struct ActiveJob: Identifiable, Codable, Equatable, Sendable {
     }
 
     // MARK: Codable
-    /// UserDefaults key constants.
+    /// JSON coding keys for `ActiveJob`.
     enum CodingKeys: String, CodingKey {
         /// The `id` case.
         case id, name, status, conclusion
@@ -157,15 +157,11 @@ public struct JobStep: Identifiable, Codable, Equatable, Sendable {
     }
 
     /// Human-readable elapsed duration for this step in `MM:SS` format.
-    ///
-    /// Returns `"--:--"` when `startedAt` is `nil` (step never started, e.g. skipped
-    /// or still queued). Uses `completedAt` as the end time when available, otherwise
-    /// measures up to the current wall clock for in-progress steps.
     public var elapsed: String {
-        guard let start = startedAt else { return "--:--" }
+        let start = startedAt ?? Date()
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
-        guard secs >= 0 else { return "--:--" }
+        guard secs >= 0 else { return "00:00" }
         let m = secs / 60
         let s = secs % 60
         return String(format: "%02d:%02d", m, s)
@@ -188,7 +184,7 @@ public struct JobStep: Identifiable, Codable, Equatable, Sendable {
         self.completedAt = completedAt
     }
 
-    /// UserDefaults key constants.
+    /// JSON coding keys for `JobStep`.
     enum CodingKeys: String, CodingKey {
         /// Coding key for the `id` field.
         case id = "number"
@@ -226,7 +222,7 @@ public struct JobPayload: Decodable {
     /// The runnerName constant.
     public let runnerName: String?
 
-    /// UserDefaults key constants.
+    /// JSON coding keys for `JobPayload`.
     enum CodingKeys: String, CodingKey {
         /// The `id` case.
         case id, name, status, conclusion, steps
@@ -260,7 +256,7 @@ public struct StepPayload: Decodable {
     /// The completedAt constant.
     public let completedAt: String?
 
-    /// UserDefaults key constants.
+    /// JSON coding keys for `StepPayload`.
     enum CodingKeys: String, CodingKey {
         /// The `number` case.
         case number, name, status, conclusion

@@ -85,7 +85,7 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
 private struct WorkflowRunsResponse: Codable {
     /// The workflowRuns constant.
     let workflowRuns: [WorkflowRun]
-    /// UserDefaults key constants.
+    /// JSON coding keys for `WorkflowRunsResponse`.
     enum CodingKeys: String, CodingKey {
         /// Coding key mapping to the `workflowRuns` JSON field.
         case workflowRuns = "workflow_runs"
