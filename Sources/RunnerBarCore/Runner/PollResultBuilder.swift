@@ -14,6 +14,14 @@ public struct PollResultBuilder {
 
     /// Maximum number of completed jobs retained in the job cache.
     public static let jobCacheLimit = 3
+
+    /// Maximum number of job entries shown in the panel UI (live + cached combined).
+    ///
+    /// Intentionally larger than `jobCacheLimit` so that live in-progress and queued
+    /// jobs are never silently dropped when the cache is already full.
+    /// `jobCacheLimit` controls *retention*; `jobDisplayLimit` controls *visibility*.
+    public static let jobDisplayLimit = 10
+
     /// Maximum number of completed groups retained in the group cache.
     public static let groupCacheLimit = 30
 
@@ -174,6 +182,10 @@ public struct PollResultBuilder {
     }
 
     /// Builds the ordered job display list from live jobs and the completed cache.
+    ///
+    /// Display order: in-progress → queued → cached (most-recently-completed first).
+    /// Live jobs are never capped by `jobCacheLimit`; the combined list is capped
+    /// at `jobDisplayLimit` so the panel UI stays manageable.
     public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress = live.filter { $0.status == "in_progress" }
         let queued     = live.filter { $0.status == "queued" }
@@ -181,9 +193,9 @@ public struct PollResultBuilder {
             ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
         }
         var display: [ActiveJob] = []
-        for job in inProgress where display.count < jobCacheLimit { display.append(job) }
-        for job in queued     where display.count < jobCacheLimit { display.append(job) }
-        for job in cached     where display.count < jobCacheLimit { display.append(job) }
+        for job in inProgress where display.count < jobDisplayLimit { display.append(job) }
+        for job in queued     where display.count < jobDisplayLimit { display.append(job) }
+        for job in cached     where display.count < jobDisplayLimit { display.append(job) }
         return display
     }
 
@@ -256,8 +268,7 @@ public struct PollResultBuilder {
 
     /// Trims the group cache to at most `limit` entries, keeping the most recently completed.
     public static func trimGroupCache(_ cache: inout [String: WorkflowActionGroup], limit: Int) {
-        guard cache.count > limit else { return }
-        let sorted = cache.values.sorted {
+        guard cache.count > limit else { return }\n        let sorted = cache.values.sorted {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
