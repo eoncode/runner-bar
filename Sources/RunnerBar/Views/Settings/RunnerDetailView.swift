@@ -624,8 +624,10 @@ struct RunnerDetailView: View {
         workFolderSaveState = .saving
         let folder = workFolderText
         DispatchQueue.global(qos: .userInitiated).async {
-            patchRunnerJSON(installPath: installPath, key: "workFolder", value: folder)
-            DispatchQueue.main.async { workFolderSaveState = .success }
+            let ok = patchRunnerJSON(installPath: installPath, key: "workFolder", value: folder)
+            DispatchQueue.main.async {
+                workFolderSaveState = ok ? .success : .failure("Failed to write .runner JSON")
+            }
         }
     }
 
@@ -637,8 +639,10 @@ struct RunnerDetailView: View {
         autoUpdateSaveState = .saving
         let disable = !autoUpdate
         DispatchQueue.global(qos: .userInitiated).async {
-            patchRunnerJSON(installPath: installPath, key: "disableUpdate", value: disable)
-            DispatchQueue.main.async { autoUpdateSaveState = .success }
+            let ok = patchRunnerJSON(installPath: installPath, key: "disableUpdate", value: disable)
+            DispatchQueue.main.async {
+                autoUpdateSaveState = ok ? .success : .failure("Failed to write .runner JSON")
+            }
         }
     }
 
@@ -700,19 +704,27 @@ struct RunnerDetailView: View {
 
 // MARK: - .runner JSON patch helper
 
-/// Reads the `.runner` JSON at `installPath`, merges the given key, and writes the result back to disk.
+/// Reads the `.runner` JSON at `installPath`, merges `key`/`value`, writes back, and returns success.
+@discardableResult
 private func patchRunnerJSON(
     installPath: String,
     key: String,
     value: Any
-) {
+) -> Bool {
     let path = installPath + "/.runner"
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
           var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return }
+    else { log("patchRunnerJSON › could not read/parse .runner at \(path)"); return false }
     json[key] = value
     guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
-    else { return }
-    try? updated.write(to: URL(fileURLWithPath: path))
+    else { log("patchRunnerJSON › serialization failed for key=\(key)"); return false }
+    do {
+        try updated.write(to: URL(fileURLWithPath: path))
+        log("patchRunnerJSON › wrote key=\(key) to \(path)")
+        return true
+    } catch {
+        log("patchRunnerJSON › write failed: \(error)")
+        return false
+    }
 }
 // swiftlint:enable missing_docs
