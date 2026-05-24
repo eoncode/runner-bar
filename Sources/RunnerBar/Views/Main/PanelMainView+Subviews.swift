@@ -113,14 +113,7 @@ struct PanelLocalRunnerRow: View {
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-        )
+        .glassCard(cornerRadius: RBRadius.card)
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
     }
 }
@@ -152,19 +145,15 @@ struct ActionRowView: View {
         }
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-                .overlay(
-                    Rectangle()
-                        .fill(rowStatus.color)
-                        .frame(width: 4)
-                        .frame(maxHeight: .infinity),
-                    alignment: .leading
-                )
+            ZStack {
+                glassCardBackground
+                Rectangle()
+                    .fill(rowStatus.color)
+                    .frame(width: 4)
+                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         )
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
@@ -196,6 +185,22 @@ struct ActionRowView: View {
             previousStatus = newStatus
         }
     }
+
+    /// Glass card background for the action row, with status colour stripe overlay.
+    @ViewBuilder private var glassCardBackground: some View {
+        if #available(macOS 26, *) {
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        }
+    }
+
     /// Resolves the effective display status, preferring the overridden `expandState` when set.
     private var rowStatus: RBStatus {
         switch group.groupStatus {
