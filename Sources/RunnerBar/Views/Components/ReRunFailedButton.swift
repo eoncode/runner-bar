@@ -73,9 +73,9 @@ struct ReRunFailedButton: View {
         }
     }
 
-    /// Returns the macOS 26 glass-effect idle button.
-    /// Extracted to an `@available`-annotated function so `GlassEffectContainer`
-    /// and `.glassEffect` are resolved only against the macOS 26+ SDK.
+    /// Returns the macOS 26 glass idle button wrapped in `GlassEffectContainer`.
+    /// Extracted to an `@available(macOS 26, *)` function so that `GlassEffectContainer`
+    /// and `.glassEffect` are only resolved against the macOS 26+ SDK at compile time.
     @available(macOS 26, *)
     private func idleButtonGlass() -> some View {
         GlassEffectContainer {

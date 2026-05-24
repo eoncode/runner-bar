@@ -2,40 +2,36 @@
 // RunnerBar
 import SwiftUI
 
-// MARK: - GlassCard macOS 26 core (compile-time availability guard)
+// MARK: - macOS 26 glass helpers
+// These are @available *functions* (not ViewModifier structs) so that the Swift
+// compiler resolves the `.glassEffect` symbol only when building against the
+// macOS 26 SDK. An @available struct's body is still type-checked at compile
+// time on older SDKs, causing "value of type 'X' has no member 'glassEffect'".
 
-/// Internal macOS 26-only modifier that calls `.glassEffect(.regular.interactive())`.
-/// Only referenced through `GlassCard.body` behind a runtime `#available` check.
+/// Applies `.glassEffect(.regular.interactive())` to `view` on macOS 26+.
+/// Returns an `AnyView` so callers can use it inside an `if #available` branch
+/// that returns `AnyView` on both sides.
 @available(macOS 26, *)
-private struct GlassCardMacOS26: ViewModifier {
-    /// Corner radius applied to the rounded rectangle shape.
-    var cornerRadius: CGFloat
-    /// Applies `.glassEffect(.regular.interactive())` on macOS 26+.
-    func body(content: Content) -> some View {
-        content
-            .glassEffect(
-                .regular.interactive(),
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
-    }
+private func applyGlassCard<V: View>(_ view: V, cornerRadius: CGFloat) -> AnyView {
+    AnyView(
+        view.glassEffect(
+            .regular.interactive(),
+            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+    )
 }
 
-// MARK: - GlassSection macOS 26 core (compile-time availability guard)
-
-/// Internal macOS 26-only modifier that calls `.glassEffect(.prominent)`.
-/// Only referenced through `GlassSection.body` behind a runtime `#available` check.
+/// Applies `.glassEffect(.prominent)` to `view` on macOS 26+.
+/// Returns an `AnyView` so callers can use it inside an `if #available` branch
+/// that returns `AnyView` on both sides.
 @available(macOS 26, *)
-private struct GlassSectionMacOS26: ViewModifier {
-    /// Corner radius applied to the rounded rectangle shape.
-    var cornerRadius: CGFloat
-    /// Applies `.glassEffect(.prominent)` on macOS 26+.
-    func body(content: Content) -> some View {
-        content
-            .glassEffect(
-                .prominent,
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
-    }
+private func applyGlassSection<V: View>(_ view: V, cornerRadius: CGFloat) -> AnyView {
+    AnyView(
+        view.glassEffect(
+            .prominent,
+            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+    )
 }
 
 // MARK: - GlassCard
@@ -63,7 +59,7 @@ struct GlassCard: ViewModifier {
     /// Applies Liquid Glass on macOS 26+ and a material fallback on older OSes.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            AnyView(content.modifier(GlassCardMacOS26(cornerRadius: cornerRadius)))
+            applyGlassCard(content, cornerRadius: cornerRadius)
         } else {
             AnyView(
                 content
@@ -98,7 +94,7 @@ struct GlassSection: ViewModifier {
     /// Applies prominent Liquid Glass on macOS 26+ and a material fallback on older OSes.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            AnyView(content.modifier(GlassSectionMacOS26(cornerRadius: cornerRadius)))
+            applyGlassSection(content, cornerRadius: cornerRadius)
         } else {
             AnyView(
                 content
