@@ -149,7 +149,9 @@ final class SystemStatsViewModel: ObservableObject {
 
     /// Deallocates the Mach `processor_info_array_t` buffer stored in `prevCPUInfo`
     /// using `vm_deallocate`, then nils the pointer. Safe to call when `prevCPUInfo` is `nil`.
-    private func deallocPrevCPUInfo() {
+    /// `nonisolated` so it can be called from `deinit` (which is always nonisolated) and from
+    /// `sampleCPU()`'s `defer` block without crossing an actor boundary.
+    nonisolated private func deallocPrevCPUInfo() {
         guard let prev = prevCPUInfo else { return }
         let infoSize  = vm_size_t(MemoryLayout<integer_t>.size)
         let totalSize = vm_size_t(prevNumCPUInfo) * infoSize
