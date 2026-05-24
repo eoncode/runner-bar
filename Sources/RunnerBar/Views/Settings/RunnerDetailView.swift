@@ -1,6 +1,5 @@
 // RunnerDetailView.swift
 // RunnerBar
-// swiftlint:disable missing_docs
 import AppKit
 import RunnerBarCore
 import SwiftUI
@@ -18,86 +17,86 @@ import SwiftUI
 // MARK: - Save state helper
 /// Tracks the lifecycle of an async save operation for a single editable field.
 private enum SaveState: Equatable {
-    /// The `idle` case.
+    /// The field is idle and ready for editing.
     case idle
-    /// The `saving` case.
+    /// A save request has been dispatched and is in flight.
     case saving
-    /// The `success` case.
+    /// The last save completed successfully.
     case success
-    /// The `failure` case.
+    /// The last save failed; the associated value contains a human-readable error message.
     case failure(String)
 }
 
 // MARK: - Danger action
 /// Represents a destructive action the user can trigger from the Danger Zone section.
 private enum DangerAction: Identifiable, Equatable {
-    /// The `remove` case.
+    /// Permanently de-registers and removes the runner.
     case remove
 
-    /// The id property.
+    /// Stable identifier used by SwiftUI's `sheet(item:)` presentation.
     var id: String { "remove" }
 
-    /// The title property.
+    /// Human-readable title displayed in the Danger Zone row and confirmation sheet.
     var title: String { "Remove runner" }
 
-    /// The confirmLabel property.
+    /// Label shown on the primary confirmation button.
     var confirmLabel: String { "Remove" }
 
-    /// The destructive property.
+    /// When `true` the trigger button and confirmation text are rendered in danger red.
     var destructive: Bool { true }
 }
 
 // swiftlint:disable:next type_body_length
 /// Detail screen for a single self-hosted runner: displays info, editable config fields, and the Danger Zone.
 struct RunnerDetailView: View {
-    /// The runner constant.
+    /// The runner model whose details and configuration this view displays and edits.
     let runner: RunnerModel
-    /// The onBack constant.
+    /// Callback invoked when the user taps the back button to return to the Settings runner list.
     let onBack: () -> Void
 
-    /// The isRunning property.
+    /// Reflects the runner's current running/stopped state; updated optimistically on start/stop.
     @State private var isRunning: Bool
-    /// The displayStatus property.
+    /// Human-readable status string derived from the runner model (e.g. "Online", "Offline").
     @State private var displayStatus: String
-    /// The localRunnerStore property.
+    /// Observes `LocalRunnerStore.shared` to refresh `isRunning` and `displayStatus` when the store changes.
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
     // MARK: - Editable field state (#492)
-    /// The labelsText property.
+    /// Comma-separated custom labels string bound to the labels text field.
     @State private var labelsText: String
-    /// The labelsSaveState property.
+    /// Async save lifecycle state for the labels field.
     @State private var labelsSaveState: SaveState = .idle
-    /// The workFolderText property.
+    /// Work folder path string bound to the work-folder text field.
     @State private var workFolderText: String
-    /// The workFolderSaveState property.
+    /// Async save lifecycle state for the work-folder field.
     @State private var workFolderSaveState: SaveState = .idle
     /// `true` = auto-update enabled (written to .runner JSON as disableUpdate: false)
     @State private var autoUpdate: Bool
-    /// The autoUpdateSaveState property.
+    /// Async save lifecycle state for the auto-update toggle.
     @State private var autoUpdateSaveState: SaveState = .idle
     // #532: unified proxy card — single save state for URL + user + pass
-    /// The proxyUrl property.
+    /// Proxy server URL string bound to the proxy URL text field.
     @State private var proxyUrl: String
-    /// The proxyUser property.
+    /// Proxy username string bound to the proxy user text field.
     @State private var proxyUser: String
-    /// The proxyPassword property.
+    /// Proxy password string bound to the proxy password secure field.
     @State private var proxyPassword: String
-    /// The proxySaveState property.
+    /// Async save lifecycle state shared by all three proxy fields.
     @State private var proxySaveState: SaveState = .idle
 
     // MARK: - Info fields loaded from .runner JSON (#533)
-    /// The displayOsArch property.
+    /// Formatted OS and architecture string loaded from the `.runner` JSON on appear (e.g. "macos / arm64").
     @State private var displayOsArch: String = ""
-    /// The displayVersion property.
+    /// Runner agent version string loaded from the `.runner` JSON on appear.
     @State private var displayVersion: String = ""
 
     // MARK: - Danger Zone state (#493)
-    /// The pendingDangerAction property.
+    /// When non-nil, the confirmation sheet for the given danger action is presented.
     @State private var pendingDangerAction: DangerAction?
-    /// The dangerActionState property.
+    /// Async save lifecycle state for the currently pending danger action.
     @State private var dangerActionState: SaveState = .idle
 
-    /// Creates a new instance.
+    /// Initialises the view with a runner model and a back callback, seeding all editable field state.
     init(runner: RunnerModel, onBack: @escaping () -> Void) {
         self.runner = runner
         self.onBack = onBack
@@ -550,7 +549,7 @@ struct RunnerDetailView: View {
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
     }
 
-    /// Status indicator color: green when running, red when offline, yellow otherwise.
+    /// Status indicator color: green when running, red when offline.
     private var dotColor: Color {
         isRunning ? Color.rbSuccess : Color.rbDanger
     }
@@ -558,7 +557,7 @@ struct RunnerDetailView: View {
     // MARK: - On Appear
 
     // swiftlint:disable:next function_body_length
-    /// Reads the runner’s `.runner` JSON file and seeds editable fields and display values.
+    /// Reads the runner's `.runner` JSON file and seeds editable fields and display values.
     private func loadEditableFields() {
         log("RunnerDetailView loadEditableFields ENTER runner=\(runner.runnerName) installPath=\(runner.installPath ?? "<nil>") platform=\(runner.platform ?? "<nil>") platformArch=\(runner.platformArchitecture ?? "<nil>") agentVersion=\(runner.agentVersion ?? "<nil>") displayOsArch=\(displayOsArch) displayVersion=\(displayVersion)")
 
@@ -633,7 +632,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Save Actions
 
-    /// Patches the runner’s labels via `patchRunnerJSON` and updates `labelsSaveState`.
+    /// Patches the runner's labels via the GitHub API and updates `labelsSaveState`.
     private func saveLabels() {
         guard let agentId = runner.agentId,
               let gitHubUrl = runner.gitHubUrl,
@@ -662,7 +661,7 @@ struct RunnerDetailView: View {
         }
     }
 
-    /// Patches the runner’s work folder path via `patchRunnerJSON` and updates `workFolderSaveState`.
+    /// Patches the runner's work folder path via `patchRunnerJSON` and updates `workFolderSaveState`.
     private func saveWorkFolder() {
         guard let installPath = runner.installPath else {
             workFolderSaveState = .failure("Install path unknown"); return
@@ -702,7 +701,7 @@ struct RunnerDetailView: View {
         }
     }
 
-    /// Persists proxy URL, username, and password to the runner JSON and updates `proxySaveState`.
+    /// Persists proxy URL, username, and password to disk and updates `proxySaveState`.
     private func saveProxy() {
         guard let installPath = runner.installPath else {
             proxySaveState = .failure("Install path unknown"); return
@@ -788,6 +787,7 @@ struct RunnerDetailView: View {
 /// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: RBRadius.small))` + thin border.
 /// macOS < 26: original `RoundedRectangle fill(rbSurfaceElevated) + strokeBorder(rbBorderSubtle)` (unchanged).
 private struct InfoCardBackground: ViewModifier {
+    /// Applies glass on macOS 26+ or a solid elevated surface on earlier OS versions.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
@@ -816,6 +816,7 @@ private struct InfoCardBackground: ViewModifier {
 /// macOS 26+: `.glassEffect(.regular)` + danger tint overlay + danger strokeBorder.
 /// macOS < 26: original danger-tinted fill + danger strokeBorder (unchanged).
 private struct DangerZoneCardBackground: ViewModifier {
+    /// Applies glass with a danger tint on macOS 26+, or a danger-tinted solid fill on earlier OS.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
@@ -877,4 +878,3 @@ private func patchRunnerJSON(
         return false
     }
 }
-// swiftlint:enable missing_docs

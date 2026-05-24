@@ -1,6 +1,5 @@
 // RunnerViewModel.swift
 // RunnerBar
-// swiftlint:disable missing_docs
 import Combine
 import Foundation
 import RunnerBarCore
@@ -63,4 +62,3 @@ final class RunnerViewModel: ObservableObject {
         }
     }
 }
-// swiftlint:enable missing_docs

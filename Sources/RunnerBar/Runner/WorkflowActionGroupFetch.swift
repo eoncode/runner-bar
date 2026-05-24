@@ -1,6 +1,5 @@
 // WorkflowActionGroupFetch.swift
 // RunnerBar
-// swiftlint:disable missing_docs
 import Foundation
 import RunnerBarCore
 
@@ -233,7 +232,8 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     return result
 }
 
-/// Lower number = higher display priority for sort.
+/// Returns a numeric sort priority for a `GroupStatus` value.
+/// Lower number = higher display priority: in_progress (0) → queued (1) → completed (2).
 private func statusPriority(_ status: GroupStatus) -> Int {
     switch status {
     case .inProgress: return 0
@@ -241,4 +241,3 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable missing_docs
