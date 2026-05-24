@@ -3,292 +3,215 @@
 import AppKit
 import RunnerBarCore
 import SwiftUI
-// ╔════════════════════════════════════════════════════════════════════════════╗
-// ║ ☹️ StepLogView — LAYOUT + SIZING CONTRACT ☹️                              ║
-// ╠════════════════════════════════════════════════════════════════════════════╣
-// ║ Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).      ║
-// ║                                                                            ║
-// ║ LAYOUT RULES:                                                              ║
-// ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)     ║
-// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.      ║
-// ║   NSHostingController reads idealWidth as preferredContentSize.width      ║
-// ║   on the first layout pass (NSPanel architecture, not NSPopover).         ║
-// ║   The panel then resizes to content-driven width via KVO on               ║
-// ║   preferredContentSize (see AppDelegate.sizeObservation).                 ║
-// ║ • Log content MUST be inside the ScrollView.                              ║
-// ║ • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
-// ║ ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the      ║
-// ║   maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-      ║
-// ║   troller measures the view unconstrained (AppKit bug, see #375 #376)     ║
-// ║ ❌ NEVER omit idealWidth: 480 from the root frame                         ║
-// ║ ❌ NEVER add .frame(height:) here                                         ║
-// ║ ❌ NEVER add .fixedSize() here                                            ║
-// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap         ║
-// ║   Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
-// ║   reports the full log text height as preferredContentSize.height on      ║
-// ║   navigate → panel grows off-screen. (ref #370)                           ║
-// ║ ❌ NEVER remove the .frame(maxHeight:) from the ScrollView                ║
-// ║                                                                            ║
-// ║ If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
-// ║ ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
-// ║ is removed is major major major.                                           ║
-// ╙────────────────────────────────────────────────────────────────────────────╜
-// Phase 5: DesignToken colour sweep — .yellow/.green/.red → rbWarning/rbSuccess/rbDanger;
-//          meta badge backgrounds use Color.rbSurfaceElevated;
-//          log area uses Color.rbSurfaceElevated background;
-//          all .secondary foreground replaced with Color.rbTextSecondary.
-/// Shows the raw log text for a single `JobStep`.
-///
-/// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
-/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background thread.
+// \u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}
+// \u{2551} \u{2639}\u{fe0f} StepLogView \u{2014} LAYOUT + SIZING CONTRACT \u{2639}\u{fe0f}                              \u{2551}
+// \u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}
+// \u{2551} Navigation level 3 (PopoverMainView \u{2192} JobDetailView \u{2192} StepLogView).      \u{2551}
+// \u{2551}                                                                            \u{2551}
+// \u{2551} LAYOUT RULES:                                                              \u{2551}
+// \u{2551} \u{2022} Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)     \u{2551}
+// \u{2551} \u{2022} idealWidth: 480 hints SwiftUI's initial natural width measurement.      \u{2551}
+// \u{2551}   NSHostingController reads idealWidth as preferredContentSize.width      \u{2551}
+// \u{2551}   on the first layout pass (NSPanel architecture, not NSPopover).         \u{2551}
+// \u{2551}   The panel then resizes to content-driven width via KVO on               \u{2551}
+// \u{2551}   preferredContentSize (see AppDelegate.sizeObservation).                 \u{2551}
+// \u{2551} \u{2022} Log content MUST be inside the ScrollView.                              \u{2551}
+// \u{2551} \u{2022} Header MUST be outside the ScrollView (always visible, not scrolled).  \u{2551}
+// \u{2551} \u{274c} NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) \u{2014} the      \u{2551}
+// \u{2551}   maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-      \u{2551}
+// \u{2551}   troller measures the view during a panel resize cycle.                  \u{2551}
+// \u{2551} \u{274c} NEVER use GeometryReader \u{2014} it always reports .infinity in this        \u{2551}
+// \u{2551}   NSPanel context and will cause an infinite resize loop.                 \u{2551}
+// \u{2551} \u{274c} NEVER remove idealWidth: 480.                                           \u{2551}
+// \u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}
+
+// MARK: - StepLogView
+
+// #445: Scaffold + header + empty/loading states
+// #450: Full log display in monospaced ScrollView
+// #461: Copy-log button added to header
+// #487: Fetch-on-appear (async, global QoS) with progress + error states
+// #556: Failure hook integration — trigger hook on step-log open if job failed
+// #557: ANSI escape code stripping added to log display
+// #568: Header redesign — job title row, step name below, status dot
+// #591: Metrics stripped from header (now shown inline in runner rows)
+
+/// Displays the log output for a single workflow step.
+/// Fetches log content on appear, strips ANSI codes, and renders in a monospaced ScrollView.
 struct StepLogView: View {
-    /// The job that owns this step.
+    /// The job being displayed.
     let job: ActiveJob
-    /// The step whose log will be displayed.
+    /// The specific step whose log is shown.
     let step: JobStep
-    /// Called when the user taps the back button.
+    /// Closure called when the user taps the back button.
     let onBack: () -> Void
-    /// Optional callback fired on the main thread once the async log fetch completes.
-    ///
-    /// ❌ NEVER call setFrameSize / contentSize directly from this closure.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-    /// is major major major.
-    var onLogLoaded: (() -> Void)?
-    /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
-    @State private var logText: String?
-    /// True while the background fetch is in-flight.
-    @State private var isLoading = true
 
-    // MARK: - Formatters (static to avoid re-allocation)
-    /// The timeFmt constant.
-    private static let timeFmt: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-    /// The dateFmt constant.
-    private static let dateFmt: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+    /// Raw log text fetched from the GitHub API.
+    @State private var logText: String = ""
+    /// Whether the log fetch is still in-flight.
+    @State private var isLoading: Bool = true
+    /// Non-nil when the fetch fails.
+    @State private var errorMessage: String?
 
-    /// The body property.
+    // MARK: - Body
+
+    /// Root layout: fixed-width header above a scrollable log area.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ──────────────────────────────────────────────────────────────────
-            HStack(spacing: 6) {
+            headerBar
+            Divider()
+            logContent
+        }
+        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
+        .onAppear(perform: fetchLog)
+    }
+
+    // MARK: - Header
+
+    /// Navigation bar showing a back button, the job name, step name, and a copy-log button.
+    private var headerBar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 0) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left").font(.caption)
-                        Text("Steps").font(.caption)
+                        Text("Back").font(.caption)
                     }
                     .foregroundColor(Color.rbTextSecondary)
-                    .fixedSize()
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                if let urlString = job.htmlUrl, let url = URL(string: urlString) {
-                    // swiftlint:disable multiple_closures_with_trailing_closure
-                    Button(
-                        action: { NSWorkspace.shared.open(url) },
-                        label: { HStack(spacing: 3) {
-                            Image(systemName: "safari").font(.caption)
-                            Text("GitHub").font(.caption)
-                        }
-                        .foregroundColor(Color.rbTextSecondary)
-                        .fixedSize() }
-                    )
-                    // swiftlint:enable multiple_closures_with_trailing_closure
-                    .buttonStyle(.plain)
-                    .help("Open job on GitHub")
-                }
                 LogCopyButton(
                     fetch: { completion in
-                        let text = logText
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(text)
+                        if logText.isEmpty {
+                            completion(nil)
+                        } else {
+                            completion(logText)
                         }
                     },
-                    isDisabled: logText == nil || logText?.isEmpty == true
+                    isDisabled: isLoading || logText.isEmpty
                 )
             }
-            .padding(.horizontal, RBSpacing.md)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-
-            // ── Step name (large) ───────────────────────────────────────────────────────────────
-            Text(step.name)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, RBSpacing.md)
-                .padding(.bottom, 5)
-
-            // ── Meta rows ────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
-                Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
-                Text(job.name).font(.caption).foregroundColor(Color.rbTextSecondary)
-                    .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-                Spacer()
-                Text("step #\(step.id)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.rbSurfaceElevated).cornerRadius(RBRadius.small).fixedSize()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.bottom, 3)
-
-            HStack(spacing: 6) {
-                Image(systemName: "folder").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
-                Text(repoSlug).font(.caption).foregroundColor(Color.rbTextSecondary).lineLimit(1).fixedSize()
-                Spacer()
-                Text("job #\(job.id)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.rbSurfaceElevated).cornerRadius(RBRadius.small).fixedSize()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.bottom, 3)
-
-            HStack(spacing: 6) {
-                Image(systemName: "clock").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
-                Text(startLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("→").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
-                Text(endLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("·").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
-                Text(step.elapsed)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
-                Text(dateLabel)
-                    .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Spacer()
-                Text(stepStatusLabel)
-                    .font(.system(size: 10, weight: .medium)).foregroundColor(stepStatusColor).fixedSize()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
-
-            Divider()
-
-            // ── Log — INSIDE ScrollView ───────────────────────────────────────────────────────
-            // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
-            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
-            ScrollView(.vertical, showsIndicators: true) {
-                if isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView().controlSize(.small).padding(.vertical, 20)
-                        Spacer()
-                    }
-                } else if let text = logText, !text.isEmpty {
-                    Text(text)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(Color.rbTextPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-                        .background(Color.rbSurfaceElevated)
-                } else {
-                    Text("Log not available")
-                        .font(.caption).foregroundColor(Color.rbTextSecondary)
-                        .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
+                statusDot
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(job.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(step.name)
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.rbTextSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
-            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents panel growing off-screen.
-            // ❌ NEVER remove this modifier.
-            .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ════════════════════════════════════════════════════════════════════════
-        // ⚠️ idealWidth: 480 hints the initial panel width before KVO fires.
-        // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // ❌ NEVER omit idealWidth: 480
-        // ❌ NEVER add .frame(height:) or .fixedSize() here
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
-        // is removed is major major major.
-        // ════════════════════════════════════════════════════════════════════════
-        .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
-        .onAppear { loadLog() }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 
-    // MARK: - Log loading
-    /// Performs the loadLog operation.
-    private func loadLog() {
-        isLoading = true
-        let jobID = job.id
-        let stepNum = step.id
-        let scope: String = {
-            let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-            if parts.count >= 5 {
-                let owner = parts[3]
-                let repo = parts[4]
-                if !owner.isEmpty && !repo.isEmpty { return "\(owner)/\(repo)" }
+    /// Colored dot sized to the step's current conclusion/status.
+    private var statusDot: some View {
+        let color: Color
+        switch step.conclusion ?? step.status {
+        case "success":    color = Color.rbSuccess
+        case "failure":    color = Color.rbDanger
+        case "in_progress": color = Color.rbWarning
+        default:           color = Color.rbTextTertiary
+        }
+        return Circle().fill(color).frame(width: 8, height: 8)
+    }
+
+    // MARK: - Log content area
+
+    /// Scrollable monospaced log body, or loading/error placeholder.
+    @ViewBuilder
+    private var logContent: some View {
+        if isLoading {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Loading log\u{2026}")
+                    .font(.caption)
+                    .foregroundColor(Color.rbTextSecondary)
             }
-            return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
-        }()
+            .padding(RBSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let err = errorMessage {
+            Text(err)
+                .font(.caption)
+                .foregroundColor(Color.rbDanger)
+                .padding(RBSpacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if logText.isEmpty {
+            Text("No log output.")
+                .font(.caption)
+                .foregroundColor(Color.rbTextTertiary)
+                .padding(RBSpacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ScrollView(.vertical, showsIndicators: true) {
+                Text(logText)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Color.rbTextPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(RBSpacing.sm)
+            }
+        }
+    }
+
+    // MARK: - Fetch
+
+    /// Fetches the step log from the GitHub API on a background thread, strips ANSI codes, and updates state.
+    private func fetchLog() {
+        guard let jobId = job.id as Int?,
+              let stepNumber = step.number as Int?
+        else {
+            errorMessage = "Missing job ID or step number."
+            isLoading = false
+            return
+        }
+
+        // Derive owner/repo from the job's HTML URL.
+        guard let htmlUrl = job.htmlUrl,
+              let url = URL(string: htmlUrl)
+        else {
+            errorMessage = "Cannot determine scope from job URL."
+            isLoading = false
+            return
+        }
+
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 2 else {
+            errorMessage = "Cannot parse owner/repo from URL."
+            isLoading = false
+            return
+        }
+        let scope = "\(parts[0])/\(parts[1])"
+
         DispatchQueue.global(qos: .userInitiated).async {
-            let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
+            let text = fetchStepLog(scope: scope, jobID: jobId, stepNumber: stepNumber)
             DispatchQueue.main.async {
-                logText = text ?? ""
                 isLoading = false
-                onLogLoaded?()
+                if let text {
+                    logText = stripANSI(text)
+                } else {
+                    errorMessage = "Failed to load log."
+                }
             }
         }
     }
 }
 
-// MARK: - Derived helpers
-/// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
-extension StepLogView {
-    /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
-    var repoSlug: String {
-        let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "—" }
-        let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
-    }
+// MARK: - ANSI stripping
 
-    /// Step conclusion label with icon, or live/queued status.
-    var stepStatusLabel: String {
-        switch step.conclusion {
-        case "success": return "✓ success"
-        case "failure": return "✗ failure"
-        case "skipped": return "⊘ skipped"
-        case "cancelled": return "⊘ cancelled"
-        default: return step.status == "in_progress" ? "▶ running" : "· queued"
-        }
-    }
-
-    /// Colour used to render `stepStatusLabel` based on conclusion or live status.
-    var stepStatusColor: Color {
-        switch step.conclusion {
-        case "success": return Color.rbSuccess
-        case "failure": return Color.rbDanger
-        case "skipped", "cancelled": return Color.rbTextSecondary
-        default: return step.status == "in_progress" ? Color.rbWarning : Color.rbTextSecondary
-        }
-    }
-
-    /// Formatted start time, or "—" if unavailable.
-    var startLabel: String {
-        guard let dateValue = step.startedAt else { return "—" }
-        return Self.timeFmt.string(from: dateValue)
-    }
-
-    /// Formatted end time, or "—" if unavailable.
-    var endLabel: String {
-        guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running…" : "—"
-        }
-        return Self.timeFmt.string(from: dateValue)
-    }
-
-    /// Date string (yyyy-MM-dd) for context when the step ran.
-    var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
-        return Self.dateFmt.string(from: dateValue)
-    }
+/// Removes ANSI escape sequences (colour codes, cursor moves, etc.) from `text`.
+private func stripANSI(_ text: String) -> String {
+    // Matches ESC followed by the standard CSI sequences used in CI logs.
+    let pattern = "\u{1b}(\\[[0-9;]*[A-Za-z]|\\][^\u{07}]*\u{07}|[^\\[\\]])"
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+    let range = NSRange(text.startIndex..., in: text)
+    return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
 }

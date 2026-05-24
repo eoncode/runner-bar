@@ -597,7 +597,7 @@ struct RunnerDetailView: View {
 
         let disableUpdate = json["disableUpdate"] as? Bool ?? false
         autoUpdate = !disableUpdate
-        log("RunnerDetailView loadEditableFields disableUpdate=\(disableUpdate) → autoUpdate=\(autoUpdate)")
+        log("RunnerDetailView loadEditableFields disableUpdate=\(disableUpdate) \u{2192} autoUpdate=\(autoUpdate)")
 
         if displayOsArch.isEmpty {
             let platform = json["platform"] as? String ?? ""
@@ -653,7 +653,7 @@ struct RunnerDetailView: View {
               let gitHubUrl = runner.gitHubUrl,
               let scope = scopeFromHtmlUrl(gitHubUrl)
         else {
-            labelsSaveState = .failure("No agent ID or GitHub URL — cannot save via API")
+            labelsSaveState = .failure("No agent ID or GitHub URL \u{2014} cannot save via API")
             return
         }
         let parsed = labelsText
@@ -769,7 +769,7 @@ struct RunnerDetailView: View {
             let result = RunnerLifecycleService.shared.start(runner: runner)
             DispatchQueue.main.async {
                 if case .success = result {
-                    // success — no additional action needed
+                    // success \u{2014} no additional action needed
                 } else {
                     isRunning = false
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
@@ -787,7 +787,7 @@ struct RunnerDetailView: View {
             let result = RunnerLifecycleService.shared.stop(runner: runner)
             DispatchQueue.main.async {
                 if case .success = result {
-                    // success — no additional action needed
+                    // success \u{2014} no additional action needed
                 } else {
                     isRunning = true
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
@@ -812,21 +812,21 @@ private func patchRunnerJSON(
     guard let data = try? Data(contentsOf: url),
           var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else {
-        log("patchRunnerJSON › failed to read \(path)")
+        log("patchRunnerJSON \u{203a} failed to read \(path)")
         return false
     }
     if let sv = stringValue { json[key] = sv }
     if let bv = boolValue   { json[key] = bv }
     guard let newData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]) else {
-        log("patchRunnerJSON › serialization failed for key=\(key)")
+        log("patchRunnerJSON \u{203a} serialization failed for key=\(key)")
         return false
     }
     do {
         try newData.write(to: url, options: .atomic)
-        log("patchRunnerJSON › wrote key=\(key) to \(path)")
+        log("patchRunnerJSON \u{203a} wrote key=\(key) to \(path)")
         return true
     } catch {
-        log("patchRunnerJSON › write failed: \(error)")
+        log("patchRunnerJSON \u{203a} write failed: \(error)")
         return false
     }
 }
