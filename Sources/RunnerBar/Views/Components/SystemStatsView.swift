@@ -94,6 +94,7 @@ struct SparklineMetricView: View {
 /// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 5))`
 /// macOS < 26: subtle `rbSurface` fill (visual anchor; original had no background).
 private struct SparklineChipBackground: ViewModifier {
+    /// Applies the OS-appropriate chip background to `content`.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
@@ -150,7 +151,9 @@ struct DiskPillBadge: View {
 /// macOS 26+: `.glassEffect` with color tint overlay.
 /// macOS < 26: original tinted `background` + `strokeBorder` (unchanged).
 private struct DiskPillBackground: ViewModifier {
+    /// The tint color derived from the disk free percentage threshold.
     let color: Color
+    /// Applies the OS-appropriate background to `content`.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content

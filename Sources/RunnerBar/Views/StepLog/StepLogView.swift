@@ -10,7 +10,7 @@ import SwiftUI
 // ║                                                                            ║
 // ║ LAYOUT RULES:                                                              ║
 // ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)     ║
-// ║ • idealWidth: 480 hints SwiftUI’s initial natural width measurement.      ║
+// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.      ║
 // ║   NSHostingController reads idealWidth as preferredContentSize.width      ║
 // ║   on the first layout pass (NSPanel architecture, not NSPopover).         ║
 // ║   The panel then resizes to content-driven width via KVO on               ║
@@ -248,6 +248,7 @@ struct StepLogView: View {
 /// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: RBRadius.small))`
 /// macOS < 26: `.background(Color.rbSurfaceElevated).cornerRadius(RBRadius.small)` (unchanged).
 private struct StepMetaBadgeBackground: ViewModifier {
+    /// Applies the OS-appropriate badge background to `content`.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
@@ -268,6 +269,7 @@ private struct StepMetaBadgeBackground: ViewModifier {
 /// macOS 26+: `.glassEffect(.regular, in: Rectangle())`
 /// macOS < 26: `.background(Color.rbSurfaceElevated)` (unchanged).
 private struct StepLogAreaBackground: ViewModifier {
+    /// Applies the OS-appropriate log area background to `content`.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
