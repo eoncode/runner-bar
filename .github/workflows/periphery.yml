@@ -9,9 +9,7 @@ on:
 jobs:
   periphery:
     name: Periphery
-    runs-on: macos-15
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
+    runs-on: macos-26
 
     steps:
       - name: Checkout
