@@ -1,10 +1,9 @@
 // AddRunnerSheet.swift
 // RunnerBar
+// swiftlint:disable type_body_length missing_docs
 import AppKit
 import SwiftUI
 
-// swiftlint:disable type_body_length
-// swiftlint:disable missing_docs
 // MARK: - AddRunnerSheet
 
 // MARK: - URI Constants
@@ -172,7 +171,7 @@ struct AddRunnerSheet: View {
         if isLoadingScopes {
             HStack {
                 ProgressView().scaleEffect(0.7)
-                Text("Loading\u{2026}").font(.caption).foregroundColor(.secondary)
+                Text("Loading…").font(.caption).foregroundColor(.secondary)
             }
         } else if scopeType == .repo {
             selectorButton(
@@ -260,7 +259,7 @@ struct AddRunnerSheet: View {
                 if isRegistering {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7).frame(width: 14, height: 14)
-                        Text("Registering\u{2026}")
+                        Text("Registering…")
                     }
                 } else {
                     Text("Add new runner")
@@ -289,7 +288,7 @@ struct AddRunnerSheet: View {
                         .lineLimit(1)
                         .truncationMode(.head)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Choose\u{2026}") { pickExistingFolder() }
+                    Button("Choose…") { pickExistingFolder() }
                         .controlSize(.small)
                 }
                 .padding(8)
@@ -361,7 +360,7 @@ struct AddRunnerSheet: View {
             Text(label).font(.caption).foregroundColor(.secondary)
             Button(action: action) {
                 HStack {
-                    Text(selection.isEmpty ? "\u{2014} select \u{2014}" : selection)
+                    Text(selection.isEmpty ? "— select —" : selection)
                         .font(.system(size: 12))
                         .foregroundColor(selection.isEmpty ? .secondary : .primary)
                         .lineLimit(1)
@@ -518,7 +517,7 @@ struct AddRunnerSheet: View {
         detectedGitHubURL = json.gitHubUrl ?? ""
         isDuplicate = checkDuplicate(runnerName: detectedName)
 
-        log("AddRunnerSheet \u{203a} pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")
+        log("AddRunnerSheet › pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")
     }
 
     /// Derives scope from the GitHub URL, writes the LaunchAgent plist, and dismisses.
@@ -621,7 +620,7 @@ struct AddRunnerSheet: View {
             guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
                 DispatchQueue.main.async {
                     isRegistering = false
-                    errorMessage  = "Install directory must be inside your home folder (~/\u{2026})."
+                    errorMessage  = "Install directory must be inside your home folder (~/…)."
                 }
                 return
             }
@@ -646,7 +645,7 @@ struct AddRunnerSheet: View {
             let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
 
             if !FileManager.default.fileExists(atPath: configPath) {
-                setStep("Downloading runner package\u{2026}")
+                setStep("Downloading runner package…")
                 guard let downloadURL = fetchRunnerDownloadURL() else {
                     DispatchQueue.main.async {
                         isRegistering = false
@@ -661,7 +660,7 @@ struct AddRunnerSheet: View {
                     DispatchQueue.main.async { isRegistering = false; errorMessage = "Download failed." }
                     return
                 }
-                setStep("Unpacking runner package\u{2026}")
+                setStep("Unpacking runner package…")
                 let tarExit = runSimpleProcess("/usr/bin/tar", args: ["xzf", tarPath, "-C", dir])
                 try? FileManager.default.removeItem(atPath: tarPath)
                 guard tarExit == 0 else {
@@ -670,7 +669,7 @@ struct AddRunnerSheet: View {
                 }
             }
 
-            setStep("Fetching registration token\u{2026}")
+            setStep("Fetching registration token…")
             guard let token = fetchRegistrationToken(scope: scope) else {
                 DispatchQueue.main.async {
                     isRegistering = false
@@ -679,7 +678,7 @@ struct AddRunnerSheet: View {
                 return
             }
 
-            setStep("Configuring runner\u{2026}")
+            setStep("Configuring runner…")
             let ghURL      = "\(GitHubURIs.base)\(scope)"
             let configExit = runRegistrationCommand(dir: dir, ghURL: ghURL,
                                                     token: token, name: name, labels: labels)
@@ -691,7 +690,7 @@ struct AddRunnerSheet: View {
                 return
             }
 
-            setStep("Registering service\u{2026}")
+            setStep("Registering service…")
             writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
 
             DispatchQueue.main.async {
@@ -707,7 +706,7 @@ struct AddRunnerSheet: View {
 
     /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/` so `LocalRunnerScanner`
     /// can discover the runner on every app launch. Used by both Add-new and Add-pre-existing flows.
-    func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
+    private func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
         let scopeParts = scope.components(separatedBy: "/")
@@ -725,9 +724,9 @@ struct AddRunnerSheet: View {
                 options: 0
             )
             try plistData.write(to: plistURL, options: .atomic)
-            log("AddRunnerSheet \u{203a} wrote LaunchAgent plist: \(plistURL.path)")
+            log("AddRunnerSheet › wrote LaunchAgent plist: \(plistURL.path)")
         } catch {
-            log("AddRunnerSheet \u{203a} failed to write LaunchAgent plist: \(error)")
+            log("AddRunnerSheet › failed to write LaunchAgent plist: \(error)")
         }
     }
 
@@ -758,7 +757,7 @@ struct AddRunnerSheet: View {
         }
         do { try task.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            log("runRegistrationCommand \u{203a} launch error: \(error)")
+            log("runRegistrationCommand › launch error: \(error)")
             return 1
         }
         // swiftlint:disable:next multiple_closures_with_trailing_closure
@@ -769,7 +768,7 @@ struct AddRunnerSheet: View {
         pipe.fileHandleForReading.readabilityHandler = nil
         let tail = pipe.fileHandleForReading.readDataToEndOfFile()
         if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-        log("runRegistrationCommand \u{203a} exit=\(task.terminationStatus): \((String(data: outputData, encoding: .utf8) ?? "").prefix(500))")
+        log("runRegistrationCommand › exit=\(task.terminationStatus): \((String(data: outputData, encoding: .utf8) ?? "").prefix(500))")
         return task.terminationStatus
     }
 
@@ -781,7 +780,7 @@ struct AddRunnerSheet: View {
         task.standardOutput = Pipe()
         task.standardError  = Pipe()
         do { try task.run() } catch {
-            log("runSimpleProcess \u{203a} \(executable) launch error: \(error)")
+            log("runSimpleProcess › \(executable) launch error: \(error)")
             return 1
         }
         // swiftlint:disable:next multiple_closures_with_trailing_closure
@@ -789,7 +788,7 @@ struct AddRunnerSheet: View {
         DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeoutItem)
         task.waitUntilExit()
         timeoutItem.cancel()
-        log("runSimpleProcess \u{203a} \(executable) exit \(task.terminationStatus)")
+        log("runSimpleProcess › \(executable) exit \(task.terminationStatus)")
         return task.terminationStatus
     }
 }
@@ -812,11 +811,11 @@ private func fetchRunnerDownloadURL() -> String? {
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     let assetArch = (arch == "arm64") ? "arm64" : "x64"
     let assetName = "actions-runner-osx-\(assetArch)"
-    log("fetchRunnerDownloadURL \u{203a} arch=\(arch) assetName=\(assetName)")
+    log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
 
     guard let url  = URL(string: GitHubURIs.apiRunnerLatest),
           let data = try? Data(contentsOf: url) else {
-        log("fetchRunnerDownloadURL \u{203a} failed to fetch release JSON")
+        log("fetchRunnerDownloadURL › failed to fetch release JSON")
         return nil
     }
     struct Asset: Decodable {
@@ -828,14 +827,13 @@ private func fetchRunnerDownloadURL() -> String? {
     }
     struct Release: Decodable { let assets: [Asset] }
     guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
-        log("fetchRunnerDownloadURL \u{203a} decode failed")
+        log("fetchRunnerDownloadURL › decode failed")
         return nil
     }
     let match = release.assets.first {
         $0.name.hasPrefix(assetName) && $0.name.hasSuffix(".tar.gz")
     }
-    log("fetchRunnerDownloadURL \u{203a} match=\(match?.name ?? "nil")")
+    log("fetchRunnerDownloadURL › match=\(match?.name ?? "nil")")
     return match?.browserDownloadUrl
 }
-// swiftlint:enable missing_docs
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length missing_docs
