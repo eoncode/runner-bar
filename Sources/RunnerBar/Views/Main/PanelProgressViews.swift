@@ -23,8 +23,7 @@ import SwiftUI
 /// - `completionScale` gives a spring pulse when progress reaches 1.0.
 ///
 /// ❌ NEVER change onChange to two-argument form — macOS 13 only supports single-value.
-/// ❌ NEVER set displayProgress directly without withAnimation — breaks interpolation.
-// periphery:ignore
+/// ❌ NEVER set displayProgress directly without withAnimation — breaks interpolation. // periphery:ignore
 struct PieProgressDot: View {
     /// Radial fill fraction (0.0–1.0). Nil renders a spinning indeterminate arc.
     let progress: Double?
