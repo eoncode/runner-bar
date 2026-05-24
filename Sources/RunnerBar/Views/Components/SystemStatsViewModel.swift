@@ -124,27 +124,35 @@ final class SystemStatsViewModel: ObservableObject {
             &cpuInfo,
             &numCPUInfo
         )
-        guard kr == KERN_SUCCESS, let cpuInfo else { return 0 }
+        guard kr == KERN_SUCCESS,
+              let cpuInfo
+        else {
+            return 0
+        }
         defer {
             deallocPrevCPUInfo()
             prevCPUInfo = cpuInfo
             prevNumCPUInfo = numCPUInfo
         }
-        guard let prevInfo = prevCPUInfo else { return 0 }
+        guard let prevInfo = prevCPUInfo else {
+            return 0
+        }
         var totalUsed: Double = 0
         var totalAll: Double = 0
         let numCPUs = Int(numCPUsU)
         for i in 0 ..< numCPUs {
             let base = Int(CPU_STATE_MAX) * i
-            let userDelta   = Double(cpuInfo[base + Int(CPU_STATE_USER)]   - prevInfo[base + Int(CPU_STATE_USER)])
-            let sysDelta    = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)] - prevInfo[base + Int(CPU_STATE_SYSTEM)])
-            let idleDelta   = Double(cpuInfo[base + Int(CPU_STATE_IDLE)]   - prevInfo[base + Int(CPU_STATE_IDLE)])
-            let niceDelta   = Double(cpuInfo[base + Int(CPU_STATE_NICE)]   - prevInfo[base + Int(CPU_STATE_NICE)])
+            let userDelta = Double(cpuInfo[base + Int(CPU_STATE_USER)] - prevInfo[base + Int(CPU_STATE_USER)])
+            let sysDelta  = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)] - prevInfo[base + Int(CPU_STATE_SYSTEM)])
+            let idleDelta = Double(cpuInfo[base + Int(CPU_STATE_IDLE)] - prevInfo[base + Int(CPU_STATE_IDLE)])
+            let niceDelta = Double(cpuInfo[base + Int(CPU_STATE_NICE)] - prevInfo[base + Int(CPU_STATE_NICE)])
             let used = userDelta + sysDelta + niceDelta
             totalUsed += used
             totalAll  += used + idleDelta
         }
-        guard totalAll > 0 else { return 0 }
+        guard totalAll > 0 else {
+            return 0
+        }
         return totalUsed / totalAll * 100
     }
 
@@ -171,7 +179,7 @@ final class SystemStatsViewModel: ObservableObject {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        let pageSize  = Double(vm_kernel_page_size)
+        let pageSize   = Double(vm_kernel_page_size)
         let totalBytes = Double(ProcessInfo.processInfo.physicalMemory)
         let totalGB    = totalBytes / 1_000_000_000
         guard kr == KERN_SUCCESS else { return (0, totalGB) }

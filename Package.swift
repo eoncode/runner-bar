@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "RunnerBar",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v15)],
     targets: [
         .target(
             name: "RunnerBarCore",
