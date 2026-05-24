@@ -1,7 +1,7 @@
 // SystemStatsViewModel.swift
 // RunnerBar
 import Combine
-import Darwin
+@preconcurrency import Darwin
 import Foundation
 import RunnerBarCore
 
@@ -30,6 +30,7 @@ struct RingBuffer {
 // MARK: - SystemStatsViewModel
 /// Observable view-model that periodically samples CPU, memory, and disk metrics.
 /// Call `start()` when the owning view appears and `stop()` when it disappears.
+@MainActor
 final class SystemStatsViewModel: ObservableObject {
     /// Latest sampled snapshot, ready for display.
     @Published private(set) var stats: SystemStats = .zero
@@ -41,11 +42,17 @@ final class SystemStatsViewModel: ObservableObject {
     @Published private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
 
     /// The timer property.
-    private var timer: Timer?
+    /// Safety: only mutated on MainActor (start/stop). Captured as a local `let` in
+    /// deinit before dispatching invalidation to the main run loop — Timer.invalidate()
+    /// must be called on the thread that installed the timer (main run loop).
+    nonisolated(unsafe) private var timer: Timer?
     /// The prevCPUInfo property.
-    private var prevCPUInfo: processor_info_array_t?
+    /// Safety: accessed only from `sampleCPU()` (always called on MainActor) and
+    /// `deinit` (which implies no other references exist, so no concurrent access is possible).
+    nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
     /// The prevNumCPUInfo property.
-    private var prevNumCPUInfo: mach_msg_type_number_t = 0
+    /// Safety: same as `prevCPUInfo` — MainActor during sampling, no concurrency in deinit.
+    nonisolated(unsafe) private var prevNumCPUInfo: mach_msg_type_number_t = 0
     /// Root volume path used for disk-space queries.
     private static let rootVolumePath = NSOpenStepRootDirectory()
 
@@ -55,7 +62,10 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     deinit {
-        stop()
+        // Timer.invalidate() must be called on the thread that installed the timer (main run loop).
+        // deinit is nonisolated in Swift 6 and may run off-main, so we dispatch explicitly.
+        let t = timer
+        DispatchQueue.main.async { t?.invalidate() }
         deallocPrevCPUInfo()
     }
 
@@ -66,19 +76,19 @@ final class SystemStatsViewModel: ObservableObject {
         guard timer == nil else { return }
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            self?.sample()
+            Task { @MainActor [weak self] in self?.sample() }
         }
     }
 
-    /// Invalidates the sampling timer. Call from `onDisappear` or `deinit`.
+    /// Invalidates the sampling timer. Call from `onDisappear`.
     func stop() {
         timer?.invalidate()
         timer = nil
     }
 
     // MARK: Sampling
-    /// Collects CPU, memory, and disk snapshots off the main thread, then publishes
-    /// the new ``stats`` and updated history ring-buffers on the main actor.
+    /// Collects CPU, memory, and disk snapshots and publishes the new ``stats``
+    /// and updated history ring-buffers. Runs on the MainActor.
     private func sample() {
         let cpu = sampleCPU()
         let mem = sampleMemory()
@@ -98,13 +108,10 @@ final class SystemStatsViewModel: ObservableObject {
         let diskPct = disk.total > 0 ? disk.used / disk.total * 100 : 0.0
         newMem.append(memPct)
         newDisk.append(diskPct)
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.stats = snapshot
-            self.cpuHistory = newCPU
-            self.memHistory = newMem
-            self.diskHistory = newDisk
-        }
+        self.stats = snapshot
+        self.cpuHistory = newCPU
+        self.memHistory = newMem
+        self.diskHistory = newDisk
     }
 
     // MARK: CPU (Mach host_processor_info)
@@ -150,7 +157,9 @@ final class SystemStatsViewModel: ObservableObject {
 
     /// Deallocates the Mach `processor_info_array_t` buffer stored in `prevCPUInfo`
     /// using `vm_deallocate`, then nils the pointer. Safe to call when `prevCPUInfo` is `nil`.
-    private func deallocPrevCPUInfo() {
+    /// `nonisolated` so it can be called from `deinit` (which is always nonisolated) and from
+    /// `sampleCPU()`'s `defer` block without crossing an actor boundary.
+    nonisolated private func deallocPrevCPUInfo() {
         guard let prev = prevCPUInfo else { return }
         let infoSize  = vm_size_t(MemoryLayout<integer_t>.size)
         let totalSize = vm_size_t(prevNumCPUInfo) * infoSize
@@ -171,7 +180,7 @@ final class SystemStatsViewModel: ObservableObject {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        let pageSize  = Double(vm_kernel_page_size)
+        let pageSize = Double(Int(vm_kernel_page_size))
         let totalBytes = Double(ProcessInfo.processInfo.physicalMemory)
         let totalGB    = totalBytes / 1_000_000_000
         guard kr == KERN_SUCCESS else { return (0, totalGB) }
