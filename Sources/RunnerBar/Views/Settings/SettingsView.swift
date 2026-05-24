@@ -154,15 +154,12 @@ struct SettingsView: View {
             isCLIAuthenticated = !success && githubToken() != nil
             isSigningIn = false
         }
-        // #723: subscribe to didSignOut via Combine — consistent with didUpdate/didMutate pattern.
         signOutCancellable = OAuthService.shared.didSignOut
             .receive(on: DispatchQueue.main)
             .sink {
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = githubToken() != nil
             }
-        // #695: Subscribe to ScopeStore.didMutate via Combine instead of the old
-        // onMutate closure (which no longer exists after the Combine migration).
         scopeMutateCancellable = ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak store] in store?.reload() }
@@ -232,6 +229,8 @@ struct SettingsView: View {
     }
 
     /// Performs the localRunnerRow operation.
+    /// macOS 26+: .glassEffect card background.
+    /// macOS < 26: original RoundedRectangle fill + strokeBorder (unchanged).
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         Button(action: { onSelectRunner(runner) }) {
@@ -240,13 +239,7 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(RoundedRectangle(cornerRadius: RBRadius.small)
-                    .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                .padding(.horizontal, RBSpacing.xs)
-        )
+        .modifier(SettingsRowBackground(cornerRadius: RBRadius.small))
     }
 
     /// Performs the localRunnerRowContent operation.
@@ -379,19 +372,21 @@ struct SettingsView: View {
     }
 
     /// Performs the scopeRow operation.
+    /// macOS 26+: glass card + glass Repo/Org type tag.
+    /// macOS < 26: original fill+strokeBorder paths (unchanged).
     private func scopeRow(_ entry: ScopeEntry) -> some View {
         let isRepo = entry.scope.contains("/")
         let displayName = ScopePreferencesStore.displayName(for: entry.scope)
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         return Button(action: { onSelectScope(entry) }) {
             HStack(spacing: 8) {
+                // Repo/Org type tag
                 Text(isRepo ? "Repo" : "Org")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextSecondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.rbSurfaceElevated))
-                    .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+                    .modifier(ScopeTypeTagBackground())
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(displayName)
@@ -445,15 +440,7 @@ struct SettingsView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(entry.isEnabled ? Color.rbSurfaceElevated : Color.rbSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-                .padding(.horizontal, RBSpacing.xs)
-        )
+        .modifier(SettingsRowBackground(cornerRadius: RBRadius.small, dimmed: !entry.isEnabled))
         .opacity(entry.isEnabled ? 1.0 : 0.5)
     }
 
@@ -611,6 +598,55 @@ struct SettingsView: View {
                 if !ok { removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs." }
                 LocalRunnerStore.shared.refresh()
             }
+        }
+    }
+}
+
+// MARK: - SettingsRowBackground
+/// Applies the correct card background for settings list rows based on OS version.
+/// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle(cornerRadius:))`
+/// macOS < 26: original `RoundedRectangle fill + strokeBorder` (unchanged).
+private struct SettingsRowBackground: ViewModifier {
+    let cornerRadius: CGFloat
+    var dimmed: Bool = false
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                        .padding(.horizontal, RBSpacing.xs)
+                )
+        } else {
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(dimmed ? Color.rbSurface : Color.rbSurfaceElevated)
+                        .overlay(RoundedRectangle(cornerRadius: cornerRadius)
+                            .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+                        .padding(.horizontal, RBSpacing.xs)
+                )
+        }
+    }
+}
+
+// MARK: - ScopeTypeTagBackground
+/// Applies the correct background for the Repo/Org type tag in `scopeRow`.
+/// macOS 26+: `.glassEffect(.regular, in: Capsule())`
+/// macOS < 26: `Capsule().fill(rbSurfaceElevated) + strokeBorder` (unchanged).
+private struct ScopeTypeTagBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(Capsule().fill(Color.rbSurfaceElevated))
+                .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
         }
     }
 }
