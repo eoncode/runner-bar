@@ -81,7 +81,9 @@ struct BranchTagPill: View { // periphery:ignore
 // MARK: - CardRowModifier
 /// Applies Liquid Glass ultraThinMaterial background + subtle white stroke to a card row.
 private struct CardRowModifier: ViewModifier {
+    /// Corner radius for the rounded rectangle background.
     var cornerRadius: CGFloat = RBRadius.small
+    /// Applies the ultraThinMaterial background and white stroke overlay.
     func body(content: Content) -> some View {
         content
             .background(
@@ -95,15 +97,10 @@ private struct CardRowModifier: ViewModifier {
     }
 }
 
-extension View {
-    func cardRow(cornerRadius: CGFloat = RBRadius.small) -> some View {
-        modifier(CardRowModifier(cornerRadius: cornerRadius))
-    }
-}
-
 // MARK: - GlassPanelModifier
 /// Applies Liquid Glass regularMaterial background + subtle white stroke + shadow to a container.
 private struct GlassPanelModifier: ViewModifier {
+    /// Applies the regularMaterial background, white stroke overlay, and drop shadow.
     func body(content: Content) -> some View {
         content
             .background(
@@ -118,9 +115,60 @@ private struct GlassPanelModifier: ViewModifier {
     }
 }
 
+// MARK: - GlassCardModifier
+/// Applies Liquid Glass ultraThinMaterial card styling with a configurable corner radius.
+private struct GlassCardModifier: ViewModifier {
+    /// Corner radius for the rounded rectangle background. Defaults to `RBRadius.card`.
+    var cornerRadius: CGFloat = RBRadius.card
+    /// Applies the ultraThinMaterial background and white stroke overlay.
+    func body(content: Content) -> some View {
+        content
+            .background(
+                .ultraThinMaterial,
+                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
+    }
+}
+
+// MARK: - GlassSectionModifier
+/// Applies a thinMaterial section header background used inside glass card sheets.
+private struct GlassSectionModifier: ViewModifier {
+    /// Applies the thinMaterial background and bottom separator stroke.
+    func body(content: Content) -> some View {
+        content
+            .background(.thinMaterial)
+            .overlay(
+                Rectangle()
+                    .frame(height: 0.5)
+                    .foregroundColor(Color.white.opacity(0.1)),
+                alignment: .bottom
+            )
+    }
+}
+
 extension View {
+    /// Applies the `.cardRow()` Liquid Glass ultraThinMaterial modifier with configurable corner radius.
+    func cardRow(cornerRadius: CGFloat = RBRadius.small) -> some View {
+        modifier(CardRowModifier(cornerRadius: cornerRadius))
+    }
+
+    /// Applies the `.glassPanel()` Liquid Glass regularMaterial modifier.
     func glassPanel() -> some View {
         modifier(GlassPanelModifier())
+    }
+
+    /// Applies the `.glassCard()` Liquid Glass ultraThinMaterial card modifier.
+    func glassCard(cornerRadius: CGFloat = RBRadius.card) -> some View {
+        modifier(GlassCardModifier(cornerRadius: cornerRadius))
+    }
+
+    /// Applies the `.glassSection()` thinMaterial section header modifier.
+    func glassSection() -> some View {
+        modifier(GlassSectionModifier())
     }
 }
 
