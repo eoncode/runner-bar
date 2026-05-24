@@ -51,6 +51,7 @@ struct AddRunnerSheet: View {
         case addNew      = "Add new"
         /// Coding key for the `addExisting` field.
         case addExisting = "Add pre-existing"
+        /// Stable identifier for `Identifiable` conformance.
         var id: String { rawValue }
     }
 
@@ -65,6 +66,7 @@ struct AddRunnerSheet: View {
         case repo = "Repository"
         /// Coding key for the `org` field.
         case org  = "Organisation"
+        /// Stable identifier for `Identifiable` conformance.
         var id: String { rawValue }
     }
 
