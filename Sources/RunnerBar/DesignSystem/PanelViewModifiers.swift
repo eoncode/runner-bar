@@ -54,7 +54,8 @@ struct StatusBadge: View {
 // MARK: - BranchTagPill
 /// Inline pill displaying a git branch or tag name.
 /// Uses a blue-tinted stroke capsule consistent with the Phase 5 design language.
-struct BranchTagPill: View { // periphery:ignore
+// periphery:ignore
+struct BranchTagPill: View {
     /// The branch or tag name to display.
     let name: String
 

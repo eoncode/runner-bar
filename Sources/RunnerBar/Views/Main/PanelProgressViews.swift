@@ -24,7 +24,8 @@ import SwiftUI
 ///
 /// ❌ NEVER change onChange to two-argument form — macOS 13 only supports single-value.
 /// ❌ NEVER set displayProgress directly without withAnimation — breaks interpolation.
-struct PieProgressDot: View { // periphery:ignore
+// periphery:ignore
+struct PieProgressDot: View {
     /// Radial fill fraction (0.0–1.0). Nil renders a spinning indeterminate arc.
     let progress: Double?
     /// Wedge fill and ring stroke colour. Animated on change.

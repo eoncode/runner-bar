@@ -7,7 +7,8 @@ import SwiftUI
 /// idle (arrow.clockwise + "Re-run") ->
 /// loading (spinner + "Running...") ->
 /// done (checkmark + "Done", 1.5 s) OR failed (cross + "Failed", 1.5 s) -> idle
-struct ReRunButton: View { // periphery:ignore
+// periphery:ignore
+struct ReRunButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
     /// When true the button is completely hidden and takes no layout space.

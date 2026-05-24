@@ -5,7 +5,8 @@ import SwiftUI
 // MARK: - CancelButton
 /// Top-bar cancel button used in JobDetailView and StepLogView.
 /// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
-struct CancelButton: View { // periphery:ignore
+// periphery:ignore
+struct CancelButton: View {
     /// Called on tap. Must invoke completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
     /// When true the button is rendered at reduced opacity and cannot be tapped.
