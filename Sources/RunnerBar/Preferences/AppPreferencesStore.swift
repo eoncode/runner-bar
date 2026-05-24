@@ -6,12 +6,11 @@ import Foundation
 // MARK: - AppPreferencesStore
 
 /// Persists general app settings to UserDefaults.
-// swiftlint:disable:next missing_docs
 final class AppPreferencesStore: ObservableObject {
     /// Shared singleton instance.
     static let shared = AppPreferencesStore()
 
-    /// UserDefaults key constants.
+    /// UserDefaults key constants used by `AppPreferencesStore`.
     private enum Key {
         /// Key for the polling interval setting.
         static let pollingInterval    = "settings.pollingInterval"
