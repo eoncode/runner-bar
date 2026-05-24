@@ -1,1 +1,1 @@
-placeholder_settings
+SETTINGS_CONTENT
