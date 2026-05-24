@@ -61,9 +61,6 @@ final class OAuthService {
     /// Subscribe via `.sink { }.store(in: &cancellables)` — do NOT use a raw closure.
     let didSignOut = PassthroughSubject<Void, Never>()
 
-    /// The isSignedIn property.
-    var isSignedIn: Bool { Keychain.token != nil }
-
     // MARK: Sign In
 
     /// Performs the signIn operation.
