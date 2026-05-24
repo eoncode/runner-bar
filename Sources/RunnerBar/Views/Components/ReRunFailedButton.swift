@@ -12,7 +12,9 @@ import SwiftUI
 /// idle (exclamationmark.arrow.clockwise + "Re-run failed") →
 /// loading (spinner + "Running…") →
 /// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
-struct ReRunFailedButton: View { // periphery:ignore
+// swiftlint:disable:next orphaned_doc_comment
+// periphery:ignore
+struct ReRunFailedButton: View {
     /// Called on tap. Must call completion(success: Bool) from any thread.
     let action: (@escaping (Bool) -> Void) -> Void
     /// When true the button is completely hidden and takes no layout space.

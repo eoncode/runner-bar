@@ -5,7 +5,9 @@ import SwiftUI
 
 // MARK: - SystemStatsView
 /// Full-page system stats view shown in the settings panel.
-struct SystemStatsView: View { // periphery:ignore
+// swiftlint:disable:next orphaned_doc_comment
+// periphery:ignore
+struct SystemStatsView: View {
     /// The viewModel property.
     @StateObject private var viewModel = SystemStatsViewModel()
 
@@ -196,7 +198,9 @@ struct HeaderStatsBar: View {
 // Renders a coloured block-bar and percentage label for a given metric.
 // Deprecated -- use SparklineMetricView / HeaderStatsBar instead.
 /// A value type representing BlockBarView.
-struct BlockBarView: View { // periphery:ignore
+// swiftlint:disable:next orphaned_doc_comment
+// periphery:ignore
+struct BlockBarView: View {
     /// The label constant.
     let label: String
     /// The pct constant.
