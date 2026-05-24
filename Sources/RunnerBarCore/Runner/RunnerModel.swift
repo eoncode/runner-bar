@@ -7,7 +7,7 @@ import Foundation
 
 /// Represents a locally-installed GitHub Actions self-hosted runner.
 /// Discovered by scanning LaunchAgent plists in ~/Library/LaunchAgents.
-public struct RunnerModel: Identifiable, Equatable {
+public struct RunnerModel: @unchecked Sendable: Identifiable, Equatable {
     // MARK: Stored
 
     /// String-based ID so LocalRunnerScanner can use runnerName as the dedup key.

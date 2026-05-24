@@ -747,7 +747,7 @@ struct AddRunnerSheet: View {
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError  = pipe
-        var outputData = Data()
+        nonisolated(unsafe) var outputData = Data()
         let lock = NSLock()
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         pipe.fileHandleForReading.readabilityHandler = { handle in
