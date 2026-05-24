@@ -174,14 +174,7 @@ private struct JobRowCard: View {
                 jobHeader
                 if isExpanded { stepsContainer }
             }
-            .background(
-                RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                    .fill(Color.rbSurfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                            .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                    )
-            )
+            .glassCard(cornerRadius: RBRadius.small)
             .clipShape(RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous))
         }
         .padding(.vertical, 1)
