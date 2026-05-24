@@ -1,5 +1,6 @@
 // GitHub.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import Foundation
 import RunnerBarCore
 
@@ -128,12 +129,11 @@ func fetchUserRepos() -> [String] {
 
 // MARK: - Step log
 
-// swiftlint:disable:next force_try missing_docs
+// swiftlint:disable:next force_try
 private let _ansiRegex = try! NSRegularExpression(
     pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
 )
 
-// swiftlint:disable missing_docs
 // URLSession configured to NOT follow redirects.
 // Used for the first leg of fetchStepLog so we can capture the pre-signed S3
 // Location URL from the GitHub 302 response before fetching the log body.
@@ -157,7 +157,6 @@ private let noRedirectSession = URLSession(
     delegate: noRedirectDelegate,
     delegateQueue: nil
 )
-// swiftlint:enable missing_docs
 
 /// Fetches step logs via URLSession (token path) or gh CLI (fallback).
 func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
@@ -301,3 +300,4 @@ private func stripAnsi(_ input: String) -> String {
         withTemplate: ""
     )
 }
+// swiftlint:enable missing_docs
