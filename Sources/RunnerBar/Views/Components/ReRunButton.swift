@@ -20,8 +20,14 @@ struct ReRunButton: View {
     // MARK: - Phase
     /// Visual states of the re-run button lifecycle.
     enum Phase {
-        /// The `idle` case.
-        case idle, loading, done, failed
+        /// Waiting for the user to tap; shows the re-run affordance.
+        case idle
+        /// Async request is in-flight; shows a spinner.
+        case loading
+        /// Request succeeded; shows a green checkmark for 1.5 s.
+        case done
+        /// Request failed; shows a red cross for 1.5 s.
+        case failed
     }
 
     // MARK: - Body
