@@ -1,6 +1,7 @@
 // NavState.swift
 // RunnerBar
 import RunnerBarCore
+
 // MARK: - NavState
 //
 // Represents the currently visible navigation screen inside the RunnerBar panel.
@@ -12,7 +13,7 @@ import RunnerBarCore
 // #455: Removed .jobDetail, .actionDetail, .actionJobDetail, .actionStepLog.
 // Navigation from the main view now goes directly: inline step tap → .stepLog.
 
-/// Represents the currently visible navigation screen.
+/// Represents the currently visible navigation screen inside the RunnerBar panel.
 enum NavState {
     /// The root popover showing runners and the recent-actions list.
     case main
