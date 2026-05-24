@@ -1,6 +1,5 @@
 // SystemStatsView.swift
 // RunnerBar
-// swiftlint:disable missing_docs
 import RunnerBarCore
 import SwiftUI
 

@@ -1,6 +1,6 @@
 // PanelMainView+Subviews.swift
 // RunnerBar
-// swiftlint:disable colon opening_brace missing_docs
+// swiftlint:disable colon opening_brace
 
 import RunnerBarCore
 import SwiftUI
@@ -297,7 +297,9 @@ struct ActionRowView: View {
 /// macOS 26+: .glassEffect with status colour bar overlay + thin border.
 /// macOS < 26: original RoundedRectangle fill + strokeBorder + status bar (unchanged).
 private struct ActionRowBackground: ViewModifier {
+    /// The workflow run status that drives the left colour bar tint.
     let status: RBStatus
+    /// Applies the OS-appropriate card background and status bar overlay to `content`.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
