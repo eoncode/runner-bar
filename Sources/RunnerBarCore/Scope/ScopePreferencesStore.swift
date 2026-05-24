@@ -207,8 +207,16 @@ public enum ScopePreferencesStore {
     /// Removes all per-scope keys for `scope` from UserDefaults.
     /// Call this from `ScopeStore.remove(id:)` to avoid orphaned data.
     public static func cleanUp(scope: String) {
-        let fields = ["alias", "pollingInterval", "notifyOnSuccess", "notifyOnFailure",
-                      "failureHookEnabled", "failureHookCommand", "localRepoPath", "failureHookBranch"]
+        let fields = [
+            "alias",
+            "pollingInterval",
+            "notifyOnSuccess",
+            "notifyOnFailure",
+            "failureHookEnabled",
+            "failureHookCommand",
+            "localRepoPath",
+            "failureHookBranch"
+        ]
         for field in fields {
             UserDefaults.standard.removeObject(forKey: key(scope, field))
         }

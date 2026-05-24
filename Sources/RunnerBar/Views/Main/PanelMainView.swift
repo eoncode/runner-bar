@@ -164,13 +164,40 @@ struct PanelMainView: View {
         displayTickTimer?.invalidate()
         displayTickTimer = nil
     }
-    // MARK: - Rate limit banner
-    /// Warning strip shown at the top of the actions list when GitHub's rate limit has been hit.
+    // MARK: - Rate limit banner (#778)
+    /// Warning strip shown below the header when GitHub's rate limit has been hit.
+    ///
+    /// Uses `store.rateLimitResetDate` + the 1-second `displayTick` to render
+    /// a live countdown ("resets in 42s", "resets in 3m 07s", etc.).
+    /// Falls back to the static "pausing polls" label when no reset date is
+    /// known (e.g. CLI code path that sets `ghIsRateLimited` without a
+    /// `X-RateLimit-Reset` header value).
+    ///
+    /// `displayTick` is referenced via `_ = displayTick` so SwiftUI re-evaluates
+    /// this computed property every second while the banner is visible — the
+    /// same mechanism used by elapsed-time labels in `ActionRowView`.
     private var rateLimitBanner: some View {
-        HStack(spacing: 6) {
+        // Capture tick to force a re-evaluation every second.
+        _ = displayTick // swiftlint:disable:this redundant_discardable_let
+        let countdownLabel: String
+        if let resetDate = store.rateLimitResetDate {
+            let remaining = max(0, resetDate.timeIntervalSinceNow)
+            if remaining < 1 {
+                countdownLabel = "resuming…"
+            } else if remaining < 60 {
+                countdownLabel = "resets in \(Int(remaining))s"
+            } else {
+                let mins = Int(remaining) / 60
+                let secs = Int(remaining) % 60
+                countdownLabel = String(format: "resets in %dm %02ds", mins, secs)
+            }
+        } else {
+            countdownLabel = "pausing polls"
+        }
+        return HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.yellow).font(.caption)
-            Text("GitHub rate limit reached — pausing polls")
+            Text("GitHub rate limit reached — \(countdownLabel)")
                 .font(.caption).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 4)

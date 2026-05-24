@@ -14,6 +14,14 @@ public struct PollResultBuilder {
 
     /// Maximum number of completed jobs retained in the job cache.
     public static let jobCacheLimit = 3
+
+    /// Maximum number of job entries shown in the panel UI (live + cached combined).
+    ///
+    /// Intentionally larger than `jobCacheLimit` so that live in-progress and queued
+    /// jobs are never silently dropped when the cache is already full.
+    /// `jobCacheLimit` controls *retention*; `jobDisplayLimit` controls *visibility*.
+    public static let jobDisplayLimit = 10
+
     /// Maximum number of completed groups retained in the group cache.
     public static let groupCacheLimit = 30
 
@@ -32,34 +40,34 @@ public struct PollResultBuilder {
         fetchJobs: () -> [ActiveJob],
         backfill: (inout [Int: ActiveJob]) -> Void
     ) -> JobPollResult {
-        let allFetched = fetchJobs()
-        let liveJobs = allFetched.filter { $0.conclusion == nil && $0.status != "completed" }
-        let freshDone = allFetched.filter { $0.conclusion != nil || $0.status == "completed" }
-        let liveIDs = Set(liveJobs.map { $0.id })
+        let allFetched: [ActiveJob] = fetchJobs()
+        let liveJobs: [ActiveJob] = allFetched.filter { $0.conclusion == nil && $0.status != .completed }
+        let freshDone: [ActiveJob] = allFetched.filter { $0.conclusion != nil || $0.status == .completed }
+        let liveIDs: Set<Int> = Set(liveJobs.map { $0.id })
         let now = Date()
-        var newCache = snapCache
+        var newCache: [Int: ActiveJob] = snapCache
         applyVanishedJobs(snapPrev: snapPrev, liveIDs: liveIDs, now: now, into: &newCache)
         for job in freshDone {
             newCache[job.id] = ActiveJob(
                 id: job.id,
                 name: job.name,
-                status: "completed",
-                conclusion: job.conclusion ?? "success",
-                startedAt: job.startedAt,
-                createdAt: job.createdAt,
-                completedAt: job.completedAt ?? Date(),
                 htmlUrl: job.htmlUrl,
+                status: .completed,
+                conclusion: job.conclusion ?? .success,
                 isDimmed: true,
-                steps: job.steps,
-                runnerName: job.runnerName
+                runnerName: job.runnerName,
+                scope: job.scope,
+                startedAt: job.startedAt,
+                completedAt: job.completedAt ?? Date(),
+                steps: job.steps
             )
         }
         trimJobCache(&newCache, limit: jobCacheLimit)
         backfill(&newCache)
-        let newPrevLive = Dictionary(uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
+        let newPrevLive: [Int: ActiveJob] = [Int: ActiveJob](uniqueKeysWithValues: liveJobs.map { ($0.id, $0) })
         let display = buildJobDisplay(live: liveJobs, cache: newCache)
-        let inProgCount = liveJobs.filter { $0.status == "in_progress" }.count
-        let queuedCount = liveJobs.filter { $0.status == "queued" }.count
+        let inProgCount = liveJobs.filter { $0.status == .inProgress }.count
+        let queuedCount = liveJobs.filter { $0.status == .queued }.count
         log(
             "PollResultBuilder › \(inProgCount) in_progress \(queuedCount) queued"
             + " | cache: \(newCache.count) | display: \(display.count)"
@@ -120,7 +128,7 @@ public struct PollResultBuilder {
             newCache[group.id] = dimmed
         }
         trimGroupCache(&newCache, limit: groupCacheLimit)
-        let newPrevLive = Dictionary(uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
+        let newPrevLive = [String: WorkflowActionGroup](uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
         let display = buildGroupDisplay(live: liveGroups, cache: newCache)
         let inProgCount = liveGroups.filter { $0.groupStatus == .inProgress }.count
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
@@ -151,15 +159,15 @@ public struct PollResultBuilder {
             cache[jobID] = ActiveJob(
                 id: job.id,
                 name: job.name,
-                status: "completed",
-                conclusion: job.conclusion ?? "success",
-                startedAt: job.startedAt,
-                createdAt: job.createdAt,
-                completedAt: job.completedAt ?? now,
                 htmlUrl: job.htmlUrl,
+                status: .completed,
+                conclusion: job.conclusion ?? .success,
                 isDimmed: true,
-                steps: job.steps,
-                runnerName: job.runnerName
+                runnerName: job.runnerName,
+                scope: job.scope,
+                startedAt: job.startedAt,
+                completedAt: job.completedAt ?? now,
+                steps: job.steps
             )
         }
     }
@@ -170,20 +178,24 @@ public struct PollResultBuilder {
         let sorted = cache.values.sorted {
             ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
         }
-        cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
+        cache = [Int: ActiveJob](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
     /// Builds the ordered job display list from live jobs and the completed cache.
+    ///
+    /// Display order: in-progress → queued → cached (most-recently-completed first).
+    /// Live jobs are never capped by `jobCacheLimit`; the combined list is capped
+    /// at `jobDisplayLimit` so the panel UI stays manageable.
     public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
-        let inProgress = live.filter { $0.status == "in_progress" }
-        let queued     = live.filter { $0.status == "queued" }
-        let cached     = cache.values.sorted {
+        let inProgress: [ActiveJob] = live.filter { $0.status == .inProgress }
+        let queued: [ActiveJob]     = live.filter { $0.status == .queued }
+        let cached: [ActiveJob]     = cache.values.sorted {
             ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
         }
         var display: [ActiveJob] = []
-        for job in inProgress where display.count < jobCacheLimit { display.append(job) }
-        for job in queued     where display.count < jobCacheLimit { display.append(job) }
-        for job in cached     where display.count < jobCacheLimit { display.append(job) }
+        for job in inProgress where display.count < jobDisplayLimit { display.append(job) }
+        for job in queued     where display.count < jobDisplayLimit { display.append(job) }
+        for job in cached     where display.count < jobDisplayLimit { display.append(job) }
         return display
     }
 
@@ -261,7 +273,7 @@ public struct PollResultBuilder {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
-        cache = Dictionary(uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
+        cache = [String: WorkflowActionGroup](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
     /// Builds the ordered group display list from live groups and the completed cache.

@@ -38,6 +38,49 @@ final class ActiveJobElapsedTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(total, 89)
         XCTAssertLessThanOrEqual(total, 95)
     }
+
+    func testElapsedInProgressFallsBackToCreatedAt() {
+        // When startedAt is nil (still queued/assigning), elapsed uses createdAt
+        let created = Date(timeIntervalSinceNow: -60)
+        let job = ActiveJob(id: 1, name: "J", status: "in_progress", createdAt: created)
+        let mins = Int(job.elapsed.prefix(2))!
+        let secs = Int(job.elapsed.suffix(2))!
+        let total = mins * 60 + secs
+        XCTAssertGreaterThanOrEqual(total, 59)
+        XCTAssertLessThanOrEqual(total, 65)
+    }
+
+    func testElapsedInProgressNeitherDateReturnsZero() {
+        let job = ActiveJob(id: 1, name: "J", status: "in_progress")
+        XCTAssertEqual(job.elapsed, "00:00")
+    }
+}
+
+// MARK: - JobStep.elapsed
+
+final class JobStepElapsedTests: XCTestCase {
+
+    func testElapsedFixedDuration() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let end   = Date(timeIntervalSinceReferenceDate: 185) // 3m 5s
+        let step = JobStep(id: 1, name: "S", status: "completed",
+                           startedAt: start, completedAt: end)
+        XCTAssertEqual(step.elapsed, "03:05")
+    }
+
+    func testElapsedNilDatesReturnsZero() {
+        // Both nil → Date() - Date() ≈ 0
+        let step = JobStep(id: 1, name: "S", status: "in_progress")
+        XCTAssertEqual(step.elapsed, "00:00")
+    }
+
+    func testElapsedExactlyOneMinute() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let end   = Date(timeIntervalSinceReferenceDate: 60)
+        let step = JobStep(id: 1, name: "S", status: "completed",
+                           startedAt: start, completedAt: end)
+        XCTAssertEqual(step.elapsed, "01:00")
+    }
 }
 
 // MARK: - ActiveJob.isLocalRunner
@@ -59,8 +102,33 @@ final class ActiveJobIsLocalRunnerTests: XCTestCase {
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
+    func testIsLocalRunnerFalseForWindowsHosted() {
+        let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "windows-2022")
+        XCTAssertEqual(job.isLocalRunner, false)
+    }
+
+    func testIsLocalRunnerFalseForBuildjetHosted() {
+        let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "buildjet-4vcpu-ubuntu-2204")
+        XCTAssertEqual(job.isLocalRunner, false)
+    }
+
+    func testIsLocalRunnerFalseForDepotHosted() {
+        let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "depot-ubuntu-22.04")
+        XCTAssertEqual(job.isLocalRunner, false)
+    }
+
+    func testIsLocalRunnerFalseForGitHubActionsHosted() {
+        let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "GitHub Actions 12")
+        XCTAssertEqual(job.isLocalRunner, false)
+    }
+
     func testIsLocalRunnerTrueForSelfHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "my-mac-mini")
+        XCTAssertEqual(job.isLocalRunner, true)
+    }
+
+    func testIsLocalRunnerTrueForCustomName() {
+        let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "office-m2-runner")
         XCTAssertEqual(job.isLocalRunner, true)
     }
 }
@@ -92,8 +160,9 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
         XCTAssertEqual(makeRunner(isRunning: true).displayStatus, "running")
     }
 
+    // #773: displayStatus must return "busy" when isBusy is true (dead-branch fix).
     func testDisplayStatusBusy() {
-        XCTAssertEqual(makeRunner(isRunning: true, isBusy: true).displayStatus, "running")
+        XCTAssertEqual(makeRunner(isRunning: true, isBusy: true).displayStatus, "busy")
     }
 
     func testDisplayStatusOnline() {
@@ -107,6 +176,14 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
     func testDisplayStatusLifecycleWarningTakesPriority() {
         let runner = makeRunner(isRunning: true, lifecycleWarning: "update required")
         XCTAssertEqual(runner.displayStatus, "update required")
+    }
+
+    func testDisplayStatusBusyGithubStatusWhenNotRunning() {
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "busy").displayStatus, "busy")
+    }
+
+    func testDisplayStatusDefaultsToOfflineForUnknownStatus() {
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "unknown").displayStatus, "offline")
     }
 }
 
@@ -208,6 +285,86 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertTrue(display.isEmpty)
     }
 
+    /// Verifies that live jobs beyond jobCacheLimit are NOT silently dropped.
+    /// This was the bug in #776 — live jobs were capped at jobCacheLimit = 3.
+    func testBuildJobDisplayDoesNotCapLiveJobsAtCacheLimit() {
+        let live: [ActiveJob] = (1...5).map {
+            ActiveJob(id: $0, name: "Job \($0)", status: "in_progress")
+        }
+        let display = PollResultBuilder.buildJobDisplay(live: live, cache: [:])
+        XCTAssertEqual(display.count, 5, "All 5 live jobs should appear; jobCacheLimit must not truncate live jobs")
+    }
+
+    /// Verifies the total display list is capped at jobDisplayLimit.
+    func testBuildJobDisplayCapsAtJobDisplayLimit() {
+        let live: [ActiveJob] = (1...8).map {
+            ActiveJob(id: $0, name: "Job \($0)", status: "in_progress")
+        }
+        let cached: [Int: ActiveJob] = Dictionary(uniqueKeysWithValues: (100...106).map {
+            ($0, ActiveJob(id: $0, name: "Done \($0)", status: "completed",
+                           conclusion: "success",
+                           completedAt: Date(timeIntervalSinceReferenceDate: Double($0))))
+        })
+        let display = PollResultBuilder.buildJobDisplay(live: live, cache: cached)
+        XCTAssertLessThanOrEqual(display.count, PollResultBuilder.jobDisplayLimit)
+    }
+
+    // MARK: applyVanishedJobs
+
+    func testApplyVanishedJobsMovesVanishedJobToCache() {
+        let vanished = ActiveJob(id: 55, name: "Vanished", status: "in_progress")
+        var cache: [Int: ActiveJob] = [:]
+        PollResultBuilder.applyVanishedJobs(
+            snapPrev: [55: vanished],
+            liveIDs: [],
+            now: Date(),
+            into: &cache
+        )
+        XCTAssertNotNil(cache[55], "Vanished job should be added to cache")
+        XCTAssertEqual(cache[55]?.status, "completed")
+        XCTAssertEqual(cache[55]?.isDimmed, true)
+        XCTAssertEqual(cache[55]?.conclusion, "success", "Missing conclusion defaults to success")
+    }
+
+    func testApplyVanishedJobsDoesNotOverwriteExistingCacheEntry() {
+        let vanished = ActiveJob(id: 55, name: "Vanished", status: "in_progress")
+        let existing = ActiveJob(id: 55, name: "Vanished", status: "completed",
+                                 conclusion: "failure", isDimmed: true)
+        var cache: [Int: ActiveJob] = [55: existing]
+        PollResultBuilder.applyVanishedJobs(
+            snapPrev: [55: vanished],
+            liveIDs: [],
+            now: Date(),
+            into: &cache
+        )
+        XCTAssertEqual(cache[55]?.conclusion, "failure", "Existing cache entry must not be overwritten")
+    }
+
+    func testApplyVanishedJobsIgnoresStillLiveJobs() {
+        let job = ActiveJob(id: 77, name: "StillLive", status: "in_progress")
+        var cache: [Int: ActiveJob] = [:]
+        PollResultBuilder.applyVanishedJobs(
+            snapPrev: [77: job],
+            liveIDs: [77],
+            now: Date(),
+            into: &cache
+        )
+        XCTAssertNil(cache[77], "Live job must not be moved to cache")
+    }
+
+    func testApplyVanishedJobsPreservesExistingConclusion() {
+        let vanished = ActiveJob(id: 88, name: "Done", status: "completed",
+                                 conclusion: "failure")
+        var cache: [Int: ActiveJob] = [:]
+        PollResultBuilder.applyVanishedJobs(
+            snapPrev: [88: vanished],
+            liveIDs: [],
+            now: Date(),
+            into: &cache
+        )
+        XCTAssertEqual(cache[88]?.conclusion, "failure", "Existing conclusion should be preserved")
+    }
+
     // MARK: buildJobState
 
     func testBuildJobStateLiveJobAppearsInDisplay() {
@@ -216,7 +373,10 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [liveJob] },
-            backfill: { _ in } // no-op: backfill not required for this test case
+            backfill: { _ in
+                // No backfill needed for this test — step-log fetching
+                // is exercised by integration tests, not unit tests.
+            }
         )
         XCTAssertTrue(result.display.contains(where: { $0.id == 99 }))
     }
@@ -227,9 +387,26 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [doneJob] },
-            backfill: { _ in } // no-op: backfill not required for this test case
+            backfill: { _ in
+                // No backfill needed — completed job already has full data.
+            }
         )
         XCTAssertTrue(result.newCache.keys.contains(42))
         XCTAssertEqual(result.newCache[42]?.isDimmed, true)
+    }
+
+    func testBuildJobStateVanishedLiveJobAppearsInCache() {
+        let prev = ActiveJob(id: 11, name: "Old", status: "in_progress")
+        // Job 11 was live last poll but fetchJobs returns nothing this poll
+        let result = PollResultBuilder.buildJobState(
+            snapPrev: [11: prev],
+            snapCache: [:],
+            fetchJobs: { [] },
+            backfill: { _ in
+                // No backfill needed — vanished job has no new data to fetch.
+            }
+        )
+        XCTAssertNotNil(result.newCache[11], "Vanished live job should appear in cache")
+        XCTAssertEqual(result.newCache[11]?.status, "completed")
     }
 }

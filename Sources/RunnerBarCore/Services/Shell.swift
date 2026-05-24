@@ -9,6 +9,7 @@ private let zshBinaryPath = "/bin/zsh"
 
 // Executes shell commands synchronously.
 /// Enumerates possible values for Shell.
+@available(*, deprecated, message: "Use ProcessRunner.run(_:arguments:timeout:) instead. Shell.run uses /bin/zsh -c which carries shell-injection risk and /bin/zsh startup overhead.")
 public enum Shell {
 
     /// The output and exit code produced by a shell command execution.
@@ -95,9 +96,13 @@ public enum Shell {
 }
 // swiftlint:enable function_body_length
 
-/// Backward-compatibility shim that delegates to ``Shell/run(_:timeout:)`` and returns stdout as a string.
+/// Backward-compatibility shim — **deprecated**. Use `ProcessRunner.run` instead.
 ///
-/// `timeout` is forwarded to `Shell.run`, which enforces it via `DispatchSemaphore`.
+/// This shim delegates to `Shell.run` which wraps `/bin/zsh -c`. It carries
+/// shell-injection risk and `/bin/zsh` startup overhead. All call sites have been
+/// migrated to `ProcessRunner.run`; this function is retained only to satisfy any
+/// remaining compile-time references during the transition period and will be deleted
+/// in a follow-up cleanup.
 ///
 /// ⚠️ NEVER ignore the `timeout` parameter here again — that was the bug (ref #477).
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
@@ -107,6 +112,7 @@ public enum Shell {
 ///   - command: The shell command string to execute via `/bin/zsh -c`.
 ///   - timeout: Maximum seconds to wait. Defaults to `20`.
 /// - Returns: Trimmed stdout string, or empty on timeout/failure.
+@available(*, deprecated, message: "Use ProcessRunner.run(_:arguments:timeout:) instead. This shim uses /bin/zsh -c which carries shell-injection risk.")
 @discardableResult
 public func shell(_ command: String, timeout: TimeInterval = 20) -> String {
     log("shell() shim › command=\(command) timeout=\(timeout)")

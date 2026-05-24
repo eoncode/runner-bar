@@ -32,6 +32,16 @@ final class RunnerStore {
 
     /// Documentation.
     private(set) var isRateLimited = false
+
+    /// The exact moment the current rate-limit window expires.
+    ///
+    /// Set to `nil` when no rate-limit is active or when the reset time is
+    /// unknown (e.g. CLI code path that sets `ghIsRateLimited` without a
+    /// header value).  Sourced from `ghRateLimitResetDate` in
+    /// `applyFetchResult` and propagated via `RunnerViewModel` to the
+    /// `rateLimitBanner` in `PanelMainView`.
+    private(set) var rateLimitResetDate: Date?
+
     /// The timer property.
     private var timer: Timer?
     /// The intervalCancellable property.
@@ -163,23 +173,24 @@ final class RunnerStore {
         var byName: [String: String] = [:]
         for localRunner in localRunners {
             guard let path = localRunner.installPath else { continue }
-            // Name-only entry — always populated regardless of scope.
             byName[localRunner.runnerName] = path
-            // Scope-prefixed entries — one per active scope.
             for scope in scopes {
                 byFullKey["\(scope)/\(localRunner.runnerName)"] = path
             }
         }
         log("RunnerStore › buildInstallPathMap — fullKeys=\(byFullKey.keys.sorted()) nameKeys=\(byName.keys.sorted())")
-        // Warn early if scopes are empty or no runners are registered — the
-        // full-key map will always be empty and metrics will never be assigned.
         if byFullKey.isEmpty && !localRunners.isEmpty {
             log("RunnerStore › ⚠️ buildInstallPathMap — fullKey map is EMPTY (scopes=\(scopes), localRunners=\(localRunners.count)) — check ScopeStore alignment")
         }
         return (byFullKey, byName)
     }
 
-    /// Performs the applyFetchResult operation.
+    /// Applies a completed fetch cycle's results to the store's @MainActor state.
+    ///
+    /// Copies `ghIsRateLimited` and `ghRateLimitResetDate` from the transport
+    /// layer so the full rate-limit context (flag + exact reset moment) is
+    /// available to `RunnerViewModel` and ultimately to `PanelMainView`'s
+    /// live-countdown banner.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -193,7 +204,11 @@ final class RunnerStore {
         actionGroupCache = groupResult.newGroupCache
         prevLiveGroups = groupResult.newPrevLiveGroups
         isRateLimited = ghIsRateLimited
-        log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited)")
+        // Mirror the reset date so the UI can show an accurate countdown.
+        // ghRateLimitResetDate is nil when no rate-limit is active, which
+        // correctly clears the countdown when polls resume normally.
+        rateLimitResetDate = ghRateLimitResetDate
+        log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited) rateLimitResetDate=\(String(describing: rateLimitResetDate))")
         didUpdate.send()
         scheduleTimer(liveActions: groupResult.newPrevLiveGroups.map { $0.value })
     }
@@ -225,16 +240,12 @@ final class RunnerStore {
             }
             let fullKey = "\(scope)/\(runner.name)"
             if let installPath = installPathByName[fullKey] {
-                // Primary match: scope-prefixed key aligned correctly.
                 runner.metrics = metricsForRunner(installPath: installPath)
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via fullKey=\(fullKey)")
             } else if let installPath = installPathByRunnerName[runner.name] {
-                // Fallback: scope key didn't match (e.g. org scope vs repo scope string).
-                // Use name-only lookup so metrics are not silently lost.
                 runner.metrics = metricsForRunner(installPath: installPath)
                 log("RunnerStore › fetchAndEnrichRunners — ⚠️ \(runner.name) (scope=\(scope)) fullKey miss, used name-only fallback — check ScopeStore scope strings align with fetch scope")
             } else {
-                // No match in either map — runner is not registered locally.
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) busy but no installPath for key=\(fullKey), metrics=nil")
                 runner.metrics = nil
             }

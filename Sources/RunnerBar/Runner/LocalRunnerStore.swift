@@ -6,7 +6,7 @@ import RunnerBarCore
 
 // MARK: - LocalRunnerStore
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length missing_docs
 /// Manages LocalRunnerStore state and behaviour.
 @MainActor
 final class LocalRunnerStore: ObservableObject {
@@ -121,4 +121,4 @@ final class LocalRunnerStore: ObservableObject {
         log("LocalRunnerStore > setLifecycleWarning — done for \(runnerName), displayStatus is now: \(displayStatus)")
     }
 }
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length missing_docs

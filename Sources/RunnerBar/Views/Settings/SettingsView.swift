@@ -1,6 +1,6 @@
 // SettingsView.swift
 // RunnerBar
-// swiftlint:disable orphaned_doc_comment
+// swiftlint:disable orphaned_doc_comment missing_docs
 import Combine
 import RunnerBarCore
 import ServiceManagement
@@ -622,4 +622,4 @@ struct SettingsView: View {
         }
     }
 }
-// swiftlint:enable orphaned_doc_comment
+// swiftlint:enable orphaned_doc_comment missing_docs

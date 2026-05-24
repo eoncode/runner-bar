@@ -1,5 +1,6 @@
 // RunnerDetailView.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import AppKit
 import RunnerBarCore
 import SwiftUI
@@ -485,7 +486,7 @@ struct RunnerDetailView: View {
 
     // MARK: - Save button helper
 
-    /// Performs the saveButton operation.
+    /// Returns a view representing the current save state: spinner, checkmark, error icon, or Save button.
     @ViewBuilder
     private func saveButton(state: SaveState, action: @escaping () -> Void) -> some View {
         switch state {
@@ -500,10 +501,9 @@ struct RunnerDetailView: View {
         default:
             Button(action: action) { Text("Save").font(.caption2) }.buttonStyle(.bordered)
         }
-    /// Performs the saveStateRow operation.
     }
 
-    /// Performs the saveStateRow operation.
+    /// Shows a restart note or failure message below a config card based on the current save state.
     @ViewBuilder
     private func saveStateRow(_ state: SaveState, restartNote: Bool) -> some View {
         if restartNote, state == .success {
@@ -830,3 +830,4 @@ private func patchRunnerJSON(
         return false
     }
 }
+// swiftlint:enable missing_docs

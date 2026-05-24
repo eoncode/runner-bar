@@ -65,12 +65,11 @@ extension RunnerStore {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil,
-                  cached.steps.isEmpty || cached.steps.contains(where: { $0.status == "in_progress" }),
+                  cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress }),
                   let scope = scopeFromHtmlUrl(cached.htmlUrl),
                   let data = ghAPI("repos/\(scope)/actions/jobs/\(cacheID)"),
                   let fresh = try? JSONDecoder().decode(JobPayload.self, from: data),
-                  let rawSteps = fresh.steps,
-                  !rawSteps.isEmpty
+                  !fresh.steps.isEmpty
             else { continue }
             cache[cacheID] = makeActiveJob(from: fresh, iso: iso8601, isDimmed: true)
         }

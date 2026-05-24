@@ -5,30 +5,59 @@ import os
 
 // MARK: - Rate limit flag
 
-/// OSAllocatedUnfairLock state: (isRateLimited: Bool, resetItem: DispatchWorkItem?)
-/// Both fields are mutated together under the same lock so the cancel-and-replace
-/// of the reset timer is always atomic with the flag write.
+/// Combined rate-limit state held under a single lock.
+///
+/// Both `isLimited` and `resetDate` are mutated together so that a reader
+/// can never observe `isLimited == true` with a stale / nil `resetDate`.
+///
+/// Pipeline:
+///   1. `urlSessionAPI` / `urlSessionAPIPaginated` receive a 403/429.
+///   2. They write `isLimited = true` + `resetDate` under this lock and call
+///      `scheduleRateLimitReset(resetAt:)` to auto-clear after the window.
+///   3. `ghIsRateLimited` / `ghRateLimitResetDate` module vars expose the
+///      current values for consumption on any thread.
+///   4. `RunnerStore.applyFetchResult` copies both into its own
+///      `@MainActor` properties (`isRateLimited`, `rateLimitResetDate`).
+///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
+///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
+///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
 private struct RateLimitState {
-    /// The isLimited property.
+    /// Whether the GitHub API is currently rate-limiting this client.
     var isLimited: Bool = false
-    /// The resetItem property.
+    /// The moment at which the rate-limit window expires (mirrors X-RateLimit-Reset).
+    /// `nil` when the reset time is unknown (e.g. CLI code path).
+    var resetDate: Date?
+    /// Pending work item that clears `isLimited` when it fires.
     var resetItem: DispatchWorkItem?
 }
-/// The rateLimitLock constant.
+
+/// Lock that serialises all reads and writes to `RateLimitState`.
 private let rateLimitLock = OSAllocatedUnfairLock(initialState: RateLimitState())
 
-/// The ghIsRateLimited property.
+/// Thread-safe read/write access to the rate-limited flag.
+///
+/// Setting to `true` without a reset date (legacy / CLI path) schedules a
+/// 60-minute auto-reset via `scheduleRateLimitReset(resetAt: nil)`.
 var ghIsRateLimited: Bool {
     get { rateLimitLock.withLock { $0.isLimited } }
     set {
-        rateLimitLock.withLock { $0.isLimited = newValue }
+        rateLimitLock.withLock {
+            $0.isLimited = newValue
+            if !newValue { $0.resetDate = nil }
+        }
         if newValue {
-            // Auto-reset is scheduled by scheduleRateLimitReset(resetAt:).
-            // If called without a header value (e.g. from a CLI code path),
-            // fall back to a 60-minute window.
             scheduleRateLimitReset(resetAt: nil)
         }
     }
+}
+
+/// The exact `Date` at which the current rate-limit window expires.
+///
+/// `nil` when no rate-limit is active or when the reset time is unknown.
+/// Updated atomically alongside `ghIsRateLimited` whenever a 403/429
+/// response is received so consumers always see a consistent pair.
+var ghRateLimitResetDate: Date? {
+    rateLimitLock.withLock { $0.resetDate }
 }
 
 /// Schedules an automatic reset of `ghIsRateLimited` to `false`.
@@ -42,28 +71,30 @@ var ghIsRateLimited: Bool {
 ///   falls back to 60 minutes from now.
 private func scheduleRateLimitReset(resetAt: TimeInterval?) {
     let delay: TimeInterval
+    let resetDate: Date
     if let ts = resetAt {
         let secondsUntilReset = ts - Date().timeIntervalSince1970
-        // Clamp: never fire in less than 5 s or more than 2 h.
         delay = min(max(secondsUntilReset, 5), 7200)
+        resetDate = Date(timeIntervalSince1970: ts)
     } else {
-        delay = 3600 // GitHub default: 60 min
+        delay = 3600
+        resetDate = Date().addingTimeInterval(delay)
     }
-    log("ghIsRateLimited › auto-reset scheduled in \(Int(delay))s")
+    log("ghIsRateLimited › auto-reset scheduled in \(Int(delay))s (resetDate=\(resetDate))")
 
-    // Cancel any previously scheduled reset before registering a new one.
-    // This ensures concurrent 403/429 responses from paginated requests do
-    // not stack up multiple timers that could prematurely clear the flag.
     let item = DispatchWorkItem {
         rateLimitLock.withLock {
             $0.isLimited = false
+            $0.resetDate = nil
             $0.resetItem = nil
         }
-        log("ghIsRateLimited › auto-reset after \(Int(delay))s")
+        log("ghIsRateLimited › auto-reset fired after \(Int(delay))s")
     }
     rateLimitLock.withLock {
         $0.resetItem?.cancel()
         $0.resetItem = item
+        // Always update resetDate so ghRateLimitResetDate reflects the latest window.
+        $0.resetDate = resetDate
     }
     DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: item)
 }
@@ -195,12 +226,11 @@ private func extractNextURL(from header: String?) -> String? {
 // The CLI fallback is skipped when ghIsRateLimited is true — a rate-limit hit on the
 // URLSession path must not trigger a second outbound request via the CLI on the same cycle.
 
-/// Performs the ghAPI operation.
+/// Calls the GitHub API for a single page, preferring URLSession over the gh CLI.
+/// Falls back to the CLI when no OAuth token is available or URLSession returns nil.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPI(endpoint, timeout: timeout)
-        // If the URLSession call set ghIsRateLimited, bail out immediately.
-        // Falling through to the CLI would fire another request against a rate-limited API.
         if data != nil || ghIsRateLimited {
             if ghIsRateLimited { log("ghAPI › rate limited, skipping CLI fallback for: \(endpoint)") }
             return data
@@ -209,11 +239,11 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     return ghAPICLI(endpoint, timeout: timeout)
 }
 
-/// Performs the ghAPIPaginated operation.
+/// Calls the GitHub API for all pages, preferring URLSession over the gh CLI.
+/// Falls back to the CLI when no OAuth token is available or URLSession returns nil.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPIPaginated(endpoint, timeout: timeout)
-        // If the URLSession call set ghIsRateLimited, bail out immediately.
         if data != nil || ghIsRateLimited {
             if ghIsRateLimited { log("ghAPIPaginated › rate limited, skipping CLI fallback for: \(endpoint)") }
             return data

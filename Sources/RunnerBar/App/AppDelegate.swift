@@ -6,19 +6,8 @@ import SwiftUI
 
 // MARK: - NSPanel architecture note
 //
-// ⚠️ ARCHITECTURE: NSPanel (Pattern 2 from #377) — READ BEFORE CHANGING.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
-//
-// WHY NSPanel INSTEAD OF NSPopover:
-// NSPopover re-anchors by AppKit design on ANY contentSize change while shown.
-// This is not a bug — it is documented intentional behavior. Every attempt to
-// dynamically resize NSPopover while visible causes a side-jump. Confirmed across:
-//   • #377, #375, #376, #52, #53, #54, #57, #321, #370
-//   • Just10/MEMORY.md (identical bug history)
-//   • Stack Overflow #14449945, #69877522
-// NSPanel has no anchor concept. setFrame() while visible = zero jump, ever.
+// ⚠️ NSPanel (Pattern 2 from #377) is used instead of NSPopover to prevent
+// lateral panel jumps on content-size changes. See ARCHITECTURE.md §Panel Lifecycle.
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
@@ -28,8 +17,7 @@ import SwiftUI
 //      panelTopY = statusItemRect.minY - gap       ← locked at open time
 //      y (frame origin) = max(visibleFrame.minY, panelTopY - totalH) ← clamped
 //              ❌ NEVER re-derive panelTopY from statusItemRect inside
-//                 resizeAndRepositionPanel() — menu bar hide/show shifts
-//                 statusItemRect.minY, moving the panel under the notch.
+//                 resizeAndRepositionPanel() — see ARCHITECTURE.md §Panel Lifecycle.
 //      panelH  = clampedContentH + arrowHeight
 // 3. arrowX = statusItemRect.midX - panel.frame.minX
 //    ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local.
@@ -55,30 +43,17 @@ import SwiftUI
 // panelVisibilityState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
 // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
 // ❌ NEVER pass as a plain Bool prop to PanelMainView.
-//
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
-// is major major major.
+// See ARCHITECTURE.md §panelVisibilityState.
 
 // NOTE: KeyablePanel is defined in KeyablePanel.swift (internal access level).
 // It must NOT be private or fileprivate — AppDelegate+Navigation.swift accesses
-// `panel: KeyablePanel?` from a separate file.
+// `panel: KeyablePanel?` from a separate file. See ARCHITECTURE.md §KeyablePanel.
 
 // MARK: - AppDelegate
 
-// ⚠️ @MainActor ISOLATION CONTRACT — DO NOT REMOVE THIS ANNOTATION.
-// AppDelegate runs entirely on the main thread. @MainActor gives the Swift 6
-// compiler static proof of this so every method and stored property is verified
-// as main-thread-only without any runtime assertion.
-//
-// The nonisolated blocking helper (enrichStepsIfNeeded) lives in
-// AppDelegate+Navigation.swift and is intentionally exempt — it performs
-// blocking network I/O and is always dispatched onto DispatchQueue.global().
-//
+// ⚠️ @MainActor isolation — see ARCHITECTURE.md §@MainActor isolation.
 // ❌ NEVER remove @MainActor from this class declaration.
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded.
-// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-// UNDER ANY CIRCUMSTANCE.
 /// Manages AppDelegate state and behaviour.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -111,14 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var cancellables = Set<AnyCancellable>()
 
     /// Top anchor (screen coords) captured once in openPanel().
-    /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
+    /// ❌ NEVER re-derive inside resizeAndRepositionPanel() — see ARCHITECTURE.md §Panel Lifecycle.
     var panelTopY: CGFloat?                // internal: required for AppDelegate+Navigation
 
-    // ⚠️ REGRESSION GUARD (ref #377):
-    // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-    // ❌ NEVER pass as a plain Bool prop to PanelMainView.
-    // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-    // ALLOWED UNDER ANY CIRCUMSTANCE.
+    // Regression guard — see ARCHITECTURE.md §panelVisibilityState.
+    // ❌ NEVER remove. ❌ NEVER remove from wrapEnv(). ❌ NEVER pass as plain Bool to PanelMainView.
     /// The panelVisibilityState constant.
     let panelVisibilityState = PanelVisibilityState() // internal: required for AppDelegate+Navigation
 
@@ -149,9 +121,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Environment injection
 
-    /// ❌ NEVER bypass. ❌ NEVER remove .environmentObject(panelVisibilityState).
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-    /// ALLOWED UNDER ANY CIRCUMSTANCE.
+    // Regression guard — see ARCHITECTURE.md §panelVisibilityState and §wrapEnv.
+    // ❌ NEVER bypass. ❌ NEVER remove .environmentObject(panelVisibilityState).
+    // swiftlint:disable:next missing_docs
     func wrapEnv<V: View>(_ view: V) -> AnyView { // internal: required for AppDelegate+Navigation
         AnyView(view.environmentObject(panelVisibilityState))
     }
@@ -166,16 +138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - OAuth URL callback (#326)
     //
-    // Handles the runnerbar://oauth/callback?code=... redirect from GitHub after
-    // the user authorizes the app in the browser. Forwards to OAuthService which
-    // exchanges the code for a token and saves it to Keychain.
-    //
-    // OAuthService.onCompletion is wired in SettingsView so the Account section
-    // updates automatically once the token arrives.
-    //
-    // Search the full urls array for the OAuth callback rather than assuming
-    // urls.first — macOS may deliver multiple URLs and the callback may not be
-    // first, which would leave the sign-in spinner stuck. (#597)
+    // Handles the runnerbar://oauth/callback?code=... redirect from GitHub.
+    // Searches the full urls array — see ARCHITECTURE.md §OAuth URL handling.
 
     /// Performs the application operation.
     func application(_ _: NSApplication, open urls: [URL]) {
@@ -186,10 +150,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel resize
 
-    /// ❌ NEVER re-derive panelTopY here.
-    /// ❌ NEVER call from a background thread.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE. The regression is major major major.
+    // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
+    // ❌ NEVER re-derive panelTopY here. ❌ NEVER call from a background thread.
+    // swiftlint:disable:next missing_docs
     func resizeAndRepositionPanel() { // internal: required for AppDelegate+Navigation
         guard panelIsOpen,
               let panel,
@@ -217,9 +180,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Navigation
 
-    /// ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
-    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-    /// UNDER ANY CIRCUMSTANCE.
+    // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
+    // ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
+    // swiftlint:disable:next missing_docs
     func navigate(to view: AnyView) { // internal: required for AppDelegate+Navigation
         hostingController?.rootView = view
         resizeAndRepositionPanel()
@@ -247,12 +210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelVisibilityState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
-        // ⚠️ NAV STATE PERSISTENCE (#385) — DO NOT REMOVE THIS COMMENT.
-        // Capture savedNavState before calling mainView() (which resets it),
-        // then restore it so openPanel()'s validatedView path works.
-        // ❌ NEVER replace this with a no-op stub PanelMainView.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
-        // ALLOWED UNDER ANY CIRCUMSTANCE.
+        // Nav-state persistence — see ARCHITECTURE.md §Nav-state persistence.
+        // ❌ NEVER replace hostingController?.rootView = mainView() with a no-op stub.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let preserved = self.savedNavState

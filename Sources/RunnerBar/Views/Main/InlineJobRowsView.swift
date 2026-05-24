@@ -1,6 +1,6 @@
 // InlineJobRowsView.swift
 // RunnerBar
-
+// swiftlint:disable redundant_discardable_let
 import RunnerBarCore
 import SwiftUI
 // MARK: - TreeLineLeader
@@ -106,7 +106,7 @@ private struct StepRowView: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
                 Spacer(minLength: 4)
-                if step.status == "in_progress" || step.conclusion != nil {
+                if step.status == .inProgress || step.conclusion != nil {
                     Text(step.elapsed)
                         .font(.caption2.monospacedDigit())
                         .foregroundColor(Color.rbTextTertiary)
@@ -127,10 +127,10 @@ private struct StepRowView: View {
     /// The iconColor property.
     private var iconColor: Color {
         switch step.conclusion {
-        case "success":            return Color.rbSuccess
-        case "failure":            return Color.rbDanger
-        case "skipped", "cancelled": return Color.rbTextTertiary
-        default: return step.status == "in_progress" ? Color.rbBlue : Color.rbTextTertiary
+        case .success:                   return Color.rbSuccess
+        case .failure:                   return Color.rbDanger
+        case .skipped, .cancelled:       return Color.rbTextTertiary
+        default: return step.status == .inProgress ? Color.rbBlue : Color.rbTextTertiary
         }
     }
 }
@@ -163,7 +163,7 @@ private struct JobRowCard: View {
     private var totalSteps: Int { job.steps.count }
     /// The completedSteps property.
     private var completedSteps: Int {
-        job.steps.filter { $0.conclusion != nil || $0.status == "completed" }.count
+        job.steps.filter { $0.conclusion != nil || $0.status == .completed }.count
     }
     /// The body property.
     var body: some View {
@@ -202,7 +202,7 @@ private struct JobRowCard: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
                 Spacer(minLength: 4)
-                if job.status == "in_progress" {
+                if job.status == .inProgress {
                     JobInlineProgress(progress: job.progressFraction ?? 0)
                         .frame(width: 120)
                 }
@@ -270,7 +270,7 @@ struct InlineJobRowsView: View {
     var body: some View {
         Group {
             if panelVisibilityState.isOpen {
-                let jobs = fullExpand ? group.jobs : group.jobs.filter { $0.status == "in_progress" }
+                let jobs = fullExpand ? group.jobs : group.jobs.filter { $0.status == .inProgress }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in
                         JobRowCard(
@@ -301,16 +301,17 @@ struct InlineJobRowsView: View {
     private func jobStatus(for job: ActiveJob) -> RBStatus {
         if let conclusion = job.conclusion {
             switch conclusion {
-            case "success":            return .success
-            case "failure":            return .failed
-            case "cancelled", "skipped": return .unknown
-            default: return .unknown
+            case .success:                   return .success
+            case .failure:                   return .failed
+            case .cancelled, .skipped:       return .unknown
+            default:                         return .unknown
             }
         }
         switch job.status {
-        case "in_progress": return .inProgress
-        case "queued":       return .queued
-        default:             return .queued
+        case .inProgress: return .inProgress
+        case .queued:     return .queued
+        default:          return .queued
         }
     }
 }
+// swiftlint:enable redundant_discardable_let

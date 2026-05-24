@@ -105,11 +105,16 @@ public struct RunnerModel: Identifiable, Equatable {
 
     /// Human-readable status label shown in the settings runner row.
     /// When a lifecycle warning is set it takes priority over the normal status.
+    ///
+    /// - Returns `"busy"` when the runner is running and either `isBusy` is true
+    ///   or the GitHub API reports `githubStatus == "busy"`.
+    /// - Returns `"running"` when the runner is running but not busy.
+    /// - Returns `"online"` / `"busy"` / `"offline"` based on `githubStatus`
+    ///   when the runner process is not running locally.
     public var displayStatus: String {
         if let warning = lifecycleWarning { return warning }
         if isRunning {
-            if isBusy || githubStatus == "busy" { return "running" }
-            return "running"
+            return (isBusy || githubStatus == "busy") ? "busy" : "running"
         } else {
             switch githubStatus {
             case "online": return "online"

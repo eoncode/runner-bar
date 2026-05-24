@@ -163,15 +163,19 @@ public struct WorkflowActionGroup: Identifiable, Equatable {
             // ⚠️ Do NOT change this to read from runs[].conclusion — run-level API
             // conclusions are stale and can report "failure" even when all jobs pass
             // (e.g. after a retry). This caused the spurious FAILED badge (issue #294).
-            if jobs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
-            if jobs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
-            if jobs.contains(where: { $0.conclusion == "skipped" })   { return "skipped" }
+            //
+            // ActiveJob.conclusion is typed as JobConclusion? — compare against enum cases,
+            // not raw strings. The rawValue of each case matches the GitHub API string exactly.
+            if jobs.contains(where: { $0.conclusion == .failure })   { return "failure" }
+            if jobs.contains(where: { $0.conclusion == .cancelled }) { return "cancelled" }
+            if jobs.contains(where: { $0.conclusion == .skipped })   { return "skipped" }
             return "success"
         }
         // ── Run-based conclusion (fallback when jobs haven't loaded yet) ────────────────────
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // Do NOT move the run-based logic back to be the primary path — see above.
+        // WorkflowRunRef.conclusion is still a raw String? — keep string comparisons here.
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
         if runs.contains(where: { $0.conclusion == "failure" })   { return "failure" }
         if runs.contains(where: { $0.conclusion == "cancelled" }) { return "cancelled" }
@@ -189,9 +193,10 @@ public struct WorkflowActionGroup: Identifiable, Equatable {
     public var jobProgress: String { jobs.isEmpty ? "—" : "\(jobsDone)/\(jobsTotal)" }
 
     /// Name of the first in-progress job, or first queued, or "—".
+    /// ActiveJob.status is typed as JobStatus — compare against enum cases.
     public var currentJobName: String {
-        if let job = jobs.first(where: { $0.status == "in_progress" }) { return job.name }
-        if let job = jobs.first(where: { $0.status == "queued" })      { return job.name }
+        if let job = jobs.first(where: { $0.status == .inProgress }) { return job.name }
+        if let job = jobs.first(where: { $0.status == .queued })     { return job.name }
         return "—"
     }
 
