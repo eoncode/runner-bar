@@ -3,7 +3,8 @@
 import SwiftUI
 
 // MARK: - StatPill
-/// Compact ultraThinMaterial pill showing a label + value (e.g. "CPU 3.2%").
+/// Compact material pill showing a label + value (e.g. "CPU 3.2%").
+/// Uses .glassEffect on macOS 26+, .ultraThinMaterial on macOS < 26.
 /// Used in PanelLocalRunnerRow to surface per-runner CPU / MEM metrics.
 struct StatPill: View {
     /// The short metric label (e.g. "CPU", "MEM").
@@ -24,41 +25,75 @@ struct StatPill: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(.ultraThinMaterial, in: Capsule())
+        .modifier(StatPillBackground())
+    }
+}
+
+/// Applies the correct background material for `StatPill` based on OS version.
+/// macOS 26+: `.glassEffect(.regular, in: Capsule())`
+/// macOS < 26: `.background(.ultraThinMaterial, in: Capsule())`
+private struct StatPillBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+        }
     }
 }
 
 // MARK: - StatusBadge
-/// Capsule-stroked badge used in action-row trailing area.
-/// Renders a colour-matched border + label for a given RBStatus.
+/// Capsule badge used in action-row trailing area.
+/// On macOS 26+: glass capsule with status-color tint overlay.
+/// On macOS < 26: colour-matched stroke capsule (original behaviour).
 struct StatusBadge: View {
     /// The status that drives the badge colour.
     let status: RBStatus
     /// The text displayed inside the badge.
     let text: String
 
-    /// Renders the status text inside a colour-matched capsule stroke.
+    /// Renders the status text inside a status-appropriate capsule.
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .semibold))
             .foregroundColor(status.color)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(
-                Capsule()
-                    .strokeBorder(status.color.opacity(0.5), lineWidth: 1)
-            )
+            .modifier(StatusBadgeBackground(color: status.color))
+    }
+}
+
+/// Applies the correct background for `StatusBadge` based on OS version.
+/// macOS 26+: `.glassEffect` with a tinted color overlay.
+/// macOS < 26: `Capsule().strokeBorder(...)` (original behaviour).
+private struct StatusBadgeBackground: ViewModifier {
+    let color: Color
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background(color.opacity(0.15), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(
+                    Capsule()
+                        .strokeBorder(color.opacity(0.5), lineWidth: 1)
+                )
+        }
     }
 }
 
 // MARK: - BranchTagPill
 /// Inline pill displaying a git branch or tag name.
-/// Uses a blue-tinted stroke capsule consistent with the Phase 5 design language.
+/// On macOS 26+: glass capsule with accent tint overlay.
+/// On macOS < 26: blue-tinted stroke capsule (original behaviour).
 struct BranchTagPill: View { // periphery:ignore
     /// The branch or tag name to display.
     let name: String
 
-    /// Renders the branch icon and name inside a tinted capsule stroke.
+    /// Renders the branch icon and name inside a tinted capsule.
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "arrow.triangle.branch")
@@ -71,10 +106,49 @@ struct BranchTagPill: View { // periphery:ignore
         .foregroundColor(Color.rbAccent)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1)
-        )
+        .modifier(BranchTagPillBackground())
+    }
+}
+
+/// Applies the correct background for `BranchTagPill` based on OS version.
+/// macOS 26+: `.glassEffect` with accent color tint overlay.
+/// macOS < 26: `Capsule().strokeBorder(...)` (original behaviour).
+private struct BranchTagPillBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background(Color.rbAccent.opacity(0.12), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(
+                    Capsule()
+                        .strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1)
+                )
+        }
+    }
+}
+
+// MARK: - CardRowModifier
+/// Applies flat semi-transparent card styling to scrollable list rows.
+/// ❌ NEVER apply .glassEffect here — Apple HIG prohibits glass on scrollable list content.
+/// Uses the Phase 2 rbSurface / rbSurfaceElevated tokens, which are near-zero on macOS 26+
+/// so the glass panel backdrop shows through correctly.
+struct CardRowModifier: ViewModifier {
+    var elevated: Bool = false
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
+                    .fill(elevated ? Color.rbSurfaceElevated : Color.rbSurface)
+            )
+    }
+}
+
+extension View {
+    /// Applies `CardRowModifier` to this view.
+    func cardRow(elevated: Bool = false) -> some View {
+        modifier(CardRowModifier(elevated: elevated))
     }
 }
 
