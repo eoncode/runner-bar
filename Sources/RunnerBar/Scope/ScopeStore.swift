@@ -40,6 +40,7 @@ final class ScopeStore: ObservableObject {
     /// Kept for call-sites not yet migrated; prefer `activeScopes`.
     var scopes: [String] { entries.map(\.scope) }
 
+    // periphery:ignore - called from files outside Periphery scan scope
     /// `true` when no entries have been added yet.
     var isEmpty: Bool { entries.isEmpty }
 
@@ -54,7 +55,6 @@ final class ScopeStore: ObservableObject {
     /// Loads `[ScopeEntry]` from `UserDefaults`, migrating the legacy
     /// `[String]` key when found. Returns an empty array on decode failure.
     private func loadEntries() -> [ScopeEntry] {
-        // Migration: convert legacy [String] key if present.
         if let legacy = UserDefaults.standard.stringArray(forKey: legacyKey),
            !legacy.isEmpty {
             log("ScopeStore › migrating \(legacy.count) legacy scope(s) to ScopeEntry")
@@ -78,7 +78,6 @@ final class ScopeStore: ObservableObject {
     }
 
     /// JSON-encodes `newEntries` and writes them to `UserDefaults`.
-    /// Logs an error and no-ops when encoding fails.
     /// - Parameter newEntries: The complete list of entries to persist.
     private func save(_ newEntries: [ScopeEntry]) {
         do {
@@ -115,6 +114,7 @@ final class ScopeStore: ObservableObject {
         didMutate.send()
     }
 
+    // periphery:ignore - called from files outside Periphery scan scope (backward compat)
     /// Legacy remove by scope string — kept for backward compatibility.
     func remove(_ scope: String) {
         guard let entry = entries.first(where: { $0.scope == scope }) else { return }
@@ -122,13 +122,11 @@ final class ScopeStore: ObservableObject {
     }
 
     /// Toggles the `isEnabled` flag for the entry with the given ID.
-    /// Does NOT send `didMutate` — enable/disable is not a structural change.
     func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[idx].isEnabled = enabled
         persist()
         log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(enabled)")
-        // Publish so RunnerStore's Combine subscription triggers a polling restart.
         objectWillChange.send()
     }
 }

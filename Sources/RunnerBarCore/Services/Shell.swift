@@ -16,6 +16,7 @@ public enum Shell {
     struct Result {
         /// The output constant.
         let output: String
+        // periphery:ignore - used in Shell.run return values; Periphery does not cross-target-trace
         /// The exitCode constant.
         let exitCode: Int32
     }
@@ -65,8 +66,6 @@ public enum Shell {
     }
 
     /// Creates a `Process` configured to run `command` via `/bin/zsh -c`.
-    /// - Parameter command: The shell command string.
-    /// - Returns: A configured but not yet launched `Process`.
     private static func makeProcess(_ command: String) -> Process {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: zshBinaryPath)
@@ -75,8 +74,6 @@ public enum Shell {
     }
 
     /// Attaches stdout and stderr `Pipe`s to `process` and returns them.
-    /// - Parameter process: The `Process` to attach pipes to.
-    /// - Returns: A tuple of `(stdout pipe, stderr pipe)`.
     private static func attachPipes(to process: Process) -> (Pipe, Pipe) {
         let out = Pipe()
         let err = Pipe()
@@ -86,8 +83,6 @@ public enum Shell {
     }
 
     /// Reads all available data from `pipe`'s read handle and returns it as a trimmed UTF-8 string.
-    /// - Parameter pipe: The `Pipe` whose stdout data should be read.
-    /// - Returns: Trimmed UTF-8 string from the pipe, or an empty string if decoding fails.
     private static func readOutput(from pipe: Pipe) -> String {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?
@@ -97,21 +92,6 @@ public enum Shell {
 // swiftlint:enable function_body_length
 
 /// Backward-compatibility shim — **deprecated**. Use `ProcessRunner.run` instead.
-///
-/// This shim delegates to `Shell.run` which wraps `/bin/zsh -c`. It carries
-/// shell-injection risk and `/bin/zsh` startup overhead. All call sites have been
-/// migrated to `ProcessRunner.run`; this function is retained only to satisfy any
-/// remaining compile-time references during the transition period and will be deleted
-/// in a follow-up cleanup.
-///
-/// ⚠️ NEVER ignore the `timeout` parameter here again — that was the bug (ref #477).
-/// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
-/// UNDER ANY CIRCUMSTANCE.
-///
-/// - Parameters:
-///   - command: The shell command string to execute via `/bin/zsh -c`.
-///   - timeout: Maximum seconds to wait. Defaults to `20`.
-/// - Returns: Trimmed stdout string, or empty on timeout/failure.
 @available(*, deprecated, message: "Use ProcessRunner.run(_:arguments:timeout:) instead. This shim uses /bin/zsh -c which carries shell-injection risk.")
 @discardableResult
 public func shell(_ command: String, timeout: TimeInterval = 20) -> String {

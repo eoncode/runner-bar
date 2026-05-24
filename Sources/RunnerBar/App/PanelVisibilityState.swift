@@ -57,11 +57,13 @@ final class PanelVisibilityState: ObservableObject {
     /// `true` from immediately before the panel opens until after it closes.
     @Published var isOpen: Bool = false
 
+    // periphery:ignore - AppDelegate contract: reset to false before each show(), set to true after first height report
     /// Set to `false` before each `show()`, set to `true` after first height report.
     /// Guards against repeated `setContentSize` calls on every layout pass.
     /// ❌ NEVER remove. ❌ NEVER skip resetting to false before show().
     var heightReported: Bool = false
 
+    // periphery:ignore - AppDelegate contract: set before show(), calls panel.setFrame() once
     /// Called ONCE after the first real rendered height is known.
     /// Set by AppDelegate before show(). Calls panel.setFrame().
     /// ❌ NEVER call more than once per open.
