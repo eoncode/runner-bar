@@ -1,7 +1,7 @@
 // SystemStatsViewModel.swift
 // RunnerBar
 import Combine
-import Darwin
+@preconcurrency import Darwin
 import Foundation
 import RunnerBarCore
 
@@ -171,7 +171,7 @@ final class SystemStatsViewModel: ObservableObject {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        let pageSize  = Double(vm_kernel_page_size)
+        let pageSize = Double(Int(vm_kernel_page_size))
         let totalBytes = Double(ProcessInfo.processInfo.physicalMemory)
         let totalGB    = totalBytes / 1_000_000_000
         guard kr == KERN_SUCCESS else { return (0, totalGB) }

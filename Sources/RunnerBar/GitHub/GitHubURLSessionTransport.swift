@@ -1,6 +1,6 @@
 // GitHubURLSessionTransport.swift
 // RunnerBar
-import Foundation
+@preconcurrency import Foundation
 import os
 
 // MARK: - Rate limit flag
@@ -21,7 +21,7 @@ import os
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
-private struct RateLimitState {
+private struct RateLimitState: @unchecked Sendable {
     /// Whether the GitHub API is currently rate-limiting this client.
     var isLimited: Bool = false
     /// The moment at which the rate-limit window expires (mirrors X-RateLimit-Reset).
@@ -82,7 +82,7 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
     }
     log("ghIsRateLimited › auto-reset scheduled in \(Int(delay))s (resetDate=\(resetDate))")
 
-    let item = DispatchWorkItem {
+    nonisolated(unsafe) let item = DispatchWorkItem {
         rateLimitLock.withLock {
             $0.isLimited = false
             $0.resetDate = nil
@@ -136,7 +136,7 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     }
     let req = makeRequest(url: url, token: token, timeout: timeout)
     let sem = DispatchSemaphore(value: 0)
-    var result: Data?
+    nonisolated(unsafe) var result: Data?
     URLSession.shared.dataTask(with: req) { data, response, error in
         defer { sem.signal() }
         if let error { log("urlSessionAPI › network error: \(error.localizedDescription)") ; return }
@@ -174,8 +174,8 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         guard let url = URL(string: urlString) else { break }
         let req = makeRequest(url: url, token: token, timeout: timeout)
         let sem = DispatchSemaphore(value: 0)
-        var pageData: Data?
-        var linkHeader: String?
+        nonisolated(unsafe) var pageData: Data?
+        nonisolated(unsafe) var linkHeader: String?
         URLSession.shared.dataTask(with: req) { data, response, error in
             defer { sem.signal() }
             if let error { log("urlSessionAPIPaginated › network error: \(error.localizedDescription)") ; return }

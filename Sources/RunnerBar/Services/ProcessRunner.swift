@@ -59,7 +59,7 @@ enum ProcessRunner {
             inputPipe = nil
         }
 
-        var outputData = Data()
+        nonisolated(unsafe) var outputData = Data()
         let lock = NSLock()
         outPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData

@@ -13,6 +13,7 @@ import Foundation
 ///
 /// Conforms to `ObservableObject` — SwiftUI views should use `@ObservedObject`.
 /// Subscribe to `didMutate` to be notified after any structural change (add / remove).
+@MainActor
 final class ScopeStore: ObservableObject {
     /// Shared singleton — single source of truth for all scope operations.
     static let shared = ScopeStore()

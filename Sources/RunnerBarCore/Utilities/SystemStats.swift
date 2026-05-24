@@ -3,7 +3,7 @@
 import Foundation
 
 /// Snapshot of CPU and memory metrics sampled at a point in time.
-public struct SystemStats {
+public struct SystemStats: Sendable {
     /// CPU usage as a fraction in 0…100 (percentage).
     public var cpuPct: Double
     /// Used memory in gigabytes.

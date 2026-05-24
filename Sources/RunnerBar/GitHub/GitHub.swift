@@ -19,7 +19,7 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
 // MARK: - Fetch all jobs from active runs
 
 /// Shared ISO-8601 date formatter.
-private let iso8601 = ISO8601DateFormatter()
+nonisolated(unsafe) private let iso8601 = ISO8601DateFormatter()
 
 /// Fetches all active (in-progress and queued) jobs for a given scope.
 /// Supports both repo-scoped (`owner/repo`) and org-scoped (`org`) runners.
@@ -146,7 +146,7 @@ private let _ansiRegex = try! NSRegularExpression( // swiftlint:disable:this for
 /// `URLSessionTaskDelegate` that prevents automatic redirect following.
 /// Captures the `Location` header from GitHub's 302 response so the caller
 /// can fetch the pre-signed S3 URL directly.
-private class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
     /// Intercepts redirect responses and calls the completion handler with `nil`
     /// to prevent URLSession from following the redirect automatically.
     func urlSession(
@@ -215,7 +215,7 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
         return nil
     }
 
-    var redirectURL: URL?
+    nonisolated(unsafe) var redirectURL: URL?
     var step1Request = URLRequest(url: url, timeoutInterval: 20)
     step1Request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     step1Request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -243,7 +243,7 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
     }
 
     let sem2 = DispatchSemaphore(value: 0) // TODO: #777 async/await
-    var logData: Data?
+    nonisolated(unsafe) var logData: Data?
     var plainRequest = URLRequest(url: s3URL, timeoutInterval: 30)
     plainRequest.setValue("text/plain", forHTTPHeaderField: "Accept")
     URLSession.shared.dataTask(with: plainRequest) { data, response, error in

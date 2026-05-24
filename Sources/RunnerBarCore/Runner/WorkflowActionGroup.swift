@@ -21,7 +21,7 @@ public enum GroupStatus {
 /// Lightweight reference to a single workflow run inside a WorkflowActionGroup.
 /// Holds only the data needed for display and job fetching — deliberately
 /// minimal so the full job list lives on the parent WorkflowActionGroup instead.
-public struct WorkflowRunRef: Identifiable {
+public struct WorkflowRunRef: Identifiable, Sendable {
     public let id: Int
     public let name: String       // workflow file name, e.g. "SonarQube", "vitest"
     public let status: String
@@ -41,7 +41,7 @@ public struct WorkflowRunRef: Identifiable {
 /// Hierarchy: WorkflowActionGroup → jobs (flat across all sibling runs) → JobStep → log.
 /// `ActionDetailView` drills into the flat job list; `JobDetailView`/`StepLogView`
 /// are reused unchanged below that.
-public struct WorkflowActionGroup: Identifiable, Equatable {
+public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     public let headSha: String        // head_sha — kept as the underlying group identity
     public let label: String          // "#1270" if PR, else "d6281b" (sha[:7])
     public let title: String          // commit/PR message first line (≤40 chars)

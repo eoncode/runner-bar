@@ -11,7 +11,7 @@ import RunnerBarCore
 /// Shared ISO-8601 date formatter for this file.
 /// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
 /// keeping one file-level instance avoids repeated allocation on every poll cycle.
-private let iso8601 = ISO8601DateFormatter()
+nonisolated(unsafe) private let iso8601 = ISO8601DateFormatter()
 
 /// Extension adding functionality to `RunnerStore`.
 extension RunnerStore {
@@ -22,8 +22,9 @@ extension RunnerStore {
             snapPrev: snapPrev,
             snapCache: snapCache,
             fetchJobs: {
+                let scopes = DispatchQueue.main.sync { ScopeStore.shared.scopes }
                 var jobs: [ActiveJob] = []
-                for scope in ScopeStore.shared.scopes {
+                for scope in scopes {
                     jobs.append(contentsOf: fetchActiveJobs(for: scope))
                 }
                 return jobs
@@ -44,8 +45,9 @@ extension RunnerStore {
             snapPrevGroups: snapPrevGroups,
             snapGroupCache: snapGroupCache,
             fetchGroups: { shaKeyedCache in
+                let scopes = DispatchQueue.main.sync { ScopeStore.shared.scopes }
                 var groups: [WorkflowActionGroup] = []
-                for scope in ScopeStore.shared.scopes {
+                for scope in scopes {
                     groups.append(contentsOf: fetchActionGroups(for: scope, cache: shaKeyedCache))
                 }
                 return groups

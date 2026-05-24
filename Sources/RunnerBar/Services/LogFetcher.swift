@@ -21,7 +21,7 @@ private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     task.arguments = ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"]
     task.standardOutput = pipe
     task.standardError = Pipe()
-    var outputData = Data()
+    nonisolated(unsafe) var outputData = Data()
     let lock = NSLock()
     pipe.fileHandleForReading.readabilityHandler = { handle in
         let chunk = handle.availableData
@@ -65,7 +65,7 @@ func fetchActionLogs(group: WorkflowActionGroup) -> String? {
     guard scope.contains("/") else { return nil }
     let runIDs = group.runs.map { $0.id }
     guard !runIDs.isEmpty else { return nil }
-    var parts: [(name: String, text: String)] = []
+    nonisolated(unsafe) var parts: [(name: String, text: String)] = []
     let lock = NSLock()
     let dispatchGroup = DispatchGroup()
     for runID in runIDs {

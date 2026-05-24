@@ -6,6 +6,7 @@ import Foundation
 // MARK: - NotificationPreferences
 
 /// Persists notification preferences to UserDefaults.
+@MainActor
 final class NotificationPreferences: ObservableObject {
     /// The shared constant.
     static let shared = NotificationPreferences()

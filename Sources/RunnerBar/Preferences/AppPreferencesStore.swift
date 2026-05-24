@@ -6,6 +6,7 @@ import Foundation
 // MARK: - AppPreferencesStore
 
 /// Persists general app settings to UserDefaults.
+@MainActor
 final class AppPreferencesStore: ObservableObject {
     /// Shared singleton instance.
     static let shared = AppPreferencesStore()

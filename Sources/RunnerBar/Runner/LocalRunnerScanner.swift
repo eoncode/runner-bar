@@ -175,7 +175,7 @@ struct LocalRunnerScanner {
         task.arguments = rawPaths + ["-maxdepth", "6", "-name", ".runner"]
         task.standardOutput = pipe
         task.standardError = Pipe()
-        var outputData = Data()
+        nonisolated(unsafe) var outputData = Data()
         let lock = NSLock()
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
