@@ -115,11 +115,12 @@ final class PanelChromeView: NSView {
     /// The visual effect view providing the HUD vibrancy background.
     private let vibrancyView: NSVisualEffectView = {
         let view = NSVisualEffectView()
-        // .hudWindow gives a cool dark translucent look — no warm tint.
+        // macOS 26: .menu participates in Liquid Glass rendering.
+        // .hudWindow does not auto-upgrade to Liquid Glass on macOS 26 — only SwiftUI materials do.
         // .popover has a warm cream tint in dark mode which is undesirable.
         // ❌ NEVER switch back to .popover — it produces a warm brown tint on dark wallpapers.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        view.material = .hudWindow
+        view.material = .menu
         view.blendingMode = .behindWindow
         view.state = .active
         view.wantsLayer = true
