@@ -101,6 +101,7 @@ struct ScopeDetailView: View {
                 onSelect: { chosen in
                     hookBranch = chosen
                     ScopePreferencesStore.setFailureHookBranch(chosen, for: scope)
+                    showBranchSheet = false
                 }
             )
         }
