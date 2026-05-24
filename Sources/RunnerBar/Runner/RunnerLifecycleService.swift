@@ -247,30 +247,4 @@ struct RunnerLifecycleService {
         log("RunnerLifecycle > runScript [\(logTag)]: exit=\(result.exitCode) output=\(output.prefix(500))")
         return (result.exitCode == 0, output)
     }
-
-    // MARK: - Update config
-
-    /// Performs the updateConfig operation.
-    @discardableResult
-    func updateConfig(runner: RunnerModel, labels: [String], workFolder: String) -> Bool {
-        guard let path = runner.installPath else { return false }
-        let url = URL(fileURLWithPath: path).appendingPathComponent(".runner")
-        guard let data = try? Data(contentsOf: url),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            log("RunnerLifecycle > updateConfig: failed to read .runner at \(path)")
-            return false
-        }
-        json["workFolder"] = workFolder
-        json["customLabels"] = labels
-        guard let updated = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) else { return false }
-        do {
-            try updated.write(to: url)
-            log("RunnerLifecycle > updateConfig: labels=\(labels) workFolder=\(workFolder)")
-            return true
-        } catch {
-            log("RunnerLifecycle > updateConfig write error: \(error)")
-            return false
-        }
-    }
 }

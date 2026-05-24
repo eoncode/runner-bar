@@ -16,19 +16,6 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     return "\(components[1])/\(components[2])"
 }
 
-/// Extracts the numeric run ID from a GitHub Actions HTML URL.
-/// Scans path components for the segment following `runs`.
-func runIDFromHtmlUrl(_ url: String?) -> Int? {
-    guard let url else { return nil }
-    let parts = url.components(separatedBy: "/")
-    for (idx, part) in parts.enumerated() {
-        if part == "runs", idx + 1 < parts.count {
-            return Int(parts[idx + 1])
-        }
-    }
-    return nil
-}
-
 // MARK: - Fetch all jobs from active runs
 
 /// Shared ISO-8601 date formatter.

@@ -41,7 +41,7 @@ final class ScopeStore: ObservableObject {
     var scopes: [String] { entries.map(\.scope) }
 
     /// `true` when no entries have been added yet.
-    var isEmpty: Bool { entries.isEmpty }
+    var isEmpty: Bool { entries.isEmpty } // periphery:ignore
 
     /// Initialises the store by loading persisted entries (or migrating the
     /// legacy `[String]` key if present).
@@ -116,7 +116,7 @@ final class ScopeStore: ObservableObject {
     }
 
     /// Legacy remove by scope string — kept for backward compatibility.
-    func remove(_ scope: String) {
+    func remove(_ scope: String) { // periphery:ignore
         guard let entry = entries.first(where: { $0.scope == scope }) else { return }
         remove(id: entry.id)
     }

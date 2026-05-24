@@ -8,7 +8,7 @@ import SwiftUI
 
 /// Convenience initialisers for constructing `Color` values from raw hex strings.
 extension Color {
-    /// Initialises a `Color` from a CSS-style hex string (with or without leading `#`).
+    /// Initialises a `Color` from a CSS-style hex string (with or without leading `#`). // periphery:ignore
     init(hex: String) {
         let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         let value = UInt64(cleaned, radix: 16) ?? 0
@@ -74,12 +74,12 @@ extension Color {
         light: Color(white: 0.0).opacity(0.08),
         dark: Color(white: 1.0).opacity(0.06)
     )
-    /// Mid-weight border — slightly more visible than `rbBorderSubtle`.
+    /// Mid-weight border — slightly more visible than `rbBorderSubtle`. // periphery:ignore
     static let rbBorderMid = Color.adaptive(
         light: Color(white: 0.0).opacity(0.12),
         dark: Color(white: 1.0).opacity(0.10)
     )
-    /// Horizontal rule / section divider color.
+    /// Horizontal rule / section divider color. // periphery:ignore
     static let rbDivider = Color.adaptive(
         light: Color(white: 0.0).opacity(0.08),
         dark: Color(white: 1.0).opacity(0.08)
@@ -100,15 +100,15 @@ extension Color {
         dark: Color(white: 0.39)
     )
 
-    /// Low-opacity amber tint for row backgrounds in warning/queued state.
+    /// Low-opacity amber tint for row backgrounds in warning/queued state. // periphery:ignore
     static let rbYellowTint = rbWarning.opacity(0.08)
-    /// Low-opacity blue tint for row backgrounds in in-progress state.
+    /// Low-opacity blue tint for row backgrounds in in-progress state. // periphery:ignore
     static let rbBlueTint = rbBlue.opacity(0.08)
-    /// Low-opacity green tint for row backgrounds in success state.
+    /// Low-opacity green tint for row backgrounds in success state. // periphery:ignore
     static let rbGreenTint = rbSuccess.opacity(0.08)
-    /// Low-opacity red tint for row backgrounds in failed/danger state.
+    /// Low-opacity red tint for row backgrounds in failed/danger state. // periphery:ignore
     static let rbRedTint = rbDanger.opacity(0.08)
-    /// Low-opacity orange tint — alias for `rbYellowTint`.
+    /// Low-opacity orange tint — alias for `rbYellowTint`. // periphery:ignore
     static let rbOrangeTint = rbWarning.opacity(0.08)
 }
 
@@ -138,7 +138,7 @@ enum RBStatus {
         }
     }
 
-    /// A low-opacity background tint to visually distinguish rows by status.
+    /// A low-opacity background tint to visually distinguish rows by status. // periphery:ignore
     var tint: Color {
         switch self {
         case .inProgress: return .rbBlueTint
@@ -149,7 +149,7 @@ enum RBStatus {
         }
     }
 
-    /// The SF Symbol name that represents this status.
+    /// The SF Symbol name that represents this status. // periphery:ignore
     var sfSymbol: String {
         switch self {
         case .inProgress: return "arrow.trianglehead.2.clockwise"
@@ -173,30 +173,30 @@ enum RBSpacing {
     static let sm: CGFloat = 8
     /// 12 pt — default row horizontal padding.
     static let md: CGFloat = 12
-    /// 16 pt — section-level spacing.
+    /// 16 pt — section-level spacing. // periphery:ignore
     static let lg: CGFloat = 16
-    /// 20 pt — generous section spacing.
+    /// 20 pt — generous section spacing. // periphery:ignore
     static let xl: CGFloat = 20
-    /// 28 pt — large structural spacing.
+    /// 28 pt — large structural spacing. // periphery:ignore
     static let xxl: CGFloat = 28
 }
 
 /// Corner-radius constants for consistent rounding across components.
 enum RBRadius {
-    /// 20 pt — full pill shape for tags and badges.
+    /// 20 pt — full pill shape for tags and badges. // periphery:ignore
     static let pill: CGFloat = 20
     /// 8 pt — standard card corner radius.
     static let card: CGFloat = 8
     /// 5 pt — small card or row corner radius.
     static let small: CGFloat = 5
-    /// 6 pt — badge corner radius.
+    /// 6 pt — badge corner radius. // periphery:ignore
     static let badge: CGFloat = 6
-    /// 2 pt — subtle indicator corner radius.
+    /// 2 pt — subtle indicator corner radius. // periphery:ignore
     static let indicator: CGFloat = 2
 }
 
 /// Shadow constants used to give cards and panels consistent depth.
-enum RBShadow {
+enum RBShadow { // periphery:ignore
     /// Opacity of the card drop shadow.
     static let cardOpacity: Double = 0.35
     /// Blur radius of the card drop shadow.
@@ -213,11 +213,11 @@ enum RBFont {
     static let mono: Font = .system(.caption, design: .monospaced)
     /// 11 pt regular monospaced — small metric values.
     static let monoSmall: Font = .system(size: 11, weight: .regular, design: .monospaced)
-    /// 13 pt semibold monospaced — prominent metric headings.
+    /// 13 pt semibold monospaced — prominent metric headings. // periphery:ignore
     static let monoBold: Font = .system(size: 13, weight: .semibold, design: .monospaced)
     /// 13 pt medium — standard row/list label.
     static let label: Font = .system(size: 13, weight: .medium)
-    /// 12 pt regular — standard body text inside rows.
+    /// 12 pt regular — standard body text inside rows. // periphery:ignore
     static let body: Font = .system(size: 12, weight: .regular)
     /// 12.5 pt regular — section key labels.
     static let sectionKey: Font = .system(size: 12.5, weight: .regular)
@@ -240,7 +240,7 @@ enum DesignTokens {
     enum Fonts {
         /// Monospaced label font — alias for `RBFont.monoSmall`.
         static let monoLabel: Font = RBFont.monoSmall
-        /// Monospaced stat font — alias for `RBFont.monoSmall`.
+        /// Monospaced stat font — alias for `RBFont.monoSmall`. // periphery:ignore
         static let monoStat: Font = RBFont.monoSmall
         /// Caption monospaced font — alias for `RBFont.mono`.
         static let mono: Font = RBFont.mono

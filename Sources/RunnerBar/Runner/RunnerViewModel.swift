@@ -18,9 +18,9 @@ import SwiftUI
 /// AppDelegate itself runs on the main thread at launch.
 final class RunnerViewModel: ObservableObject {
     /// Mirrors `RunnerStore.shared.runners` (remote GitHub API runners).
-    @Published private(set) var runners: [Runner] = []
+    @Published private(set) var runners: [Runner] = [] // periphery:ignore
     /// Mirrors `RunnerStore.shared.jobs`.
-    @Published private(set) var jobs: [ActiveJob] = []
+    @Published private(set) var jobs: [ActiveJob] = [] // periphery:ignore
     /// Mirrors `RunnerStore.shared.actions`.
     @Published private(set) var actions: [WorkflowActionGroup] = []
     /// Mirrors `RunnerStore.shared.isRateLimited`.

@@ -62,7 +62,7 @@ final class OAuthService {
     let didSignOut = PassthroughSubject<Void, Never>()
 
     /// The isSignedIn property.
-    var isSignedIn: Bool { Keychain.token != nil }
+    var isSignedIn: Bool { Keychain.token != nil } // periphery:ignore
 
     // MARK: Sign In
 
