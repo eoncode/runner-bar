@@ -54,39 +54,35 @@ import SwiftUI
 // ⚠️ @MainActor isolation — see ARCHITECTURE.md §@MainActor isolation.
 // ❌ NEVER remove @MainActor from this class declaration.
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded.
-/// Manages AppDelegate state and behaviour.
+// swiftlint:disable:next missing_docs
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // NOTE: The properties and methods below are `internal` (not `private`) because
     // Swift `private` does not cross file boundaries. AppDelegate+Navigation.swift
     // requires read/write access to all of them. Do not widen beyond `internal`.
     // swiftlint:disable missing_docs
-    var statusItem: NSStatusItem?           // internal: required for AppDelegate+Navigation
-    var panel: KeyablePanel?               // internal: required for AppDelegate+Navigation
-    var chrome: PanelChromeView?           // internal: required for AppDelegate+Navigation
-    var hostingController: NSHostingController<AnyView>? // internal: required for AppDelegate+Navigation
-    let observable = RunnerViewModel()      // internal: required for AppDelegate+Navigation
-    var savedNavState: NavState?           // internal: required for AppDelegate+Navigation
-    var panelIsOpen = false                // internal: required for AppDelegate+Navigation
-    var eventMonitor: Any?                 // internal: required for AppDelegate+Navigation
+    var statusItem: NSStatusItem?
+    var panel: KeyablePanel?
+    var chrome: PanelChromeView?
+    var hostingController: NSHostingController<AnyView>?
+    let observable = RunnerViewModel()
+    var savedNavState: NavState?
+    var panelIsOpen = false
+    var eventMonitor: Any?
     var sizeObservation: NSKeyValueObservation?
     var workspaceObserver: Any?
     var cancellables = Set<AnyCancellable>()
-    // Top anchor (screen coords) captured once in openPanel().
-    // ❌ NEVER re-derive inside resizeAndRepositionPanel() — see ARCHITECTURE.md §Panel Lifecycle.
-    var panelTopY: CGFloat?                // internal: required for AppDelegate+Navigation
-    // Regression guard — see ARCHITECTURE.md §panelVisibilityState.
-    // ❌ NEVER remove. ❌ NEVER remove from wrapEnv(). ❌ NEVER pass as plain Bool to PanelMainView.
-    let panelVisibilityState = PanelVisibilityState() // internal: required for AppDelegate+Navigation
+    var panelTopY: CGFloat?
+    let panelVisibilityState = PanelVisibilityState()
     static let minWidth: CGFloat = 280
-    var statusItemScreen: NSScreen {       // internal: required for AppDelegate+Navigation
+    var statusItemScreen: NSScreen {
         statusItem?.button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
     }
-    var maxWidth: CGFloat {                // internal: required for AppDelegate+Navigation
+    var maxWidth: CGFloat {
         let screenMax = statusItemScreen.visibleFrame.width * 0.9
         return min(900, screenMax)
     }
-    var maxHeight: CGFloat {               // internal: required for AppDelegate+Navigation
+    var maxHeight: CGFloat {
         statusItemScreen.visibleFrame.height * 0.85
     }
     static let gap: CGFloat = 2
@@ -94,17 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // swiftlint:enable missing_docs
 
     // MARK: - Environment injection
-
-    // Regression guard — see ARCHITECTURE.md §panelVisibilityState and §wrapEnv.
-    // ❌ NEVER bypass. ❌ NEVER remove .environmentObject(panelVisibilityState).
     // swiftlint:disable:next missing_docs
-    func wrapEnv<V: View>(_ view: V) -> AnyView { // internal: required for AppDelegate+Navigation
+    func wrapEnv<V: View>(_ view: V) -> AnyView {
         AnyView(view.environmentObject(panelVisibilityState))
     }
 
     // MARK: - App lifecycle
-
-    /// Performs the applicationDidFinishLaunching operation.
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
         setupPanel()
@@ -114,8 +105,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     //
     // Handles the runnerbar://oauth/callback?code=... redirect from GitHub.
     // Searches the full urls array — see ARCHITECTURE.md §OAuth URL handling.
-
-    /// Performs the application operation.
     func application(_ _: NSApplication, open urls: [URL]) {
         guard let url = urls.first(where: { $0.scheme == "runnerbar" && $0.host == "oauth" })
         else { return }
@@ -123,11 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Panel resize
-
-    // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
     // ❌ NEVER re-derive panelTopY here. ❌ NEVER call from a background thread.
     // swiftlint:disable:next missing_docs
-    func resizeAndRepositionPanel() { // internal: required for AppDelegate+Navigation
+    func resizeAndRepositionPanel() {
         guard panelIsOpen,
               let panel,
               let chrome,
@@ -153,28 +140,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Navigation
-
-    // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
-    // ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     // swiftlint:disable:next missing_docs
-    func navigate(to view: AnyView) { // internal: required for AppDelegate+Navigation
+    func navigate(to view: AnyView) {
         hostingController?.rootView = view
         resizeAndRepositionPanel()
     }
 
     // MARK: - Make key for text input
-
-    // See KeyablePanel.swift for the full explanation.
-    // ❌ NEVER call this for views that have no text input (main, step log).
-    /// Performs the makeKeyForTextInput operation.
-    func makeKeyForTextInput() { // internal: required for AppDelegate+Navigation
+    // swiftlint:disable:next missing_docs
+    func makeKeyForTextInput() {
         panel?.wantsKey = true
         panel?.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Dismiss
-
-    /// Performs the closePanel operation.
+    // swiftlint:disable:next missing_docs
     func closePanel() {
         guard panelIsOpen else { return }
         panel?.wantsKey = false
@@ -184,8 +164,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelVisibilityState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
-        // Nav-state persistence — see ARCHITECTURE.md §Nav-state persistence.
-        // ❌ NEVER replace hostingController?.rootView = mainView() with a no-op stub.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let preserved = self.savedNavState
@@ -194,12 +172,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Performs the removeEventMonitor operation.
+    // swiftlint:disable:next missing_docs
     func removeEventMonitor() {
         if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
     }
 
-    /// Performs the removeWorkspaceObserver operation.
+    // swiftlint:disable:next missing_docs
     func removeWorkspaceObserver() {
         if let opt = workspaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(opt)
@@ -208,10 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Toggle
-
-    // internal (not private) so AppDelegate+StatusItem.swift can reference
-    // it via #selector(togglePanel) from a separate file.
-    /// Performs the togglePanel operation.
+    // swiftlint:disable:next missing_docs
     @objc func togglePanel() {
         if panelIsOpen {
             closePanel()
@@ -221,8 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Open
-
-    /// Performs the openPanel operation.
+    // swiftlint:disable:next missing_docs
     func openPanel() {
         guard let button = statusItem?.button,
               let statusItemRect = button.window?.frame,

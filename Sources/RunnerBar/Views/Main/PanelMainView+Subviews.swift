@@ -6,6 +6,7 @@ import RunnerBarCore
 import SwiftUI
 
 // MARK: - SectionHeaderLabel
+// swiftlint:disable:next orphaned_doc_comment
 /// Uppercase small-caps label used as a section divider inside the panel.
 /// Displays a title string in the muted secondary style.
 struct SectionHeaderLabel: View {
@@ -23,6 +24,7 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PanelHeaderView
+// swiftlint:disable:next orphaned_doc_comment
 /// Top bar of the popover panel showing the RunnerBar logo, sign-in state,
 /// and the settings gear button.
 struct PanelHeaderView: View {
@@ -64,6 +66,7 @@ struct PanelHeaderView: View {
 }
 
 // MARK: - RunnerTypeIcon
+// swiftlint:disable:next orphaned_doc_comment
 /// Small SF Symbol icon indicating whether a runner is local (self-hosted)
 /// or a GitHub-hosted cloud runner.
 private struct RunnerTypeIcon: View {
@@ -78,6 +81,7 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - PanelLocalRunnerRow
+// swiftlint:disable:next orphaned_doc_comment
 /// Row displaying a single local self-hosted runner: name, status badge, and
 /// CPU/memory stats. Only shown when `showLocalRunnerSection` is true.
 struct PanelLocalRunnerRow: View {
@@ -127,6 +131,7 @@ struct PanelLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
+// swiftlint:disable:next orphaned_doc_comment
 /// Row representing one GitHub Actions workflow run.
 /// Tapping expands inline job rows; long-press opens the run URL in Safari.
 struct ActionRowView: View {

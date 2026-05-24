@@ -3,6 +3,7 @@
 import SwiftUI
 
 // MARK: - DonutStatusView
+// swiftlint:disable:next orphaned_doc_comment
 /// Replaces the PieProgressDot for the action row status indicator.
 /// Three visual states:
 /// - in_progress : animated rotating shimmer arc (blue) + arc trim from 0 → progress
@@ -58,14 +59,11 @@ struct DonutStatusView: View {
             displayProgress = max(0, min(1, progress))
             startRotationIfNeeded()
         }
-        // Single-argument form for macOS 13 compatibility.
         .onChange(of: progress) { _ in
             withAnimation(.easeInOut(duration: 0.4)) {
                 displayProgress = max(0, min(1, progress))
             }
         }
-        // Start rotation if we transition into .inProgress after appearing
-        // (e.g. queued → inProgress). No-op for any other transition.
         .onChange(of: status) { _ in
             startRotationIfNeeded()
         }
@@ -89,7 +87,6 @@ struct DonutStatusView: View {
     /// Animated in-progress ring: faint shimmer background + blue arc trim.
     private var inProgressRing: some View {
         ZStack {
-            // Shimmer background ring
             Circle()
                 .stroke(
                     AngularGradient(
@@ -100,7 +97,6 @@ struct DonutStatusView: View {
                 )
                 .frame(width: size, height: size)
                 .rotationEffect(.degrees(rotationAngle))
-            // Progress arc
             Circle()
                 .trim(from: 0, to: CGFloat(displayProgress))
                 .stroke(
@@ -113,7 +109,6 @@ struct DonutStatusView: View {
     }
 
     /// Queued ring: solid yellow stroke — spec: queued = yellow.
-    /// fix(#419): was dashed blue, corrected to solid rbWarning.
     private var queuedRing: some View {
         Circle()
             .stroke(Color.rbWarning, lineWidth: strokeWidth)
