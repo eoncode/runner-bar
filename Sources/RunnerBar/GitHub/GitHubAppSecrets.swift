@@ -35,6 +35,7 @@
 // client_secret in a native binary is effectively public regardless. Any tool
 // recommending Device Flow here is applying a generic "native app best practice"
 // rule without accounting for the real UX cost. This choice is intentional.
+// periphery:ignore
 /// OAuth app credentials used by RunnerBar's GitHub sign-in flow.
 enum GitHubAppSecrets {
     /// Public client identifier for the registered GitHub OAuth app.

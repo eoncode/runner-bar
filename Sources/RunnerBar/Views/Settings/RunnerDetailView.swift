@@ -460,7 +460,7 @@ struct RunnerDetailView: View {
     }
 
     /// Dispatches to the appropriate handler based on the confirmed `DangerAction`.
-    private func executeDangerAction(_ action: DangerAction) {
+    private func executeDangerAction(_: DangerAction) {
         dangerActionState = .saving
         performRemove()
     }

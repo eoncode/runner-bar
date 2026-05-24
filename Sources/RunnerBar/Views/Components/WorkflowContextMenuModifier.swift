@@ -194,6 +194,7 @@ extension View {
 
 private struct StepContextMenuModifier: ViewModifier {
     let step: JobStep
+    // periphery:ignore
     let job: ActiveJob
     let onTap: () -> Void
 

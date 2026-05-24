@@ -3,6 +3,7 @@
 import SwiftUI
 
 // MARK: - CancelButton
+// periphery:ignore
 /// Top-bar cancel button used in JobDetailView and StepLogView.
 /// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
 struct CancelButton: View {

@@ -3,6 +3,7 @@
 import SwiftUI
 
 // MARK: - ReRunFailedButton
+// periphery:ignore
 /// Top-bar "Re-run failed jobs" button.
 /// Mirrors ReRunButton's phase-machine pattern but calls the
 /// GitHub "rerun-failed-jobs" endpoint instead of the full rerun endpoint.

@@ -40,7 +40,7 @@ private struct RunPayload: Codable {
     let displayTitle: String?
     /// ISO-8601 timestamp when the run was created.
     let createdAt: String?
-    /// ISO-8601 timestamp when the run was last updated.
+    /// ISO-8601 timestamp when the run was last updated. // periphery:ignore
     let updatedAt: String?
     /// URL to the run detail page on github.com.
     let htmlUrl: String?

@@ -17,9 +17,9 @@ import SwiftUI
 /// AppDelegate creates this as a stored property; init() is safe because
 /// AppDelegate itself runs on the main thread at launch.
 final class RunnerViewModel: ObservableObject {
-    /// Mirrors `RunnerStore.shared.runners` (remote GitHub API runners).
+    /// Mirrors `RunnerStore.shared.runners` (remote GitHub API runners). // periphery:ignore
     @Published private(set) var runners: [Runner] = []
-    /// Mirrors `RunnerStore.shared.jobs`.
+    /// Mirrors `RunnerStore.shared.jobs`. // periphery:ignore
     @Published private(set) var jobs: [ActiveJob] = []
     /// Mirrors `RunnerStore.shared.actions`.
     @Published private(set) var actions: [WorkflowActionGroup] = []

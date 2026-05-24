@@ -3,6 +3,7 @@
 import SwiftUI
 
 // MARK: - ReRunButton
+// periphery:ignore
 /// Top-bar re-run button.
 /// idle (arrow.clockwise + "Re-run") ->
 /// loading (spinner + "Running...") ->

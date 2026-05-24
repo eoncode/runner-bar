@@ -16,7 +16,7 @@ public enum Shell {
     struct Result {
         /// The output constant.
         let output: String
-        /// The exitCode constant.
+        /// The exitCode constant. // periphery:ignore
         let exitCode: Int32
     }
 

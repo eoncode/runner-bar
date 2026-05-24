@@ -40,9 +40,6 @@ final class ScopeStore: ObservableObject {
     /// Kept for call-sites not yet migrated; prefer `activeScopes`.
     var scopes: [String] { entries.map(\.scope) }
 
-    /// `true` when no entries have been added yet.
-    var isEmpty: Bool { entries.isEmpty }
-
     /// Initialises the store by loading persisted entries (or migrating the
     /// legacy `[String]` key if present).
     private init() {
@@ -113,12 +110,6 @@ final class ScopeStore: ObservableObject {
         persist()
         log("ScopeStore › removed scope id: \(id)")
         didMutate.send()
-    }
-
-    /// Legacy remove by scope string — kept for backward compatibility.
-    func remove(_ scope: String) {
-        guard let entry = entries.first(where: { $0.scope == scope }) else { return }
-        remove(id: entry.id)
     }
 
     /// Toggles the `isEnabled` flag for the entry with the given ID.
