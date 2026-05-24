@@ -73,10 +73,16 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     // MARK: Derived
 
     /// Human-readable elapsed duration, e.g. `"02:47"`.
-    /// Uses `startedAt` if available, falls back to `createdAt`, returns `"00:00"` if both nil.
+    /// - Returns `"--:--"` for completed jobs where both `startedAt` and `createdAt` are nil
+    ///   (timing data unavailable from API).
+    /// - Returns `"00:00"` for queued/in-progress jobs with no timing yet.
+    /// - Uses `startedAt` if available, falls back to `createdAt`.
     public var elapsed: String {
         let start = startedAt ?? createdAt
-        guard let start else { return "00:00" }
+        guard let start else {
+            // #781: completed jobs with no timing data show dashes, not a fake zero.
+            return (status == .completed || conclusion != nil) ? "--:--" : "00:00"
+        }
         let end = completedAt ?? Date()
         let secs = Int(end.timeIntervalSince(start))
         return String(format: "%02d:%02d", secs / 60, secs % 60)
