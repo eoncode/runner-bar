@@ -115,7 +115,7 @@ struct StepLogView: View {
     /// Colored dot sized to the step's current conclusion/status.
     private var statusDot: some View {
         let color: Color
-        switch step.conclusion ?? step.status {
+        switch step.conclusion?.rawValue ?? step.status.rawValue {
         case "success":    color = Color.rbSuccess
         case "failure":    color = Color.rbDanger
         case "in_progress": color = Color.rbWarning
@@ -191,7 +191,7 @@ struct StepLogView: View {
         let scope = "\(parts[0])/\(parts[1])"
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let text = fetchStepLog(scope: scope, jobID: jobId, stepNumber: stepNumber)
+            let text = fetchStepLog(jobID: jobId, stepNumber: stepNumber, scope: scope)
             DispatchQueue.main.async {
                 isLoading = false
                 if let text {
