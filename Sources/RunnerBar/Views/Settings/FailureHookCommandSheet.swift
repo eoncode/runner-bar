@@ -69,6 +69,7 @@ struct FailureHookCommandSheet: View {
 // MARK: - Subviews
 
 extension FailureHookCommandSheet {
+    /// The header section showing the sheet title and description.
     var headerSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Failure Hook Command")
@@ -83,6 +84,7 @@ extension FailureHookCommandSheet {
         .padding(.bottom, 10)
     }
 
+    /// The monospaced `TextEditor` for the shell command.
     var editorSection: some View {
         TextEditor(text: $commandText)
             .font(.system(size: 11, design: .monospaced))
@@ -96,6 +98,7 @@ extension FailureHookCommandSheet {
             .padding(.horizontal, 16)
     }
 
+    /// The row of variable-insertion pill buttons below the editor.
     var pillSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Insert variable at cursor:")
@@ -124,6 +127,7 @@ extension FailureHookCommandSheet {
         .padding(.top, 10)
     }
 
+    /// The footer row with Cancel, Test, and Save buttons.
     var footerSection: some View {
         HStack {
             Spacer()
@@ -170,6 +174,7 @@ extension FailureHookCommandSheet {
 // MARK: - Actions
 
 extension FailureHookCommandSheet {
+    /// Persists the current command text to `ScopePreferencesStore` and dismisses the sheet.
     func save() {
         log("FailureHookCommandSheet \u{203a} save \u{2014} scope=\(scope) commandText='\(commandText.prefix(200))'")
         ScopePreferencesStore.setFailureHookCommand(commandText, for: scope)
@@ -177,6 +182,7 @@ extension FailureHookCommandSheet {
         onDismiss()
     }
 
+    /// Resolves `$LOCAL_PATH` and `$SCOPE` tokens and opens the command in Terminal for a live test.
     func testCommand() {
         let localPath = ScopePreferencesStore.localRepoPath(for: scope) ?? ""
         let resolved = commandText
@@ -186,6 +192,7 @@ extension FailureHookCommandSheet {
         TerminalLauncher.open(command: resolved)
     }
 
+    /// Appends `variable` to `commandText` (with a space separator) or sets it if the field is empty.
     func insertVariable(_ variable: String) {
         if commandText.isEmpty {
             commandText = variable
@@ -200,8 +207,10 @@ extension FailureHookCommandSheet {
 /// A custom `Layout` that wraps child views into rows like a word-wrapped line of text.
 /// Used to arrange variable-insertion pill buttons beneath the command editor.
 struct FlowLayout: Layout {
+    /// Horizontal and vertical gap between adjacent subviews.
     var spacing: CGFloat = 6
 
+    /// Returns the minimum size needed to fit all subviews given the proposed width.
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let width = proposal.width ?? 400
         var x: CGFloat = 0
@@ -216,6 +225,7 @@ struct FlowLayout: Layout {
         return CGSize(width: width, height: y + rowH)
     }
 
+    /// Places each subview left-to-right, wrapping to a new row when the available width is exceeded.
     func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         var x: CGFloat = bounds.minX
         var y: CGFloat = bounds.minY
