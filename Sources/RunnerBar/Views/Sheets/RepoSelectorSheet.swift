@@ -1,5 +1,6 @@
 // RepoSelectorSheet.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - RepoSelectorSheet
@@ -79,7 +80,7 @@ extension RepoSelectorSheet {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11))
                 .foregroundColor(Color.rbTextTertiary)
-            TextField("Search \(label.lowercased())s\u{2026}", text: $searchText)
+            TextField("Search \(label.lowercased())s...", text: $searchText)
                 .font(.system(size: 12))
                 .textFieldStyle(.plain)
             if !searchText.isEmpty {
@@ -100,7 +101,6 @@ extension RepoSelectorSheet {
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
-    /// The listSection computed view.
     }
 
     /// The listSection computed view.
@@ -148,7 +148,7 @@ extension RepoSelectorSheet {
     /// Performs the itemRow operation.
     func itemRow(_ item: String) -> some View {
         Button(action: {
-            log("RepoSelectorSheet \u{203a} selected item='\(item)'")
+            log("RepoSelectorSheet > selected item='\(item)'")
             onSelect(item)
         }) {
             HStack(spacing: 8) {
@@ -190,3 +190,4 @@ extension RepoSelectorSheet {
         .padding(.bottom, 14)
     }
 }
+// swiftlint:enable missing_docs

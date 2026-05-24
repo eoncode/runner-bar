@@ -1,39 +1,40 @@
 // StepLogView.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import AppKit
 import RunnerBarCore
 import SwiftUI
-// ╔════════════════════════════════════════════════════════════════════════════╗
-// ║ ☹️ StepLogView — LAYOUT + SIZING CONTRACT ☹️                              ║
-// ╠════════════════════════════════════════════════════════════════════════════╣
-// ║ Navigation level 3 (PopoverMainView → JobDetailView → StepLogView).      ║
-// ║                                                                            ║
-// ║ LAYOUT RULES:                                                              ║
-// ║ • Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)     ║
-// ║ • idealWidth: 480 hints SwiftUI's initial natural width measurement.      ║
-// ║   NSHostingController reads idealWidth as preferredContentSize.width      ║
-// ║   on the first layout pass (NSPanel architecture, not NSPopover).         ║
-// ║   The panel then resizes to content-driven width via KVO on               ║
-// ║   preferredContentSize (see AppDelegate.sizeObservation).                 ║
-// ║ • Log content MUST be inside the ScrollView.                              ║
-// ║ • Header MUST be outside the ScrollView (always visible, not scrolled).  ║
-// ║ ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) — the      ║
-// ║   maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-      ║
-// ║   troller measures the view unconstrained (AppKit bug, see #375 #376)     ║
-// ║ ❌ NEVER omit idealWidth: 480 from the root frame                         ║
-// ║ ❌ NEVER add .frame(height:) here                                         ║
-// ║ ❌ NEVER add .fixedSize() here                                            ║
-// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap         ║
-// ║   Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
-// ║   reports the full log text height as preferredContentSize.height on      ║
-// ║   navigate → panel grows off-screen. (ref #370)                           ║
-// ║ ❌ NEVER remove the .frame(maxHeight:) from the ScrollView                ║
-// ║                                                                            ║
-// ║ If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     ║
-// ║ ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   ║
-// ║ is removed is major major major.                                           ║
-// ╙────────────────────────────────────────────────────────────────────────────╜
-// Phase 5: DesignToken colour sweep — .yellow/.green/.red → rbWarning/rbSuccess/rbDanger;
+// +===========================================================================+
+// | StepLogView -- LAYOUT + SIZING CONTRACT                                   |
+// +===========================================================================+
+// | Navigation level 3 (PopoverMainView > JobDetailView > StepLogView).       |
+// |                                                                            |
+// | LAYOUT RULES:                                                              |
+// | * Root: .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)     |
+// | * idealWidth: 480 hints SwiftUI's initial natural width measurement.      |
+// |   NSHostingController reads idealWidth as preferredContentSize.width      |
+// |   on the first layout pass (NSPanel architecture, not NSPopover).         |
+// |   The panel then resizes to content-driven width via KVO on               |
+// |   preferredContentSize (see AppDelegate.sizeObservation).                 |
+// | * Log content MUST be inside the ScrollView.                              |
+// | * Header MUST be outside the ScrollView (always visible, not scrolled).  |
+// | NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity) -- the        |
+// |   maxHeight: .infinity corrupts fittingSize.width when NSHostingCon-      |
+// |   troller measures the view unconstrained (AppKit bug, see #375 #376)     |
+// | NEVER omit idealWidth: 480 from the root frame                            |
+// | NEVER add .frame(height:) here                                            |
+// | NEVER add .fixedSize() here                                               |
+// | ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap           |
+// |   Without it, with sizingOptions=.preferredContentSize, SwiftUI           |
+// |   reports the full log text height as preferredContentSize.height on      |
+// |   navigate -> panel grows off-screen. (ref #370)                          |
+// | NEVER remove the .frame(maxHeight:) from the ScrollView                   |
+// |                                                                            |
+// | If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT     |
+// | ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment   |
+// | is removed is major major major.                                           |
+// +---------------------------------------------------------------------------+
+// Phase 5: DesignToken colour sweep -- .yellow/.green/.red -> rbWarning/rbSuccess/rbDanger;
 //          meta badge backgrounds use Color.rbSurfaceElevated;
 //          log area uses Color.rbSurfaceElevated background;
 //          all .secondary foreground replaced with Color.rbTextSecondary.
@@ -50,7 +51,7 @@ struct StepLogView: View {
     let onBack: () -> Void
     /// Optional callback fired on the main thread once the async log fetch completes.
     ///
-    /// ❌ NEVER call setFrameSize / contentSize directly from this closure.
+    /// NEVER call setFrameSize / contentSize directly from this closure.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -77,7 +78,7 @@ struct StepLogView: View {
     /// The body property.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ──────────────────────────────────────────────────────────────────────────
+            // -- Top bar
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -118,7 +119,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ──────────────────────────────────────────────────────────────────────────────────
+            // -- Step name (large)
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -126,7 +127,7 @@ struct StepLogView: View {
                 .padding(.horizontal, RBSpacing.md)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────────────────────────────────────
+            // -- Meta rows
             HStack(spacing: 6) {
                 Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(job.name).font(.caption).foregroundColor(Color.rbTextSecondary)
@@ -156,13 +157,13 @@ struct StepLogView: View {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(startLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("→").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("->").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(endLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("·").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text(".").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(step.elapsed)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
+                Text(".").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
                 Text(dateLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
                 Spacer()
@@ -173,9 +174,9 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ──────────────────────────────────────────────────────────────────────────────
-            // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
-            // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
+            // -- Log -- INSIDE ScrollView
+            // REQUIRED .frame(maxHeight:) cap on this ScrollView (ref #370).
+            // NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
                 if isLoading {
                     HStack {
@@ -197,19 +198,17 @@ struct StepLogView: View {
                         .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
                 }
             }
-            // ⚠️ REQUIRED — caps preferredContentSize.height. Prevents panel growing off-screen.
-            // ❌ NEVER remove this modifier.
+            // REQUIRED -- caps preferredContentSize.height. Prevents panel growing off-screen.
+            // NEVER remove this modifier.
             .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 } ?? 600)
         }
-        // ════════════════════════════════════════════════════════════════════════
-        // ⚠️ idealWidth: 480 hints the initial panel width before KVO fires.
-        // ❌ NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // ❌ NEVER omit idealWidth: 480
-        // ❌ NEVER add .frame(height:) or .fixedSize() here
+        // idealWidth: 480 hints the initial panel width before KVO fires.
+        // NEVER use .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // NEVER omit idealWidth: 480
+        // NEVER add .frame(height:) or .fixedSize() here
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT
         // ALLOWED UNDER ANY CIRCUMSTANCE. The regression we get when this comment
         // is removed is major major major.
-        // ════════════════════════════════════════════════════════════════════════
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear { loadLog() }
     }
@@ -246,19 +245,19 @@ extension StepLogView {
     /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
     var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "—" }
+        guard parts.count >= 5 else { return "--" }
         let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
+        return (owner.isEmpty || repo.isEmpty) ? "--" : "\(owner)/\(repo)"
     }
 
     /// Step conclusion label with icon, or live/queued status.
     var stepStatusLabel: String {
         switch step.conclusion {
-        case "success": return "✓ success"
-        case "failure": return "✗ failure"
-        case "skipped": return "⊘ skipped"
-        case "cancelled": return "⊘ cancelled"
-        default: return step.status == "in_progress" ? "▶ running" : "· queued"
+        case "success": return "success"
+        case "failure": return "failure"
+        case "skipped": return "skipped"
+        case "cancelled": return "cancelled"
+        default: return step.status == "in_progress" ? "running" : "queued"
         }
     }
 
@@ -272,23 +271,24 @@ extension StepLogView {
         }
     }
 
-    /// Formatted start time, or "—" if unavailable.
+    /// Formatted start time, or "--" if unavailable.
     var startLabel: String {
-        guard let dateValue = step.startedAt else { return "—" }
+        guard let dateValue = step.startedAt else { return "--" }
         return Self.timeFmt.string(from: dateValue)
     }
 
-    /// Formatted end time, or "—" if unavailable.
+    /// Formatted end time, or "--" if unavailable.
     var endLabel: String {
         guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running…" : "—"
+            return step.status == "in_progress" ? "running..." : "--"
         }
         return Self.timeFmt.string(from: dateValue)
     }
 
     /// Date string (yyyy-MM-dd) for context when the step ran.
     var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
+        guard let dateValue = step.startedAt ?? step.completedAt else { return "--" }
         return Self.dateFmt.string(from: dateValue)
     }
 }
+// swiftlint:enable missing_docs

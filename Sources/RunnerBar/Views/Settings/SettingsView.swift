@@ -7,21 +7,21 @@ import ServiceManagement
 import SwiftUI
 
 // MARK: - SettingsView
-// Settings view — complete implementation for all phases 1-6.
+// Settings view -- complete implementation for all phases 1-6.
 //
 // HEIGHT CONTRACT:
-// headerBar is OUTSIDE the ScrollView — back button always visible.
+// headerBar is OUTSIDE the ScrollView -- back button always visible.
 // ScrollView uses maxHeight: .infinity to fill all remaining panel space.
 // AppDelegate.resizeAndRepositionPanel() clamps the panel at 85% visibleFrame.
-// No extra cap needed here — the panel cap IS the scroll boundary.
-// ❌ NEVER move headerBar inside the ScrollView.
-// ❌ NEVER replace .infinity with a fixed number.
-// ❌ NEVER use GeometryReader for the height.
-// ❌ NEVER add idealHeight to the root frame.
+// No extra cap needed here -- the panel cap IS the scroll boundary.
+// NEVER move headerBar inside the ScrollView.
+// NEVER replace .infinity with a fixed number.
+// NEVER use GeometryReader for the height.
+// NEVER add idealHeight to the root frame.
 //
 // WIDTH CONTRACT:
-// .frame(idealWidth: 480) — only idealWidth needed. NSPanel handles bounds.
-// ❌ NEVER remove idealWidth: 480.
+// .frame(idealWidth: 480) -- only idealWidth needed. NSPanel handles bounds.
+// NEVER remove idealWidth: 480.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -74,11 +74,11 @@ struct SettingsView: View {
 
     /// The appVersion property.
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "--"
     }
     /// The appBuild property.
     private var appBuild: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "--"
     }
     /// The removalAlertTitle property.
     private var removalAlertTitle: String {
@@ -90,6 +90,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
+            // maxHeight: .infinity -- fills all space the panel gives us.
+            // AppDelegate caps the panel at 85% visibleFrame. That IS the limit.
+            // NEVER move headerBar inside this ScrollView.
+            // NEVER replace .infinity with a fixed number.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+            // UNDER ANY CIRCUMSTANCE.
             ScrollView(.vertical, showsIndicators: true) {
                 sectionsStack
             }
@@ -148,12 +154,15 @@ struct SettingsView: View {
             isCLIAuthenticated = !success && githubToken() != nil
             isSigningIn = false
         }
+        // #723: subscribe to didSignOut via Combine -- consistent with didUpdate/didMutate pattern.
         signOutCancellable = OAuthService.shared.didSignOut
             .receive(on: DispatchQueue.main)
             .sink {
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = githubToken() != nil
             }
+        // #695: Subscribe to ScopeStore.didMutate via Combine instead of the old
+        // onMutate closure (which no longer exists after the Combine migration).
         scopeMutateCancellable = ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak store] in store?.reload() }
@@ -277,6 +286,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Resume / Stop actions
+
     /// Performs the performResume operation.
     private func performResume(runner: RunnerModel) {
         log("SettingsView > performResume called runner=\(runner.runnerName)")
@@ -288,12 +298,12 @@ struct SettingsView: View {
                 case .success: break
                 case .corruptInstall:
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
+                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "[!] corrupt install")
                 case .failed(let msg):
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
                     let short = msg.components(separatedBy: "\n")
                         .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(short)")
+                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "[!] \(short)")
                 }
                 LocalRunnerStore.shared.refresh()
             }
@@ -310,12 +320,12 @@ struct SettingsView: View {
                 switch result {
                 case .success: break
                 case .corruptInstall:
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
+                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "[!] corrupt install")
                 case .failed(let msg):
                     LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
                     let short = msg.components(separatedBy: "\n")
                         .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(short)")
+                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "[!] \(short)")
                 }
                 LocalRunnerStore.shared.refresh()
             }
@@ -333,6 +343,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Remote runner scopes
+
     /// The remoteScopesSectionHeader property.
     private var remoteScopesSectionHeader: some View {
         HStack {
@@ -381,6 +392,7 @@ struct SettingsView: View {
                     .padding(.vertical, 2)
                     .background(Capsule().fill(Color.rbSurfaceElevated))
                     .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text(displayName)
                         .font(.system(size: 12))
@@ -393,10 +405,13 @@ struct SettingsView: View {
                             .lineLimit(1).truncationMode(.middle)
                     }
                 }
+
                 Spacer()
+
                 Text(entry.isEnabled ? "Active" : "Paused")
                     .font(.caption2)
                     .foregroundColor(entry.isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
+
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
                     set: { ScopeStore.shared.setEnabled(entry.id, $0); RunnerStore.shared.start() }
@@ -407,9 +422,11 @@ struct SettingsView: View {
                 .help(entry.isEnabled ? "Pause monitoring" : "Resume monitoring")
                 .scaleEffect(0.8, anchor: .trailing)
                 .buttonStyle(.borderless)
+
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
+
                 // swiftlint:disable:next multiple_closures_with_trailing_closure
                 Button(action: {
                     ScopePreferencesStore.cleanUp(scope: entry.scope)
@@ -501,7 +518,7 @@ struct SettingsView: View {
                 if isSigningIn {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7)
-                        Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
+                        Text("Waiting for browser...").font(.caption).foregroundColor(Color.rbTextSecondary)
                     }
                 } else if isOAuthAuthenticated {
                     HStack(spacing: 10) {
