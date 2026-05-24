@@ -1,84 +1,38 @@
 // ReRunFailedButton.swift
 // RunnerBar
+import RunnerBarCore
 import SwiftUI
 
 // MARK: - ReRunFailedButton
-// periphery:ignore
-/// Top-bar "Re-run failed jobs" button.
-/// Mirrors ReRunButton's phase-machine pattern but calls the
-/// GitHub "rerun-failed-jobs" endpoint instead of the full rerun endpoint.
-///
-/// GitHub API: POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
-///
-/// idle (exclamationmark.arrow.clockwise + "Re-run failed") →
-/// loading (spinner + "Running…") →
-/// done (✓ + "Done", 1.5 s) OR failed (✗ + "Failed", 1.5 s) → idle
+/// Button that re-runs only the failed jobs in a workflow.
+/// On macOS 26+ uses Liquid Glass interactive background;
+/// on older OSes falls back to the existing bordered button style.
 struct ReRunFailedButton: View {
-    /// Called on tap. Must call completion(success: Bool) from any thread.
-    let action: (@escaping (Bool) -> Void) -> Void
-    /// When true the button is completely hidden and takes no layout space.
-    var isDisabled: Bool = false
+    /// The action to invoke when the button is tapped.
+    let action: () -> Void
+    /// Whether the re-run request is currently in-flight.
+    var isLoading: Bool = false
 
-    /// The phase property.
-    @State private var phase: Phase = .idle
-
-    // MARK: - Phase
-    /// Visual states of the re-run-failed button lifecycle.
-    enum Phase {
-        /// Normal tappable state.
-        case idle
-        /// Spinner shown while the re-run request is in-flight.
-        case loading
-        /// Green checkmark shown for 1.5 s after success.
-        case done
-        /// Red cross shown for 1.5 s after failure.
-        case failed
-    }
-
-    // MARK: - Body
-    /// Renders idle re-run-failed button or delegates to `ButtonPhaseView` for active states.
     var body: some View {
-        Group {
-            switch phase {
-            case .idle:
-                if !isDisabled {
-                    Button(action: startRerun) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.arrow.clockwise")
-                                .font(.caption)
-                            Text("Re-run failed")
-                                .font(.caption)
-                                .fixedSize()
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Re-run only the failed and cancelled jobs in this workflow run")
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                } else {
+                    Image(systemName: "arrow.clockwise.circle")
+                        .font(.system(size: 11, weight: .medium))
                 }
-            case .loading:
-                ButtonPhaseView(phase: .loading)
-            case .done:
-                ButtonPhaseView(phase: .done)
-            case .failed:
-                ButtonPhaseView(phase: .failed)
+                Text("Re-run failed")
+                    .font(.system(size: 11, weight: .medium))
             }
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .glassCard(cornerRadius: 6)
         }
-    }
-
-    // MARK: - Actions
-    /// Transitions the button to `.loading`, invokes `action` (which calls the
-    /// "rerun-failed-jobs" endpoint), then transitions to `.done` or `.failed`
-    /// based on the success flag before resetting to `.idle` after 1.5 s.
-    private func startRerun() {
-        guard phase == .idle else { return }
-        phase = .loading
-        action { success in
-            DispatchQueue.main.async {
-                phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    phase = .idle
-                }
-            }
-        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 }

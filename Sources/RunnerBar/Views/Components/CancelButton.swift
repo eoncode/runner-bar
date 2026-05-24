@@ -1,55 +1,38 @@
 // CancelButton.swift
 // RunnerBar
+import RunnerBarCore
 import SwiftUI
 
 // MARK: - CancelButton
-// periphery:ignore
-/// Top-bar cancel button used in JobDetailView and StepLogView.
-/// States: idle → loading → done (1.5 s) or failed (1.5 s) → idle.
+/// Button that cancels the active workflow run.
+/// On macOS 26+ uses Liquid Glass interactive background;
+/// on older OSes falls back to the existing bordered button style.
 struct CancelButton: View {
-    /// Called on tap. Must invoke completion(success: Bool) from any thread.
-    let action: (@escaping (Bool) -> Void) -> Void
-    /// When true the button is rendered at reduced opacity and cannot be tapped.
-    var isDisabled: Bool = false
+    /// The action to invoke when the button is tapped.
+    let action: () -> Void
+    /// Whether the cancel request is currently in-flight.
+    var isLoading: Bool = false
 
-    /// The phase property.
-    @State private var phase: ButtonPhaseView.Phase?
-
-    // MARK: - Body
-    /// Renders idle cancel button or delegates to `ButtonPhaseView` for active states.
     var body: some View {
-        Group {
-            if let phase {
-                ButtonPhaseView(phase: phase)
-            } else {
-                Button(action: startCancel) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "xmark.circle")
-                            .font(.caption)
-                        Text("Cancel")
-                            .font(.caption)
-                            .fixedSize()
-                    }
-                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                } else {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 11, weight: .medium))
                 }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
+                Text("Cancel")
+                    .font(.system(size: 11, weight: .medium))
             }
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .glassCard(cornerRadius: 6)
         }
-    }
-
-    // MARK: - Actions
-    /// Performs the startCancel operation.
-    private func startCancel() {
-        guard phase == nil else { return }
-        phase = .loading
-        action { success in
-            DispatchQueue.main.async {
-                self.phase = success ? .done : .failed
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    self.phase = nil
-                }
-            }
-        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 }
