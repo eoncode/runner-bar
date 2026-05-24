@@ -77,7 +77,7 @@ struct StepLogView: View {
     /// The body property.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ──────────────────────────────────────────────────────────────────
+            // ── Top bar ──────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -118,7 +118,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ───────────────────────────────────────────────────────────────
+            // ── Step name (large) ──────────────────────────────────────────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -126,7 +126,7 @@ struct StepLogView: View {
                 .padding(.horizontal, RBSpacing.md)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────────────────────
+            // ── Meta rows ────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(job.name).font(.caption).foregroundColor(Color.rbTextSecondary)
@@ -156,13 +156,13 @@ struct StepLogView: View {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(startLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("\u2192").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("→").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(endLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("\u00b7").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("·").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(step.elapsed)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("\u00b7").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
+                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
                 Text(dateLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
                 Spacer()
@@ -173,7 +173,7 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ───────────────────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ──────────────────────────────────────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -246,19 +246,19 @@ extension StepLogView {
     /// Repo slug derived from job.htmlUrl, e.g. "owner/repo".
     var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "\u2014" }
+        guard parts.count >= 5 else { return "—" }
         let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "\u2014" : "\(owner)/\(repo)"
+        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
     }
 
     /// Step conclusion label with icon, or live/queued status.
     var stepStatusLabel: String {
         switch step.conclusion {
-        case "success": return "\u2713 success"
-        case "failure": return "\u2717 failure"
-        case "skipped": return "\u2298 skipped"
-        case "cancelled": return "\u2298 cancelled"
-        default: return step.status == "in_progress" ? "\u25b6 running" : "\u00b7 queued"
+        case "success": return "✓ success"
+        case "failure": return "✗ failure"
+        case "skipped": return "⊘ skipped"
+        case "cancelled": return "⊘ cancelled"
+        default: return step.status == "in_progress" ? "▶ running" : "· queued"
         }
     }
 
@@ -272,23 +272,23 @@ extension StepLogView {
         }
     }
 
-    /// Formatted start time, or "\u2014" if unavailable.
+    /// Formatted start time, or "—" if unavailable.
     var startLabel: String {
-        guard let dateValue = step.startedAt else { return "\u2014" }
+        guard let dateValue = step.startedAt else { return "—" }
         return Self.timeFmt.string(from: dateValue)
     }
 
-    /// Formatted end time, or "\u2014" if unavailable.
+    /// Formatted end time, or "—" if unavailable.
     var endLabel: String {
         guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running\u2026" : "\u2014"
+            return step.status == "in_progress" ? "running…" : "—"
         }
         return Self.timeFmt.string(from: dateValue)
     }
 
     /// Date string (yyyy-MM-dd) for context when the step ran.
     var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "\u2014" }
+        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
         return Self.dateFmt.string(from: dateValue)
     }
 }

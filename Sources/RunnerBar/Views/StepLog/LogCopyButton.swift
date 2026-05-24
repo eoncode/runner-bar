@@ -3,96 +3,47 @@
 import AppKit
 import SwiftUI
 
-/// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
-/// States: idle (doc.on.doc + "Copy log") → loading (spinner + "Copying…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
+// MARK: - LogCopyButton
+/// A toolbar button that copies the full log text to the clipboard.
+/// Accepts a `fetch` closure so the caller controls when the copy is resolved
+/// (e.g. off the main thread) without coupling the button to a specific data model.
 struct LogCopyButton: View {
-    // Called on tap. Pass nil or empty string on failure — button still resets to idle.
-    /// The fetch constant.
+    /// Closure called when the user taps Copy.
+    /// The closure receives a completion that must be called with the optional log text.
     let fetch: (@escaping (String?) -> Void) -> Void
-    // When true the button is rendered at reduced opacity and cannot be tapped.
-    /// The isDisabled property.
-    var isDisabled: Bool = false
+    /// When `true` the button is greyed-out and ignores taps.
+    let isDisabled: Bool
 
-    /// The phase property.
-    @State private var phase: Phase = .idle
-
-    /// Visual states of the copy button lifecycle.
-    enum Phase {
-        /// Normal tappable state.
-        case idle
-        /// Spinner shown while fetching log text.
-        case loading
-        /// Green checkmark shown for 1.5 s after a successful copy.
-        case done
-        /// Red cross shown for 1.5 s after a failed fetch.
-        case failed
-    }
+    /// Whether the clipboard write has just succeeded (drives the checkmark state).
+    @State private var copied = false
 
     /// The body property.
     var body: some View {
-        Group {
-            switch phase {
-            case .idle:
-                Button(action: startCopy) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.caption)
-                        Text("Copy log")
-                            .font(.caption)
-                            .fixedSize()
-                    }
-                    .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
-                }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
-            case .loading:
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.mini)
-                    Text("Copying\u2026")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize()
-                }
-            case .done:
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                    Text("Done")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                        .fixedSize()
-                }
-            case .failed:
-                HStack(spacing: 4) {
-                    Image(systemName: "xmark")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                    Text("Failed")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .fixedSize()
-                }
+        Button(action: performCopy) {
+            HStack(spacing: 3) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.caption)
+                Text(copied ? "Copied" : "Copy log")
+                    .font(.caption)
             }
+            .foregroundColor(isDisabled ? Color.rbTextTertiary : Color.rbTextSecondary)
+            .fixedSize()
         }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(isDisabled ? "Log not yet loaded" : "Copy log to clipboard")
     }
 
-    /// Performs the startCopy operation.
-    private func startCopy() {
-        guard phase == .idle else { return }
-        phase = .loading
-        let resetDelay: DispatchTimeInterval = .milliseconds(1500)
-        fetch { copyText in
+    /// Performs the copy: calls `fetch`, writes the result to the pasteboard, and
+    /// briefly shows the checkmark state.
+    private func performCopy() {
+        fetch { text in
+            guard let text, !text.isEmpty else { return }
             DispatchQueue.main.async {
-                if let text = copyText, !text.isEmpty {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                    phase = .done
-                    DispatchQueue.main.asyncAfter(deadline: .now() + resetDelay) { phase = .idle }
-                } else {
-                    phase = .failed
-                    DispatchQueue.main.asyncAfter(deadline: .now() + resetDelay) { phase = .idle }
-                }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
             }
         }
     }

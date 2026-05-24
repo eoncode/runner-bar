@@ -114,16 +114,21 @@ final class PanelChromeView: NSView {
 
     /// The visual effect view providing the panel vibrancy background.
     ///
-    /// On macOS 26+ uses `.glass` which participates fully in Liquid Glass rendering.
-    /// On macOS 13–25 falls back to `.menu` for a clean dark translucent surface.
+    /// On macOS 26+ uses raw material value 24 (.glass) which participates fully
+    /// in Liquid Glass rendering. Raw value is used so the file compiles on
+    /// Xcode 16 / macOS 14 SDK where .glass is not yet a named symbol.
+    /// On macOS 13-25 falls back to .menu for a clean dark translucent surface.
     /// ❌ NEVER switch back to .popover — it produces a warm brown tint on dark wallpapers.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private let vibrancyView: NSVisualEffectView = {
         let view = NSVisualEffectView()
         if #available(macOS 26, *) {
-            view.material = .glass
+            // .glass = raw value 24 in macOS 26 SDK.
+            // Using raw init so this file compiles on Xcode 16 / macOS 14 SDK.
+            // ❌ NEVER replace with .popover or .hudWindow.
+            view.material = NSVisualEffectView.Material(rawValue: 24) ?? .menu
         } else {
-            // .menu gives a clean dark translucent surface on macOS 13–25.
+            // .menu gives a clean dark translucent surface on macOS 13-25.
             // ❌ NEVER switch back to .popover — warm brown tint on dark wallpapers.
             // ❌ NEVER switch back to .hudWindow — .menu is the correct fallback here.
             // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
