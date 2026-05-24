@@ -5,8 +5,7 @@ import SwiftUI
 
 // MARK: - SystemStatsView
 /// Full-page system stats view shown in the settings panel.
-// periphery:ignore
-struct SystemStatsView: View {
+struct SystemStatsView: View { // periphery:ignore
     /// The viewModel property.
     @StateObject private var viewModel = SystemStatsViewModel()
 
@@ -54,8 +53,7 @@ struct SystemStatsView: View {
 ///        9pt label  40x14pt sparkline  10pt mono value
 ///
 /// Do NOT restore the VStack layout -- it makes the header ~70pt tall.
-// periphery:ignore
-struct SparklineMetricView: View {
+struct SparklineMetricView: View { // periphery:ignore
     /// The label constant.
     let label: String
     /// The value constant.
@@ -102,8 +100,7 @@ struct SparklineMetricView: View {
 ///   else         → rbSuccess (green)
 ///
 /// Always renders at its intrinsic size -- never truncates.
-// periphery:ignore
-struct DiskPillBadge: View {
+struct DiskPillBadge: View { // periphery:ignore
     // Percentage of disk space that is FREE (0-100).
     /// The freePct constant.
     let freePct: Double
@@ -140,8 +137,7 @@ struct DiskPillBadge: View {
 // Accepts an existing SystemStatsViewModel so it shares the sampler
 // already running in PopoverMainView -- no second timer is created.
 /// A value type representing HeaderStatsBar.
-// periphery:ignore
-struct HeaderStatsBar: View {
+struct HeaderStatsBar: View { // periphery:ignore
     /// The statsVM property.
     @ObservedObject var statsVM: SystemStatsViewModel
 
@@ -200,8 +196,7 @@ struct HeaderStatsBar: View {
 // Renders a coloured block-bar and percentage label for a given metric.
 // Deprecated -- use SparklineMetricView / HeaderStatsBar instead.
 /// A value type representing BlockBarView.
-// periphery:ignore
-struct BlockBarView: View {
+struct BlockBarView: View { // periphery:ignore
     /// The label constant.
     let label: String
     /// The pct constant.
