@@ -30,6 +30,7 @@ struct RingBuffer {
 // MARK: - SystemStatsViewModel
 /// Observable view-model that periodically samples CPU, memory, and disk metrics.
 /// Call `start()` when the owning view appears and `stop()` when it disappears.
+@MainActor
 final class SystemStatsViewModel: ObservableObject {
     /// Latest sampled snapshot, ready for display.
     @Published private(set) var stats: SystemStats = .zero
@@ -43,9 +44,9 @@ final class SystemStatsViewModel: ObservableObject {
     /// The timer property.
     private var timer: Timer?
     /// The prevCPUInfo property.
-    private var prevCPUInfo: processor_info_array_t?
+    nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
     /// The prevNumCPUInfo property.
-    private var prevNumCPUInfo: mach_msg_type_number_t = 0
+    nonisolated(unsafe) private var prevNumCPUInfo: mach_msg_type_number_t = 0
     /// Root volume path used for disk-space queries.
     private static let rootVolumePath = NSOpenStepRootDirectory()
 
@@ -66,7 +67,7 @@ final class SystemStatsViewModel: ObservableObject {
         guard timer == nil else { return }
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            self?.sample()
+            Task { @MainActor [weak self] in self?.sample() }
         }
     }
 
@@ -77,8 +78,8 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     // MARK: Sampling
-    /// Collects CPU, memory, and disk snapshots off the main thread, then publishes
-    /// the new ``stats`` and updated history ring-buffers on the main actor.
+    /// Collects CPU, memory, and disk snapshots and publishes the new ``stats``
+    /// and updated history ring-buffers. Runs on the MainActor.
     private func sample() {
         let cpu = sampleCPU()
         let mem = sampleMemory()
@@ -98,13 +99,10 @@ final class SystemStatsViewModel: ObservableObject {
         let diskPct = disk.total > 0 ? disk.used / disk.total * 100 : 0.0
         newMem.append(memPct)
         newDisk.append(diskPct)
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.stats = snapshot
-            self.cpuHistory = newCPU
-            self.memHistory = newMem
-            self.diskHistory = newDisk
-        }
+        self.stats = snapshot
+        self.cpuHistory = newCPU
+        self.memHistory = newMem
+        self.diskHistory = newDisk
     }
 
     // MARK: CPU (Mach host_processor_info)
