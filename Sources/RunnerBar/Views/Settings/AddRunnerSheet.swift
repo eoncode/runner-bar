@@ -1,6 +1,6 @@
 // AddRunnerSheet.swift
 // RunnerBar
-// swiftlint:disable type_body_length missing_docs
+// swiftlint:disable type_body_length
 import AppKit
 import SwiftUI
 
@@ -36,6 +36,7 @@ private enum GitHubURIs {
 /// runner on every subsequent scan — including after a full app reinstall.
 ///
 /// Requires a GitHub token for "Add new" only (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
+// swiftlint:disable missing_docs
 struct AddRunnerSheet: View {
     /// The isPresented property.
     @Binding var isPresented: Bool
@@ -792,6 +793,7 @@ struct AddRunnerSheet: View {
         return task.terminationStatus
     }
 }
+// swiftlint:enable missing_docs
 
 // MARK: - Runner download URL
 
@@ -836,4 +838,4 @@ private func fetchRunnerDownloadURL() -> String? {
     log("fetchRunnerDownloadURL › match=\(match?.name ?? "nil")")
     return match?.browserDownloadUrl
 }
-// swiftlint:enable type_body_length missing_docs
+// swiftlint:enable type_body_length
