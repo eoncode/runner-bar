@@ -1,5 +1,6 @@
 // AddScopeSheet.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import SwiftUI
 
 // MARK: - ScopeType
@@ -63,7 +64,7 @@ struct AddScopeSheet: View {
     /// The body property.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header ─────────────────────────────────────────────────────
+            // -- Header
             Text("Add remote scope")
                 .font(.headline)
                 .padding(.horizontal, RBSpacing.md)
@@ -75,7 +76,7 @@ struct AddScopeSheet: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: RBSpacing.md) {
 
-                    // ── Type toggle ──────────────────────────────────────────
+                    // -- Type toggle
                     Picker("", selection: $scopeType) {
                         ForEach(ScopeType.allCases) { t in
                             Text(t.rawValue).tag(t)
@@ -87,7 +88,7 @@ struct AddScopeSheet: View {
                         showScopeSelector = false
                     }
 
-                    // ── Scope picker / text field ────────────────────────────
+                    // -- Scope picker / text field
                     VStack(alignment: .leading, spacing: 4) {
                         Text(scopeType == .org ? "Organisation" : "Repository")
                             .font(.caption)
@@ -96,17 +97,17 @@ struct AddScopeSheet: View {
                         if isFetching {
                             HStack(spacing: 8) {
                                 ProgressView().scaleEffect(0.7)
-                                Text("Fetching from GitHub\u{2026}")
+                                Text("Fetching from GitHub...")
                                     .font(.caption)
                                     .foregroundColor(Color.rbTextSecondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 6)
                         } else if usePicker && !pickerItems.isEmpty {
-                            // ── Searchable sheet trigger ─────────────────────
+                            // -- Searchable sheet trigger
                             Button(action: { showScopeSelector = true }) {
                                 HStack {
-                                    Text(selectedScope.isEmpty ? "\u{2014} select \u{2014}" : selectedScope)
+                                    Text(selectedScope.isEmpty ? "-- select --" : selectedScope)
                                         .font(.system(size: 12))
                                         .foregroundColor(
                                             selectedScope.isEmpty
@@ -156,7 +157,7 @@ struct AddScopeSheet: View {
                         }
                     }
 
-                    // ── Helper caption ───────────────────────────────────────
+                    // -- Helper caption
                     Text(scopeType == .org
                          ? "Monitors all runners in the organisation."
                          : "Monitors runners registered to this repository.")
@@ -168,9 +169,8 @@ struct AddScopeSheet: View {
 
             Divider()
 
-            // ── Button row ─────────────────────────────────────────────────
+            // -- Button row
             HStack {
-                // Proper dismiss button — no async machinery needed for sheet dismissal.
                 Button(action: { isPresented = false }) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle")
@@ -206,7 +206,7 @@ struct AddScopeSheet: View {
     /// Falls back to manual text entry when no token is present or the fetch returns empty results.
     private func fetchScopeOptions() {
         guard githubToken() != nil else {
-            log("AddScopeSheet \u{203a} no token \u{2014} falling back to text field")
+            log("AddScopeSheet > no token -- falling back to text field")
             usePicker = false
             return
         }
@@ -218,7 +218,7 @@ struct AddScopeSheet: View {
             DispatchQueue.main.async {
                 isFetching = false
                 if fetchedOrgs.isEmpty && fetchedRepos.isEmpty {
-                    log("AddScopeSheet \u{203a} fetch returned no orgs or repos \u{2014} using text field")
+                    log("AddScopeSheet > fetch returned no orgs or repos -- using text field")
                     usePicker = false
                     errorMessage = "Could not load orgs/repos. Enter manually."
                 } else {
@@ -226,7 +226,7 @@ struct AddScopeSheet: View {
                     repos = fetchedRepos
                     usePicker = true
                     selectedScope = pickerItems.first ?? ""
-                    log("AddScopeSheet \u{203a} loaded orgs=\(orgs.count) repos=\(repos.count)")
+                    log("AddScopeSheet > loaded orgs=\(orgs.count) repos=\(repos.count)")
                 }
             }
         }
@@ -238,7 +238,8 @@ struct AddScopeSheet: View {
         guard !scope.isEmpty else { return }
         ScopeStore.shared.add(scope)
         RunnerStore.shared.start()
-        log("AddScopeSheet \u{203a} added scope: \(scope)")
+        log("AddScopeSheet > added scope: \(scope)")
         isPresented = false
     }
 }
+// swiftlint:enable missing_docs
