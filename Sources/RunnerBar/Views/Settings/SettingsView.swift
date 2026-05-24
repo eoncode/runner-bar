@@ -27,15 +27,6 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
-// MARK: - URI Constants
-/// Enumerates possible values for SettingsURIs.
-private enum SettingsURIs {
-    /// The privacyPolicy constant.
-    static let privacyPolicy  = "https://dev.eon.st/runnerbar/privacy"
-    /// The termsOfService constant.
-    static let termsOfService = "https://dev.eon.st/runnerbar/terms"
-}
-
 // swiftlint:disable:next type_body_length
 /// A value type representing SettingsView.
 struct SettingsView: View {
@@ -52,6 +43,7 @@ struct SettingsView: View {
     /// The notifications property.
     @ObservedObject private var notifications = NotificationPreferences.shared
     /// The legal property.
+    // periphery:ignore
     @ObservedObject private var legal = LegalPreferences.shared
     /// The localRunnerStore property.
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared

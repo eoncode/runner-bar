@@ -10,12 +10,9 @@ import RunnerBarCore
 struct RingBuffer {
     /// The storage property.
     private var storage: [Double]
-    /// The capacity constant.
-    private let capacity: Int
 
     /// Creates a new instance.
     init(capacity: Int, fill: Double = 0) {
-        self.capacity = capacity
         self.storage = Array(repeating: fill, count: capacity)
     }
 
