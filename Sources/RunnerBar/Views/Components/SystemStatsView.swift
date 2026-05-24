@@ -27,12 +27,7 @@ struct SystemStatsView: View {
         .onDisappear { viewModel.stop() }
     }
 
-    /// Returns a single label/value row: left-aligned monospaced label in secondary colour,
-    /// right-aligned monospaced value, separated by a `Spacer`.
-    /// - Parameters:
-    ///   - label: The metric name (e.g. `"CPU"`, `"Memory Used"`).
-    ///   - value: The pre-formatted value string (e.g. `"41.2%"`, `"7.0 GB"`).
-    /// - Returns: An `HStack` row view.
+    /// Returns a single label/value row.
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
@@ -46,14 +41,15 @@ struct SystemStatsView: View {
 }
 
 // MARK: - SparklineMetricView
-/// A single header metric chip: label + inline sparkline + monospaced value,
-/// all in one horizontal row -- matching the reference compact header design.
+/// A single header metric chip: label + inline sparkline + monospaced value.
 ///
 /// Layout: CPU [▄6▄6▄6] 41.1% MEM [▄6▄6▄6] 6.4/16.0GB
-///          ^      ^        ^    ^      ^        ^
-///        9pt label  40x14pt sparkline  10pt mono value
 ///
-/// Do NOT restore the VStack layout -- it makes the header ~70pt tall.
+/// macOS 26+: .glassEffect chip per metric.
+/// macOS < 26: subtle rbSurface background (original — no background applied before,
+///             kept as lightweight visual anchor).
+///
+/// Do NOT restore the VStack layout — it makes the header ~70pt tall.
 struct SparklineMetricView: View {
     /// The label constant.
     let label: String
@@ -80,6 +76,9 @@ struct SparklineMetricView: View {
                 .foregroundStyle(labelColor)
                 .fixedSize()
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .modifier(SparklineChipBackground())
         .fixedSize()
     }
 
@@ -91,19 +90,40 @@ struct SparklineMetricView: View {
     }
 }
 
+/// Applies the correct chip background for `SparklineMetricView` based on OS version.
+/// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 5))`
+/// macOS < 26: subtle `rbSurface` fill (visual anchor; original had no background).
+private struct SparklineChipBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                )
+        } else {
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.rbSurface)
+                )
+        }
+    }
+}
+
 // MARK: - DiskPillBadge
 /// Compact pill showing disk FREE percentage, placed inline next to the
 /// DISK sparkline in HeaderStatsBar.
 ///
-/// Color thresholds (inverted vs. used-space -- low free = danger):
+/// Color thresholds (inverted vs. used-space — low free = danger):
 ///   freePct < 15 → rbDanger  (red)
 ///   freePct < 40 → rbWarning (orange)
 ///   else         → rbSuccess (green)
 ///
-/// Always renders at its intrinsic size -- never truncates.
+/// macOS 26+: .glassEffect capsule with color tint overlay.
+/// macOS < 26: original tinted background + strokeBorder (unchanged).
 struct DiskPillBadge: View {
-    // Percentage of disk space that is FREE (0-100).
-    /// The freePct constant.
+    /// Percentage of disk space that is FREE (0-100).
     let freePct: Double
 
     /// The body property.
@@ -114,8 +134,7 @@ struct DiskPillBadge: View {
             .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(pillColor.opacity(0.15), in: Capsule())
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            .modifier(DiskPillBackground(color: pillColor))
             .fixedSize()
     }
 
@@ -124,6 +143,24 @@ struct DiskPillBadge: View {
         if freePct < 15 { return .rbDanger }
         if freePct < 40 { return .rbWarning }
         return .rbSuccess
+    }
+}
+
+/// Applies the correct background for `DiskPillBadge` based on OS version.
+/// macOS 26+: `.glassEffect` with color tint overlay.
+/// macOS < 26: original tinted `background` + `strokeBorder` (unchanged).
+private struct DiskPillBackground: ViewModifier {
+    let color: Color
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background(color.opacity(0.15), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(color.opacity(0.15), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: 0.5))
+        }
     }
 }
 
@@ -136,7 +173,7 @@ struct DiskPillBadge: View {
 // before the Spacer, so it stays adjacent to the disk graph.
 //
 // Accepts an existing SystemStatsViewModel so it shares the sampler
-// already running in PopoverMainView -- no second timer is created.
+// already running in PopoverMainView — no second timer is created.
 /// A value type representing HeaderStatsBar.
 struct HeaderStatsBar: View {
     /// The statsVM property.
@@ -194,8 +231,7 @@ struct HeaderStatsBar: View {
 }
 
 // MARK: - BlockBarView (kept for backward compat)
-// Renders a coloured block-bar and percentage label for a given metric.
-// Deprecated -- use SparklineMetricView / HeaderStatsBar instead.
+// Deprecated — use SparklineMetricView / HeaderStatsBar instead.
 // periphery:ignore
 /// A value type representing BlockBarView.
 struct BlockBarView: View {
