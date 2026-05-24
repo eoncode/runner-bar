@@ -92,7 +92,7 @@ extension AppDelegate {
         ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
-                guard let self else { return }
+                guard self != nil else { return }
                 log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore")
                 RunnerStore.shared.start()
             }

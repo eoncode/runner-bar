@@ -71,7 +71,7 @@ final class LocalRunnerStore: ObservableObject {
                 log("LocalRunnerStore > refresh() background — metrics for \(enriched[idx].runnerName): \(String(describing: enriched[idx].metrics))")
             }
 
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async { [weak self, enriched] in
                 guard let self else { return }
                 log("LocalRunnerStore > refresh() main — assigning \(enriched.count) runner(s) to self.runners (was \(self.runners.count))")
                 self.runners = enriched

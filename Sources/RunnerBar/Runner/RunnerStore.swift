@@ -108,7 +108,7 @@ final class RunnerStore {
             repeats: false
         ) { [weak self] _ in
             log("RunnerStore › timer fired")
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 self?.fetch()
             }
         }
