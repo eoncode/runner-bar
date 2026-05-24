@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Install Periphery
-        run: brew install peripheryapp/periphery/periphery
+        run: brew install peripheryapp/periphery/periphery@3.7.4
 
       - name: Run Periphery scan
-        run: periphery scan
+        run: periphery scan --strict
