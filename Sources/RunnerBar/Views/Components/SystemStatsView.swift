@@ -49,7 +49,7 @@ struct SystemStatsView: View {
 /// A single header metric chip: label + inline sparkline + monospaced value,
 /// all in one horizontal row -- matching the reference compact header design.
 ///
-/// Layout: CPU [▄ 6▄ 6▄ 6] 41.1% MEM [▄ 6▄ 6▄ 6] 6.4/16.0GB
+/// Layout: CPU [▄6▄6▄6] 41.1% MEM [▄6▄6▄6] 6.4/16.0GB
 ///          ^      ^        ^    ^      ^        ^
 ///        9pt label  40x14pt sparkline  10pt mono value
 ///
@@ -100,6 +100,9 @@ struct SparklineMetricView: View {
 ///   freePct < 40 → rbWarning (orange)
 ///   else         → rbSuccess (green)
 ///
+/// Background: .ultraThinMaterial (Liquid Glass treatment on macOS 26+);
+/// stroke uses pillColor at opacity 0.45.
+///
 /// Always renders at its intrinsic size -- never truncates.
 struct DiskPillBadge: View {
     // Percentage of disk space that is FREE (0-100).
@@ -114,8 +117,8 @@ struct DiskPillBadge: View {
             .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(pillColor.opacity(0.15), in: Capsule())
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(pillColor.opacity(0.45), lineWidth: 0.5))
             .fixedSize()
     }
 
