@@ -168,13 +168,15 @@ extension Color {
 /// On macOS < 26 values match the original design.
 enum RBShadow {
     /// Drop-shadow opacity for card/row elements.
-    /// 0.35 on macOS < 26; 0.18 on macOS 26+ (glass needs a lighter shadow).
+    /// Returns 0.18 on macOS 26+ (glass panels need a lighter shadow) and 0.35 on earlier OS versions.
     static var cardOpacity: Double {
+        /// Returns 0.18 on macOS 26+; 0.35 on macOS < 26.
         if #available(macOS 26, *) { return 0.18 } else { return 0.35 }
     }
-    /// Drop-shadow blur radius for card/row elements.
-    /// 12 pt on macOS < 26; 18 pt on macOS 26+ (softer, more diffuse).
+    /// Drop-shadow blur radius for card/row elements, in points.
+    /// Returns 18 pt on macOS 26+ (softer, more diffuse) and 12 pt on earlier OS versions.
     static var cardRadius: CGFloat {
+        /// Returns 18 pt on macOS 26+; 12 pt on macOS < 26.
         if #available(macOS 26, *) { return 18 } else { return 12 }
     }
 }
