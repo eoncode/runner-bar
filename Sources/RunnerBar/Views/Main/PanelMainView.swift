@@ -92,7 +92,11 @@ struct PanelMainView: View {
             actionsSectionScrollable
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
-        .glassCard()
+        // Note: .glassCard() intentionally NOT applied at the root level.
+        // Child rows (JobRowCard, PanelLocalRunnerRow, ActionRowView) each
+        // apply .glassCard() individually. Adding it here would stack a second
+        // ultraThinMaterial layer on top of PanelChromeView's surface, causing
+        // double-blur artefacts and unnecessary rendering overhead.
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if panelVisibilityState.isOpen { systemStats.start() }
