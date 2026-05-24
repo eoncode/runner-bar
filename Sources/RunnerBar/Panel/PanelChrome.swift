@@ -112,15 +112,23 @@ final class PanelChromeView: NSView {
         didSet { needsDisplay = true; updateFxMask() }
     }
 
-    /// The visual effect view providing the HUD vibrancy background.
+    /// The visual effect view providing the panel vibrancy background.
+    ///
+    /// On macOS 26+ uses `.glass` which participates fully in Liquid Glass rendering.
+    /// On macOS 13–25 falls back to `.menu` for a clean dark translucent surface.
+    /// ❌ NEVER switch back to .popover — it produces a warm brown tint on dark wallpapers.
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private let vibrancyView: NSVisualEffectView = {
         let view = NSVisualEffectView()
-        // macOS 26: .menu participates in Liquid Glass rendering.
-        // .hudWindow does not auto-upgrade to Liquid Glass — only SwiftUI materials do.
-        // .popover has a warm cream tint in dark mode which is undesirable.
-        // ❌ NEVER switch back to .popover — it produces a warm brown tint on dark wallpapers.
-        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        view.material = .menu
+        if #available(macOS 26, *) {
+            view.material = .glass
+        } else {
+            // .menu gives a clean dark translucent surface on macOS 13–25.
+            // ❌ NEVER switch back to .popover — warm brown tint on dark wallpapers.
+            // ❌ NEVER switch back to .hudWindow — .menu is the correct fallback here.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+            view.material = .menu
+        }
         view.blendingMode = .behindWindow
         view.state = .active
         view.wantsLayer = true
@@ -167,6 +175,10 @@ final class PanelChromeView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        // On macOS 26+, .glass material handles the surface rendering entirely.
+        // The near-zero alpha fill is only needed on older OSes to keep the
+        // CABackdropLayer sampler active without adding visible colour.
+        if #available(macOS 26, *) { return }
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let fill: NSColor = isDark ? NSColor(white: 0.18, alpha: 0.01) : NSColor(white: 0.95, alpha: 0.01)
