@@ -253,7 +253,9 @@ struct AddRunnerSheet: View {
 
         HStack {
             Spacer()
-            Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
+            Button("Cancel") { isPresented = false }
+                .keyboardShortcut(.cancelAction)
+                .disabled(isRegistering)
             // swiftlint:disable:next multiple_closures_with_trailing_closure
             Button(action: { Task { await register() } }) {
                 if isRegistering {

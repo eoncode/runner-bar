@@ -41,7 +41,10 @@ final class SystemStatsViewModel: ObservableObject {
     /// Documentation.
     @Published private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
 
-    /// The timer property — nonisolated(unsafe) so deinit can invalidate it directly.
+    /// The timer property.
+    /// Safety: only mutated on MainActor (start/stop). Captured as a local `let` in
+    /// deinit before dispatching invalidation to the main run loop — Timer.invalidate()
+    /// must be called on the thread that installed the timer (main run loop).
     nonisolated(unsafe) private var timer: Timer?
     /// The prevCPUInfo property.
     /// Safety: accessed only from `sampleCPU()` (always called on MainActor) and
@@ -59,8 +62,10 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     deinit {
-        timer?.invalidate()
-        timer = nil
+        // Timer.invalidate() must be called on the thread that installed the timer (main run loop).
+        // deinit is nonisolated in Swift 6 and may run off-main, so we dispatch explicitly.
+        let t = timer
+        DispatchQueue.main.async { t?.invalidate() }
         deallocPrevCPUInfo()
     }
 
