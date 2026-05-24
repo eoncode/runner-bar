@@ -8,7 +8,6 @@ import RunnerBarCore
 
 /// Manages local GitHub Actions runner discovery, status enrichment, and optimistic mutations.
 @MainActor
-// swiftlint:disable:next type_body_length
 final class LocalRunnerStore: ObservableObject {
     /// The shared singleton instance.
     static let shared = LocalRunnerStore()
@@ -115,4 +114,3 @@ final class LocalRunnerStore: ObservableObject {
         log("LocalRunnerStore > setLifecycleWarning — done for \(runnerName), displayStatus is now: \(displayStatus)")
     }
 }
-// swiftlint:enable type_body_length
