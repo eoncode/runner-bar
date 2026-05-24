@@ -8,7 +8,7 @@ import SwiftUI
 struct LogCopyButton: View {
     // Called on tap. Pass nil or empty string on failure — button still resets to idle.
     /// The fetch constant.
-    let fetch: (@escaping (String?) -> Void) -> Void
+    let fetch: (@escaping @Sendable (String?) -> Void) -> Void
     // When true the button is rendered at reduced opacity and cannot be tapped.
     /// The isDisabled property.
     var isDisabled: Bool = false

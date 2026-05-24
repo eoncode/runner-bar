@@ -41,8 +41,8 @@ final class SystemStatsViewModel: ObservableObject {
     /// Documentation.
     @Published private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
 
-    /// The timer property.
-    private var timer: Timer?
+    /// The timer property — nonisolated(unsafe) so deinit can invalidate it directly.
+    nonisolated(unsafe) private var timer: Timer?
     /// The prevCPUInfo property.
     nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
     /// The prevNumCPUInfo property.
@@ -56,7 +56,8 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     deinit {
-        stop()
+        timer?.invalidate()
+        timer = nil
         deallocPrevCPUInfo()
     }
 
@@ -71,7 +72,7 @@ final class SystemStatsViewModel: ObservableObject {
         }
     }
 
-    /// Invalidates the sampling timer. Call from `onDisappear` or `deinit`.
+    /// Invalidates the sampling timer. Call from `onDisappear`.
     func stop() {
         timer?.invalidate()
         timer = nil

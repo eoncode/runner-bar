@@ -105,7 +105,7 @@ struct StepLogView: View {
                     .help("Open job on GitHub")
                 }
                 LogCopyButton(
-                    fetch: { (completion: @Sendable (String?) -> Void) in
+                    fetch: { completion in
                         let text = logText
                         DispatchQueue.global(qos: .userInitiated).async {
                             completion(text)
