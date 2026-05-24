@@ -14,36 +14,82 @@ struct LogCopyButton: View {
     /// When `true` the button is greyed-out and ignores taps.
     let isDisabled: Bool
 
-    /// Whether the clipboard write has just succeeded (drives the checkmark state).
-    @State private var copied = false
+    /// Tracks the outcome of the last copy attempt.
+    private enum CopyState { case idle, copied, failed }
+    /// Current copy-state; drives label and colour.
+    @State private var copyState: CopyState = .idle
 
     /// The body property.
     var body: some View {
         Button(action: performCopy) {
             HStack(spacing: 3) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                Image(systemName: iconName)
                     .font(.caption)
-                Text(copied ? "Copied" : "Copy log")
+                Text(label)
                     .font(.caption)
             }
-            .foregroundColor(isDisabled ? Color.rbTextTertiary : Color.rbTextSecondary)
+            .foregroundColor(foregroundColor)
             .fixedSize()
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .help(isDisabled ? "Log not yet loaded" : "Copy log to clipboard")
+        .help(helpText)
     }
 
-    /// Performs the copy: calls `fetch`, writes the result to the pasteboard, and
-    /// briefly shows the checkmark state.
+    // MARK: - Derived helpers
+
+    private var iconName: String {
+        switch copyState {
+        case .idle:   return "doc.on.doc"
+        case .copied: return "checkmark"
+        case .failed: return "exclamationmark.circle"
+        }
+    }
+
+    private var label: String {
+        switch copyState {
+        case .idle:   return "Copy log"
+        case .copied: return "Copied"
+        case .failed: return "Failed"
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch copyState {
+        case .idle:   return isDisabled ? Color.rbTextTertiary : Color.rbTextSecondary
+        case .copied: return Color.rbSuccess
+        case .failed: return Color.rbDanger
+        }
+    }
+
+    private var helpText: String {
+        switch copyState {
+        case .idle:   return isDisabled ? "Log not yet loaded" : "Copy log to clipboard"
+        case .copied: return "Copied to clipboard"
+        case .failed: return "Log not available — try again once the log has loaded"
+        }
+    }
+
+    // MARK: - Action
+
+    /// Calls `fetch`, writes the result to the pasteboard on success,
+    /// or briefly shows a red \"Failed\" state if the text is nil/empty.
     private func performCopy() {
         fetch { text in
-            guard let text, !text.isEmpty else { return }
             DispatchQueue.main.async {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                if let text, !text.isEmpty {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copyState = .copied
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        copyState = .idle
+                    }
+                } else {
+                    copyState = .failed
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        copyState = .idle
+                    }
+                }
             }
         }
     }
