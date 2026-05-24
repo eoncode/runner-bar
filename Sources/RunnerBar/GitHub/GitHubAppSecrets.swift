@@ -1,2 +1,4 @@
-// GitHubAppSecrets.swift removed — OAuthService uses Secrets.* instead (Periphery #805)
-// File intentionally emptied; delete via git rm if preferred.
+// GitHubAppSecrets.swift
+// RunnerBar
+// Enum removed — dead code flagged by Periphery (#805).
+// OAuthService uses Secrets.clientID / Secrets.clientSecret directly.
