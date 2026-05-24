@@ -18,7 +18,8 @@ struct RemovalAlertModifier: ViewModifier {
     let onCancel: () -> Void
     /// Called when the user confirms removal.
     let onConfirm: () -> Void
-
+    /// Human-readable description of the runner being removed; shown in the alert.
+    let description: String
     /// Wraps `content` with a runner-removal confirmation alert.
     func body(content: Content) -> some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure

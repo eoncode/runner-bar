@@ -29,35 +29,43 @@ struct CancelButton: View {
     }
 
     // MARK: - Idle button
-    /// The icon + label HStack used as the button's content in the idle state.
-    private var idleLabel: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "xmark.circle")
-                .font(.caption)
-            Text("Cancel")
-                .font(.caption)
-                .fixedSize()
-        }
-        .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-    }
-
     /// The idle-state button, styled with glass on macOS 26+ or plain on earlier OS.
     @ViewBuilder
     private var idleButton: some View {
         if #available(macOS 26, *) {
-            Button(action: startCancel) { idleLabel }
-                .buttonStyle(.plain)
-                .glassEffect(
-                    .regular,
-                    in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                )
-                .disabled(isDisabled)
+            Button(action: startCancel) {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                    Text("Cancel")
+                        .font(.caption)
+                        .fixedSize()
+                }
+                .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(
+                .regular,
+                in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+            )
+            .disabled(isDisabled)
         } else {
-            Button(action: startCancel) { idleLabel }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
+            Button(action: startCancel) {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                    Text("Cancel")
+                        .font(.caption)
+                        .fixedSize()
+                }
+                .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
         }
     }
 

@@ -15,9 +15,19 @@ private let iso8601 = ISO8601DateFormatter()
 /// Extension on `RunnerStore` providing poll-cycle helpers that delegate
 /// to `PollResultBuilder` for independently testable build logic.
 extension RunnerStore {
-    /// Builds the current job-poll state from a previous live-jobs snapshot and
-    /// the completed-jobs cache, fetching fresh jobs for all active scopes.
-    nonisolated func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
+
+    // MARK: - Job state
+
+    /// Builds the current job-poll state by fetching live jobs for all scopes
+    /// and backfilling concluded jobs with step detail from the GitHub API.
+    /// - Parameters:
+    ///   - snapPrev: Previous live-jobs snapshot keyed by job ID.
+    ///   - snapCache: Concluded-jobs cache keyed by job ID.
+    /// - Returns: A `JobPollResult` with updated live and cached jobs.
+    nonisolated func buildJobState(
+        snapPrev: [Int: ActiveJob],
+        snapCache: [Int: ActiveJob]
+    ) -> JobPollResult {
         PollResultBuilder.buildJobState(
             snapPrev: snapPrev,
             snapCache: snapCache,
@@ -28,14 +38,21 @@ extension RunnerStore {
                 }
                 return jobs
             },
-            backfill: { cache in
-                self.backfillSteps(into: &cache)
+            backfill: {
+                self.backfillSteps(into: &$0)
             }
         )
     }
 
-    /// Builds the current group-poll state from previous group and job snapshots,
-    /// fetching fresh groups for all active scopes and enriching jobs from cache.
+    // MARK: - Group state
+
+    /// Builds the current group-poll state by fetching workflow action groups
+    /// for all scopes and enriching their jobs from the concluded-jobs cache.
+    /// - Parameters:
+    ///   - snapPrevGroups: Previous groups snapshot keyed by group ID string.
+    ///   - snapGroupCache: Concluded-groups cache keyed by group ID string.
+    ///   - jobCache: Concluded-jobs cache used to enrich group job data.
+    /// - Returns: A `GroupPollResult` with updated live and cached groups.
     nonisolated func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
@@ -44,29 +61,26 @@ extension RunnerStore {
         PollResultBuilder.buildGroupState(
             snapPrevGroups: snapPrevGroups,
             snapGroupCache: snapGroupCache,
-            fetchGroups: { shaKeyedCache in
+            fetchGroups: {
                 var groups: [WorkflowActionGroup] = []
                 for scope in ScopeStore.shared.scopes {
-                    groups.append(contentsOf: fetchActionGroups(for: scope, cache: shaKeyedCache))
+                    groups.append(contentsOf: fetchActionGroups(for: scope, cache: $0))
                 }
                 return groups
             },
-            scopeFromGroup: { group in
-                self.scopeFromActionGroup(group)
+            scopeFromGroup: { self.scopeFromActionGroup($0) },
+            fireFailureHook: {
+                FailureHookRunner.fireIfNeeded(group: $0, scope: $1, callsite: "pollResultBuilder")
             },
-            fireFailureHook: { group, scope in
-                FailureHookRunner.fireIfNeeded(group: group, scope: scope, callsite: "pollResultBuilder")
-            },
-            enrichJobs: { jobs in
-                self.enrichGroupJobs(jobs, jobCache: jobCache)
-            }
+            enrichJobs: { self.enrichGroupJobs($0, jobCache: jobCache) }
         )
     }
 
-    // MARK: - Backfill (retains ghAPI access via RunnerStore)
+    // MARK: - Backfill
 
     /// Fills in missing step data for concluded jobs in `cache` by re-fetching
     /// each job from the GitHub API when steps are absent or still in-progress.
+    /// - Parameter cache: The concluded-jobs cache to mutate in place.
     nonisolated func backfillSteps(into cache: inout [Int: ActiveJob]) {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
@@ -82,10 +96,12 @@ extension RunnerStore {
         }
     }
 
-    // MARK: - Group helpers (retain RunnerStore context)
+    // MARK: - Group helpers
 
     /// Derives the API scope string ("owner/repo") for a workflow action group.
     /// Uses `group.repo` when non-empty; falls back to parsing `htmlUrl` of the first run.
+    /// - Parameter group: The workflow action group whose scope is needed.
+    /// - Returns: An "owner/repo" scope string, or an empty string if it cannot be derived.
     nonisolated func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
         log("RunnerStore › scopeFromActionGroup — group.repo='\(group.repo)' groupID=\(group.id)")
         if !group.repo.isEmpty {
@@ -105,7 +121,14 @@ extension RunnerStore {
 
     /// Merges enriched job data from `jobCache` into `jobs`, preferring cached entries
     /// that have a conclusion or more steps than the freshly-fetched job.
-    nonisolated func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
+    /// - Parameters:
+    ///   - jobs: Freshly-fetched jobs to potentially replace with cached versions.
+    ///   - jobCache: Concluded-jobs cache keyed by job ID.
+    /// - Returns: Array of jobs with cache-preferred entries substituted where applicable.
+    nonisolated func enrichGroupJobs(
+        _ jobs: [ActiveJob],
+        jobCache: [Int: ActiveJob]
+    ) -> [ActiveJob] {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
             let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
