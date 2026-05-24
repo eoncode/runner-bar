@@ -27,20 +27,4 @@ enum LoginItem {
             log("[RunnerBar] LoginItem.setEnabled(\(enabled)) failed: \(error)")
         }
     }
-
-    /// Toggles launch-at-login on or off.
-    /// Registers the app if currently unregistered; unregisters it if registered.
-    /// Errors are logged to stderr but otherwise swallowed — failure is non-fatal
-    /// since the checkbox UI will simply reflect the unchanged state on next read.
-    static func toggle() {
-        do {
-            if isEnabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            log("[RunnerBar] LoginItem toggle failed: \(error)")
-        }
-    }
 }

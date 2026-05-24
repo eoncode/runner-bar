@@ -3,47 +3,6 @@
 import RunnerBarCore
 import SwiftUI
 
-// MARK: - SystemStatsView
-/// Full-page system stats view shown in the settings panel.
-struct SystemStatsView: View {
-    /// The viewModel property.
-    @StateObject private var viewModel = SystemStatsViewModel()
-
-    /// The body property.
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("System Stats")
-                .font(.headline)
-                .padding(.bottom, 4)
-            statRow(label: "CPU", value: String(format: "%.1f%%", viewModel.stats.cpuPct))
-            statRow(label: "Memory Used", value: String(format: "%.1f GB", viewModel.stats.memUsedGB))
-            statRow(label: "Memory Total", value: String(format: "%.1f GB", viewModel.stats.memTotalGB))
-            statRow(label: "Disk Used", value: String(format: "%.1f GB", viewModel.stats.diskUsedGB))
-            statRow(label: "Disk Total", value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
-        }
-        .padding()
-        .onAppear { viewModel.start() }
-        .onDisappear { viewModel.stop() }
-    }
-
-    /// Returns a single label/value row: left-aligned monospaced label in secondary colour,
-    /// right-aligned monospaced value, separated by a `Spacer`.
-    /// - Parameters:
-    ///   - label: The metric name (e.g. `"CPU"`, `"Memory Used"`).
-    ///   - value: The pre-formatted value string (e.g. `"41.2%"`, `"7.0 GB"`).
-    /// - Returns: An `HStack` row view.
-    private func statRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(DesignTokens.Fonts.monoLabel)
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
-                .font(DesignTokens.Fonts.mono)
-        }
-    }
-}
-
 // MARK: - SparklineMetricView
 /// A single header metric chip: label + inline sparkline + monospaced value,
 /// all in one horizontal row -- matching the reference compact header design.
@@ -189,46 +148,5 @@ struct HeaderStatsBar: View {
         }
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.sm)
-    }
-}
-
-// MARK: - BlockBarView (kept for backward compat)
-// Renders a coloured block-bar and percentage label for a given metric.
-// Deprecated -- use SparklineMetricView / HeaderStatsBar instead.
-/// A value type representing BlockBarView.
-struct BlockBarView: View {
-    /// The label constant.
-    let label: String
-    /// The pct constant.
-    let pct: Double
-
-    /// The body property.
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(label)
-                .font(DesignTokens.Fonts.monoLabel)
-                .foregroundColor(.secondary)
-            GeometryReader { geo in
-                let barWidth = geo.size.width * CGFloat(min(max(pct / 100.0, 0), 1))
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.2))
-                    Rectangle()
-                        .fill(usageColor)
-                        .frame(width: barWidth)
-                }
-                .cornerRadius(2)
-            }
-            .frame(height: 6)
-            Text(String(format: "%.0f%%", pct))
-                .font(DesignTokens.Fonts.mono)
-                .foregroundColor(usageColor)
-                .frame(width: 36, alignment: .trailing)
-        }
-    }
-
-    /// The usageColor property.
-    private var usageColor: Color {
-        DesignTokens.Colors.usage(pct: pct)
     }
 }
