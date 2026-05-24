@@ -5,29 +5,30 @@ import RunnerBarCore
 
 // MARK: - LifecycleResult
 
-/// Enumerates possible values for LifecycleResult.
+/// Enumerates possible outcomes of a runner lifecycle operation.
 enum LifecycleResult {
-    /// The `success` case.
+    /// The operation completed successfully.
     case success
-    /// The `corruptInstall` case.
+    /// The runner install directory is corrupt or incomplete.
     case corruptInstall
-    /// The `failed` case.
+    /// The operation failed with a human-readable reason.
     case failed(String)
 }
 
 // MARK: - RunnerLifecycleService
 
 // swiftlint:disable:next type_body_length
-/// A value type representing RunnerLifecycleService.
+/// Manages start, stop, and remove lifecycle operations for local GitHub Actions runners.
 struct RunnerLifecycleService {
-    /// The shared constant.
+    /// The shared singleton instance.
     static let shared = RunnerLifecycleService()
     /// Private initialiser — use `shared`.
     private init() {}
 
     // MARK: - Start
 
-    /// Performs the start operation.
+    /// Starts the runner service using `svc.sh install` then `svc.sh start`.
+    /// Returns `.corruptInstall` if svc.sh detects a broken install, `.success` on success.
     @discardableResult
     func start(runner: RunnerModel) -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
@@ -80,7 +81,8 @@ struct RunnerLifecycleService {
 
     // MARK: - Stop
 
-    /// Performs the stop operation.
+    /// Stops the runner service using `svc.sh stop` then `svc.sh uninstall`.
+    /// Returns `.corruptInstall` if svc.sh detects a broken install, `.success` on success.
     @discardableResult
     func stop(runner: RunnerModel) -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
@@ -122,7 +124,8 @@ struct RunnerLifecycleService {
 
     // MARK: - Remove
 
-    /// Performs the remove operation.
+    /// Removes the runner: uninstalls the service, calls the GitHub API removal token,
+    /// runs `config.sh remove`, deletes the install directory, and cleans up LaunchAgent plists.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         let ip = runner.installPath ?? "nil"
@@ -181,7 +184,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Corrupt install detection
 
-    /// Performs the isCorruptInstall operation.
+    /// Returns `true` when the script output indicates a corrupt runner install.
     private func isCorruptInstall(output: String) -> Bool {
         let lower = output.lowercased()
         let result = lower.contains("must run from runner root") || lower.contains("install is corrupt")
@@ -191,7 +194,7 @@ struct RunnerLifecycleService {
 
     // MARK: - LaunchAgent plist cleanup
 
-    /// Performs the deleteLaunchAgentPlist operation.
+    /// Removes LaunchAgent plist files matching the runner name from `~/Library/LaunchAgents`.
     private func deleteLaunchAgentPlist(for runnerName: String) {
         let laDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
@@ -208,7 +211,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Scope helper
 
-    /// Performs the scopeFromGitHubUrl operation.
+    /// Extracts a `owner/repo` or `owner` scope string from a GitHub runner registration URL.
     private func scopeFromGitHubUrl(_ urlString: String) -> String {
         guard let url = URL(string: urlString) else { return urlString }
         let parts = url.pathComponents.filter { $0 != "/" }
@@ -219,8 +222,7 @@ struct RunnerLifecycleService {
 
     // MARK: - Script runner
 
-    // Thin wrapper around `ProcessRunner.run` for shell scripts relative to a working directory.
-    /// Performs the runScriptWithOutput operation.
+    /// Runs a shell script relative to `workingDirectory` and returns `(success, output)`.
     private func runScriptWithOutput(
         executableName: String,
         arguments: [String],
