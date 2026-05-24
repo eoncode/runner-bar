@@ -6,6 +6,7 @@ import Foundation
 // MARK: - AppPreferencesStore
 
 /// Persists general app settings to UserDefaults.
+// swiftlint:disable:next missing_docs
 final class AppPreferencesStore: ObservableObject {
     /// Shared singleton instance.
     static let shared = AppPreferencesStore()
