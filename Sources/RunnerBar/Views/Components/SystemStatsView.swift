@@ -23,6 +23,7 @@ struct SystemStatsView: View {
             statRow(label: "Disk Total", value: String(format: "%.1f GB", viewModel.stats.diskTotalGB))
         }
         .padding()
+        .glassCard(cornerRadius: RBRadius.card)
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
     }

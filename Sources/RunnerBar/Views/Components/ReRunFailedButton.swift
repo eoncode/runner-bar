@@ -41,20 +41,7 @@ struct ReRunFailedButton: View {
         Group {
             switch phase {
             case .idle:
-                if !isDisabled {
-                    Button(action: startRerun) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.arrow.clockwise")
-                                .font(.caption)
-                            Text("Re-run failed")
-                                .font(.caption)
-                                .fixedSize()
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Re-run only the failed and cancelled jobs in this workflow run")
-                }
+                if !isDisabled { idleButton }
             case .loading:
                 ButtonPhaseView(phase: .loading)
             case .done:
@@ -62,6 +49,42 @@ struct ReRunFailedButton: View {
             case .failed:
                 ButtonPhaseView(phase: .failed)
             }
+        }
+    }
+
+    // MARK: - Idle button
+    @ViewBuilder private var idleButton: some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer {
+                Button(action: startRerun) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.arrow.clockwise")
+                            .font(.caption)
+                        Text("Re-run failed")
+                            .font(.caption)
+                            .fixedSize()
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous))
+                .help("Re-run only the failed and cancelled jobs in this workflow run")
+            }
+        } else {
+            Button(action: startRerun) {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.arrow.clockwise")
+                        .font(.caption)
+                    Text("Re-run failed")
+                        .font(.caption)
+                        .fixedSize()
+                }
+                .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Re-run only the failed and cancelled jobs in this workflow run")
         }
     }
 

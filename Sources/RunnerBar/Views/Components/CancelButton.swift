@@ -22,6 +22,15 @@ struct CancelButton: View {
             if let phase {
                 ButtonPhaseView(phase: phase)
             } else {
+                idleButton
+            }
+        }
+    }
+
+    // MARK: - Idle button
+    @ViewBuilder private var idleButton: some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer {
                 Button(action: startCancel) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle")
@@ -31,10 +40,26 @@ struct CancelButton: View {
                             .fixedSize()
                     }
                     .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                 }
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous))
             }
+        } else {
+            Button(action: startCancel) {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                    Text("Cancel")
+                        .font(.caption)
+                        .fixedSize()
+                }
+                .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
         }
     }
 

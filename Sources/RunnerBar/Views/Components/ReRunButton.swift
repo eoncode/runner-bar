@@ -30,19 +30,7 @@ struct ReRunButton: View {
         Group {
             switch phase {
             case .idle:
-                if !isDisabled {
-                    Button(action: startRerun) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.caption)
-                            Text("Re-run")
-                                .font(.caption)
-                                .fixedSize()
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                if !isDisabled { idleButton }
             case .loading:
                 ButtonPhaseView(phase: .loading)
             case .done:
@@ -50,6 +38,40 @@ struct ReRunButton: View {
             case .failed:
                 ButtonPhaseView(phase: .failed)
             }
+        }
+    }
+
+    // MARK: - Idle button
+    @ViewBuilder private var idleButton: some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer {
+                Button(action: startRerun) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption)
+                        Text("Re-run")
+                            .font(.caption)
+                            .fixedSize()
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous))
+            }
+        } else {
+            Button(action: startRerun) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
+                    Text("Re-run")
+                        .font(.caption)
+                        .fixedSize()
+                }
+                .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
         }
     }
 
