@@ -68,8 +68,7 @@ extension AppDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())
-            },
-            onLogLoaded: nil
+            }
         ))
     }
 

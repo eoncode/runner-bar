@@ -109,7 +109,6 @@ struct ScopeDetailView: View {
 }
 
 // MARK: - Sections
-/// Extension adding functionality to `ScopeDetailView`.
 extension ScopeDetailView {
     /// Top navigation bar showing a back button and the scope display name.
     var headerBar: some View {
@@ -254,7 +253,6 @@ extension ScopeDetailView {
 }
 
 // MARK: - Failure Hook Rows
-/// Extension adding functionality to `ScopeDetailView`.
 extension ScopeDetailView {
     /// Toggle row enabling or disabling the failure-hook for this scope.
     var hookToggleRow: some View {
@@ -334,4 +332,190 @@ extension ScopeDetailView {
                 .fixedSize()
             if isEditingPath {
                 TextField("~/code/org/repo", text: $localRepoPath)
-  
+                    .font(.system(size: 11, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .foregroundColor(Color.rbTextPrimary)
+                    .frame(maxWidth: .infinity)
+                    .onSubmit { commitLocalPath() }
+                Button("Done") { commitLocalPath() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color.rbAccent)
+            } else {
+                // swiftlint:disable:next multiple_closures_with_trailing_closure
+                Button(action: { startEditingPath() }) {
+                    Text(localRepoPath.isEmpty ? "Tap to set path…" : localRepoPath)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(localRepoPath.isEmpty ? Color.rbTextTertiary : Color.rbTextPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                Button(action: { openFolderPicker() }) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.rbTextSecondary)
+                }
+                .buttonStyle(.plain)
+                .help("Browse for folder…")
+                if !localRepoPath.isEmpty {
+                    Button(action: {
+                        localRepoPath = ""
+                        ScopePreferencesStore.setLocalRepoPath(nil, for: scope)
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.rbTextTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear local path")
+                }
+            }
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, 9)
+    }
+
+    /// Row for configuring the hook command.
+    var commandRow: some View {
+        // swiftlint:disable:next multiple_closures_with_trailing_closure
+        Button(action: { showHookSheet = true }) {
+            HStack(spacing: 8) {
+                Text("Command")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color.rbTextSecondary)
+                    .frame(width: 100, alignment: .leading)
+                    .fixedSize()
+                if let cmd = hookCommand, !cmd.isEmpty {
+                    Text(cmd)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color.rbTextPrimary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text("Tap to set a command…")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color.rbTextTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color.rbTextTertiary)
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Actions
+extension ScopeDetailView {
+    /// Enters inline editing mode for the local-path field.
+    func startEditingPath() {
+        if localRepoPath.isEmpty { localRepoPath = "~/" }
+        isEditingPath = true
+    }
+
+    /// Commits the edited local path to `ScopePreferencesStore`.
+    func commitLocalPath() {
+        isEditingPath = false
+        let trimmed = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = (trimmed == "~/") ? "" : trimmed
+        localRepoPath = cleaned
+        ScopePreferencesStore.setLocalRepoPath(cleaned.isEmpty ? nil : cleaned, for: scope)
+    }
+
+    /// Clears the branch filter for the failure hook.
+    func clearBranchFilter() {
+        hookBranch = nil
+        ScopePreferencesStore.setFailureHookBranch(nil, for: scope)
+    }
+
+    /// Presents an `NSOpenPanel` to let the user pick the local repository folder.
+    func openFolderPicker() {
+        let appDelegate = NSApp.delegate as? AppDelegate
+        appDelegate?.closePanel()
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select"
+        panel.message = "Choose the local folder for \(scope)"
+        if !localRepoPath.isEmpty {
+            let expanded = NSString(string: localRepoPath).expandingTildeInPath
+            panel.directoryURL = URL(fileURLWithPath: expanded)
+        } else {
+            panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                let abs = url.path
+                let tilde = abs.hasPrefix(home) ? "~/" + abs.dropFirst(home.count + 1) : abs
+                localRepoPath = tilde
+                ScopePreferencesStore.setLocalRepoPath(tilde, for: scope)
+            }
+            appDelegate?.openPanel()
+        }
+    }
+
+    /// Removes this scope from `ScopeStore` and navigates back.
+    func removeScope() {
+        ScopePreferencesStore.cleanUp(scope: scope)
+        ScopeStore.shared.remove(id: scopeEntry.id)
+        RunnerStore.shared.start()
+        onBack()
+    }
+}
+
+// MARK: - Sub-view helpers
+extension ScopeDetailView {
+    /// Renders a styled section-header label.
+    func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
+            .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 4)
+    }
+
+    /// Wraps `content` in the standard rounded-card background.
+    func infoCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+        }
+        .background(
+            RoundedRectangle(cornerRadius: RBRadius.small)
+                .fill(Color.rbSurfaceElevated)
+                .overlay(RoundedRectangle(cornerRadius: RBRadius.small)
+                    .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
+        )
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.bottom, 8)
+    }
+
+    /// Renders a label–value row inside an info card.
+    func infoRow(label: String, value: String, copyable: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                .frame(width: 100, alignment: .leading).fixedSize()
+            Text(value)
+                .font(.system(size: 12, design: .monospaced)).foregroundColor(Color.rbTextPrimary)
+                .lineLimit(2).truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if copyable {
+                // swiftlint:disable:next multiple_closures_with_trailing_closure
+                Button(action: {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(value, forType: .string)
+                }) {
+                    Image(systemName: "doc.on.doc").font(.system(size: 10)).foregroundColor(Color.rbTextTertiary)
+                }
+                .buttonStyle(.plain).help("Copy to clipboard")
+            }
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
+    }
+}
