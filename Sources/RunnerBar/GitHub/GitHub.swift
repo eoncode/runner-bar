@@ -145,11 +145,12 @@ func fetchUserRepos() -> [String] {
 
 // MARK: - Step log
 
-// swiftlint:disable:next force_try
 /// Pre-compiled regex that matches ANSI escape sequences for stripping terminal colour codes from log output.
+// swiftlint:disable force_try
 private let _ansiRegex = try! NSRegularExpression(
     pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
 )
+// swiftlint:enable force_try
 
 // URLSession configured to NOT follow redirects.
 // Used for the first leg of fetchStepLog so we can capture the pre-signed S3
