@@ -110,7 +110,9 @@ public func allWorkerMetrics() -> [RunnerMetrics] {
     // Dots are escaped (\.) so pgrep treats them as literal characters,
     // not regex wildcards — avoids false matches like 'RunnerXWorker'.
     let pidsOutput = runProcess(
-        "/usr/bin/pgrep", ["-f", "Runner\\.Worker|Runner\\.Listener"], timeout: 3
+        "/usr/bin/pgrep",
+        ["-f", "Runner\\.Worker|Runner\\.Listener"],
+        timeout: 3
     )
     guard !pidsOutput.isEmpty else {
         log("allWorkerMetrics › no Runner.Worker / Runner.Listener processes found — returning []")

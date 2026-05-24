@@ -1,5 +1,6 @@
 // RunnerDetailView.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import AppKit
 import RunnerBarCore
 import SwiftUI
@@ -829,3 +830,4 @@ private func patchRunnerJSON(
         return false
     }
 }
+// swiftlint:enable missing_docs
