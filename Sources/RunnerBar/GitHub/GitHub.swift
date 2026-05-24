@@ -1,11 +1,12 @@
 // GitHub.swift
 // RunnerBar
-// swiftlint:disable missing_docs
 import Foundation
 import RunnerBarCore
 
 // MARK: - URL helpers
 
+/// Extracts the `owner/repo` scope string from a GitHub HTML URL.
+/// Returns `nil` if the URL is malformed or has fewer than 3 path components.
 func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     guard let urlString,
           let url = URL(string: urlString),
@@ -15,6 +16,8 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     return "\(components[1])/\(components[2])"
 }
 
+/// Extracts the numeric run ID from a GitHub Actions HTML URL.
+/// Scans path components for the segment following `runs`.
 func runIDFromHtmlUrl(_ url: String?) -> Int? {
     guard let url else { return nil }
     let parts = url.components(separatedBy: "/")
@@ -31,6 +34,7 @@ func runIDFromHtmlUrl(_ url: String?) -> Int? {
 /// Shared ISO-8601 date formatter.
 private let iso8601 = ISO8601DateFormatter()
 
+/// Fetches all active (in-progress and queued) jobs for a given scope.
 /// Supports both repo-scoped (`owner/repo`) and org-scoped (`org`) runners.
 func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     guard let scope = Scope.parse(scopeString) else {
@@ -40,6 +44,7 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
+    /// Returns the API endpoint for workflow runs filtered by the given status.
     func runsEndpoint(status: String) -> String {
         "\(scope.apiPrefix)/actions/runs?status=\(status)&per_page=50"
     }
@@ -72,19 +77,24 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
 
 // MARK: - Codable helpers
 
+/// Response envelope for the workflow runs list API endpoint.
 private struct WorkflowRunsResponse: Codable {
+    /// The list of workflow runs returned by the API.
     let workflowRuns: [WorkflowRun]
     enum CodingKeys: String, CodingKey {
         case workflowRuns = "workflow_runs"
     }
 }
 
+/// Minimal workflow run payload — only the run ID is needed for job fetching.
 private struct WorkflowRun: Codable {
+    /// The unique run identifier.
     let id: Int
 }
 
 // MARK: - Runners
 
+/// Fetches all registered runners for the given scope string.
 func fetchRunners(for scopeString: String) -> [Runner] {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRunners › invalid scope: \(scopeString)")
@@ -104,12 +114,15 @@ func fetchRunners(for scopeString: String) -> [Runner] {
     return response.runners
 }
 
+/// Response envelope for the runners list API endpoint.
 private struct RunnersResponse: Codable {
+    /// The list of runners returned by the API.
     let runners: [Runner]
 }
 
 // MARK: - User orgs and repos
 
+/// Returns the login names of all GitHub organisations the authenticated user belongs to.
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     struct Org: Decodable { let login: String }
@@ -117,6 +130,7 @@ func fetchUserOrgs() -> [String] {
     return orgs.map(\.login)
 }
 
+/// Returns the `owner/repo` full names of all repositories visible to the authenticated user.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
     struct Repo: Decodable {
@@ -140,6 +154,8 @@ private let _ansiRegex = try! NSRegularExpression(
 // Lifetime: module-level singleton — allocated once at app start, shared for
 // the process lifetime. URLSession is thread-safe and designed for reuse.
 private class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    /// Intercepts redirect responses and calls the completion handler with `nil`
+    /// to prevent URLSession from following the redirect automatically.
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
@@ -151,7 +167,10 @@ private class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
         completionHandler(nil)
     }
 }
+
+/// Module-level `NoRedirectDelegate` singleton.
 private let noRedirectDelegate = NoRedirectDelegate()
+/// URLSession that never follows HTTP redirects — used for step-1 of `fetchStepLogViaURLSession`.
 private let noRedirectSession = URLSession(
     configuration: .default,
     delegate: noRedirectDelegate,
@@ -252,6 +271,7 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
     return String(data: data, encoding: .utf8)
 }
 
+/// Fetches raw step log text using the `gh` CLI as a fallback.
 private func fetchStepLogViaCLI(endpoint: String) -> String? {
     let (data, _) = runGHProcess(
         arguments: ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"],
@@ -261,6 +281,9 @@ private func fetchStepLogViaCLI(endpoint: String) -> String? {
     return String(data: data, encoding: .utf8)
 }
 
+/// Parses a raw log string into sections delimited by `##[group]` markers
+/// and returns the section matching `stepNumber`.
+/// Falls back to the full log if sections cannot be parsed or the index is out of range.
 private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
     let cleaned = stripAnsi(raw)
     let lines = cleaned.components(separatedBy: "\n")
@@ -293,6 +316,7 @@ private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
     return section.isEmpty ? cleaned : section
 }
 
+/// Strips ANSI escape codes from a raw log string.
 private func stripAnsi(_ input: String) -> String {
     _ansiRegex.stringByReplacingMatches(
         in: input,
@@ -300,4 +324,3 @@ private func stripAnsi(_ input: String) -> String {
         withTemplate: ""
     )
 }
-// swiftlint:enable missing_docs

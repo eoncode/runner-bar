@@ -30,7 +30,8 @@ private struct RateLimitState {
     /// Pending work item that clears `isLimited` when it fires.
     var resetItem: DispatchWorkItem?
 }
-/// The rateLimitLock constant.
+
+/// Lock that serialises all reads and writes to `RateLimitState`.
 private let rateLimitLock = OSAllocatedUnfairLock(initialState: RateLimitState())
 
 /// Thread-safe read/write access to the rate-limited flag.
@@ -225,7 +226,8 @@ private func extractNextURL(from header: String?) -> String? {
 // The CLI fallback is skipped when ghIsRateLimited is true — a rate-limit hit on the
 // URLSession path must not trigger a second outbound request via the CLI on the same cycle.
 
-/// Performs the ghAPI operation.
+/// Calls the GitHub API for a single page, preferring URLSession over the gh CLI.
+/// Falls back to the CLI when no OAuth token is available or URLSession returns nil.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPI(endpoint, timeout: timeout)
@@ -237,7 +239,8 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     return ghAPICLI(endpoint, timeout: timeout)
 }
 
-/// Performs the ghAPIPaginated operation.
+/// Calls the GitHub API for all pages, preferring URLSession over the gh CLI.
+/// Falls back to the CLI when no OAuth token is available or URLSession returns nil.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPIPaginated(endpoint, timeout: timeout)
