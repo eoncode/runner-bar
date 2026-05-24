@@ -37,6 +37,8 @@ import SwiftUI
 //          meta badge backgrounds use Color.rbSurfaceElevated;
 //          log area uses Color.rbSurfaceElevated background;
 //          all .secondary foreground replaced with Color.rbTextSecondary.
+// Phase 7: meta badge backgrounds → .glassCard(cornerRadius: RBRadius.small);
+//          log text area background → .glassCard(cornerRadius: 0).
 /// Shows the raw log text for a single `JobStep`.
 ///
 /// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
@@ -77,7 +79,7 @@ struct StepLogView: View {
     /// The body property.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Top bar ──────────────────────────────────────────────────────────────────
+            // ── Top bar ────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
@@ -118,7 +120,7 @@ struct StepLogView: View {
             .padding(.top, 10)
             .padding(.bottom, 4)
 
-            // ── Step name (large) ───────────────────────────────────────────────────────────────
+            // ── Step name (large) ────────────────────────────────────────────────────────────────────────────────────
             Text(step.name)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
@@ -126,7 +128,7 @@ struct StepLogView: View {
                 .padding(.horizontal, RBSpacing.md)
                 .padding(.bottom, 5)
 
-            // ── Meta rows ────────────────────────────────────────────────────────────────────
+            // ── Meta rows ──────────────────────────────────────────────────────────────────────────────────────
             HStack(spacing: 6) {
                 Image(systemName: "briefcase").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(job.name).font(.caption).foregroundColor(Color.rbTextSecondary)
@@ -136,7 +138,8 @@ struct StepLogView: View {
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(Color.rbTextSecondary)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.rbSurfaceElevated).cornerRadius(RBRadius.small).fixedSize()
+                    .glassCard(cornerRadius: RBRadius.small)
+                    .fixedSize()
             }
             .padding(.horizontal, RBSpacing.md).padding(.bottom, 3)
 
@@ -148,7 +151,8 @@ struct StepLogView: View {
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(Color.rbTextSecondary)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.rbSurfaceElevated).cornerRadius(RBRadius.small).fixedSize()
+                    .glassCard(cornerRadius: RBRadius.small)
+                    .fixedSize()
             }
             .padding(.horizontal, RBSpacing.md).padding(.bottom, 3)
 
@@ -173,7 +177,7 @@ struct StepLogView: View {
 
             Divider()
 
-            // ── Log — INSIDE ScrollView ───────────────────────────────────────────────────────
+            // ── Log — INSIDE ScrollView ──────────────────────────────────────────────────────────────────────────────────
             // ⚠️ .frame(maxHeight:) cap is REQUIRED on this ScrollView (ref #370).
             // ❌ NEVER remove .frame(maxHeight:) from this ScrollView.
             ScrollView(.vertical, showsIndicators: true) {
@@ -190,7 +194,7 @@ struct StepLogView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-                        .background(Color.rbSurfaceElevated)
+                        .glassCard(cornerRadius: 0)
                 } else {
                     Text("Log not available")
                         .font(.caption).foregroundColor(Color.rbTextSecondary)
