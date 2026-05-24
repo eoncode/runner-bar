@@ -58,8 +58,7 @@ struct FailureHookCommandSheet: View {
             footerSection
         }
         .frame(width: 440)
-        .background(Color.rbSurfaceElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .glassCard(cornerRadius: 10)
     }
 }
 
@@ -106,12 +105,7 @@ extension FailureHookCommandSheet {
                             .foregroundColor(Color.rbTextSecondary)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.rbSurfaceElevated)
-                                    .overlay(RoundedRectangle(cornerRadius: 4)
-                                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                            )
+                            .glassCard(cornerRadius: 4)
                     }
                     .buttonStyle(.plain)
                 }
@@ -129,12 +123,7 @@ extension FailureHookCommandSheet {
                 .font(.system(size: 12))
                 .foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.rbSurfaceElevated)
-                        .overlay(RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                )
+                .glassCard(cornerRadius: 6)
             if !commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button(action: { testCommand() }) {
                     Label("Test", systemImage: "play.fill")
@@ -143,12 +132,7 @@ extension FailureHookCommandSheet {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.rbSurfaceElevated)
-                        .overlay(RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 0.5))
-                )
+                .glassCard(cornerRadius: 6)
                 .help("Run this command in Terminal now")
             }
             Button("Save") { save() }

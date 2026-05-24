@@ -240,13 +240,8 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(Color.rbSurfaceElevated)
-                .overlay(RoundedRectangle(cornerRadius: RBRadius.small)
-                    .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                .padding(.horizontal, RBSpacing.xs)
-        )
+        .glassCard(cornerRadius: RBRadius.small)
+        .padding(.horizontal, RBSpacing.xs)
     }
 
     /// Performs the localRunnerRowContent operation.
@@ -445,15 +440,8 @@ struct SettingsView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: RBRadius.small)
-                .fill(entry.isEnabled ? Color.rbSurfaceElevated : Color.rbSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: RBRadius.small)
-                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
-                )
-                .padding(.horizontal, RBSpacing.xs)
-        )
+        .glassCard(cornerRadius: RBRadius.small)
+        .padding(.horizontal, RBSpacing.xs)
         .opacity(entry.isEnabled ? 1.0 : 0.5)
     }
 
