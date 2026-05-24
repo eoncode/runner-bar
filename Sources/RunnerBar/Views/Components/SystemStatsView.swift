@@ -114,8 +114,8 @@ struct DiskPillBadge: View {
             .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(pillColor.opacity(0.15), in: Capsule())
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(pillColor.opacity(0.45), lineWidth: 0.5))
             .fixedSize()
     }
 
