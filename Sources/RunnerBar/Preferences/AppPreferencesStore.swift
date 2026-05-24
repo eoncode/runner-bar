@@ -18,7 +18,7 @@ final class AppPreferencesStore: ObservableObject {
         static let showDimmedRunners  = "settings.showDimmedRunners"
     }
 
-    /// Valid range for the polling interval (seconds).
+    /// Valid range for the polling interval in seconds. Minimum 10 s, maximum 300 s.
     static let pollingRange: ClosedRange<Int> = 10 ... 300
 
     /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
