@@ -1,5 +1,15 @@
 name: UI Tests
 
+# PREREQUISITES — one-time manual setup on the self-hosted runner machine.
+# See docs/TESTING.md for full instructions.
+#
+# 1. Register runner as Launch Agent (needs GUI/WindowServer session):
+#    cd ~/actions-runner && ./svc.sh install && ./svc.sh start
+#
+# 2. Grant Accessibility permission to xcodebuild (cannot be automated on SIP-enabled macOS):
+#    System Settings → Privacy & Security → Accessibility → add xcodebuild
+#    ⚠️ Without this, UI tests will hang indefinitely. Do it once; it persists forever.
+
 on:
   push:
     branches: [main]
@@ -8,9 +18,19 @@ on:
 jobs:
   ui-test:
     runs-on: self-hosted
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          if ! command -v xcodegen &> /dev/null; then
+            brew install xcodegen
+          fi
+          if ! command -v xcpretty &> /dev/null; then
+            gem install xcpretty --no-document
+          fi
 
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
@@ -19,6 +39,7 @@ jobs:
         run: ./build.sh
 
       - name: Run UI Tests
+        timeout-minutes: 5
         run: |
           xcodebuild test \
             -project RunnerBar.xcodeproj \
