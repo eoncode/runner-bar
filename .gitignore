@@ -1,2 +1,5 @@
 *.build
 *dist
+
+# XcodeGen generated — never commit
+RunnerBar.xcodeproj/
