@@ -156,7 +156,9 @@ struct PanelMainView: View {
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
         displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            self.displayTick &+= 1
+            Task { @MainActor in
+                self.displayTick &+= 1
+            }
         }
     }
     /// Invalidates and nils the display-tick timer.
