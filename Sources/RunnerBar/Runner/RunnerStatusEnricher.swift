@@ -54,6 +54,7 @@ struct RunnerStatusEnricher {
 
 // MARK: - Private helpers
 
+/// Private helpers for `RunnerStatusEnricher`.
 private extension RunnerStatusEnricher {
 
     /// Fetches the **complete** runner list for a scope URL via `ghAPI`, paginating

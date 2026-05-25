@@ -56,6 +56,7 @@ final class AppPreferencesStore: ObservableObject {
 
 // MARK: - Comparable+clamped
 
+/// Clamping helper used by preference bounds validation.
 private extension Comparable {
     /// Clamps `self` to `range`, returning `range.lowerBound` if below or `range.upperBound` if above.
     func clamped(to range: ClosedRange<Self>) -> Self {

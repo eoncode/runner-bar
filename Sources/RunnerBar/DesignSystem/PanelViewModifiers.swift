@@ -151,6 +151,7 @@ struct CardRowModifier: ViewModifier {
     }
 }
 
+/// Convenience extensions for applying card-row and glass panel modifiers.
 extension View {
     /// Applies `CardRowModifier` to this view.
     func cardRow(elevated: Bool = false) -> some View {

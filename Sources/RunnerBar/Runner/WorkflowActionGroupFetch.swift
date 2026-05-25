@@ -49,14 +49,29 @@ private struct RunPayload: Codable {
     let pullRequests: [PRRef]?
     /// Maps Swift property names to their snake_case JSON keys.
     enum CodingKeys: String, CodingKey {
-        case id, name, status, conclusion
+        /// The unique run identifier.
+        case id
+        /// The workflow name.
+        case name
+        /// The current run status.
+        case status
+        /// The run conclusion, if completed.
+        case conclusion
+        /// The branch the run was triggered on.
         case headBranch   = "head_branch"
+        /// The commit SHA that triggered the run.
         case headSha      = "head_sha"
+        /// Human-readable title shown in the GitHub UI.
         case displayTitle = "display_title"
+        /// ISO-8601 timestamp when the run was created.
         case createdAt    = "created_at"
+        /// ISO-8601 timestamp when the run was last updated.
         case updatedAt    = "updated_at"
+        /// URL to the run detail page on github.com.
         case htmlUrl      = "html_url"
+        /// The head commit associated with this run.
         case headCommit   = "head_commit"
+        /// Pull requests associated with this run, if any.
         case pullRequests = "pull_requests"
     }
 }

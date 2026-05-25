@@ -185,6 +185,7 @@ private struct JobContextMenuModifier: ViewModifier {
 }
 
 // MARK: - View extensions
+/// Convenience extensions for attaching workflow and job context menus.
 extension View {
     /// Attaches a workflow-level right-click context menu to this view.
     func workflowContextMenu(group: WorkflowActionGroup) -> some View {
