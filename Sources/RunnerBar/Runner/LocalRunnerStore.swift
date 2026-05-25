@@ -38,13 +38,14 @@ final class LocalRunnerStore: ObservableObject {
         }
         isScanning = true
         log("LocalRunnerStore > refresh() — isScanning set to true, dispatching background scan")
-        // Capture enricher before entering the Sendable background closure so the
+        // Capture scanner and enricher before entering the Sendable background closure so the
         // compiler does not see a main-actor-isolated property reference inside async.
+        let scanner = self.scanner
         let enricher = self.enricher
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, scanner] in
             guard let self else { return }
             log("LocalRunnerStore > refresh() background — starting scanner.scan()")
-            let scanned = self.scanner.scan()
+            let scanned = scanner.scan()
             let summary = scanned.map { "\($0.runnerName)(isRunning=\($0.isRunning))" }.joined(separator: ", ")
             log("LocalRunnerStore > refresh() background — scanner.scan() returned \(scanned.count) runner(s): [\(summary)]")
 

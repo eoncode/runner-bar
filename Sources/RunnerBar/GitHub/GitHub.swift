@@ -1,6 +1,7 @@
 // GitHub.swift
 // RunnerBar
 import Foundation
+import os
 import RunnerBarCore
 
 // MARK: - URL helpers
@@ -137,7 +138,7 @@ func fetchUserRepos() -> [String] {
 
 /// Compiled regular expression for stripping ANSI escape sequences from log output.
 /// Safety: NSRegularExpression is immutable after initialisation — concurrent reads are safe.
-nonisolated(unsafe) private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
+private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
     pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
 )
 
@@ -166,10 +167,10 @@ private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
 
 /// Module-level `NoRedirectDelegate` singleton.
 /// Safety: allocated once at module load; only ever passed to URLSession(configuration:delegate:delegateQueue:).
-nonisolated(unsafe) private let noRedirectDelegate = NoRedirectDelegate()
+private let noRedirectDelegate = NoRedirectDelegate()
 /// URLSession that never follows HTTP redirects — used for step-1 of `fetchStepLogViaURLSession`.
 /// Safety: URLSession is thread-safe by design; concurrent use is explicitly supported by Apple.
-nonisolated(unsafe) private let noRedirectSession = URLSession(
+private let noRedirectSession = URLSession(
     configuration: .default,
     delegate: noRedirectDelegate,
     delegateQueue: nil
@@ -220,7 +221,7 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
         return nil
     }
 
-    var redirectURL: URL?
+    let redirectURL = OSAllocatedUnfairLock<URL?>(initialState: nil)
     var step1Request = URLRequest(url: url, timeoutInterval: 20)
     step1Request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     step1Request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -236,19 +237,19 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
             log("fetchStepLogViaURLSession › step1 status=\(http.statusCode)")
             if let location = http.value(forHTTPHeaderField: "Location"),
                let locURL = URL(string: location) {
-                redirectURL = locURL
+                redirectURL.withLock { $0 = locURL }
             }
         }
     }.resume()
     sem1.wait()
 
-    guard let s3URL = redirectURL else {
+    guard let s3URL = redirectURL.withLock({ $0 }) else {
         log("fetchStepLogViaURLSession › no Location header, returning nil for CLI fallback")
         return nil
     }
 
     let sem2 = DispatchSemaphore(value: 0) // TODO: #777 async/await
-    var logData: Data?
+    let logData = OSAllocatedUnfairLock<Data?>(initialState: nil)
     var plainRequest = URLRequest(url: s3URL, timeoutInterval: 30)
     plainRequest.setValue("text/plain", forHTTPHeaderField: "Accept")
     URLSession.shared.dataTask(with: plainRequest) { data, response, error in
@@ -261,11 +262,11 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
             log("fetchStepLogViaURLSession › step2 status=\(http.statusCode)")
             guard (200..<300).contains(http.statusCode) else { return }
         }
-        logData = data
+        logData.withLock { $0 = data }
     }.resume()
     sem2.wait()
 
-    guard let data = logData else { return nil }
+    guard let data = logData.withLock({ $0 }) else { return nil }
     return String(data: data, encoding: .utf8)
 }
 

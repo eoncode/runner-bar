@@ -25,7 +25,7 @@ import Foundation
 ///
 /// 3. **Live service check** — `launchctl list` filtered in-process for `actions.runner`
 ///    Flags which runners currently have an active launchd service.
-public struct LocalRunnerScanner {
+public struct LocalRunnerScanner: Sendable {
 
     // MARK: - .runner JSON schema
 
