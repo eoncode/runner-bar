@@ -194,6 +194,14 @@ final class PanelChromeView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        // fix(#891): On macOS 26+, NSGlassEffectView owns all visual rendering.
+        // The legacy grey fill (white: 0.18, alpha: 0.01) is imperceptible on
+        // macOS < 26 but composites visibly over NSGlassEffectView on cold open
+        // before the backdrop sampler has acquired real desktop content.
+        // On Settings → Main navigation the wallpaper bleed-through overpowers
+        // the fill, masking the bug. Skip entirely on macOS 26+.
+        // ❌ NEVER remove this guard — restoring the fill on 26+ reintroduces the grey tint.
+        guard #unavailable(macOS 26) else { return }
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let fill: NSColor = isDark ? NSColor(white: 0.18, alpha: 0.01) : NSColor(white: 0.95, alpha: 0.01)
