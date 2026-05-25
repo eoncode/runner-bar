@@ -2,11 +2,11 @@
 // RunnerBar
 import RunnerBarCore
 import SwiftUI
-// REGRESSION GUARD — DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
+// REGRESSION GUARD -- DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
 //
 // ARCHITECTURE: NSPanel + sizingOptions=.preferredContentSize
 // Dynamic height is achieved via KVO on NSHostingController.preferredContentSize.
-// AppDelegate observes it and calls NSPanel.setFrame() — zero jump (no anchor).
+// AppDelegate observes it and calls NSPanel.setFrame() -- zero jump (no anchor).
 // SwiftUI views report their natural ideal size. No height caps needed here.
 //
 // RULE 1: Root VStack uses .frame(minWidth: 280, maxWidth: 900, alignment: .top)
@@ -22,22 +22,28 @@ import SwiftUI
 // (content fits, no scroll indicator) and activates only when expanded rows
 // would push content off screen.
 // ❌ NEVER remove the ScrollView from actionsSection.
-// ❌ NEVER use a GeometryReader or preference key for this cap — it freezes
+// ❌ NEVER use a GeometryReader or preference key for this cap -- it freezes
 // at the initial layout height and prevents scrolling to expanded content.
 // ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
 //
-// RULE 6: systemStats MUST run only while the panel is open — stop it when the panel closes.
+// RULE 6: systemStats MUST run only while the panel is open -- stop it when the panel closes.
 // RULE 6b: systemStats must START when the panel opens so charts are live while the user views them.
 //
 // RULE 7: RunnerStore self-schedules via its own adaptive timer after each fetch().
 // ❌ NEVER add a second repeating timer in PanelMainView that calls
-// store.reload() — it doubles API calls and drains GitHub quota.
+// store.reload() -- it doubles API calls and drains GitHub quota.
 // LocalRunnerStore.refresh() (local-only, no API) may be called from onAppear.
 //
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 //
-// RULE 10: ❌ NEVER wrap ActionRowView or PanelLocalRunnerRow cards in GlassEffectContainer.
+// RULE 10: .scrollContentBackground(.hidden) MUST stay on the ScrollView in actionsSectionScrollable.
+// On macOS 26 ScrollView paints an opaque grey system background by default, which blocks
+// NSGlassEffectView in PanelChromeView. .scrollContentBackground(.hidden) removes that fill.
+// ❌ NEVER remove .scrollContentBackground(.hidden) -- main panel goes grey without it.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+//
+// RULE 11: ❌ NEVER wrap ActionRowView or PanelLocalRunnerRow cards in GlassEffectContainer.
 // GlassEffectContainer merges children into a unified glass surface that falls back
 // to flat grey on cold open before the compositor has sampled real desktop content.
 // Each card applies .glassEffect() individually (via ActionRowBackground / runnerCard)
@@ -114,15 +120,22 @@ struct PanelMainView: View {
     }
     // MARK: - Scrollable actions section (RULE 5)
     /// Wraps `actionsSectionContent` in a `ScrollView` capped at `screenScrollMaxHeight`.
+    ///
+    /// .scrollContentBackground(.hidden) is REQUIRED (RULE 10).
+    /// On macOS 26 ScrollView paints an opaque grey system background that blocks
+    /// NSGlassEffectView. .hidden removes that fill so the glass shows through.
+    /// ❌ NEVER remove .scrollContentBackground(.hidden).
+    /// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     private var actionsSectionScrollable: some View {
         ScrollView(.vertical, showsIndicators: true) {
             actionsSectionContent
         }
+        .scrollContentBackground(.hidden)
         .frame(maxHeight: screenScrollMaxHeight)
     }
     /// Vertical stack of the Workflows section header, `ActionRowView` items, and the load-more button.
     /// Each ActionRowView applies .glassEffect() individually via ActionRowBackground.
-    /// ❌ NEVER wrap in GlassEffectContainer — see RULE 10 above.
+    /// ❌ NEVER wrap in GlassEffectContainer -- see RULE 11 above.
     private var actionsSectionContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeaderLabel(title: "Workflows")
@@ -151,7 +164,7 @@ struct PanelMainView: View {
             Button(
                 action: { visibleCount += nextBatch },
                 label: {
-                    Text("Load \(nextBatch) more workflows\u{2026}")
+                    Text("Load \(nextBatch) more workflows...")
                         .font(.caption).foregroundColor(.secondary)
                 }
             )
@@ -159,7 +172,7 @@ struct PanelMainView: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
         }
     }
-    // MARK: - Display tick timer (RULE 9 — ungated, 1s)
+    // MARK: - Display tick timer (RULE 9 -- ungated, 1s)
     /// Schedules a 1-second repeating timer that increments `displayTick`, driving elapsed-time labels.
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
@@ -173,14 +186,13 @@ struct PanelMainView: View {
         displayTickTimer = nil
     }
     // MARK: - Rate limit banner (#778)
-    /// Warning strip shown below the header when GitHub's rate limit has been hit.
     private var rateLimitBanner: some View {
         _ = displayTick // swiftlint:disable:this redundant_discardable_let
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
             let remaining = max(0, resetDate.timeIntervalSinceNow)
             if remaining < 1 {
-                countdownLabel = "resuming\u{2026}"
+                countdownLabel = "resuming..."
             } else if remaining < 60 {
                 countdownLabel = "resets in \(Int(remaining))s"
             } else {
@@ -194,13 +206,12 @@ struct PanelMainView: View {
         return HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.yellow).font(.caption)
-            Text("GitHub rate limit reached — \(countdownLabel)")
+            Text("GitHub rate limit reached -- \(countdownLabel)")
                 .font(.caption).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
     // MARK: - Helpers
-    /// Opens the GitHub personal-access-token documentation page in the default browser.
     private func signInWithGitHub() {
         let urlString = "\(GitHubConstants.base)/en/authentication/"
             + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"

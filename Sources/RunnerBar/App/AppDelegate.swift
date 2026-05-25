@@ -6,8 +6,8 @@ import SwiftUI
 
 // MARK: - NSPanel architecture note
 //
-// ⚠️ NSPanel (Pattern 2 from #377) is used instead of NSPopover to prevent
-// lateral panel jumps on content-size changes. See ARCHITECTURE.md §Panel Lifecycle.
+// WARNING: NSPanel (Pattern 2 from #377) is used instead of NSPopover to prevent
+// lateral panel jumps on content-size changes. See ARCHITECTURE.md
 //
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
@@ -17,10 +17,10 @@ import SwiftUI
 //      panelTopY = statusItemRect.minY - gap       <- locked at open time
 //      y (frame origin) = max(visibleFrame.minY, panelTopY - totalH) <- clamped
 //              ❌ NEVER re-derive panelTopY from statusItemRect inside
-//                 resizeAndRepositionPanel() — see ARCHITECTURE.md §Panel Lifecycle.
+//                 resizeAndRepositionPanel() -- see ARCHITECTURE.md
 //      panelH  = clampedContentH + arrowHeight
 // 3. arrowX = statusItemRect.midX - panel.frame.minX
-//    ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local.
+//    ❌ NEVER use convertToScreen(button.frame) -- button.frame is button-local.
 // 4. sizingOptions = .preferredContentSize: KVO on preferredContentSize
 //    -> resizeAndRepositionPanel() -> setFrame(). Zero jump.
 // 5. Dismiss: NSEvent global monitor + NSWorkspace app-switch notification.
@@ -29,7 +29,7 @@ import SwiftUI
 //   arrowHeight = 9pt, arrowWidth = 30pt, cornerRadius = 10pt
 //
 // WIDTH: Content-driven via preferredContentSize.width.
-// SwiftUI views declare their own minWidth or idealWidth — NO shared fixed width.
+// SwiftUI views declare their own minWidth or idealWidth -- NO shared fixed width.
 // resizeAndRepositionPanel() clamps to [minWidth..maxWidth] and re-centres
 // the panel under the status button.
 //
@@ -41,27 +41,28 @@ import SwiftUI
 //
 // PANELVISIBILITYSTATE:
 // panelVisibilityState.isOpen mirrors panelIsOpen. Injected via wrapEnv().
-// ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
-// ❌ NEVER pass as a plain Bool prop to PanelMainView.
-// See ARCHITECTURE.md §panelVisibilityState.
+// ❌ NEVER remove. ❌ NEVER remove from wrapEnv(). ❌ NEVER pass as plain Bool to PanelMainView.
+// See ARCHITECTURE.md
 //
-// HOSTING VIEW LIFECYCLE (fix #891):
-// The hosting controller view is added to chromeView lazily in openPanel(),
-// AFTER panel.orderFront(nil). This ensures viewDidMoveToWindow fires in a
-// live on-screen window so NSGlassEffectView samples real desktop pixels.
-// ❌ NEVER add the hosting view in setupPanel() — fires off-screen, samples grey.
-// ❌ NEVER add the hosting view before orderFront in openPanel().
+// KEY-WINDOW GLASS (#850):
+// NSGlassEffectView has two variants: dark (key-window) and grey (background-window).
+// .appearance = .darkAqua controls colour scheme only, NOT the glass variant.
+// makeKeyAndOrderFront makes the panel key immediately so dark glass renders on
+// the very first compositor frame. .nonactivatingPanel ensures the app never
+// steals focus or activates.
+// ❌ NEVER revert to orderFront(nil) -- cold-open glass goes grey.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 //
 // RULE 10: ❌ NEVER wrap ActionRowView or PanelLocalRunnerRow cards in GlassEffectContainer.
 // See PanelMainView.swift for full explanation.
 
 // NOTE: KeyablePanel is defined in KeyablePanel.swift (internal access level).
-// It must NOT be private or fileprivate — AppDelegate+Navigation.swift accesses
-// `panel: KeyablePanel?` from a separate file. See ARCHITECTURE.md §KeyablePanel.
+// It must NOT be private or fileprivate -- AppDelegate+Navigation.swift accesses
+// `panel: KeyablePanel?` from a separate file.
 
 // MARK: - AppDelegate
 
-// ⚠️ @MainActor isolation — see ARCHITECTURE.md §@MainActor isolation.
+// WARNING: @MainActor isolation -- see ARCHITECTURE.md
 // ❌ NEVER remove @MainActor from this class declaration.
 // ❌ NEVER remove `nonisolated` from enrichStepsIfNeeded.
 /// Manages AppDelegate state and behaviour.
@@ -72,22 +73,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // requires read/write access to all of them. Do not widen beyond `internal`.
 
     /// The statusItem property.
-    var statusItem: NSStatusItem?           // internal: required for AppDelegate+Navigation
+    var statusItem: NSStatusItem?
     /// The panel property.
-    var panel: KeyablePanel?               // internal: required for AppDelegate+Navigation
+    var panel: KeyablePanel?
     /// The chrome property.
-    var chrome: PanelChromeView?           // internal: required for AppDelegate+Navigation
+    var chrome: PanelChromeView?
     /// The hostingController property.
-    var hostingController: NSHostingController<AnyView>? // internal: required for AppDelegate+Navigation
+    var hostingController: NSHostingController<AnyView>?
     /// The observable constant.
-    let observable = RunnerViewModel()      // internal: required for AppDelegate+Navigation
+    let observable = RunnerViewModel()
     /// The savedNavState property.
-    var savedNavState: NavState?           // internal: required for AppDelegate+Navigation
+    var savedNavState: NavState?
     /// The panelIsOpen property.
-    var panelIsOpen = false                // internal: required for AppDelegate+Navigation
+    var panelIsOpen = false
 
     /// The eventMonitor property.
-    var eventMonitor: Any?                 // internal: required for AppDelegate+Navigation
+    var eventMonitor: Any?
     /// The sizeObservation property.
     var sizeObservation: NSKeyValueObservation?
     /// The workspaceObserver property.
@@ -96,30 +97,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var cancellables = Set<AnyCancellable>()
 
     /// Top anchor (screen coords) captured once in openPanel().
-    /// ❌ NEVER re-derive inside resizeAndRepositionPanel() — see ARCHITECTURE.md §Panel Lifecycle.
-    var panelTopY: CGFloat?                // internal: required for AppDelegate+Navigation
+    /// ❌ NEVER re-derive inside resizeAndRepositionPanel().
+    var panelTopY: CGFloat?
 
-    // Regression guard — see ARCHITECTURE.md §panelVisibilityState.
+    // Regression guard -- see ARCHITECTURE.md
     // ❌ NEVER remove. ❌ NEVER remove from wrapEnv(). ❌ NEVER pass as plain Bool to PanelMainView.
     /// The panelVisibilityState constant.
-    let panelVisibilityState = PanelVisibilityState() // internal: required for AppDelegate+Navigation
+    let panelVisibilityState = PanelVisibilityState()
 
     /// Lower bound for panel content width (clamp floor in resizeAndRepositionPanel).
     static let minWidth: CGFloat = 280
 
     /// The screen the status item lives on.
-    var statusItemScreen: NSScreen {       // internal: required for AppDelegate+Navigation
+    var statusItemScreen: NSScreen {
         statusItem?.button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
     /// The maxWidth property.
-    var maxWidth: CGFloat {                // internal: required for AppDelegate+Navigation
+    var maxWidth: CGFloat {
         let screenMax = statusItemScreen.visibleFrame.width * 0.9
         return min(900, screenMax)
     }
 
     /// The maxHeight property.
-    var maxHeight: CGFloat {               // internal: required for AppDelegate+Navigation
+    var maxHeight: CGFloat {
         statusItemScreen.visibleFrame.height * 0.85
     }
 
@@ -131,10 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Environment injection
 
-    // Regression guard — see ARCHITECTURE.md §panelVisibilityState and §wrapEnv.
+    // Regression guard -- see ARCHITECTURE.md
     // ❌ NEVER bypass. ❌ NEVER remove .environmentObject(panelVisibilityState).
     // swiftlint:disable:next missing_docs
-    func wrapEnv<V: View>(_ view: V) -> AnyView { // internal: required for AppDelegate+Navigation
+    func wrapEnv<V: View>(_ view: V) -> AnyView {
         AnyView(view.environmentObject(panelVisibilityState))
     }
 
@@ -149,7 +150,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - OAuth URL callback (#326)
     //
     // Handles the runnerbar://oauth/callback?code=... redirect from GitHub.
-    // Searches the full urls array — see ARCHITECTURE.md §OAuth URL handling.
 
     /// Performs the application operation.
     func application(_ _: NSApplication, open urls: [URL]) {
@@ -160,10 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel resize
 
-    // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
+    // Regression guard.
     // ❌ NEVER re-derive panelTopY here. ❌ NEVER call from a background thread.
     // swiftlint:disable:next missing_docs
-    func resizeAndRepositionPanel() { // internal: required for AppDelegate+Navigation
+    func resizeAndRepositionPanel() {
         guard panelIsOpen,
               let panel,
               let chrome,
@@ -190,10 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Navigation
 
-    // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
+    // Regression guard.
     // ❌ NEVER remove the resizeAndRepositionPanel() call from this method.
     // swiftlint:disable:next missing_docs
-    func navigate(to view: AnyView) { // internal: required for AppDelegate+Navigation
+    func navigate(to view: AnyView) {
         hostingController?.rootView = view
         resizeAndRepositionPanel()
     }
@@ -203,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // See KeyablePanel.swift for the full explanation.
     // ❌ NEVER call this for views that have no text input (main, step log).
     /// Performs the makeKeyForTextInput operation.
-    func makeKeyForTextInput() { // internal: required for AppDelegate+Navigation
+    func makeKeyForTextInput() {
         panel?.wantsKey = true
         panel?.makeKeyAndOrderFront(nil)
     }
@@ -220,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelVisibilityState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
-        // Nav-state persistence — see ARCHITECTURE.md §Nav-state persistence.
+        // Nav-state persistence.
         // ❌ NEVER replace hostingController?.rootView = mainView() with a no-op stub.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -282,18 +282,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         chrome?.arrowX = statusItemRect.midX - posX
-        panel.orderFront(nil)
 
-        // fix(#891): Add hosting view AFTER orderFront so viewDidMoveToWindow fires
-        // in a live on-screen window. NSGlassEffectView then samples real desktop
-        // pixels on the very first frame instead of grey off-screen emptiness.
-        // addSubview is safe to call every open — if the view already has this
-        // parent it is a no-op.
-        // ❌ NEVER move this before orderFront.
-        // ❌ NEVER move this back into setupPanel().
-        if let hc = hostingController, let chromeView = chrome {
-            chromeView.addSubview(hc.view)
-        }
+        // KEY-WINDOW GLASS (#850):
+        // NSGlassEffectView has two variants: dark (key-window) and grey (background-window).
+        // .appearance = .darkAqua controls colour scheme only, NOT the glass variant.
+        // makeKeyAndOrderFront makes the panel key immediately so dark glass renders on
+        // the very first compositor frame. .nonactivatingPanel ensures the app never
+        // steals focus or activates.
+        // ❌ NEVER revert to orderFront(nil) -- cold-open glass goes grey.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        panel.wantsKey = true
+        panel.makeKeyAndOrderFront(nil)
 
         resizeAndRepositionPanel()
 
