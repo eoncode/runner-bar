@@ -22,15 +22,14 @@ jobs:
 
       - name: Install Swift 6.2 toolchain
         run: |
-          brew install swiftenv || true
-          export SWIFTENV_ROOT="$HOME/.swiftenv"
-          export PATH="$SWIFTENV_ROOT/bin:$SWIFTENV_ROOT/shims:$PATH"
           SWIFT_URL="https://download.swift.org/swift-6.2-release/xcode/swift-6.2-RELEASE/swift-6.2-RELEASE-osx.pkg"
           curl -L -o /tmp/swift.pkg "$SWIFT_URL"
           sudo installer -pkg /tmp/swift.pkg -target /
-          TOOLCHAIN=$(find /Library/Developer/Toolchains -name '*.xctoolchain' -maxdepth 1 | head -1)
-          echo "TOOLCHAINS=$(plutil -extract CFBundleIdentifier raw "$TOOLCHAIN/Info.plist")" >> "$GITHUB_ENV"
-          echo "$(dirname $(xcrun --find swift))" >> "$GITHUB_PATH"
+          TOOLCHAIN=$(find /Library/Developer/Toolchains -name '*.xctoolchain' -maxdepth 1 | sort -r | head -1)
+          TOOLCHAIN_ID=$(plutil -extract CFBundleIdentifier raw "$TOOLCHAIN/Info.plist")
+          SWIFT_BIN="$TOOLCHAIN/usr/bin"
+          echo "TOOLCHAINS=$TOOLCHAIN_ID" >> "$GITHUB_ENV"
+          echo "$SWIFT_BIN" >> "$GITHUB_PATH"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -39,7 +38,10 @@ jobs:
           build-mode: manual
 
       - name: Build
-        run: swift build
+        run: |
+          TOOLCHAIN=$(find /Library/Developer/Toolchains -name '*.xctoolchain' -maxdepth 1 | sort -r | head -1)
+          export PATH="$TOOLCHAIN/usr/bin:$PATH"
+          swift build
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
