@@ -13,14 +13,15 @@ import SwiftUI
 // ❌ NEVER inline this back into AppDelegate.swift.
 // ❌ NEVER call setupPanel() more than once.
 //
-// HOSTING VIEW LIFECYCLE (fix #891):
-// The hosting controller view is NOT added to chromeView in setupPanel().
-// It is added lazily in openPanel(), AFTER panel.orderFront(nil), so that
-// viewDidMoveToWindow fires in a live on-screen window with real desktop
-// pixels behind it. NSGlassEffectView then gets a valid compositor sample
-// on the very first frame instead of sampling grey off-screen emptiness.
-// ❌ NEVER move chromeView.addSubview(hostingController.view) back into setupPanel().
-// ❌ NEVER add the hosting view before orderFront.
+// APPEARANCE CONTRACT:
+// newPanel.appearance is pinned to .darkAqua.
+// NSGlassEffectView on macOS 26 adjusts its visual weight based on key/main
+// window state — without a fixed appearance the glass flips between light and
+// dark variants whenever the user clicks inside the panel.
+// Pinning to .darkAqua gives a stable dark glass look regardless of activation.
+// ❌ NEVER remove the appearance assignment.
+// ❌ NEVER set appearance to nil — that re-enables the state-driven toggling.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
 /// AppDelegate extension that builds the NSPanel, embeds the SwiftUI hosting controller,
 /// wires KVO on `preferredContentSize`, and starts all Combine subscriptions.
@@ -28,9 +29,8 @@ extension AppDelegate {
 
     // MARK: Panel construction
 
-    /// Builds the NSPanel and PanelChromeView. Does NOT add the hosting view yet —
-    /// that happens lazily in openPanel() after orderFront so NSGlassEffectView
-    /// gets a valid compositor sample on first show.
+    /// Builds the NSPanel, embeds the SwiftUI hosting controller inside
+    /// PanelChromeView, wires KVO, and starts all Combine subscriptions.
     func setupPanel() {
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
@@ -43,7 +43,7 @@ extension AppDelegate {
         let chromeView = PanelChromeView(
             frame: NSRect(x: 0, y: 0, width: initW, height: 300 + arrowHeight)
         )
-        // ❌ NEVER add controller.view here — see HOSTING VIEW LIFECYCLE note above.
+        chromeView.addSubview(controller.view)
         chrome = chromeView
 
         let newPanel = KeyablePanel(
@@ -59,6 +59,11 @@ extension AppDelegate {
         newPanel.level = .popUpMenu
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.animationBehavior = .none
+        // Pin appearance to .darkAqua so NSGlassEffectView renders the dark glass
+        // variant consistently, regardless of key/main window state.
+        // ❌ NEVER remove or set to nil — causes light/dark toggling on click.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        newPanel.appearance = NSAppearance(named: .darkAqua)
         panel = newPanel
 
         setupKVO(controller: controller)
