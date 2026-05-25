@@ -47,6 +47,10 @@ extension AppDelegate {
         newPanel.level = .popUpMenu
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.animationBehavior = .none
+        // Pin appearance to darkAqua so the glass chrome never toggles on click.
+        // ❌ NEVER remove or set to nil — causes light/dark toggling on click.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        newPanel.appearance = NSAppearance(named: .darkAqua)
         panel = newPanel
 
         setupKVO(controller: controller)

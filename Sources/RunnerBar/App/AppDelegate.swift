@@ -272,7 +272,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         chrome?.arrowX = statusItemRect.midX - posX
-        panel.orderFront(nil)
+        // Use wantsKey + makeKeyAndOrderFront to guarantee the panel receives
+        // keyboard events on first open, preventing grey cold-open regression.
+        // ❌ NEVER revert to orderFront(nil) — grey cold-open regression (#892).
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        panel.wantsKey = true
+        panel.makeKeyAndOrderFront(nil)
         resizeAndRepositionPanel()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
