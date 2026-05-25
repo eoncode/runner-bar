@@ -96,7 +96,7 @@ extension AppDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard let self else { return }
-                log("AppDelegate \u203a didUpdate fired \u2014 panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
+                log("AppDelegate > didUpdate fired -- panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
                 self.updateStatusIcon()
                 self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
             }
@@ -108,7 +108,7 @@ extension AppDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard self != nil else { return }
-                log("AppDelegate \u203a ScopeStore.didMutate \u2014 restarting RunnerStore")
+                log("AppDelegate > ScopeStore.didMutate -- restarting RunnerStore")
                 RunnerStore.shared.start()
             }
             .store(in: &cancellables)

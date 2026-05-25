@@ -12,17 +12,17 @@ import SwiftUI
 // HOW THE PANEL WORKS:
 // 1. Panel is a borderless, non-activating NSPanel.
 // 2. Position is computed from status button's window frame (screen coords):
-//      statusItemRect = button.window!.frame   ← already in screen coords
-//      panelX = statusItemRect.midX - contentW/2   ← re-centred each resize
-//      panelTopY = statusItemRect.minY - gap       ← locked at open time
-//      y (frame origin) = max(visibleFrame.minY, panelTopY - totalH) ← clamped
+//      statusItemRect = button.window!.frame   <- already in screen coords
+//      panelX = statusItemRect.midX - contentW/2   <- re-centred each resize
+//      panelTopY = statusItemRect.minY - gap       <- locked at open time
+//      y (frame origin) = max(visibleFrame.minY, panelTopY - totalH) <- clamped
 //              ❌ NEVER re-derive panelTopY from statusItemRect inside
 //                 resizeAndRepositionPanel() — see ARCHITECTURE.md §Panel Lifecycle.
 //      panelH  = clampedContentH + arrowHeight
 // 3. arrowX = statusItemRect.midX - panel.frame.minX
 //    ❌ NEVER use convertToScreen(button.frame) — button.frame is button-local.
 // 4. sizingOptions = .preferredContentSize: KVO on preferredContentSize
-//    → resizeAndRepositionPanel() → setFrame(). Zero jump.
+//    -> resizeAndRepositionPanel() -> setFrame(). Zero jump.
 // 5. Dismiss: NSEvent global monitor + NSWorkspace app-switch notification.
 //
 // CHROME DIMENSIONS (match NSPopover exactly):
@@ -264,7 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let statusItemRect = button.window?.frame,
               let panel else { return }
 
-        log("AppDelegate \u203a openPanel \u2014 seeding observable: actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count) localRunners=\(LocalRunnerStore.shared.runners.count)")
+        log("AppDelegate > openPanel -- seeding observable: actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count) localRunners=\(LocalRunnerStore.shared.runners.count)")
         observable.reload(localRunnerStore: LocalRunnerStore.shared)
 
         panelIsOpen = true
