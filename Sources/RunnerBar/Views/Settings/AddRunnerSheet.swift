@@ -45,7 +45,7 @@ struct AddRunnerSheet: View {
     // MARK: - Add Mode
 
     /// Controls which form body is shown in the sheet.
-    enum AddMode: String, CaseIterable, Identifiable {
+    private enum AddMode: String, CaseIterable, Identifiable {
         /// Coding key for the `addNew` field.
         case addNew      = "Add new"
         /// Coding key for the `addExisting` field.
@@ -60,7 +60,7 @@ struct AddRunnerSheet: View {
     // MARK: Scope state (Add new only)
 
     /// Determines whether the runner is registered at repo or organisation scope.
-    enum ScopeType: String, CaseIterable, Identifiable {
+    private enum ScopeType: String, CaseIterable, Identifiable {
         /// Coding key for the `repo` field.
         case repo = "Repository"
         /// Coding key for the `org` field.
@@ -706,7 +706,7 @@ struct AddRunnerSheet: View {
 
     /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/` so `LocalRunnerScanner`
     /// can discover the runner on every app launch. Used by both Add-new and Add-pre-existing flows.
-    func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
+    private func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
         let scopeParts = scope.components(separatedBy: "/")
