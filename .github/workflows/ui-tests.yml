@@ -36,7 +36,8 @@ jobs:
         run: |
           xcodebuild -resolvePackageDependencies \
             -project RunnerBar.xcodeproj \
-            -scheme RunnerBar
+            -scheme RunnerBar \
+            -derivedDataPath .derived
 
       - name: Build app
         run: |
@@ -51,6 +52,7 @@ jobs:
             -scheme RunnerBar \
             -destination 'platform=macOS' \
             -only-testing RunnerBarUITests \
+            -derivedDataPath .derived \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=YES
 
