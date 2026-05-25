@@ -14,7 +14,7 @@ import SwiftUI
 /// keeping one file-level instance avoids repeated allocation on every step enrichment call.
 private let iso8601 = ISO8601DateFormatter()
 
-/// Extension adding functionality to `AppDelegate`.
+/// AppDelegate extension providing navigation helpers and SwiftUI view factories.
 extension AppDelegate {
 
     // MARK: - Enrichment helper
@@ -23,7 +23,7 @@ extension AppDelegate {
     // ❌ NEVER call from the main thread.
     // ❌ NEVER call directly — always dispatch via DispatchQueue.global().
     // Marked nonisolated to opt out of @MainActor isolation.
-    /// Performs the enrichStepsIfNeeded operation.
+    /// Enriches the given job's steps by fetching fresh step data from the GitHub API if needed.
     nonisolated func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
         // ActiveJob.steps[].status is typed as JobStatus — compare against enum case.
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == .inProgress }),
@@ -36,7 +36,7 @@ extension AppDelegate {
 
     // MARK: - View factories
 
-    /// Performs the mainView operation.
+    /// Returns the root panel view and resets saved navigation state.
     func mainView() -> AnyView {
         savedNavState = nil
         return wrapEnv(PanelMainView(
@@ -73,7 +73,7 @@ extension AppDelegate {
         ))
     }
 
-    /// Performs the settingsView operation.
+    /// Returns the Settings view and saves navigation state.
     func settingsView() -> AnyView {
         savedNavState = .settings
         makeKeyForTextInput()
@@ -121,7 +121,7 @@ extension AppDelegate {
         ))
     }
 
-    /// Performs the validatedView operation.
+    /// Returns a validated view for the given saved navigation state, or `nil` if the state is `.main`.
     func validatedView(for state: NavState) -> AnyView? {
         savedNavState = nil
         let store = RunnerStore.shared
