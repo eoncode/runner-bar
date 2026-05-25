@@ -28,9 +28,8 @@ struct GlassCard: ViewModifier {
         self.strokeOpacity = strokeOpacity
     }
 
-    /// Applies Liquid Glass on macOS 26+ (Swift 6.2+) and a material fallback on older OSes.
+    /// Applies Liquid Glass on macOS 26+ and a material fallback on older OSes.
     func body(content: Content) -> some View {
-        #if swift(>=6.2)
         if #available(macOS 26, *) {
             AnyView(
                 content.glassEffect(
@@ -41,9 +40,6 @@ struct GlassCard: ViewModifier {
         } else {
             AnyView(materialFallback(content: content))
         }
-        #else
-        AnyView(materialFallback(content: content))
-        #endif
     }
 
     /// Returns the `.ultraThinMaterial` + stroke fallback view used on macOS < 26.
@@ -102,7 +98,6 @@ struct GlassButton: ViewModifier {
     /// Wraps the content in a Liquid Glass interactive container on macOS 26+;
     /// passes through unstyled on older OSes.
     func body(content: Content) -> some View {
-        #if swift(>=6.2)
         if #available(macOS 26, *) {
             AnyView(
                 GlassEffectContainer {
@@ -116,9 +111,6 @@ struct GlassButton: ViewModifier {
         } else {
             AnyView(content)
         }
-        #else
-        AnyView(content)
-        #endif
     }
 }
 
