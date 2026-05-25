@@ -5,6 +5,74 @@ import AppKit
 import RunnerBarCore
 import SwiftUI
 
+// MARK: - InfoCardBackground
+
+/// Card background for the Runner Info and Configuration cards.
+///
+/// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: RBRadius.small))`
+/// + `rbBorderSubtle` strokeBorder overlay (0.5 pt).
+/// macOS < 26: `.glassCard(cornerRadius: RBRadius.small)` (unchanged).
+private struct InfoCardBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        } else {
+            content
+                .glassCard(cornerRadius: RBRadius.small)
+        }
+    }
+}
+
+// MARK: - DangerZoneCardBackground
+
+/// Card background for the Danger Zone action card.
+///
+/// macOS 26+: `rbDanger.opacity(0.05)` fill + `.glassEffect(.regular, in: RoundedRectangle)`
+/// + `rbDanger.opacity(0.25)` strokeBorder overlay (0.5 pt).
+/// macOS < 26: `rbDanger.opacity(0.05)` fill + `rbDanger.opacity(0.25)` strokeBorder (unchanged).
+private struct DangerZoneCardBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .fill(Color.rbDanger.opacity(0.05))
+                )
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
+                )
+        } else {
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .fill(Color.rbDanger.opacity(0.05))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                                .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
+                        )
+                )
+        }
+    }
+}
+
+private extension View {
+    func infoCardStyle() -> some View { modifier(InfoCardBackground()) }
+    func dangerZoneCard() -> some View { modifier(DangerZoneCardBackground()) }
+}
+
 // MARK: - RunnerDetailView
 // Navigation level: SettingsView (runner row tap) → RunnerDetailView ← this view
 //
@@ -369,14 +437,7 @@ struct RunnerDetailView: View {
                     description: "Permanently de-registers and removes this runner."
                 )
             }
-            .background(
-                RoundedRectangle(cornerRadius: RBRadius.small)
-                    .fill(Color.rbDanger.opacity(0.05))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: RBRadius.small)
-                            .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
-                    )
-            )
+            .dangerZoneCard()
             .padding(.horizontal, RBSpacing.md)
             .padding(.bottom, 8)
         }
@@ -525,10 +586,10 @@ struct RunnerDetailView: View {
             .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 4)
     }
 
-    /// Rounded card container with a subtle border used to group related info or config rows.
+    /// Rounded card container with a glass background used to group related info or config rows.
     private func infoCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) { content() }
-            .glassCard(cornerRadius: RBRadius.small)
+            .infoCardStyle()
             .padding(.horizontal, RBSpacing.md)
             .padding(.bottom, 8)
     }
