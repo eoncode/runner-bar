@@ -3,6 +3,10 @@ options:
   bundleIdPrefix: com.eoncode
   createIntermediateGroups: true
 
+packages:
+  RunnerBarCore:
+    path: .
+
 targets:
   RunnerBar:
     type: application
@@ -12,6 +16,9 @@ targets:
       - Sources/RunnerBar
     resources:
       - Resources
+    dependencies:
+      - package: RunnerBarCore
+        product: RunnerBarCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.eoncode.RunnerBar
