@@ -3,6 +3,57 @@
 import RunnerBarCore
 import SwiftUI
 
+// MARK: - SparklineChipBackground
+
+/// Background modifier for the `SparklineMetricView` chip.
+///
+/// macOS 26+: near-zero tinted fill + `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 3))`
+/// so the chip surface shares the panel’s Liquid Glass compositor layer.
+/// macOS < 26: flat `Color.secondary.opacity(0.10)` fill (unchanged appearance).
+private struct SparklineChipBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background(Color.secondary.opacity(0.07),
+                            in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+                .glassEffect(.regular,
+                             in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+        } else {
+            content
+                .background(Color.secondary.opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+        }
+    }
+}
+
+// MARK: - DiskPillBackground
+
+/// Background modifier for `DiskPillBadge`.
+///
+/// macOS 26+: tinted fill (`pillColor.opacity(0.10)`) + `.glassEffect(.regular, in: Capsule())`
+/// + `pillColor.opacity(0.35)` strokeBorder overlay.
+/// macOS < 26: `.background(pillColor.opacity(0.15), in: Capsule())`
+/// + `.overlay(Capsule().strokeBorder(pillColor.opacity(0.35)))` (unchanged).
+private struct DiskPillBackground: ViewModifier {
+    let pillColor: Color
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content
+                .background(pillColor.opacity(0.10), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
+                .overlay(
+                    Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5)
+                )
+        } else {
+            content
+                .background(pillColor.opacity(0.15), in: Capsule())
+                .overlay(
+                    Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5)
+                )
+        }
+    }
+}
+
 // MARK: - SystemStatsView
 // periphery:ignore
 /// Full-page system stats view shown in the settings panel.
@@ -54,6 +105,10 @@ struct SystemStatsView: View {
 ///          ^      ^        ^    ^      ^        ^
 ///        9pt label  40x14pt sparkline  10pt mono value
 ///
+/// Background:
+/// macOS 26+: `SparklineChipBackground` — near-zero tinted fill + `.glassEffect(.regular)`.
+/// macOS < 26: `SparklineChipBackground` — flat `Color.secondary.opacity(0.10)` fill (unchanged).
+///
 /// Do NOT restore the VStack layout -- it makes the header ~70pt tall.
 struct SparklineMetricView: View {
     /// The label constant.
@@ -82,6 +137,9 @@ struct SparklineMetricView: View {
                 .fixedSize()
         }
         .fixedSize()
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .modifier(SparklineChipBackground())
     }
 
     /// The labelColor property.
@@ -101,6 +159,11 @@ struct SparklineMetricView: View {
 ///   freePct < 40 → rbWarning (orange)
 ///   else         → rbSuccess (green)
 ///
+/// Background:
+/// macOS 26+: `DiskPillBackground` — tinted fill + `.glassEffect(.regular, in: Capsule())`
+/// + strokeBorder overlay.
+/// macOS < 26: `DiskPillBackground` — tinted fill + strokeBorder (unchanged).
+///
 /// Always renders at its intrinsic size -- never truncates.
 struct DiskPillBadge: View {
     // Percentage of disk space that is FREE (0-100).
@@ -115,8 +178,7 @@ struct DiskPillBadge: View {
             .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(pillColor.opacity(0.15), in: Capsule())
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            .modifier(DiskPillBackground(pillColor: pillColor))
             .fixedSize()
     }
 
