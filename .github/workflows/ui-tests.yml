@@ -1,0 +1,30 @@
+name: UI Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ui-test:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen (if not cached)
+        run: which xcodegen || brew install xcodegen
+
+      - name: Generate ephemeral Xcode project
+        run: xcodegen generate
+
+      - name: Run UI Tests
+        run: |
+          xcodebuild test \
+            -project RunnerBar.xcodeproj \
+            -scheme RunnerBarUITests \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+        env:
+          UI_TESTING: "1"
