@@ -51,14 +51,15 @@ import AppKit
 //
 // 5. NSBezierPath.cgPath is macOS 14+. Use .compatCGPath (extension below).
 //
-// NSGLASS COMPOSITOR WARM-UP (fix #891):
-// On cold open, NSGlassEffectView is added to the window before orderFront.
-// The CABackdropLayer sampler fires against an empty/grey buffer and renders flat.
-// Fix: viewDidMoveToWindow() defers one run-loop tick after the window is live,
-// then calls fxView.needsDisplay=true + updateFxMask() so the compositor gets
-// a valid desktop sample on the very first frame.
-// ❌ NEVER remove viewDidMoveToWindow() — regression is immediate grey on cold open.
-// ❌ NEVER remove the DispatchQueue.main.async defer — synchronous call fires too early.
+// NSGLASS COMPOSITOR WARM-UP (fix #891/#893):
+// On cold open, NSGlassEffectView samples the compositor BEFORE NSHostingController
+// has flushed its first render. The backdrop sampler sees an incomplete/grey stack.
+// Fix: viewDidMoveToWindow() defers one run-loop tick, then sets needsLayout=true
+// on both self and fxView. This forces a full layout+composite pass with the real
+// SwiftUI content stack present, so NSGlassEffectView re-samples correctly.
+// ❌ NEVER remove viewDidMoveToWindow() — cold-open grey regression is immediate.
+// ❌ NEVER make the call synchronous — fires before SwiftUI has flushed to compositor.
+// ❌ NEVER remove the fxView.needsLayout line — fxView must also re-layout to resample.
 //
 // ❌ NEVER remove this file. Regression is major major major.
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
@@ -176,30 +177,27 @@ final class PanelChromeView: NSView {
     /// Not implemented — this view is only created programmatically.
     required init?(coder _: NSCoder) { fatalError() }
 
-    // MARK: - Glass compositor warm-up (fix #891)
+    // MARK: - Glass compositor warm-up (fix #891/#893)
     //
-    // On cold open, NSGlassEffectView is attached to the window BEFORE orderFront.
-    // The CABackdropLayer sampler fires against an empty/grey buffer — no real desktop
-    // content yet — and renders flat grey. It never self-corrects unless something
-    // triggers a layout pass (which navigate() accidentally did via rootView swap).
+    // On cold open, NSGlassEffectView is attached to the window BEFORE the SwiftUI
+    // NSHostingController has flushed its first render into the compositor.
+    // NSGlassEffectView samples an incomplete/thin content stack and renders grey.
     //
-    // Fix: once the view is attached to a real window (viewDidMoveToWindow), defer
-    // one run-loop tick so the window is fully on-screen, then invalidate fxView and
-    // call updateFxMask(). This gives the CABackdropLayer a valid composition pass
-    // against live desktop pixels on the very first visible frame.
+    // Fix: defer one run-loop turn after viewDidMoveToWindow so the hosting controller
+    // has flushed, then mark both self and fxView as needing layout. This forces a
+    // full layout+composite pass with the complete SwiftUI content stack present,
+    // so NSGlassEffectView re-samples correctly and renders dark on the first frame.
     //
     // ❌ NEVER remove this override — cold-open grey regression is immediate.
-    // ❌ NEVER make the call synchronous — it fires before the window is on-screen.
+    // ❌ NEVER make the dispatches synchronous — SwiftUI hasn't flushed yet at that point.
+    // ❌ NEVER remove fxView.needsLayout — fxView must re-layout to trigger re-sampling.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil else { return }
-        if #available(macOS 26, *) {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.fxView.needsDisplay = true
-                self.fxView.layer?.setNeedsDisplay()
-                self.updateFxMask()
-            }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.needsLayout = true
+            self.fxView.needsLayout = true
         }
     }
 
