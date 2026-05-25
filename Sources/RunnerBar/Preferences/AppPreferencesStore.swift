@@ -18,7 +18,7 @@ final class AppPreferencesStore: ObservableObject {
         static let showDimmedRunners = "settings.showDimmedRunners"
     }
 
-    /// Valid range for the polling interval (seconds).
+    /// Valid range (seconds) for the polling interval.
     static let pollingRange: ClosedRange<Int> = 10 ... 300
 
     /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
@@ -33,8 +33,7 @@ final class AppPreferencesStore: ObservableObject {
         }
     }
 
-    /// Whether to show dimmed (offline/idle) runners in the runners list.
-    /// Retained for backwards compat but no longer surfaced in the UI (#510).
+    /// Whether to show dimmed (offline/idle) runners. Retained for backwards compat (#510).
     @Published var showDimmedRunners: Bool {
         didSet {
             UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners)
@@ -57,9 +56,9 @@ final class AppPreferencesStore: ObservableObject {
 
 // MARK: - Comparable+clamped
 
-/// Extension adding clamping functionality to `Comparable`.
-private extension Comparable {
-    /// Clamps the value to the given closed range.
+extension Comparable {
+    /// Clamps the value to the given closed range, returning `range.lowerBound` if below
+    /// or `range.upperBound` if above.
     func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
     }
