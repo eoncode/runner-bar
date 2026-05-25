@@ -12,8 +12,7 @@ import RunnerBarCore
 // #455: Removed .jobDetail, .actionDetail, .actionJobDetail, .actionStepLog.
 // Navigation from the main view now goes directly: inline step tap → .stepLog.
 
-// swiftlint:disable missing_docs
-/// Represents the currently visible navigation screen.
+/// The currently active navigation destination inside the RunnerBar panel.
 enum NavState {
     /// The root popover showing runners and the recent-actions list.
     case main
@@ -26,4 +25,3 @@ enum NavState {
     /// Scope detail drill-down reached from SettingsView scope row tap. (#499)
     case scopeDetail(ScopeEntry)
 }
-// swiftlint:enable missing_docs

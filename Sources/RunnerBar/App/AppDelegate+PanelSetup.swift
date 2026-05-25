@@ -13,7 +13,8 @@ import SwiftUI
 // ❌ NEVER inline this back into AppDelegate.swift.
 // ❌ NEVER call setupPanel() more than once.
 
-// swiftlint:disable:next missing_docs
+/// AppDelegate extension that builds the NSPanel, embeds the SwiftUI hosting controller,
+/// wires KVO on `preferredContentSize`, and starts all Combine subscriptions.
 extension AppDelegate {
 
     // MARK: Panel construction
