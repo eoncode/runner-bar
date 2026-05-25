@@ -75,7 +75,6 @@ struct RunnerDetailView: View {
     @State private var autoUpdate: Bool
     /// Async save lifecycle state for the auto-update toggle.
     @State private var autoUpdateSaveState: SaveState = .idle
-    // #532: unified proxy card — single save state for URL + user + pass
     /// Proxy server URL string bound to the proxy URL text field.
     @State private var proxyUrl: String
     /// Proxy username string bound to the proxy user text field.
