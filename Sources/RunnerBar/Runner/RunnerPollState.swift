@@ -62,7 +62,7 @@ extension RunnerStore {
     /// by re-fetching each job from the GitHub API when steps are absent or still in-progress.
     ///
     /// - Parameter cache: The concluded-jobs cache to mutate in place.
-    func backfillSteps(into cache: inout [Int: ActiveJob]) {
+    nonisolated func backfillSteps(into cache: inout [Int: ActiveJob]) {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
             guard cached.conclusion != nil,
@@ -81,7 +81,7 @@ extension RunnerStore {
     ///
     /// - Parameter group: The workflow action group whose scope is needed.
     /// - Returns: An "owner/repo" scope string, or an empty string if it cannot be derived.
-    func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
+    nonisolated func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
         if !group.repo.isEmpty { return group.repo }
         if let firstRun = group.runs.first,
            let url = firstRun.htmlUrl,
@@ -96,7 +96,7 @@ extension RunnerStore {
     ///   - jobs: Freshly-fetched jobs to potentially replace with cached versions.
     ///   - jobCache: Concluded-jobs cache keyed by job ID.
     /// - Returns: Array of jobs with cache-preferred entries substituted where applicable.
-    func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
+    nonisolated func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
             return (cached.conclusion != nil && job.conclusion == nil)
