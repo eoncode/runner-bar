@@ -53,24 +53,39 @@ struct ReRunFailedButton: View {
     }
 
     // MARK: - Idle button
-    /// Renders the idle state: Liquid Glass button on Swift 6.2+ / macOS 26+,
-    /// plain button on older SDKs.
+    /// Renders the idle state.
+    /// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle)` + `rbBorderSubtle`
+    /// strokeBorder overlay — no `GlassEffectContainer` (toolbar buttons are individual).
+    /// macOS < 26: plain `.buttonStyle(.plain)` (unchanged).
     @ViewBuilder private var idleButton: some View {
-        Button(action: startRerun) {
-            HStack(spacing: 4) {
-                Image(systemName: "exclamationmark.arrow.clockwise")
-                    .font(.caption)
-                Text("Re-run failed")
-                    .font(.caption)
-                    .fixedSize()
-            }
-            .foregroundColor(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+        let label = HStack(spacing: 4) {
+            Image(systemName: "exclamationmark.arrow.clockwise")
+                .font(.caption)
+            Text("Re-run failed")
+                .font(.caption)
+                .fixedSize()
         }
-        .buttonStyle(.plain)
-        .help("Re-run only the failed and cancelled jobs in this workflow run")
-        .glassButton(cornerRadius: RBRadius.small)
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+
+        if #available(macOS 26, *) {
+            Button(action: startRerun) { label }
+                .buttonStyle(.plain)
+                .help("Re-run only the failed and cancelled jobs in this workflow run")
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        } else {
+            Button(action: startRerun) { label }
+                .buttonStyle(.plain)
+                .help("Re-run only the failed and cancelled jobs in this workflow run")
+        }
     }
 
     // MARK: - Actions

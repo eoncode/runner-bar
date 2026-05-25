@@ -28,24 +28,39 @@ struct CancelButton: View {
     }
 
     // MARK: - Idle button
-    /// Renders the idle state: Liquid Glass button on Swift 6.2+ / macOS 26+,
-    /// plain button on older SDKs.
+    /// Renders the idle state.
+    /// macOS 26+: `.glassEffect(.regular, in: RoundedRectangle)` + `rbBorderSubtle`
+    /// strokeBorder overlay — no `GlassEffectContainer` (toolbar buttons are individual).
+    /// macOS < 26: plain `.buttonStyle(.plain)` (unchanged).
     @ViewBuilder private var idleButton: some View {
-        Button(action: startCancel) {
-            HStack(spacing: 4) {
-                Image(systemName: "xmark.circle")
-                    .font(.caption)
-                Text("Cancel")
-                    .font(.caption)
-                    .fixedSize()
-            }
-            .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+        let label = HStack(spacing: 4) {
+            Image(systemName: "xmark.circle")
+                .font(.caption)
+            Text("Cancel")
+                .font(.caption)
+                .fixedSize()
         }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .glassButton(cornerRadius: RBRadius.small)
+        .foregroundColor(isDisabled ? .secondary.opacity(0.4) : .secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+
+        if #available(macOS 26, *) {
+            Button(action: startCancel) { label }
+                .buttonStyle(.plain)
+                .disabled(isDisabled)
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+                        .strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5)
+                )
+        } else {
+            Button(action: startCancel) { label }
+                .buttonStyle(.plain)
+                .disabled(isDisabled)
+        }
     }
 
     // MARK: - Actions
