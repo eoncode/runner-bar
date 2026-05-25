@@ -272,7 +272,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         chrome?.arrowX = statusItemRect.midX - posX
-        panel.orderFront(nil)
+
+        // makeKeyAndOrderFront makes the panel key immediately so NSGlassEffectView
+        // renders its dark variant on the very first compositor frame.
+        // orderFront(nil) only puts the window in front but never makes it key —
+        // NSGlassEffectView renders grey until a tap triggers makeKey internally.
+        // .nonactivatingPanel style mask ensures the app itself does NOT activate,
+        // so this does not steal keyboard focus from whatever the user was doing.
+        // wantsKey=true is required first so KeyablePanel accepts becomeKey.
+        // ❌ NEVER revert to orderFront(nil) — grey cold-open regression (#892).
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        panel.wantsKey = true
+        panel.makeKeyAndOrderFront(nil)
         resizeAndRepositionPanel()
 
         if let saved = savedNavState, let restored = validatedView(for: saved) {
