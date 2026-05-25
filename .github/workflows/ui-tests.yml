@@ -34,14 +34,6 @@ jobs:
             echo "XcodeGen already installed: $(xcodegen --version)"
           fi
 
-      - name: Install xcpretty (if not cached)
-        run: |
-          if ! command -v xcpretty &>/dev/null; then
-            gem install xcpretty --no-document
-          else
-            echo "xcpretty already installed: $(xcpretty --version)"
-          fi
-
       - name: Validate Xcode installation
         run: |
           XCODE_PATH=$(xcode-select -p 2>/dev/null || true)
@@ -77,11 +69,7 @@ jobs:
           xcodebuild test \
             -project RunnerBar.xcodeproj \
             -scheme RunnerBarUITests \
-            -destination 'platform=macOS' \
-            | xcpretty || xcodebuild test \
-              -project RunnerBar.xcodeproj \
-              -scheme RunnerBarUITests \
-              -destination 'platform=macOS'
+            -destination 'platform=macOS'
         env:
           UI_TESTING: "1"
 
