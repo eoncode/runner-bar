@@ -24,7 +24,7 @@ import Foundation
 //
 // All methods are synchronous and blocking — always call from a background thread.
 /// A value type representing RunnerStatusEnricher.
-public struct RunnerStatusEnricher {
+public struct RunnerStatusEnricher: Sendable {
     // MARK: - Shared singleton
 
     // The shared `RunnerStatusEnricher` instance used throughout the app.

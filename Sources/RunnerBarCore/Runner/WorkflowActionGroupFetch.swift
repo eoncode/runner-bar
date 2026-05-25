@@ -179,18 +179,6 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
 
 // MARK: - Private helpers
 
-/// Constructs an `ActiveJob` from a decoded `JobPayload`.
-/// Delegates to the canonical `makeActiveJob(from:iso:isDimmed:)` factory in
-/// `ActiveJob.swift` — do NOT duplicate logic here.
-/// ⚠️ Uses `step.number` (API-supplied sequence number), NOT `idx + 1`.
-/// GitHub step numbers can be non-contiguous (e.g. after retries or skipped
-/// steps); using the array index would cause `fetchStepLog` to fetch the wrong log.
-public func makeActiveJob(from jobPayload: JobPayload,
-                          iso: ISO8601DateFormatter,
-                          isDimmed: Bool = false) -> ActiveJob {
-    makeActiveJob(from: jobPayload, iso: iso, isDimmed: isDimmed)
-}
-
 /// Fetch and decode jobs for a single run ID.
 /// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
 /// causing the main row to show a lower jobsTotal than the detail view.

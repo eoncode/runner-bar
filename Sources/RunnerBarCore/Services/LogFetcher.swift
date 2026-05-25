@@ -6,6 +6,13 @@ import Foundation
 /// The unzipBinaryPath constant.
 private let unzipBinaryPath = "/usr/bin/unzip"
 
+/// Returns the path to the `gh` CLI binary, or nil if not found.
+/// Private to this file — mirrors the internal version in GitHubCLITransport.swift.
+private func ghBinaryPath() -> String? {
+    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
+    return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+}
+
 // MARK: - Raw binary/text fetch via gh CLI
 
 /// Calls `gh api` with `Accept: application/vnd.github.v3.raw` so log endpoints
