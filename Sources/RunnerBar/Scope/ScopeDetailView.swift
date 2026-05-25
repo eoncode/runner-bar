@@ -28,19 +28,19 @@ struct ScopeDetailView: View {
     /// `SettingsView`.
     let onBack: () -> Void
 
-    /// The scopeStore property.
+    /// Live `ScopeStore` reference so the view reacts to external mutations.
     @ObservedObject private var scopeStore = ScopeStore.shared
-    /// The showHookSheet property.
+    /// Controls presentation of `FailureHookCommandSheet`.
     @State private var showHookSheet = false
-    /// The showBranchSheet property.
+    /// Controls presentation of `BranchSelectorSheet`.
     @State private var showBranchSheet = false
-    /// The hookEnabled property.
+    /// Whether the failure hook is currently enabled for this scope.
     @State private var hookEnabled: Bool
-    /// The hookBranch property.
+    /// The branch filter applied by the failure hook, or `nil` for all branches.
     @State private var hookBranch: String?
-    /// The localRepoPath property.
+    /// The local repository path used by the failure hook.
     @State private var localRepoPath: String
-    /// The isEditingPath property.
+    /// Whether the local-path field is currently in inline-edit mode.
     @State private var isEditingPath = false
 
     /// Creates the view, seeding `@State` values from `ScopePreferencesStore`
@@ -74,7 +74,7 @@ struct ScopeDetailView: View {
     /// The GitHub web URL for this scope, used to render the "Open on GitHub" link.
     private var gitHURL: URL? { URL(string: "https://github.com/\(scope)") }
 
-    /// The body property.
+    /// The root view hierarchy for this screen.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar

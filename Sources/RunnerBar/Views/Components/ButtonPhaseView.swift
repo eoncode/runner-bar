@@ -19,6 +19,9 @@ import SwiftUI
 /// not a floating element. Apple HIG: no glass on inline row content.
 struct ButtonPhaseView: View {
     /// The active non-idle phase to render.
+    /// - `.loading`: spinner shown while the async request is in-flight.
+    /// - `.done`: green checkmark shown for 1.5 s after success.
+    /// - `.failed`: red cross shown for 1.5 s after failure.
     enum Phase {
         /// Spinner shown while the async request is in-flight.
         case loading
