@@ -104,6 +104,7 @@ struct ScopeDetailView: View {
 }
 
 // MARK: - Sections
+/// Extension providing the main section sub-views for `ScopeDetailView`.
 extension ScopeDetailView {
     /// Top navigation bar showing a back button and the scope display name.
     var headerBar: some View {
@@ -245,6 +246,7 @@ extension ScopeDetailView {
 }
 
 // MARK: - Failure Hook Rows
+/// Extension providing failure-hook configuration rows for `ScopeDetailView`.
 extension ScopeDetailView {
     /// Toggle row enabling or disabling the failure-hook for this scope.
     var hookToggleRow: some View {
@@ -398,6 +400,7 @@ extension ScopeDetailView {
 }
 
 // MARK: - Actions
+/// Extension providing user-action handlers for `ScopeDetailView`.
 extension ScopeDetailView {
     /// Enters inline editing mode for the local-path field, pre-filling `~/` if the field is empty.
     func startEditingPath() {
@@ -460,6 +463,7 @@ extension ScopeDetailView {
 }
 
 // MARK: - Sub-view helpers
+/// Extension providing reusable sub-view helper methods for `ScopeDetailView`.
 extension ScopeDetailView {
     /// Renders a styled section-header label above a settings card group.
     func sectionHeader(_ title: String) -> some View {
