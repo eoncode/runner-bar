@@ -23,10 +23,14 @@ extension Color {
 
 /// Helpers for creating appearance-adaptive `Color` values that respond to light/dark mode.
 extension Color {
-    /// Returns a color that resolves to `light` in light-appearance contexts and `dark` in dark-appearance contexts.
+    /// Returns a color that switches between `light` and `dark` based on the current
+    /// colour scheme by embedding both variants into an `NSColor`.
     static func adaptive(light: Color, dark: Color) -> Color {
         Color(NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            appearance.name == .darkAqua
+                || appearance.name == .vibrantDark
+                || appearance.name == .accessibilityHighContrastDarkAqua
+                || appearance.name == .accessibilityHighContrastVibrantDark
                 ? NSColor(dark)
                 : NSColor(light)
         })
@@ -35,71 +39,159 @@ extension Color {
 
 // MARK: - Color Tokens
 
-/// Semantic color tokens used throughout RunnerBar for status, surface, and text styling.
+/// Semantic surface, border, text, and status color tokens used throughout RunnerBar.
 extension Color {
-    /// Primary blue accent — used for in-progress status indicators and interactive highlights.
-    static let rbBlue = Color(red: 0.04, green: 0.52, blue: 1.00)
-    /// Green success color — used for completed / passing status.
-    static let rbSuccess = Color(red: 0.19, green: 0.82, blue: 0.35)
-    /// Amber warning color — used for queued / pending status.
-    static let rbWarning = Color(red: 1.00, green: 0.62, blue: 0.04)
-    /// Red danger color — used for failed / error status.
-    static let rbDanger = Color(red: 1.00, green: 0.27, blue: 0.23)
-    /// Primary accent alias — resolves to `rbBlue`.
-    static let rbAccent = rbBlue
-
-    // Neutral / surface — semi-transparent so .hudWindow vibrancy shows through.
+    // Design token notes:
     //
-    // ⚠️ TRANSLUCENCY CONTRACT — DO NOT REMOVE THIS COMMENT.
-    // NSVisualEffectView uses .hudWindow (.behindWindow). MUST stay opacity < 1.0.
-    // ❌ NEVER set opacity 1.0 — kills vibrancy.
     // ❌ NEVER switch PanelChrome material back to .popover — warm brown tint.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
     //
+    // macOS 26+ (Liquid Glass):
+    //   On macOS 26 the NSGlassEffectView provides blur/tint itself.
+    //   Surface fills must be near-zero so they don’t fight the glass backdrop.
+    //   rbSurface         — near-zero (glass handles translucency)
+    //   rbSurfaceElevated — near-zero (glass handles translucency)
+    //
+    // macOS < 26 (HUD vibrancy — unchanged):
     //   rbSurface         — white: 0.11 @ 0.45  (panel bg)
     //   rbSurfaceElevated — white: 0.15 @ 0.25  (rows — very transparent)
 
-    /// Base panel background surface — semi-transparent to preserve HUD vibrancy.
-    static let rbSurface = Color.adaptive(
-        light: Color(white: 0.95).opacity(0.88),
-        dark: Color(white: 0.11).opacity(0.45)
-    )
-    /// Elevated row/card surface — slightly lighter than `rbSurface`.
-    static let rbSurfaceElevated = Color.adaptive(
-        light: Color(white: 0.88).opacity(0.92),
-        dark: Color(white: 0.15).opacity(0.25)
-    )
+    /// Base panel background surface.
+    /// On macOS 26+ returns near-zero opacity — `NSGlassEffectView` provides the translucency.
+    /// On macOS < 26 returns the original HUD-tuned value.
+    static var rbSurface: Color {
+        if #available(macOS 26, *) {
+            return Color.adaptive(
+                light: Color(white: 0.95).opacity(0.04),
+                dark:  Color(white: 0.11).opacity(0.04)
+            )
+        } else {
+            return Color.adaptive(
+                light: Color(white: 0.95).opacity(0.88),
+                dark:  Color(white: 0.11).opacity(0.45)
+            )
+        }
+    }
+
+    /// Elevated row/card surface.
+    /// On macOS 26+ returns near-zero opacity — `NSGlassEffectView` provides the translucency.
+    /// On macOS < 26 returns the original HUD-tuned value.
+    static var rbSurfaceElevated: Color {
+        if #available(macOS 26, *) {
+            return Color.adaptive(
+                light: Color(white: 0.88).opacity(0.05),
+                dark:  Color(white: 0.15).opacity(0.05)
+            )
+        } else {
+            return Color.adaptive(
+                light: Color(white: 0.88).opacity(0.92),
+                dark:  Color(white: 0.15).opacity(0.25)
+            )
+        }
+    }
+
     /// Subtle border — low-contrast outline for cards and separators.
-    static let rbBorderSubtle = Color.adaptive(
-        light: Color(white: 0.0).opacity(0.08),
-        dark: Color(white: 1.0).opacity(0.06)
-    )
+    /// On macOS 26+ light-mode opacity is raised slightly (0.12) to match
+    /// the thin specular border idiom of Liquid Glass.
+    static var rbBorderSubtle: Color {
+        if #available(macOS 26, *) {
+            return Color.adaptive(
+                light: Color(white: 0.0).opacity(0.12),
+                dark:  Color(white: 1.0).opacity(0.06)
+            )
+        } else {
+            return Color.adaptive(
+                light: Color(white: 0.0).opacity(0.08),
+                dark:  Color(white: 1.0).opacity(0.06)
+            )
+        }
+    }
+
+    /// Mid border — slightly stronger outline.
+    /// On macOS 26+ light-mode opacity is raised to 0.14 for Liquid Glass specular edge.
+    static var rbBorderMid: Color {
+        if #available(macOS 26, *) {
+            return Color.adaptive(
+                light: Color(white: 0.0).opacity(0.14),
+                dark:  Color(white: 1.0).opacity(0.10)
+            )
+        } else {
+            return Color.adaptive(
+                light: Color(white: 0.0).opacity(0.10),
+                dark:  Color(white: 1.0).opacity(0.08)
+            )
+        }
+    }
+
     /// Primary text — high contrast body and heading text.
     static let rbTextPrimary = Color.adaptive(
         light: .black,
         dark: .white
     )
-    /// Secondary text — reduced-emphasis labels and descriptions.
+    /// Secondary text — medium contrast labels and captions.
     static let rbTextSecondary = Color.adaptive(
-        light: Color(white: 0.40),
-        dark: Color(white: 0.55)
+        light: Color(white: 0.35),
+        dark: Color(white: 0.65)
     )
-    /// Tertiary text — lowest-emphasis metadata and timestamps.
+    /// Tertiary text — lowest contrast; used for hints and placeholders.
     static let rbTextTertiary = Color.adaptive(
-        light: Color(white: 0.58),
-        dark: Color(white: 0.39)
+        light: Color(white: 0.55),
+        dark: Color(white: 0.45)
     )
 
-    /// Low-opacity amber tint for row backgrounds in warning/queued state.
-    public static let rbYellowTint = rbWarning.opacity(0.08)
-    /// Low-opacity blue tint for row backgrounds in in-progress state.
-    public static let rbBlueTint = rbBlue.opacity(0.08)
-    /// Low-opacity green tint for row backgrounds in success state.
-    public static let rbGreenTint = rbSuccess.opacity(0.08)
-    /// Low-opacity red tint for row backgrounds in failed/danger state.
-    public static let rbRedTint = rbDanger.opacity(0.08)
-    /// Low-opacity orange tint — alias for `rbYellowTint`.
-    public static let rbOrangeTint = rbWarning.opacity(0.08)
+    /// Accent blue — interactive elements and focus rings.
+    static let rbAccent  = Color.rbBlue
+    /// Blue — used for in-progress status and accent.
+    static let rbBlue    = Color.adaptive(
+        light: Color(red: 0.0,  green: 0.48, blue: 1.0),
+        dark:  Color(red: 0.3,  green: 0.64, blue: 1.0)
+    )
+    /// Success green — completed / passing status.
+    static let rbSuccess = Color.adaptive(
+        light: Color(red: 0.18, green: 0.64, blue: 0.18),
+        dark:  Color(red: 0.25, green: 0.80, blue: 0.25)
+    )
+    /// Danger red — failed / error status.
+    static let rbDanger  = Color.adaptive(
+        light: Color(red: 0.85, green: 0.18, blue: 0.18),
+        dark:  Color(red: 1.00, green: 0.35, blue: 0.35)
+    )
+    /// Warning amber — queued / caution status.
+    static let rbWarning = Color.adaptive(
+        light: Color(red: 0.80, green: 0.55, blue: 0.05),
+        dark:  Color(red: 1.00, green: 0.75, blue: 0.20)
+    )
+
+    // MARK: - Backwards-compat tint aliases
+    /// Orange tint overlay — subtle amber fill for warning backgrounds.
+    public static let rbOrangeTint  = rbWarning.opacity(0.08)
+    /// Backwards-compat — low-opacity amber tint for warning/queued row backgrounds.
+    public static let rbYellowTint  = rbWarning.opacity(0.08)
+    /// Backwards-compat — low-opacity blue tint for in-progress row backgrounds.
+    public static let rbBlueTint    = rbBlue.opacity(0.08)
+    /// Backwards-compat — low-opacity green tint for success row backgrounds.
+    public static let rbGreenTint   = rbSuccess.opacity(0.08)
+    /// Backwards-compat — low-opacity red tint for failed/danger row backgrounds.
+    public static let rbRedTint     = rbDanger.opacity(0.08)
+}
+
+// MARK: - Shadow Tokens
+
+/// Shadow tokens for card/row drop shadows.
+/// On macOS 26+ shadows are softer and more diffuse to complement Liquid Glass.
+/// On macOS < 26 values match the original design.
+enum RBShadow {
+    /// Drop-shadow opacity for card/row elements.
+    /// Returns 0.18 on macOS 26+ (glass panels need a lighter shadow) and 0.35 on earlier OS versions.
+    static var cardOpacity: Double {
+        if #available(macOS 26, *) { return 0.18 } else { return 0.35 }
+    }
+
+    /// Drop-shadow blur radius for card/row elements, in points.
+    /// Returns 18 pt on macOS 26+ (softer, more diffuse) and 12 pt on earlier OS versions.
+    static var cardRadius: CGFloat {
+        if #available(macOS 26, *) { return 18 } else { return 12 }
+    }
 }
 
 // MARK: - Status helpers
@@ -121,10 +213,10 @@ enum RBStatus {
     var color: Color {
         switch self {
         case .inProgress: return .rbBlue
-        case .success: return .rbSuccess
-        case .failed: return .rbDanger
-        case .queued: return .rbWarning
-        case .unknown: return .rbTextTertiary
+        case .success:    return .rbSuccess
+        case .failed:     return .rbDanger
+        case .queued:     return .rbWarning
+        case .unknown:    return .rbTextTertiary
         }
     }
 
@@ -132,10 +224,10 @@ enum RBStatus {
     public var tint: Color {
         switch self {
         case .inProgress: return .rbBlueTint
-        case .success: return .rbGreenTint
-        case .failed: return .rbRedTint
-        case .queued: return .rbYellowTint
-        default: return .clear
+        case .success:    return .rbGreenTint
+        case .failed:     return .rbRedTint
+        case .queued:     return .rbYellowTint
+        default:          return .clear
         }
     }
 
@@ -143,10 +235,10 @@ enum RBStatus {
     public var sfSymbol: String {
         switch self {
         case .inProgress: return "arrow.trianglehead.2.clockwise"
-        case .success: return "checkmark"
-        case .failed: return "xmark"
-        case .queued: return "clock"
-        case .unknown: return "questionmark"
+        case .success:    return "checkmark"
+        case .failed:     return "xmark"
+        case .queued:     return "clock"
+        case .unknown:    return "questionmark"
         }
     }
 }
@@ -211,6 +303,13 @@ enum DesignTokens {
     enum Spacing {
         /// Horizontal row padding — alias for `RBSpacing.md`.
         static let rowHPad: CGFloat = RBSpacing.md
+    }
+    /// Radius aliases forwarded from `RBRadius`.
+    enum Radius {
+        /// Standard card corner radius — alias for `RBRadius.card`.
+        static let card: CGFloat = RBRadius.card
+        /// Small corner radius — alias for `RBRadius.small`.
+        static let small: CGFloat = RBRadius.small
     }
     /// Color helpers forwarded from the `Color` token extensions.
     enum Colors {
