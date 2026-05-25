@@ -195,8 +195,16 @@ final class PanelChromeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        // ⚠️ ALPHA CONTRACT — DO NOT RAISE ABOVE 0.001.
+        // draw() fires on cold open and paints this fill over NSGlassEffectView.
+        // At alpha: 0.01 (10x higher) the white fill in light mode produces a
+        // visible grey/washed veil on first open that is absent after navigation
+        // round-trips (where draw() does not re-fire on the chrome view).
+        // 0.001 matches layer?.backgroundColor and is truly invisible while still
+        // satisfying the CABackdropLayer sampler contract.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let fill: NSColor = isDark ? NSColor(white: 0.18, alpha: 0.01) : NSColor(white: 0.95, alpha: 0.01)
+        let fill: NSColor = isDark ? NSColor(white: 0.18, alpha: 0.001) : NSColor(white: 0.95, alpha: 0.001)
         ctx.setFillColor(fill.cgColor)
         chromePath(in: bounds).fill()
     }
