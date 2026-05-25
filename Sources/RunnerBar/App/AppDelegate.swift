@@ -135,20 +135,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⚠️ UI Testing boot path — bypasses Keychain, OAuth, and API polling.
         // This prevents macOS from showing a Keychain approval prompt during
         // XCUITest runs, which would otherwise silently hang CI forever.
-        // ❌ NEVER move configureGHAPI or Auth into the isUITesting branch.
+        // ❌ NEVER move configureGHAPI into the !isUITesting guard below.
         let isUITesting = ProcessInfo.processInfo.arguments.contains("--uitesting")
 
-        if isUITesting {
-            setupStatusItem()
-            setupPanel()
-        } else {
+        if !isUITesting {
             configureGHAPI(
                 { endpoint in ghAPI(endpoint) },
                 isRateLimited: { ghIsRateLimited }
             )
-            setupStatusItem()
-            setupPanel()
         }
+        setupStatusItem()
+        setupPanel()
     }
 
     // MARK: - OAuth URL callback (#326)
