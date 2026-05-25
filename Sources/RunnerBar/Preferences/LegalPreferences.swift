@@ -12,7 +12,7 @@ final class LegalPreferences: ObservableObject {
     /// The shared constant.
     static let shared = LegalPreferences()
 
-    /// UserDefaults key constants.
+    /// UserDefaults key constants for `LegalPreferences`.
     private enum Key {
         /// Key for the analytics opt-in flag.
         static let analyticsEnabled = "legal.analyticsEnabled"
