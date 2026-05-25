@@ -9,7 +9,7 @@ on:
 jobs:
   periphery:
     name: Periphery
-    runs-on: macos-15-arm64
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
