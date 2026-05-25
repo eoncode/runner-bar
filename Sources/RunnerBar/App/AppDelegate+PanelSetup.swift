@@ -54,7 +54,8 @@ extension AppDelegate {
 
     // MARK: KVO
 
-    /// Performs the setupKVO operation.
+    /// Installs KVO on `controller.preferredContentSize` to trigger panel resize
+    /// whenever the SwiftUI content height changes.
     private func setupKVO(controller: NSHostingController<AnyView>) {
         sizeObservation = controller.observe(
             \.preferredContentSize,
@@ -67,7 +68,8 @@ extension AppDelegate {
 
     // MARK: Combine subscriptions
 
-    /// Performs the setupCombineSubscriptions operation.
+    /// Wires Combine subscriptions for `LocalRunnerStore`, `RunnerStore.didUpdate`,
+    /// and `ScopeStore.didMutate` so the status icon and view model stay in sync.
     private func setupCombineSubscriptions() {
         LocalRunnerStore.shared.$runners
             .receive(on: DispatchQueue.main)
