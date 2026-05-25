@@ -82,7 +82,7 @@ struct AddScopeSheet: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: scopeType) { _ in
+                    .onChange(of: scopeType) { _, _ in
                         selectedScope = pickerItems.first ?? ""
                         showScopeSelector = false
                     }

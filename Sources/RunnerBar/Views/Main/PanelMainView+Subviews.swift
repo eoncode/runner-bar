@@ -175,7 +175,7 @@ struct ActionRowView: View {
             previousStatus = status
             expandState = (status == .inProgress) ? false : nil
         }
-        .onChange(of: rowStatus) { newStatus in
+        .onChange(of: rowStatus) { _, newStatus in
             if newStatus == .inProgress && expandState == nil {
                 withAnimation(.easeInOut(duration: 0.15)) { expandState = false }
             }

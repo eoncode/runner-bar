@@ -103,7 +103,7 @@ struct SettingsView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear(perform: onAppearAction)
-        .onChange(of: localRunnerStore.isScanning) { if !$0 { hasLoadedOnce = true } }
+        .onChange(of: localRunnerStore.isScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
         .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
         .sheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
         .modifier(removalAlertModifier)
@@ -477,7 +477,7 @@ struct SettingsView: View {
                 Text("Launch at login").font(.system(size: 12)); Spacer()
                 Toggle("", isOn: $launchAtLogin)
                     .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
-                    .onChange(of: launchAtLogin, perform: applyLaunchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newVal in applyLaunchAtLogin(newVal) }
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)

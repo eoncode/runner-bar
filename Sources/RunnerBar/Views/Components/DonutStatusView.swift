@@ -61,14 +61,14 @@ struct DonutStatusView: View {
             startRotationIfNeeded()
         }
         // Single-argument form for macOS 13 compatibility.
-        .onChange(of: progress) { _ in
+        .onChange(of: progress) { _, _ in
             withAnimation(.easeInOut(duration: 0.4)) {
                 displayProgress = max(0, min(1, progress))
             }
         }
         // Start rotation if we transition into .inProgress after appearing
         // (e.g. queued → inProgress). No-op for any other transition.
-        .onChange(of: status) { _ in
+        .onChange(of: status) { _, _ in
             startRotationIfNeeded()
         }
     }

@@ -23,7 +23,6 @@ import SwiftUI
 ///   repeating animation started in `.onAppear`.
 /// - `completionScale` gives a spring pulse when progress reaches 1.0.
 ///
-/// ❌ NEVER change onChange to two-argument form — macOS 13 only supports single-value.
 /// ❌ NEVER set displayProgress directly without withAnimation — breaks interpolation.
 struct PieProgressDot: View {
     /// Radial fill fraction (0.0–1.0). Nil renders a spinning indeterminate arc.
@@ -126,8 +125,7 @@ struct PieProgressDot: View {
             }
         }
         // Animate wedge angle when progress changes.
-        // ❌ macOS 13 compat: single-value onChange only.
-        .onChange(of: progress) { newValue in
+        .onChange(of: progress) { _, newValue in
             withAnimation(.easeInOut(duration: 0.4)) { displayProgress = newValue }
             // Trigger completion pulse when reaching 100%.
             if let value = newValue, value >= 1.0 {
@@ -142,8 +140,7 @@ struct PieProgressDot: View {
             }
         }
         // Animate color crossfade on state transitions.
-        // ❌ macOS 13 compat: single-value onChange only.
-        .onChange(of: color) { newColor in
+        .onChange(of: color) { _, newColor in
             withAnimation(.easeInOut(duration: 0.35)) { displayColor = newColor }
         }
     }

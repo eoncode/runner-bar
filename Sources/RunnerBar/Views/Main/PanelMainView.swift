@@ -101,10 +101,10 @@ struct PanelMainView: View {
             systemStats.stop()
             stopDisplayTickTimer()
         }
-        .onChange(of: panelVisibilityState.isOpen) { open in
+        .onChange(of: panelVisibilityState.isOpen) { _, open in
             if open { systemStats.start() } else { systemStats.stop() }
         }
-        .onChange(of: store.actions) { _ in visibleCount = 10 }
+        .onChange(of: store.actions) { _, _ in visibleCount = 10 }
     }
     // MARK: - Scrollable actions section (RULE 5)
     /// Wraps `actionsSectionContent` in a `ScrollView` capped at `screenScrollMaxHeight`.

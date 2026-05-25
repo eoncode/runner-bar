@@ -140,7 +140,7 @@ struct RunnerDetailView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear(perform: loadEditableFields)
-        .onChange(of: localRunnerStore.runners) { _ in
+        .onChange(of: localRunnerStore.runners) { _, _ in
             if let fresh = localRunnerStore.runners.first(where: { $0.id == runner.id }) {
                 isRunning = fresh.isRunning
                 displayStatus = fresh.displayStatus
@@ -262,7 +262,7 @@ struct RunnerDetailView: View {
                     Toggle("", isOn: $autoUpdate)
                         .toggleStyle(.switch)
                         .labelsHidden()
-                        .onChange(of: autoUpdate) { _ in saveAutoUpdate() }
+                        .onChange(of: autoUpdate) { _, _ in saveAutoUpdate() }
                 }
                 .padding(.horizontal, RBSpacing.md)
                 .padding(.vertical, 8)
