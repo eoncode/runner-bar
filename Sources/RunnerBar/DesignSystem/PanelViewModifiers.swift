@@ -19,11 +19,13 @@ struct GlassCard: ViewModifier {
     /// Opacity of the fallback stroke border. Defaults to 0.15; use 0.25 for sections.
     var strokeOpacity: Double
 
+    /// Creates a `GlassCard` modifier with custom corner radius and stroke opacity.
     init(cornerRadius: CGFloat = RBRadius.card, strokeOpacity: Double = 0.15) {
         self.cornerRadius = cornerRadius
         self.strokeOpacity = strokeOpacity
     }
 
+    /// Applies the glass card effect to the given content view.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
@@ -37,6 +39,7 @@ struct GlassCard: ViewModifier {
         }
     }
 
+    /// Returns the pre-macOS-26 material + stroke fallback for the given content.
     private func materialFallback(content: Content) -> some View {
         content
             .background(
@@ -54,12 +57,15 @@ struct GlassCard: ViewModifier {
 /// Prominent Liquid Glass modifier for section headers and containers.
 /// Delegates to `GlassCard` with stronger stroke opacity (0.25).
 struct GlassSection: ViewModifier {
+    /// Corner radius applied to the rounded rectangle shape. Defaults to `RBRadius.card`.
     var cornerRadius: CGFloat
 
+    /// Creates a `GlassSection` modifier with the given corner radius.
     init(cornerRadius: CGFloat = RBRadius.card) {
         self.cornerRadius = cornerRadius
     }
 
+    /// Applies a prominent glass section effect to the given content view.
     func body(content: Content) -> some View {
         content.modifier(GlassCard(cornerRadius: cornerRadius, strokeOpacity: 0.25))
     }
@@ -72,12 +78,15 @@ struct GlassSection: ViewModifier {
 ///
 /// ❌ Do NOT call `.glassEffect(.regular.interactive())` directly on buttons.
 struct GlassButton: ViewModifier {
+    /// Corner radius applied to the rounded rectangle shape. Defaults to `RBRadius.small`.
     var cornerRadius: CGFloat
 
+    /// Creates a `GlassButton` modifier with the given corner radius.
     init(cornerRadius: CGFloat = RBRadius.small) {
         self.cornerRadius = cornerRadius
     }
 
+    /// Applies the interactive glass button effect to the given content view.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
@@ -103,6 +112,7 @@ struct GlassButton: ViewModifier {
 /// ❌ Do NOT use `GlassCard` for StatPill — it is a capsule-shaped inline pill,
 /// not a card container.
 struct StatPillBackground: ViewModifier {
+    /// Applies a glass capsule background (macOS 26+) or ultra-thin material capsule (pre-26).
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
@@ -124,6 +134,7 @@ struct StatusBadgeBackground: ViewModifier {
     /// The status color used to tint the badge.
     let color: Color
 
+    /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
@@ -146,6 +157,7 @@ struct StatusBadgeBackground: ViewModifier {
 /// macOS 26+: `rbAccent` tint layer + `.glassEffect(.regular, in: Capsule())`.
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
 struct BranchTagPillBackground: ViewModifier {
+    /// Applies an accent-tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
@@ -176,6 +188,7 @@ struct CardRowModifier: ViewModifier {
     /// When `true`, uses `rbSurfaceElevated`; otherwise uses `rbSurface`.
     var elevated: Bool = false
 
+    /// Fills the row background with the appropriate surface color.
     func body(content: Content) -> some View {
         content.background(
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
@@ -233,9 +246,12 @@ extension View {
 /// ❌ Do NOT convert to GlassCard — this is a capsule-shaped inline pill,
 /// not a card container. Background is provided by `StatPillBackground`.
 struct StatPill: View {
+    /// The metric label displayed before the value (e.g. "CPU").
     let label: String
+    /// The formatted metric value (e.g. "3.6%").
     let value: String
 
+    /// The pill content: label + value in a glass capsule.
     var body: some View {
         HStack(spacing: 3) {
             Text(label)
@@ -256,9 +272,12 @@ struct StatPill: View {
 /// Capsule badge for action-row trailing area.
 /// Renders a colour-matched background/border and label for a given `RBStatus`.
 struct StatusBadge: View {
+    /// The workflow status used to determine badge color and appearance.
     let status: RBStatus
+    /// The short label text displayed inside the badge.
     let text: String
 
+    /// The badge content: a tinted capsule label matching the status color.
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .semibold))
@@ -273,8 +292,10 @@ struct StatusBadge: View {
 /// Inline pill displaying a git branch or tag name.
 /// Uses an accent-tinted glass capsule on macOS 26+, stroke capsule pre-26.
 struct BranchTagPill: View { // periphery:ignore
+    /// The branch or tag name displayed inside the pill.
     let name: String
 
+    /// The pill content: a branch icon + name in an accent-tinted capsule.
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "arrow.triangle.branch")

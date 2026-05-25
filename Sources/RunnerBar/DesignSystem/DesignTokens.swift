@@ -41,12 +41,12 @@ extension Color {
     /// Amber warning color — adaptive light/dark pair for queued / pending status.
     static let rbWarning = Color.adaptive(
         light: Color(red: 0.80, green: 0.55, blue: 0.05),
-        dark:  Color(red: 1.0,  green: 0.75, blue: 0.20)
+        dark: Color(red: 1.0, green: 0.75, blue: 0.20)
     )
     /// Red danger color — adaptive light/dark pair for failed / error status.
     static let rbDanger = Color.adaptive(
         light: Color(red: 0.85, green: 0.18, blue: 0.18),
-        dark:  Color(red: 1.0,  green: 0.35, blue: 0.35)
+        dark: Color(red: 1.0, green: 0.35, blue: 0.35)
     )
     /// Primary accent alias — resolves to `rbBlue`.
     static let rbAccent = rbBlue
