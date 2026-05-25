@@ -283,11 +283,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is why that round-trip produces the correct dark glass.
         //
         // We only do this when no saved nav state would override it (i.e. we are
-        // showing mainView). The replacement is cheap — same view type, same model.
+        // about to show mainView, not a restored Settings/StepLog screen).
+        // NavState has associated values so is not Equatable — use if-case pattern.
         //
         // ❌ NEVER remove this block — main panel shows grey on cold open without it.
+        // ❌ NEVER replace with == comparison — NavState is not Equatable.
         // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
-        if savedNavState == nil || savedNavState == .main {
+        let showingMain: Bool
+        switch savedNavState {
+        case .none, .some(.main): showingMain = true
+        default: showingMain = false
+        }
+        if showingMain {
             hostingController?.rootView = mainView()
         }
 
