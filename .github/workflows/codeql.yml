@@ -3,8 +3,9 @@ name: CodeQL
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths:
+      - '**/*.swift'
+      - 'Package.swift'
   schedule:
     - cron: '0 3 * * 1'  # weekly Monday 03:00 UTC
 
@@ -19,6 +20,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache CodeQL bundle
+        uses: actions/cache@v4
+        with:
+          path: ~/.codeql/packages
+          key: codeql-swift-${{ runner.os }}-${{ runner.arch }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
