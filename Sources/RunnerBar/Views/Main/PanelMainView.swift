@@ -36,6 +36,14 @@ import SwiftUI
 //
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
+//
+// RULE 10: ❌ NEVER wrap ActionRowView items in GlassEffectContainer.
+// GlassEffectContainer merges all child glass surfaces into one shared compositor
+// layer which samples the backdrop as a whole — on a mixed/light desktop background
+// this appears grey/flat. SettingsView uses plain ForEach (no GlassEffectContainer)
+// and looks correct for exactly this reason. Each ActionRowView card must get its
+// own independent glass surface via the .glassEffect() modifier in ActionRowBackground.
+// See regression #892.
 /// Root panel view rendered inside the NSPanel.
 /// Owns the display-tick timer and system-stats lifecycle.
 /// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
@@ -115,8 +123,9 @@ struct PanelMainView: View {
         .frame(maxHeight: screenScrollMaxHeight)
     }
     /// Vertical stack of the Workflows section header, `ActionRowView` items, and the load-more button.
-    /// On macOS 26+ the ForEach of ActionRowView is wrapped in a GlassEffectContainer so that
-    /// adjacent glass cards merge at their shared edges. On macOS < 26 a plain VStack is used.
+    /// Each ActionRowView gets its own independent glass surface via ActionRowBackground.
+    /// ❌ NEVER wrap with GlassEffectContainer — it merges glass into one layer and looks grey
+    /// on mixed/light desktop backgrounds. See RULE 10 above.
     private var actionsSectionContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeaderLabel(title: "Workflows")
@@ -126,24 +135,12 @@ struct PanelMainView: View {
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
                 let visible = Array(store.actions.prefix(visibleCount))
-                if #available(macOS 26, *) {
-                    GlassEffectContainer {
-                        ForEach(visible) { group in
-                            ActionRowView(
-                                group: group,
-                                tick: displayTick,
-                                onStepTap: onStepTap
-                            )
-                        }
-                    }
-                } else {
-                    ForEach(visible) { group in
-                        ActionRowView(
-                            group: group,
-                            tick: displayTick,
-                            onStepTap: onStepTap
-                        )
-                    }
+                ForEach(visible) { group in
+                    ActionRowView(
+                        group: group,
+                        tick: displayTick,
+                        onStepTap: onStepTap
+                    )
                 }
                 loadMoreButton
             }
@@ -180,18 +177,7 @@ struct PanelMainView: View {
     }
     // MARK: - Rate limit banner (#778)
     /// Warning strip shown below the header when GitHub's rate limit has been hit.
-    ///
-    /// Uses `store.rateLimitResetDate` + the 1-second `displayTick` to render
-    /// a live countdown ("resets in 42s", "resets in 3m 07s", etc.).
-    /// Falls back to the static "pausing polls" label when no reset date is
-    /// known (e.g. CLI code path that sets `ghIsRateLimited` without a
-    /// `X-RateLimit-Reset` header value).
-    ///
-    /// `displayTick` is referenced via `_ = displayTick` so SwiftUI re-evaluates
-    /// this computed property every second while the banner is visible — the
-    /// same mechanism used by elapsed-time labels in `ActionRowView`.
     private var rateLimitBanner: some View {
-        // Capture tick to force a re-evaluation every second.
         _ = displayTick // swiftlint:disable:this redundant_discardable_let
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
@@ -217,7 +203,6 @@ struct PanelMainView: View {
         .padding(.horizontal, 12).padding(.vertical, 4)
     }
     // MARK: - Helpers
-    /// Opens the GitHub personal-access-token documentation page in the default browser.
     private func signInWithGitHub() {
         let urlString = "\(GitHubConstants.base)/en/authentication/"
             + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
