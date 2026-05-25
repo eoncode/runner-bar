@@ -1,6 +1,7 @@
 // RunnerPollState.swift
 // RunnerBar
 import Foundation
+import os
 import RunnerBarCore
 
 // MARK: - RunnerStore thin wrappers
@@ -8,10 +9,18 @@ import RunnerBarCore
 // These extensions delegate to PollResultBuilder so RunnerStore.fetch() call
 // sites are unchanged while the logic lives in the independently testable builder.
 
-/// Shared ISO-8601 date formatter for this file.
-/// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
-/// keeping one file-level instance avoids repeated allocation on every poll cycle.
-nonisolated(unsafe) private let iso8601 = ISO8601DateFormatter()
+// Shared ISO-8601 date formatter for this file.
+// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
+// keeping one file-level instance avoids repeated allocation on every poll cycle.
+// Safety: protected by iso8601Lock.
+
+/// A Sendable wrapper for ISO8601DateFormatter.
+private struct SendableFormatter: @unchecked Sendable {
+    /// The internal formatter instance.
+    let iso = ISO8601DateFormatter()
+}
+/// Lock for the formatter.
+private let iso8601Lock = OSAllocatedUnfairLock(initialState: SendableFormatter())
 
 /// Extension adding functionality to `RunnerStore`.
 extension RunnerStore {
@@ -73,7 +82,9 @@ extension RunnerStore {
                   let fresh = try? JSONDecoder().decode(JobPayload.self, from: data),
                   !fresh.steps.isEmpty
             else { continue }
-            cache[cacheID] = makeActiveJob(from: fresh, iso: iso8601, isDimmed: true)
+            cache[cacheID] = iso8601Lock.withLock { wrapper in
+                makeActiveJob(from: fresh, iso: wrapper.iso, isDimmed: true)
+            }
         }
     }
 

@@ -132,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Performs the applicationDidFinishLaunching operation.
     func applicationDidFinishLaunching(_ notification: Notification) {
+        configureGHAPI(
+            { endpoint in ghAPI(endpoint) },
+            isRateLimited: { ghIsRateLimited }
+        )
         setupStatusItem()
         setupPanel()
     }

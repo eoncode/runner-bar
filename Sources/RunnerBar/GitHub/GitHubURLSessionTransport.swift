@@ -139,7 +139,7 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     }
     let req = makeRequest(url: url, token: token, timeout: timeout)
     let sem = DispatchSemaphore(value: 0)
-    var result: Data?
+    let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
     URLSession.shared.dataTask(with: req) { data, response, error in
         defer { sem.signal() }
         if let error { log("urlSessionAPI › network error: \(error.localizedDescription)") ; return }
@@ -154,10 +154,10 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
             }
             guard (200..<300).contains(http.statusCode) else { return }
         }
-        result = data
+        result.withLock { $0 = data }
     }.resume()
     sem.wait()
-    return result
+    return result.withLock { $0 }
 }
 
 /// Fetches all pages of a GitHub API endpoint, concatenating JSON arrays.
@@ -177,8 +177,8 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         guard let url = URL(string: urlString) else { break }
         let req = makeRequest(url: url, token: token, timeout: timeout)
         let sem = DispatchSemaphore(value: 0)
-        var pageData: Data?
-        var linkHeader: String?
+        let pageData = OSAllocatedUnfairLock<Data?>(initialState: nil)
+        let linkHeader = OSAllocatedUnfairLock<String?>(initialState: nil)
         URLSession.shared.dataTask(with: req) { data, response, error in
             defer { sem.signal() }
             if let error { log("urlSessionAPIPaginated › network error: \(error.localizedDescription)") ; return }
@@ -191,16 +191,16 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else { return }
-                linkHeader = http.value(forHTTPHeaderField: "Link")
+                linkHeader.withLock { $0 = http.value(forHTTPHeaderField: "Link") }
             }
-            pageData = data
+            pageData.withLock { $0 = data }
         }.resume()
         sem.wait()
-        guard let data = pageData else { break }
+        guard let data = pageData.withLock({ $0 }) else { break }
         if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             allItems.append(contentsOf: page)
         }
-        nextURL = extractNextURL(from: linkHeader)
+        nextURL = extractNextURL(from: linkHeader.withLock({ $0 }))
     }
     guard !allItems.isEmpty else { return nil }
     return try? JSONSerialization.data(withJSONObject: allItems)

@@ -49,7 +49,7 @@ func githubToken() -> String? {
     // 3. gh CLI fallback — existing users keep working without re-authenticating.
     //    Uses ProcessRunner.run directly (no shell wrapper) to avoid /bin/zsh overhead
     //    and shell-injection risk.
-    if let ghPath = ghBinaryPath() {
+    if let ghPath = GHBinaryLocator.ghBinaryPath() {
         let run = ProcessRunner.run(
             executableURL: URL(fileURLWithPath: ghPath),
             arguments: ["auth", "token"],

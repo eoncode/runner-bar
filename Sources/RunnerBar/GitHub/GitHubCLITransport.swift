@@ -12,21 +12,6 @@ import Foundation
 
 /// Returns the path to the `gh` CLI binary, or nil if not found.
 ///
-/// Re-evaluated on every call so that `gh` installed after app launch
-/// (e.g. via Homebrew) is picked up on the next poll cycle without
-/// requiring a relaunch.
-///
-/// The candidate list covers the standard Homebrew (Apple Silicon and Intel)
-/// and system locations. The first executable match wins.
-func ghBinaryPath() -> String? {
-    let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
-    let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-    if found == nil { log("ghBinaryPath › gh not found in \(candidates)") }
-    return found
-}
-
-// MARK: - Core subprocess primitive
-
 /// Runs `gh` with the given arguments. Returns (output, exitCode).
 /// output is nil when the process produces no stdout (e.g. HTTP 204 No Content).
 /// exitCode is Int32.max on launch failure.
@@ -36,7 +21,7 @@ func runGHProcess(
     stdin: Data? = nil,
     timeout: TimeInterval = 20
 ) -> (data: Data?, exitCode: Int32) {
-    guard let ghPath = ghBinaryPath() else {
+    guard let ghPath = GHBinaryLocator.ghBinaryPath() else {
         log("runGHProcess › gh not found in known paths")
         return (nil, Int32.max)
     }

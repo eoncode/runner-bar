@@ -169,7 +169,7 @@ public struct JobStep: Identifiable, Equatable, Sendable {
 /// Uses a custom `init(from:)` so that a missing `steps` key decodes as `[]`
 /// rather than throwing — the GitHub API omits `steps` for jobs that have not
 /// yet started (e.g. queued jobs in a matrix).
-public struct JobPayload: Decodable {
+public struct JobPayload: Decodable, Sendable {
     public let id: Int
     public let name: String
     public let status: JobStatus
@@ -206,7 +206,7 @@ public struct JobPayload: Decodable {
 }
 
 /// Raw API payload for a single job step.
-public struct StepPayload: Decodable {
+public struct StepPayload: Decodable, Sendable {
     public let name: String
     public let status: JobStatus
     public let conclusion: JobConclusion?
@@ -222,7 +222,7 @@ public struct StepPayload: Decodable {
 }
 
 /// Wraps the top-level JSON object returned by `/actions/runs/{id}/jobs`.
-public struct JobsResponse: Decodable {
+public struct JobsResponse: Decodable, Sendable {
     public let jobs: [JobPayload]
 }
 // swiftlint:enable missing_docs
