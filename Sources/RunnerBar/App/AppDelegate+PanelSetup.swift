@@ -12,6 +12,16 @@ import SwiftUI
 //
 // ❌ NEVER inline this back into AppDelegate.swift.
 // ❌ NEVER call setupPanel() more than once.
+//
+// APPEARANCE CONTRACT:
+// newPanel.appearance is pinned to .darkAqua.
+// NSGlassEffectView on macOS 26 adjusts its visual weight based on key/main
+// window state — without a fixed appearance the glass flips between light and
+// dark variants whenever the user clicks inside the panel.
+// Pinning to .darkAqua gives a stable dark glass look regardless of activation.
+// ❌ NEVER remove the appearance assignment.
+// ❌ NEVER set appearance to nil — that re-enables the state-driven toggling.
+// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
 /// AppDelegate extension that builds the NSPanel, embeds the SwiftUI hosting controller,
 /// wires KVO on `preferredContentSize`, and starts all Combine subscriptions.
@@ -47,6 +57,11 @@ extension AppDelegate {
         newPanel.level = .popUpMenu
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.animationBehavior = .none
+        // Pin appearance to .darkAqua so NSGlassEffectView renders the dark glass
+        // variant consistently, regardless of key/main window state.
+        // ❌ NEVER remove or set to nil — causes light/dark toggling on click.
+        // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
+        newPanel.appearance = NSAppearance(named: .darkAqua)
         panel = newPanel
 
         setupKVO(controller: controller)
