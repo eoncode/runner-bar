@@ -31,7 +31,7 @@ struct RepoSelectorSheet: View {
     /// The searchText property.
     @State private var searchText = ""
 
-    /// The filtered property.
+    /// Items filtered by the current search query.
     private var filtered: [String] {
         searchText.isEmpty
             ? items
@@ -58,7 +58,7 @@ struct RepoSelectorSheet: View {
 
 /// Extension adding functionality to `RepoSelectorSheet`.
 extension RepoSelectorSheet {
-    /// The headerSection property.
+    /// Title and subtitle shown at the top of the sheet.
     var headerSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Select \(label)")
@@ -73,7 +73,7 @@ extension RepoSelectorSheet {
         .padding(.bottom, 10)
     }
 
-    /// The searchSection property.
+    /// Search field that filters the item list client-side.
     var searchSection: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -100,10 +100,9 @@ extension RepoSelectorSheet {
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
-    /// The listSection computed view.
     }
 
-    /// The listSection computed view.
+    /// Scrollable list of filtered items, or an appropriate empty/no-results state.
     @ViewBuilder
     var listSection: some View {
         if items.isEmpty {
@@ -145,7 +144,7 @@ extension RepoSelectorSheet {
         }
     }
 
-    /// Performs the itemRow operation.
+    /// A single tappable row displaying `item` with a drive icon.
     func itemRow(_ item: String) -> some View {
         Button(action: {
             log("RepoSelectorSheet \u{203a} selected item='\(item)'")
@@ -169,7 +168,7 @@ extension RepoSelectorSheet {
         .buttonStyle(.plain)
     }
 
-    /// The footerSection property.
+    /// Cancel button row shown at the bottom of the sheet.
     var footerSection: some View {
         HStack {
             Spacer()
