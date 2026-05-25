@@ -5,10 +5,14 @@ import XCTest
 // ⚠️ runner-bar uses NSPanel, NOT NSPopover.
 // ❌ NEVER query app.popovers — always use app.windows.
 // The app is LSUIElement=YES: no Dock icon, no app switcher, no visible windows.
-// The status bar icon appears briefly during panel tests, then disappears on tearDown.
+// The status bar icon appears briefly during panel interaction tests, then disappears on tearDown.
 final class RunnerBarUITests: XCTestCase {
 
     var app: XCUIApplication!
+
+    // macOS 13+ routes status bar items through Control Centre, not systemuiserver.
+    // ❌ NEVER use "com.apple.systemuiserver" — it will not find the status item on modern macOS.
+    private let controlCentre = XCUIApplication(bundleIdentifier: "com.apple.controlcenter")
 
     override func setUp() {
         continueAfterFailure = false
@@ -32,15 +36,13 @@ final class RunnerBarUITests: XCTestCase {
     }
 
     func testStatusBarItemExists() {
-        let menuBar = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
-        let statusItem = menuBar.statusItems.firstMatch
+        let statusItem = controlCentre.statusItems.firstMatch
         XCTAssertTrue(statusItem.waitForExistence(timeout: 5))
     }
 
     func testPanelOpensOnClick() {
         // NSPanel — query app.windows, NOT app.popovers
-        let menuBar = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
-        let statusItem = menuBar.statusItems.firstMatch
+        let statusItem = controlCentre.statusItems.firstMatch
         XCTAssertTrue(statusItem.waitForExistence(timeout: 5))
         statusItem.click()
         let panel = app.windows.firstMatch
@@ -48,11 +50,11 @@ final class RunnerBarUITests: XCTestCase {
     }
 
     func testPanelDismissesOnSecondClick() {
-        let menuBar = XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
-        let statusItem = menuBar.statusItems.firstMatch
+        let statusItem = controlCentre.statusItems.firstMatch
         statusItem.click()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 3))
         statusItem.click()
-        XCTAssertFalse(app.windows.firstMatch.waitForExistence(timeout: 2))
+        // 4s gives the panel enough time to fully dismiss under CI load
+        XCTAssertFalse(app.windows.firstMatch.waitForExistence(timeout: 4))
     }
 }
