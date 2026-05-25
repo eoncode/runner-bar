@@ -25,6 +25,14 @@ extension AppDelegate {
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
         controller.view.autoresizingMask = [.width, .height]
+        // fix(#891): NSHostingController's backing NSView has a default opaque
+        // background. Without this, the hosting view sits on top of
+        // NSGlassEffectView and produces a grey tint on cold open.
+        // Navigating away and back coincidentally cleared it by triggering a
+        // SwiftUI rootView swap. Setting the layer transparent here fixes it
+        // at source — same contract as PanelChromeView and the NSPanel itself.
+        controller.view.wantsLayer = true
+        controller.view.layer?.backgroundColor = .clear
         hostingController = controller
 
         let initW = Self.initPanelWidth
