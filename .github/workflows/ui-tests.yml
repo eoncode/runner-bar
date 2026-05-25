@@ -12,8 +12,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- Toolchain checks ---------------------------------------------------
+
+      - name: Ensure Homebrew is available
+        run: |
+          if ! command -v brew &>/dev/null; then
+            echo "Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          else
+            echo "Homebrew already installed: $(brew --version)"
+          fi
+
       - name: Install XcodeGen (if not cached)
-        run: which xcodegen || brew install xcodegen
+        run: |
+          if ! command -v xcodegen &>/dev/null; then
+            brew install xcodegen
+          else
+            echo "XcodeGen already installed: $(xcodegen --version)"
+          fi
+
+      - name: Validate Xcode installation
+        run: |
+          XCODE_PATH=$(xcode-select -p 2>/dev/null || true)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "ERROR: xcode-select returns no path. Run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
+            exit 1
+          fi
+          echo "Xcode developer path: $XCODE_PATH"
+          # Must point at a full Xcode install, not just CLT
+          if [[ "$XCODE_PATH" == *"CommandLineTools"* ]]; then
+            echo "ERROR: xcode-select points at CLT only. Full Xcode.app required for xcodebuild UITests."
+            echo "Fix: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
+            exit 1
+          fi
+          xcodebuild -version
+
+      # --- Build --------------------------------------------------------------
 
       - name: Generate ephemeral Xcode project
         run: xcodegen generate
@@ -25,6 +59,18 @@ jobs:
             -scheme RunnerBarUITests \
             -destination 'platform=macOS' \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty || xcodebuild test \
+              -project RunnerBar.xcodeproj \
+              -scheme RunnerBarUITests \
+              -destination 'platform=macOS' \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY=""
         env:
           UI_TESTING: "1"
+
+      # --- Cleanup ------------------------------------------------------------
+
+      - name: Remove generated Xcode project
+        if: always()
+        run: rm -rf RunnerBar.xcodeproj
