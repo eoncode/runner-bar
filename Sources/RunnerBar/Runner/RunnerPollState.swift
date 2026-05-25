@@ -18,7 +18,7 @@ extension RunnerStore {
     ///   - snapPrev: Previous live-jobs snapshot keyed by job ID.
     ///   - snapCache: Concluded-jobs cache keyed by job ID.
     /// - Returns: Updated `JobPollResult`.
-    func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
+    nonisolated func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         PollResultBuilder.buildJobState(
             snapPrev: snapPrev,
             snapCache: snapCache,
@@ -39,7 +39,7 @@ extension RunnerStore {
     ///   - snapGroupCache: Concluded-groups cache keyed by group ID string.
     ///   - jobCache: Concluded-jobs cache used to enrich group job data.
     /// - Returns: Updated `GroupPollResult`.
-    func buildGroupState(
+    nonisolated func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
         jobCache: [Int: ActiveJob]
