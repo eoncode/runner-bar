@@ -1,4 +1,4 @@
-# UI Test CI — What Doesn’t Work (and What Does)
+# UI Test CI — What Doesn't Work (and What Does)
 
 Running log of the `feature/936-xcodegen-uitest-setup` branch.  
 Update this file every time something new breaks or works. Do **not** delete old entries.
@@ -11,6 +11,7 @@ Update this file every time something new breaks or works. Do **not** delete old
 ```
 Test Case '-[RunnerBarUITests.RunnerBarUITests testSettingsNavigationFlow]' passed (22.525 seconds).
 Executed 1 test, with 0 failures (0 unexpected) in 22.525 seconds
+** TEST SUCCEEDED **
 ```
 
 **Passing config:**
@@ -87,14 +88,14 @@ Executed 3 tests, with 0 failures (0 unexpected) in 9.656 seconds
 
 ### ❌ Using the `RunnerBar` app scheme for `xcodebuild test` (Xcode 26)
 **Error:** `The bundle identifier for RunnerBar couldn't be read. No such file or directory: ".../Debug/RunnerBar"`  
-**Why:** Running UI tests via the app’s own scheme causes Xcode 26 to auto-populate `XCTTargetAppPath` internally with `.app` stripped.  
+**Why:** Running UI tests via the app's own scheme causes Xcode 26 to auto-populate `XCTTargetAppPath` internally with `.app` stripped.  
 **Fix:** Use a dedicated `RunnerBarUITests` scheme with no `testTargetApp` key.
 
 ---
 
 ### ❌ `dependencies: - target: RunnerBar` on `RunnerBarUITests` target (Xcode 26)
 **Error:** `The bundle identifier for RunnerBar couldn't be read.` — persists even with a dedicated scheme.  
-**Why:** On Xcode 26, a target-level dependency from a `bundle.ui-testing` target to an app target triggers auto-injection of `XCTTargetAppPath` regardless of scheme configuration. Xcode sees “this UI test bundle depends on this app” and wires the path internally — then strips `.app` from it.  
+**Why:** On Xcode 26, a target-level dependency from a `bundle.ui-testing` target to an app target triggers auto-injection of `XCTTargetAppPath` regardless of scheme configuration. Xcode sees "this UI test bundle depends on this app" and wires the path internally — then strips `.app` from it.  
 **Fix:** Remove `dependencies` from `RunnerBarUITests` entirely. Build the app in a **separate `xcodebuild build` step** first, then run `xcodebuild test`. Both steps share `-derivedDataPath`.  
 **Rule:** On Xcode 26, `bundle.ui-testing` targets must have **zero target dependencies** on the app.
 
@@ -103,7 +104,7 @@ Executed 3 tests, with 0 failures (0 unexpected) in 9.656 seconds
 ### ❌ `UI_TESTING` in scheme `commandLineArguments` instead of `environmentVariables`
 **Error:** `ProcessInfo.processInfo.environment["UI_TESTING"]` is always `nil`.  
 **Why:** `commandLineArguments` become `argv[]` entries, not environment variables.  
-**Fix:** Move `UI_TESTING` to `environmentVariables` in the scheme’s `test` block.
+**Fix:** Move `UI_TESTING` to `environmentVariables` in the scheme's `test` block.
 
 ---
 
@@ -154,7 +155,7 @@ is called and the app terminates the test.
 guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else { return }
 eventMonitor = NSEvent.addGlobalMonitorForEvents(...)
 ```
-**Rule:** ❌ NEVER install a global event monitor during UI tests. The monitor sees XCTest’s synthesized events and closes the panel.
+**Rule:** ❌ NEVER install a global event monitor during UI tests. The monitor sees XCTest's synthesized events and closes the panel.
 
 ---
 
@@ -168,7 +169,7 @@ so the click lands at the Y-mirrored screen position, which is outside the panel
 ```swift
 element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
 ```
-Normalised-offset clicks are computed **relative to the element’s own bounds**, not absolute screen
+Normalised-offset clicks are computed **relative to the element's own bounds**, not absolute screen
 space — the coordinate-space flip is irrelevant.
 **Rule:** ❌ NEVER call `.click()` directly on elements inside the panel. Always use
 `.coordinate(withNormalizedOffset: CGVector(dx:0.5, dy:0.5)).click()`.
@@ -176,7 +177,7 @@ space — the coordinate-space flip is irrelevant.
 ---
 
 ### ❌ `isHittable` always `false` for buttons inside a `nonActivatingPanel`
-**Why:** The panel never becomes the key window, so XCTest’s AX hit-test check at the
+**Why:** The panel never becomes the key window, so XCTest's AX hit-test check at the
 window level always returns `false` — even when the button is fully visible and clickable.
 **Fix:** Remove all `isHittable` predicates. `waitForExistence` is sufficient.
 **Rule:** ❌ NEVER wait for `isHittable` on elements inside the RunnerBar panel.
@@ -185,7 +186,7 @@ window level always returns `false` — even when the button is fully visible an
 
 ### ❌ `staticTexts["Settings"]` to verify SettingsView is open
 **Why:** `Text("Settings")` in `SettingsView.headerBar` is **nested inside a `Button`**. SwiftUI
-folds nested `Text` into the button’s AX label — it does NOT create a standalone `AXStaticText`
+folds nested `Text` into the button's AX label — it does NOT create a standalone `AXStaticText`
 node. `app.staticTexts["Settings"]` therefore always returns zero matches.
 **Fix:** Use `app.staticTexts["Active local runners"]` — the first unconditional `Text()` section
 header in `SettingsView`, which IS a standalone `AXStaticText`.
@@ -199,7 +200,7 @@ header in `SettingsView`, which IS a standalone `AXStaticText`.
 Picker renders as `NSSegmentedControl`. In the AX tree its segments appear as `AXRadioButton`
 children of an `AXRadioGroup` — **never as `AXButton` elements**. `app.buttons["Add new"]`
 always returns zero matches.
-**Fix:** Assert the sheet’s title `Text` instead: `app.staticTexts["Add runner"]`.
+**Fix:** Assert the sheet's title `Text` instead: `app.staticTexts["Add runner"]`.
 **Rule:** ❌ NEVER assert `app.buttons[]` for segmented Picker segments. Query `staticTexts` for
 proof-of-arrival.
 
@@ -246,7 +247,7 @@ app.buttons.matching(identifier: "plus").element(boundBy: 1) // Add scope
 ---
 
 ### ❌ Runner installed as a system `LaunchDaemon`
-**Error:** No GUI session → XCUIApplication can’t launch.  
+**Error:** No GUI session → XCUIApplication can't launch.  
 **Fix:** Install as user `LaunchAgent`:
 ```bash
 sudo ./svc.sh uninstall && ./svc.sh install && ./svc.sh start
@@ -262,7 +263,7 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
 ---
 
-## General Rules (Don’t Forget)
+## General Rules (Don't Forget)
 
 | Rule | Detail |
 |------|--------|
@@ -280,7 +281,7 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 | **Window level is NOT the cause of `app.windows` being empty** | `.popUpMenu` vs `.floating` makes no difference. The culprit is `nonactivatingPanel`. |
 | **Never rewrite tests before committing app-side code** | Verify app code exists (`grep`/search) before pushing tests that depend on it. |
 | **Clean build after app source changes** | `xcodebuild test -scheme RunnerBarUITests` does NOT recompile app sources. Run `xcodebuild clean + build -scheme RunnerBar` first. |
-| **Disable global event monitor during UI tests** | `NSEvent.addGlobalMonitorForEvents` sees XCTest’s synthesized clicks and dismisses the panel. Guard with `UI_TESTING`. |
+| **Disable global event monitor during UI tests** | `NSEvent.addGlobalMonitorForEvents` sees XCTest's synthesized clicks and dismisses the panel. Guard with `UI_TESTING`. |
 | **Use `.coordinate(withNormalizedOffset:).click()` always** | Direct `.click()` misfires on `nonActivatingPanel` due to Quartz/HIServices Y-axis flip. Normalised-offset is element-relative — no flip. |
 | **`isHittable` is always false on panel buttons** | Panel never becomes key. Drop all `isHittable` predicates. |
 | **`Text` inside `Button` is NOT a standalone `AXStaticText`** | SwiftUI folds it into the button label. Never assert nested `Text` via `staticTexts[]`. |
