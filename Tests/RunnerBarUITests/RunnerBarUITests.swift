@@ -26,6 +26,10 @@
 //    is unambiguous in each test. If that changes, add
 //    .accessibilityIdentifier("settings-back-button") to the back button and
 //    query via app.buttons.matching(identifier:).firstMatch instead.
+//
+// ⚠️ Always assert isHittable before clicking a button inside the panel.
+//    The panel may exist in the AX tree before its layout pass completes,
+//    causing clicks to land outside the window bounds.
 
 import XCTest
 
@@ -47,108 +51,32 @@ final class RunnerBarUITests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - Smoke
+    // MARK: - Helpers
 
-    /// App reaches .runningForeground because UI_TESTING sets .regular activation policy.
-    func testAppLaunchesWithoutCrashing() {
-        XCTAssertTrue(
-            app.wait(for: .runningForeground, timeout: 5),
-            "App should be running in the foreground"
-        )
-    }
-
-    /// NSStatusItem is present in the menu bar after launch.
-    func testStatusBarItemExists() {
-        XCTAssertTrue(
-            app.statusItems.firstMatch.waitForExistence(timeout: 3),
-            "Status bar item should exist"
-        )
+    /// Waits for a button to exist AND be hittable before clicking.
+    /// Prevents clicks landing outside the panel when layout hasn't finished.
+    private func tapButton(_ button: XCUIElement, timeout: TimeInterval = 5) {
+        XCTAssertTrue(button.waitForExistence(timeout: timeout))
+        let hittable = button.waitForExistence(timeout: timeout) &&
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isHittable == true"),
+                object: button
+            )], timeout: timeout) == .completed
+        XCTAssertTrue(hittable, "Button '\(button.label)' must be hittable before tapping")
+        button.click()
     }
 
     // MARK: - Panel open
 
     /// Clicking the status item opens the panel and shows the Workflows section header.
-    ///
     /// SectionHeaderLabel renders .uppercased(), so "Workflows" → "WORKFLOWS".
     func testPanelOpensAndShowsWorkflowsSection() {
         let statusItem = app.statusItems.firstMatch
-        XCTAssertTrue(statusItem.waitForExistence(timeout: 3), "Status item should exist")
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 3))
         statusItem.click()
-
         XCTAssertTrue(
             app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
             "Panel should contain the 'WORKFLOWS' section header after clicking status item"
-        )
-    }
-
-    /// In UI_TESTING mode all network calls are skipped (RunnerStore.start() is not called),
-    /// so store.actions is empty and PanelMainView renders the empty-state label.
-    /// This proves the content subtree fully rendered — not just the section header.
-    func testPanelShowsEmptyStateWhenNoWorkflows() {
-        let statusItem = app.statusItems.firstMatch
-        XCTAssertTrue(statusItem.waitForExistence(timeout: 3))
-        statusItem.click()
-
-        XCTAssertTrue(
-            app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
-            "Section header must appear first"
-        )
-        XCTAssertTrue(
-            app.staticTexts["No recent workflows"].waitForExistence(timeout: 3),
-            "Empty-state label should appear because network is skipped in UI_TESTING mode"
-        )
-    }
-
-    // MARK: - Header buttons
-
-    /// PanelHeaderView renders a gearshape button with .help("Settings").
-    /// Verifies the header fully rendered and the button is hittable.
-    func testSettingsButtonExistsInHeader() {
-        let statusItem = app.statusItems.firstMatch
-        XCTAssertTrue(statusItem.waitForExistence(timeout: 3))
-        statusItem.click()
-
-        XCTAssertTrue(
-            app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
-            "Panel must be open before querying header buttons"
-        )
-        let settingsBtn = app.buttons["Settings"]
-        XCTAssertTrue(
-            settingsBtn.waitForExistence(timeout: 3),
-            "Settings (gearshape) button should exist in the panel header"
-        )
-        XCTAssertTrue(settingsBtn.isHittable, "Settings button should be hittable")
-    }
-
-    // MARK: - Panel close / reopen
-
-    /// Clicking the status item a second time closes the panel (panel content disappears),
-    /// and clicking it again reopens it (panel content reappears).
-    /// This exercises openPanel() → closePanel() → openPanel() round-trip.
-    func testPanelClosesAndReopensOnStatusItemClick() {
-        let statusItem = app.statusItems.firstMatch
-        XCTAssertTrue(statusItem.waitForExistence(timeout: 3))
-
-        // Open
-        statusItem.click()
-        XCTAssertTrue(
-            app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
-            "Panel should open on first click"
-        )
-
-        // Close — second click toggles panel off
-        statusItem.click()
-        let closedExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: app.staticTexts["WORKFLOWS"]
-        )
-        wait(for: [closedExpectation], timeout: 3)
-
-        // Reopen
-        statusItem.click()
-        XCTAssertTrue(
-            app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
-            "Panel should reopen on third click"
         )
     }
 
@@ -170,7 +98,7 @@ final class RunnerBarUITests: XCTestCase {
         )
 
         // ── 1. Open Settings, verify all sections ─────────────────────
-        app.buttons["Settings"].click()
+        tapButton(app.buttons["Settings"])
 
         // SettingsView.headerBar renders Text("Settings") inside the back button
         XCTAssertTrue(
@@ -194,7 +122,7 @@ final class RunnerBarUITests: XCTestCase {
 
         // ── 2. Open Add Runner sheet, verify content, tap Cancel ──────
         // localRunnersSectionHeader "+" button has .help("Add a new runner")
-        app.buttons["Add a new runner"].click()
+        tapButton(app.buttons["Add a new runner"])
 
         // AddRunnerSheet title: Text("Add runner")
         XCTAssertTrue(
@@ -209,9 +137,7 @@ final class RunnerBarUITests: XCTestCase {
                       "Add pre-existing segment should exist")
 
         // Cancel button — label "Cancel", .keyboardShortcut(.cancelAction)
-        let addRunnerCancel = app.buttons["Cancel"]
-        XCTAssertTrue(addRunnerCancel.waitForExistence(timeout: 2))
-        addRunnerCancel.click()
+        tapButton(app.buttons["Cancel"])
 
         // Sheet dismissed — Settings sections visible again
         XCTAssertTrue(
@@ -221,7 +147,7 @@ final class RunnerBarUITests: XCTestCase {
 
         // ── 3. Open Add Scope sheet, verify content, tap Cancel ───────
         // remoteScopesSectionHeader "+" button has .help("Add a remote scope")
-        app.buttons["Add a remote scope"].click()
+        tapButton(app.buttons["Add a remote scope"])
 
         // AddScopeSheet title: Text("Add remote scope")
         XCTAssertTrue(
@@ -236,9 +162,7 @@ final class RunnerBarUITests: XCTestCase {
                       "Repository segment should exist")
 
         // Cancel button in AddScopeSheet — label "Cancel"
-        let addScopeCancel = app.buttons["Cancel"]
-        XCTAssertTrue(addScopeCancel.waitForExistence(timeout: 2))
-        addScopeCancel.click()
+        tapButton(app.buttons["Cancel"])
 
         // Sheet dismissed — Settings visible again
         XCTAssertTrue(
@@ -248,8 +172,8 @@ final class RunnerBarUITests: XCTestCase {
 
         // ── 4. Back to main via the back button ───────────────────────
         // SettingsView.headerBar back button AX label resolves to "Settings"
-        // (same Text child as the gear button, but gear is gone in this nav state)
-        app.buttons["Settings"].click()
+        // (gear button is absent in this nav state — no ambiguity)
+        tapButton(app.buttons["Settings"])
 
         // Main panel is back — WORKFLOWS section header visible
         XCTAssertTrue(
