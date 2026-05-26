@@ -24,6 +24,11 @@ extension AppDelegate {
             button.image = menuBarImage(for: .allOffline)
             button.action = #selector(togglePanel)
             button.target = self
+            // Required for XCUI tests on macOS 26+.
+            // statusItems["com.eoncode.runner-bar"] does NOT resolve to the bundle ID
+            // on macOS 26 — the accessibility tree uses the button's identifier instead.
+            // This string is the stable key used in RunnerBarUITests.
+            button.setAccessibilityIdentifier("RunnerBarStatusItem")
         }
     }
 
