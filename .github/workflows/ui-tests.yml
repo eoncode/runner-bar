@@ -68,7 +68,7 @@ jobs:
           xcodebuild build \
             -project RunnerBar.xcodeproj \
             -scheme RunnerBar \
-            -destination 'platform=macOS' \
+            -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath .derived
 
       - name: Run UI Tests
@@ -77,9 +77,10 @@ jobs:
           xcodebuild test \
             -project RunnerBar.xcodeproj \
             -scheme RunnerBar \
-            -destination 'platform=macOS' \
+            -destination 'platform=macOS,arch=arm64' \
             -only-testing RunnerBarUITests \
-            -derivedDataPath .derived
+            -derivedDataPath .derived \
+            -resultBundlePath .derived/UITests.xcresult
         # ⚠️ Do NOT pass CODE_SIGN_IDENTITY or CODE_SIGNING_REQUIRED here.
         # Passing CODE_SIGNING_REQUIRED=YES via command line causes Xcode 26 to
         # incorrectly flag USES_XCTRUNNER + TEST_HOST conflict on bundle.ui-testing targets.
@@ -90,4 +91,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-test-results-${{ github.sha }}
-          path: "*.xcresult"
+          path: .derived/UITests.xcresult
