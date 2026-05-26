@@ -267,15 +267,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Performs the openPanel operation.
     ///
     /// When `UI_TESTING=1` is set, `button.window` is nil because the app runs
-    /// as `.regular` activation policy (no real menu-bar window backing). In that
-    /// case we fall back to a centred position on the main screen and use
-    /// `.floating` window level so XCTest's AX server can see the panel in
-    /// `app.windows`.
+    /// as `.regular` activation policy (no real menu-bar backing window). In that
+    /// case we fall back to a centred position on the main screen.
     ///
-    /// `.popUpMenu` level panels are invisible to XCTest — they sit above the
-    /// AX layer. This fallback is UI-test-only and never affects production.
+    /// Panel window level is handled once in setupPanel() — .floating for UI
+    /// tests, .popUpMenu for production. Do not set panel.level here.
     func openPanel() {
-        let isUITesting = ProcessInfo.processInfo.environment["UI_TESTING"] != nil
         guard let button = statusItem?.button, let panel else { return }
 
         // In UI tests button.window is nil (no real menu-bar backing window), so
@@ -300,12 +297,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         panelVisibilityState.isOpen = true
         panelTopY = statusItemRect.minY - Self.gap
-
-        // During UI tests lower the panel level to .floating so XCTest's AX server
-        // can see it in app.windows. .popUpMenu is above the AX layer and invisible
-        // to XCTest. This is restored to .popUpMenu in production (see setupPanel).
-        // ❌ NEVER apply this outside UI_TESTING — it breaks menu-bar behaviour.
-        if isUITesting { panel.level = .floating }
 
         let initW = Self.initPanelWidth
         let initH: CGFloat = 300 + arrowHeight
