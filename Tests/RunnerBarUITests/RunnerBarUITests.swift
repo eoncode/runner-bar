@@ -27,10 +27,10 @@
 //    .accessibilityIdentifier("settings-back-button") to the back button and
 //    query via app.buttons.matching(identifier:).firstMatch instead.
 //
-// ⚠️ The panel resizes when switching between main view and SettingsView.
-//    XCTest caches AX element coordinates from the previous (larger) frame,
-//    so clicks land outside the shrunken window.
-//    ✓ Call waitForWindowToSettle() after any navigation that triggers a resize.
+// ⚠️ Text("Settings") in the SettingsView header is nested inside a Button —
+//    it does NOT appear as a standalone staticText in the AX tree.
+//    ❌ NEVER assert app.staticTexts["Settings"] to verify Settings is open.
+//    ✓ Use app.staticTexts["Active local runners"] — first unconditional section header.
 
 import XCTest
 
@@ -67,43 +67,14 @@ final class RunnerBarUITests: XCTestCase {
         button.click()
     }
 
-    /// Polls the first window's frame until it stops changing.
-    /// Required after any navigation that resizes the panel (e.g. main ↔ Settings),
-    /// because XCTest computes click coordinates from the AX tree which lags the
-    /// actual NSWindow frame commit — clicks land outside the window otherwise.
-    private func waitForWindowToSettle(timeout: TimeInterval = 3) {
-        let window = app.windows.firstMatch
-        var lastFrame = window.frame
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.1)
-            let current = window.frame
-            if current == lastFrame { return }
-            lastFrame = current
-        }
-    }
-
-    // MARK: - Panel open
-
-    /// Clicking the status item opens the panel and shows the Workflows section header.
-    /// SectionHeaderLabel renders .uppercased(), so "Workflows" → "WORKFLOWS".
-    func testPanelOpensAndShowsWorkflowsSection() {
-        let statusItem = app.statusItems.firstMatch
-        XCTAssertTrue(statusItem.waitForExistence(timeout: 3))
-        statusItem.click()
-        XCTAssertTrue(
-            app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
-            "Panel should contain the 'WORKFLOWS' section header after clicking status item"
-        )
-    }
-
     // MARK: - Settings navigation
 
     /// Full settings flow:
-    /// open panel → open settings → verify sections →
+    /// open panel → assert main content →
+    /// open settings → verify all section headers →
     /// open Add Runner sheet → verify + cancel →
     /// open Add Scope sheet → verify + cancel →
-    /// back to main → confirm main panel is visible.
+    /// back to main → confirm WORKFLOWS visible, Settings gone.
     func testSettingsNavigationFlow() {
         // ── Open panel ────────────────────────────────────────────────
         let statusItem = app.statusItems.firstMatch
@@ -111,17 +82,15 @@ final class RunnerBarUITests: XCTestCase {
         statusItem.click()
         XCTAssertTrue(
             app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
-            "Main panel must be open before navigating to Settings"
+            "Main panel must show WORKFLOWS section header after status item click"
         )
 
         // ── 1. Open Settings ──────────────────────────────────────────
         tapButton(app.buttons["Settings"])
-        // Panel shrinks to Settings size — wait for frame to stop changing
-        // before querying any element coordinates inside the smaller window.
-        waitForWindowToSettle()
-
+        // Text("Settings") is inside the back Button — not a standalone staticText.
+        // Proof-of-arrival: first unconditional section header in SettingsView.
         XCTAssertTrue(app.staticTexts["Active local runners"].waitForExistence(timeout: 5),
-                      "Local runners section header")
+                      "Active local runners section header")
         XCTAssertTrue(app.staticTexts["Remote runner scopes"].exists,
                       "Remote scopes section header")
         XCTAssertTrue(app.staticTexts["Notifications"].exists,
@@ -155,9 +124,6 @@ final class RunnerBarUITests: XCTestCase {
 
         // ── 4. Back to main ───────────────────────────────────────────
         tapButton(app.buttons["Settings"])
-        // Panel expands back to main view size — wait for frame to settle.
-        waitForWindowToSettle()
-
         XCTAssertTrue(
             app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
             "WORKFLOWS section header should reappear after navigating back to main"
