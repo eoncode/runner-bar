@@ -42,8 +42,10 @@ final class RunnerBarUITests: XCTestCase {
 
     func testPanelOpensOnClick() {
         // NSPanel — query app.windows, NOT app.popovers.
-        // Use the RunnerBar bundle identifier to avoid matching system status items (e.g. Battery).
-        let statusItem = controlCentre.statusItems["com.eoncode.runner-bar"]
+        // ⚠️ macOS 26: controlCentre.statusItems["com.eoncode.runner-bar"] does NOT work —
+        // the accessibility identifier is NOT the bundle ID on macOS 26. Use firstMatch instead.
+        // testStatusBarItemExists confirms firstMatch resolves to our item (only one item in CI).
+        let statusItem = controlCentre.statusItems.firstMatch
         XCTAssertTrue(statusItem.waitForExistence(timeout: 5))
         statusItem.click()
         let panel = app.windows.firstMatch
@@ -51,7 +53,8 @@ final class RunnerBarUITests: XCTestCase {
     }
 
     func testPanelDismissesOnSecondClick() {
-        let statusItem = controlCentre.statusItems["com.eoncode.runner-bar"]
+        // ⚠️ macOS 26: same as above — use firstMatch, not bundle-id identifier.
+        let statusItem = controlCentre.statusItems.firstMatch
         XCTAssertTrue(statusItem.waitForExistence(timeout: 5))
         statusItem.click()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 3))
