@@ -27,6 +27,14 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         AD_HOC_CODE_SIGNING_ALLOWED: YES
         INFOPLIST_FILE: Resources/Info.plist
+        # LSUIElement makes the app a menu bar agent (no Dock icon) in production.
+        # It lives here as a build setting rather than in Info.plist so that it
+        # is only applied to the RunnerBar app target. The RunnerBarUITests target
+        # has its own generated plist and never inherits this key, meaning the app
+        # launches as a normal foreground process during UI tests and app.windows
+        # is fully visible to XCTest.
+        # ❌ NEVER move this back into Resources/Info.plist.
+        INFOPLIST_KEY_LSUIElement: YES
 
   RunnerBarUITests:
     type: bundle.ui-testing
