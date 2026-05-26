@@ -1,17 +1,20 @@
 # RunnerBar
 
-<!-- Platform & Stack -->
+**Platform & Stack**
+
 ![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black?logo=apple&logoColor=white)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift&logoColor=white)
 ![Liquid Glass](https://img.shields.io/badge/UI-Liquid%20Glass-0A84FF?style=flat-square&logo=apple&logoColor=white)
 
-<!-- CI Checks -->
+**CI Checks**
+
 ![SwiftLint](https://github.com/eoncode/runner-bar/actions/workflows/swiftlint.yml/badge.svg)
 ![Tests](https://github.com/eoncode/runner-bar/actions/workflows/swift-test.yml/badge.svg)
 ![Periphery](https://github.com/eoncode/runner-bar/actions/workflows/periphery.yml/badge.svg)
 [![CodeQL](https://github.com/eoncode/runner-bar/actions/workflows/codeql.yml/badge.svg)](https://github.com/eoncode/runner-bar/actions/workflows/codeql.yml)
 
-<!-- Code Quality -->
+**Code Quality**
+
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
