@@ -52,9 +52,11 @@ jobs:
             -scheme RunnerBar \
             -destination 'platform=macOS' \
             -only-testing RunnerBarUITests \
-            -derivedDataPath .derived \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=YES
+            -derivedDataPath .derived
+        # ⚠️ Do NOT pass CODE_SIGN_IDENTITY or CODE_SIGNING_REQUIRED here.
+        # Passing CODE_SIGNING_REQUIRED=YES via command line causes Xcode 26 to
+        # incorrectly flag USES_XCTRUNNER + TEST_HOST conflict on bundle.ui-testing targets.
+        # Signing is already handled by project.yml.
 
       - name: Upload test results
         if: always()
