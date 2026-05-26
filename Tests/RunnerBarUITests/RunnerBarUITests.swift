@@ -15,13 +15,22 @@ import XCTest
 // automatically on launch when --uitesting is passed (see AppDelegate.swift).
 // ❌ NEVER query controlcenter.statusItems — broken on macOS 26.
 // ❌ NEVER use mouse coordinate simulation — fragile and CI-hostile.
+//
+// WHY XCUIApplication(bundleIdentifier:) INSTEAD OF XCUIApplication():
+// On Xcode 26, when RunnerBarUITests has no target-level dependency on RunnerBar
+// (removed to fix the .app-extension stripping bug), Xcode no longer injects
+// targetApplicationPath into XCTestConfiguration. XCUIApplication() reads that
+// field and crashes with "No target application path specified" if it is nil.
+// XCUIApplication(bundleIdentifier:) bypasses that field entirely and is the
+// correct API for LSUIElement apps that are not the scheme's primary run target.
 final class RunnerBarUITests: XCTestCase {
 
     var app: XCUIApplication!
 
     override func setUp() {
         continueAfterFailure = false
-        app = XCUIApplication()
+        // ⚠️ Must use bundleIdentifier: — see comment above.
+        app = XCUIApplication(bundleIdentifier: "com.eoncode.runner-bar")
         // ⚠️ --uitesting bypasses Keychain reads and API polling AND opens the
         // panel immediately on launch so tests can interact with app.windows.
         // ❌ NEVER remove this launch argument.
