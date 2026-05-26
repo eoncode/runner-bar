@@ -167,16 +167,27 @@ RunnerBarUITests: [build, test]   # ← `build` is required, not just `test`
 
 Result: `xcodebuild: error: Scheme RunnerBar is not currently configured for the test action.` — even though `project.yml` is logically correct.
 
-**Fix:** Commit the `.xcscheme` file directly into the repo at `RunnerBar.xcodeproj/xcshareddata/xcschemes/RunnerBar.xcscheme`. Since XcodeGen regenerates the project folder, also add the schemes directory to `.gitignore`'s **negation** or switch to a workflow that copies the committed scheme *after* `xcodegen generate`.
+**Fix:** Commit the `.xcscheme` file directly into the repo at `RunnerBar.xcodeproj/xcshareddata/xcschemes/RunnerBar.xcscheme` with a hand-written `<TestAction>` containing `<TestableReference skipped="NO">` for `RunnerBarUITests`. Then restore it in the workflow after `xcodegen generate` (see learning #15).
 
-**Workflow step to restore the committed scheme after xcodegen:**
+❌ **Never** assume XcodeGen will generate a test-capable scheme on Xcode 26 for UI test targets.
+
+---
+
+### 15. Committing `.xcscheme` without a workflow restore step
+**Why it fails:** `xcodegen generate` runs on every CI job and **overwrites** `RunnerBar.xcodeproj/xcshareddata/xcschemes/RunnerBar.xcscheme` with its own (broken) generated scheme. Even if you commit a perfectly correct `.xcscheme`, it is silently replaced before any `xcodebuild` call sees it. The error is still:
+```
+xcodebuild: error: Scheme RunnerBar is not currently configured for the test action.
+```
+This is insidious because the fix looks complete from the git log — the good scheme is committed — but it never survives to runtime.
+
+**Fix:** Add a workflow step **immediately after** `xcodegen generate` that restores the committed scheme:
 ```yaml
 - name: Restore committed scheme
   run: |
     mkdir -p RunnerBar.xcodeproj/xcshareddata/xcschemes
     git checkout HEAD -- RunnerBar.xcodeproj/xcshareddata/xcschemes/RunnerBar.xcscheme
 ```
-❌ **Never** assume XcodeGen will generate a test-capable scheme on Xcode 26 for UI test targets. Always commit and restore the scheme explicitly.
+❌ **Never** commit a `.xcscheme` fix without this restore step in the workflow — the commit is a no-op without it.
 
 ---
 
@@ -193,7 +204,7 @@ Result: `xcodebuild: error: Scheme RunnerBar is not currently configured for the
 - `app: RunnerBar` on the UI test target in the scheme test action — required on Xcode 26 for correct `.app` path resolution
 - Explicit action list on main app: `RunnerBar: [build, run, test, profile, analyze, archive]` — never use `all`
 - `RunnerBarUITests: [build, test]` in scheme build targets — `build` is required or TestAction is empty
-- Commit `.xcscheme` directly + restore it after `xcodegen generate` — required on Xcode 26 when XcodeGen scheme generation is broken
+- Commit `.xcscheme` directly + restore with `git checkout HEAD --` after `xcodegen generate` — both steps required together
 
 ---
 
