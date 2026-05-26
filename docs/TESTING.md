@@ -2,6 +2,34 @@
 
 One-time manual steps required on the self-hosted Mac before UI tests will run unattended in CI.
 
+## Triggering UI Tests
+
+UI tests are **opt-in** — they do NOT run on every push or PR. They take over the
+self-hosted Mac's display (WindowServer), so they must be requested explicitly.
+
+### Opt-in via commit message
+
+Add `[run ui tests]` anywhere in your commit message:
+
+```bash
+git commit -m "fix: settings navigation [run ui tests]"
+git push
+```
+
+The CI job is skipped on all other commits. Both `push` and `pull_request`
+events honour the flag.
+
+### Opt-in via manual dispatch
+
+You can also trigger the workflow manually from the GitHub Actions UI without
+making a commit:
+
+1. Go to **Actions → UI Tests**
+2. Click **Run workflow**
+3. Select the branch and click **Run workflow**
+
+---
+
 ## 1. Grant Accessibility permission to Xcode
 
 Without this step, every CI run will block on a system dialog:
@@ -39,4 +67,3 @@ sudo ./svc.sh uninstall
 ./svc.sh install
 ./svc.sh start
 ```
-   

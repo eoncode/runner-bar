@@ -1,25 +1,30 @@
 name: UI Tests
 
 on:
-  # Only trigger on pull_request — not on push.
-  # push to this branch also fires a PR event; having both causes duplicate runs.
+  push:
+    branches: ['**']
   pull_request:
+  workflow_dispatch:  # allows manual trigger from the GitHub Actions UI
 
-# Skip if the commit message contains [skip ci] or [ci skip].
-# GitHub natively honours these tokens on push events but NOT on pull_request
-# events (it only skips if the PR title/body contains them). The condition
-# below enforces the skip on pull_request events as well.
+# Cancel any in-progress run for the same ref when a new one starts.
 concurrency:
   group: ui-tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   ui-test:
-    # Skip the job if [skip ci] or [ci skip] appears anywhere in the latest
-    # commit message of the push that triggered this PR event.
+    # Opt-in only: the job runs ONLY when the triggering commit message
+    # contains [run ui tests]. This prevents the UI test workflow from
+    # monopolising the self-hosted Mac on every push.
+    #
+    # Usage:
+    #   git commit -m "fix: settings nav [run ui tests]"
+    #
+    # workflow_dispatch (manual trigger) always runs regardless of message.
     if: |
-      !contains(github.event.head_commit.message, '[skip ci]') &&
-      !contains(github.event.head_commit.message, '[ci skip]')
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[run ui tests]') ||
+      contains(github.event.pull_request.head.commit.message, '[run ui tests]')
     runs-on: self-hosted
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
