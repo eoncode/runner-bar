@@ -197,7 +197,10 @@ struct SettingsView: View {
             Button(action: { showAddRunnerSheet = true }, label: {
                 Image(systemName: "plus").font(.caption).foregroundColor(Color.rbTextSecondary)
             })
-            .buttonStyle(.plain).help("Add a new runner").padding(.trailing, 4)
+            .buttonStyle(.plain)
+            .help("Add a new runner")
+            .accessibilityIdentifier("addRunnerButton")
+            .padding(.trailing, 4)
             if localRunnerStore.isScanning {
                 ProgressView().scaleEffect(0.6).frame(width: 14, height: 14)
             } else {
@@ -349,7 +352,9 @@ struct SettingsView: View {
             Button(action: { showAddScopeSheet = true }) {
                 Image(systemName: "plus").font(.caption).foregroundColor(Color.rbTextSecondary)
             }
-            .buttonStyle(.plain).help("Add a remote scope")
+            .buttonStyle(.plain)
+            .help("Add a remote scope")
+            .accessibilityIdentifier("addScopeButton")
         }
         .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
     }
