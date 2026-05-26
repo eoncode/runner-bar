@@ -22,6 +22,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.eonist.runnerbar
+        MACH_O_TYPE: mh_execute
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
         AD_HOC_CODE_SIGNING_ALLOWED: YES
@@ -42,6 +43,8 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         AD_HOC_CODE_SIGNING_ALLOWED: YES
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/RunnerBar.app/Contents/MacOS/RunnerBar
+        BUNDLE_LOADER: $(TEST_HOST)
 
 schemes:
   RunnerBar:
@@ -55,8 +58,6 @@ schemes:
           parallelizable: false
       environmentVariables:
         XCTestObserverAlwaysShowShield: NO
-        # Explicitly supply the .app path so XCTRunner doesn't fall back to
-        # bundle-ID lookup (which strips .app on macOS 26 when LSUIElement=YES)
         XCTTargetAppPath: $(BUILT_PRODUCTS_DIR)/RunnerBar.app
       commandLineArguments:
         UI_TESTING: true
