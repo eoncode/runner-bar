@@ -62,12 +62,20 @@ struct PanelMainView: View {
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
-    /// True only when at least one local runner is actively busy AND there is
-    /// at least one in-progress workflow. Gates both the section header and
-    /// PanelLocalRunnerRow so the section never appears without an active run.
+    /// True only when at least one local runner is actively busy (per the remote GitHub API,
+    /// which is always in sync with store.actions) AND there is at least one in-progress
+    /// workflow. Gates both the section header and PanelLocalRunnerRow so the section never
+    /// appears without an active run.
+    ///
+    /// Fix (#948): previously used localRunners[x].isBusy, which is set by
+    /// RunnerStatusEnricher inside LocalRunnerStore.refresh() on a separate background
+    /// cycle — never in sync with store.actions. Now uses store.runners (remote [Runner],
+    /// same RunnerStore.fetch() cycle as store.actions) cross-referenced against local
+    /// runner names to eliminate the timing race.
     private var hasBusyLocalRunners: Bool {
-        store.localRunners.contains { $0.isBusy }
-            && store.actions.contains { $0.groupStatus == .inProgress }
+        guard store.actions.contains(where: { $0.groupStatus == .inProgress }) else { return false }
+        let localNames = Set(store.localRunners.map { $0.runnerName })
+        return store.runners.contains { $0.busy && localNames.contains($0.name) }
     }
     /// Root body: stacks the header, optional rate-limit banner, local-runner section, and scrollable actions list.
     var body: some View {
