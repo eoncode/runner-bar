@@ -1,8 +1,6 @@
 name: UI Tests
 
 on:
-  push:
-    branches: ['**']
   pull_request:
   workflow_dispatch:  # allows manual trigger from the GitHub Actions UI
 
@@ -23,7 +21,6 @@ jobs:
     # workflow_dispatch (manual trigger) always runs regardless of message.
     if: |
       github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message, '[run ui tests]') ||
       contains(github.event.pull_request.head.commit.message, '[run ui tests]')
     runs-on: self-hosted
     env:
