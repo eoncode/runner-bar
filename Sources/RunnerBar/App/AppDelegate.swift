@@ -168,13 +168,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Regression guard — see ARCHITECTURE.md §Panel Lifecycle.
     // ❌ NEVER re-derive panelTopY here. ❌ NEVER call from a background thread.
+    //
+    // UI_TESTING note: in UI tests button.window is nil (no real menu-bar backing
+    // window). The guard below falls back to a centred rect on the main screen so
+    // the panel is positioned on-screen and XCTest's AX server can find it in
+    // app.windows. ❌ NEVER remove the button.window fallback.
     // swiftlint:disable:next missing_docs
     func resizeAndRepositionPanel() { // internal: required for AppDelegate+Navigation
         guard panelIsOpen,
               let panel,
               let chrome,
               let button = statusItem?.button,
-              let statusItemRect = button.window?.frame,
               let topY = panelTopY else { return }
 
         let preferred = hostingController?.preferredContentSize ?? CGSize(width: Self.initPanelWidth, height: 300)
@@ -182,6 +186,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentW = min(max(preferred.width, Self.minWidth), maxWidth)
         let contentH = min(max(preferred.height, 60), maxHeight)
         let totalH = contentH + arrowHeight
+
+        // In UI tests button.window is nil — fall back to centred position on main screen.
+        // ❌ NEVER remove this fallback — required for testPanelOpensAndShowsWorkflowsSection.
+        let statusItemRect: NSRect
+        if let windowFrame = button.window?.frame {
+            statusItemRect = windowFrame
+        } else {
+            let screen = NSScreen.main ?? NSScreen.screens[0]
+            let sf = screen.visibleFrame
+            statusItemRect = NSRect(
+                x: sf.midX - contentW / 2,
+                y: sf.maxY,
+                width: contentW,
+                height: 0
+            )
+        }
 
         let posX = statusItemRect.midX - contentW / 2
         let rawPosY = topY - totalH
@@ -229,8 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Nav-state persistence — see ARCHITECTURE.md §Nav-state persistence.
         // ❌ NEVER replace hostingController?.rootView = mainView() with a no-op stub.
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            let preserved = self.savedNavState
+            guard let self else { return }\n            let preserved = self.savedNavState
             self.hostingController?.rootView = self.mainView()
             self.savedNavState = preserved
         }
