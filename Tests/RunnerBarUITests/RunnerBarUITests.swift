@@ -10,11 +10,11 @@
 //     mouse cursor and steals focus on the active desktop session.
 //   • All tests here are READ-ONLY: they only query the AX tree, never synthesise
 //     input events. This keeps CI safe to run on a shared/active machine.
-//   • Interactive tests (click → panel opens) belong in a local dev scheme only,
-//     or must run in an isolated user session via fast-user-switching.
 //
 // ⚠️ LSUIElement apps never reach .runningForeground — use .runningBackground.
 // ⚠️ This app uses NSPanel, not NSPopover — use app.windows, not app.popovers.
+// ⚠️ XCUIApplication must be initialised with the bundle ID (not default init)
+//    to avoid Xcode 26 path resolution bug with LSUIElement apps.
 
 import XCTest
 
@@ -25,7 +25,9 @@ final class RunnerBarUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        app = XCUIApplication()
+        // Use explicit bundle ID — avoids XCTTargetAppPath .app-extension stripping
+        // bug on macOS 26 with LSUIElement apps.
+        app = XCUIApplication(bundleIdentifier: "dev.eonist.runnerbar")
         app.launchEnvironment["UI_TESTING"] = "1"
         app.launch()
     }

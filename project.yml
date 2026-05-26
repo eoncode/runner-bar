@@ -42,8 +42,6 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         AD_HOC_CODE_SIGNING_ALLOWED: YES
         GENERATE_INFOPLIST_FILE: YES
-        # TEST_HOST and BUNDLE_LOADER must NOT be set for bundle.ui-testing
-        # (USES_XCTRUNNER=YES is implicit and mutually exclusive with those)
 
 schemes:
   RunnerBar:
@@ -53,9 +51,13 @@ schemes:
         RunnerBarUITests: [testing]
     test:
       targets:
-        - RunnerBarUITests
+        - name: RunnerBarUITests
+          parallelizable: false
       environmentVariables:
         XCTestObserverAlwaysShowShield: NO
+        # Explicitly supply the .app path so XCTRunner doesn't fall back to
+        # bundle-ID lookup (which strips .app on macOS 26 when LSUIElement=YES)
+        XCTTargetAppPath: $(BUILT_PRODUCTS_DIR)/RunnerBar.app
       commandLineArguments:
         UI_TESTING: true
     run:
