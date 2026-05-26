@@ -16,6 +16,8 @@
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
