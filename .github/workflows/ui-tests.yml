@@ -8,6 +8,13 @@ on:
 env:
   HOMEBREW_NO_AUTO_UPDATE: "1"
 
+# Only one UI test job runs on the machine at a time.
+# A newer run cancels any already-queued (but not yet started) run;
+# if a run is already executing it will finish first.
+concurrency:
+  group: ui-tests-self-hosted
+  cancel-in-progress: false
+
 jobs:
   ui-test:
     runs-on: self-hosted
