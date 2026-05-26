@@ -9,6 +9,8 @@
 //    Use app.windows.firstMatch — NEVER app.popovers.firstMatch.
 // ⚠️ UI_TESTING=1 is injected via launchEnvironment, which causes the app to
 //    skip RunnerStore.shared.start() and all keychain/network access.
+// ⚠️ LSUIElement apps run as background agents — they never reach .runningForeground.
+//    Use .runningBackground instead.
 
 import XCTest
 
@@ -29,9 +31,13 @@ final class RunnerBarUITests: XCTestCase {
         super.tearDown()
     }
 
-    /// Verifies the app process starts and reaches the running state without crashing.
+    /// Verifies the app process starts and reaches running state without crashing.
+    /// LSUIElement apps are background agents — they never reach .runningForeground.
     func testAppLaunchesWithoutCrashing() {
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+        XCTAssertTrue(
+            app.wait(for: .runningBackground, timeout: 5),
+            "App should reach .runningBackground state (it is an LSUIElement agent)"
+        )
     }
 
     /// Verifies the NSStatusItem is present in the menu bar after launch.
@@ -41,15 +47,18 @@ final class RunnerBarUITests: XCTestCase {
     }
 
     /// Verifies clicking the status item shows the NSPanel.
-    /// ⚠️ App uses NSPanel (borderless, non-activating) — query via app.windows, not app.popovers.
+    /// ⚠️ Status items live at negative Y coordinates in the menu bar.
+    ///    XCTest considers them "not hittable" when the test overlay is active;
+    ///    we use coordinate-based click to bypass the hittability check.
     func testPanelOpensOnClick() {
         let statusItem = app.statusItems.firstMatch
         guard statusItem.waitForExistence(timeout: 3) else {
             XCTFail("Status item not found in menu bar")
             return
         }
-        statusItem.click()
+        // Use coordinate click to bypass hittability check on menu bar items
+        statusItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         let panel = app.windows.firstMatch
-        XCTAssertTrue(panel.waitForExistence(timeout: 3))
+        XCTAssertTrue(panel.waitForExistence(timeout: 3), "NSPanel should appear after clicking status item")
     }
 }

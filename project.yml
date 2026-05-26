@@ -52,6 +52,8 @@ schemes:
     test:
       targets:
         - RunnerBarUITests
+      environmentVariables:
+        XCTestObserverAlwaysShowShield: NO
       commandLineArguments:
         UI_TESTING: true
     run:
