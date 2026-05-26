@@ -13,10 +13,10 @@ Update this file every time something new breaks or works. Do **not** delete old
 - `GENERATE_INFOPLIST_FILE: YES` on `RunnerBarUITests`
 - `XCUIApplication(bundleIdentifier: "dev.eonist.runnerbar")` — NOT default init
 - `app.wait(for: .runningBackground, timeout:)` — NOT `.runningForeground`
-- **No `XCTTargetAppPath`** in scheme env — removing it fixed the fatal launch error on Xcode 26
-- `xcodebuild test -only-testing:RunnerBarUITests` on self-hosted runner with GUI session
-
-**Results:** `Executed 2 tests, with 0 failures` ✅
+- **No `testTargetApp` in scheme** — omitting it prevents Xcode 26 from auto-injecting `XCTTargetAppPath`
+- **`UI_TESTING` as `environmentVariables`** in scheme, NOT `commandLineArguments`
+- **Dedicated `RunnerBarUITests` scheme** used for `xcodebuild test`, NOT the `RunnerBar` app scheme
+- `xcodebuild test -scheme RunnerBarUITests -only-testing:RunnerBarUITests` on self-hosted runner with GUI session
 
 ---
 
@@ -52,6 +52,22 @@ Update this file every time something new breaks or works. Do **not** delete old
 ### ❌ `RunnerBarUITests` not wired into the scheme's test action
 **Error:** `xcodebuild test -only-testing:RunnerBarUITests` finds nothing to run.  
 **Fix:** The `schemes.RunnerBar.test.targets` list must explicitly include `RunnerBarUITests`. XcodeGen does not infer it.
+
+---
+
+### ❌ Using the `RunnerBar` app scheme for `xcodebuild test` (Xcode 26)
+**Error:** `The bundle identifier for RunnerBar couldn't be read. No such file or directory: ".../Debug/RunnerBar"`  
+**Why:** When `RunnerBarUITests` is wired into the `RunnerBar` app scheme's test action (even without an explicit `testTargetApp` key), Xcode 26 auto-populates `XCTTargetAppPath` internally, pointing at `.../Debug/RunnerBar` — with the `.app` extension stripped. The test runner then fails to read the bundle ID from that path.  
+**Fix:** Create a **dedicated `RunnerBarUITests` scheme** that includes only the build/test targets and has **no `testTargetApp`** key. Run `xcodebuild test -scheme RunnerBarUITests` instead of `-scheme RunnerBar`.  
+**Rule:** On Xcode 26, UI tests must use a dedicated scheme with no `testTargetApp`. Never run UI tests via the app's own scheme.
+
+---
+
+### ❌ `UI_TESTING` in scheme `commandLineArguments` instead of `environmentVariables`
+**Error:** `ProcessInfo.processInfo.environment["UI_TESTING"]` is always `nil` in the app — network/keychain guard never triggers.  
+**Why:** `commandLineArguments` in an XcodeGen scheme become `argv[]` entries (prefixed with `-`), not environment variables. `ProcessInfo.processInfo.environment` only sees env vars, not CLI args.  
+**Fix:** Move `UI_TESTING` from `commandLineArguments` to `environmentVariables` in the scheme's `test` block.  
+**Rule:** Anything the app reads via `ProcessInfo.processInfo.environment["KEY"]` must be in `environmentVariables`, not `commandLineArguments`.
 
 ---
 
@@ -153,5 +169,8 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 | **LSUIElement apps are `.runningBackground`** | Never `.runningForeground`. |
 | **Use bundle ID init** | `XCUIApplication(bundleIdentifier:)` — not default init — on Xcode 26 + LSUIElement. |
 | **No `XCTTargetAppPath` in scheme** | Xcode 26 strips `.app` from the path → bundle ID read fails. Remove it entirely. |
+| **No `testTargetApp` in UITests scheme** | Xcode 26 auto-injects `XCTTargetAppPath` when present → same `.app`-stripping bug. Use dedicated scheme. |
+| **`UI_TESTING` in `environmentVariables`, not `commandLineArguments`** | CLI args are not env vars. `ProcessInfo.processInfo.environment` won't see them. |
+| **Use dedicated `RunnerBarUITests` scheme** | Never run UI tests via the app scheme. Dedicated scheme = no auto-injected `XCTTargetAppPath`. |
 | **No mouse events in CI** | AX read-only queries only. Use `OPEN_PANEL_ON_LAUNCH` to open the panel instead. |
 | **Runner must be a user LaunchAgent** | GUI session required for UI tests. System daemons have no screen. |

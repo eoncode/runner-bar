@@ -2,27 +2,19 @@ name: UI Tests
 
 on:
   push:
-    branches: [main]
+    branches:
+      - 'feature/936-xcodegen-uitest-setup'
+      - main
   pull_request:
-
-env:
-  HOMEBREW_NO_AUTO_UPDATE: "1"
-
-# Only one UI test job runs on the machine at a time.
-# A newer run cancels any already-queued (but not yet started) run;
-# if a run is already executing it will finish first.
-concurrency:
-  group: ui-tests-self-hosted
-  cancel-in-progress: false
 
 jobs:
   ui-test:
     runs-on: self-hosted
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
 
     steps:
       - uses: actions/checkout@v4
-
-      # --- Toolchain checks ---------------------------------------------------
 
       - name: Ensure Homebrew is available
         run: |
@@ -33,7 +25,7 @@ jobs:
             echo "Homebrew already installed: $(brew --version)"
           fi
 
-      - name: Install XcodeGen (if not cached)
+      - name: Ensure XcodeGen is available
         run: |
           if ! command -v xcodegen &>/dev/null; then
             brew install xcodegen
@@ -41,7 +33,7 @@ jobs:
             echo "XcodeGen already installed: $(xcodegen --version)"
           fi
 
-      - name: Validate Xcode installation
+      - name: Verify Xcode.app (not CLT)
         run: |
           XCODE_PATH=$(xcode-select -p 2>/dev/null || true)
           if [ -z "$XCODE_PATH" ] || [[ "$XCODE_PATH" == *"CommandLineTools"* ]]; then
@@ -52,7 +44,7 @@ jobs:
           echo "Xcode developer path: $XCODE_PATH"
           xcodebuild -version
 
-      - name: Verify runner has a GUI session
+      - name: Check runner GUI session
         run: |
           if ls ~/Library/LaunchAgents/com.github.runner.*.plist &>/dev/null; then
             echo "Runner is a user launch agent (GUI session available)."
@@ -66,23 +58,23 @@ jobs:
             echo "WARNING: Could not detect runner service type. Proceeding."
           fi
 
-      # --- Build --------------------------------------------------------------
-
       - name: Generate ephemeral Xcode project
         run: xcodegen generate
 
       - name: Run UI Tests
+        # Use the dedicated RunnerBarUITests scheme — NOT the RunnerBar scheme.
+        # The RunnerBar scheme wires testTargetApp which causes Xcode 26 to
+        # auto-inject XCTTargetAppPath with the .app extension stripped,
+        # producing a fatal "bundle ID couldn't be read" error.
+        # The RunnerBarUITests scheme has no testTargetApp; the test code uses
+        # XCUIApplication(bundleIdentifier:) + Launch Services instead.
         run: |
           xcodebuild test \
             -project RunnerBar.xcodeproj \
-            -scheme RunnerBar \
+            -scheme RunnerBarUITests \
             -destination 'platform=macOS' \
             -only-testing:RunnerBarUITests
-        env:
-          UI_TESTING: "1"
 
-      # --- Cleanup ------------------------------------------------------------
-
-      - name: Remove generated Xcode project
+      - name: Clean up ephemeral project
         if: always()
         run: rm -rf RunnerBar.xcodeproj

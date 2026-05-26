@@ -49,14 +49,25 @@ schemes:
     build:
       targets:
         RunnerBar: all
-        RunnerBarUITests: [testing]
+    run:
+      config: Debug
+
+  # Separate scheme for UI tests.
+  # CRITICAL: no testTargetApp key here — omitting it prevents xcodebuild from
+  # auto-populating XCTTargetAppPath. On Xcode 26 that path has its .app
+  # extension stripped, causing a fatal "bundle ID couldn't be read" error.
+  # The test code uses XCUIApplication(bundleIdentifier:) + Launch Services
+  # to locate the app — no path injection needed.
+  RunnerBarUITests:
+    build:
+      targets:
+        RunnerBar: [build]
+        RunnerBarUITests: [build, testing]
     test:
       targets:
         - name: RunnerBarUITests
           parallelizable: false
       environmentVariables:
-        XCTestObserverAlwaysShowShield: NO
-      commandLineArguments:
-        UI_TESTING: true
-    run:
-      config: Debug
+        # UI_TESTING must be an env var (not a commandLineArgument) so that
+        # ProcessInfo.processInfo.environment["UI_TESTING"] sees it in the app.
+        UI_TESTING: "1"
