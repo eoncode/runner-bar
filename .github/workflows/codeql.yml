@@ -8,10 +8,22 @@ on:
       - 'Package.swift'
   schedule:
     - cron: '0 3 * * 1'  # weekly Monday 03:00 UTC
+  workflow_dispatch:  # allows manual trigger from GitHub Actions UI
 
 jobs:
   analyze:
     name: CodeQL Analysis
+    # Opt-in only: runs when commit message contains [run codeql],
+    # on the weekly schedule, or via manual workflow_dispatch.
+    # This prevents CodeQL from blocking the self-hosted runner on every push.
+    #
+    # Usage:
+    #   git commit -m "fix: something [run codeql]"
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[run codeql]') ||
+      contains(github.event.pull_request.head.commit.message, '[run codeql]')
     runs-on: macos-26
     permissions:
       actions: read
