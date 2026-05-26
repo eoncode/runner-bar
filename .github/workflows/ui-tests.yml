@@ -5,8 +5,21 @@ on:
   # push to this branch also fires a PR event; having both causes duplicate runs.
   pull_request:
 
+# Skip if the commit message contains [skip ci] or [ci skip].
+# GitHub natively honours these tokens on push events but NOT on pull_request
+# events (it only skips if the PR title/body contains them). The condition
+# below enforces the skip on pull_request events as well.
+concurrency:
+  group: ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ui-test:
+    # Skip the job if [skip ci] or [ci skip] appears anywhere in the latest
+    # commit message of the push that triggered this PR event.
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !contains(github.event.head_commit.message, '[ci skip]')
     runs-on: self-hosted
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
