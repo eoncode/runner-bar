@@ -16,21 +16,25 @@ import XCTest
 // ❌ NEVER query controlcenter.statusItems — broken on macOS 26.
 // ❌ NEVER use mouse coordinate simulation — fragile and CI-hostile.
 //
-// WHY XCUIApplication(bundleIdentifier:) INSTEAD OF XCUIApplication():
-// On Xcode 26, when RunnerBarUITests has no target-level dependency on RunnerBar
-// (removed to fix the .app-extension stripping bug), Xcode no longer injects
-// targetApplicationPath into XCTestConfiguration. XCUIApplication() reads that
-// field and crashes with "No target application path specified" if it is nil.
-// XCUIApplication(bundleIdentifier:) bypasses that field entirely and is the
-// correct API for LSUIElement apps that are not the scheme's primary run target.
+// WHY XCUIApplication() (zero-argument) WORKS HERE:
+// The xcscheme's TestAction contains a <HostedTestableReference> pointing to
+// RunnerBar.app. On Xcode 26, this is what populates targetApplicationBundleID
+// (and targetApplicationPath) in XCTestConfiguration — NOT a target-level
+// dependency in project.yml (which was removed because it caused Xcode 26 to
+// strip the .app extension from XCTTargetAppPath).
+//
+// ❌ Do NOT switch to XCUIApplication(bundleIdentifier:).
+// That initializer bypasses targetApplicationBundleID injection and silently
+// drops launchArguments, so --uitesting is never delivered to the app and the
+// panel never opens, causing testPanelIsOpenOnLaunch/testPanelContainsContent
+// to time out.
 final class RunnerBarUITests: XCTestCase {
 
     var app: XCUIApplication!
 
     override func setUp() {
         continueAfterFailure = false
-        // ⚠️ Must use bundleIdentifier: — see comment above.
-        app = XCUIApplication(bundleIdentifier: "com.eoncode.runner-bar")
+        app = XCUIApplication()
         // ⚠️ --uitesting bypasses Keychain reads and API polling AND opens the
         // panel immediately on launch so tests can interact with app.windows.
         // ❌ NEVER remove this launch argument.
