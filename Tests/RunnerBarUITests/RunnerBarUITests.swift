@@ -15,6 +15,11 @@
 //    to avoid Xcode 26 path resolution bug.
 // ⚠️ Do NOT set XCTTargetAppPath in project.yml scheme env — Xcode 26 strips
 //    the .app extension, causing a fatal "bundle ID couldn't be read" error.
+//
+// ⚠️ app.windows does NOT enumerate NSPanel with [.borderless, .nonactivatingPanel].
+//    Borderless non-activating panels appear under app.otherElements, not app.windows.
+//    ❌ NEVER use app.windows to find the RunnerBar panel.
+//    ✓ Use app.staticTexts / app.otherElements to verify panel content directly.
 
 import XCTest
 
@@ -57,20 +62,20 @@ final class RunnerBarUITests: XCTestCase {
     // MARK: - Panel tests
 
     /// Clicking the status item opens the panel and shows the Workflows section.
+    ///
+    /// The panel is an NSPanel with [.borderless, .nonactivatingPanel] style mask.
+    /// Borderless non-activating panels are NOT enumerated by app.windows in XCUITest.
+    /// We verify the panel opened by waiting for content directly via app.staticTexts.
     func testPanelOpensAndShowsWorkflowsSection() {
         let statusItem = app.statusItems.firstMatch
         XCTAssertTrue(statusItem.waitForExistence(timeout: 3), "Status item should exist")
         statusItem.click()
 
-        let panel = app.windows.firstMatch
+        // ❌ Do NOT use app.windows.firstMatch — borderless nonactivating NSPanel
+        //    never appears in app.windows. Query content directly instead.
         XCTAssertTrue(
-            panel.waitForExistence(timeout: 5),
-            "Panel should appear after clicking the status item"
-        )
-
-        XCTAssertTrue(
-            app.staticTexts["Workflows"].waitForExistence(timeout: 5),
-            "Panel should contain the 'Workflows' section header"
+            app.staticTexts["WORKFLOWS"].waitForExistence(timeout: 5),
+            "Panel should contain the 'WORKFLOWS' section header after clicking status item"
         )
     }
 }
