@@ -38,14 +38,16 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
-      # ⚠️ XcodeGen on Xcode 26 generates a broken .xcscheme for UI test targets —
-      # the TestAction is either empty or has skipped=YES for RunnerBarUITests.
-      # We commit a hand-written scheme and restore it immediately after xcodegen.
-      # ❌ NEVER remove this step.
+      # ⚠️ XcodeGen on Xcode 26 generates a broken .xcscheme for UI test targets.
+      # We keep the correct scheme at xcschemes/RunnerBar.xcscheme (outside the
+      # gitignored RunnerBar.xcodeproj/ directory) and copy it into place after
+      # xcodegen generate overwrites it.
+      # ❌ NEVER use `git checkout HEAD -- RunnerBar.xcodeproj/...` here —
+      # RunnerBar.xcodeproj/ is in .gitignore, so git silently ignores the restore.
       - name: Restore committed scheme
         run: |
           mkdir -p RunnerBar.xcodeproj/xcshareddata/xcschemes
-          git checkout HEAD -- RunnerBar.xcodeproj/xcshareddata/xcschemes/RunnerBar.xcscheme
+          cp xcschemes/RunnerBar.xcscheme RunnerBar.xcodeproj/xcshareddata/xcschemes/RunnerBar.xcscheme
 
       - name: Resolve package dependencies
         run: |
