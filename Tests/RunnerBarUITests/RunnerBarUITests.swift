@@ -17,8 +17,8 @@
 //    the .app extension, causing a fatal "bundle ID couldn't be read" error.
 // ⚠️ LSUIElement (menu bar agent) apps NEVER reach .runningForeground.
 //    Always use app.wait(for: .runningBackground, ...).
-// ⚠️ app.windows is always empty for LSUIElement apps regardless of panel level.
-//    Use XCUIScreen.main.windows / XCUIScreen.main.staticTexts instead.
+// ⚠️ XCUIScreen.main has no .windows or .staticTexts in macOS 26 SDK.
+//    Use app.windows / app.staticTexts on the XCUIApplication instance instead.
 // ⚠️ To open the panel in CI (no mouse available), set OPEN_PANEL_ON_LAUNCH=1
 //    in launchEnvironment. The app positions the panel with setFrameOrigin+orderFront
 //    at .floating level (NOT openPanel() — that requires a real status item position).
@@ -74,7 +74,8 @@ final class RunnerBarUITests: XCTestCase {
     /// Panel level is set to .floating (not .popUpMenu) when OPEN_PANEL_ON_LAUNCH
     /// is set, so XCTest's AX server can see it.
     ///
-    /// app.windows is always empty for LSUIElement apps — use XCUIScreen.main instead.
+    /// Use app.windows (not XCUIScreen.main.windows — that API does not exist
+    /// in the macOS 26 SDK).
     func testPanelOpensAndShowsWorkflowsSection() {
         // Re-launch with the auto-open flag.
         app.terminate()
@@ -88,17 +89,15 @@ final class RunnerBarUITests: XCTestCase {
             "App should reach .runningBackground (LSUIElement menu bar agent)"
         )
 
-        // app.windows is always empty for LSUIElement apps.
-        // Use XCUIScreen.main.windows to query all visible windows on screen.
-        let panel = XCUIScreen.main.windows.firstMatch
+        let panel = app.windows.firstMatch
         XCTAssertTrue(
             panel.waitForExistence(timeout: 10),
-            "Panel (NSPanel) should appear in XCUIScreen.main.windows after auto-open"
+            "Panel (NSPanel) should appear after auto-open"
         )
 
         // The panel's SwiftUI content always renders a 'Workflows' static text
         // regardless of auth state — it is the section header in PanelMainView.
-        let workflowsHeader = XCUIScreen.main.staticTexts["Workflows"]
+        let workflowsHeader = app.staticTexts["Workflows"]
         XCTAssertTrue(
             workflowsHeader.waitForExistence(timeout: 5),
             "Panel content should contain the 'Workflows' section header"
