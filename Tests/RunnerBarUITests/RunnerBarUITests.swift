@@ -27,8 +27,11 @@
 //    ❌ NEVER assert app.buttons["Add new"] etc.
 //    ✓ Assert staticTexts["Add runner"] / staticTexts["Add remote scope"] as arrival proof.
 //
-// ⚠️ The two Add buttons both have identifier 'plus' and label 'Add'.
-//    Disambiguate by index: app.buttons.matching(identifier:"plus").element(boundBy: N)
+// ⚠️ Add-runner and Add-scope buttons may have either:
+//      identifier="plus"           (local build)
+//      identifier="addRunnerButton" / "addScopeButton"  (remote/PR-merge build)
+//    Always probe both and use whichever exists.
+//    ❌ NEVER hard-code only one identifier.
 
 import XCTest
 
@@ -72,6 +75,41 @@ final class RunnerBarUITests: XCTestCase {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
     }
 
+    /// Returns the Add-Runner button, probing the stable explicit identifier first
+    /// and falling back to the legacy 'plus' + index approach.
+    ///
+    /// Local builds expose identifier="plus" (boundBy:0 = Add Runner).
+    /// Remote/PR-merge builds expose identifier="addRunnerButton".
+    /// We probe both so the test is environment-agnostic.
+    private func addRunnerButton() -> XCUIElement {
+        let explicit = app.buttons["addRunnerButton"]
+        if explicit.waitForExistence(timeout: 0.5) {
+            print("[UITest] addRunnerButton: found via identifier='addRunnerButton'")
+            return explicit
+        }
+        // Fallback: first 'plus' button = add runner
+        let fallback = app.buttons.matching(identifier: "plus").element(boundBy: 0)
+        print("[UITest] addRunnerButton: falling back to identifier='plus' boundBy:0")
+        return fallback
+    }
+
+    /// Returns the Add-Scope button, probing the stable explicit identifier first
+    /// and falling back to the legacy 'plus' + index approach.
+    ///
+    /// Local builds expose identifier="plus" (boundBy:1 = Add Scope).
+    /// Remote/PR-merge builds expose identifier="addScopeButton".
+    private func addScopeButton() -> XCUIElement {
+        let explicit = app.buttons["addScopeButton"]
+        if explicit.waitForExistence(timeout: 0.5) {
+            print("[UITest] addScopeButton: found via identifier='addScopeButton'")
+            return explicit
+        }
+        // Fallback: second 'plus' button = add scope
+        let fallback = app.buttons.matching(identifier: "plus").element(boundBy: 1)
+        print("[UITest] addScopeButton: falling back to identifier='plus' boundBy:1")
+        return fallback
+    }
+
     // MARK: - Settings navigation
 
     /// Full settings flow:
@@ -93,10 +131,7 @@ final class RunnerBarUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["About"].exists, "About")
 
         // ── 2. Add Runner sheet ───────────────────────────────────────
-        // First 'plus' button (boundBy:0) = Add runner.
-        // Second 'plus' button (boundBy:1) = Add scope.
-        // Do NOT assert Picker segment labels as buttons — they are radioButtons.
-        tapButton(app.buttons.matching(identifier: "plus").element(boundBy: 0))
+        tapButton(addRunnerButton())
         XCTAssertTrue(app.staticTexts["Add runner"].waitForExistence(timeout: 3),
                       "Add Runner sheet title")
         tapButton(app.buttons["Cancel"])
@@ -104,7 +139,7 @@ final class RunnerBarUITests: XCTestCase {
                       "Back in Settings after Cancel")
 
         // ── 3. Add Scope sheet ────────────────────────────────────────
-        tapButton(app.buttons.matching(identifier: "plus").element(boundBy: 1))
+        tapButton(addScopeButton())
         XCTAssertTrue(app.staticTexts["Add remote scope"].waitForExistence(timeout: 3),
                       "Add Scope sheet title")
         tapButton(app.buttons["Cancel"])
