@@ -40,12 +40,11 @@ Update this file every time something new breaks. Do **not** delete old entries.
 
 ---
 
-### ❌ `XCTTargetAppPath` missing from scheme env
-**Error:** XCUIApplication can't locate the `.app` bundle; test runner crashes.  
-**Fix:** Add to the scheme's `test.environmentVariables`:
-```yaml
-XCTTargetAppPath: $(BUILT_PRODUCTS_DIR)/RunnerBar.app
-```
+### ❌ `XCTTargetAppPath` in scheme `environmentVariables` (Xcode 26)
+**Error:** `The bundle identifier for RunnerBar couldn't be read. No such file or directory: ".../Build/Products/Debug/RunnerBar"`  
+**Why:** Xcode 26's test runner uses `XCTTargetAppPath` to locate the app and read its bundle ID — but it strips the `.app` extension from the path, making the directory lookup fail. This triggers even when test code correctly uses `XCUIApplication(bundleIdentifier:)`.  
+**Fix:** **Do not set `XCTTargetAppPath` in the scheme at all.** When using `XCUIApplication(bundleIdentifier:)`, the runtime locates the app through Launch Services. Setting `XCTTargetAppPath` is redundant and triggers the broken Xcode 26 path handling.  
+**Rule:** On Xcode 26, `XCTTargetAppPath` in scheme env = broken. Remove it. Trust Launch Services + bundle ID init.
 
 ---
 
@@ -115,5 +114,6 @@ The workflow validates this at startup and exits with a clear error if not fixed
 | **`bundle.ui-testing` ≠ `bundle.unit-test`** | Different signing, no `TEST_HOST`, no `BUNDLE_LOADER`, uses XCTRunner. |
 | **LSUIElement apps are `.runningBackground`** | Never `.runningForeground`. |
 | **Use bundle ID init** | `XCUIApplication(bundleIdentifier:)` — not default init — on Xcode 26 + LSUIElement. |
+| **No `XCTTargetAppPath` in scheme** | Xcode 26 strips `.app` from the path → bundle ID read fails. Remove it entirely. |
 | **No mouse events in CI** | AX read-only queries only. Input synthesis moves the real cursor. |
 | **Runner must be a user LaunchAgent** | GUI session required for UI tests. System daemons have no screen. |

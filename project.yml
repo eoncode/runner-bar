@@ -56,7 +56,6 @@ schemes:
           parallelizable: false
       environmentVariables:
         XCTestObserverAlwaysShowShield: NO
-        XCTTargetAppPath: $(BUILT_PRODUCTS_DIR)/RunnerBar.app
       commandLineArguments:
         UI_TESTING: true
     run:
