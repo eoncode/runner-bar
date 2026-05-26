@@ -55,10 +55,11 @@ schemes:
   RunnerBar:
     build:
       targets:
-        RunnerBar: all
-        # ⚠️ RunnerBar must be listed under [test] as well as the UI test target.
-        # On Xcode 26, xcodebuild test does not infer the host app from the target
-        # dependency alone — it must appear explicitly in the scheme build targets.
+        # ⚠️ Do NOT use `all` here — on Xcode 26, XcodeGen's `all` keyword does not
+        # reliably populate the TestAction element in the generated .xcscheme.
+        # xcodebuild then reports: "Scheme RunnerBar is not currently configured for
+        # the test action." Always list actions explicitly.
+        RunnerBar: [build, run, test, profile, analyze, archive]
         RunnerBarUITests: [test]
     test:
       targets:

@@ -24,7 +24,7 @@ The goal is to stop re-discovering the same mistakes.
 
 ---
 
-### 2. `controlCentre.statusItems.firstMatch` for clicking RunnerBar’s icon
+### 2. `controlCentre.statusItems.firstMatch` for clicking RunnerBar's icon
 **Why it fails:** On macOS 26, `firstMatch` resolves to **`com.apple.menuextra.battery`** — the Battery item appears first in the accessibility tree, before RunnerBar. Clicking it does nothing and the panel never opens.
 
 Evidence from CI log:
@@ -36,7 +36,7 @@ Check for interrupting elements affecting com.apple.menuextra.battery StatusItem
 ---
 
 ### 3. `XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")` for status items
-**Why it fails:** On macOS 13+, status items are no longer hosted by `systemuiserver`. They moved to `com.apple.controlcenter`. Querying `systemuiserver` returns an app that either doesn’t exist or has no status items.
+**Why it fails:** On macOS 13+, status items are no longer hosted by `systemuiserver`. They moved to `com.apple.controlcenter`. Querying `systemuiserver` returns an app that either doesn't exist or has no status items.
 **Fix:** Always use `XCUIApplication(bundleIdentifier: "com.apple.controlcenter")`.
 
 ---
@@ -69,7 +69,7 @@ Invalid configuration: RunnerBarUITests sets both USES_XCTRUNNER and either TEST
 ---
 
 ### 8. `controlCentre.statusItems["com.eoncode.runner-bar"]` on macOS 26
-**Why it fails:** On macOS 26 / Xcode 26, the accessibility identifier of a status bar item is **not** the app’s bundle ID. `waitForExistence(timeout: 5)` polls the full 5 seconds and returns false.
+**Why it fails:** On macOS 26 / Xcode 26, the accessibility identifier of a status bar item is **not** the app's bundle ID. `waitForExistence(timeout: 5)` polls the full 5 seconds and returns false.
 **Fix:** See learning #9 — set an explicit accessibility identifier on the button and query by that.
 
 ---
@@ -124,6 +124,26 @@ schemes:
 
 ---
 
+### 12. Using `all` for a build target in the scheme on Xcode 26
+**Why it fails:** XcodeGen's `all` shorthand (e.g. `RunnerBar: all`) does **not** reliably populate the `TestAction` element in the generated `.xcscheme` on Xcode 26. When the TestAction is empty or missing, xcodebuild reports:
+```
+xcodebuild: error: Scheme RunnerBar is not currently configured for the test action.
+```
+This happens even when the `test:` block and `RunnerBarUITests` target are fully correct.
+
+**Fix:** Always list build actions explicitly on every target:
+```yaml
+schemes:
+  RunnerBar:
+    build:
+      targets:
+        RunnerBar: [build, run, test, profile, analyze, archive]
+        RunnerBarUITests: [test]
+```
+❌ **Never** use `RunnerBar: all` in the scheme build targets.
+
+---
+
 ## ✅ Confirmed Working Patterns
 
 - `app.wait(for: .runningBackground, timeout: 5)` — correct state check for LSUIElement apps
@@ -135,13 +155,14 @@ schemes:
 - No `TEST_HOST` / `BUNDLE_LOADER` on `bundle.ui-testing` targets
 - Explicit `xcodebuild build` step before `xcodebuild test -only-testing` — required on Xcode 26
 - `app: RunnerBar` on the UI test target in the scheme test action — required on Xcode 26 for correct `.app` path resolution
+- Explicit action list `[build, run, test, profile, analyze, archive]` on main app target in scheme — required on Xcode 26 (never use `all`)
 
 ---
 
 ## Process Rules (to stop repeating mistakes)
 
 1. **Read the exact failure line** before writing any fix. Not the full 300KB log — just the `XCTAssert` or `error:` line.
-2. **Run locally first.** If you can’t confirm green on the runner machine, don’t push.
+2. **Run locally first.** If you can't confirm green on the runner machine, don't push.
 3. **One change per commit.** Never bundle workflow + project.yml + test file in one push.
 4. **Update this file** every time something new fails, before pushing the fix.
 5. **Check the learnings file first.** Before writing any fix, read this file top to bottom.
