@@ -29,6 +29,7 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        MACH_O_TYPE: mh_execute
 
   RunnerBarUITests:
     type: bundle.ui-testing
@@ -45,6 +46,8 @@ targets:
         CODE_SIGNING_REQUIRED: YES
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.eoncode.runner-bar.uitests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/RunnerBar.app/Contents/MacOS/RunnerBar
+        BUNDLE_LOADER: $(TEST_HOST)
 
 schemes:
   RunnerBar:
