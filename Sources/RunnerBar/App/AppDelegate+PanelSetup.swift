@@ -21,10 +21,11 @@ extension AppDelegate {
 
     /// Builds the NSPanel, embeds the SwiftUI hosting controller inside
     /// PanelChromeView, wires KVO, and starts all Combine subscriptions.
+    ///
     /// When `OPEN_PANEL_ON_LAUNCH` is set (UI testing only), opens the panel
     /// directly at a hardcoded on-screen position so the AX tree can see it.
     /// ❌ NEVER call `openPanel()` from this branch — it requires a real status
-    /// item button frame which doesn't exist in a pure XCUIApplication launch.
+    ///    item button frame which doesn't exist in a pure XCUIApplication launch.
     func setupPanel() {
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
@@ -48,7 +49,19 @@ extension AppDelegate {
         newPanel.isOpaque = false
         newPanel.backgroundColor = NSColor(white: 1, alpha: 0.001)
         newPanel.hasShadow = true
-        newPanel.level = .popUpMenu
+
+        // Production: .popUpMenu keeps the panel above all normal windows.
+        // UI testing: must use .floating so the XCTest AX server includes the
+        // panel in app.windows. NSPanel at .popUpMenu level is treated as a
+        // system overlay and is INVISIBLE to XCTest's AX tree, even when
+        // on-screen. .floating is the highest level XCTest can query.
+        // ❌ NEVER change this condition — .popUpMenu breaks AX in tests.
+        if ProcessInfo.processInfo.environment["OPEN_PANEL_ON_LAUNCH"] != nil {
+            newPanel.level = .floating
+        } else {
+            newPanel.level = .popUpMenu
+        }
+
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.animationBehavior = .none
         // Pin appearance to darkAqua so the glass chrome never toggles on click.

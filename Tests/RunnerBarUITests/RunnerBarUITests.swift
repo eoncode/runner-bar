@@ -18,7 +18,10 @@
 // ⚠️ Do NOT set XCTTargetAppPath in project.yml scheme env — Xcode 26 strips
 //    the .app extension, causing a fatal "bundle ID couldn't be read" error.
 // ⚠️ To open the panel in CI (no mouse available), set OPEN_PANEL_ON_LAUNCH=1
-//    in launchEnvironment. The app auto-calls openPanel() 300ms after launch.
+//    in launchEnvironment. The app positions the panel with setFrameOrigin+orderFront
+//    at .floating level (NOT openPanel() — that requires a real status item position).
+// ⚠️ NSPanel at .popUpMenu level is INVISIBLE to XCTest AX — the app lowers it
+//    to .floating when OPEN_PANEL_ON_LAUNCH is set so app.windows can see it.
 
 import XCTest
 
@@ -65,10 +68,13 @@ final class RunnerBarUITests: XCTestCase {
 
     /// The panel window appears and contains the expected header elements.
     ///
-    /// Uses `OPEN_PANEL_ON_LAUNCH` env var to trigger `openPanel()` inside
+    /// Uses `OPEN_PANEL_ON_LAUNCH` env var to trigger panel display inside
     /// the app 300ms after launch — no mouse click needed, cursor stays still.
-    /// Verifies that the panel (NSPanel = app.windows) exists and that the
-    /// SwiftUI content rendered the "Workflows" section header.
+    ///
+    /// The app lowers the panel level to .floating (from .popUpMenu) when
+    /// OPEN_PANEL_ON_LAUNCH is set, because XCTest AX cannot see panels at
+    /// .popUpMenu level. Verifies that the panel exists and SwiftUI rendered
+    /// the "Workflows" section header.
     func testPanelOpensAndShowsWorkflowsSection() {
         // Re-launch with the auto-open flag.
         app.terminate()
@@ -76,10 +82,11 @@ final class RunnerBarUITests: XCTestCase {
         app.launchEnvironment["OPEN_PANEL_ON_LAUNCH"] = "1"
         app.launch()
 
-        // Wait for the panel (NSPanel exposes as a window in the AX tree).
+        // Wait for the panel (NSPanel at .floating level exposes as a window
+        // in the AX tree). Allow 10s: 0.3s app delay + SwiftUI render time.
         let panel = app.windows.firstMatch
         XCTAssertTrue(
-            panel.waitForExistence(timeout: 5),
+            panel.waitForExistence(timeout: 10),
             "Panel (NSPanel) should appear in the AX tree after auto-open"
         )
 
