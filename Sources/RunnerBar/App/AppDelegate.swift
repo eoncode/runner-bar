@@ -132,6 +132,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Performs the applicationDidFinishLaunching operation.
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Option A — UI test workaround: promote the LSUIElement agent to a
+        // regular foreground process so XCTest's AX server populates app.windows.
+        // Must be the FIRST thing in applicationDidFinishLaunching — XCTest's
+        // automation session attaches at launch and polls the process state
+        // immediately; calling setActivationPolicy later (e.g. in setupPanel)
+        // is too late and the app never reaches .runningForeground.
+        // A Dock icon briefly appears during CI test runs — acceptable.
+        // ❌ NEVER move this call below configureGHAPI / setupStatusItem.
+        if ProcessInfo.processInfo.environment["UI_TESTING"] != nil {
+            NSApp.setActivationPolicy(.regular)
+        }
+
         configureGHAPI(
             { endpoint in ghAPI(endpoint) },
             isRateLimited: { ghIsRateLimited }

@@ -82,8 +82,6 @@ extension AppDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, let p = self.panel else { return }
                 let screen = NSScreen.main ?? NSScreen.screens[0]
-                // Place panel in the top-right corner of the main screen,
-                // well within the visible area so AX can see it.
                 let x = screen.visibleFrame.maxX - p.frame.width - 20
                 let y = screen.visibleFrame.maxY - p.frame.height - 20
                 p.setFrameOrigin(NSPoint(x: x, y: y))
@@ -111,22 +109,11 @@ extension AppDelegate {
     /// Starts all Combine subscriptions: local runner reloads, remote runner
     /// store updates (icon + observable reload), and scope mutation restarts.
     ///
-    /// When `UI_TESTING` is set in the environment (i.e. launched by
-    /// XCUIApplication during automated UI tests):
-    ///   1. The process is promoted from LSUIElement agent to a regular foreground
-    ///      app so XCTest's AX server exposes app.windows (Option A workaround).
-    ///      A Dock icon briefly appears during the test run — acceptable for CI.
-    ///   2. All network polling and keychain access is skipped to prevent macOS
-    ///      from showing keychain approval dialogs for ad-hoc-signed CI builds.
+    /// Option A (setActivationPolicy) is called in applicationDidFinishLaunching
+    /// BEFORE this method runs — it must happen at the very start of launch so
+    /// XCTest's automation session sees the process as .runningForeground.
+    /// See AppDelegate.swift §App lifecycle for the full explanation.
     private func setupCombineSubscriptions() {
-        // Option A: promote LSUIElement agent to a normal foreground process so
-        // XCTest's AX server populates app.windows. Without this, app.windows is
-        // always empty for background agents regardless of panel level.
-        // ❌ NEVER call this outside the UI_TESTING guard — it adds a Dock icon.
-        if ProcessInfo.processInfo.environment["UI_TESTING"] != nil {
-            NSApp.setActivationPolicy(.regular)
-        }
-
         // LocalRunnerStore subscription is safe — no network or keychain access.
         LocalRunnerStore.shared.$runners
             .receive(on: DispatchQueue.main)
