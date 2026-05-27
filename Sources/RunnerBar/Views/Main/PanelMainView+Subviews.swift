@@ -52,11 +52,11 @@ struct PanelHeaderView: View {
             // (scaling-on-press, shimmer, bounce) and morphing between sibling buttons.
             // Pre-26: falls back to .buttonStyle(.plain) as before.
             if #available(macOS 26, *) {
-                // spacing: 8 keeps the two glass buttons visually separate;
-                // without a gap GlassEffectContainer merges them into one shape.
-                GlassEffectContainer(spacing: 8) {
-                    settingsButton.glassButton()
-                    quitButton.glassButton()
+                // Each button gets its own GlassEffectContainer so their backdrops
+                // stay independent (no bleed). HStack keeps them side-by-side.
+                HStack(spacing: 8) {
+                    GlassEffectContainer { settingsButton.glassButton() }
+                    GlassEffectContainer { quitButton.glassButton() }
                 }
             } else {
                 settingsButton
