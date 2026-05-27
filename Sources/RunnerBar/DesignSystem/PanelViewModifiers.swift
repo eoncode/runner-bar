@@ -4,9 +4,13 @@ import SwiftUI
 
 // MARK: - GlassCard
 /// Centralised Liquid Glass card modifier.
-/// On macOS 26+ uses `.glassEffect(.regular)` (non-interactive — passive containers
-/// must not use `.interactive()`; see #963);
-/// on older OSes falls back to `.ultraThinMaterial` + a subtle stroke overlay.
+/// On macOS 26+ uses `.glassEffect(.regular)` — passive containers must NOT
+/// use `.interactive()`. The LiquidGlassReference guide restricts `.interactive()`
+/// to tappable controls (buttons, icons) only. Applying it to a passive container
+/// activates scaling/shimmer on the entire card surface including non-interactive
+/// children, which is semantically wrong and wastes GPU compositing budget.
+/// Tappable rows handle interactivity at the contentShape/button level via GlassButton.
+/// On older OSes falls back to `.ultraThinMaterial` + a subtle stroke overlay.
 ///
 /// All phases of the Liquid Glass adoption (Phase 3–7) must use `.glassCard()`
 /// instead of calling `.glassEffect()` or `.ultraThinMaterial` directly on
@@ -14,6 +18,7 @@ import SwiftUI
 ///
 /// ❌ Do NOT convert `StatPill` to `GlassCard` — it is a capsule-shaped inline
 /// pill, not a card container. Use `StatPillBackground` instead.
+/// ❌ Do NOT add `.interactive()` back to GlassCard — see #963.
 struct GlassCard: ViewModifier {
     /// Corner radius applied to the rounded rectangle shape. Defaults to `RBRadius.card`.
     var cornerRadius: CGFloat
@@ -31,7 +36,7 @@ struct GlassCard: ViewModifier {
         if #available(macOS 26, *) {
             AnyView(
                 content.glassEffect(
-                    .regular.interactive(),
+                    .regular,
                     in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 )
             )
@@ -211,7 +216,8 @@ struct CardRowModifier: ViewModifier {
 // MARK: - View extensions
 /// Convenience modifiers for applying glass and surface effects to any `View`.
 extension View {
-    /// Applies the `GlassCard` modifier (interactive glass on macOS 26+, material fallback pre-26).
+    /// Applies the `GlassCard` modifier (non-interactive glass on macOS 26+, material fallback pre-26).
+    /// ❌ Do NOT add `.interactive()` to GlassCard — use GlassButton for tappable controls.
     func glassCard(cornerRadius: CGFloat = RBRadius.card) -> some View {
         modifier(GlassCard(cornerRadius: cornerRadius))
     }
