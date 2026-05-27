@@ -100,15 +100,13 @@ struct GlassButton: ViewModifier {
     /// Applies the interactive glass button effect to the given content view.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            AnyView(
-                content
-                    .glassEffect(
-                        .regular.interactive(),
-                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    )
-            )
+            content
+                .glassEffect(
+                    .regular.interactive(),
+                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
         } else {
-            AnyView(content)
+            content
         }
     }
 }
