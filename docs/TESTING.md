@@ -67,3 +67,23 @@ sudo ./svc.sh uninstall
 ./svc.sh install
 ./svc.sh start
 ```
+
+### Reset instruction for local tests when they go stale
+
+```
+rm -rf .derived # clear stale app binary
+
+xcodebuild build \
+-project RunnerBar.xcodeproj
+-scheme RunnerBar \
+-destination 'platform=macOS'
+-derivedDataPath .derived
+
+xcodebuild test \
+-project RunnerBar.xcodeproj \
+-scheme RunnerBarUITests \
+-destination 'platform=macOS' \
+-derivedDataPath .derived
+-only-testing:RunnerBarUITests
+2>&1 | tee uitest.log
+```
