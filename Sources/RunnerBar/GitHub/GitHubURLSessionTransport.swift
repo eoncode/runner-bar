@@ -153,6 +153,15 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
                 return
             }
             guard (200..<300).contains(http.statusCode) else { return }
+            // Successful response: clear any stale rate-limit flag from a prior cycle.
+            rateLimitLock.withLock {
+                if $0.isLimited {
+                    $0.isLimited = false
+                    $0.resetDate = nil
+                    $0.resetItem?.cancel()
+                    $0.resetItem = nil
+                }
+            }
         }
         result.withLock { $0 = data }
     }.resume()
@@ -191,6 +200,15 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else { return }
+                // Successful response: clear any stale rate-limit flag from a prior cycle.
+                rateLimitLock.withLock {
+                    if $0.isLimited {
+                        $0.isLimited = false
+                        $0.resetDate = nil
+                        $0.resetItem?.cancel()
+                        $0.resetItem = nil
+                    }
+                }
                 linkHeader.withLock { $0 = http.value(forHTTPHeaderField: "Link") }
             }
             pageData.withLock { $0 = data }
@@ -226,17 +244,20 @@ private func extractNextURL(from header: String?) -> String? {
 // MARK: - Public API entry points
 //
 // Prefer URLSession (native OAuth token) when available; fall back to gh CLI subprocess.
-// The CLI fallback is skipped when ghIsRateLimited is true — a rate-limit hit on the
-// URLSession path must not trigger a second outbound request via the CLI on the same cycle.
+// The CLI fallback is skipped only when URLSession returned nil AND ghIsRateLimited is
+// true — meaning the failure was caused by rate-limiting. A successful URLSession response
+// (data != nil) is returned immediately without consulting ghIsRateLimited at all, so a
+// stale rate-limit flag from a prior cycle can never suppress a healthy response.
 
 /// Calls the GitHub API for a single page, preferring URLSession over the gh CLI.
 /// Falls back to the CLI when no OAuth token is available or URLSession returns nil.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPI(endpoint, timeout: timeout)
-        if data != nil || ghIsRateLimited {
-            if ghIsRateLimited { log("ghAPI › rate limited, skipping CLI fallback for: \(endpoint)") }
-            return data
+        if let data { return data }  // Success — return immediately, ignore rate-limit flag.
+        if ghIsRateLimited {
+            log("ghAPI › rate limited, skipping CLI fallback for: \(endpoint)")
+            return nil
         }
     }
     return ghAPICLI(endpoint, timeout: timeout)
@@ -247,9 +268,10 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPIPaginated(endpoint, timeout: timeout)
-        if data != nil || ghIsRateLimited {
-            if ghIsRateLimited { log("ghAPIPaginated › rate limited, skipping CLI fallback for: \(endpoint)") }
-            return data
+        if let data { return data }  // Success — return immediately, ignore rate-limit flag.
+        if ghIsRateLimited {
+            log("ghAPIPaginated › rate limited, skipping CLI fallback for: \(endpoint)")
+            return nil
         }
     }
     return ghAPIPaginatedCLI(endpoint, timeout: timeout)
