@@ -3,6 +3,7 @@
 // Extracted from PanelProgressViews.swift during dead-code cleanup (removed PieProgressDot).
 import Foundation
 import RunnerBarCore
+import SwiftUI
 
 // MARK: - RelativeTimeFormatter
 /// Formats a `Date` into a compact relative string like `"3m ago"`, `"1h ago"`, `"2d ago"`.
@@ -24,19 +25,63 @@ enum RelativeTimeFormatter {
     }
 }
 
-// MARK: - WorkflowActionGroup + progressFraction
-/// Adds a pie-progress fraction property to `WorkflowActionGroup` for use with `DonutStatusView`.
+// MARK: - WorkflowActionGroup progress helpers
+
+/// UI-layer extensions on `WorkflowActionGroup` for deriving progress fractions
+/// and display strings used by the panel's action rows.
 extension WorkflowActionGroup {
-    /// Radial fill fraction (0.0–1.0). Returns `nil` while queued or when no jobs are available.
+
+    /// Returns the overall completion fraction (0.0–1.0) across all jobs in the group.
+    ///
+    /// Calculated as the ratio of completed steps to total steps. Returns `nil`
+    /// when no steps are present so callers can suppress progress indicators entirely.
     var progressFraction: Double? {
-        switch groupStatus {
-        case .queued: return nil
-        case .completed: return 1.0
-        case .inProgress:
-            guard jobsTotal > 0 else { return nil }
-            let fraction = Double(jobsDone) / Double(jobsTotal)
-            return min(max(fraction, 0.0), 1.0)
-        }
+        let steps = jobs.flatMap { $0.steps }
+        guard !steps.isEmpty else { return nil }
+        let done = steps.filter { $0.conclusion != nil || $0.status == .completed }.count
+        return Double(done) / Double(steps.count)
+    }
+
+    /// A formatted string showing completed vs total job count, e.g. `"2/4"`.
+    ///
+    /// Returns an empty string when the group has no jobs.
+    var jobProgress: String {
+        guard !jobs.isEmpty else { return "" }
+        let done = jobs.filter { $0.conclusion != nil }.count
+        return "\(done)/\(jobs.count)"
+    }
+
+    /// The name of the currently running job, or an empty string when no job is active.
+    var currentJobName: String {
+        jobs.first { $0.status == .inProgress }?.name ?? ""
+    }
+
+    /// A human-readable elapsed-time string derived from the earliest job start date.
+    ///
+    /// Returns an empty string when no job has started yet.
+    var elapsed: String {
+        guard let start = firstJobStartedAt else { return "" }
+        return RelativeTimeFormatter.string(from: start)
+    }
+
+    /// The start date of the earliest job in the group, or `nil` if none has started.
+    var firstJobStartedAt: Date? {
+        jobs.compactMap { $0.startedAt }.min()
+    }
+
+    /// `true` when every job in the group is either dimmed (cancelled/skipped) or
+    /// the group conclusion is neither success nor failure.
+    var isDimmed: Bool {
+        guard groupStatus == .completed else { return false }
+        return conclusion != "success" && conclusion != "failure"
+    }
+
+    /// `true` when the group originated from a self-hosted (local) runner.
+    ///
+    /// Derived from the first job's runner name; returns `nil` when ambiguous.
+    var isLocalGroup: Bool? {
+        guard let first = jobs.first else { return nil }
+        return first.runnerName?.lowercased().contains("self-hosted") == true
     }
 }
 
