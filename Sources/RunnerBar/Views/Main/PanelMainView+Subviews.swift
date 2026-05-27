@@ -226,7 +226,7 @@ struct ActionRowView: View {
 
             if let fullExpand = expandState {
                 InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
-                    .glassEffectID(group.id.uuidString + "-jobs", in: glassNS)
+                    .glassEffectID(group.id + "-jobs", in: glassNS)
                     .glassEffectTransition(.materialize)
             }
         }
