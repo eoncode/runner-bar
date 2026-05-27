@@ -236,16 +236,12 @@ struct PanelLocalRunnerRow: View {
 /// Row representing one GitHub Actions workflow run.
 /// Tapping expands inline job rows; long-press opens the run URL in Safari.
 ///
-/// macOS 26+: the card background and inline job rows share a
-/// `GlassEffectContainer(spacing: 4)` with `glassEffectID` assigned to each
-/// so the glass shape morphs when the row expands/collapses (.bouncy animation).
-/// Inline job rows appear via `.glassEffectTransition(.materialize)` — the native
-/// Liquid Glass appearance transition (modulates light-bending on insert/remove).
+/// macOS 26+: the card background uses `.glassCard()` directly on the VStack,
+/// identical structure to the pre-26 path. Animation is `.easeInOut(duration: 0.15)`
+/// on both paths — matching main branch exactly.
 ///
-/// ⚠️ glassEffectID must be on the outermost content view carrying the glass shape
-/// (the card VStack), NOT on Color.clear inside a .background() modifier.
-/// The morph geometry tracks the view that holds the ID — placing it on a
-/// background-layer Color.clear gives it a zero/wrong frame and breaks morphing.
+/// ⚠️ Do NOT add GlassEffectContainer, .glassEffectID, .bouncy, or
+/// .glassEffectTransition — they cause staggered/slow expand animations (#957).
 struct ActionRowView: View {
     /// The group constant.
     let group: WorkflowActionGroup
@@ -257,8 +253,6 @@ struct ActionRowView: View {
     @State private var expandState: Bool?
     /// The previousStatus property.
     @State private var previousStatus: RBStatus?
-    /// Namespace for glassEffectID morphing (macOS 26+ only).
-    @Namespace private var glassNS
     /// The body property.
     var body: some View {
         if #available(macOS 26, *) {
@@ -268,44 +262,35 @@ struct ActionRowView: View {
         }
     }
 
-    // MARK: macOS 26+ morphing body
-    /// Uses GlassEffectContainer + glassEffectID so the glass shape morphs
-    /// on expand/collapse. Animation is .bouncy for native Liquid Glass feel.
-    /// InlineJobRowsView uses .glassEffectTransition(.materialize) so rows
-    /// appear by modulating light-bending — the native Liquid Glass insertion transition.
+    // MARK: macOS 26+ body
+    /// macOS 26+ path — uses .glassCard() directly on the VStack with the same
+    /// .easeInOut(duration: 0.15) animation as main. No GlassEffectContainer,
+    /// no .bouncy, no .glassEffectTransition — these caused staggered/slow animation.
     @available(macOS 26, *)
     @ViewBuilder private var glassMorphBody: some View {
-        GlassEffectContainer(spacing: 4) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 0) {
-                    Color.clear.frame(width: RBSpacing.md)
-                    rowContent
-                }
-                if let fullExpand = expandState {
-                    InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
-                        .glassEffectTransition(.materialize)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: RBSpacing.md)
+                rowContent
             }
-            .frame(maxWidth: .infinity)
-            // 1. Status bar at the very bottom — plain colour, no glass.
-            // Uses maxWidth/maxHeight so it spans the full card, then the
-            // leading-aligned 4pt bar is cut by clipShape into the half-pill.
-            .background {
-                Rectangle()
-                    .fill(rowStatus.color)
-                    .frame(width: 4)
-                    .frame(maxHeight: .infinity)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+            if let fullExpand = expandState {
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
             }
-            // 2. Glass card surface on top of status bar, behind VStack content.
-            .glassCard(cornerRadius: RBRadius.card)
-            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-            .workflowContextMenu(group: group)
-            .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus, useBouncyAnimation: true))
-            .glassEffectID(group.id, in: glassNS)
         }
+        .frame(maxWidth: .infinity)
+        .background {
+            Rectangle()
+                .fill(rowStatus.color)
+                .frame(width: 4)
+                .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        }
+        .glassCard(cornerRadius: RBRadius.card)
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .workflowContextMenu(group: group)
+        .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus, useBouncyAnimation: false))
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear { applyInitialExpandState() }
@@ -365,12 +350,7 @@ struct ActionRowView: View {
 
     /// Reacts to row status changes, auto-expanding on inProgress and collapsing on completion.
     private func handleStatusChange(_ newStatus: RBStatus) {
-        let animation: Animation
-        if #available(macOS 26, *) {
-            animation = .bouncy
-        } else {
-            animation = .easeInOut(duration: 0.15)
-        }
+        let animation: Animation = .easeInOut(duration: 0.15)
         if newStatus == .inProgress && expandState == nil {
             withAnimation(animation) { expandState = false }
         }

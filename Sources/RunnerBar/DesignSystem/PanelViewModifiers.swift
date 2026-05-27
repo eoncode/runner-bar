@@ -34,11 +34,18 @@ struct GlassCard: ViewModifier {
     /// Applies the glass card effect to the given content view.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
+            // glassEffect does not render a stroke automatically — add it as an
+            // overlay so the card has the same subtle border in both OS paths.
             AnyView(
-                content.glassEffect(
-                    .regular.interactive(),
-                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                )
+                content
+                    .glassEffect(
+                        .regular,
+                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
+                    )
             )
         } else {
             AnyView(materialFallback(content: content))
