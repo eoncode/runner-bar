@@ -135,20 +135,19 @@ struct StatPillBackground: ViewModifier {
 
 // MARK: - StatusBadgeBackground
 /// Background modifier for `StatusBadge` capsule badges.
-/// macOS 26+: status colour integrated via `.tint()` directly into the glass
-/// compositor — do NOT use a raw `.background` layer underneath `.glassEffect`
-/// as it renders outside the glass stack and fails to adapt with the material.
+/// macOS 26+: colour tint layer + `.glassEffect(.regular, in: Capsule())`.
 /// macOS < 26: `Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)` (unchanged).
 struct StatusBadgeBackground: ViewModifier {
     /// The status color used to tint the badge.
     let color: Color
 
-    /// Applies a compositor-tinted glass capsule (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
                 content
-                    .glassEffect(.regular.tint(color.opacity(0.4)), in: Capsule())
+                    .background(color.opacity(0.15), in: Capsule())
+                    .glassEffect(.regular, in: Capsule())
             )
         } else {
             AnyView(
@@ -162,17 +161,16 @@ struct StatusBadgeBackground: ViewModifier {
 
 // MARK: - BranchTagPillBackground
 /// Background modifier for `BranchTagPill` capsule pills.
-/// macOS 26+: `rbAccent` tint integrated via `.tint()` directly into the glass
-/// compositor — do NOT use a raw `.background` layer underneath `.glassEffect`
-/// as it renders outside the glass stack and fails to adapt with the material.
+/// macOS 26+: accent tint layer + `.glassEffect(.regular, in: Capsule())`.
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
 struct BranchTagPillBackground: ViewModifier {
-    /// Applies a compositor-tinted glass capsule (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
                 content
-                    .glassEffect(.regular.tint(Color.rbAccent.opacity(0.4)), in: Capsule())
+                    .background(Color.rbAccent.opacity(0.15), in: Capsule())
+                    .glassEffect(.regular, in: Capsule())
             )
         } else {
             AnyView(

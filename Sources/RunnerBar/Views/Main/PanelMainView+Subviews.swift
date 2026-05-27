@@ -287,17 +287,21 @@ struct ActionRowView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .glassCard(cornerRadius: RBRadius.card)
+            .background(
+                ZStack {
+                    // Glass card surface sits behind content (same as legacyBody).
+                    Color.clear.glassCard(cornerRadius: RBRadius.card)
+                    // Status half-pill: left-aligned Rectangle; the ZStack's clipShape
+                    // below rounds only the left corners into the half-pill shape.
+                    Rectangle()
+                        .fill(rowStatus.color)
+                        .frame(width: 4)
+                        .frame(maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+            )
             .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-            .overlay(alignment: .leading) {
-                // Status half-pill on top of glass: Rectangle clipped by card shape
-                // so left corners become rounded (half-pill). Applied after clipShape
-                // so it renders above the glass material layer.
-                Rectangle()
-                    .fill(rowStatus.color)
-                    .frame(width: 4)
-                    .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-            }
             .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             .workflowContextMenu(group: group)
             .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus, useBouncyAnimation: true))
