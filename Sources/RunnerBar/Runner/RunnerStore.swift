@@ -157,7 +157,7 @@ final class RunnerStore {
     }
 
     /// Lookup maps built from the local runner list, used by `fetchAndEnrichRunners`.
-    private struct InstallPathMap {
+    struct InstallPathMap {
         /// "scope/runnerName" → installPath  (exact scope-prefixed match)
         let byFullKey: [String: String]
         /// "runnerName" → installPath  (name-only fallback)
@@ -253,9 +253,9 @@ final class RunnerStore {
             }
             let fullKey = "\(scope)/\(runner.name)"
             // Priority: id → fullKey → name → nil
-            if let runnerId = runner.id, let installPath = installPathMap.byId[runnerId] {
+            if let installPath = installPathMap.byId[runner.id] {
                 runner.metrics = metricsForRunner(installPath: installPath)
-                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via id=\(runnerId)")
+                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via id=\(runner.id)")
             } else if let installPath = installPathMap.byFullKey[fullKey] {
                 runner.metrics = metricsForRunner(installPath: installPath)
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via fullKey=\(fullKey)")
