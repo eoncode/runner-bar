@@ -44,6 +44,33 @@ struct SystemStatsView: View {
     }
 }
 
+// MARK: - GlassBadgeContainer
+/// A stable glass wrapper for live-updating chip content.
+///
+/// Places `.glassEffect()` in a `.background {}` block so SwiftUI evaluates
+/// the glass layer independently from the foreground content. The
+/// `CABackdropLayer` never re-composites on timer ticks — only the inner
+/// text/sparkline diffs and redraws. This is the correct pattern for Liquid
+/// Glass on views that update frequently (CPU, MEM).
+struct GlassBadgeContainer<Content: View>: View {
+    /// The semantic tint colour for the badge (danger / warning / primary).
+    let labelColor: Color
+    /// The live-updating chip content rendered in the foreground.
+    @ViewBuilder let content: () -> Content
+
+    /// The body property.
+    var body: some View {
+        content()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background {
+                Capsule()
+                    .glassEffect(.regular.tint(labelColor.opacity(0.15)), in: Capsule())
+            }
+            .overlay(Capsule().strokeBorder(labelColor.opacity(0.35), lineWidth: 0.5))
+    }
+}
+
 // MARK: - SparklineMetricView
 /// A single header metric chip: label + inline sparkline + monospaced value,
 /// all in one horizontal row -- matching the reference compact header design.
@@ -81,7 +108,7 @@ struct SparklineMetricView: View {
     }
 
     /// The labelColor property.
-    private var labelColor: Color {
+    var labelColor: Color {
         if currentPct > 85 { return .rbDanger }
         if currentPct > 60 { return .rbWarning }
         return .primary
@@ -133,12 +160,15 @@ struct HeaderStatsBar: View {
     /// The body property.
     var body: some View {
         HStack(spacing: RBSpacing.md) {
-            SparklineMetricView(
-                label: "CPU",
-                value: String(format: "%.1f%%", statsVM.stats.cpuPct),
-                history: statsVM.cpuHistory.values,
-                currentPct: statsVM.stats.cpuPct
-            )
+            let cpuPct = statsVM.stats.cpuPct
+            GlassBadgeContainer(labelColor: chipColor(for: cpuPct)) {
+                SparklineMetricView(
+                    label: "CPU",
+                    value: String(format: "%.1f%%", cpuPct),
+                    history: statsVM.cpuHistory.values,
+                    currentPct: cpuPct
+                )
+            }
 
             Color.secondary.opacity(0.3)
                 .frame(width: 1, height: 14)
@@ -146,12 +176,14 @@ struct HeaderStatsBar: View {
             let memTotal = statsVM.stats.memTotalGB
             let memUsed = statsVM.stats.memUsedGB
             let memPct = memTotal > 0 ? memUsed / memTotal * 100 : 0.0
-            SparklineMetricView(
-                label: "MEM",
-                value: String(format: "%.1f/%.1fGB", memUsed, memTotal),
-                history: statsVM.memHistory.values,
-                currentPct: memPct
-            )
+            GlassBadgeContainer(labelColor: chipColor(for: memPct)) {
+                SparklineMetricView(
+                    label: "MEM",
+                    value: String(format: "%.1f/%.1fGB", memUsed, memTotal),
+                    history: statsVM.memHistory.values,
+                    currentPct: memPct
+                )
+            }
 
             Color.secondary.opacity(0.3)
                 .frame(width: 1, height: 14)
@@ -160,14 +192,16 @@ struct HeaderStatsBar: View {
                 let diskTotal = statsVM.stats.diskTotalGB
                 let diskUsed = statsVM.stats.diskUsedGB
                 let diskUsedPct = diskTotal > 0 ? diskUsed / diskTotal * 100 : 0.0
-                SparklineMetricView(
-                    label: "DISK",
-                    value: String(format: "%d/%dGB",
-                                  Int(statsVM.stats.diskUsedGB.rounded()),
-                                  Int(statsVM.stats.diskTotalGB.rounded())),
-                    history: statsVM.diskHistory.values,
-                    currentPct: diskUsedPct
-                )
+                GlassBadgeContainer(labelColor: chipColor(for: diskUsedPct)) {
+                    SparklineMetricView(
+                        label: "DISK",
+                        value: String(format: "%d/%dGB",
+                                      Int(statsVM.stats.diskUsedGB.rounded()),
+                                      Int(statsVM.stats.diskTotalGB.rounded())),
+                        history: statsVM.diskHistory.values,
+                        currentPct: diskUsedPct
+                    )
+                }
                 if statsVM.stats.diskTotalGB > 0 {
                     DiskPillBadge(freePct: statsVM.stats.diskFreePct)
                 }
@@ -178,5 +212,13 @@ struct HeaderStatsBar: View {
         }
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.sm)
+    }
+
+    /// Returns the semantic badge colour for a given usage percentage.
+    /// - Parameter pct: Usage percentage (0–100).
+    private func chipColor(for pct: Double) -> Color {
+        if pct > 85 { return .rbDanger }
+        if pct > 60 { return .rbWarning }
+        return .primary
     }
 }
