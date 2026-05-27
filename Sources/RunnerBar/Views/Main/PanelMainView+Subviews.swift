@@ -287,20 +287,15 @@ struct ActionRowView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .background(
-                ZStack {
-                    // Glass card surface sits behind content (same as legacyBody).
-                    Color.clear.glassCard(cornerRadius: RBRadius.card)
-                    // Status half-pill: left-aligned Rectangle; the ZStack's clipShape
-                    // below rounds only the left corners into the half-pill shape.
-                    Rectangle()
-                        .fill(rowStatus.color)
-                        .frame(width: 4)
-                        .frame(maxHeight: .infinity)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-            )
+            // 1. Status bar at the very bottom — plain colour, no glass.
+            .background(alignment: .leading) {
+                Rectangle()
+                    .fill(rowStatus.color)
+                    .frame(width: 4)
+                    .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+            }
+            // 2. Glass card surface on top of status bar, behind VStack content.
+            .glassCard(cornerRadius: RBRadius.card)
             .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             .workflowContextMenu(group: group)
