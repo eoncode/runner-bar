@@ -158,6 +158,8 @@ struct PanelLocalRunnerRow: View {
 /// macOS 26+: the card background and inline job rows share a
 /// `GlassEffectContainer(spacing: 4)` with `glassEffectID` assigned to each
 /// so the glass shape morphs when the row expands/collapses (.bouncy animation).
+/// Inline job rows appear via `.glassEffectTransition(.materialize)` — the native
+/// Liquid Glass appearance transition (modulates light-bending on insert/remove).
 struct ActionRowView: View {
     /// The group constant.
     let group: WorkflowActionGroup
@@ -183,6 +185,8 @@ struct ActionRowView: View {
     // MARK: macOS 26+ morphing body
     /// Uses GlassEffectContainer + glassEffectID so the glass shape morphs
     /// on expand/collapse. Animation is .bouncy for native Liquid Glass feel.
+    /// InlineJobRowsView uses .glassEffectTransition(.materialize) so rows
+    /// appear by modulating light-bending — the native Liquid Glass insertion transition.
     @available(macOS 26, *)
     @ViewBuilder private var glassMorphBody: some View {
         GlassEffectContainer(spacing: 4) {
@@ -223,6 +227,7 @@ struct ActionRowView: View {
             if let fullExpand = expandState {
                 InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
                     .glassEffectID(group.id.uuidString + "-jobs", in: glassNS)
+                    .glassEffectTransition(.materialize)
             }
         }
         .padding(.horizontal, RBSpacing.md)
