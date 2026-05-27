@@ -288,14 +288,16 @@ struct ActionRowView: View {
             }
             .frame(maxWidth: .infinity)
             .glassCard(cornerRadius: RBRadius.card)
+            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             .overlay(alignment: .leading) {
-                // Status half-pill: Rectangle with no clip; card's RoundedRectangle
-                // shape from .glassCard clips left corners into half-pill.
+                // Status half-pill on top of glass: Rectangle clipped by card shape
+                // so left corners become rounded (half-pill). Applied after clipShape
+                // so it renders above the glass material layer.
                 Rectangle()
                     .fill(rowStatus.color)
                     .frame(width: 4)
+                    .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             }
-            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             .workflowContextMenu(group: group)
             .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus, useBouncyAnimation: true))
