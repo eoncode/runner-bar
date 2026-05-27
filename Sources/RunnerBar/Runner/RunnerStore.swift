@@ -125,7 +125,7 @@ final class RunnerStore {
         let snapCache = completedCache
         let snapPrevGroups = prevLiveGroups
         let snapGroupCache = actionGroupCache
-        let (installPathByName, installPathByRunnerName) = buildInstallPathMap(
+        let installPathMap = buildInstallPathMap(
             scopes: scopesSnapshot,
             localRunners: LocalRunnerStore.shared.runners
         )
@@ -138,8 +138,7 @@ final class RunnerStore {
             ghIsRateLimited = false
             let enrichedRunners = self.fetchAndEnrichRunners(
                 scopes: scopesSnapshot,
-                installPathByName: installPathByName,
-                installPathByRunnerName: installPathByRunnerName
+                installPathMap: installPathMap
             )
             let jobResult = self.buildJobState(snapPrev: snapPrev, snapCache: snapCache)
             let groupResult = self.buildGroupState(
@@ -157,32 +156,47 @@ final class RunnerStore {
         }
     }
 
-    /// Builds two lookup maps from the local runner list:
-    /// - Primary:   "scope/runnerName" → installPath  (exact scope-prefixed match)
-    /// - Secondary: "runnerName"        → installPath  (name-only fallback for org-scoped runners
-    ///              whose ScopeStore scope string differs from the fetch-time scope key)
+    /// Lookup maps built from the local runner list, used by `fetchAndEnrichRunners`.
+    struct InstallPathMap {
+        /// "scope/runnerName" → installPath  (exact scope-prefixed match)
+        let byFullKey: [String: String]
+        /// "runnerName" → installPath  (name-only fallback)
+        let byName: [String: String]
+        /// agentId (Int) → installPath  (ID-based, scope-agnostic)
+        let byId: [Int: String]
+    }
+
+    /// Builds three lookup maps from the local runner list:
+    /// - Primary:    "scope/runnerName" → installPath  (exact scope-prefixed match)
+    /// - Secondary:  "runnerName"        → installPath  (name-only fallback)
+    /// - Tertiary:   agentId (Int)        → installPath  (ID-based, scope-agnostic)
     ///
-    /// The name-only map is used as a fallback in fetchAndEnrichRunners when the
-    /// scope-prefixed key produces no match, preventing silent metrics loss when
-    /// scope strings are org-level vs repo-level.
+    /// The ID map is the most reliable — GitHub writes the runner's integer ID
+    /// to the `.runner` JSON on disk during `config.sh`, so it is stable across
+    /// renames and scope-string format changes.  Runners that predate this field
+    /// (agentId == nil) fall through to the fullKey / name maps.
     private func buildInstallPathMap(
         scopes: [String],
         localRunners: [RunnerModel]
-    ) -> (byFullKey: [String: String], byName: [String: String]) {
+    ) -> InstallPathMap {
         var byFullKey: [String: String] = [:]
         var byName: [String: String] = [:]
+        var byId: [Int: String] = [:]
         for localRunner in localRunners {
             guard let path = localRunner.installPath else { continue }
             byName[localRunner.runnerName] = path
+            if let runnerId = localRunner.agentId {
+                byId[runnerId] = path
+            }
             for scope in scopes {
                 byFullKey["\(scope)/\(localRunner.runnerName)"] = path
             }
         }
-        log("RunnerStore › buildInstallPathMap — fullKeys=\(byFullKey.keys.sorted()) nameKeys=\(byName.keys.sorted())")
+        log("RunnerStore › buildInstallPathMap — fullKeys=\(byFullKey.keys.sorted()) nameKeys=\(byName.keys.sorted()) idKeys=\(byId.keys.sorted())")
         if byFullKey.isEmpty && !localRunners.isEmpty {
             log("RunnerStore › ⚠️ buildInstallPathMap — fullKey map is EMPTY (scopes=\(scopes), localRunners=\(localRunners.count)) — check ScopeStore alignment")
         }
-        return (byFullKey, byName)
+        return InstallPathMap(byFullKey: byFullKey, byName: byName, byId: byId)
     }
 
     /// Applies a completed fetch cycle's results to the store's @MainActor state.
@@ -216,8 +230,7 @@ final class RunnerStore {
     /// Performs the fetchAndEnrichRunners operation.
     nonisolated func fetchAndEnrichRunners(
         scopes: [String],
-        installPathByName: [String: String],
-        installPathByRunnerName: [String: String]
+        installPathMap: InstallPathMap
     ) -> [Runner] {
         log("RunnerStore › fetchAndEnrichRunners ENTER")
         log("RunnerStore › fetchAndEnrichRunners — activeScopes=\(scopes)")
@@ -229,7 +242,7 @@ final class RunnerStore {
                 runnersWithScope.append((scope: scope, runner: runner))
             }
         }
-        log("RunnerStore › fetchAndEnrichRunners — installPathByName keys=\(installPathByName.keys.sorted())")
+        log("RunnerStore › fetchAndEnrichRunners — installPathMap.byFullKey keys=\(installPathMap.byFullKey.keys.sorted())")
         var result: [Runner] = []
         for (scope, var runner) in runnersWithScope {
             guard runner.busy else {
@@ -239,12 +252,16 @@ final class RunnerStore {
                 continue
             }
             let fullKey = "\(scope)/\(runner.name)"
-            if let installPath = installPathByName[fullKey] {
+            // Priority: id → fullKey → name → nil
+            if let installPath = installPathMap.byId[runner.id] {
+                runner.metrics = metricsForRunner(installPath: installPath)
+                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via id=\(runner.id)")
+            } else if let installPath = installPathMap.byFullKey[fullKey] {
                 runner.metrics = metricsForRunner(installPath: installPath)
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via fullKey=\(fullKey)")
-            } else if let installPath = installPathByRunnerName[runner.name] {
+            } else if let installPath = installPathMap.byName[runner.name] {
                 runner.metrics = metricsForRunner(installPath: installPath)
-                log("RunnerStore › fetchAndEnrichRunners — ⚠️ \(runner.name) (scope=\(scope)) fullKey miss, used name-only fallback — check ScopeStore scope strings align with fetch scope")
+                log("RunnerStore › fetchAndEnrichRunners — ⚠️ \(runner.name) (scope=\(scope)) fullKey miss, used name-only fallback")
             } else {
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) busy but no installPath for key=\(fullKey), metrics=nil")
                 runner.metrics = nil

@@ -25,6 +25,9 @@ import SwiftUI
 // ❌ NEVER use a GeometryReader or preference key for this cap — it freezes
 // at the initial layout height and prevents scrolling to expanded content.
 // ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
+// ❌ NEVER replace the ScrollView with ViewThatFits — ViewThatFits duplicates
+// the view tree during layout measurement, destroying @State on ActionRowView
+// (expandState) every time displayTick fires, making workflow rows un-expandable.
 //
 // RULE 6: systemStats MUST run only while the panel is open — stop it when the panel closes.
 // RULE 6b: systemStats must START when the panel opens so charts are live while the user views them.
@@ -58,17 +61,58 @@ struct PanelMainView: View {
     @State private var displayTick: Int = 0
     /// The displayTickTimer property.
     @State private var displayTickTimer: Timer?
-    /// The screenScrollMaxHeight property.
+    /// Maximum height for the scrollable actions section when content is too tall to fit naturally.
+    /// Used only as the ScrollView fallback inside ViewThatFits (RULE 5).
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
-    /// True only when at least one local runner is actively busy AND there is
-    /// at least one in-progress workflow. Gates both the section header and
-    /// PanelLocalRunnerRow so the section never appears without an active run.
-    private var hasBusyLocalRunners: Bool {
-        store.localRunners.contains { $0.isBusy }
-            && store.actions.contains { $0.groupStatus == .inProgress }
+
+    /// The subset of locally-installed runners that are currently active.
+    ///
+    /// A local runner is considered active when ANY of the following is true:
+    ///   1. Its `runnerName` appears in `store.jobs` with status `.inProgress`
+    ///      (repo-scoped runners whose jobs land in store.jobs normally).
+    ///   2. Its `agentId` matches a `busy == true` runner in `store.runners`
+    ///      (org-scoped runners whose jobs come from the org API — those jobs
+    ///       may not be present in store.jobs due to org-API 403, but
+    ///       store.runners is populated via the per-scope runner-list endpoint
+    ///       which does return the busy flag).
+    ///   3. Its `runnerName` matches a `busy == true` runner in `store.runners`
+    ///      (same as 2 but for runners that lack an agentId on disk).
+    ///
+    /// Both store.jobs and store.runners are updated in the same
+    /// AppDelegate didUpdate → reload() cycle — no timing drift.
+    ///
+    /// ❌ DO NOT filter on RunnerModel.isBusy — it is set by RunnerStatusEnricher
+    /// on a separate background cycle and always lags, causing empty rows. (#948)
+    private var activeLocalRunners: [RunnerModel] {
+        // Gate: never show the section when no workflow is currently in-progress.
+        // Without this guard the LOCAL RUNNERS section is permanently visible even
+        // when all runners are idle, bloating the panel height at rest. (#948)
+        guard store.actions.contains(where: { $0.groupStatus == .inProgress }) else { return [] }
+
+        // Source 1: names from in-progress jobs (repo-scoped path)
+        let activeNamesFromJobs = Set(
+            store.jobs
+                .filter { $0.status == .inProgress }
+                .compactMap { $0.runnerName }
+        )
+        // Source 2: busy runners from the enriched runner list (org-scoped fallback)
+        let busyRunners = store.runners.filter { $0.busy }
+        let busyIds = Set(busyRunners.compactMap { $0.id })
+        let busyNames = Set(busyRunners.map { $0.name })
+
+        return store.localRunners.filter { local in
+            // Path 1: matched via job runnerName
+            if activeNamesFromJobs.contains(local.runnerName) { return true }
+            // Path 2: matched via agentId against busy runner list
+            if let aid = local.agentId, busyIds.contains(aid) { return true }
+            // Path 3: matched via name against busy runner list
+            if busyNames.contains(local.runnerName) { return true }
+            return false
+        }
     }
+
     /// Root body: stacks the header, optional rate-limit banner, local-runner section, and scrollable actions list.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -81,9 +125,9 @@ struct PanelMainView: View {
             .onAppear { systemStats.start() }
             Divider()
             if store.isRateLimited { rateLimitBanner; Divider() }
-            if hasBusyLocalRunners {
+            if !activeLocalRunners.isEmpty {
                 SectionHeaderLabel(title: "Local Runners")
-                PanelLocalRunnerRow(runners: store.localRunners)
+                PanelLocalRunnerRow(runners: activeLocalRunners)
             }
             Color.clear.frame(width: 0, height: 0)
                 .onAppear {
@@ -107,7 +151,13 @@ struct PanelMainView: View {
         .onChange(of: store.actions) { _, _ in visibleCount = 10 }
     }
     // MARK: - Scrollable actions section (RULE 5)
-    /// Wraps `actionsSectionContent` in a `ScrollView` capped at `screenScrollMaxHeight`.
+    /// Uses `ViewThatFits` so short content drives the panel to its natural height
+    /// with no scroll indicator. Only when content exceeds `screenScrollMaxHeight`
+    /// does it fall through to the capped `ScrollView`, keeping all content reachable.
+    ///
+    /// ❌ NEVER replace with a bare `ScrollView + .frame(maxHeight:)` —
+    /// that always reports `maxHeight` as the ideal height, pinning the panel at
+    /// maximum size even for a single-row list.
     private var actionsSectionScrollable: some View {
         ScrollView(.vertical, showsIndicators: true) {
             actionsSectionContent
@@ -143,7 +193,7 @@ struct PanelMainView: View {
             Button(
                 action: { visibleCount += nextBatch },
                 label: {
-                    Text("Load \(nextBatch) more workflows…")
+                    Text("Load \(nextBatch) more workflows\u{2026}")
                         .font(.caption).foregroundColor(.secondary)
                 }
             )
@@ -167,25 +217,15 @@ struct PanelMainView: View {
         displayTickTimer = nil
     }
     // MARK: - Rate limit banner (#778)
-    /// Warning strip shown below the header when GitHub's rate limit has been hit.
-    ///
-    /// Uses `store.rateLimitResetDate` + the 1-second `displayTick` to render
-    /// a live countdown ("resets in 42s", "resets in 3m 07s", etc.).
-    /// Falls back to the static "pausing polls" label when no reset date is
-    /// known (e.g. CLI code path that sets `ghIsRateLimited` without a
-    /// `X-RateLimit-Reset` header value).
-    ///
-    /// `displayTick` is referenced via `_ = displayTick` so SwiftUI re-evaluates
-    /// this computed property every second while the banner is visible — the
-    /// same mechanism used by elapsed-time labels in `ActionRowView`.
+    /// Inline banner shown at the top of the panel when GitHub rate-limiting is active.
+    /// Displays a live countdown to the rate-limit reset time, updated every second via `displayTick`.
     private var rateLimitBanner: some View {
-        // Capture tick to force a re-evaluation every second.
         _ = displayTick // swiftlint:disable:this redundant_discardable_let
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
             let remaining = max(0, resetDate.timeIntervalSinceNow)
             if remaining < 1 {
-                countdownLabel = "resuming…"
+                countdownLabel = "resuming\u{2026}"
             } else if remaining < 60 {
                 countdownLabel = "resets in \(Int(remaining))s"
             } else {

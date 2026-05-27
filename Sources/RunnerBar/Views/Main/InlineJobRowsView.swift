@@ -256,7 +256,7 @@ struct InlineJobRowsView: View {
     @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
     /// The expandedJobIDs property.
     @State private var expandedJobIDs: Set<Int> = []
-    /// The tickSnapshot property.
+    /// A stable snapshot of `tick` captured at view evaluation time, used to key job row identity.
     private var tickSnapshot: Int { tick }
     /// The body property.
     var body: some View {

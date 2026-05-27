@@ -80,45 +80,126 @@ private struct RunnerTypeIcon: View {
     }
 }
 
+// MARK: - RunnerMetricsBadge
+/// Single grouped badge showing CPU and MEM for a runner inside one
+/// shared glass background. Uses `.statPillBackground()` so macOS 26+
+/// gets native Liquid Glass and pre-26 falls back to ultraThinMaterial.
+private struct RunnerMetricsBadge: View {
+    /// The cpu constant.
+    let cpu: Double
+    /// The mem constant.
+    let mem: Double
+    /// The body property.
+    var body: some View {
+        HStack(spacing: 8) {
+            metricItem(label: "CPU", value: String(format: "%.0f%%", cpu))
+            metricItem(label: "MEM", value: String(format: "%.0f%%", mem))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .statPillBackground()
+    }
+    /// Renders a label+value pair.
+    private func metricItem(label: String, value: String) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(RBFont.statLabel)
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(RBFont.statValue)
+                .foregroundColor(.primary)
+                .monospacedDigit()
+        }
+    }
+}
+
 // MARK: - PanelLocalRunnerRow
-/// Row displaying a single local self-hosted runner: name, status badge, and
-/// CPU/memory stats. Only shown when `showLocalRunnerSection` is true.
+/// Renders a card for each runner passed in. Caller is responsible for
+/// pre-filtering to only the runners that are currently active — this
+/// view renders all entries it receives without internal re-filtering.
+///
+/// ❌ DO NOT add an isBusy filter here — isBusy is set by RunnerStatusEnricher
+/// on a separate background cycle and will always lag behind the RunnerStore
+/// fetch cycle, causing rows to be silently swallowed. (#948)
 struct PanelLocalRunnerRow: View {
     /// The runners constant.
     let runners: [RunnerModel]
     /// The body property.
     var body: some View {
-        let busy = runners.filter { $0.isBusy }
-        if !busy.isEmpty { runnerList(busy) }
+        if !runners.isEmpty { runnerList(runners) }
     }
-    /// Renders a vertical stack of `runnerCard` views for each busy local runner.
-    @ViewBuilder private func runnerList(_ busy: [RunnerModel]) -> some View {
-        ForEach(busy.prefix(3)) { runner in runnerCard(runner) }
-        if busy.count > 3 {
-            Text("+ \(busy.count - 3) more…")
+    /// Renders a vertical stack of `runnerCard` views for each runner.
+    @ViewBuilder private func runnerList(_ active: [RunnerModel]) -> some View {
+        ForEach(active.prefix(3)) { runner in runnerCard(runner) }
+        if active.count > 3 {
+            Text("+ \(active.count - 3) more…")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
         }
         Divider()
     }
-    /// Compact card showing a single runner's name, status badge, and CPU/memory stats.
+    /// Compact card showing runner name with optional arch/platform inline,
+    /// and a grouped CPU/MEM badge on the trailing edge.
+    ///
+    /// arch and platform are rendered as muted secondary text after the name,
+    /// separated by middle dots (e.g. "psw-org-runner · arm64 · macOS").
+    /// The meta tokens are hidden when both fields are nil.
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
-            Text(runner.runnerName)
-                .font(RBFont.label)
-                .foregroundColor(.primary)
-                .lineLimit(1)
-                .layoutPriority(1)
+            // Name + optional arch/platform inline
+            HStack(spacing: 4) {
+                Text(runner.runnerName)
+                    .font(RBFont.label)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                if let subtitle = runnerSubtitle(runner) {
+                    Text("· \(subtitle)")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .layoutPriority(1)
             Spacer()
             if let metrics = runner.metrics {
-                StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
-                StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
+                RunnerMetricsBadge(cpu: metrics.cpu, mem: metrics.mem)
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
         .glassCard(cornerRadius: RBRadius.card)
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
+    }
+
+    /// Builds a normalised subtitle string from architecture and platform fields.
+    /// Returns nil when both are absent so the caller can hide the tokens entirely.
+    /// Parts are joined with a middle dot separator (·).
+    private func runnerSubtitle(_ runner: RunnerModel) -> String? {
+        let arch = runner.platformArchitecture.map { normaliseArch($0) }
+        let os = runner.platform.map { normalisePlatform($0) }
+        let parts = [arch, os].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Normalises raw architecture strings from the GitHub runner agent JSON.
+    /// Maps "ARM64"→"arm64", "X64"→"x64", "X86"→"x86"; lowercases all others.
+    private func normaliseArch(_ raw: String) -> String {
+        switch raw.uppercased() {
+        case "ARM64": return "arm64"
+        case "X64":   return "x64"
+        case "X86":   return "x86"
+        default:      return raw.lowercased()
+        }
+    }
+
+    /// Normalises raw platform strings from the GitHub runner agent JSON.
+    /// Maps "osx"/"darwin"→"macOS", "linux"→"Linux", "win"→"Windows".
+    private func normalisePlatform(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        if lower.hasPrefix("osx") || lower.hasPrefix("darwin") { return "macOS" }
+        if lower.hasPrefix("linux") { return "Linux" }
+        if lower.hasPrefix("win") { return "Windows" }
+        return raw
     }
 }
 
@@ -191,8 +272,6 @@ struct ActionRowView: View {
     }
 
     /// Glass card background for the action row.
-    /// Routes through `.glassCard()` to honour the Phase 1 contract — nothing
-    /// outside `PanelViewModifiers` calls `.glassEffect()` directly on card containers.
     @ViewBuilder private var glassCardBackground: some View {
         Color.clear
             .glassCard(cornerRadius: RBRadius.card)

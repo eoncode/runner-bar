@@ -127,6 +127,20 @@ public struct RunnerStatusEnricher: Sendable {
         let labelNames = (api["labels"] as? [[String: Any]])?
             .compactMap { $0["name"] as? String } ?? []
 
+        // Derive platform and arch from API labels when the .runner JSON on disk
+        // did not supply them (older runner agent versions omit these fields).
+        // Labels like ["self-hosted", "macOS", "arm64"] are always present after
+        // registration regardless of agent version.
+        let effectiveLabels = labelNames.isEmpty ? runner.labels : labelNames
+        let platform = runner.platform ?? effectiveLabels.first(where: { label in
+            let l = label.lowercased()
+            return l == "macos" || l == "linux" || l == "windows"
+        })
+        let platformArchitecture = runner.platformArchitecture ?? effectiveLabels.first(where: { label in
+            let l = label.lowercased()
+            return l == "arm64" || l == "x64" || l == "x86" || l == "aarch64"
+        })
+
         return RunnerModel(
             id: runner.id,
             runnerName: runner.runnerName,
@@ -135,12 +149,12 @@ public struct RunnerStatusEnricher: Sendable {
             workFolder: runner.workFolder,
             installPath: runner.installPath,
             isRunning: runner.isRunning,
-            labels: labelNames.isEmpty ? runner.labels : labelNames,
+            labels: effectiveLabels,
             githubStatus: status,
             isBusy: busy,
             lifecycleWarning: runner.lifecycleWarning,
-            platform: runner.platform,
-            platformArchitecture: runner.platformArchitecture,
+            platform: platform,
+            platformArchitecture: platformArchitecture,
             agentVersion: runner.agentVersion,
             isEphemeral: runner.isEphemeral,
             runnerGroup: group,
