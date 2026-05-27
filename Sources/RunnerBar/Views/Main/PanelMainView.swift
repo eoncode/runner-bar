@@ -15,16 +15,18 @@ import SwiftUI
 // RULE 3: Job row HStack Spacer() is LOAD-BEARING.
 // RULE 4: RunnerViewModel.reload() uses withAnimation(nil).
 //
-// RULE 5: actionsSection is wrapped in a ScrollView capped at screenScrollMaxHeight.
+// RULE 5: actionsSection uses ViewThatFits so content drives the panel height
+// naturally. For short lists, the plain VStack is used (no scroll, no cap).
+// For tall lists that exceed screenScrollMaxHeight, it falls through to the
+// capped ScrollView so content remains reachable via scrolling.
 // screenScrollMaxHeight = NSScreen.main.visibleFrame.height * 0.80.
-// This mirrors AppDelegate's 85% panel ceiling minus headroom for the header
-// and runner rows above the list. The ScrollView is transparent for short lists
-// (content fits, no scroll indicator) and activates only when expanded rows
-// would push content off screen.
-// ❌ NEVER remove the ScrollView from actionsSection.
+// ❌ NEVER remove the ScrollView fallback from actionsSection.
 // ❌ NEVER use a GeometryReader or preference key for this cap — it freezes
 // at the initial layout height and prevents scrolling to expanded content.
 // ❌ NEVER add .frame(maxHeight:) to the root VStack instead.
+// ❌ NEVER replace ViewThatFits with a bare ScrollView + .frame(maxHeight:) —
+// that pins preferredContentSize to the cap even for single-row lists, causing
+// the panel to always render at maximum height regardless of actual content.
 //
 // RULE 6: systemStats MUST run only while the panel is open — stop it when the panel closes.
 // RULE 6b: systemStats must START when the panel opens so charts are live while the user views them.
@@ -58,7 +60,8 @@ struct PanelMainView: View {
     @State private var displayTick: Int = 0
     /// The displayTickTimer property.
     @State private var displayTickTimer: Timer?
-    /// The screenScrollMaxHeight property.
+    /// Maximum height for the scrollable actions section when content is too tall to fit naturally.
+    /// Used only as the ScrollView fallback inside ViewThatFits (RULE 5).
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
     }
@@ -124,12 +127,23 @@ struct PanelMainView: View {
         .onChange(of: store.actions) { _, _ in visibleCount = 10 }
     }
     // MARK: - Scrollable actions section (RULE 5)
-    /// Wraps `actionsSectionContent` in a `ScrollView` capped at `screenScrollMaxHeight`.
+    /// Uses `ViewThatFits` so short content drives the panel to its natural height
+    /// with no scroll indicator. Only when content exceeds `screenScrollMaxHeight`
+    /// does it fall through to the capped `ScrollView`, keeping all content reachable.
+    ///
+    /// ❌ NEVER replace with a bare `ScrollView + .frame(maxHeight:)` —
+    /// that always reports `maxHeight` as the ideal height, pinning the panel at
+    /// maximum size even for a single-row list.
     private var actionsSectionScrollable: some View {
-        ScrollView(.vertical, showsIndicators: true) {
+        ViewThatFits(in: .vertical) {
+            // Short content: natural height, no scroll bar.
             actionsSectionContent
+            // Tall content: capped ScrollView so everything is still reachable.
+            ScrollView(.vertical, showsIndicators: true) {
+                actionsSectionContent
+            }
+            .frame(maxHeight: screenScrollMaxHeight)
         }
-        .frame(maxHeight: screenScrollMaxHeight)
     }
     /// Vertical stack of the Workflows section header, `ActionRowView` items, and the load-more button.
     private var actionsSectionContent: some View {
