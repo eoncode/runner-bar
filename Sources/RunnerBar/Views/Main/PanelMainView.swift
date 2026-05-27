@@ -85,6 +85,11 @@ struct PanelMainView: View {
     /// ❌ DO NOT filter on RunnerModel.isBusy — it is set by RunnerStatusEnricher
     /// on a separate background cycle and always lags, causing empty rows. (#948)
     private var activeLocalRunners: [RunnerModel] {
+        // Gate: never show the section when no workflow is currently in-progress.
+        // Without this guard the LOCAL RUNNERS section is permanently visible even
+        // when all runners are idle, bloating the panel height at rest. (#948)
+        guard store.actions.contains(where: { $0.groupStatus == .inProgress }) else { return [] }
+
         // Source 1: names from in-progress jobs (repo-scoped path)
         let activeNamesFromJobs = Set(
             store.jobs
