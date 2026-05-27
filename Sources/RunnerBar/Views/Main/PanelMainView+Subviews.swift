@@ -160,6 +160,11 @@ struct PanelLocalRunnerRow: View {
 /// so the glass shape morphs when the row expands/collapses (.bouncy animation).
 /// Inline job rows appear via `.glassEffectTransition(.materialize)` — the native
 /// Liquid Glass appearance transition (modulates light-bending on insert/remove).
+///
+/// ⚠️ glassEffectID must be on the outermost content view carrying the glass shape
+/// (the card VStack), NOT on Color.clear inside a .background() modifier.
+/// The morph geometry tracks the view that holds the ID — placing it on a
+/// background-layer Color.clear gives it a zero/wrong frame and breaks morphing.
 struct ActionRowView: View {
     /// The group constant.
     let group: WorkflowActionGroup
@@ -187,6 +192,9 @@ struct ActionRowView: View {
     /// on expand/collapse. Animation is .bouncy for native Liquid Glass feel.
     /// InlineJobRowsView uses .glassEffectTransition(.materialize) so rows
     /// appear by modulating light-bending — the native Liquid Glass insertion transition.
+    ///
+    /// glassEffectID is placed on the card VStack (the outermost content view with
+    /// the glass shape) so the morph engine has the correct frame to animate from/to.
     @available(macOS 26, *)
     @ViewBuilder private var glassMorphBody: some View {
         GlassEffectContainer(spacing: 4) {
@@ -201,7 +209,6 @@ struct ActionRowView: View {
                 ZStack {
                     Color.clear
                         .glassCard(cornerRadius: RBRadius.card)
-                        .glassEffectID(group.id, in: glassNS)
                     Rectangle()
                         .fill(rowStatus.color)
                         .frame(width: 4)
@@ -223,6 +230,9 @@ struct ActionRowView: View {
                     }
                 }
             }
+            // glassEffectID on the card VStack — the outermost view with the glass shape.
+            // Do NOT move this to Color.clear inside .background().
+            .glassEffectID(group.id, in: glassNS)
 
             if let fullExpand = expandState {
                 InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
