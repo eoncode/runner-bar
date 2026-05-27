@@ -9,6 +9,23 @@ import Foundation
 ///
 /// Both `runGHProcess` (GitHubCLITransport) and `runScriptWithOutput`
 /// (RunnerLifecycleService) are thin wrappers around this type.
+///
+/// ## Migration note (from Shell.swift — deleted in #956)
+/// The old `Shell` enum used `/bin/zsh -c "<command string>"` which had
+/// a documented shell-injection risk: any unsanitised argument could escape
+/// the command string and execute arbitrary shell code. `ProcessRunner.run`
+/// takes a typed `[String]` arguments array and passes it directly to
+/// `Process`, bypassing the shell entirely. Never reintroduce a string-based
+/// shell invocation here.
+///
+/// ## ⚠️ Timeout implementation — do NOT simplify
+/// The timeout is implemented as a `DispatchWorkItem` + `DispatchQueue.asyncAfter`
+/// rather than the simpler `process.waitUntilExit()` with no deadline.
+/// Reason: `waitUntilExit()` with no timeout can hang indefinitely if a child
+/// process ignores SIGTERM or holds an open pipe. This pattern was the root
+/// cause of the main-thread hang tracked in bug #477. The `DispatchWorkItem`
+/// approach guarantees termination within `timeout` seconds even in that case.
+/// Do NOT replace this with a bare `waitUntilExit()` call.
 public enum ProcessRunner {
     /// A value type representing Result.
     public struct Result {
@@ -81,6 +98,8 @@ public enum ProcessRunner {
             inputPipe.fileHandleForWriting.closeFile()
         }
 
+        // ⚠️ DO NOT replace this DispatchWorkItem timeout with a bare waitUntilExit().
+        // See class-level doc comment and bug #477 for full context.
         let timeoutItem = DispatchWorkItem {
             // Guard against the race where the process exits just before the
             // timeout fires — only terminate if the process is still running.
