@@ -82,8 +82,8 @@ private struct RunnerTypeIcon: View {
 
 // MARK: - RunnerMetricsBadge
 /// Single grouped badge showing CPU and MEM for a runner inside one
-/// shared rounded-rectangle background. Matches the reference design
-/// where both metrics are grouped as a unit rather than separate capsules.
+/// shared glass background. Uses `.statPillBackground()` so macOS 26+
+/// gets native Liquid Glass and pre-26 falls back to ultraThinMaterial.
 private struct RunnerMetricsBadge: View {
     /// The cpu constant.
     let cpu: Double
@@ -97,14 +97,7 @@ private struct RunnerMetricsBadge: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.primary.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
+        .statPillBackground()
     }
     /// Renders a label+value pair.
     private func metricItem(label: String, value: String) -> some View {
@@ -145,15 +138,28 @@ struct PanelLocalRunnerRow: View {
         }
         Divider()
     }
-    /// Compact card showing a single runner's name and a grouped CPU/MEM badge.
+    /// Compact card showing a runner's name, optional arch/platform subtitle, and a grouped CPU/MEM badge.
+    ///
+    /// The subtitle is built from `runner.platformArchitecture` and `runner.platform`,
+    /// both sourced from the `.runner` JSON file. Raw API strings are normalised for
+    /// display: "ARM64"→"arm64", "X64"→"x64", "osx"→"macOS", "linux"→"Linux", "win"→"Windows".
+    /// The subtitle line is hidden entirely when both fields are nil.
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
-            Text(runner.runnerName)
-                .font(RBFont.label)
-                .foregroundColor(.primary)
-                .lineLimit(1)
-                .layoutPriority(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(runner.runnerName)
+                    .font(RBFont.label)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                if let subtitle = runnerSubtitle(runner) {
+                    Text(subtitle)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .layoutPriority(1)
             Spacer()
             if let metrics = runner.metrics {
                 RunnerMetricsBadge(cpu: metrics.cpu, mem: metrics.mem)
@@ -162,6 +168,34 @@ struct PanelLocalRunnerRow: View {
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
         .glassCard(cornerRadius: RBRadius.card)
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
+    }
+
+    /// Builds a normalised subtitle string from architecture and platform fields.
+    /// Returns nil when both are absent so the caller can hide the line entirely.
+    private func runnerSubtitle(_ runner: RunnerModel) -> String? {
+        let arch = runner.platformArchitecture.map { normaliseArch($0) }
+        let os = runner.platform.map { normalisePlatform($0) }
+        let parts = [arch, os].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " \u00b7 ")
+    }
+
+    /// Normalises raw architecture strings from the GitHub runner agent JSON.
+    private func normaliseArch(_ raw: String) -> String {
+        switch raw.uppercased() {
+        case "ARM64": return "arm64"
+        case "X64":   return "x64"
+        case "X86":   return "x86"
+        default:      return raw.lowercased()
+        }
+    }
+
+    /// Normalises raw platform strings from the GitHub runner agent JSON.
+    private func normalisePlatform(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        if lower.hasPrefix("osx") || lower.hasPrefix("darwin") { return "macOS" }
+        if lower.hasPrefix("linux") { return "Linux" }
+        if lower.hasPrefix("win") { return "Windows" }
+        return raw
     }
 }
 
