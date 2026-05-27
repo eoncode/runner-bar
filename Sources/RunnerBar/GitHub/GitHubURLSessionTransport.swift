@@ -122,6 +122,19 @@ private func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLR
     return req
 }
 
+/// Clears the rate-limit flag and cancels any pending reset timer.
+/// Called after every successful (2xx) URLSession response so a stale flag
+/// from a prior rate-limit cycle never suppresses healthy responses.
+private func clearRateLimitIfNeeded() {
+    rateLimitLock.withLock {
+        guard $0.isLimited else { return }
+        $0.isLimited = false
+        $0.resetDate = nil
+        $0.resetItem?.cancel()
+        $0.resetItem = nil
+    }
+}
+
 /// Fetches a single GitHub API page synchronously (blocking the calling thread).
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
@@ -154,14 +167,7 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
             }
             guard (200..<300).contains(http.statusCode) else { return }
             // Successful response: clear any stale rate-limit flag from a prior cycle.
-            rateLimitLock.withLock {
-                if $0.isLimited {
-                    $0.isLimited = false
-                    $0.resetDate = nil
-                    $0.resetItem?.cancel()
-                    $0.resetItem = nil
-                }
-            }
+            clearRateLimitIfNeeded()
         }
         result.withLock { $0 = data }
     }.resume()
@@ -201,14 +207,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
                 }
                 guard (200..<300).contains(http.statusCode) else { return }
                 // Successful response: clear any stale rate-limit flag from a prior cycle.
-                rateLimitLock.withLock {
-                    if $0.isLimited {
-                        $0.isLimited = false
-                        $0.resetDate = nil
-                        $0.resetItem?.cancel()
-                        $0.resetItem = nil
-                    }
-                }
+                clearRateLimitIfNeeded()
                 linkHeader.withLock { $0 = http.value(forHTTPHeaderField: "Link") }
             }
             pageData.withLock { $0 = data }
