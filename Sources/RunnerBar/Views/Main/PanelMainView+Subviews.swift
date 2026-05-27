@@ -288,10 +288,14 @@ struct ActionRowView: View {
             }
             .frame(maxWidth: .infinity)
             // 1. Status bar at the very bottom — plain colour, no glass.
-            .background(alignment: .leading) {
+            // Uses maxWidth/maxHeight so it spans the full card, then the
+            // leading-aligned 4pt bar is cut by clipShape into the half-pill.
+            .background {
                 Rectangle()
                     .fill(rowStatus.color)
                     .frame(width: 4)
+                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
             }
             // 2. Glass card surface on top of status bar, behind VStack content.
