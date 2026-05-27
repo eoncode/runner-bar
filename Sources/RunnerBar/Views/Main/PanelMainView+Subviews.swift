@@ -132,7 +132,7 @@ struct PanelLocalRunnerRow: View {
     @ViewBuilder private func runnerList(_ active: [RunnerModel]) -> some View {
         ForEach(active.prefix(3)) { runner in runnerCard(runner) }
         if active.count > 3 {
-            Text("+ \(active.count - 3) more\u{2026}")
+            Text("+ \(active.count - 3) more…")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
         }
@@ -172,14 +172,16 @@ struct PanelLocalRunnerRow: View {
 
     /// Builds a normalised subtitle string from architecture and platform fields.
     /// Returns nil when both are absent so the caller can hide the line entirely.
+    /// Parts are joined with a middle dot separator (·).
     private func runnerSubtitle(_ runner: RunnerModel) -> String? {
         let arch = runner.platformArchitecture.map { normaliseArch($0) }
         let os = runner.platform.map { normalisePlatform($0) }
         let parts = [arch, os].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " \u00b7 ")
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// Normalises raw architecture strings from the GitHub runner agent JSON.
+    /// Maps "ARM64"→"arm64", "X64"→"x64", "X86"→"x86"; lowercases all others.
     private func normaliseArch(_ raw: String) -> String {
         switch raw.uppercased() {
         case "ARM64": return "arm64"
@@ -190,6 +192,7 @@ struct PanelLocalRunnerRow: View {
     }
 
     /// Normalises raw platform strings from the GitHub runner agent JSON.
+    /// Maps "osx"/"darwin"→"macOS", "linux"→"Linux", "win"→"Windows".
     private func normalisePlatform(_ raw: String) -> String {
         let lower = raw.lowercased()
         if lower.hasPrefix("osx") || lower.hasPrefix("darwin") { return "macOS" }
