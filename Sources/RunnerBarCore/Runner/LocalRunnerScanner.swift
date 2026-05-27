@@ -23,6 +23,13 @@ import Foundation
 ///    `/opt/actions-runner`, `/opt/runner`, `/usr/local/actions-runner`,
 ///    `/usr/local/runner` up to depth 6.
 ///
+///    NOTE: GitHub's runner agent serialises `.runner` with the default
+///    System.Text.Json settings (no camelCase policy), so all keys are
+///    **PascalCase** (e.g. `"AgentId"`, `"AgentName"`, `"GitHubUrl"`,
+///    `"Platform"`, `"PlatformArchitecture"`, `"WorkFolder"`, `"Ephemeral"`).
+///    `RunnerJSON` uses explicit `CodingKeys` to map these to Swift
+///    camelCase properties. (#948)
+///
 /// 3. **Live service check** — `launchctl list` filtered in-process for `actions.runner`
 ///    Flags which runners currently have an active launchd service.
 public struct LocalRunnerScanner: Sendable {
@@ -39,7 +46,7 @@ public struct LocalRunnerScanner: Sendable {
         let agentId: Int?
         /// The workFolder constant.
         let workFolder: String?
-        // #491 — additional fields present in the GitHub runner .runner JSON
+        // #491 / #948 — additional fields present in the GitHub runner .runner JSON
         /// The platform constant.
         let platform: String?
         /// The platformArchitecture constant.
@@ -48,6 +55,21 @@ public struct LocalRunnerScanner: Sendable {
         let agentVersion: String?
         /// The ephemeral constant.
         let ephemeral: Bool?
+
+        /// Explicit CodingKeys mapping PascalCase JSON keys (written by the
+        /// GitHub runner's C#/.NET serialiser) to Swift camelCase properties.
+        /// Without these keys, JSONDecoder looks for exact lowercase matches
+        /// and all fields decode as nil. (#948)
+        enum CodingKeys: String, CodingKey {
+            case gitHubUrl            = "GitHubUrl"
+            case runnerName           = "AgentName"
+            case agentId              = "AgentId"
+            case workFolder           = "WorkFolder"
+            case platform             = "Platform"
+            case platformArchitecture = "PlatformArchitecture"
+            case agentVersion         = "AgentVersion"
+            case ephemeral            = "Ephemeral"
+        }
     }
 
     // MARK: - Filesystem path constants
