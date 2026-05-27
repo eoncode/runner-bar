@@ -154,6 +154,10 @@ struct PanelLocalRunnerRow: View {
 // MARK: - ActionRowView
 /// Row representing one GitHub Actions workflow run.
 /// Tapping expands inline job rows; long-press opens the run URL in Safari.
+///
+/// macOS 26+: the card background and inline job rows share a
+/// `GlassEffectContainer(spacing: 4)` with `glassEffectID` assigned to each
+/// so the glass shape morphs when the row expands/collapses (.bouncy animation).
 struct ActionRowView: View {
     /// The group constant.
     let group: WorkflowActionGroup
@@ -165,8 +169,70 @@ struct ActionRowView: View {
     @State private var expandState: Bool?
     /// The previousStatus property.
     @State private var previousStatus: RBStatus?
+    /// Namespace for glassEffectID morphing (macOS 26+ only).
+    @Namespace private var glassNS
     /// The body property.
     var body: some View {
+        if #available(macOS 26, *) {
+            glassMorphBody
+        } else {
+            legacyBody
+        }
+    }
+
+    // MARK: macOS 26+ morphing body
+    /// Uses GlassEffectContainer + glassEffectID so the glass shape morphs
+    /// on expand/collapse. Animation is .bouncy for native Liquid Glass feel.
+    @available(macOS 26, *)
+    @ViewBuilder private var glassMorphBody: some View {
+        GlassEffectContainer(spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: RBSpacing.md)
+                    rowContent
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .background(
+                ZStack {
+                    Color.clear
+                        .glassCard(cornerRadius: RBRadius.card)
+                        .glassEffectID(group.id, in: glassNS)
+                    Rectangle()
+                        .fill(rowStatus.color)
+                        .frame(width: 4)
+                        .frame(maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+            .workflowContextMenu(group: group)
+            .onTapGesture {
+                guard !group.jobs.isEmpty else { return }
+                withAnimation(.bouncy) {
+                    if expandState == true {
+                        expandState = (rowStatus == .inProgress) ? false : nil
+                    } else {
+                        expandState = true
+                    }
+                }
+            }
+
+            if let fullExpand = expandState {
+                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
+                    .glassEffectID(group.id.uuidString + "-jobs", in: glassNS)
+            }
+        }
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xxs)
+        .onAppear { applyInitialExpandState() }
+        .onChange(of: rowStatus) { _, newStatus in handleStatusChange(newStatus) }
+    }
+
+    // MARK: Pre-macOS-26 body (unchanged)
+    @ViewBuilder private var legacyBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: RBSpacing.md)
@@ -203,28 +269,38 @@ struct ActionRowView: View {
         }
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
-        .onAppear {
-            let status = rowStatus
-            previousStatus = status
-            expandState = (status == .inProgress) ? false : nil
-        }
-        .onChange(of: rowStatus) { _, newStatus in
-            if newStatus == .inProgress && expandState == nil {
-                withAnimation(.easeInOut(duration: 0.15)) { expandState = false }
-            }
-            if previousStatus == .inProgress && (newStatus == .success || newStatus == .failed) {
-                withAnimation(.easeInOut(duration: 0.15)) { expandState = nil }
-            }
-            previousStatus = newStatus
-        }
+        .onAppear { applyInitialExpandState() }
+        .onChange(of: rowStatus) { _, newStatus in handleStatusChange(newStatus) }
     }
 
-    /// Glass card background for the action row.
+    // MARK: Shared helpers
+
+    /// Glass card background for the action row (pre-26 path).
     /// Routes through `.glassCard()` to honour the Phase 1 contract — nothing
     /// outside `PanelViewModifiers` calls `.glassEffect()` directly on card containers.
     @ViewBuilder private var glassCardBackground: some View {
         Color.clear
             .glassCard(cornerRadius: RBRadius.card)
+    }
+
+    private func applyInitialExpandState() {
+        let status = rowStatus
+        previousStatus = status
+        expandState = (status == .inProgress) ? false : nil
+    }
+
+    private func handleStatusChange(_ newStatus: RBStatus) {
+        let animation: Animation = {
+            if #available(macOS 26, *) { return .bouncy }
+            return .easeInOut(duration: 0.15)
+        }()
+        if newStatus == .inProgress && expandState == nil {
+            withAnimation(animation) { expandState = false }
+        }
+        if previousStatus == .inProgress && (newStatus == .success || newStatus == .failed) {
+            withAnimation(animation) { expandState = nil }
+        }
+        previousStatus = newStatus
     }
 
     /// Resolves the effective display status for the row.
