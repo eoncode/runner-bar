@@ -122,7 +122,7 @@ private struct StepRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .stepContextMenu(step: step, job: job, onTap: onTap)
+        .stepContextMenu(step: step, onTap: onTap)
     }
     /// The iconColor property.
     private var iconColor: Color {
