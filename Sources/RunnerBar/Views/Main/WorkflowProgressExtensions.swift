@@ -34,7 +34,8 @@ extension WorkflowActionGroup {
         case .completed: return 1.0
         case .inProgress:
             guard jobsTotal > 0 else { return nil }
-            return Double(jobsDone) / Double(jobsTotal)
+            let fraction = Double(jobsDone) / Double(jobsTotal)
+            return min(max(fraction, 0.0), 1.0)
         }
     }
 }
@@ -50,7 +51,8 @@ extension ActiveJob {
         default:
             guard !steps.isEmpty else { return nil }
             let done = steps.filter { $0.conclusion != nil }.count
-            return Double(done) / Double(steps.count)
+            let fraction = Double(done) / Double(steps.count)
+            return min(max(fraction, 0.0), 1.0)
         }
     }
 }
