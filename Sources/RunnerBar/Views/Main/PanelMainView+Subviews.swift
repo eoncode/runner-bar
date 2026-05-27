@@ -80,6 +80,46 @@ private struct RunnerTypeIcon: View {
     }
 }
 
+// MARK: - RunnerMetricsBadge
+/// Single grouped badge showing CPU and MEM for a runner inside one
+/// shared rounded-rectangle background. Matches the reference design
+/// where both metrics are grouped as a unit rather than separate capsules.
+private struct RunnerMetricsBadge: View {
+    /// The cpu constant.
+    let cpu: Double
+    /// The mem constant.
+    let mem: Double
+    /// The body property.
+    var body: some View {
+        HStack(spacing: 8) {
+            metricItem(label: "CPU", value: String(format: "%.0f%%", cpu))
+            metricItem(label: "MEM", value: String(format: "%.0f%%", mem))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
+    }
+    /// Renders a label+value pair.
+    private func metricItem(label: String, value: String) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(RBFont.statLabel)
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(RBFont.statValue)
+                .foregroundColor(.primary)
+                .monospacedDigit()
+        }
+    }
+}
+
 // MARK: - PanelLocalRunnerRow
 /// Renders a card for each runner passed in. Caller is responsible for
 /// pre-filtering to only the runners that are currently active — this
@@ -105,7 +145,7 @@ struct PanelLocalRunnerRow: View {
         }
         Divider()
     }
-    /// Compact card showing a single runner's name, status badge, and CPU/memory stats.
+    /// Compact card showing a single runner's name and a grouped CPU/MEM badge.
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
@@ -116,8 +156,7 @@ struct PanelLocalRunnerRow: View {
                 .layoutPriority(1)
             Spacer()
             if let metrics = runner.metrics {
-                StatPill(label: "CPU", value: String(format: "%.0f%%", metrics.cpu))
-                StatPill(label: "MEM", value: String(format: "%.0f%%", metrics.mem))
+                RunnerMetricsBadge(cpu: metrics.cpu, mem: metrics.mem)
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
