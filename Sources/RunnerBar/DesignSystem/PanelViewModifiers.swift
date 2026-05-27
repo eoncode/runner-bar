@@ -36,7 +36,7 @@ struct GlassCard: ViewModifier {
         if #available(macOS 26, *) {
             AnyView(
                 content.glassEffect(
-                    .regular,
+                    .regular.interactive(),
                     in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 )
             )
