@@ -82,11 +82,13 @@ public struct LocalRunnerScanner: Sendable {
 
     // MARK: - Filesystem path constants
     /// The findBinary constant.
-    private static let findBinary    = "/usr/bin/find"
+    private static let findBinary      = "/usr/bin/find"
     /// Full path to the launchctl binary.
     private static let launchctlBinary = "/bin/launchctl"
     /// Base URL used to construct GitHub repository and organisation URLs from plist labels.
-    private static let gitHubBaseURL = GitHubConstants.base
+    private static let gitHubBaseURL   = GitHubConstants.base
+    /// Shared decoder — allocated once; RunnerJSON decoding has no custom strategies.
+    private static let jsonDecoder     = JSONDecoder()
 
     // MARK: - Public API
 
@@ -154,52 +156,73 @@ public struct LocalRunnerScanner: Sendable {
         for url in entries {
             let filename = url.deletingPathExtension().lastPathComponent
             guard filename.hasPrefix(prefix) else { continue }
-            // Label format: actions.runner.<owner>.<repo>.<runnerName>
-            // parts[0] = owner, parts[1] = repo, parts[2...] = runner name components
-            let remainder = String(filename.dropFirst(prefix.count))
-            let parts = remainder.components(separatedBy: ".")
-            let runnerName = parts.last ?? "runner"
-            // Derive a GitHub URL fallback from the label when possible.
-            var plistGitHubUrl: String?
-            if parts.count >= 3 {
-                let owner = parts[0]
-                let repo = parts[1]
-                if !owner.isEmpty && !repo.isEmpty {
-                    plistGitHubUrl = "\(Self.gitHubBaseURL)/\(owner)/\(repo)"
-                }
-            } else if parts.count == 2 {
-                let org = parts[0]
-                if !org.isEmpty { plistGitHubUrl = "\(Self.gitHubBaseURL)/\(org)" }
-            }
-            // Extract WorkingDirectory and opportunistically read the .runner JSON
-            // so platform/arch are available even for runners outside the default roots.
-            var workDir: String?
-            var jsonPlatform: String?
-            var jsonArch: String?
-            if let plist = NSDictionary(contentsOf: url),
-               let dir = plist["WorkingDirectory"] as? String,
-               !dir.isEmpty {
-                workDir = dir
-                installPaths.insert(dir)
-                let jsonURL = URL(fileURLWithPath: dir).appendingPathComponent(".runner")
-                if let data = try? Data(contentsOf: jsonURL),
-                   let json = try? JSONDecoder().decode(RunnerJSON.self, from: data) {
-                    jsonPlatform = json.platform
-                    jsonArch     = json.platformArchitecture
-                }
-            }
-            models.append(RunnerModel(
-                runnerName: runnerName,
-                gitHubUrl: plistGitHubUrl,
-                agentId: nil,
-                workFolder: workDir,
-                installPath: workDir,
-                isRunning: false,
-                platform: jsonPlatform,
-                platformArchitecture: jsonArch
-            ))
+            let model = plistRunnerModel(
+                filename: filename,
+                prefix: prefix,
+                plistURL: url,
+                installPaths: &installPaths
+            )
+            models.append(model)
         }
         return (models, installPaths)
+    }
+
+    /// Builds a `RunnerModel` stub from a single LaunchAgent plist file.
+    /// Also inserts the runner's `WorkingDirectory` into `installPaths`.
+    private func plistRunnerModel(
+        filename: String,
+        prefix: String,
+        plistURL: URL,
+        installPaths: inout Set<String>
+    ) -> RunnerModel {
+        // Label format: actions.runner.<owner>.<repo>.<runnerName>
+        // parts[0] = owner, parts[1] = repo, parts[2...] = runner name components
+        let remainder = String(filename.dropFirst(prefix.count))
+        let parts     = remainder.components(separatedBy: ".")
+        let runnerName = parts.last ?? "runner"
+        let plistGitHubUrl = gitHubURLFromPlistParts(parts)
+
+        var workDir: String?
+        var jsonPlatform: String?
+        var jsonArch: String?
+        if let plist = NSDictionary(contentsOf: plistURL),
+           let dir = plist["WorkingDirectory"] as? String,
+           !dir.isEmpty {
+            workDir = dir
+            installPaths.insert(dir)
+            let jsonURL = URL(fileURLWithPath: dir).appendingPathComponent(".runner")
+            if let data = try? Data(contentsOf: jsonURL),
+               let json = try? Self.jsonDecoder.decode(RunnerJSON.self, from: data) {
+                jsonPlatform = json.platform
+                jsonArch     = json.platformArchitecture
+            }
+        }
+        return RunnerModel(
+            runnerName: runnerName,
+            gitHubUrl: plistGitHubUrl,
+            agentId: nil,
+            workFolder: workDir,
+            installPath: workDir,
+            isRunning: false,
+            platform: jsonPlatform,
+            platformArchitecture: jsonArch
+        )
+    }
+
+    /// Derives a GitHub URL string from the dot-separated parts of a plist label.
+    /// Returns `nil` when there are not enough parts to form a valid URL.
+    private func gitHubURLFromPlistParts(_ parts: [String]) -> String? {
+        if parts.count >= 3 {
+            let owner = parts[0], repo = parts[1]
+            guard !owner.isEmpty, !repo.isEmpty else { return nil }
+            return "\(Self.gitHubBaseURL)/\(owner)/\(repo)"
+        }
+        if parts.count == 2 {
+            let org = parts[0]
+            guard !org.isEmpty else { return nil }
+            return "\(Self.gitHubBaseURL)/\(org)"
+        }
+        return nil
     }
 
     // MARK: - Source 2: .runner JSON files
@@ -246,25 +269,29 @@ public struct LocalRunnerScanner: Sendable {
         guard !raw.isEmpty else { return [] }
         return raw.components(separatedBy: "\n")
             .filter { !$0.isEmpty }
-            .compactMap { path -> RunnerModel? in
-                let url = URL(fileURLWithPath: path)
-                guard let data = try? Data(contentsOf: url),
-                      let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
-                else { return nil }
-                let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
-                return RunnerModel(
-                    runnerName: name,
-                    gitHubUrl: json.gitHubUrl,
-                    agentId: json.agentId,
-                    workFolder: json.workFolder,
-                    installPath: url.deletingLastPathComponent().path,
-                    isRunning: false,
-                    platform: json.platform,
-                    platformArchitecture: json.platformArchitecture,
-                    agentVersion: json.agentVersion,
-                    isEphemeral: json.ephemeral ?? false
-                )
-            }
+            .compactMap { runnerModel(fromDotRunnerPath: $0) }
+    }
+
+    /// Decodes a single `.runner` JSON file at `path` and returns a `RunnerModel`,
+    /// or `nil` if the file cannot be read or decoded.
+    private func runnerModel(fromDotRunnerPath path: String) -> RunnerModel? {
+        let url = URL(fileURLWithPath: path)
+        guard let data = try? Data(contentsOf: url),
+              let json = try? Self.jsonDecoder.decode(RunnerJSON.self, from: data)
+        else { return nil }
+        let name = json.runnerName ?? url.deletingLastPathComponent().lastPathComponent
+        return RunnerModel(
+            runnerName: name,
+            gitHubUrl: json.gitHubUrl,
+            agentId: json.agentId,
+            workFolder: json.workFolder,
+            installPath: url.deletingLastPathComponent().path,
+            isRunning: false,
+            platform: json.platform,
+            platformArchitecture: json.platformArchitecture,
+            agentVersion: json.agentVersion,
+            isEphemeral: json.ephemeral ?? false
+        )
     }
 
     // MARK: - Source 3: Live service check
@@ -286,7 +313,7 @@ public struct LocalRunnerScanner: Sendable {
         for line in output.components(separatedBy: "\n") where line.contains("actions.runner") {
             let columns = line.components(separatedBy: "\t")
             guard columns.count >= 3 else { continue }
-            let pid = columns[0].trimmingCharacters(in: .whitespaces)
+            let pid   = columns[0].trimmingCharacters(in: .whitespaces)
             let label = columns[2].trimmingCharacters(in: .whitespaces)
             if pid != "-", !label.isEmpty { labels.insert(label) }
         }

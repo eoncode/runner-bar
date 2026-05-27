@@ -13,9 +13,7 @@ final class LocalRunnerStore: ObservableObject {
     /// The shared constant.
     static let shared = LocalRunnerStore()
     /// Private initialiser — use `shared`.
-    private init() {
-        // Singleton — no custom initialisation needed; default property values are sufficient.
-    }
+    private init() {}
 
     /// The runners property.
     @Published var runners: [RunnerModel] = []
@@ -44,20 +42,14 @@ final class LocalRunnerStore: ObservableObject {
             guard let self else { return }
             log("LocalRunnerStore > refresh() background — starting scanner.scan()")
             let scanned = scanner.scan()
-            let summary = scanned.map { "\($0.runnerName)(isRunning=\($0.isRunning))" }.joined(separator: ", ")
-            log("LocalRunnerStore > refresh() background — scanner.scan() returned \(scanned.count) runner(s): [\(summary)]")
+            log("LocalRunnerStore > refresh() background — scanner.scan() returned \(scanned.count) runner(s): [\(runnerScanSummary(scanned))]")
 
             let token = githubToken()
             var enriched = scanned
             if token != nil {
                 log("LocalRunnerStore > refresh() background — token present, calling enricher")
                 enriched = enricher.enrich(runners: scanned)
-                let enrichedSummary = enriched.map { r -> String in
-                    let st = r.githubStatus ?? "nil"
-                    let w = r.lifecycleWarning ?? "none"
-                    return "\(r.runnerName)(isRunning=\(r.isRunning),status=\(st),warning=\(w))"
-                }.joined(separator: ", ")
-                log("LocalRunnerStore > refresh() background — enricher returned \(enriched.count) runner(s): [\(enrichedSummary)]")
+                log("LocalRunnerStore > refresh() background — enricher returned \(enriched.count) runner(s): [\(runnerEnrichedSummary(enriched))]")
             } else {
                 log("LocalRunnerStore > refresh() background — no token, skipping enricher")
             }
@@ -67,11 +59,7 @@ final class LocalRunnerStore: ObservableObject {
             // isBusy is set by RunnerStatusEnricher via the GitHub API and lags behind
             // the launchctl live-service check — gating on isBusy caused metrics to be
             // absent on the first render and permanently missing when isBusy never synced.
-            for idx in enriched.indices {
-                guard enriched[idx].isRunning, let installPath = enriched[idx].installPath else { continue }
-                enriched[idx].metrics = metricsForRunner(installPath: installPath)
-                log("LocalRunnerStore > refresh() background — metrics for \(enriched[idx].runnerName): \(String(describing: enriched[idx].metrics))")
-            }
+            applyMetrics(&enriched)
 
             DispatchQueue.main.async { [weak self, enriched] in
                 guard let self else { return }
@@ -124,3 +112,29 @@ final class LocalRunnerStore: ObservableObject {
     }
 }
 // swiftlint:enable type_body_length missing_docs
+
+// MARK: - Private helpers (file-private, non-member to reduce class complexity)
+
+/// Returns a compact scan summary string: "name(isRunning=true), …"
+private func runnerScanSummary(_ runners: [RunnerModel]) -> String {
+    runners.map { "\($0.runnerName)(isRunning=\($0.isRunning))" }.joined(separator: ", ")
+}
+
+/// Returns a compact enriched summary string: "name(isRunning, status, warning), …"
+private func runnerEnrichedSummary(_ runners: [RunnerModel]) -> String {
+    runners.map { r in
+        let st = r.githubStatus ?? "nil"
+        let w  = r.lifecycleWarning ?? "none"
+        return "\(r.runnerName)(isRunning=\(r.isRunning),status=\(st),warning=\(w))"
+    }.joined(separator: ", ")
+}
+
+/// Mutates each runner in `enriched` in-place to attach CPU/MEM metrics
+/// for any runner whose launchd service is active (`isRunning == true`).
+private func applyMetrics(_ enriched: inout [RunnerModel]) {
+    for idx in enriched.indices {
+        guard enriched[idx].isRunning, let installPath = enriched[idx].installPath else { continue }
+        enriched[idx].metrics = metricsForRunner(installPath: installPath)
+        log("LocalRunnerStore > applyMetrics — \(enriched[idx].runnerName): \(String(describing: enriched[idx].metrics))")
+    }
+}
