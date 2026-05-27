@@ -220,8 +220,6 @@ private struct JobRowCard: View {
     /// The stepsContainer property.
     private var stepsContainer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Color.rbBorderSubtle.frame(height: 0.5)
-                .padding(.horizontal, RBSpacing.sm)
             ForEach(Array(job.steps.enumerated()), id: \.element.id) { index, step in
                 StepRowView(
                     step: step,

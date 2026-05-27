@@ -153,8 +153,8 @@ struct StatusBadgeBackground: ViewModifier {
         if #available(macOS 26, *) {
             AnyView(
                 content
-                    .background(color.opacity(0.15), in: Capsule())
-                    .glassEffect(.regular, in: Capsule())
+                    .background(color.opacity(0.25), in: Capsule())
+                    .overlay(Capsule().strokeBorder(color.opacity(0.55), lineWidth: 0.5))
             )
         } else {
             AnyView(

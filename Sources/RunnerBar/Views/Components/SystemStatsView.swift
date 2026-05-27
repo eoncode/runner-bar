@@ -108,7 +108,7 @@ struct DiskPillBadge: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(pillColor.opacity(0.15), in: Capsule())
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.35), lineWidth: 0.5))
+            .glassEffect(.regular, in: Capsule())
             .fixedSize()
     }
 
