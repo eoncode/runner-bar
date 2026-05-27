@@ -158,17 +158,23 @@ struct StatusBadgeBackground: ViewModifier {
 }
 
 // MARK: - BranchTagPillBackground
+<<<<<<< HEAD
 /// Background modifier for branch/tag name capsule pills.
 /// macOS 26+: `rbAccent` tint layer + `.glassEffect(.regular, in: Capsule())`.
+=======
+/// Background modifier for `BranchTagPill` capsule pills.
+/// macOS 26+: `rbAccent` tint integrated via `.tint()` directly into the glass
+/// compositor — do NOT use a raw `.background` layer underneath `.glassEffect`
+/// as it renders outside the glass stack and fails to adapt with the material.
+>>>>>>> 2974743 (fix(glass): BranchTagPill use .tint() on glass instead of raw .background (#961))
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
 struct BranchTagPillBackground: ViewModifier {
-    /// Applies an accent-tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies a compositor-tinted glass capsule (macOS 26+) or stroke capsule border (pre-26).
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             AnyView(
                 content
-                    .background(Color.rbAccent.opacity(0.12), in: Capsule())
-                    .glassEffect(.regular, in: Capsule())
+                    .glassEffect(.regular.tint(Color.rbAccent.opacity(0.4)), in: Capsule())
             )
         } else {
             AnyView(
@@ -232,7 +238,7 @@ extension View {
         modifier(StatusBadgeBackground(color: color))
     }
 
-    /// Applies the `BranchTagPillBackground` modifier (accent-tinted glass capsule on macOS 26+).
+    /// Applies the `BranchTagPillBackground` modifier (compositor-tinted glass capsule on macOS 26+).
     func branchTagPillBackground() -> some View {
         modifier(BranchTagPillBackground())
     }
