@@ -96,11 +96,11 @@ enum FailureHookRunner {
         }
     }
 
-    /// A value type representing FailedJobResult.
+    /// Represents the result of fetching a single failed job, including its log tail.
     private struct FailedJobResult {
-        /// The job constant.
+        /// The job payload.
         let job: JobPayload
-        /// The logTail constant.
+        /// The last 150 lines of the job log, or nil if unavailable.
         let logTail: String?
     }
 
@@ -153,7 +153,7 @@ enum FailureHookRunner {
         s.replacingOccurrences(of: "'", with: "'\\''")
     }
 
-    /// Builds the $FAILURE_LOG content.
+    /// Builds the $FAILURE_LOG content from failed job results.
     private static func buildLogContent(
         group: WorkflowActionGroup,
         scope _: String,
