@@ -198,6 +198,8 @@ struct PanelMainView: View {
         displayTickTimer = nil
     }
     // MARK: - Rate limit banner (#778)
+    /// Inline banner shown at the top of the panel when GitHub rate-limiting is active.
+    /// Displays a live countdown to the rate-limit reset time, updated every second via `displayTick`.
     private var rateLimitBanner: some View {
         _ = displayTick // swiftlint:disable:this redundant_discardable_let
         let countdownLabel: String
