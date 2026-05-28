@@ -48,17 +48,18 @@ struct SystemStatsView: View {
 /// it independently from the foreground content — the `CABackdropLayer`
 /// never re-composites on timer ticks. Only the inner text/sparkline diffs.
 ///
-/// Visual intent: barely-there frosted chip. Plain `.regular` glass with no
-/// tint gives a subtle frost; a faint `labelColor` stroke traces the capsule
-/// edge for semantic colour identity (danger/warning/normal) without filling.
+/// Shape: `RoundedRectangle(cornerRadius: RBRadius.small)` — matches the
+/// settings and quit button shape language in `PanelHeaderView`.
 ///
-/// ❌ Do NOT use `.tint()` on the glassEffect — it renders too aggressively
-/// regardless of opacity value and makes badges appear solid/filled.
+/// ❌ Do NOT use Capsule — use RoundedRectangle to match toolbar button shape.
+/// ❌ Do NOT use `.tint()` on glassEffect — renders too aggressively.
 struct GlassBadgeContainer<Content: View>: View {
     /// The semantic tint colour for the badge stroke (danger / warning / primary).
     let labelColor: Color
     /// The live-updating chip content rendered in the foreground.
     @ViewBuilder let content: () -> Content
+
+    private let shape = RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
 
     /// The body property.
     var body: some View {
@@ -67,14 +68,12 @@ struct GlassBadgeContainer<Content: View>: View {
             .padding(.vertical, 3)
             .background {
                 if #available(macOS 26, *) {
-                    Capsule()
-                        .glassEffect(.regular, in: Capsule())
+                    shape.glassEffect(.regular, in: shape)
                 } else {
-                    Capsule()
-                        .fill(Color.primary.opacity(0.06))
+                    shape.fill(Color.primary.opacity(0.06))
                 }
             }
-            .overlay(Capsule().strokeBorder(labelColor.opacity(0.30), lineWidth: 0.5))
+            .overlay(shape.strokeBorder(labelColor.opacity(0.30), lineWidth: 0.5))
     }
 }
 
@@ -133,6 +132,8 @@ struct DiskPillBadge: View {
     /// The freePct constant.
     let freePct: Double
 
+    private let shape = RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
+
     /// The body property.
     var body: some View {
         Text(String(format: "%.0f%% free", freePct))
@@ -143,14 +144,12 @@ struct DiskPillBadge: View {
             .padding(.vertical, 2)
             .background {
                 if #available(macOS 26, *) {
-                    Capsule()
-                        .glassEffect(.regular, in: Capsule())
+                    shape.glassEffect(.regular, in: shape)
                 } else {
-                    Capsule()
-                        .fill(Color.primary.opacity(0.06))
+                    shape.fill(Color.primary.opacity(0.06))
                 }
             }
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.30), lineWidth: 0.5))
+            .overlay(shape.strokeBorder(pillColor.opacity(0.30), lineWidth: 0.5))
             .fixedSize()
     }
 
