@@ -29,9 +29,6 @@ struct SystemStatsView: View {
     }
 
     /// Returns a single label/value row for display in the stats panel.
-    /// - Parameters:
-    ///   - label: The metric name displayed on the leading edge (e.g. "CPU").
-    ///   - value: The formatted metric value displayed on the trailing edge (e.g. "41.2%").
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
@@ -51,14 +48,14 @@ struct SystemStatsView: View {
 /// it independently from the foreground content — the `CABackdropLayer`
 /// never re-composites on timer ticks. Only the inner text/sparkline diffs.
 ///
-/// Visual intent: barely-there rounded chip. The glass tint alone at low
-/// opacity gives shape definition and depth without washing out the content
-/// in dark mode. A light stroke traces the edge.
+/// Visual intent: barely-there frosted chip. Plain `.regular` glass with no
+/// tint gives a subtle frost; a faint `labelColor` stroke traces the capsule
+/// edge for semantic colour identity (danger/warning/normal) without filling.
 ///
-/// ❌ Do NOT add a `.fill(labelColor.opacity(...))` layer on top of the glass —
-/// it compounds with the tint and makes badges appear too bright/solid.
+/// ❌ Do NOT use `.tint()` on the glassEffect — it renders too aggressively
+/// regardless of opacity value and makes badges appear solid/filled.
 struct GlassBadgeContainer<Content: View>: View {
-    /// The semantic tint colour for the badge (danger / warning / primary).
+    /// The semantic tint colour for the badge stroke (danger / warning / primary).
     let labelColor: Color
     /// The live-updating chip content rendered in the foreground.
     @ViewBuilder let content: () -> Content
@@ -71,14 +68,13 @@ struct GlassBadgeContainer<Content: View>: View {
             .background {
                 if #available(macOS 26, *) {
                     Capsule()
-                        .glassEffect(.regular.tint(labelColor.opacity(0.08)), in: Capsule())
+                        .glassEffect(.regular, in: Capsule())
                 } else {
                     Capsule()
-                        .fill(labelColor.opacity(0.08))
-                        .overlay(Capsule().strokeBorder(labelColor.opacity(0.20), lineWidth: 0.5))
+                        .fill(Color.primary.opacity(0.06))
                 }
             }
-            .overlay(Capsule().strokeBorder(labelColor.opacity(0.20), lineWidth: 0.5))
+            .overlay(Capsule().strokeBorder(labelColor.opacity(0.30), lineWidth: 0.5))
     }
 }
 
@@ -148,14 +144,13 @@ struct DiskPillBadge: View {
             .background {
                 if #available(macOS 26, *) {
                     Capsule()
-                        .glassEffect(.regular.tint(pillColor.opacity(0.08)), in: Capsule())
+                        .glassEffect(.regular, in: Capsule())
                 } else {
                     Capsule()
-                        .fill(pillColor.opacity(0.08))
-                        .overlay(Capsule().strokeBorder(pillColor.opacity(0.20), lineWidth: 0.5))
+                        .fill(Color.primary.opacity(0.06))
                 }
             }
-            .overlay(Capsule().strokeBorder(pillColor.opacity(0.20), lineWidth: 0.5))
+            .overlay(Capsule().strokeBorder(pillColor.opacity(0.30), lineWidth: 0.5))
             .fixedSize()
     }
 
