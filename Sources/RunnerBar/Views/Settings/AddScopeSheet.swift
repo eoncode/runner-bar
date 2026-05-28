@@ -103,7 +103,7 @@ struct AddScopeSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 6)
                         } else if usePicker && !pickerItems.isEmpty {
-                            // ── Searchable sheet trigger ─────────────────────
+                            // ── Searchable selector trigger ──────────────────
                             Button(action: { showScopeSelector = true }) {
                                 HStack {
                                     Text(selectedScope.isEmpty ? "\u{2014} select \u{2014}" : selectedScope)
@@ -129,17 +129,6 @@ struct AddScopeSheet: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            .sheet(isPresented: $showScopeSelector) {
-                                RepoSelectorSheet(
-                                    items: pickerItems,
-                                    label: scopeType == .org ? "Organisation" : "Repository",
-                                    onDismiss: { showScopeSelector = false },
-                                    onSelect: { item in
-                                        selectedScope = item
-                                        showScopeSelector = false
-                                    }
-                                )
-                            }
                         } else {
                             TextField(
                                 scopeType == .org ? "e.g. myorg" : "e.g. myorg/myrepo",
@@ -188,6 +177,18 @@ struct AddScopeSheet: View {
         }
         .frame(width: 420)
         .onAppear(perform: fetchScopeOptions)
+        // Nested inline overlay for scope selector — no child NSWindow.
+        .inlineSheet(isPresented: $showScopeSelector) {
+            RepoSelectorSheet(
+                items: pickerItems,
+                label: scopeType == .org ? "Organisation" : "Repository",
+                onDismiss: { showScopeSelector = false },
+                onSelect: { item in
+                    selectedScope = item
+                    showScopeSelector = false
+                }
+            )
+        }
     }
 
     // MARK: - Actions

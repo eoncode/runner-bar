@@ -152,6 +152,29 @@ struct AddRunnerSheet: View {
         .onAppear {
             if addMode == .addNew { loadScopes() }
         }
+        // Nested inline overlays for the repo/org selector — no child NSWindow.
+        .inlineSheet(isPresented: $showRepoSelector) {
+            RepoSelectorSheet(
+                items: repos,
+                label: "Repository",
+                onDismiss: { showRepoSelector = false },
+                onSelect: { item in
+                    selectedRepo = item
+                    showRepoSelector = false
+                }
+            )
+        }
+        .inlineSheet(isPresented: $showOrgSelector) {
+            RepoSelectorSheet(
+                items: orgs,
+                label: "Organisation",
+                onDismiss: { showOrgSelector = false },
+                onSelect: { item in
+                    selectedOrg = item
+                    showOrgSelector = false
+                }
+            )
+        }
     }
 
     // MARK: - Add New Form Body
@@ -176,34 +199,12 @@ struct AddRunnerSheet: View {
                 selection: selectedRepo,
                 action: { showRepoSelector = true }
             )
-            .sheet(isPresented: $showRepoSelector) {
-                RepoSelectorSheet(
-                    items: repos,
-                    label: "Repository",
-                    onDismiss: { showRepoSelector = false },
-                    onSelect: { item in
-                        selectedRepo = item
-                        showRepoSelector = false
-                    }
-                )
-            }
         } else {
             selectorButton(
                 label: "Organisation",
                 selection: selectedOrg,
                 action: { showOrgSelector = true }
             )
-            .sheet(isPresented: $showOrgSelector) {
-                RepoSelectorSheet(
-                    items: orgs,
-                    label: "Organisation",
-                    onDismiss: { showOrgSelector = false },
-                    onSelect: { item in
-                        selectedOrg = item
-                        showOrgSelector = false
-                    }
-                )
-            }
         }
 
         labeledField("Runner name", placeholder: "e.g. my-mac-runner", text: $runnerName)
@@ -351,7 +352,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Sub-views
 
-    /// Selector button that opens the searchable RepoSelectorSheet.
+    /// Selector button that opens the searchable RepoSelectorSheet inline overlay.
     @ViewBuilder
     private func selectorButton(label: String, selection: String,
                                 action: @escaping () -> Void) -> some View {

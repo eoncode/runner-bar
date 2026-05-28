@@ -107,9 +107,10 @@ struct SettingsView: View {
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear(perform: onAppearAction)
         .onChange(of: localRunnerStore.isScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
-        .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
-        .sheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
-        .sheet(item: $selectedScopeEntry) { entry in
+        // Inline overlays — no child NSWindow spawned (safe for borderless NSPanel).
+        .inlineSheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
+        .inlineSheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
+        .inlineSheet(item: $selectedScopeEntry) { entry in
             // #992: ScopeEditSheet replaces the old nav drill-down.
             ScopeEditSheet(
                 scopeEntry: entry,
@@ -120,8 +121,8 @@ struct SettingsView: View {
             )
         }
         .modifier(removalAlertModifier)
-        // #1001: runner editing sheet (was .popover — converted to .sheet to match ScopeEditSheet)
-        .sheet(item: $editingRunner) { runner in
+        // #1001: runner editing inline overlay (was .sheet — converted to .inlineSheet)
+        .inlineSheet(item: $editingRunner) { runner in
             runnerEditingPopover(runner: runner)
         }
     }
@@ -138,10 +139,6 @@ struct SettingsView: View {
                 guard !isCommitting else { return }
                 isCommitting = true
                 commitError = nil
-                // Build original from disk so the dirty-check in commitRunnerEdit
-                // compares against actual persisted values, not model defaults.
-                // (#1001 fix: was RunnerEditDraft(runner: runner) which left
-                // autoUpdate=true and proxy fields empty regardless of disk state.)
                 var original = RunnerEditDraft(runner: runner)
                 if let installPath = runner.installPath {
                     original.load(installPath: installPath)
