@@ -20,6 +20,7 @@ import SwiftUI
 // #560: Branch selector row added to Failure Hook section.
 // #973: Remove Danger Zone and monitoring toggle — Settings is single source of truth.
 // #992: Converted from nav drill-down to modal sheet with explicit Cancel / Save.
+//       All edits are staged locally; ScopePreferencesStore is only written on Save.
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `SettingsView`.
 struct ScopeEditSheet: View {
@@ -36,11 +37,11 @@ struct ScopeEditSheet: View {
     @State private var showHookSheet = false
     /// The showBranchSheet property.
     @State private var showBranchSheet = false
-    /// The hookEnabled property.
+    /// Draft: whether the failure hook is enabled. Written to store only on Save.
     @State private var hookEnabled: Bool
-    /// The hookBranch property.
+    /// Draft: selected branch filter. Written to store only on Save.
     @State private var hookBranch: String?
-    /// The localRepoPath property.
+    /// Draft: local repo path. Written to store only on Save.
     @State private var localRepoPath: String
     /// The isEditingPath property.
     @State private var isEditingPath = false
@@ -72,6 +73,7 @@ struct ScopeEditSheet: View {
     /// scope rather than an organisation scope.
     private var isRepo: Bool { scope.contains("/") }
     /// The persisted failure-hook terminal command for this scope, if set.
+    /// Command is edited via FailureHookCommandSheet which has its own save flow.
     private var hookCommand: String? { ScopePreferencesStore.failureHookCommand(for: scope) }
     /// The GitHub web URL for this scope, used to render the "Open on GitHub" link.
     private var gitHURL: URL? { URL(string: "https://github.com/\(scope)") }
@@ -102,8 +104,8 @@ struct ScopeEditSheet: View {
                 scope: scope,
                 onDismiss: { showBranchSheet = false },
                 onSelect: { chosen in
+                    // Stage locally only — not persisted until Save.
                     hookBranch = chosen
-                    ScopePreferencesStore.setFailureHookBranch(chosen, for: scope)
                     showBranchSheet = false
                 }
             )
@@ -252,6 +254,7 @@ extension ScopeEditSheet {
 /// Extension adding functionality to `ScopeEditSheet`.
 extension ScopeEditSheet {
     /// Toggle row enabling or disabling the failure-hook for this scope.
+    /// Updates draft state only — not persisted until Save.
     var hookToggleRow: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -263,22 +266,16 @@ extension ScopeEditSheet {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Toggle("", isOn: Binding(
-                get: { hookEnabled },
-                set: { newVal in
-                    hookEnabled = newVal
-                    ScopePreferencesStore.setFailureHookEnabled(newVal, for: scope)
-                }
-            ))
-            .toggleStyle(.switch)
-            .tint(Color.rbSuccess)
-            .labelsHidden()
+            Toggle("", isOn: $hookEnabled)
+                .toggleStyle(.switch)
+                .tint(Color.rbSuccess)
+                .labelsHidden()
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
     }
 
     /// Row for selecting the branch filter applied by the failure hook.
-    /// Tapping opens `BranchSelectorSheet`; an ×-button clears the filter.
+    /// Tapping opens `BranchSelectorSheet`; an ×-button clears the draft filter.
     var branchRow: some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         Button(action: { showBranchSheet = true }) {
@@ -357,10 +354,8 @@ extension ScopeEditSheet {
                 .buttonStyle(.plain)
                 .help("Browse for folder…")
                 if !localRepoPath.isEmpty {
-                    Button(action: {
-                        localRepoPath = ""
-                        ScopePreferencesStore.setLocalRepoPath(nil, for: scope)
-                    }) {
+                    // Clears draft only — not persisted until Save.
+                    Button(action: { localRepoPath = "" }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 11))
                             .foregroundColor(Color.rbTextTertiary)
@@ -418,31 +413,33 @@ extension ScopeEditSheet {
         isEditingPath = true
     }
 
-    /// Commits the edited local path: trims whitespace, clears the `~/`
-    /// placeholder, and persists the result to `ScopePreferencesStore`.
+    /// Normalises the draft local path: trims whitespace and clears the `~/` placeholder.
+    /// Does NOT write to `ScopePreferencesStore` — that happens in `confirmSave()`.
     func commitLocalPath() {
         isEditingPath = false
         let trimmed = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleaned = (trimmed == "~/") ? "" : trimmed
-        localRepoPath = cleaned
-        ScopePreferencesStore.setLocalRepoPath(cleaned.isEmpty ? nil : cleaned, for: scope)
+        localRepoPath = (trimmed == "~/") ? "" : trimmed
     }
 
-    /// Clears the branch filter for the failure hook and persists the change.
+    /// Clears the draft branch filter. Does NOT write to `ScopePreferencesStore`.
     func clearBranchFilter() {
         hookBranch = nil
-        ScopePreferencesStore.setFailureHookBranch(nil, for: scope)
     }
 
-    /// Persists all edited fields to `ScopePreferencesStore` and dismisses the sheet.
-    /// This is the single commit point — no writes happen until the user taps Save.
+    /// Single commit point: writes all three draft fields to `ScopePreferencesStore`,
+    /// then dismisses the sheet. Nothing is persisted before this runs.
     @MainActor func confirmSave() {
+        ScopePreferencesStore.setFailureHookEnabled(hookEnabled, for: scope)
+        ScopePreferencesStore.setFailureHookBranch(hookBranch, for: scope)
+        let path = localRepoPath.isEmpty ? nil : localRepoPath
+        ScopePreferencesStore.setLocalRepoPath(path, for: scope)
         isPresented = false
     }
 
     /// Presents an `NSOpenPanel` to let the user pick the local repository
     /// folder. Closes the panel before opening the picker so the floating
     /// window does not obscure the sheet (#546).
+    /// Updates draft `localRepoPath` only — not persisted until Save.
     func openFolderPicker() {
         let appDelegate = NSApp.delegate as? AppDelegate
         appDelegate?.closePanel()
@@ -465,7 +462,6 @@ extension ScopeEditSheet {
                 let abs = url.path
                 let tilde = abs.hasPrefix(home) ? "~/" + abs.dropFirst(home.count + 1) : abs
                 localRepoPath = tilde
-                ScopePreferencesStore.setLocalRepoPath(tilde, for: scope)
             }
             appDelegate?.openPanel()
         }
