@@ -18,6 +18,7 @@ import SwiftUI
 //       panel is never obscured by the popover.
 // #559: Failure Hook section hidden for org scopes — only shown for repo scopes.
 // #560: Branch selector row added to Failure Hook section.
+// #973: Remove Danger Zone and monitoring toggle — Settings is single source of truth.
 /// Detail settings screen for a single scope (org or repo).
 /// Rendered when the user taps a scope row in `SettingsView`.
 struct ScopeDetailView: View {
@@ -84,7 +85,6 @@ struct ScopeDetailView: View {
                     infoSection
                     monitoringSection
                     if isRepo { failureHookSection }
-                    dangerSection
                 }
                 .padding(.bottom, 16)
             }
@@ -178,7 +178,8 @@ extension ScopeDetailView {
         }
     }
 
-    /// Card section with a toggle to enable or disable polling for this scope.
+    /// Card section displaying the current monitoring status for this scope as a read-only label.
+    /// Toggle and remove controls live in Settings — see #973.
     var monitoringSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("Monitoring")
@@ -195,14 +196,9 @@ extension ScopeDetailView {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    Toggle("", isOn: Binding(
-                        get: { isEnabled },
-                        set: { ScopeStore.shared.setEnabled(scopeEntry.id, $0); RunnerStore.shared.start() }
-                    ))
-                    .toggleStyle(.switch)
-                    .tint(Color.rbSuccess)
-                    .labelsHidden()
-                    .help(isEnabled ? "Pause monitoring this scope" : "Resume monitoring")
+                    Text(isEnabled ? "Active" : "Paused")
+                        .font(.caption2)
+                        .foregroundColor(isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
                 }
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
             }
@@ -222,32 +218,6 @@ extension ScopeDetailView {
                 localPathRow
                 Divider().padding(.leading, RBSpacing.md)
                 commandRow
-            }
-        }
-    }
-
-    /// Card section with a destructive "Remove scope" action.
-    var dangerSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionHeader("Danger Zone")
-            infoCard {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Remove scope")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.rbDanger)
-                        Text("Stops monitoring this scope. Runners already discovered are not affected.")
-                            .font(.caption2).foregroundColor(Color.rbTextSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    // swiftlint:disable:next multiple_closures_with_trailing_closure
-                    Button(action: removeScope) {
-                        Text("Remove").font(.caption2).foregroundColor(Color.rbDanger)
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 10)
             }
         }
     }
@@ -468,15 +438,6 @@ extension ScopeDetailView {
             }
             appDelegate?.openPanel()
         }
-    }
-
-    /// Removes the scope: cleans up its `UserDefaults` keys, removes it from
-    /// `ScopeStore`, restarts the runner polling cycle, and navigates back.
-    func removeScope() {
-        ScopePreferencesStore.cleanUp(scope: scope)
-        ScopeStore.shared.remove(id: scopeEntry.id)
-        RunnerStore.shared.start()
-        onBack()
     }
 }
 

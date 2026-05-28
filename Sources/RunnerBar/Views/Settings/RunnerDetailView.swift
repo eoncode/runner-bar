@@ -13,6 +13,7 @@ import SwiftUI
 // #493: Danger Zone (remove only)
 // #532: Redesign — two-row header, slim info section, unified proxy card
 // #533: OS/Arch + Version rows in Runner Info; Danger Zone always expanded
+// #973: Remove Danger Zone and Start/Stop from detail view — Settings is single source of truth
 
 // MARK: - Save state helper
 /// Tracks the lifecycle of an async save operation for a single editable field.
@@ -27,37 +28,14 @@ private enum SaveState: Equatable {
     case failure(String)
 }
 
-// MARK: - Danger action
-/// Represents a destructive action the user can trigger from the Danger Zone section.
-private enum DangerAction: Identifiable, Equatable {
-    /// The `remove` case.
-    case remove
-
-    /// The id property.
-    var id: String { "remove" }
-
-    /// The title property.
-    var title: String { "Remove runner" }
-
-    /// The confirmLabel property.
-    var confirmLabel: String { "Remove" }
-
-    /// The destructive property.
-    var destructive: Bool { true }
-}
-
 // swiftlint:disable:next type_body_length
-/// Detail screen for a single self-hosted runner: displays info, editable config fields, and the Danger Zone.
+/// Detail screen for a single self-hosted runner: displays info and editable config fields.
 struct RunnerDetailView: View {
     /// The runner constant.
     let runner: RunnerModel
     /// The onBack constant.
     let onBack: () -> Void
 
-    /// The isRunning property.
-    @State private var isRunning: Bool
-    /// The displayStatus property.
-    @State private var displayStatus: String
     /// The localRunnerStore property.
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
 
@@ -90,18 +68,10 @@ struct RunnerDetailView: View {
     /// The displayVersion property.
     @State private var displayVersion: String = ""
 
-    // MARK: - Danger Zone state (#493)
-    /// The pendingDangerAction property.
-    @State private var pendingDangerAction: DangerAction?
-    /// The dangerActionState property.
-    @State private var dangerActionState: SaveState = .idle
-
     /// Creates a new instance.
     init(runner: RunnerModel, onBack: @escaping () -> Void) {
         self.runner = runner
         self.onBack = onBack
-        self._isRunning = State(initialValue: runner.isRunning)
-        self._displayStatus = State(initialValue: runner.displayStatus)
         self._labelsText = State(initialValue: runner.labels
             .filter { !["self-hosted"].contains($0)
                 && !$0.lowercased().contains("x64")
@@ -123,7 +93,7 @@ struct RunnerDetailView: View {
         self._displayVersion = State(initialValue: runner.agentVersion ?? "")
     }
 
-    /// Root settings detail layout containing the header, runner info, editable configuration, and Danger Zone.
+    /// Root settings detail layout containing the header, runner info, and editable configuration.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -132,7 +102,6 @@ struct RunnerDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     infoSection
                     configSection
-                    dangerZoneSection
                 }
                 .padding(.bottom, 16)
             }
@@ -140,18 +109,11 @@ struct RunnerDetailView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear(perform: loadEditableFields)
-        .onChange(of: localRunnerStore.runners) { _, _ in
-            if let fresh = localRunnerStore.runners.first(where: { $0.id == runner.id }) {
-                isRunning = fresh.isRunning
-                displayStatus = fresh.displayStatus
-            }
-        }
-        .sheet(item: $pendingDangerAction, content: dangerActionSheet)
     }
 
     // MARK: - Header (#532: two-row layout)
 
-    /// Two-row header with a back button, runner name, status dot, and start/stop control.
+    /// Two-row header with a back button, runner name, and status dot.
     private var headerBar: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button(action: onBack) {
@@ -164,18 +126,11 @@ struct RunnerDetailView: View {
             .buttonStyle(.plain)
 
             HStack(spacing: 6) {
-                Circle().fill(dotColor).frame(width: 8, height: 8)
+                Circle().fill(dotColor(for: runner)).frame(width: 8, height: 8)
                 Text(runner.runnerName)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if isRunning {
-                    Button(action: stopRunner) { Text("Stop").font(.caption2) }
-                        .buttonStyle(.bordered).help("Stop runner service")
-                } else {
-                    Button(action: startRunner) { Text("Start").font(.caption2) }
-                        .buttonStyle(.bordered).help("Start runner service")
-                }
             }
         }
         .padding(.horizontal, RBSpacing.md)
@@ -206,27 +161,9 @@ struct RunnerDetailView: View {
                     infoRow(label: "Version", value: displayVersion)
                 }
                 Divider().padding(.leading, RBSpacing.md)
-                statusRow
+                infoRow(label: "Status", value: runner.displayStatus)
             }
         }
-    }
-
-    /// Status row used inside the info card, pairing the current `displayStatus` with a colored dot.
-    private var statusRow: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("Status")
-                .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                .frame(width: 100, alignment: .leading).fixedSize()
-            HStack(spacing: 4) {
-                Circle().fill(dotColor).frame(width: 7, height: 7)
-                Text(displayStatus)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(Color.rbTextPrimary)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, RBSpacing.md)
-        .padding(.vertical, 7)
     }
 
     // MARK: - Config Section (#532 / #533: single card with dividers)
@@ -345,145 +282,6 @@ struct RunnerDetailView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Danger Zone (#493 / #533: always expanded)
-
-    /// Always-expanded destructive-actions section used for runner removal.
-    private var dangerZoneSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color.rbDanger)
-                Text("Danger Zone")
-                    .font(RBFont.sectionHeader)
-                    .foregroundColor(Color.rbDanger)
-                Spacer()
-            }
-            .padding(.horizontal, RBSpacing.md)
-            .padding(.top, 12)
-            .padding(.bottom, 6)
-
-            VStack(alignment: .leading, spacing: 0) {
-                dangerActionRow(
-                    action: .remove,
-                    description: "Permanently de-registers and removes this runner."
-                )
-            }
-            .background(
-                RoundedRectangle(cornerRadius: RBRadius.small)
-                    .fill(Color.rbDanger.opacity(0.05))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: RBRadius.small)
-                            .strokeBorder(Color.rbDanger.opacity(0.25), lineWidth: 0.5)
-                    )
-            )
-            .padding(.horizontal, RBSpacing.md)
-            .padding(.bottom, 8)
-        }
-    }
-
-    /// Row inside the Danger Zone card showing the action title, description, and a trigger button.
-    private func dangerActionRow(action: DangerAction, description: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(action.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(action.destructive ? Color.rbDanger : Color.rbTextPrimary)
-                Text(description)
-                    .font(.caption2)
-                    .foregroundColor(Color.rbTextSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-            // swiftlint:disable:next multiple_closures_with_trailing_closure
-            Button(action: { triggerDangerAction(action) }) {
-                Text(action.title)
-                    .font(.caption2)
-                    .foregroundColor(action.destructive ? Color.rbDanger : Color.rbTextPrimary)
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(.horizontal, RBSpacing.md)
-        .padding(.vertical, 8)
-    }
-
-    // MARK: - Danger Zone Action Sheet
-
-    /// Confirmation sheet presented before executing a destructive `DangerAction`.
-    @ViewBuilder
-    private func dangerActionSheet(_ action: DangerAction) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(action.title)
-                .font(.headline)
-                .padding(.top, 4)
-
-            Text("This will de-register \"\(runner.runnerName)\" from GitHub and remove it from the list. The runner binary remains on disk.")
-                .font(.system(size: 12))
-                .foregroundColor(Color.rbTextSecondary)
-
-            if case .failure(let msg) = dangerActionState {
-                Text(msg).font(.caption2).foregroundColor(Color.rbDanger)
-            }
-            if dangerActionState == .success {
-                Text("Done.").font(.caption2).foregroundColor(Color.rbSuccess)
-            }
-
-            Divider()
-
-            HStack {
-                Button("Cancel") {
-                    pendingDangerAction = nil
-                    dangerActionState = .idle
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(Color.rbTextSecondary)
-                Spacer()
-                if dangerActionState == .saving {
-                    ProgressView().scaleEffect(0.7)
-                } else {
-                    Button(action.confirmLabel) {
-                        executeDangerAction(action)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.rbDanger)
-                }
-            }
-        }
-        .padding(20)
-        .frame(minWidth: 380)
-    }
-
-    /// Sets `pendingDangerAction` to show the confirmation sheet for the given action.
-    private func triggerDangerAction(_ action: DangerAction) {
-        dangerActionState = .idle
-        pendingDangerAction = action
-    }
-
-    /// Dispatches to the appropriate handler based on the confirmed `DangerAction`.
-    private func executeDangerAction(_: DangerAction) {
-        dangerActionState = .saving
-        performRemove()
-    }
-
-    /// De-registers the runner via the GitHub API and removes it from `LocalRunnerStore`.
-    private func performRemove() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let ok = RunnerLifecycleService.shared.remove(runner: runner)
-            DispatchQueue.main.async {
-                if ok {
-                    dangerActionState = .success
-                    LocalRunnerStore.shared.refresh()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        pendingDangerAction = nil
-                        onBack()
-                    }
-                } else {
-                    dangerActionState = .failure("Removal failed. Check logs.")
-                }
-            }
-        }
-    }
-
     // MARK: - Save button helper
 
     /// Returns a view representing the current save state: spinner, checkmark, error icon, or Save button.
@@ -557,10 +355,9 @@ struct RunnerDetailView: View {
         .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
     }
 
-    // dotColor is derived from live isRunning state, not the frozen runner snapshot
-    /// Status indicator color: green when running, red when offline, yellow otherwise.
-    private var dotColor: Color {
-        isRunning ? Color.rbSuccess : Color.rbDanger
+    /// Status indicator color derived from the runner snapshot.
+    private func dotColor(for runnerModel: RunnerModel) -> Color {
+        runnerModel.isRunning ? Color.rbSuccess : Color.rbDanger
     }
 
     // MARK: - On Appear
@@ -750,44 +547,6 @@ struct RunnerDetailView: View {
                         if proxySaveState == .success { proxySaveState = .idle }
                     }
                 }
-            }
-        }
-    }
-
-    // MARK: - Start / Stop
-
-    /// Launches the runner service via `LocalRunnerStore` and sets `isRunning` to true.
-    private func startRunner() {
-        isRunning = true
-        LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = RunnerLifecycleService.shared.start(runner: runner)
-            DispatchQueue.main.async {
-                if case .success = result {
-                    // success — no additional action needed
-                } else {
-                    isRunning = false
-                    LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-                }
-                LocalRunnerStore.shared.refresh()
-            }
-        }
-    }
-
-    /// Stops the runner service via `LocalRunnerStore` and sets `isRunning` to false.
-    private func stopRunner() {
-        isRunning = false
-        LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = RunnerLifecycleService.shared.stop(runner: runner)
-            DispatchQueue.main.async {
-                if case .success = result {
-                    // success — no additional action needed
-                } else {
-                    isRunning = true
-                    LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
-                }
-                LocalRunnerStore.shared.refresh()
             }
         }
     }
