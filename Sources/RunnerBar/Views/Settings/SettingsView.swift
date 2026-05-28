@@ -32,9 +32,6 @@ import SwiftUI
 struct SettingsView: View {
     /// The onBack constant.
     let onBack: () -> Void
-    /// Called when the user taps a runner row.
-    /// Kept for Phase 5 cleanup — presentation is now handled internally via editingRunner.
-    let onSelectRunner: (RunnerModel) -> Void
     /// #499: Called when the user taps a scope row; navigates to ScopeDetailView.
     let onSelectScope: (ScopeEntry) -> Void
     /// The store property.
@@ -70,7 +67,7 @@ struct SettingsView: View {
     /// Retains the Combine subscription for OAuthService.didSignOut.
     @State private var signOutCancellable: AnyCancellable?
 
-    // MARK: - Popover editing state (Phase 4)
+    // MARK: - Popover editing state (#1001)
     /// The runner currently being edited in `RunnerDetailPopover`. `nil` = popover dismissed.
     @State private var editingRunner: RunnerModel?
     /// `true` while `commitRunnerEdit` is in-flight.
@@ -113,13 +110,13 @@ struct SettingsView: View {
         .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
         .sheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
         .modifier(removalAlertModifier)
-        // Phase 4: runner editing popover
+        // #1001: runner editing popover
         .popover(item: $editingRunner) { runner in
             runnerEditingPopover(runner: runner)
         }
     }
 
-    // MARK: - Runner editing popover
+    // MARK: - Runner editing popover (#1001)
 
     /// Builds the `RunnerDetailPopover` with commit/cancel wiring.
     @ViewBuilder
@@ -130,9 +127,6 @@ struct SettingsView: View {
                 guard !isCommitting else { return }
                 isCommitting = true
                 commitError = nil
-                // Capture original draft from a fresh init — the popover itself
-                // already snapshotted originalDraft after disk load, but
-                // commitRunnerEdit only needs it for dirty-field skipping.
                 let original = RunnerEditDraft(runner: runner)
                 commitRunnerEdit(runner: runner, draft: draft, original: original) { result in
                     isCommitting = false
@@ -197,15 +191,12 @@ struct SettingsView: View {
             isCLIAuthenticated = !success && githubToken() != nil
             isSigningIn = false
         }
-        // #723: subscribe to didSignOut via Combine — consistent with didUpdate/didMutate pattern.
         signOutCancellable = OAuthService.shared.didSignOut
             .receive(on: DispatchQueue.main)
             .sink {
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = githubToken() != nil
             }
-        // #695: Subscribe to ScopeStore.didMutate via Combine instead of the old
-        // onMutate closure (which no longer exists after the Combine migration).
         scopeMutateCancellable = ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak store] in store?.reload() }
@@ -279,7 +270,6 @@ struct SettingsView: View {
 
     /// Performs the localRunnerRow operation.
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
-        // Phase 4: tap opens RunnerDetailPopover instead of pushing navigation
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         Button(action: {
             commitError = nil

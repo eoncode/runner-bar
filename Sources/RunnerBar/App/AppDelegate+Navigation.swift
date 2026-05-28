@@ -12,11 +12,7 @@ import SwiftUI
 //
 // #1001: runnerDetailView(runner:) removed — runner editing is now a popover
 // inside SettingsView (RunnerDetailPopover). NavState.runnerDetail also removed.
-
-// Shared ISO-8601 date formatter for this file.
-// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
-// keeping one file-level instance avoids repeated allocation on every step enrichment call.
-// Safety: protected by iso8601Lock.
+// #1001 Phase 6: onSelectRunner parameter removed from SettingsView.
 
 /// A Sendable wrapper for ISO8601DateFormatter.
 private struct SendableFormatter: @unchecked Sendable {
@@ -37,7 +33,6 @@ extension AppDelegate {
     // Marked nonisolated to opt out of @MainActor isolation.
     /// Performs the enrichStepsIfNeeded operation.
     nonisolated func enrichStepsIfNeeded(_ job: ActiveJob) -> ActiveJob {
-        // ActiveJob.steps[].status is typed as JobStatus — compare against enum case.
         guard job.steps.isEmpty || job.steps.contains(where: { $0.status == .inProgress }),
               let scope = scopeFromHtmlUrl(job.htmlUrl),
               let data = ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
@@ -103,11 +98,6 @@ extension AppDelegate {
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.mainView())
-            },
-            onSelectRunner: { _ in
-                // Runner editing is now handled internally by SettingsView via
-                // RunnerDetailPopover. This callback is a no-op pending Phase 6
-                // cleanup of the SettingsView parameter itself.
             },
             onSelectScope: { [weak self] entry in
                 guard let self else { return }
