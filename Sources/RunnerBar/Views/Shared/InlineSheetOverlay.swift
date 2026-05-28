@@ -21,9 +21,12 @@ import SwiftUI
 /// Overlays sheet content inside the current view hierarchy.
 /// No NSWindow child is spawned — safe to use from a borderless NSPanel.
 private struct InlineSheetModifier<SheetContent: View>: ViewModifier {
+    /// Controls whether the sheet is visible.
     @Binding var isPresented: Bool
+    /// Builds the sheet content view.
     @ViewBuilder let sheetContent: () -> SheetContent
 
+    /// Wraps `content` in a ZStack that conditionally renders the scrim and sheet card.
     func body(content: Content) -> some View {
         ZStack {
             content
@@ -53,11 +56,15 @@ private struct InlineSheetModifier<SheetContent: View>: ViewModifier {
 
 /// Item-based variant — mirrors the API of SwiftUI's `.sheet(item:content:)`.
 private struct InlineSheetItemModifier<Item: Identifiable, SheetContent: View>: ViewModifier {
+    /// The optional item driving sheet presentation; set to `nil` to dismiss.
     @Binding var item: Item?
+    /// Builds the sheet content view for the given item.
     @ViewBuilder let sheetContent: (Item) -> SheetContent
 
+    /// `true` when `item` is non-nil.
     private var isPresented: Bool { item != nil }
 
+    /// Wraps `content` in a ZStack that conditionally renders the scrim and sheet card.
     func body(content: Content) -> some View {
         ZStack {
             content
