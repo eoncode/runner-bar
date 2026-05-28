@@ -9,6 +9,9 @@ import SwiftUI
 // Extracted from AppDelegate.swift (#604).
 // All view factory methods and the enrichment helper live here so AppDelegate.swift
 // can focus on panel lifecycle, status item, and event monitor concerns.
+//
+// #1001: runnerDetailView(runner:) removed — runner editing is now a popover
+// inside SettingsView (RunnerDetailPopover). NavState.runnerDetail also removed.
 
 // Shared ISO-8601 date formatter for this file.
 // ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
@@ -101,30 +104,16 @@ extension AppDelegate {
                 guard let self else { return }
                 self.navigate(to: self.mainView())
             },
-            onSelectRunner: { [weak self] runner in
-                guard let self else { return }
-                self.navigate(to: self.runnerDetailView(runner: runner))
+            onSelectRunner: { _ in
+                // Runner editing is now handled internally by SettingsView via
+                // RunnerDetailPopover. This callback is a no-op pending Phase 6
+                // cleanup of the SettingsView parameter itself.
             },
             onSelectScope: { [weak self] entry in
                 guard let self else { return }
                 self.navigate(to: self.scopeDetailView(entry: entry))
             },
             store: observable
-        ))
-    }
-
-    /// #491: RunnerDetailView drill-down from SettingsView runner row.
-    func runnerDetailView(runner: RunnerModel) -> AnyView {
-        savedNavState = .runnerDetail(runner)
-        if ProcessInfo.processInfo.environment["UI_TESTING"] == nil {
-            makeKeyForTextInput()
-        }
-        return wrapEnv(RunnerDetailView(
-            runner: runner,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
         ))
     }
 
@@ -156,9 +145,6 @@ extension AppDelegate {
             return stepLogFromMain(job: live, step: step)
         case .settings:
             return settingsView()
-        case .runnerDetail(let runner):
-            let live = LocalRunnerStore.shared.runners.first(where: { $0.id == runner.id }) ?? runner
-            return runnerDetailView(runner: live)
         case .scopeDetail(let entry):
             guard let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) else {
                 return settingsView()
