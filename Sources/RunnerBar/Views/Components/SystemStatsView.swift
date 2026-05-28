@@ -53,7 +53,6 @@ struct SystemStatsView: View {
 ///
 /// ❌ Do NOT apply to DiskPillBadge (the "22% free" pill) — that has its own styling.
 /// ❌ Do NOT add fill, tint, or stroke on macOS 26+ — the glass handles all rendering.
-/// ❌ Do NOT use `.tint()` on glassEffect — renders too aggressively.
 struct GlassBadgeContainer<Content: View>: View {
     /// The live-updating chip content rendered in the foreground.
     @ViewBuilder let content: () -> Content
@@ -64,11 +63,13 @@ struct GlassBadgeContainer<Content: View>: View {
             GlassEffectContainer {
                 content()
                     .padding(.horizontal, RBSpacing.sm)
+                    .padding(.vertical, RBSpacing.xs)
                     .glassButton(cornerRadius: RBRadius.small)
             }
         } else {
             content()
                 .padding(.horizontal, RBSpacing.sm)
+                .padding(.vertical, RBSpacing.xs)
                 .background(
                     RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
                         .fill(Color.primary.opacity(0.06))
