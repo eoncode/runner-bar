@@ -49,6 +49,11 @@ final class LocalRunnerStore: ObservableObject {
         refresh()
     }
 
+    /// Returns true if the given runner name is already in the persisted index.
+    func isTracked(runnerName: String) -> Bool {
+        runnerIndex[runnerName] != nil
+    }
+
     private func loadIndex() {
         runnerIndex = UserDefaults.standard
             .dictionary(forKey: Self.indexKey) as? [String: String] ?? [:]

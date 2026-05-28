@@ -112,11 +112,11 @@ struct AddRunnerSheet: View {
     @State private var detectedName = ""
     /// GitHub URL parsed from the `.runner` JSON inside `existingDir`.
     @State private var detectedGitHubURL = ""
-    /// Shown when the selected folder has no valid `.runner` file or it can’t be parsed.
+    /// Shown when the selected folder has no valid `.runner` file or it can't be parsed.
     @State private var existingError: String?
     /// Editable fallback shown when `.runner` JSON has no `gitHubUrl` (rare, org-scoped runners).
     @State private var githubURLOverride = ""
-    /// Whether a plist already exists for this runner name (duplicate detection).
+    /// Whether a runner with this name is already in LocalRunnerStore's index.
     @State private var isDuplicate = false
 
     // MARK: - Body
@@ -448,7 +448,7 @@ struct AddRunnerSheet: View {
     }
 
     /// Guards the Import button: requires a detected runner name, no parse error,
-    /// no duplicate plist, and a non-empty GitHub URL.
+    /// no duplicate in the store, and a non-empty GitHub URL.
     private var canImport: Bool {
         !detectedName.isEmpty
             && existingError == nil
@@ -456,15 +456,9 @@ struct AddRunnerSheet: View {
             && !effectiveGitHubURL.isEmpty
     }
 
-    /// Checks whether a LaunchAgent plist already exists for this runner name.
+    /// Checks whether the runner name is already tracked in LocalRunnerStore's index.
     private func checkDuplicate(runnerName: String) -> Bool {
-        let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(GitHubURIs.launchAgentsDir).path
-        guard let entries = try? FileManager.default
-            .contentsOfDirectory(atPath: launchAgentsDir) else { return false }
-        return entries.contains {
-            $0.hasPrefix("actions.runner.") && $0.contains(".".appending(runnerName) + ".plist")
-        }
+        LocalRunnerStore.shared.isTracked(runnerName: runnerName)
     }
 
     // MARK: - Actions (Add pre-existing)
@@ -574,7 +568,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Scopes loader
 
-    /// Fetches the user’s repos and organisations on a background thread.
+    /// Fetches the user's repos and organisations on a background thread.
     private func loadScopes() {
         isLoadingScopes = true
         Task.detached(priority: .userInitiated) {
