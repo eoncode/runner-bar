@@ -20,8 +20,6 @@ final class LocalRunnerStore: ObservableObject {
     /// The isScanning property.
     @Published var isScanning: Bool = false
 
-    /// The scanner constant.
-    private let scanner = LocalRunnerScanner()
     /// The enricher constant.
     private let enricher = RunnerStatusEnricher.shared
 
@@ -35,20 +33,17 @@ final class LocalRunnerStore: ObservableObject {
             return
         }
         isScanning = true
-        log("LocalRunnerStore > refresh() — isScanning set to true, dispatching background scan")
-        let scanner = self.scanner
+        log("LocalRunnerStore > refresh() — isScanning set to true, dispatching background task")
         let enricher = self.enricher
-        DispatchQueue.global(qos: .userInitiated).async { [weak self, scanner] in
+        // TODO: restore runner auto-discovery from git (issue #982)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            log("LocalRunnerStore > refresh() background — starting scanner.scan()")
-            let scanned = scanner.scan()
-            log("LocalRunnerStore > refresh() background — scanner.scan() returned \(scanned.count) runner(s): [\(runnerScanSummary(scanned))]")
 
             let token = githubToken()
-            var enriched = scanned
+            var enriched: [RunnerModel] = []
             if token != nil {
                 log("LocalRunnerStore > refresh() background — token present, calling enricher")
-                enriched = enricher.enrich(runners: scanned)
+                enriched = enricher.enrich(runners: [])
                 log("LocalRunnerStore > refresh() background — enricher returned \(enriched.count) runner(s): [\(runnerEnrichedSummary(enriched))]")
             } else {
                 log("LocalRunnerStore > refresh() background — no token, skipping enricher")
@@ -56,9 +51,6 @@ final class LocalRunnerStore: ObservableObject {
 
             // Phase 3 (#591 / #948): collect CPU/MEM metrics for any runner whose
             // launchd service is active (isRunning == true), not only isBusy runners.
-            // isBusy is set by RunnerStatusEnricher via the GitHub API and lags behind
-            // the launchctl live-service check — gating on isBusy caused metrics to be
-            // absent on the first render and permanently missing when isBusy never synced.
             applyMetrics(&enriched)
 
             DispatchQueue.main.async { [weak self, enriched] in
@@ -114,11 +106,6 @@ final class LocalRunnerStore: ObservableObject {
 // swiftlint:enable type_body_length missing_docs
 
 // MARK: - Private helpers (file-private, non-member to reduce class complexity)
-
-/// Returns a compact scan summary string: "name(isRunning=true), …"
-private func runnerScanSummary(_ runners: [RunnerModel]) -> String {
-    runners.map { "\($0.runnerName)(isRunning=\($0.isRunning))" }.joined(separator: ", ")
-}
 
 /// Returns a compact enriched summary string: "name(isRunning, status, warning), …"
 private func runnerEnrichedSummary(_ runners: [RunnerModel]) -> String {
