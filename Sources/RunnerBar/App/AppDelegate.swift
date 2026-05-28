@@ -119,6 +119,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Initial panel width used before SwiftUI has measured content.
     static let initPanelWidth: CGFloat = 320
 
+    // MARK: - Sheet guard
+    //
+    // SwiftUI .sheet() attaches as a child NSWindow to the panel (panel.sheets).
+    // Clicks inside the sheet land outside the panel frame, which would normally
+    // trigger the global mouse-down monitor and call closePanel() immediately.
+    // Both dismiss paths (eventMonitor + workspaceObserver) must check this flag
+    // before closing the panel.
+    // ❌ NEVER remove this check from the eventMonitor or workspaceObserver blocks.
+    /// Returns true when a SwiftUI sheet is currently presented over the panel.
+    private var hasActiveSheet: Bool {
+        guard let panel else { return false }
+        return !panel.sheets.isEmpty
+    }
+
     // MARK: - Environment injection
 
     // Regression guard — see ARCHITECTURE.md §panelVisibilityState and §wrapEnv.
@@ -357,6 +371,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
             guard let self, let panel = self.panel else { return }
+            // ❌ NEVER remove the hasActiveSheet guard — sheets attach as child
+            // windows; clicks inside them land outside the panel frame and would
+            // otherwise trigger a spurious closePanel().
+            guard !self.hasActiveSheet else { return }
             let loc = event.locationInWindow
             let screenLoc = event.window?.convertToScreen(
                 NSRect(origin: loc, size: .zero)
@@ -369,6 +387,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let self else { return }
+            // ❌ NEVER remove the hasActiveSheet guard — switching apps while a
+            // sheet is open (e.g. browser OAuth redirect) must not close the panel.
+            guard !self.hasActiveSheet else { return }
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
                 Task { @MainActor [weak self] in self?.closePanel() }
             }
