@@ -120,8 +120,8 @@ struct SettingsView: View {
             )
         }
         .modifier(removalAlertModifier)
-        // #1001: runner editing popover
-        .popover(item: $editingRunner) { runner in
+        // #1001: runner editing sheet (was .popover — converted to .sheet to match ScopeEditSheet)
+        .sheet(item: $editingRunner) { runner in
             runnerEditingPopover(runner: runner)
         }
     }

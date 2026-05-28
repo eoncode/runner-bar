@@ -95,7 +95,7 @@ struct ScopeEditSheet: View {
             Divider()
             buttonFooter
         }
-        .frame(width: 480)
+        .frame(width: 440)
         .accessibilityIdentifier("scopeEditSheet")
         .sheet(isPresented: $showHookSheet) {
             FailureHookCommandSheet(scope: scope) { showHookSheet = false }

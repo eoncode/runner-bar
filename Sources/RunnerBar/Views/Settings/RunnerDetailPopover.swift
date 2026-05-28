@@ -82,7 +82,7 @@ struct RunnerDetailPopover: View {
             Divider()
             footerBar
         }
-        .frame(width: 480)
+        .frame(width: 440)
         .onAppear(perform: loadDisplayFields)
     }
 
