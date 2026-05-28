@@ -32,7 +32,8 @@ import SwiftUI
 struct SettingsView: View {
     /// The onBack constant.
     let onBack: () -> Void
-    /// Called when the user taps a runner row; navigates to RunnerDetailView.
+    /// Called when the user taps a runner row.
+    /// Kept for Phase 5 cleanup — presentation is now handled internally via editingRunner.
     let onSelectRunner: (RunnerModel) -> Void
     /// #499: Called when the user taps a scope row; navigates to ScopeDetailView.
     let onSelectScope: (ScopeEntry) -> Void
@@ -69,6 +70,14 @@ struct SettingsView: View {
     /// Retains the Combine subscription for OAuthService.didSignOut.
     @State private var signOutCancellable: AnyCancellable?
 
+    // MARK: - Popover editing state (Phase 4)
+    /// The runner currently being edited in `RunnerDetailPopover`. `nil` = popover dismissed.
+    @State private var editingRunner: RunnerModel?
+    /// `true` while `commitRunnerEdit` is in-flight.
+    @State private var isCommitting = false
+    /// Non-nil when the last commit attempt produced errors; shown in the popover footer.
+    @State private var commitError: String?
+
     /// The appVersion property.
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -104,6 +113,43 @@ struct SettingsView: View {
         .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
         .sheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
         .modifier(removalAlertModifier)
+        // Phase 4: runner editing popover
+        .popover(item: $editingRunner) { runner in
+            runnerEditingPopover(runner: runner)
+        }
+    }
+
+    // MARK: - Runner editing popover
+
+    /// Builds the `RunnerDetailPopover` with commit/cancel wiring.
+    @ViewBuilder
+    private func runnerEditingPopover(runner: RunnerModel) -> some View {
+        RunnerDetailPopover(
+            runner: runner,
+            onCommit: { draft in
+                guard !isCommitting else { return }
+                isCommitting = true
+                commitError = nil
+                // Capture original draft from a fresh init — the popover itself
+                // already snapshotted originalDraft after disk load, but
+                // commitRunnerEdit only needs it for dirty-field skipping.
+                let original = RunnerEditDraft(runner: runner)
+                commitRunnerEdit(runner: runner, draft: draft, original: original) { result in
+                    isCommitting = false
+                    switch result {
+                    case .success:
+                        localRunnerStore.refresh()
+                        editingRunner = nil
+                    case .failure(let msgs):
+                        commitError = msgs.joined(separator: "\n")
+                    }
+                }
+            },
+            onCancel: {
+                commitError = nil
+                editingRunner = nil
+            }
+        )
     }
 
     /// Performs the addRunnerSheet operation.
@@ -233,8 +279,12 @@ struct SettingsView: View {
 
     /// Performs the localRunnerRow operation.
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
+        // Phase 4: tap opens RunnerDetailPopover instead of pushing navigation
         // swiftlint:disable:next multiple_closures_with_trailing_closure
-        Button(action: { onSelectRunner(runner) }) {
+        Button(action: {
+            commitError = nil
+            editingRunner = runner
+        }) {
             localRunnerRowContent(runner)
                 .contentShape(Rectangle())
         }
