@@ -262,15 +262,22 @@ struct SettingsView: View {
                 .foregroundColor(hasWarning ? Color.rbWarning : Color.rbTextSecondary)
                 .lineLimit(1)
                 .fixedSize()
-            if runner.isRunning {
-                Button(action: { performStop(runner: runner) },
-                       label: { Text("Stop").font(.caption2) })
-                .buttonStyle(.bordered).help("Stop runner service")
-            } else {
-                Button(action: { performResume(runner: runner) },
-                       label: { Text("Resume").font(.caption2) })
-                .buttonStyle(.bordered).help("Start runner service")
-            }
+            Toggle("", isOn: Binding(
+                get: { runner.isRunning },
+                set: { isOn in
+                    if isOn {
+                        performResume(runner: runner)
+                    } else {
+                        performStop(runner: runner)
+                    }
+                }
+            ))
+            .toggleStyle(.switch)
+            .tint(Color.rbSuccess)
+            .labelsHidden()
+            .help(runner.isRunning ? "Stop runner service" : "Start runner service")
+            .scaleEffect(0.8, anchor: .trailing)
+            .buttonStyle(.borderless)
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundColor(Color.rbTextTertiary)
