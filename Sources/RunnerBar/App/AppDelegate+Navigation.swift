@@ -14,6 +14,11 @@ import SwiftUI
 // inside SettingsView (RunnerDetailPopover). NavState.runnerDetail also removed.
 // #1001 Phase 6: onSelectRunner parameter removed from SettingsView.
 
+// Shared ISO-8601 date formatter for this file.
+// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
+// keeping one file-level instance avoids repeated allocation on every step enrichment call.
+// Safety: protected by iso8601Lock.
+
 /// A Sendable wrapper for ISO8601DateFormatter.
 private struct SendableFormatter: @unchecked Sendable {
     /// The internal formatter instance.
@@ -85,12 +90,6 @@ extension AppDelegate {
     /// Performs the settingsView operation.
     func settingsView() -> AnyView {
         savedNavState = .settings
-        // Skip makeKeyForTextInput during UI tests.
-        // makeKeyAndOrderFront repositions the panel (AppKit recalculates frame
-        // for the new key window), which invalidates the AX coordinate snapshot
-        // XCTest has already taken — every subsequent click lands in the wrong place.
-        // In UI tests we never type into text fields, so key status is not needed.
-        // ❌ NEVER remove this guard — same pattern as the event monitor skip in openPanel().
         if ProcessInfo.processInfo.environment["UI_TESTING"] == nil {
             makeKeyForTextInput()
         }
@@ -113,9 +112,8 @@ extension AppDelegate {
         if ProcessInfo.processInfo.environment["UI_TESTING"] == nil {
             makeKeyForTextInput()
         }
-        let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) ?? entry
         return wrapEnv(ScopeDetailView(
-            scopeEntry: live,
+            entry: entry,
             onBack: { [weak self] in
                 guard let self else { return }
                 self.navigate(to: self.settingsView())
