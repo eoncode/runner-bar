@@ -39,6 +39,14 @@ import SwiftUI
 //
 // RULE 8: AppDelegate.initPanelWidth is 320.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
+//
+// BACKGROUND (#1017):
+// PanelChromeView (NSVisualEffectView-backed) has been removed. The panel
+// background is now provided by .background(.regularMaterial) on this root view.
+// This is a SwiftUI material that automatically uses the correct vibrancy for
+// the current system appearance and composites correctly when a .sheet is shown.
+// ❌ NEVER remove the .background(.regularMaterial) modifier from body.
+// ❌ NEVER add NSVisualEffectView back via NSViewRepresentable at this level.
 /// Root panel view rendered inside the NSPanel.
 /// Owns the display-tick timer and system-stats lifecycle.
 /// API polling is owned entirely by RunnerStore's adaptive self-scheduling timer.
@@ -136,6 +144,12 @@ struct PanelMainView: View {
             actionsSectionScrollable
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
+        // Glass panel background — replaces PanelChromeView's NSVisualEffectView (#1017).
+        // .regularMaterial gives the standard macOS popover/HUD vibrancy and
+        // composites correctly through SwiftUI's own layer — never disturbed by
+        // .sheet attachment the way a CAShapeLayer mask would be.
+        // ❌ NEVER remove this modifier.
+        .background(.regularMaterial)
         .onAppear {
             isAuthenticated = (githubToken() != nil)
             if panelVisibilityState.isOpen { systemStats.start() }
