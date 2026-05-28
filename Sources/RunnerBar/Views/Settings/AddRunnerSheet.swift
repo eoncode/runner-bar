@@ -26,14 +26,11 @@ private enum GitHubURIs {
 /// - **Add new**: downloads, configures and registers a brand-new runner with GitHub.
 /// - **Add pre-existing**: imports a runner folder that was already configured outside
 ///   of RunnerBar (e.g. via terminal). Only writes the LaunchAgent plist so
-///   `LocalRunnerScanner` can discover the runner — no token or download needed.
+///   the runner can be managed — no token or download needed.
 ///
 /// After successful registration/import the app writes a minimal LaunchAgent plist to
 /// `~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist` directly
-/// via FileManager. This avoids calling `svc.sh install` (which requires an
-/// interactive user session and fails from an app-launched Process) while still
-/// giving `LocalRunnerScanner` the `WorkingDirectory` key it needs to find the
-/// runner on every subsequent scan — including after a full app reinstall.
+/// via FileManager, and registers the runner in `LocalRunnerStore`.
 ///
 /// Requires a GitHub token for "Add new" only (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
@@ -115,7 +112,7 @@ struct AddRunnerSheet: View {
     @State private var detectedName = ""
     /// GitHub URL parsed from the `.runner` JSON inside `existingDir`.
     @State private var detectedGitHubURL = ""
-    /// Shown when the selected folder has no valid `.runner` file or it can't be parsed.
+    /// Shown when the selected folder has no valid `.runner` file or it can’t be parsed.
     @State private var existingError: String?
     /// Editable fallback shown when `.runner` JSON has no `gitHubUrl` (rare, org-scoped runners).
     @State private var githubURLOverride = ""
@@ -473,7 +470,6 @@ struct AddRunnerSheet: View {
     // MARK: - Actions (Add pre-existing)
 
     /// Opens an `NSOpenPanel` to let the user select a pre-configured runner directory.
-    /// On confirmation, delegates validation to `handlePickedFolder(_:)`.
     private func pickExistingFolder() {
         let openPanel = NSOpenPanel()
         openPanel.canChooseFiles = false
@@ -522,7 +518,7 @@ struct AddRunnerSheet: View {
         log("AddRunnerSheet › pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")
     }
 
-    /// Derives scope from the GitHub URL, writes the LaunchAgent plist, and dismisses.
+    /// Writes the LaunchAgent plist, registers with LocalRunnerStore, and dismisses.
     private func importExistingRunner() {
         guard canImport else { return }
 
@@ -540,6 +536,7 @@ struct AddRunnerSheet: View {
             runnerName: detectedName,
             workingDirectory: existingDir
         )
+        LocalRunnerStore.shared.add(runnerName: detectedName, installPath: existingDir)
 
         isPresented = false
         onComplete()
@@ -547,8 +544,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - State reset helpers
 
-    /// Resets all "Add new" form fields to their default values and triggers
-    /// `loadScopes()` if no repos/orgs have been fetched yet.
+    /// Resets all "Add new" form fields to their default values.
     private func resetAddNewState() {
         runnerName       = ""
         labelsText       = "self-hosted,macOS"
@@ -578,8 +574,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Scopes loader
 
-    /// Fetches the user's repos and organisations on a background thread and
-    /// populates `repos`/`orgs`, then sets `isLoadingScopes = false` on the main thread.
+    /// Fetches the user’s repos and organisations on a background thread.
     private func loadScopes() {
         isLoadingScopes = true
         Task.detached(priority: .userInitiated) {
@@ -595,7 +590,7 @@ struct AddRunnerSheet: View {
         }
     }
 
-    /// Updates `registrationStep` on the main thread for display in the progress UI.
+    /// Updates `registrationStep` on the main thread.
     @MainActor private func setStep(_ msg: String) {
         registrationStep = msg
     }
@@ -603,8 +598,7 @@ struct AddRunnerSheet: View {
     // MARK: - Register (Add new)
 
     // swiftlint:disable:next function_body_length cyclomatic_complexity
-    /// Downloads, unpacks, and configures a new runner, then writes the LaunchAgent plist and dismisses.
-    /// Runs on a detached task; updates `registrationStep` via `setStep(_:)` on MainActor.
+    /// Downloads, unpacks, configures a new runner, registers with LocalRunnerStore, and dismisses.
     private func register() async {
         guard canRegister else { return }
         errorMessage = nil
@@ -696,6 +690,7 @@ struct AddRunnerSheet: View {
             writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
 
             await MainActor.run {
+                LocalRunnerStore.shared.add(runnerName: name, installPath: dir)
                 isRegistering    = false
                 registrationStep = ""
                 isPresented      = false
@@ -706,8 +701,7 @@ struct AddRunnerSheet: View {
 
     // MARK: - Plist writer (shared by both modes)
 
-    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/` so `LocalRunnerScanner`
-    /// can discover the runner on every app launch. Used by both Add-new and Add-pre-existing flows.
+    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/`.
     nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
@@ -735,7 +729,6 @@ struct AddRunnerSheet: View {
     // MARK: - Process helpers (Add new)
 
     /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
-    /// Returns the process exit code; non-zero indicates a configuration failure.
     nonisolated private func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
     ) -> Int32 {
