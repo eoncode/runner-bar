@@ -124,9 +124,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // SwiftUI .sheet() attaches as a child NSWindow to the panel (panel.sheets).
     // Clicks inside the sheet land outside the panel frame, which would normally
     // trigger the global mouse-down monitor and call closePanel() immediately.
-    // Both dismiss paths (eventMonitor + workspaceObserver) must check this flag
-    // before closing the panel.
-    // ❌ NEVER remove this check from the eventMonitor or workspaceObserver blocks.
+    // ❌ NEVER remove this check from the eventMonitor block.
+    // ⚠️ Do NOT use this guard in workspaceObserver — app-switching must always
+    // hide the panel, even when a sheet is open. See #1015.
     /// Returns true when a SwiftUI sheet is currently presented over the panel.
     private var hasActiveSheet: Bool {
         guard let panel else { return false }
@@ -270,6 +270,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Hides the panel without resetting the view hierarchy. (#1015)
+    /// Used by workspaceObserver when the user switches to another app.
+    /// Preserves hostingController.rootView so the sheet/popover is restored
+    /// intact when the user taps the status bar icon again.
+    /// ❌ NEVER call from togglePanel() — use closePanel() for explicit dismissal.
+    func hidePanel() {
+        guard panelIsOpen else { return }
+        panel?.wantsKey = false
+        panel?.orderOut(nil)
+        panelIsOpen = false
+        panelTopY = nil
+        panelVisibilityState.isOpen = false
+        removeEventMonitor()
+        removeWorkspaceObserver()
+        // Intentionally does NOT reset hostingController.rootView.
+        // openPanel() restores the current view via savedNavState on next open.
+    }
+
     /// Performs the removeEventMonitor operation.
     func removeEventMonitor() {
         if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
@@ -388,11 +406,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            // ❌ NEVER remove the hasActiveSheet guard — switching apps while a
-            // sheet is open (e.g. browser OAuth redirect) must not close the panel.
-            guard !self.hasActiveSheet else { return }
+            // #1015: No hasActiveSheet guard here — app-switching must always hide
+            // the panel, even when a sheet is open. hidePanel() preserves view state
+            // so the sheet/popover is restored when the user taps the status bar again.
+            // ⚠️ Do NOT add hasActiveSheet guard back here. See issue #1015.
             if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
-                Task { @MainActor [weak self] in self?.closePanel() }
+                Task { @MainActor [weak self] in self?.hidePanel() }
             }
         }
     }
