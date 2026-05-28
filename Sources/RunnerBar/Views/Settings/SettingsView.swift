@@ -32,8 +32,6 @@ import SwiftUI
 struct SettingsView: View {
     /// The onBack constant.
     let onBack: () -> Void
-    /// #499: Called when the user taps a scope row; navigates to ScopeDetailView.
-    let onSelectScope: (ScopeEntry) -> Void
     /// The store property.
     @ObservedObject var store: RunnerViewModel
     /// The settings property.

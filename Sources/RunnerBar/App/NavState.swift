@@ -24,6 +24,4 @@ enum NavState {
     case stepLog(ActiveJob, JobStep)
     /// The Settings sheet.
     case settings
-    /// Scope detail drill-down reached from SettingsView scope row tap. (#499)
-    case scopeDetail(ScopeEntry)
 }

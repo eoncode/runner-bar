@@ -13,6 +13,8 @@ import SwiftUI
 // #1001: runnerDetailView(runner:) removed — runner editing is now a popover
 // inside SettingsView (RunnerDetailPopover). NavState.runnerDetail also removed.
 // #1001 Phase 6: onSelectRunner parameter removed from SettingsView.
+// #992: scopeDetailView(entry:) removed — ScopeEditSheet is presented directly
+// from SettingsView via @State selectedScopeEntry. NavState.scopeDetail removed.
 
 // Shared ISO-8601 date formatter for this file.
 // ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
@@ -90,6 +92,12 @@ extension AppDelegate {
     /// Performs the settingsView operation.
     func settingsView() -> AnyView {
         savedNavState = .settings
+        // Skip makeKeyForTextInput during UI tests.
+        // makeKeyAndOrderFront repositions the panel (AppKit recalculates frame
+        // for the new key window), which invalidates the AX coordinate snapshot
+        // XCTest has already taken — every subsequent click lands in the wrong place.
+        // In UI tests we never type into text fields, so key status is not needed.
+        // ❌ NEVER remove this guard — same pattern as the event monitor skip in openPanel().
         if ProcessInfo.processInfo.environment["UI_TESTING"] == nil {
             makeKeyForTextInput()
         }
@@ -98,26 +106,7 @@ extension AppDelegate {
                 guard let self else { return }
                 self.navigate(to: self.mainView())
             },
-            onSelectScope: { [weak self] entry in
-                guard let self else { return }
-                self.navigate(to: self.scopeDetailView(entry: entry))
-            },
             store: observable
-        ))
-    }
-
-    /// #499: ScopeDetailView drill-down from SettingsView scope row tap.
-    func scopeDetailView(entry: ScopeEntry) -> AnyView {
-        savedNavState = .scopeDetail(entry)
-        if ProcessInfo.processInfo.environment["UI_TESTING"] == nil {
-            makeKeyForTextInput()
-        }
-        return wrapEnv(ScopeDetailView(
-            entry: entry,
-            onBack: { [weak self] in
-                guard let self else { return }
-                self.navigate(to: self.settingsView())
-            }
         ))
     }
 
@@ -133,11 +122,6 @@ extension AppDelegate {
             return stepLogFromMain(job: live, step: step)
         case .settings:
             return settingsView()
-        case .scopeDetail(let entry):
-            guard let live = ScopeStore.shared.entries.first(where: { $0.id == entry.id }) else {
-                return settingsView()
-            }
-            return scopeDetailView(entry: live)
         }
     }
 }
