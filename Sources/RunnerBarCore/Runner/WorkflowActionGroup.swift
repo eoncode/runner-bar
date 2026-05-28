@@ -168,7 +168,13 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
             // not raw strings. The rawValue of each case matches the GitHub API string exactly.
             if jobs.contains(where: { $0.conclusion == .failure })   { return "failure" }
             if jobs.contains(where: { $0.conclusion == .cancelled }) { return "cancelled" }
-            if jobs.contains(where: { $0.conclusion == .skipped })   { return "skipped" }
+            // A skipped job is often conditional and should not downgrade the whole
+            // workflow result when other jobs actually succeeded.
+            let hasSuccess = jobs.contains(where: { $0.conclusion == .success })
+            let allSkippedOrCancelled = jobs.allSatisfy {
+                $0.conclusion == .skipped || $0.conclusion == .cancelled
+            }
+            if !hasSuccess && allSkippedOrCancelled { return "skipped" }
             return "success"
         }
         // ── Run-based conclusion (fallback when jobs haven't loaded yet) ────────────────────
