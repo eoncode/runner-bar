@@ -75,13 +75,12 @@ struct PanelContainerView<Content: View>: View {
         stopPolling()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
             Task { @MainActor in
-                guard panelVisibilityState.isOpen,
-                      let window = hostWindow,
-                      window.isVisible
-                else {
-                    if isSheetActive { isSheetActive = false }
-                    return
-                }
+                guard let window = hostWindow else { return }
+                // If the popover window is hidden (transient hide / app-switch),
+                // do NOT touch isSheetActive — the sheet window is still attached
+                // and state must survive intact for when the window is restored.
+                // ❌ Never set isSheetActive = false here on !isVisible.
+                guard panelVisibilityState.isOpen, window.isVisible else { return }
 
                 let hasVisibleSheet = window.sheets.contains { $0.isVisible }
                 if hasVisibleSheet != isSheetActive { isSheetActive = hasVisibleSheet }
