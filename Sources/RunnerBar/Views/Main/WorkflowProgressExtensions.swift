@@ -28,7 +28,7 @@ enum RelativeTimeFormatter {
 // MARK: - WorkflowActionGroup progress helpers
 
 /// UI-layer extensions on `WorkflowActionGroup` for deriving progress fractions
-/// and display strings used by the panel's action rows.
+/// and display strings used by the panel’s action rows.
 extension WorkflowActionGroup {
 
     /// Returns the overall completion fraction (0.0–1.0) across all jobs in the group.
@@ -75,8 +75,7 @@ extension WorkflowActionGroup {
         jobs.compactMap { $0.startedAt }.min()
     }
 
-    /// `true` when every job in the group is either dimmed (cancelled/skipped) or
-    /// the group conclusion is neither success nor failure.
+    /// `true` when the group is completed and its conclusion is neither success nor failure.
     var isDimmed: Bool {
         guard groupStatus == .completed else { return false }
         return conclusion != "success" && conclusion != "failure"
@@ -84,7 +83,7 @@ extension WorkflowActionGroup {
 
     /// `true` when the group originated from a self-hosted (local) runner.
     ///
-    /// Derived from the first job's runner name; returns `nil` when ambiguous.
+    /// Derived from the first job’s runner name; returns `nil` when ambiguous.
     var isLocalGroup: Bool? {
         guard let first = jobs.first else { return nil }
         return first.runnerName?.lowercased().contains("self-hosted") == true
