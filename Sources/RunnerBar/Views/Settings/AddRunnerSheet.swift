@@ -602,6 +602,7 @@ struct AddRunnerSheet: View {
         let name   = runnerName.trimmingCharacters(in: .whitespaces)
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
         let dir    = installDir.trimmingCharacters(in: .whitespaces)
+        let currentScopeType = scopeType
 
         await Task.detached(priority: .userInitiated) {
             let homeDir     = FileManager.default.homeDirectoryForCurrentUser
@@ -663,7 +664,13 @@ struct AddRunnerSheet: View {
             guard let token = fetchRegistrationToken(scope: scope) else {
                 await MainActor.run {
                     isRegistering = false
-                    errorMessage  = "Failed to fetch registration token. Ensure `gh auth login` has been run or GH_TOKEN is set."
+                    if GHBinaryLocator.ghBinaryPath() == nil {
+                        errorMessage = "gh CLI not found. Install it with `brew install gh`."
+                    } else if currentScopeType == .org {
+                        errorMessage = "Not authorised to register org-level runners. Either add 'manage_runners:org' scope to your gh token, or sign in with OAuth via the GitHub button in Settings."
+                    } else {
+                        errorMessage = "Could not get a registration token. Ensure `gh auth login` has been run or GH_TOKEN is set."
+                    }
                 }
                 return
             }
