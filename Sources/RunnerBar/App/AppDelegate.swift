@@ -44,6 +44,23 @@ import SwiftUI
 // panelVisibilityState.isOpen is set in openPanel()/closePanel()/hidePanel().
 // ❌ NEVER remove. ❌ NEVER remove from wrapEnv().
 // See ARCHITECTURE.md §panelVisibilityState.
+//
+// SHEET ORPHAN PREVENTION — read before touching closePanel() or hidePanel():
+// When NSPopover.performClose() fires while a SwiftUI .sheet is presented,
+// the sheet's NSWindow (a child of the popover window) is NOT automatically
+// removed by AppKit. It becomes an orphan: visible, blocking hit-testing, with
+// no SwiftUI tree driving it. The app appears frozen.
+//
+// FIX: Before calling performClose(), call endSheet on every attached sheet
+// window. This lets AppKit clean them up synchronously before the popover
+// closes. Do this in BOTH closePanel() and hidePanel().
+//
+// ❌ NEVER remove the dismissSheets() call from closePanel() or hidePanel().
+// ❌ NEVER try to preserve sheet @State across close/open — SwiftUI @State
+//    lives inside the View value type and is reset when a new view is created.
+//    Creating a new SettingsView() always gives fresh @State = sheet gone.
+//    The only correct behaviour on re-open is: navigate to settings (no sheet),
+//    which is at least interactive. Sheet cannot be restored.
 
 // MARK: - AppDelegate
 
@@ -179,39 +196,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: - Sheet orphan cleanup
+
+    /// Ends all sheets currently attached to the popover window.
+    ///
+    /// MUST be called before performClose() in both closePanel() and hidePanel().
+    /// Without this, sheet NSWindows become orphaned when the popover closes:
+    /// they remain visible and block all hit-testing, freezing the app.
+    ///
+    /// ❌ NEVER remove this call from closePanel() or hidePanel().
+    private func dismissSheets() {
+        guard let win = popover?.contentViewController?.view.window else { return }
+        for sheet in win.sheets {
+            win.endSheet(sheet)
+        }
+    }
+
     // MARK: - Dismiss
 
-    /// Closes the popover and resets all state.
-    /// If a sheet is open, savedNavState is already set to .settings
-    /// so re-opening restores the settings view (sheet @State in SettingsView
-    /// is preserved in the hosting controller until rootView is replaced).
+    /// Closes the popover. Dismisses any open sheets first to prevent orphan
+    /// NSWindows from blocking hit-testing after the popover closes.
     func closePanel() {
         guard panelIsOpen else { return }
+        // ❌ NEVER remove dismissSheets() — orphaned sheet windows freeze the app.
+        dismissSheets()
         popover?.performClose(nil)
         panelIsOpen = false
         panelVisibilityState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
-        // NavState has associated values so cannot conform to Equatable automatically.
-        // Use `if case` pattern matching instead of `==`.
-        // Only reset rootView to main when there is no preserved nav state,
-        // or when the state is .main itself.
-        let shouldReset: Bool = {
-            guard let state = savedNavState else { return true }
-            if case .main = state { return true }
-            return false
-        }()
-        if shouldReset {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.hostingController?.rootView = self.mainView()
-            }
+        // Reset rootView to main. savedNavState=.settings is preserved so
+        // openPanel() navigates back to SettingsView on re-open.
+        // ⚠️ Sheet @State (showAddScopeSheet etc.) is NOT preserved — SwiftUI
+        // @State lives in the View value type and is reset when a new view is
+        // created. The sheet will be gone on re-open; SettingsView will be
+        // interactive. This is intentional — see ARCHITECTURE.md §SheetOrphans.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hostingController?.rootView = self.mainView()
         }
     }
 
-    /// Hides the popover without resetting the view hierarchy. (#1015)
+    /// Hides the popover (workspace app-switch). Dismisses sheets first.
     func hidePanel() {
         guard panelIsOpen else { return }
+        // ❌ NEVER remove dismissSheets() — orphaned sheet windows freeze the app.
+        dismissSheets()
         popover?.performClose(nil)
         panelIsOpen = false
         panelVisibilityState.isOpen = false
@@ -275,7 +305,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else { return }
 
         // Outside-click always closes — no hasActiveSheet guard.
-        // If a sheet was open, savedNavState == .settings so re-open restores it.
         eventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
@@ -285,7 +314,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSRect(origin: loc, size: .zero)
             ).origin ?? loc
             guard let popoverWindow = popover.contentViewController?.view.window else { return }
-            // Also allow clicks inside any sheet window attached to the popover.
             let sheetWindows = popoverWindow.sheets
             let inSheet = sheetWindows.contains { $0.frame.contains(screenLoc) }
             if !popoverWindow.frame.contains(screenLoc) && !inSheet {

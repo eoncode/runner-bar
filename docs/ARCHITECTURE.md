@@ -6,51 +6,104 @@ corresponding inline annotations without updating this file.
 
 ---
 
-## Panel Lifecycle — NSPanel over NSPopover
+## Panel Lifecycle — NSPopover (as of fix/#1017)
 
-> Regression guard ref: issues #377, #375, #376, #52–#57, #321, #370  
+> Previously NSPanel. Changed in fix/#1017 to fix rounded corners under SwiftUI .sheet.
+> Regression guard ref: issues #377, #375, #376, #52–#57, #321, #370, #1017
 > See also: `AppDelegate.swift`, `AppDelegate+Navigation.swift`, `AppDelegate+PanelSetup.swift`
 
-### Why NSPanel instead of NSPopover
+### Why NSPopover instead of NSPanel
 
-`NSPopover` re-anchors on **any** `contentSize` change while it is visible.
-This is documented, intentional AppKit behaviour — not a bug. Every attempt to
-dynamically resize `NSPopover` while visible causes a lateral jump. Confirmed
-across many issues and Stack Overflow threads (#14449945, #69877522).
+`NSPanel` with a custom `CAShapeLayer` mask (used to draw the arrow + rounded
+corners) loses its rounded corners whenever a SwiftUI `.sheet` is presented as
+a child `NSWindow`. AppKit's sheet attachment path modifies the parent window's
+`CALayer` tree, discarding the mask. The `SettingsView` (and any other view with
+a `.sheet`) produced rectangular corners on the popover.
 
-`NSPanel` has no anchor concept. `setFrame()` while visible = zero jump, ever.
+`NSPopover` uses `NSPopoverWindowFrame`, a dedicated window class whose chrome
+is drawn by the window-server compositor — completely unaffected by sheet
+attachment. Rounded corners survive `.sheet` natively with zero extra code.
 
-### How the panel is positioned
+### How the popover is positioned
 
-1. Panel is a borderless, non-activating `NSPanel`.
-2. Position is computed from the status button's window frame (screen coords):
-   - `statusItemRect = button.window!.frame` — already in screen coords
-   - `panelX = statusItemRect.midX - contentW / 2` — re-centred each resize
-   - `panelTopY = statusItemRect.minY - gap` — **locked at open time**
-   - `y = max(visibleFrame.minY, panelTopY - totalH)` — clamped to screen
-3. `arrowX = statusItemRect.midX - panel.frame.minX`
-   - ❌ NEVER use `convertToScreen(button.frame)` — `button.frame` is button-local
-4. `sizingOptions = .preferredContentSize`: KVO on `preferredContentSize`
-   → `resizeAndRepositionPanel()` → `setFrame()`. Zero jump.
-5. Dismiss: `NSEvent` global monitor + `NSWorkspace` app-switch notification.
+1. `NSPopover` with `animates=false`, `behavior=.applicationDefined`.
+2. Shown via `popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)`.
+   The arrow anchors to the button **once** at `show()` time and is never moved.
+3. Size is driven by KVO on `NSHostingController.preferredContentSize`.
+   Both width AND height are updated via `popover.contentSize`.
+   ⚠️ Do NOT call `popover.show()` again on resize — that re-anchors and jumps.
+4. Width is clamped to `[minWidth..maxWidth]` from screen bounds.
+5. Dismiss: `popover.performClose(nil)` via `NSEvent` global monitor
+   + `NSWorkspace` app-switch notification.
 
 ### Critical invariants
 
-- ❌ NEVER re-derive `panelTopY` from `statusItemRect` inside
-  `resizeAndRepositionPanel()` — menu-bar hide/show shifts `statusItemRect.minY`,
-  moving the panel under the notch.
-- ❌ NEVER set `initPanelWidth > maxWidth`.
-- ❌ NEVER restore `initPanelWidth` to 600.
-- ❌ NEVER call `resizeAndRepositionPanel()` from a background thread.
-- ❌ NEVER remove the `resizeAndRepositionPanel()` call from `navigate(to:)`.
+- ❌ NEVER re-call `popover.show()` on resize.
+- ❌ NEVER revert to `NSPanel` without understanding the `.sheet` corner regression.
+- ❌ NEVER remove `dismissSheets()` from `closePanel()` or `hidePanel()` — see §SheetOrphans below.
 
-### Chrome dimensions (match NSPopover exactly)
+---
 
-| Property | Value |
-|----------|-------|
-| arrowHeight | 9 pt |
-| arrowWidth | 30 pt |
-| cornerRadius | 10 pt |
+## Sheet Orphans — Why dismissSheets() Must Run Before performClose() §SheetOrphans
+
+> Regression guard ref: issue #1017  
+> See also: `AppDelegate.swift` `closePanel()`, `hidePanel()`
+
+### The problem
+
+When `NSPopover.performClose()` is called while a SwiftUI `.sheet` is presented,
+the sheet's backing `NSWindow` (a child of the popover window added via
+`NSWindow.beginSheet`) is **not** automatically removed by AppKit. It becomes
+an **orphan**: the window is still visible and still intercepts all mouse events,
+but has no SwiftUI view tree driving it. The result is the app appearing completely
+frozen — clicks land on the invisible orphan sheet window, not on the popover content.
+
+### What was tried and failed
+
+1. **`popoverShouldClose` returning `false` when `hasActiveSheet`** — blocks the
+   user from interacting with other apps. The popover cannot be dismissed at all
+   while a sheet is open. Discarded.
+
+2. **Preserving `hostingController.rootView` across close + keeping savedNavState
+   = .settings, then calling `validatedView(.settings)` on re-open** — this calls
+   `settingsView()` which constructs a **brand new `SettingsView` struct**. Swift
+   `@State` lives inside the View value type; it is initialised fresh on every
+   new struct construction. `showAddScopeSheet`, `selectedScopeEntry` etc. are
+   all reset to their defaults. The sheet disappears, and the orphaned sheet
+   `NSWindow` from before close is still attached — SettingsView is frozen.
+
+3. **Not resetting `hostingController.rootView` at all on close** — same result.
+   The orphaned sheet NSWindow from the previous session blocks hit-testing
+   regardless of what SwiftUI state we put in the hosting controller.
+
+### The fix
+
+Call `endSheet(_:)` on every sheet window **before** `performClose()`. This lets
+AppKit synchronously remove the child sheet window from the window hierarchy
+before the popover closes, preventing the orphan entirely.
+
+```swift
+private func dismissSheets() {
+    guard let win = popover?.contentViewController?.view.window else { return }
+    for sheet in win.sheets {
+        win.endSheet(sheet)
+    }
+}
+```
+
+Call `dismissSheets()` at the top of both `closePanel()` and `hidePanel()`.
+
+### Sheet state after re-open
+
+Sheet `@State` (e.g. `showAddScopeSheet = true`) **cannot** be preserved across
+a close/open cycle. `@State` lives in the SwiftUI view value type and is reset
+when a new view is constructed. `savedNavState = .settings` is still preserved
+so re-opening navigates back to `SettingsView` (interactive, no sheet). This is
+the correct and only viable behaviour.
+
+- ❌ NEVER try to "restore" sheet state by keeping the old rootView.
+- ❌ NEVER try to "restore" sheet state by passing sheet-open flags as init params.
+- ❌ NEVER remove `dismissSheets()` from `closePanel()` or `hidePanel()`.
 
 ---
 
@@ -93,20 +146,13 @@ network I/O and is always dispatched onto `DispatchQueue.global()`.
 > Regression guard ref: issue #385  
 > See also: `AppDelegate.swift` `closePanel()`
 
-When the panel closes, `savedNavState` is captured **before** `mainView()` is
-called (which resets it), then restored so `openPanel()`'s `validatedView` path
-can navigate back to the same view the user was on.
+`savedNavState` is preserved across close so `openPanel()`'s `validatedView`
+path navigates back to the same view on re-open. On close, `rootView` is always
+reset to `mainView()` (so the SwiftUI tree is fresh), but `savedNavState` is
+kept — `openPanel()` reads it and calls `navigate(to: validatedView(for: saved))`.
 
-```swift
-// In closePanel():
-let preserved = self.savedNavState
-self.hostingController?.rootView = self.mainView()
-self.savedNavState = preserved
-```
-
-- ❌ NEVER replace the `hostingController?.rootView = mainView()` call with a
-  no-op stub `PanelMainView` — this resets the SwiftUI view tree correctly.
-- ❌ NEVER reorder the capture / reset / restore sequence.
+- ❌ NEVER clear `savedNavState` inside `closePanel()` or `hidePanel()`.
+- ❌ NEVER try to preserve sheet @State across close — see §SheetOrphans.
 
 ---
 
