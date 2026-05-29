@@ -56,12 +56,18 @@ extension WorkflowActionGroup {
         jobs.first { $0.status == .inProgress }?.name ?? ""
     }
 
-    /// A human-readable elapsed-time string derived from the earliest job start date.
+    /// Elapsed time as a `mm:ss` string, computed from `firstJobStartedAt` to
+    /// `lastJobCompletedAt` (completed runs) or `Date()` (active runs).
     ///
     /// Returns an empty string when no job has started yet.
+    /// Use `RelativeTimeFormatter.string(from: firstJobStartedAt)` for the time-ago display.
     var elapsed: String {
         guard let start = firstJobStartedAt else { return "" }
-        return RelativeTimeFormatter.string(from: start)
+        let end = lastJobCompletedAt ?? Date()
+        let sec = max(0, Int(end.timeIntervalSince(start)))
+        let mins = sec / 60
+        let secs = sec % 60
+        return String(format: "%02d:%02d", mins, secs)
     }
 
     /// The start date of the earliest job in the group, or `nil` if none has started.
@@ -82,6 +88,12 @@ extension WorkflowActionGroup {
     var isLocalGroup: Bool? {
         guard let first = jobs.first else { return nil }
         return first.runnerName?.lowercased().contains("self-hosted") == true
+    }
+
+    /// The short repo name (without owner prefix), e.g. `"runner-bar"` from `"eoncode/runner-bar"`.
+    /// Falls back to the full `repo` string when no slash is present.
+    var repoShortName: String {
+        repo.components(separatedBy: "/").last ?? repo
     }
 }
 

@@ -374,20 +374,25 @@ struct ActionRowView: View {
         }
     }
 
-    /// Main body of the action row: status dot, runner icon, repo label + commit title, trailing meta.
+    /// Main body of the action row.
     ///
-    /// Column order: DonutStatus · RunnerTypeIcon · label · title(truncated) · Spacer
-    /// · time-ago · steps/total · elapsed(active only) · statusBadge
+    /// Column order (#984):
+    /// graph-dot · local-remote-icon · repo-name · commit-title(truncated)
+    /// · Spacer · time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge
     ///
-    /// headBranch is intentionally omitted here — deferred to a future settings toggle per #984.
+    /// Notes:
+    /// - `group.repoShortName` is used for repo-name (e.g. "runner-bar"), NOT group.label
+    /// - `group.label` (SHA/PR#) is intentionally omitted from this row per #984
+    /// - `headBranch` is deferred to a future settings toggle per #984
+    /// - `currentJobName` lives in the expanded InlineJobRowsView, not here
     private var rowContent: some View {
         let tickSnapshot = tick
         return HStack(spacing: 6) {
             DonutStatusView(status: rowStatus, progress: group.progressFraction ?? 0, size: 14)
             RunnerTypeIcon(isLocal: group.isLocalGroup ?? false)
-            // Leading: repo label + commit title grouped together
+            // Leading: repo name + commit title
             HStack(spacing: 4) {
-                Text(group.label)
+                Text(group.repoShortName)
                     .font(DesignTokens.Fonts.mono)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -406,15 +411,10 @@ struct ActionRowView: View {
         .padding(.vertical, 4)
     }
 
-    /// Trailing meta area: time-ago · steps/total · elapsed(active only) · statusBadge.
+    /// Trailing meta: time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge.
     ///
-    /// - `time-ago`: relative age of the run since firstJobStartedAt, keyed off tick for live refresh.
-    /// - `steps/total`: job progress fraction — hidden while jobs are loading.
-    /// - `elapsed`: mm:ss live timer — only shown for inProgress/queued runs to avoid
-    ///   a frozen clock on completed rows.
-    /// - `statusBadge`: coloured pill reflecting conclusion.
-    ///
-    /// currentJobName is intentionally omitted — it belongs in the expanded InlineJobRowsView.
+    /// elapsed is only shown while the run is inProgress or queued — completed rows
+    /// show only time-ago to avoid a frozen clock.
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
