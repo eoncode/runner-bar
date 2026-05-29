@@ -11,7 +11,7 @@ extension AppDelegate {
     // MARK: Toggle
 
     /// Toggles the panel: shows it if hidden, hides it if visible.
-    func togglePanel() {
+    @objc func togglePanel() {
         guard let panel else { return }
         if panel.isVisible {
             hidePanel()
