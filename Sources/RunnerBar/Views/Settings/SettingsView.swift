@@ -139,7 +139,7 @@ struct SettingsView: View {
                         get: { subScreen == .addRunner },
                         set: { if !$0 { navigateBack() } }
                     ),
-                    onDone: { localRunnerStore.refresh() }
+                    onComplete: { localRunnerStore.refresh() }
                 )
                 .transition(.move(edge: navForward ? .trailing : .leading))
             case .addScope:

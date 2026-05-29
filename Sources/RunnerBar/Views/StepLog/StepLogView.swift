@@ -1,5 +1,6 @@
 // StepLogView.swift
 // RunnerBar
+// swiftlint:disable missing_docs
 import AppKit
 import RunnerBarCore
 import SwiftUI
