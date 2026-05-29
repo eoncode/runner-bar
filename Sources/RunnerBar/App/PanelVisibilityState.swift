@@ -57,10 +57,31 @@ final class PanelVisibilityState: ObservableObject {
     /// `true` from immediately before the panel opens until after it closes.
     @Published var isOpen: Bool = false
 
-    /// `true` when `isOpen` was set to `false` by `hidePanel()` (transient hide)
-    /// rather than `closePanel()` (full close). Read by `PanelContainerView` to
-    /// skip clearing `isSheetActive` during a transient hide.
-    /// ❌ NEVER read this outside PanelContainerView.
+    /// Set to `true` by `hidePanel()` BEFORE it sets `isOpen = false`.
+    /// Set back to `false` by `PanelContainerView.onChange` when `isOpen` becomes `true` again.
+    ///
+    /// PURPOSE — prevent the dim-overlay animation from replaying on transient restore:
+    /// When the user switches away from the app while a sheet is open, hidePanel() fires.
+    /// hidePanel() does NOT dismiss the sheet — the sheet NSWindow stays attached.
+    /// But it does set isOpen = false, which fires onChange in PanelContainerView.
+    /// Without this flag, onChange(false) would clear isSheetActive, and then on
+    /// re-entry the timer would set it back to true, replaying the fade-in animation
+    /// even though the sheet never actually closed. With this flag, onChange(false)
+    /// and the timer guard both skip the clear, keeping isSheetActive = true throughout
+    /// the hide/restore cycle so no animation fires.
+    ///
+    /// LIFECYCLE:
+    ///   hidePanel()              → isTransientHide = true, isOpen = false
+    ///   openPanel() (restore)    → isOpen = true
+    ///   onChange(true) in view   → isTransientHide = false  (reset for next close)
+    ///   closePanel()             → isTransientHide stays false, isOpen = false
+    ///   onChange(false) in view  → isTransientHide=false so isSheetActive cleared ✅
+    ///
+    /// ❌ NEVER set this from anywhere other than hidePanel().
+    /// ❌ NEVER read this outside PanelContainerView — it is an internal signal
+    ///    between hidePanel() and the dim-overlay state machine.
+    /// ❌ NEVER set isOpen = false in hidePanel() before setting this to true —
+    ///    the flag must be visible to onChange before isOpen triggers it.
     var isTransientHide: Bool = false
 
     // periphery:ignore
