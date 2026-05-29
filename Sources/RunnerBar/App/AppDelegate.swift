@@ -96,6 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let panelSheetState = PanelSheetState()
     /// Mirrors popover.isShown — kept for compatibility with navigation code.
     var panelIsOpen = false
+    /// Tracks a transient hide that preserved an active AppKit sheet session.
+    var preservedSheetWindowHide = false
 
     /// The eventMonitor property.
     var eventMonitor: Any?
@@ -208,11 +210,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func closePanel() {
         guard panelIsOpen else { return }
         popover?.performClose(nil)
+        preservedSheetWindowHide = false
         panelIsOpen = false
         panelVisibilityState.isOpen = false
         removeEventMonitor()
         removeWorkspaceObserver()
         savedNavState = nil
+        preservedSheetWindowHide = false
         panelSheetState.clearRunnerSheet()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -260,8 +264,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let popoverWindow = popover?.contentViewController?.view.window
         else { return false }
 
-        popoverWindow.sheets.forEach { $0.orderOut(nil) }
-        popoverWindow.orderOut(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            popoverWindow.orderOut(nil)
+        }
+        preservedSheetWindowHide = true
         return true
     }
 
@@ -273,8 +281,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let popoverWindow = popover.contentViewController?.view.window
         else { return false }
 
-        popoverWindow.orderFrontRegardless()
-        popoverWindow.sheets.forEach { $0.orderFrontRegardless() }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            popoverWindow.orderFrontRegardless()
+        }
+        preservedSheetWindowHide = false
         return true
     }
 
@@ -335,7 +347,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         restorePopoverWindowsPreservingSheetsIfNeeded()
 
         DispatchQueue.main.async { [weak self] in
-            self?.panelSheetState.restoreTransientHideStateIfNeeded()
+            guard let self, !self.preservedSheetWindowHide else { return }
+            self.panelSheetState.restoreTransientHideStateIfNeeded()
         }
 
         guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else { return }
