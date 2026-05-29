@@ -18,16 +18,30 @@ import SwiftUI
 // window-server compositor. Rounded corners survive SwiftUI .sheet
 // attachment natively — no CALayer manipulation required or desired.
 //
+// SHEET HANDLING:
+// SwiftUI .sheet() attaches as a child NSWindow to the popover's backing
+// window. Two problems arise:
+//
+// 1. NO DIM: NSPopoverWindowFrame does not participate in AppKit's standard
+//    modal sheet dimming. Fix: we apply a SwiftUI .overlay dim inside the
+//    popover content via PanelContainerView, keyed on hasActiveSheet.
+//
+// 2. ORPHANED SHEET on outside click: even with .applicationDefined behavior,
+//    AppKit can close the popover when the user clicks outside (e.g. via the
+//    NSPopoverDelegate popoverShouldClose path). If the popover closes while a
+//    sheet is open, the sheet's NSWindow is orphaned — visible but with no
+//    parent popover, leaving the app in a non-interactive frozen state.
+//    Fix: NSPopoverDelegate.popoverShouldClose returns false when a sheet is
+//    open. This prevents AppKit from closing the popover underneath a sheet.
+//
 // SIZE NOTE:
 // popover.contentSize is updated (both width AND height) via KVO on
-// NSHostingController.preferredContentSize. The initial size below is
-// a placeholder; it is overwritten immediately after show() by
-// resizeAndRepositionPanel(). Updating contentSize resizes the popover
-// in-place — the arrow stays pinned to the original positioningRect.
-// ❌ NEVER call popover.show() again on resize — that re-anchors and jumps.
+// NSHostingController.preferredContentSize. Updating contentSize resizes
+// the popover in-place — the arrow stays pinned to the original
+// positioningRect. ❌ NEVER call popover.show() again on resize.
 
 /// Extension responsible for NSPopover construction, KVO, and Combine subscriptions.
-extension AppDelegate {
+extension AppDelegate: NSPopoverDelegate {
 
     // MARK: Popover construction
 
@@ -40,12 +54,10 @@ extension AppDelegate {
 
         let newPopover = NSPopover()
         newPopover.contentViewController = controller
-        // Placeholder size — overwritten by resizeAndRepositionPanel() after show().
         newPopover.contentSize = NSSize(width: 480, height: 300)
-        // animates = false prevents size-change animation on KVO updates.
         newPopover.animates = false
-        // .applicationDefined: we manage show/hide ourselves via togglePanel().
         newPopover.behavior = .applicationDefined
+        newPopover.delegate = self
 
         popover = newPopover
 
@@ -53,10 +65,33 @@ extension AppDelegate {
         setupCombineSubscriptions()
     }
 
+    // MARK: NSPopoverDelegate
+
+    /// Prevents the popover closing while a sheet is presented over it.
+    /// Without this, AppKit orphans the sheet's NSWindow and the app freezes.
+    public func popoverShouldClose(_ popover: NSPopover) -> Bool {
+        // Block close if a sheet is currently attached.
+        // The user must dismiss the sheet first.
+        return !hasActiveSheet
+    }
+
+    /// Called after the popover actually closes (e.g. user pressed Escape).
+    /// Ensures our internal state stays in sync.
+    public func popoverDidClose(_ notification: Notification) {
+        guard panelIsOpen else { return }
+        // Force-dismiss any orphaned sheet windows just in case.
+        popover?.contentViewController?.view.window?.sheets.forEach { sheet in
+            popover?.contentViewController?.view.window?.endSheet(sheet)
+        }
+        panelIsOpen = false
+        panelVisibilityState.isOpen = false
+        removeEventMonitor()
+        removeWorkspaceObserver()
+    }
+
     // MARK: KVO
 
     /// Observes `preferredContentSize` and updates both width and height.
-    /// Updating contentSize alone resizes in-place without moving the arrow anchor.
     private func setupKVO(controller: NSHostingController<AnyView>) {
         sizeObservation = controller.observe(
             \.preferredContentSize,
