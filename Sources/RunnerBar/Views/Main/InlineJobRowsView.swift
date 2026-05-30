@@ -7,17 +7,17 @@ import SwiftUI
 /// Vertical tree-connector line drawn to the left of a job or step row.
 /// Renders a straight bar with an elbow arrow at the bottom for the last item.
 private struct TreeLineLeader: View {
-    /// The isLast constant.
+    /// Whether this is the last item in the list (draws elbow instead of continuing bar).
     let isLast: Bool
-    /// The indent property.
+    /// Horizontal indent from the left edge to the vertical bar centre.
     var indent: CGFloat = 0
-    /// The lineColor constant.
+    /// Colour of the tree connector lines.
     private let lineColor = Color.secondary.opacity(0.3)
-    /// The barWidth constant.
+    /// Width of the vertical bar stroke.
     private let barWidth: CGFloat = 1
-    /// The elbowWidth constant.
+    /// Horizontal reach of the elbow arm.
     private let elbowWidth: CGFloat = 10
-    /// The arrowSize constant.
+    /// Size of the arrowhead at the elbow tip.
     private let arrowSize: CGFloat = 4
     /// The body property.
     var body: some View {
@@ -44,11 +44,26 @@ private struct TreeLineLeader: View {
     }
 }
 
+// MARK: - JobRunnerTypeIcon
+/// Small SF Symbol indicating whether a job runs on a self-hosted (local) or
+/// GitHub-hosted (cloud) runner. Derived from the job’s runner name.
+private struct JobRunnerTypeIcon: View {
+    /// The runner name string from the job, used to detect self-hosted runners.
+    let runnerName: String?
+    /// The body property.
+    var body: some View {
+        let isLocal = runnerName?.lowercased().contains("self-hosted") == true
+        Image(systemName: isLocal ? "desktopcomputer" : "cloud")
+            .font(.system(size: 9))
+            .foregroundColor(.secondary)
+    }
+}
+
 // MARK: - JobInlineProgress
 /// Compact progress bar shown inside a job row while the job is running.
 /// Fills proportionally to `fractionComplete`; hidden when no progress is available.
 private struct JobInlineProgress: View {
-    /// The progress constant.
+    /// Completion fraction in the range 0.0–1.0.
     let progress: Double
     /// The body property.
     var body: some View {
@@ -68,20 +83,20 @@ private struct JobInlineProgress: View {
 /// Single step row inside an expanded job card.
 /// Shows the step icon, name, and elapsed time aligned with the tree connector.
 private struct StepRowView: View {
-    /// The step constant.
+    /// The step to display.
     let step: JobStep
-    /// The job constant.
+    /// The parent job that owns this step.
     let job: ActiveJob
-    /// The isLast constant.
+    /// Whether this is the last step in the list.
     let isLast: Bool
-    /// The onTap constant.
+    /// Called when the user taps the step row.
     let onTap: () -> Void
     // indent = 9: centers the vertical bar under the job DonutStatusView dot.
     // Geometry: InlineJobRowsView.padding(.leading:12) + jobLeaderFrame(19) +
     // stepsContainer.padding(.horizontal:4) = 35 from InlineJobRowsView edge.
     // Job dot center = 12 + 19 + 8(card hpad) + 5(half dot10) = 44.
     // Step leader indent = 44 - 35 = 9.
-    /// The dotIndent constant.
+    /// Horizontal indent aligning the step tree bar under the job status dot.
     private let dotIndent: CGFloat = 9
     /// The body property.
     var body: some View {
@@ -91,7 +106,7 @@ private struct StepRowView: View {
             stepContent
         }
     }
-    /// The stepContent property.
+    /// The step row content: icon, name, elapsed and a chevron tap target.
     private var stepContent: some View {
         Button(action: onTap) {
             HStack(spacing: 6) {
@@ -124,7 +139,7 @@ private struct StepRowView: View {
         .buttonStyle(.plain)
         .stepContextMenu(step: step, onTap: onTap)
     }
-    /// The iconColor property.
+    /// Foreground colour for the step conclusion icon.
     private var iconColor: Color {
         switch step.conclusion {
         case .success:                   return Color.rbSuccess
@@ -139,29 +154,29 @@ private struct StepRowView: View {
 /// Expandable card that represents one job within a workflow run.
 /// Tapping the header toggles the step list; long-press opens the job in Safari.
 private struct JobRowCard: View {
-    /// The job constant.
+    /// The job this card represents.
     let job: ActiveJob
-    /// The status constant.
+    /// The resolved display status for this job.
     let status: RBStatus
-    /// The isLast constant.
+    /// Whether this is the last job card in the list (controls tree-line elbow).
     let isLast: Bool
-    /// The group constant.
+    /// The parent workflow action group.
     let group: WorkflowActionGroup
-    /// The isExpanded constant.
+    /// Whether the step list is currently expanded.
     let isExpanded: Bool
-    /// The onToggle constant.
+    /// Called when the user taps the job header to toggle expansion.
     let onToggle: () -> Void
-    /// The onStepTap constant.
+    /// Called when the user taps a step row inside the expanded card.
     let onStepTap: (JobStep) -> Void
     // indent = 7: half of the workflow DonutStatusView dot (size 14).
     // Geometry: card colour bar(4) + clear spacer(12) + half-dot(7) = 23 from card edge.
     // InlineJobRowsView padding(.leading:12) + colour bar(4) = 16 from card edge.
     // So leader barX = 23 - 16 = 7 centers under the workflow dot.
-    /// The dotIndent constant.
+    /// Horizontal indent aligning the job tree bar under the workflow status dot.
     private let dotIndent: CGFloat = 7
-    /// The totalSteps property.
+    /// Total number of steps in this job.
     private var totalSteps: Int { job.steps.count }
-    /// The completedSteps property.
+    /// Number of completed steps in this job.
     private var completedSteps: Int {
         job.steps.filter { $0.conclusion != nil || $0.status == .completed }.count
     }
@@ -179,7 +194,10 @@ private struct JobRowCard: View {
         .padding(.vertical, 1)
         .jobContextMenu(job: job, group: group)
     }
-    /// The jobHeader property.
+    /// Job header row.
+    ///
+    /// Column order (#985):
+    /// graph-dot · runner-type-icon · job-id · job-name · [progress bar] · steps/total · elapsed
     private var jobHeader: some View {
         Button {
             guard totalSteps > 0 else { return }
@@ -187,6 +205,12 @@ private struct JobRowCard: View {
         } label: {
             HStack(spacing: 6) {
                 DonutStatusView(status: status, progress: job.progressFraction ?? 0, size: 10)
+                JobRunnerTypeIcon(runnerName: job.runnerName)
+                Text("#\(job.id)")
+                    .font(DesignTokens.Fonts.mono)
+                    .foregroundColor(Color.rbTextTertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Text(job.name)
                     .font(DesignTokens.Fonts.mono)
                     .foregroundColor(job.isDimmed ? Color.rbTextTertiary : Color.rbTextSecondary)
@@ -217,7 +241,7 @@ private struct JobRowCard: View {
         }
         .buttonStyle(.plain)
     }
-    /// The stepsContainer property.
+    /// Vertically stacked step rows shown when the job card is expanded.
     private var stepsContainer: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(job.steps.enumerated()), id: \.element.id) { index, step in
@@ -238,21 +262,21 @@ private struct JobRowCard: View {
 /// Vertically stacked list of `JobRowCard` views for a single workflow run.
 /// Rendered inside the action row when the run is expanded.
 struct InlineJobRowsView: View {
-    /// The group constant.
+    /// The workflow action group whose jobs are displayed.
     let group: WorkflowActionGroup
-    /// The tick constant.
+    /// Timer tick driving live elapsed-time refresh.
     let tick: Int
-    /// The fullExpand property.
+    /// When `true`, all jobs are shown; when `false`, only in-progress jobs are shown.
     var fullExpand: Bool = false
     // Default no-op handler; callers that need step navigation override this.
-    /// The onStepTap property.
+    /// Called when the user taps a step row. Defaults to a no-op.
     var onStepTap: (ActiveJob, JobStep) -> Void = { _, _ in
         // Intentionally empty: default is a no-op.
         // Callers that require navigation provide a real implementation.
     }
-    /// The panelVisibilityState property.
+    /// Tracks whether the panel popover is currently visible.
     @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
-    /// The expandedJobIDs property.
+    /// The set of job IDs whose step lists are currently expanded.
     @State private var expandedJobIDs: Set<Int> = []
     /// A stable snapshot of `tick` captured at view evaluation time, used to key job row identity.
     private var tickSnapshot: Int { tick }
@@ -287,7 +311,7 @@ struct InlineJobRowsView: View {
             }
         }
     }
-    /// Performs the jobStatus operation.
+    /// Resolves the display status for a single job.
     private func jobStatus(for job: ActiveJob) -> RBStatus {
         if let conclusion = job.conclusion {
             switch conclusion {
