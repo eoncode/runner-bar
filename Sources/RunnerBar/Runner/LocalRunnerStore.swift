@@ -17,10 +17,11 @@ import Foundation
 /// Owns the list of locally-installed GitHub Actions runner agents.
 /// Hydrates from `installPath/.runner` JSON, marks live services via launchctl,
 /// then enriches with GitHub API data (status, busy, labels, group).
+@MainActor
 final class LocalRunnerStore: ObservableObject {
     // MARK: - Shared singleton
     /// The app-wide singleton. Always accessed on the main actor.
-    @MainActor static let shared = LocalRunnerStore()
+    static let shared = LocalRunnerStore()
 
     // MARK: - Published state
     /// The current list of locally-installed runners, sorted by name.
@@ -36,7 +37,7 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - Init
     /// Initialises the store and loads the persisted runner index from UserDefaults.
-    init() {
+    private init() {
         loadIndex()
     }
 
@@ -62,27 +63,24 @@ final class LocalRunnerStore: ObservableObject {
     }
 
     /// Immediately reflects a start/stop action in the UI before the next refresh cycle.
+    /// Already runs on the main actor via @MainActor class isolation.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
-        DispatchQueue.main.async {
-            guard let idx = self.runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
-            self.runners[idx].isRunning = isRunning
-        }
+        guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
+        runners[idx].isRunning = isRunning
     }
 
     /// Sets or clears the lifecycle warning badge for a runner (e.g. "Failed to connect").
+    /// Already runs on the main actor via @MainActor class isolation.
     func setLifecycleWarning(_ runnerName: String, warning: String?) {
-        DispatchQueue.main.async {
-            guard let idx = self.runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
-            self.runners[idx].lifecycleWarning = warning
-        }
+        guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
+        runners[idx].lifecycleWarning = warning
     }
 
     /// Removes a runner from both the index and the published list immediately.
+    /// Already runs on the main actor via @MainActor class isolation.
     func optimisticallyRemove(_ runnerName: String) {
         unregister(name: runnerName)
-        DispatchQueue.main.async {
-            self.runners.removeAll { $0.runnerName == runnerName }
-        }
+        runners.removeAll { $0.runnerName == runnerName }
     }
 
     /// Removes the index entry for `name` and persists the updated index.
@@ -108,7 +106,7 @@ final class LocalRunnerStore: ObservableObject {
 
     /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.
     /// Must be called on the main actor; heavy work is dispatched to a background queue internally.
-    @MainActor func refresh() {
+    func refresh() {
         guard !isScanning else { return }
         isScanning = true
         let index = runnerIndex
@@ -119,10 +117,7 @@ final class LocalRunnerStore: ObservableObject {
             var hydrated: [RunnerModel] = index.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
             log("LocalRunnerStore > refresh() background — hydrated \(hydrated.count) runner(s)")
 
-            // 2. Mark live services via launchctl.
-            // scanLiveServices() is always called here — isRunning is intentionally set to false
-            // during JSON parsing (step 1) and updated to its real value only at this point.
-            // Do not remove this call or assume isRunning is always false.
+            // 2. Mark live services via launchctl
             let liveLabels = scanLiveServices()
             for idx in hydrated.indices {
                 hydrated[idx].isRunning = liveLabels.contains { $0.contains(hydrated[idx].runnerName) }
@@ -141,15 +136,8 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - launchctl scan
 
-    /// Runs `launchctl list` and returns raw lines whose label contains `actions.runner`.
-    ///
-    /// Called inside `refresh()` (step 2) on a background queue, immediately after disk hydration.
-    /// Each returned line is matched against `runnerName` to set `RunnerModel.isRunning`.
-    ///
-    /// - Note: `isRunning` is **not** set during JSON parsing in `runnerModelFromIndex` — it is
-    ///   always initialised to `false` there and updated here via launchctl. Do not assume
-    ///   `isRunning` is dead or always-false — the wiring is refresh() → scanLiveServices() → isRunning.
-    private func scanLiveServices() -> [String] {
+    /// Runs `launchctl list` and returns lines whose label contains `actions.runner`.
+    private nonisolated func scanLiveServices() -> [String] {
         let result = ProcessRunner.run(
             executableURL: URL(fileURLWithPath: "/bin/launchctl"),
             arguments: ["list"],
@@ -210,7 +198,7 @@ private func runnerModelFromIndex(name: String, installPath: String) -> RunnerMo
         agentId: json?.agentId,
         workFolder: json?.workFolder,
         installPath: installPath,
-        isRunning: false, // always false here — set to real value in refresh() step 2 via scanLiveServices()
+        isRunning: false,
         platform: json?.platform,
         platformArchitecture: json?.platformArchitecture,
         agentVersion: json?.agentVersion,
