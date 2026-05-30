@@ -11,16 +11,17 @@ import Foundation
 //
 // Polling:
 //   • refresh() is called by RunnerViewModel on every displayTick (≈1 Hz).
-//   • The heavy work (disk I/O + API calls) runs on a background queue.
+//   • The heavy work (disk I/O + API calls) runs on a detached Task / background thread.
 //   • isScanning prevents concurrent refreshes.
 
 /// Owns the list of locally-installed GitHub Actions runner agents.
 /// Hydrates from `installPath/.runner` JSON, marks live services via launchctl,
 /// then enriches with GitHub API data (status, busy, labels, group).
+@MainActor
 final class LocalRunnerStore: ObservableObject {
     // MARK: - Shared singleton
     /// The app-wide singleton. Always accessed on the main actor.
-    @MainActor static let shared = LocalRunnerStore()
+    static let shared = LocalRunnerStore()
 
     // MARK: - Published state
     /// The current list of locally-installed runners, sorted by name.
@@ -63,26 +64,20 @@ final class LocalRunnerStore: ObservableObject {
 
     /// Immediately reflects a start/stop action in the UI before the next refresh cycle.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
-        DispatchQueue.main.async {
-            guard let idx = self.runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
-            self.runners[idx].isRunning = isRunning
-        }
+        guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
+        runners[idx].isRunning = isRunning
     }
 
     /// Sets or clears the lifecycle warning badge for a runner (e.g. "Failed to connect").
     func setLifecycleWarning(_ runnerName: String, warning: String?) {
-        DispatchQueue.main.async {
-            guard let idx = self.runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
-            self.runners[idx].lifecycleWarning = warning
-        }
+        guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
+        runners[idx].lifecycleWarning = warning
     }
 
     /// Removes a runner from both the index and the published list immediately.
     func optimisticallyRemove(_ runnerName: String) {
         unregister(name: runnerName)
-        DispatchQueue.main.async {
-            self.runners.removeAll { $0.runnerName == runnerName }
-        }
+        runners.removeAll { $0.runnerName == runnerName }
     }
 
     /// Removes the index entry for `name` and persists the updated index.
@@ -107,12 +102,12 @@ final class LocalRunnerStore: ObservableObject {
     // MARK: - Refresh
 
     /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.
-    /// Must be called on the main actor; heavy work is dispatched to a background queue internally.
-    @MainActor func refresh() {
+    /// Called on the main actor; heavy work is dispatched to a background task internally.
+    func refresh() {
         guard !isScanning else { return }
         isScanning = true
         let index = runnerIndex
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
             // 1. Hydrate from installPath/.runner JSON
@@ -128,7 +123,7 @@ final class LocalRunnerStore: ObservableObject {
             // 3. Enrich via GitHub API
             let enriched = RunnerStatusEnricher.shared.enrich(runners: hydrated)
 
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.runners = enriched.sorted { $0.runnerName < $1.runnerName }
                 self.isScanning = false
                 log("LocalRunnerStore > refresh() main — done. runners.count=\(self.runners.count)")
@@ -139,7 +134,7 @@ final class LocalRunnerStore: ObservableObject {
     // MARK: - launchctl scan
 
     /// Runs `launchctl list` and returns lines whose label contains `actions.runner`.
-    private func scanLiveServices() -> [String] {
+    private nonisolated func scanLiveServices() -> [String] {
         let result = ProcessRunner.run(
             executableURL: URL(fileURLWithPath: "/bin/launchctl"),
             arguments: ["list"],
