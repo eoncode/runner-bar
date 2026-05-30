@@ -53,6 +53,18 @@ final class RunnerViewModel: ObservableObject {
         let localStore = localRunnerStore ?? LocalRunnerStore.shared
         let store = RunnerStore.shared
         log("RunnerViewModel › reload — actions=\(store.actions.count) jobs=\(store.jobs.count) runners=\(store.runners.count) localRunners=\(localStore.runners.count)")
+
+        // ── LOGGING: dump full model state for every local runner right before the UI sees it ──
+        for r in localStore.runners {
+            log("RunnerViewModel › localRunner '\(r.runnerName)':")
+            log("  platform=\(r.platform ?? "NIL") platformArchitecture=\(r.platformArchitecture ?? "NIL")")
+            log("  githubStatus=\(r.githubStatus ?? "NIL") isBusy=\(r.isBusy) agentId=\(r.agentId.map(String.init) ?? "NIL")")
+            log("  gitHubUrl=\(r.gitHubUrl ?? "NIL")")
+            log("  labels=\(r.labels)")
+            log("  isRunning=\(r.isRunning) isEphemeral=\(r.isEphemeral)")
+        }
+        // ── END LOGGING ──
+
         withAnimation(nil) {
             runners = store.runners
             jobs = store.jobs
