@@ -34,8 +34,6 @@ struct SettingsView: View {
     let onBack: () -> Void
     /// The store property.
     @ObservedObject var store: RunnerViewModel
-    /// Process-lifetime sheet state shared with AppDelegate.
-    @ObservedObject var panelSheetState: PanelSheetState
     /// The settings property.
     @ObservedObject private var settings = AppPreferencesStore.shared
     /// The notifications property.
@@ -70,6 +68,8 @@ struct SettingsView: View {
     @State private var signOutCancellable: AnyCancellable?
 
     // MARK: - Popover editing state (#1001)
+    /// The runner currently being edited in `RunnerDetailPopover`. `nil` = popover dismissed.
+    @State private var editingRunner: RunnerModel?
     /// `true` while `commitRunnerEdit` is in-flight.
     @State private var isCommitting = false
     /// Non-nil when the last commit attempt produced errors; forwarded into `RunnerDetailPopover`.
@@ -120,8 +120,9 @@ struct SettingsView: View {
             )
         }
         .modifier(removalAlertModifier)
-        // #1001: runner editing sheet (was .popover — converted to .sheet to match ScopeEditSheet)
-        .sheet(item: $panelSheetState.editingRunner) { runner in
+        // #1001: runner editing — use .popover to avoid rectangular corners on the parent panel
+        // (.sheet creates a detached child NSWindow whose chrome fights the .borderless panel)
+        .popover(item: $editingRunner) { runner in
             runnerEditingPopover(runner: runner)
         }
     }
@@ -151,7 +152,7 @@ struct SettingsView: View {
                     switch result {
                     case .success:
                         localRunnerStore.refresh()
-                        panelSheetState.clearRunnerSheet()
+                        editingRunner = nil
                     case .failure(let msgs):
                         commitError = msgs.joined(separator: "\n")
                     }
@@ -159,7 +160,7 @@ struct SettingsView: View {
             },
             onCancel: {
                 commitError = nil
-                panelSheetState.clearRunnerSheet()
+                editingRunner = nil
             }
         )
     }
@@ -291,7 +292,7 @@ struct SettingsView: View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         Button(action: {
             commitError = nil
-            panelSheetState.editingRunner = runner
+            editingRunner = runner
         }) {
             localRunnerRowContent(runner)
                 .contentShape(Rectangle())

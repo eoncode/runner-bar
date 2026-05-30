@@ -62,6 +62,22 @@ curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash
 
 ---
 
+## GitHub OAuth Permissions
+
+RunnerBar uses a classic OAuth token. The following scopes are requested and are all load-bearing:
+
+| Scope | Why it's needed |
+|---|---|
+| `repo` | Read workflow runs, jobs, steps, and logs across private repositories |
+| `read:org` | Discover which organisations the authenticated user belongs to |
+| `admin:org` | Call `GET /orgs/{org}/actions/runners` to fetch org-level runner labels (e.g. `arm64`, `macOS`). Required for classic OAuth tokens — `manage_runners:org` alone is only sufficient for fine-grained PATs |
+| `manage_runners:org` | Forward-compatibility: GitHub is migrating runner APIs to require this scope for fine-grained tokens; included so the token stays valid as GitHub enforces newer auth requirements |
+| `workflow` | Trigger re-run, re-run failed, and cancel actions on workflow runs |
+
+> **Note:** `admin:org` is not a broad privilege grab. It is the documented requirement for classic OAuth tokens when calling org-runner endpoints. See [GitHub docs](https://docs.github.com/en/rest/actions/self-hosted-runners).
+
+---
+
 ## Docs
 
 - [DEVELOPMENT.md](DEVELOPMENT.md) — build and run locally

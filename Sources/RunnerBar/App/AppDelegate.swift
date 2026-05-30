@@ -339,7 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button, let popover else { return }
 
         log("AppDelegate › openPanel — seeding observable")
-        observable.reload(localRunnerStore: LocalRunnerStore.shared)
+        observable.reload()
 
         panelIsOpen = true
         panelVisibilityState.isOpen = true

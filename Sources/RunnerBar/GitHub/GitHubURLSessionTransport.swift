@@ -135,6 +135,14 @@ private func clearRateLimitIfNeeded() {
     }
 }
 
+/// Logs the response body (up to 400 chars) for non-2xx responses.
+private func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
+    guard let data, !data.isEmpty else { return }
+    let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
+    let preview = body.count > 400 ? String(body.prefix(400)) + "…" : body
+    log("URLSessionTransport › \(endpoint) status=\(status) body: \(preview)")
+}
+
 /// Fetches a single GitHub API page synchronously (blocking the calling thread).
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
@@ -155,20 +163,31 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
     URLSession.shared.dataTask(with: req) { data, response, error in
         defer { sem.signal() }
-        if let error { log("urlSessionAPI › network error: \(error.localizedDescription)") ; return }
-        if let http = response as? HTTPURLResponse {
-            log("urlSessionAPI › \(urlString) status=\(http.statusCode)")
-            if http.statusCode == 403 || http.statusCode == 429 {
-                let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
-                    .flatMap { TimeInterval($0) }
+        if let error {
+            log("URLSessionTransport › \(urlString) network error: \(error.localizedDescription)")
+            return
+        }
+        guard let http = response as? HTTPURLResponse else { return }
+        if http.statusCode == 403 || http.statusCode == 429 {
+            let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
+                .flatMap { TimeInterval($0) }
+            let isRealRateLimit = http.statusCode == 429
+                || http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
+            if isRealRateLimit {
+                logErrorBody(data, endpoint: urlString, status: http.statusCode)
+                log("URLSessionTransport › ⚠️ rate limited — \(urlString) status=\(http.statusCode)")
                 rateLimitLock.withLock { $0.isLimited = true }
                 scheduleRateLimitReset(resetAt: resetTS)
-                return
+            } else {
+                log("URLSessionTransport › 403 permission error (not rate limit) — \(urlString)")
             }
-            guard (200..<300).contains(http.statusCode) else { return }
-            // Successful response: clear any stale rate-limit flag from a prior cycle.
-            clearRateLimitIfNeeded()
+            return
         }
+        guard (200..<300).contains(http.statusCode) else {
+            logErrorBody(data, endpoint: urlString, status: http.statusCode)
+            return
+        }
+        clearRateLimitIfNeeded()
         result.withLock { $0 = data }
     }.resume()
     sem.wait()
@@ -196,20 +215,32 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         let linkHeader = OSAllocatedUnfairLock<String?>(initialState: nil)
         URLSession.shared.dataTask(with: req) { data, response, error in
             defer { sem.signal() }
-            if let error { log("urlSessionAPIPaginated › network error: \(error.localizedDescription)") ; return }
-            if let http = response as? HTTPURLResponse {
-                if http.statusCode == 403 || http.statusCode == 429 {
-                    let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
-                        .flatMap { TimeInterval($0) }
+            if let error {
+                log("URLSessionTransport(paginated) › \(urlString) network error: \(error.localizedDescription)")
+                return
+            }
+            guard let http = response as? HTTPURLResponse else { return }
+            if http.statusCode == 403 || http.statusCode == 429 {
+                let resetTS = http.value(forHTTPHeaderField: "X-RateLimit-Reset")
+                    .flatMap { TimeInterval($0) }
+                let isRealRateLimit = http.statusCode == 429
+                    || http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
+                if isRealRateLimit {
+                    logErrorBody(data, endpoint: urlString, status: http.statusCode)
+                    log("URLSessionTransport(paginated) › ⚠️ rate limited — \(urlString) status=\(http.statusCode)")
                     rateLimitLock.withLock { $0.isLimited = true }
                     scheduleRateLimitReset(resetAt: resetTS)
-                    return
+                } else {
+                    log("URLSessionTransport(paginated) › 403 permission error (not rate limit) — \(urlString)")
                 }
-                guard (200..<300).contains(http.statusCode) else { return }
-                // Successful response: clear any stale rate-limit flag from a prior cycle.
-                clearRateLimitIfNeeded()
-                linkHeader.withLock { $0 = http.value(forHTTPHeaderField: "Link") }
+                return
             }
+            guard (200..<300).contains(http.statusCode) else {
+                logErrorBody(data, endpoint: urlString, status: http.statusCode)
+                return
+            }
+            clearRateLimitIfNeeded()
+            linkHeader.withLock { $0 = http.value(forHTTPHeaderField: "Link") }
             pageData.withLock { $0 = data }
         }.resume()
         sem.wait()
@@ -253,7 +284,7 @@ private func extractNextURL(from header: String?) -> String? {
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPI(endpoint, timeout: timeout)
-        if let data { return data }  // Success — return immediately, ignore rate-limit flag.
+        if let data { return data }
         if ghIsRateLimited {
             log("ghAPI › rate limited, skipping CLI fallback for: \(endpoint)")
             return nil
@@ -267,7 +298,7 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     if githubToken() != nil {
         let data = urlSessionAPIPaginated(endpoint, timeout: timeout)
-        if let data { return data }  // Success — return immediately, ignore rate-limit flag.
+        if let data { return data }
         if ghIsRateLimited {
             log("ghAPIPaginated › rate limited, skipping CLI fallback for: \(endpoint)")
             return nil

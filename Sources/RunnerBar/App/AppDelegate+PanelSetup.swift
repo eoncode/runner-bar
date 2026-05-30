@@ -114,7 +114,7 @@ extension AppDelegate: NSPopoverDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
+                self.observable.reload()
             }
             .store(in: &cancellables)
 
@@ -126,7 +126,7 @@ extension AppDelegate: NSPopoverDelegate {
                 guard let self else { return }
                 log("AppDelegate › didUpdate fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
                 self.updateStatusIcon()
-                self.observable.reload(localRunnerStore: LocalRunnerStore.shared)
+                self.observable.reload()
             }
             .store(in: &cancellables)
 

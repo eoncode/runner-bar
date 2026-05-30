@@ -40,8 +40,30 @@ final class OAuthService {
 
     /// The redirectURI constant.
     private let redirectURI = "runnerbar://oauth/callback"
-    /// The scopes constant.
-    private let scopes = "repo read:org"
+    /// OAuth scopes requested during sign-in.
+    ///
+    /// - `repo`: Read access to repository runners, workflow runs, and job logs.
+    ///   Required for all repo-scoped API calls (`/repos/{owner}/{repo}/actions/*`).
+    /// - `read:org`: Read org membership and team info. Required to list org-level
+    ///   runners via `/orgs/{org}/actions/runners` for users who are org members
+    ///   but not owners.
+    /// - `admin:org`: Broader org admin access. Required to call the runners API
+    ///   on organisations where the authenticated user is an owner. Without this,
+    ///   org-runner fetches return 403 for owner-level accounts.
+    /// - `manage_runners:org`: Fine-grained scope (added in 2023) that explicitly
+    ///   grants runner management on org level. Requested in addition to `admin:org`
+    ///   for forward-compatibility as GitHub narrows older broad scopes.
+    /// - `workflow`: Required to trigger and re-run workflow runs via the API.
+    ///   Without this, dispatch and re-run actions fail with 403 even when `repo`
+    ///   is present.
+    /// - `gist`: Required by some GitHub CLI (`gh`) operations used internally via
+    ///   `GitHubCLITransport`. Absent from the token, `gh` prompts for re-auth
+    ///   interactively, breaking headless CLI calls.
+    ///
+    /// Previously only `repo` and `read:org` were requested. The additional scopes
+    /// were added because org-runner listing and workflow dispatch were returning 403
+    /// for accounts with org-owner or org-admin roles.
+    private let scopes = "repo read:org admin:org manage_runners:org workflow gist"
 
     // MARK: - OAuth endpoint constants
     /// The authorizeURL constant.
