@@ -1,7 +1,7 @@
 // LocalRunnerStore.swift
 // RunnerBar
-import Foundation
 import Combine
+import Foundation
 
 // MARK: - LocalRunnerStore
 //
@@ -14,26 +14,35 @@ import Combine
 //   • The heavy work (disk I/O + API calls) runs on a background queue.
 //   • isScanning prevents concurrent refreshes.
 
+/// Owns the list of locally-installed GitHub Actions runner agents.
+/// Hydrates from `installPath/.runner` JSON, marks live services via launchctl,
+/// then enriches with GitHub API data (status, busy, labels, group).
 final class LocalRunnerStore: ObservableObject {
     // MARK: - Shared singleton
+    /// The app-wide singleton. Always accessed on the main actor.
     @MainActor static let shared = LocalRunnerStore()
 
     // MARK: - Published state
+    /// The current list of locally-installed runners, sorted by name.
     @Published private(set) var runners: [RunnerModel] = []
+    /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     @Published private(set) var isScanning: Bool = false
 
     // MARK: - Index persistence
+    /// The UserDefaults key used to persist the local runner name → install path index.
     private static let indexKey = "localRunnerIndex"
     /// Maps runnerName → installPath, persisted to UserDefaults.
     private var runnerIndex: [String: String] = [:]
 
     // MARK: - Init
+    /// Initialises the store and loads the persisted runner index from UserDefaults.
     init() {
         loadIndex()
     }
 
     // MARK: - Index helpers
 
+    /// Adds or updates the index entry for `name`, mapping it to `installPath`, then persists.
     func register(name: String, installPath: String) {
         runnerIndex[name] = installPath
         persistIndex()
@@ -42,14 +51,17 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - Convenience API (called by views)
 
+    /// Returns `true` if `runnerName` has an entry in the persisted index.
     func isTracked(runnerName: String) -> Bool {
         runnerIndex[runnerName] != nil
     }
 
+    /// Registers a new runner by name and install path.
     func add(runnerName: String, installPath: String) {
         register(name: runnerName, installPath: installPath)
     }
 
+    /// Immediately reflects a start/stop action in the UI before the next refresh cycle.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
         DispatchQueue.main.async {
             guard let idx = self.runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
@@ -57,6 +69,7 @@ final class LocalRunnerStore: ObservableObject {
         }
     }
 
+    /// Sets or clears the lifecycle warning badge for a runner (e.g. "Failed to connect").
     func setLifecycleWarning(_ runnerName: String, warning: String?) {
         DispatchQueue.main.async {
             guard let idx = self.runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
@@ -64,6 +77,7 @@ final class LocalRunnerStore: ObservableObject {
         }
     }
 
+    /// Removes a runner from both the index and the published list immediately.
     func optimisticallyRemove(_ runnerName: String) {
         unregister(name: runnerName)
         DispatchQueue.main.async {
@@ -71,24 +85,29 @@ final class LocalRunnerStore: ObservableObject {
         }
     }
 
+    /// Removes the index entry for `name` and persists the updated index.
     func unregister(name: String) {
         runnerIndex.removeValue(forKey: name)
         persistIndex()
         log("LocalRunnerStore > unregister — '\(name)'")
     }
 
+    /// Loads the runner index from UserDefaults into `runnerIndex`.
     private func loadIndex() {
         runnerIndex = UserDefaults.standard
             .dictionary(forKey: Self.indexKey) as? [String: String] ?? [:]
         log("LocalRunnerStore > loadIndex — \(runnerIndex.count) entry(ies)")
     }
 
+    /// Writes the current `runnerIndex` to UserDefaults.
     private func persistIndex() {
         UserDefaults.standard.set(runnerIndex, forKey: Self.indexKey)
     }
 
     // MARK: - Refresh
 
+    /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.
+    /// Must be called on the main actor; heavy work is dispatched to a background queue internally.
     @MainActor func refresh() {
         guard !isScanning else { return }
         isScanning = true
@@ -119,6 +138,7 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - launchctl scan
 
+    /// Runs `launchctl list` and returns lines whose label contains `actions.runner`.
     private func scanLiveServices() -> [String] {
         let result = ProcessRunner.run(
             executableURL: URL(fileURLWithPath: "/bin/launchctl"),
