@@ -35,6 +35,25 @@ func runGHProcess(
     return (result.data, result.exitCode)
 }
 
+// MARK: - Rate limit helpers
+
+/// Returns true only when a gh CLI JSON error body indicates a real rate-limit.
+///
+/// GitHub uses HTTP 403 for both permission errors and rate-limits.
+/// A permission 403 has a message like "Must have admin rights to Repository."
+/// A rate-limit 403 has a message containing "rate limit" or "secondary rate".
+/// HTTP 429 is always a rate limit regardless of the message body.
+private func isCLIRateLimit(status: String, json: [String: Any]) -> Bool {
+    if status == "429" { return true }
+    guard status == "403" else { return false }
+    let message = (json["message"] as? String ?? "").lowercased()
+    let isRateLimit = message.contains("rate limit") || message.contains("secondary rate")
+    if !isRateLimit {
+        log("ghCLI › 403 is a PERMISSION ERROR (not a rate limit) — NOT setting ghIsRateLimited. message='\(json["message"] as? String ?? "")'")
+    }
+    return isRateLimit
+}
+
 // MARK: - CLI API wrappers
 
 /// Performs the ghAPICLI operation.
@@ -43,11 +62,15 @@ func ghAPICLI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
     guard let outputData else { return nil }
     log("ghAPICLI › \(endpoint) → \(outputData.count)b")
     if let json = try? JSONSerialization.jsonObject(with: outputData) as? [String: Any],
-       let status = json["status"] as? String,
-       status == "403" || status == "429" {
-        ghIsRateLimited = true
-        log("ghAPICLI › rate limit (\(status)): \(endpoint)")
-        return nil
+       let status = json["status"] as? String {
+        if isCLIRateLimit(status: status, json: json) {
+            ghIsRateLimited = true
+            log("ghAPICLI › rate limit (\(status)): \(endpoint)")
+            return nil
+        } else if status == "403" || status == "404" {
+            log("ghAPICLI › permission/not-found error (\(status)): \(endpoint) — not setting ghIsRateLimited")
+            return nil
+        }
     }
     return outputData
 }
@@ -60,11 +83,18 @@ func ghAPIPaginatedCLI(_ endpoint: String, timeout: TimeInterval = 60) -> Data? 
     )
     if exitCode != 0 {
         let raw = outputData.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        if raw.contains("\"403\"") || raw.contains("\"429\"") || raw.contains("rate limit") {
+        let rawLower = raw.lowercased()
+        // Only treat as rate-limit when the output explicitly mentions rate limiting.
+        // A bare "403" in the output is a permission error, not a rate limit.
+        let isRateLimit = rawLower.contains("rate limit")
+            || rawLower.contains("secondary rate")
+            || rawLower.contains("\"429\"")
+        if isRateLimit {
             ghIsRateLimited = true
             log("ghAPIPaginatedCLI › rate limit detected: \(endpoint)")
         } else {
-            log("ghAPIPaginatedCLI › non-zero exit (\(exitCode)): \(endpoint)")
+            log("ghAPIPaginatedCLI › non-zero exit (\(exitCode)) — permission error or other failure, NOT setting ghIsRateLimited: \(endpoint)")
+            if !raw.isEmpty { log("ghAPIPaginatedCLI › output preview: \(raw.prefix(300))") }
         }
         return nil
     }
