@@ -16,8 +16,8 @@ private let unzipBinaryPath = "/usr/bin/unzip"
 /// `gh` CLI) can be swapped without touching call sites.
 /// Log endpoints 302-redirect to S3; the transport follows the redirect automatically.
 /// - Parameter endpoint: A relative GitHub REST path, e.g. `"repos/owner/repo/actions/jobs/123/logs"`.
-/// - Note: The `timeout` parameter is accepted for future use but is not yet forwarded
-///   to the underlying transport; the transport applies its own default timeout.
+/// - Parameter timeout: Reserved for transport implementations that support request timeouts.
+///   The current transport shim does not consume this value.
 /// - Returns: Raw response bytes, or `nil` when no token is available or the request fails.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     ghRawTransport()(endpoint)
@@ -50,7 +50,10 @@ public func fetchJobLog(jobID: Int, scope: String) -> String? {
 /// Issues one API call per run in parallel on `DispatchQueue.global(qos: .userInitiated)`.
 /// Each call retrieves a ZIP archive, extracts all `.txt` log files via `unzipLogs(_:)`,
 /// and appends the results to a shared accumulator guarded by `OSAllocatedUnfairLock`.
-/// The final output is sorted by filename so logs appear in a consistent order.
+/// The final output is sorted by filename for stable ordering when names are unique.
+///
+/// This function is synchronous: it blocks the calling thread until all per-run fetches
+/// complete. Do not call from the main thread for groups with many runs or slow connections.
 /// - Parameter group: The `WorkflowActionGroup` whose runs should be fetched.
 /// - Returns: A single concatenated string with `=== <name> ===` section headers,
 ///   or `nil` if `scope` is invalid, `runs` is empty, or all fetches fail.
