@@ -465,14 +465,13 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
     ///   - runID: The run identifier, also used to derive the job id (runID * 10).
     ///   - sha: The head commit SHA.
     ///   - groupStatus: The overall group status, which also drives the run status string.
-    ///   - jobStatus: The status of the single job inside the group. Defaults to "completed"
-    ///     for completed groups and "in_progress" for in-progress groups.
+    ///   - jobStatus: The status of the single job inside the group. Defaults to match groupStatus.
     ///   - isDimmed: Whether the group should be constructed as already-dimmed.
     private func makeGroup(
         id runID: Int,
         sha: String,
         groupStatus: GroupStatus = .completed,
-        jobStatus: String? = nil,
+        jobStatus: JobStatus? = nil,
         isDimmed: Bool = false
     ) -> WorkflowActionGroup {
         let runStatus: String
@@ -482,8 +481,8 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         case .completed:  runStatus = "completed"
         }
         // Default job status mirrors the group status so helpers are consistent by default.
-        let resolvedJobStatus = jobStatus ?? runStatus
-        let jobConclusion: String? = resolvedJobStatus == "completed" ? "success" : nil
+        let resolvedJobStatus: JobStatus = jobStatus ?? JobStatus(rawString: runStatus)
+        let jobConclusion: JobConclusion? = resolvedJobStatus == .completed ? .success : nil
         let job = ActiveJob(
             id: runID * 10,
             name: "job",
@@ -496,10 +495,10 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             title: "commit message",
             headBranch: "main",
             repo: "owner/repo",
-            runs: [WorkflowRunRef(id: runID, name: "CI", status: runStatus, conclusion: jobConclusion, htmlUrl: nil)],
+            runs: [WorkflowRunRef(id: runID, name: "CI", status: runStatus, conclusion: jobConclusion.map { $0.rawValue }, htmlUrl: nil)],
             jobs: [job],
             firstJobStartedAt: Date(timeIntervalSinceReferenceDate: 0),
-            lastJobCompletedAt: resolvedJobStatus == "completed" ? Date(timeIntervalSinceReferenceDate: 60) : nil,
+            lastJobCompletedAt: resolvedJobStatus == .completed ? Date(timeIntervalSinceReferenceDate: 60) : nil,
             isDimmed: isDimmed
         )
     }
@@ -534,7 +533,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
 
     /// Verifies that a live in-progress group still appears as non-dimmed in the display list.
     func testInProgressGroupAppearsLiveInDisplay() {
-        let liveGroup = makeGroup(id: 600, sha: "ddeeff", groupStatus: .inProgress, jobStatus: "in_progress")
+        let liveGroup = makeGroup(id: 600, sha: "ddeeff", groupStatus: .inProgress, jobStatus: .inProgress)
 
         let result = PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
@@ -591,10 +590,9 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
     /// very next poll once fetchActionGroups correctly includes the completed run.
     func testPreviouslyLiveGroupSelfHealsAfterCompletion() {
         let sha = "cafe01"
-        let liveGroup = makeGroup(id: 901, sha: sha, groupStatus: .inProgress, jobStatus: "in_progress")
+        let liveGroup      = makeGroup(id: 901, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
         let completedGroup = makeGroup(id: 901, sha: sha, groupStatus: .completed)
 
-        // snapPrevGroups has it as live; fetchGroups now returns it as completed.
         let result = PollResultBuilder.buildGroupState(
             snapPrevGroups: [liveGroup.id: liveGroup],
             snapGroupCache: [:],
@@ -619,9 +617,6 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
     /// not two. The two runs belong to the same SHA group and must be merged, not duplicated.
     func testShaWithBothLiveAndCompletedRunsProducesOneDisplayEntry() {
         let sha = "beef02"
-        // Two runs for the same SHA: one in_progress, one completed.
-        // In practice fetchActionGroups merges these into one WorkflowActionGroup keyed by SHA.
-        // We model that here by building a single group with two runs.
         let mixedGroup = WorkflowActionGroup(
             headSha: sha,
             label: String(sha.prefix(7)),
@@ -633,8 +628,8 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
                 WorkflowRunRef(id: 903, name: "Deploy", status: "completed",   conclusion: "success", htmlUrl: nil),
             ],
             jobs: [
-                ActiveJob(id: 9020, name: "lint-job",   status: "in_progress"),
-                ActiveJob(id: 9030, name: "deploy-job", status: "completed", conclusion: "success"),
+                ActiveJob(id: 9020, name: "lint-job",   status: JobStatus.inProgress),
+                ActiveJob(id: 9030, name: "deploy-job", status: JobStatus.completed, conclusion: JobConclusion.success),
             ],
             firstJobStartedAt: Date(timeIntervalSinceReferenceDate: 0),
             lastJobCompletedAt: nil,
