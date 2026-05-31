@@ -57,13 +57,16 @@ final class RunnerStore {
     /// The scopeCancellable property.
     private var scopeCancellable: AnyCancellable?
 
-    /// Emits whenever a fetch cycle completes and the store's state has been updated.
+    /// Emits whenever a fetch cycle completes and the store’s state has been updated.
     let didUpdate = PassthroughSubject<Void, Never>()
 
     /// The aggregateStatus property.
+    ///
+    /// A runner with `.busy` status is connected to GitHub and executing a job,
+    /// so it counts toward the online tally alongside `.online` runners.
     var aggregateStatus: AggregateStatus {
         guard !runners.isEmpty else { return .allOffline }
-        let onlineCount = runners.filter { $0.status == "online" }.count
+        let onlineCount = runners.filter { $0.status == .online || $0.status == .busy }.count
         if onlineCount == runners.count { return .allOnline }
         if onlineCount == 0 { return .allOffline }
         return .someOffline
@@ -179,7 +182,7 @@ final class RunnerStore {
     /// - Secondary:  "runnerName"        → installPath  (name-only fallback)
     /// - Tertiary:   agentId (Int)        → installPath  (ID-based, scope-agnostic)
     ///
-    /// The ID map is the most reliable — GitHub writes the runner's integer ID
+    /// The ID map is the most reliable — GitHub writes the runner’s integer ID
     /// to the `.runner` JSON on disk during `config.sh`, so it is stable across
     /// renames and scope-string format changes.  Runners that predate this field
     /// (agentId == nil) fall through to the fullKey / name maps.
@@ -207,11 +210,11 @@ final class RunnerStore {
         return InstallPathMap(byFullKey: byFullKey, byName: byName, byId: byId)
     }
 
-    /// Applies a completed fetch cycle's results to the store's @MainActor state.
+    /// Applies a completed fetch cycle’s results to the store’s @MainActor state.
     ///
     /// Copies `ghIsRateLimited` and `ghRateLimitResetDate` from the transport
     /// layer so the full rate-limit context (flag + exact reset moment) is
-    /// available to `RunnerViewModel` and ultimately to `PanelMainView`'s
+    /// available to `RunnerViewModel` and ultimately to `PanelMainView`’s
     /// live-countdown banner.
     private func applyFetchResult(
         enrichedRunners: [Runner],

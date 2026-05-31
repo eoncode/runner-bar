@@ -299,6 +299,8 @@ struct StatusBadge: View {
         Text(text)
             .font(.system(size: 9, weight: .semibold))
             .foregroundColor(status.color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .statusBadgeBackground(color: status.color)
