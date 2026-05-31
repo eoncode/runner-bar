@@ -274,7 +274,6 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
     return String(data: data, encoding: .utf8)
 }
 
-
 /// Parses a raw log string into sections delimited by `##[group]` markers
 /// and returns the section matching `stepNumber`.
 /// Falls back to the full log if sections cannot be parsed or the index is out of range.

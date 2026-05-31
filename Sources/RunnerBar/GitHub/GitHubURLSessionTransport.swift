@@ -152,7 +152,7 @@ private func logErrorBody(_  Data?, endpoint: String, status: Int) {
 /// Handles a 403/429 HTTP response, setting rate-limit state when appropriate.
 private func handleRateLimitResponse(
     statusCode: Int,
-     Data?,
+    _  Data?,
     response: HTTPURLResponse,
     endpoint: String
 ) {
@@ -196,7 +196,7 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
         }
         guard let http = response as? HTTPURLResponse else { return }
         if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode,  data, response: http, endpoint: urlString)
+            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
             return
         }
         guard (200..<300).contains(http.statusCode) else {
@@ -235,7 +235,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
             }
             guard let http = response as? HTTPURLResponse else { return }
             if http.statusCode == 403 || http.statusCode == 429 {
-                handleRateLimitResponse(statusCode: http.statusCode,  data, response: http, endpoint: urlString)
+                handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
