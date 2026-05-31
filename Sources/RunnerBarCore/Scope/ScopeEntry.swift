@@ -9,20 +9,21 @@ import Foundation
 /// `scope` is either `"owner/repo"` (repository) or `"myorg"` (organisation).
 /// `isEnabled` controls whether `RunnerStore` polls this scope; disabled scopes
 /// are retained in the list but silently skipped during fetch.
-// swiftlint:disable missing_docs
 public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable {
-    /// The id constant.
+    /// Stable identity for use in SwiftUI lists and `Codable` round-trips.
     public let id: UUID
-    /// The scope property.
+    /// The GitHub scope string — either `"owner/repo"` or an org name.
     public var scope: String
-    /// The isEnabled property.
+    /// When `false`, `RunnerStore` skips this scope during polling.
     public var isEnabled: Bool
 
-    /// Convenience init with a new random ID and enabled by default.
+    /// Creates a new `ScopeEntry` with a fresh random `id`.
+    /// - Parameters:
+    ///   - scope: The GitHub scope string.
+    ///   - isEnabled: Whether polling is active for this scope. Defaults to `true`.
     public init(scope: String, isEnabled: Bool = true) {
         self.id = UUID()
         self.scope = scope
         self.isEnabled = isEnabled
     }
 }
-// swiftlint:enable missing_docs

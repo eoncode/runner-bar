@@ -4,22 +4,13 @@ import Foundation
 
 // MARK: - ScopePreferencesStore
 
-// #505: Per-scope UserDefaults schema.
-//
-// Intentionally caseless — used as a namespace only. Instantiation is forbidden.
-//
-// Keys are namespaced under "scope.<scope>.<field>" so each scope has its
-// own independent settings bucket. All values are optional — nil means "use the
-// global setting" (alias: use raw scope string; polling: use AppPreferencesStore.pollingInterval;
-// notifications: use NotificationPreferences values).
-//
-// Call ScopePreferencesStore.cleanUp(scope:) from ScopeStore.remove(id:) to avoid
-// orphaned keys accumulating in UserDefaults.
 /// Namespace for per-scope `UserDefaults` preferences.
 ///
 /// Intentionally caseless — used as a namespace only.
 /// Keys are namespaced under `scope.<scope>.<field>` so each scope has its
-/// own independent settings bucket.
+/// own independent settings bucket. All values are optional — `nil` means
+/// "use the global setting". Call `cleanUp(scope:)` from `ScopeStore.remove(id:)`
+/// to avoid orphaned keys accumulating in `UserDefaults`.
 public enum ScopePreferencesStore {
 
     // MARK: - Key builders
