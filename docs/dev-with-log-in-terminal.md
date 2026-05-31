@@ -42,3 +42,15 @@ pkill RunnerBar 2>/dev/null; sleep 1; \
 log stream --level debug --predicate 'subsystem == "com.eoncode.runner-bar"' & LOG_PID=$!; sleep 1; \
 ./dist/RunnerBar.app/Contents/MacOS/RunnerBar; kill $LOG_PID
 ```
+
+## For main:
+
+```main
+git fetch origin && \
+git checkout main && \
+git pull origin main && \
+bash build.sh && \
+pkill RunnerBar 2>/dev/null; sleep 1; \
+log stream --level debug --predicate 'subsystem == "com.eoncode.runner-bar"' & LOG_PID=$!; sleep 1; \
+./dist/RunnerBar.app/Contents/MacOS/RunnerBar; kill $LOG_PID
+```
