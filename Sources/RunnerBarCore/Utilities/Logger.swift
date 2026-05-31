@@ -1,5 +1,5 @@
 // Logger.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 import os
 
@@ -10,7 +10,7 @@ import os
 // subsystem/category filtering and are zero-cost in release builds
 // (.debug level is compiled out by the OS when not actively streaming).
 
-/// The logger constant.
+/// Shared `os.Logger` instance used by all `log(_:)` call sites in RunnerBarCore.
 private let logger = Logger(
     subsystem: "com.eoncode.runner-bar",
     category: "general"

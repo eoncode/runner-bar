@@ -27,11 +27,14 @@ import Foundation
 /// approach guarantees termination within `timeout` seconds even in that case.
 /// Do NOT replace this with a bare `waitUntilExit()` call.
 public enum ProcessRunner {
-    /// A value type representing Result.
+    /// The collected output and exit status from a subprocess invocation.
     public struct Result {
-        /// The data constant.
+        /// Collected stdout bytes, or `nil` when the process failed to launch
+        /// or when the process ran successfully but produced no stdout.
+        /// - Note: `nil` does not imply failure — use `exitCode` to distinguish
+        ///   a launch failure (`Int32.max`) from a successful process that produced no output.
         public let data: Data?
-        /// The exitCode constant.
+        /// Process exit code. `Int32.max` indicates a launch failure rather than a process exit.
         public let exitCode: Int32
         /// Convenience: decoded UTF-8 string of `data`, or empty string.
         public var output: String { data.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
@@ -45,7 +48,8 @@ public enum ProcessRunner {
     ///   - arguments: Command-line arguments.
     ///   - stdin: Optional data written to the process's standard input.
     ///   - workingDirectory: Optional working directory for the process.
-    ///   - mergeStderr: When true, stderr is merged into stdout (default false).
+    ///   - mergeStderr: When `true`, stderr is merged into stdout.
+    ///     When `false` (default), stderr is discarded — it is not captured or returned.
     ///   - timeout: Seconds before the process is force-terminated.
     /// - Returns: A `Result` with the collected stdout data and exit code.
     ///   `exitCode` is `Int32.max` on process-launch failure.
@@ -64,7 +68,10 @@ public enum ProcessRunner {
 
         let outPipe = Pipe()
         task.standardOutput = outPipe
-        task.standardError = mergeStderr ? outPipe : Pipe()
+        // When mergeStderr is false, use nullDevice so stderr is cleanly discarded.
+        // A throwaway Pipe() would fill its buffer on verbose stderr output and
+        // block the child process indefinitely.
+        task.standardError = mergeStderr ? outPipe : FileHandle.nullDevice
 
         // Wire stdin pipe when body data is provided.
         let inputPipe: Pipe?
@@ -76,6 +83,12 @@ public enum ProcessRunner {
             inputPipe = nil
         }
 
+        // nonisolated(unsafe): Swift 6 concurrency workaround — all concurrent reads/writes
+        // are serialised through `lock`. The final read after `readabilityHandler = nil` is
+        // safe because no other thread can access `outputData` at that point.
+        // TODO: replace readabilityHandler + NSLock with readDataToEndOfFile() after
+        // waitUntilExit() — streaming is unnecessary given the background-thread call
+        // contract. Tracked in <issue link once created>.
         nonisolated(unsafe) var outputData = Data()
         let lock = NSLock()
         outPipe.fileHandleForReading.readabilityHandler = { handle in
