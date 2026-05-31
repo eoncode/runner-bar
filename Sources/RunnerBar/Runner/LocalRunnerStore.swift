@@ -117,7 +117,10 @@ final class LocalRunnerStore: ObservableObject {
             var hydrated: [RunnerModel] = index.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
             log("LocalRunnerStore > refresh() background — hydrated \(hydrated.count) runner(s)")
 
-            // 2. Mark live services via launchctl
+            // 2. Mark live services via launchctl.
+            // scanLiveServices() is always called here — isRunning is intentionally set to false
+            // during JSON parsing (step 1) and updated to its real value only at this point.
+            // Do not remove this call or assume isRunning is always false.
             let liveLabels = scanLiveServices()
             for idx in hydrated.indices {
                 hydrated[idx].isRunning = liveLabels.contains { $0.contains(hydrated[idx].runnerName) }
@@ -136,7 +139,14 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - launchctl scan
 
-    /// Runs `launchctl list` and returns lines whose label contains `actions.runner`.
+    /// Runs `launchctl list` and returns raw lines whose label contains `actions.runner`.
+    ///
+    /// Called inside `refresh()` (step 2) on a background queue, immediately after disk hydration.
+    /// Each returned line is matched against `runnerName` to set `RunnerModel.isRunning`.
+    ///
+    /// - Note: `isRunning` is **not** set during JSON parsing in `runnerModelFromIndex` — it is
+    ///   always initialised to `false` there and updated here via launchctl. Do not assume
+    ///   `isRunning` is dead or always-false — the wiring is refresh() → scanLiveServices() → isRunning.
     private nonisolated func scanLiveServices() -> [String] {
         let result = ProcessRunner.run(
             executableURL: URL(fileURLWithPath: "/bin/launchctl"),
