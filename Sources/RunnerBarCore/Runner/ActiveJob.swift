@@ -45,6 +45,20 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     public let steps: [JobStep]
 
     // MARK: Designated init
+    /// Creates a new `ActiveJob` with all fields.
+    /// - Parameters:
+    ///   - id: The unique GitHub job ID.
+    ///   - name: The display name of the job.
+    ///   - htmlUrl: The GitHub web URL for this job run.
+    ///   - status: Typed lifecycle status.
+    ///   - conclusion: Typed conclusion (`nil` while running).
+    ///   - isDimmed: `true` for cached/history entries. Defaults to `false`.
+    ///   - runnerName: The name of the runner executing this job.
+    ///   - scope: The repo or org scope string. Injected post-fetch by `RunnerStore`.
+    ///   - startedAt: UTC time the job started.
+    ///   - completedAt: UTC time the job finished.
+    ///   - createdAt: UTC time the job was queued.
+    ///   - steps: Ordered step list. Defaults to empty.
     public init(
         id: Int,
         name: String,
@@ -83,11 +97,9 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     public var elapsed: String {
         let start = startedAt ?? createdAt
         guard let start else {
-            // #781: completed jobs with no timing data show dashes, not a fake zero.
             return (status == .completed || conclusion != nil) ? "--:--" : "00:00"
         }
         let end = completedAt ?? Date()
-        // Clamp to ≥0 to guard against API clock skew (completedAt < startedAt).
         let secs = max(0, Int(end.timeIntervalSince(start)))
         return String(format: "%02d:%02d", secs / 60, secs % 60)
     }
@@ -129,6 +141,15 @@ public struct JobStep: Identifiable, Equatable, Sendable {
     /// 1-based position of this step within its parent job.
     public let number: Int
 
+    /// Creates a new `JobStep`.
+    /// - Parameters:
+    ///   - id: Step ID (equals `number`).
+    ///   - name: Display name of the step.
+    ///   - status: Typed lifecycle status.
+    ///   - conclusion: Typed conclusion (`nil` while running).
+    ///   - startedAt: UTC time the step started.
+    ///   - completedAt: UTC time the step finished.
+    ///   - number: 1-based position within the parent job. Defaults to `0`.
     public init(
         id: Int,
         name: String,
@@ -152,11 +173,9 @@ public struct JobStep: Identifiable, Equatable, Sendable {
     /// - Returns `"00:00"` for in-progress or queued steps with no timing yet.
     public var elapsed: String {
         guard let start = startedAt else {
-            // #781: completed steps with no timing data show dashes, not a fake zero.
             return (conclusion != nil) ? "--:--" : "00:00"
         }
         let end = completedAt ?? Date()
-        // Clamp to ≥0 to guard against API clock skew (completedAt < startedAt).
         let secs = max(0, Int(end.timeIntervalSince(start)))
         return String(format: "%02d:%02d", secs / 60, secs % 60)
     }
@@ -202,15 +221,32 @@ public struct JobPayload: Decodable, Sendable {
     /// Ordered step payloads (empty for jobs not yet started).
     public let steps: [StepPayload]
 
+    /// Maps Swift property names to the snake_case JSON keys returned by the GitHub API.
     enum CodingKeys: String, CodingKey {
-        case id, name, status, conclusion, steps
+        /// Maps to the `id` JSON field.
+        case id
+        /// Maps to the `name` JSON field.
+        case name
+        /// Maps to the `status` JSON field.
+        case status
+        /// Maps to the `conclusion` JSON field.
+        case conclusion
+        /// Maps to the `steps` JSON field.
+        case steps
+        /// Maps to the `started_at` JSON field.
         case startedAt   = "started_at"
+        /// Maps to the `completed_at` JSON field.
         case completedAt = "completed_at"
+        /// Maps to the `created_at` JSON field.
         case createdAt   = "created_at"
+        /// Maps to the `html_url` JSON field.
         case htmlUrl     = "html_url"
+        /// Maps to the `runner_name` JSON field.
         case runnerName  = "runner_name"
     }
 
+    /// Decodes a `JobPayload` from a JSON container.
+    /// Falls back to an empty `steps` array when the key is absent (queued jobs).
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id          = try c.decode(Int.self, forKey: .id)
@@ -241,9 +277,19 @@ public struct StepPayload: Decodable, Sendable {
     /// ISO 8601 completion timestamp string.
     public let completedAt: String?
 
+    /// Maps Swift property names to the snake_case JSON keys returned by the GitHub API.
     enum CodingKeys: String, CodingKey {
-        case name, status, conclusion, number
+        /// Maps to the `name` JSON field.
+        case name
+        /// Maps to the `status` JSON field.
+        case status
+        /// Maps to the `conclusion` JSON field.
+        case conclusion
+        /// Maps to the `number` JSON field.
+        case number
+        /// Maps to the `started_at` JSON field.
         case startedAt   = "started_at"
+        /// Maps to the `completed_at` JSON field.
         case completedAt = "completed_at"
     }
 }
