@@ -29,6 +29,12 @@ final class RunnerStore {
     private var prevLiveGroups: [String: WorkflowActionGroup] = [:]
     /// The actionGroupCache property.
     private var actionGroupCache: [String: WorkflowActionGroup] = [:]
+    /// IDs of action groups whose failure hook has already been fired.
+    ///
+    /// Kept separate from `actionGroupCache` so that cache eviction (capped at
+    /// `groupCacheLimit = 30`) does not re-arm the hook for old completed groups
+    /// that are still present in GitHub's last-100-completed feed.
+    private var seenGroupIDs: Set<String> = []
 
     /// Documentation.
     private(set) var isRateLimited = false
@@ -128,6 +134,7 @@ final class RunnerStore {
         let snapCache = completedCache
         let snapPrevGroups = prevLiveGroups
         let snapGroupCache = actionGroupCache
+        let snapSeenGroupIDs = seenGroupIDs
         let installPathMap = buildInstallPathMap(
             scopes: scopesSnapshot,
             localRunners: LocalRunnerStore.shared.runners
@@ -147,6 +154,7 @@ final class RunnerStore {
             let groupResult = self.buildGroupState(
                 snapPrevGroups: snapPrevGroups,
                 snapGroupCache: snapGroupCache,
+                snapSeenGroupIDs: snapSeenGroupIDs,
                 jobCache: jobResult.newCache
             )
             await MainActor.run {
@@ -220,10 +228,8 @@ final class RunnerStore {
         actions = groupResult.display
         actionGroupCache = groupResult.newGroupCache
         prevLiveGroups = groupResult.newPrevLiveGroups
+        seenGroupIDs = groupResult.newSeenGroupIDs
         isRateLimited = ghIsRateLimited
-        // Mirror the reset date so the UI can show an accurate countdown.
-        // ghRateLimitResetDate is nil when no rate-limit is active, which
-        // correctly clears the countdown when polls resume normally.
         rateLimitResetDate = ghRateLimitResetDate
         log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) isRateLimited=\(ghIsRateLimited) rateLimitResetDate=\(String(describing: rateLimitResetDate))")
         didUpdate.send()
@@ -255,7 +261,6 @@ final class RunnerStore {
                 continue
             }
             let fullKey = "\(scope)/\(runner.name)"
-            // Priority: id → fullKey → name → nil
             if let installPath = installPathMap.byId[runner.id] {
                 runner.metrics = metricsForRunner(installPath: installPath)
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) metrics via id=\(runner.id)")
