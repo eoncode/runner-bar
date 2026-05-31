@@ -45,7 +45,6 @@ final class ActiveJobElapsedTests: XCTestCase {
 
     /// Verifies that an in-progress job falls back to createdAt when startedAt is nil (still queued/assigning).
     func testElapsedInProgressFallsBackToCreatedAt() {
-        // When startedAt is nil (still queued/assigning), elapsed uses createdAt
         let created = Date(timeIntervalSinceNow: -60)
         let job = ActiveJob(id: 1, name: "J", status: "in_progress", createdAt: created)
         let mins = Int(job.elapsed.prefix(2))!
@@ -77,7 +76,6 @@ final class JobStepElapsedTests: XCTestCase {
 
     /// Verifies that a step with nil start and end dates returns "00:00".
     func testElapsedNilDatesReturnsZero() {
-        // Both nil → Date() - Date() ≈ 0
         let step = JobStep(id: 1, name: "S", status: "in_progress")
         XCTAssertEqual(step.elapsed, "00:00")
     }
@@ -96,55 +94,46 @@ final class JobStepElapsedTests: XCTestCase {
 
 final class ActiveJobIsLocalRunnerTests: XCTestCase {
 
-    /// Verifies that isLocalRunner returns nil when a job has no runner name.
     func testIsLocalRunnerNilWhenNoRunnerName() {
         let job = ActiveJob(id: 1, name: "J", status: "queued")
         XCTAssertNil(job.isLocalRunner)
     }
 
-    /// Verifies that a GitHub-hosted Ubuntu runner is not considered local.
     func testIsLocalRunnerFalseForUbuntuHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "ubuntu-latest")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    /// Verifies that a GitHub-hosted macOS runner is not considered local.
     func testIsLocalRunnerFalseForMacOSHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "macos-14")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    /// Verifies that a GitHub-hosted Windows runner is not considered local.
     func testIsLocalRunnerFalseForWindowsHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "windows-2022")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    /// Verifies that a buildjet-hosted runner is not considered local.
     func testIsLocalRunnerFalseForBuildjetHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "buildjet-4vcpu-ubuntu-2204")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    /// Verifies that a depot-hosted runner is not considered local.
     func testIsLocalRunnerFalseForDepotHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "depot-ubuntu-22.04")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    /// Verifies that a runner named "GitHub Actions 12" (hosted by GitHub) is not considered local.
     func testIsLocalRunnerFalseForGitHubActionsHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "GitHub Actions 12")
         XCTAssertEqual(job.isLocalRunner, false)
     }
 
-    /// Verifies that an arbitrary self-hosted runner name is identified as local.
     func testIsLocalRunnerTrueForSelfHosted() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "my-mac-mini")
         XCTAssertEqual(job.isLocalRunner, true)
     }
 
-    /// Verifies that a custom-named runner (e.g., "office-m2-runner") is identified as local.
     func testIsLocalRunnerTrueForCustomName() {
         let job = ActiveJob(id: 1, name: "J", status: "completed", runnerName: "office-m2-runner")
         XCTAssertEqual(job.isLocalRunner, true)
@@ -174,38 +163,31 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
         )
     }
 
-    /// Verifies that a running runner displays "running" status.
     func testDisplayStatusRunning() {
         XCTAssertEqual(makeRunner(isRunning: true).displayStatus, "running")
     }
 
-    /// Verifies that a runner with isBusy = true displays "busy" status (dead-branch fix for #773).
     func testDisplayStatusBusy() {
         XCTAssertEqual(makeRunner(isRunning: true, isBusy: true).displayStatus, "busy")
     }
 
-    /// Verifies that a non-running runner with GitHub status "online" displays "online".
     func testDisplayStatusOnline() {
         XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "online").displayStatus, "online")
     }
 
-    /// Verifies that a non-running runner with GitHub status "offline" displays "offline".
     func testDisplayStatusOffline() {
         XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "offline").displayStatus, "offline")
     }
 
-    /// Verifies that a lifecycle warning overrides the running/busy status.
     func testDisplayStatusLifecycleWarningTakesPriority() {
         let runner = makeRunner(isRunning: true, lifecycleWarning: "update required")
         XCTAssertEqual(runner.displayStatus, "update required")
     }
 
-    /// Verifies that a non-running runner with GitHub status "busy" displays "busy".
     func testDisplayStatusBusyGithubStatusWhenNotRunning() {
         XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "busy").displayStatus, "busy")
     }
 
-    /// Verifies that a non-running runner with an unknown GitHub status defaults to "offline".
     func testDisplayStatusDefaultsToOfflineForUnknownStatus() {
         XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "unknown").displayStatus, "offline")
     }
@@ -215,21 +197,18 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
 
 final class RunnerMetricsTests: XCTestCase {
 
-    /// Verifies that two RunnerMetrics with identical CPU and memory values are considered equal.
     func testEquatableSameValues() {
         let a = RunnerMetrics(cpu: 12.5, mem: 3.0)
         let b = RunnerMetrics(cpu: 12.5, mem: 3.0)
         XCTAssertEqual(a, b)
     }
 
-    /// Verifies that two RunnerMetrics with different CPU values are considered not equal.
     func testEquatableDifferentCPU() {
         let a = RunnerMetrics(cpu: 10.0, mem: 3.0)
         let b = RunnerMetrics(cpu: 20.0, mem: 3.0)
         XCTAssertNotEqual(a, b)
     }
 
-    /// Verifies that two RunnerMetrics with different memory values are considered not equal.
     func testEquatableDifferentMem() {
         let a = RunnerMetrics(cpu: 10.0, mem: 1.0)
         let b = RunnerMetrics(cpu: 10.0, mem: 2.0)
@@ -241,32 +220,26 @@ final class RunnerMetricsTests: XCTestCase {
 
 final class AggregateStatusTests: XCTestCase {
 
-    /// Verifies that allOnline status returns the green circle dot character.
     func testDotAllOnline() {
         XCTAssertEqual(AggregateStatus.allOnline.dot, "🟢")
     }
 
-    /// Verifies that someOffline status returns the yellow circle dot character.
     func testDotSomeOffline() {
         XCTAssertEqual(AggregateStatus.someOffline.dot, "🟡")
     }
 
-    /// Verifies that allOffline status returns the black circle dot character.
     func testDotAllOffline() {
         XCTAssertEqual(AggregateStatus.allOffline.dot, "⚫")
     }
 
-    /// Verifies that allOnline status maps to the SF Symbol "circle.fill".
     func testSymbolNameAllOnline() {
         XCTAssertEqual(AggregateStatus.allOnline.symbolName, "circle.fill")
     }
 
-    /// Verifies that someOffline status maps to the SF Symbol "circle.lefthalf.filled".
     func testSymbolNameSomeOffline() {
         XCTAssertEqual(AggregateStatus.someOffline.symbolName, "circle.lefthalf.filled")
     }
 
-    /// Verifies that allOffline status maps to the SF Symbol "circle".
     func testSymbolNameAllOffline() {
         XCTAssertEqual(AggregateStatus.allOffline.symbolName, "circle")
     }
@@ -278,7 +251,6 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: trimJobCache
 
-    /// Verifies that trimJobCache removes the oldest completed job entries when the cache exceeds the given limit.
     func testTrimJobCacheRemovesOldestWhenOverLimit() {
         var cache: [Int: ActiveJob] = [
             1: ActiveJob(id: 1, name: "A", status: "completed", completedAt: Date(timeIntervalSinceReferenceDate: 100)),
@@ -291,7 +263,6 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertNil(cache[1], "Oldest entry should be evicted")
     }
 
-    /// Verifies that trimJobCache does nothing when the cache is already under the limit.
     func testTrimJobCacheNoopWhenUnderLimit() {
         var cache: [Int: ActiveJob] = [
             1: ActiveJob(id: 1, name: "A", status: "completed"),
@@ -303,7 +274,6 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: buildJobDisplay
 
-    /// Verifies that buildJobDisplay places live (in-progress) jobs before cached (completed) jobs in the display list.
     func testBuildJobDisplayLiveJobsFirst() {
         let live: [ActiveJob] = [
             ActiveJob(id: 10, name: "Live", status: "in_progress")
@@ -316,13 +286,11 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertTrue(display.contains(where: { $0.id == 20 }))
     }
 
-    /// Verifies that buildJobDisplay returns an empty array when both live and cache are empty.
     func testBuildJobDisplayEmptyLiveAndCacheIsEmpty() {
         let display = PollResultBuilder.buildJobDisplay(live: [], cache: [:])
         XCTAssertTrue(display.isEmpty)
     }
 
-    /// Verifies that live jobs beyond jobCacheLimit (3) are NOT silently dropped (bug fix for #776).
     func testBuildJobDisplayDoesNotCapLiveJobsAtCacheLimit() {
         let live: [ActiveJob] = (1...5).map {
             ActiveJob(id: $0, name: "Job \($0)", status: "in_progress")
@@ -331,7 +299,6 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertEqual(display.count, 5, "All 5 live jobs should appear; jobCacheLimit must not truncate live jobs")
     }
 
-    /// Verifies that the total display list is capped at jobDisplayLimit (8).
     func testBuildJobDisplayCapsAtJobDisplayLimit() {
         let live: [ActiveJob] = (1...8).map {
             ActiveJob(id: $0, name: "Job \($0)", status: "in_progress")
@@ -347,7 +314,6 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: applyVanishedJobs
 
-    /// Verifies that a job present in the previous snapshot but missing from live results is moved to the cache with "completed" status and dimmed.
     func testApplyVanishedJobsMovesVanishedJobToCache() {
         let vanished = ActiveJob(id: 55, name: "Vanished", status: "in_progress")
         var cache: [Int: ActiveJob] = [:]
@@ -363,7 +329,6 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertEqual(cache[55]?.conclusion, "success", "Missing conclusion defaults to success")
     }
 
-    /// Verifies that an existing cached entry for a vanished job is not overwritten by the vanish logic.
     func testApplyVanishedJobsDoesNotOverwriteExistingCacheEntry() {
         let vanished = ActiveJob(id: 55, name: "Vanished", status: "in_progress")
         let existing = ActiveJob(id: 55, name: "Vanished", status: "completed",
@@ -378,7 +343,6 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertEqual(cache[55]?.conclusion, "failure", "Existing cache entry must not be overwritten")
     }
 
-    /// Verifies that jobs still present in the live list are NOT moved to the cache.
     func testApplyVanishedJobsIgnoresStillLiveJobs() {
         let job = ActiveJob(id: 77, name: "StillLive", status: "in_progress")
         var cache: [Int: ActiveJob] = [:]
@@ -391,7 +355,6 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertNil(cache[77], "Live job must not be moved to cache")
     }
 
-    /// Verifies that a vanished job with an existing conclusion (e.g., "failure") preserves that conclusion in the cache.
     func testApplyVanishedJobsPreservesExistingConclusion() {
         let vanished = ActiveJob(id: 88, name: "Done", status: "completed",
                                  conclusion: "failure")
@@ -407,47 +370,36 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: buildJobState
 
-    /// Verifies that a live job from fetchJobs appears in the display list of the returned job state.
     func testBuildJobStateLiveJobAppearsInDisplay() {
         let liveJob = ActiveJob(id: 99, name: "CI", status: "in_progress")
         let result = PollResultBuilder.buildJobState(
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [liveJob] },
-            backfill: { _ in
-                // No backfill needed for this test — step-log fetching
-                // is exercised by integration tests, not unit tests.
-            }
+            backfill: { _ in }
         )
         XCTAssertTrue(result.display.contains(where: { $0.id == 99 }))
     }
 
-    /// Verifies that a completed job from fetchJobs is moved to the cache and marked as dimmed.
     func testBuildJobStateCompletedJobMovesToCache() {
         let doneJob = ActiveJob(id: 42, name: "Deploy", status: "completed", conclusion: "success")
         let result = PollResultBuilder.buildJobState(
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [doneJob] },
-            backfill: { _ in
-                // No backfill needed — completed job already has full data.
-            }
+            backfill: { _ in }
         )
         XCTAssertTrue(result.newCache.keys.contains(42))
         XCTAssertEqual(result.newCache[42]?.isDimmed, true)
     }
 
-    /// Verifies that a job that was live in the previous poll but is absent from fetchJobs is moved to the cache as vanished.
     func testBuildJobStateVanishedLiveJobAppearsInCache() {
         let prev = ActiveJob(id: 11, name: "Old", status: "in_progress")
-        // Job 11 was live last poll but fetchJobs returns nothing this poll
         let result = PollResultBuilder.buildJobState(
             snapPrev: [11: prev],
             snapCache: [:],
             fetchJobs: { [] },
-            backfill: { _ in
-                // No backfill needed — vanished job has no new data to fetch.
-            }
+            backfill: { _ in }
         )
         XCTAssertNotNil(result.newCache[11], "Vanished live job should appear in cache")
         XCTAssertEqual(result.newCache[11]?.status, "completed")
@@ -460,13 +412,6 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
 
     // MARK: Helpers
 
-    /// Builds a WorkflowActionGroup for testing.
-    /// - Parameters:
-    ///   - runID: The run identifier, also used to derive the job id (runID * 10).
-    ///   - sha: The head commit SHA.
-    ///   - groupStatus: The overall group status, which also drives the run status string.
-    ///   - jobStatus: The status of the single job inside the group. Defaults to match groupStatus.
-    ///   - isDimmed: Whether the group should be constructed as already-dimmed.
     private func makeGroup(
         id runID: Int,
         sha: String,
@@ -480,7 +425,6 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         case .queued:     runStatus = "queued"
         case .completed:  runStatus = "completed"
         }
-        // Default job status mirrors the group status so helpers are consistent by default.
         let resolvedJobStatus: JobStatus = jobStatus ?? JobStatus(rawString: runStatus)
         let jobConclusion: JobConclusion? = resolvedJobStatus == .completed ? .success : nil
         let job = ActiveJob(
@@ -505,10 +449,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
 
     // MARK: Tests
 
-    /// Verifies that a completed-only group (not present in the previous live snapshot)
-    /// is routed into the group cache by buildGroupState, not left as a live entry.
-    /// Regression test for #1041: groups that finish between polls were silently dropped
-    /// because fetchActionGroups only appended completed runs for SHAs already in bySha.
+    /// Regression test for #1041: completed-only group must land in cache, not live display.
     func testCompletedOnlyGroupIsRoutedToCacheNotLive() {
         let completedGroup = makeGroup(id: 500, sha: "aabbcc", groupStatus: .completed)
 
@@ -531,7 +472,6 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         )
     }
 
-    /// Verifies that a live in-progress group still appears as non-dimmed in the display list.
     func testInProgressGroupAppearsLiveInDisplay() {
         let liveGroup = makeGroup(id: 600, sha: "ddeeff", groupStatus: .inProgress, jobStatus: .inProgress)
 
@@ -550,7 +490,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         )
     }
 
-    /// Verifies that fireFailureHook is called exactly once for a newly-completed group.
+    /// fireFailureHook must fire exactly once for a newly-completed group.
     func testFireFailureHookCalledOnceForNewCompletedGroup() {
         let completedGroup = makeGroup(id: 700, sha: "112233", groupStatus: .completed)
         var hookCallCount = 0
@@ -558,6 +498,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         _ = PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
             snapGroupCache: [:],
+            snapSeenGroupIDs: [],
             fetchGroups: { _ in [completedGroup] },
             scopeFromGroup: { $0.repo },
             fireFailureHook: { _, _ in hookCallCount += 1 },
@@ -567,27 +508,28 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         XCTAssertEqual(hookCallCount, 1, "fireFailureHook must fire exactly once for a new completed group")
     }
 
-    /// Verifies that fireFailureHook is NOT called again for a group already present in the cache.
-    func testFireFailureHookNotCalledForAlreadyCachedGroup() {
+    /// fireFailureHook must NOT re-fire when the group ID is already in snapSeenGroupIDs,
+    /// even if it has been evicted from snapGroupCache by trimGroupCache.
+    /// This is the regression test for the CodeAnt cache-eviction re-fire bug.
+    func testFireFailureHookNotCalledWhenGroupAlreadySeenEvenIfEvictedFromCache() {
         let completedGroup = makeGroup(id: 800, sha: "445566", groupStatus: .completed, isDimmed: true)
         var hookCallCount = 0
 
         _ = PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
-            snapGroupCache: [completedGroup.id: completedGroup],
+            snapGroupCache: [:],                              // evicted from display cache
+            snapSeenGroupIDs: [completedGroup.id],           // but present in seen-IDs set
             fetchGroups: { _ in [completedGroup] },
             scopeFromGroup: { $0.repo },
             fireFailureHook: { _, _ in hookCallCount += 1 },
             enrichJobs: { $0 }
         )
 
-        XCTAssertEqual(hookCallCount, 0, "fireFailureHook must not fire for a group already in the cache")
+        XCTAssertEqual(hookCallCount, 0,
+            "fireFailureHook must not re-fire for a group already in seenGroupIDs, even after cache eviction")
     }
 
-    /// Verifies that a group that was live in the previous poll and now comes back as completed
-    /// is routed to the cache (dimmed), not kept as a live row.
-    /// This covers the stale-row self-heal path: pre-existing in-progress entries resolve on the
-    /// very next poll once fetchActionGroups correctly includes the completed run.
+    /// Stale-row self-heal: group that was live in snapPrevGroups comes back completed → must land in cache.
     func testPreviouslyLiveGroupSelfHealsAfterCompletion() {
         let sha = "cafe01"
         let liveGroup      = makeGroup(id: 901, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
@@ -612,9 +554,8 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         )
     }
 
-    /// Verifies that when fetchGroups returns a group whose SHA has both an in-progress run and a
-    /// completed run (same SHA, two run IDs), buildGroupState produces exactly one display entry —
-    /// not two. The two runs belong to the same SHA group and must be merged, not duplicated.
+    /// A mixed-SHA group (one in_progress run + one completed run) must produce exactly
+    /// one live display entry and zero cache entries while still running.
     func testShaWithBothLiveAndCompletedRunsProducesOneDisplayEntry() {
         let sha = "beef02"
         let mixedGroup = WorkflowActionGroup(
@@ -645,8 +586,11 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             enrichJobs: { $0 }
         )
 
-        let allEntries = result.display + result.newGroupCache.values
-        let entriesForSha = allEntries.filter { $0.headSha == sha }
-        XCTAssertEqual(entriesForSha.count, 1, "Same SHA with mixed runs must produce exactly one display entry")
+        // Split assertions: routing to display vs cache must be checked independently
+        // so a bug that places the group in both buckets cannot mask itself.
+        let displayForSha = result.display.filter { $0.headSha == sha }
+        let cacheForSha   = result.newGroupCache.values.filter { $0.headSha == sha }
+        XCTAssertEqual(displayForSha.count, 1, "Mixed-run group must appear exactly once in display")
+        XCTAssertEqual(cacheForSha.count,   0, "Mixed-run group must not be duplicated in cache while still live")
     }
 }

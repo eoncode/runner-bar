@@ -22,4 +22,11 @@ public struct GroupPollResult {
     public let newGroupCache: [String: WorkflowActionGroup]
     /// Live-group snapshot for the next poll's diff.
     public let newPrevLiveGroups: [String: WorkflowActionGroup]
+    /// Accumulated set of group IDs that have already fired the failure hook.
+    ///
+    /// Kept separate from `newGroupCache` so that eviction of old display entries
+    /// (trimmed at `groupCacheLimit = 30`) does not accidentally re-arm the hook
+    /// for groups that were already processed in an earlier poll cycle.
+    /// Capped at `PollResultBuilder.seenGroupIDsLimit` entries.
+    public let newSeenGroupIDs: Set<String>
 }

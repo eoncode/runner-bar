@@ -48,11 +48,13 @@ extension RunnerStore {
     nonisolated func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
+        snapSeenGroupIDs: Set<String>,
         jobCache: [Int: ActiveJob]
     ) -> GroupPollResult {
         PollResultBuilder.buildGroupState(
             snapPrevGroups: snapPrevGroups,
             snapGroupCache: snapGroupCache,
+            snapSeenGroupIDs: snapSeenGroupIDs,
             fetchGroups: { shaKeyedCache in
                 let scopes = DispatchQueue.main.sync { ScopeStore.shared.scopes }
                 var groups: [WorkflowActionGroup] = []

@@ -117,13 +117,15 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     var bySha: [String: [RunPayload]] = [:]
     for run in runPayloads { bySha[run.headSha, default: []].append(run) }
 
+    // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
+    // Fix #1041: completed-only SHAs (groups that finished between polls) are
+    // now included so they can be routed through the normal cache/display pipeline.
+    // This supersedes the previous restriction that only backfilled known SHAs.
+    // Note: de-duplication of old completed groups re-triggering the failure hook
+    // is handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
     if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
-            // Fix #1041: always insert completed runs — not just for SHAs already seen
-            // as in_progress/queued. Groups that finish between polls have no live entry
-            // and were silently dropped by the old `if bySha[sha] != nil` guard, leaving
-            // stale in-progress UI rows that never resolved.
             bySha[run.headSha, default: []].append(run)
         }
     }
