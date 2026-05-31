@@ -437,7 +437,8 @@ final class PollResultBuilderTests: XCTestCase {
 
     // MARK: applyVanishedJobs
 
-    /// Verifies that a job present in the previous snapshot but missing from live results is moved to the cache with "completed" status and dimmed.
+    /// Verifies that a job present in the previous snapshot but missing from live results is moved to the cache
+    /// with "completed" status, dimmed, and `.cancelled` conclusion (no API conclusion = cancelled, not success).
     func testApplyVanishedJobsMovesVanishedJobToCache() {
         let vanished = ActiveJob(id: 55, name: "Vanished", status: "in_progress")
         var cache: [Int: ActiveJob] = [:]
@@ -450,7 +451,7 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertNotNil(cache[55], "Vanished job should be added to cache")
         XCTAssertEqual(cache[55]?.status, "completed")
         XCTAssertEqual(cache[55]?.isDimmed, true)
-        XCTAssertEqual(cache[55]?.conclusion, "success", "Missing conclusion defaults to success")
+        XCTAssertEqual(cache[55]?.conclusion, "cancelled", "Missing conclusion defaults to cancelled")
     }
 
     /// Verifies that an existing cached entry for a vanished job is not overwritten by the vanish logic.

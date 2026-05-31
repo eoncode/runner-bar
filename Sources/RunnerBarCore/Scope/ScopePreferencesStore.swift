@@ -1,5 +1,5 @@
 // ScopePreferencesStore.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 
 // MARK: - ScopePreferencesStore
@@ -15,7 +15,11 @@ import Foundation
 //
 // Call ScopePreferencesStore.cleanUp(scope:) from ScopeStore.remove(id:) to avoid
 // orphaned keys accumulating in UserDefaults.
-/// Enumerates possible values for ScopePreferencesStore.
+/// Namespace for per-scope `UserDefaults` preferences.
+///
+/// Intentionally caseless — used as a namespace only.
+/// Keys are namespaced under `scope.<scope>.<field>` so each scope has its
+/// own independent settings bucket.
 public enum ScopePreferencesStore {
 
     // MARK: - Key builders
@@ -158,7 +162,7 @@ public enum ScopePreferencesStore {
         log("ScopePreferencesStore › failureHookCommand for \(scope) = \(trimmed ?? "nil (cleared)")")
     }
 
-    /// Local filesystem path to the repo for this scope. Used to resolve $LOCAL_PATH in hook commands.
+    /// Local filesystem path to the repo for this scope. Used to resolve `$LOCAL_PATH` in hook commands.
     /// `nil` = not set.
     public static func localRepoPath(for scope: String) -> String? {
         UserDefaults.standard.string(forKey: key(scope, "localRepoPath"))
@@ -204,7 +208,7 @@ public enum ScopePreferencesStore {
 
     // MARK: - Cleanup (#505)
 
-    /// Removes all per-scope keys for `scope` from UserDefaults.
+    /// Removes all per-scope keys for `scope` from `UserDefaults`.
     /// Call this from `ScopeStore.remove(id:)` to avoid orphaned data.
     public static func cleanUp(scope: String) {
         let fields = [
