@@ -32,6 +32,14 @@ public struct PollResultBuilder {
     /// Prevents the panel flooding with up to `groupCacheLimit` (30) stale entries.
     public static let groupDisplayLimit = 10
 
+    /// Maximum number of group IDs retained in the seen-IDs set.
+    ///
+    /// Kept much larger than `groupCacheLimit` so that the failure-hook suppression
+    /// set survives well beyond the display-cache eviction horizon.
+    /// Sized for ~6–7 poll cycles worth of typical group completions at once.
+    /// Entries are pruned by arbitrary eviction when the limit is exceeded.
+    public static let seenGroupIDsLimit = 200
+
     // MARK: - Job state
 
     /// Builds the job display list and updated caches from a background poll snapshot.
@@ -91,19 +99,27 @@ public struct PollResultBuilder {
     /// - Parameters:
     ///   - snapPrevGroups: Live-group snapshot from the previous poll.
     ///   - snapGroupCache: Completed-group cache from the previous poll.
+    ///   - snapSeenGroupIDs: Set of group IDs that have already triggered the failure
+    ///     hook in a previous poll cycle. Keyed by `WorkflowActionGroup.id`.
+    ///     Survives `trimGroupCache` eviction so the hook cannot re-fire for old groups.
     ///   - fetchGroups: Closure that fetches live groups for every active scope.
     ///   - scopeFromGroup: Closure that derives a scope string from a WorkflowActionGroup.
     ///   - fireFailureHook: Closure invoked the first time a group transitions to a failure conclusion.
     ///   - enrichJobs: Closure that enriches a job list from the job cache.
+    ///
+    /// - Important: `doneGroups` inserts into `newSeenGroupIDs` **before**
+    ///   `freezeVanishedGroups` runs, so a group that appears in both the fetched
+    ///   completed list and in `snapPrevGroups` fires the hook exactly once.
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
+        snapSeenGroupIDs: Set<String> = [],
         fetchGroups: ([String: WorkflowActionGroup]) -> [WorkflowActionGroup],
         scopeFromGroup: (WorkflowActionGroup) -> String,
         fireFailureHook: (WorkflowActionGroup, String) -> Void,
         enrichJobs: ([ActiveJob]) -> [ActiveJob]
     ) -> GroupPollResult {
-        log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count)")
+        log("PollResultBuilder › buildGroupState — snapPrevGroups=\(snapPrevGroups.count) snapGroupCache=\(snapGroupCache.count) snapSeenGroupIDs=\(snapSeenGroupIDs.count)")
         let shaKeyedCache = makeShaKeyedCache(snapGroupCache)
         let allFetched = fetchGroups(shaKeyedCache)
         if allFetched.isEmpty {
@@ -115,16 +131,12 @@ public struct PollResultBuilder {
         let liveIDs = Set(liveGroups.map { $0.id })
         let now = Date()
         var newCache = evictFreshShas(from: snapGroupCache, freshGroups: allFetched)
-        freezeVanishedGroups(
-            snapPrev: snapPrevGroups,
-            liveIDs: liveIDs,
-            now: now,
-            into: &newCache,
-            scopeFromGroup: scopeFromGroup,
-            fireFailureHook: fireFailureHook
-        )
+        // IMPORTANT: populate newSeenGroupIDs from doneGroups BEFORE calling
+        // freezeVanishedGroups, so a group present in both paths fires the hook
+        // exactly once (freezeVanishedGroups checks seenGroupIDs before firing).
+        var newSeenGroupIDs = snapSeenGroupIDs
         for group in doneGroups {
-            let isNew = snapGroupCache[group.id] == nil
+            let isNew = !newSeenGroupIDs.contains(group.id)
             let runSummary = group.runs.map { "\($0.id):\($0.conclusion ?? "nil")" }.joined(separator: ", ")
             log("PollResultBuilder › doneGroups — groupID=\(group.id) isNew=\(isNew) runs=[\(runSummary)]")
             if isNew {
@@ -136,26 +148,38 @@ public struct PollResultBuilder {
                 if isFailure {
                     fireFailureHook(group, scope)
                 }
+                newSeenGroupIDs.insert(group.id)
             }
             var dimmed = group
             dimmed.isDimmed = true
             newCache[group.id] = dimmed
         }
+        freezeVanishedGroups(
+            snapPrev: snapPrevGroups,
+            liveIDs: liveIDs,
+            now: now,
+            into: &newCache,
+            seenGroupIDs: newSeenGroupIDs,
+            scopeFromGroup: scopeFromGroup,
+            fireFailureHook: fireFailureHook
+        )
         trimGroupCache(&newCache, limit: groupCacheLimit)
+        trimSeenGroupIDs(&newSeenGroupIDs, limit: seenGroupIDsLimit)
         let newPrevLive = [String: WorkflowActionGroup](uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
         let display = buildGroupDisplay(live: liveGroups, cache: newCache)
         let inProgCount = liveGroups.filter { $0.groupStatus == .inProgress }.count
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
         log(
             "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
-            + " | cache: \(newCache.count) | display: \(display.count)"
+            + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
         let enriched = display.map { $0.withJobs(enrichJobs($0.jobs)) }
         let enrichedCache = newCache.mapValues { $0.withJobs(enrichJobs($0.jobs)) }
         return GroupPollResult(
             display: enriched,
             newGroupCache: enrichedCache,
-            newPrevLiveGroups: newPrevLive
+            newPrevLiveGroups: newPrevLive,
+            newSeenGroupIDs: newSeenGroupIDs
         )
     }
 
@@ -241,9 +265,9 @@ public struct PollResultBuilder {
     /// Freezes action groups that were live in the previous poll but have since
     /// vanished from the live feed (i.e. completed without appearing in fetchGroups).
     ///
-    /// Only fires `fireFailureHook` for groups with a genuine failure conclusion
-    /// (`failure` or `timed_out`). Successful or cancelled vanished groups are
-    /// cached and dimmed without triggering an alert.
+    /// Only fires `fireFailureHook` for groups that are unseen and have a genuine
+    /// failure conclusion (`failure` or `timed_out`). Successful or cancelled
+    /// vanished groups are cached and dimmed without triggering an alert.
     ///
     /// - Important: Both `snapPrev` and the `cache` parameter are keyed by
     ///   `WorkflowActionGroup.id`, **not** by `headSha`. `liveIDs` must also be a
@@ -254,6 +278,7 @@ public struct PollResultBuilder {
         liveIDs: Set<String>,
         now: Date,
         into cache: inout [String: WorkflowActionGroup],
+        seenGroupIDs: Set<String> = [],
         scopeFromGroup: (WorkflowActionGroup) -> String,
         fireFailureHook: (WorkflowActionGroup, String) -> Void
     ) {
@@ -264,13 +289,13 @@ public struct PollResultBuilder {
                 log("PollResultBuilder › freezeVanishedGroups — groupID=\(group.id) already cached+dimmed, skipping")
                 continue
             }
-            if cache[groupID] == nil {
+            if !seenGroupIDs.contains(groupID) && cache[groupID] == nil {
                 let scope = scopeFromGroup(group)
                 // Only alert on genuine failures — do not fire for successful or
                 // cancelled groups that vanished from the live feed normally.
                 let isFailure = group.runs.contains { $0.conclusion == "failure" || $0.conclusion == "timed_out" }
                 if isFailure {
-                    log("PollResultBuilder › freezeVanishedGroups — groupID=\(group.id) cache[groupID]==nil → fireFailureHook scope=\(scope)")
+                    log("PollResultBuilder › freezeVanishedGroups — groupID=\(group.id) unseen+failure → fireFailureHook scope=\(scope)")
                     fireFailureHook(group, scope)
                 }
             }
@@ -303,6 +328,18 @@ public struct PollResultBuilder {
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
         cache = [String: WorkflowActionGroup](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
+    }
+
+    /// Trims the seen-group-IDs set to at most `limit` entries.
+    ///
+    /// `Set` is unordered so eviction order is arbitrary, not FIFO.
+    /// The set is trimmed to exactly `limit` entries by removing the minimum
+    /// overshoot — only entries beyond `limit` are dropped.
+    public static func trimSeenGroupIDs(_ ids: inout Set<String>, limit: Int) {
+        guard ids.count > limit else { return }
+        let excess = ids.count - limit
+        let toRemove = ids.prefix(excess)
+        ids.subtract(toRemove)
     }
 
     /// Builds the ordered group display list from live groups and the completed cache.

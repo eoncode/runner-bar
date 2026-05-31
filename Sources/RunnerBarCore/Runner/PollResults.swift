@@ -34,16 +34,30 @@ public struct GroupPollResult {
     public let newGroupCache: [String: WorkflowActionGroup]
     /// Live-group snapshot for the next poll's diff.
     public let newPrevLiveGroups: [String: WorkflowActionGroup]
+    /// Accumulated set of group IDs that have already fired the failure hook.
+    ///
+    /// Kept separate from `newGroupCache` so that eviction of old display entries
+    /// (trimmed at `groupCacheLimit = 30`) does not accidentally re-arm the hook
+    /// for groups that were already processed in an earlier poll cycle.
+    /// Capped at `PollResultBuilder.seenGroupIDsLimit` entries.
+    public let newSeenGroupIDs: Set<String>
 
     /// Creates a `GroupPollResult` with all fields.
     /// - Parameters:
     ///   - display: Groups to show in the popover.
     ///   - newGroupCache: Updated group cache.
     ///   - newPrevLiveGroups: Live-group snapshot for the next poll's diff.
-    public init(display: [WorkflowActionGroup], newGroupCache: [String: WorkflowActionGroup], newPrevLiveGroups: [String: WorkflowActionGroup]) {
+    ///   - newSeenGroupIDs: Accumulated set of seen group IDs.
+    public init(
+        display: [WorkflowActionGroup],
+        newGroupCache: [String: WorkflowActionGroup],
+        newPrevLiveGroups: [String: WorkflowActionGroup],
+        newSeenGroupIDs: Set<String>
+    ) {
         self.display = display
         self.newGroupCache = newGroupCache
         self.newPrevLiveGroups = newPrevLiveGroups
+        self.newSeenGroupIDs = newSeenGroupIDs
     }
 }
 // swiftlint:enable missing_docs
