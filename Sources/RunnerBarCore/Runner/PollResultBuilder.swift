@@ -29,7 +29,8 @@ public struct PollResultBuilder {
     ///
     /// Kept much larger than `groupCacheLimit` so that the failure-hook suppression
     /// set survives well beyond the display-cache eviction horizon.
-    /// Entries are pruned FIFO (oldest half dropped) when the limit is exceeded.
+    /// Sized for ~6–7 poll cycles worth of typical group completions at once.
+    /// Entries are pruned by arbitrary eviction when the limit is exceeded.
     public static let seenGroupIDsLimit = 200
 
     // MARK: - Job state
@@ -96,6 +97,10 @@ public struct PollResultBuilder {
     ///   - scopeFromGroup: Closure that derives a scope string from a WorkflowActionGroup.
     ///   - fireFailureHook: Closure invoked the first time a group is seen as completed.
     ///   - enrichJobs: Closure that enriches a job list from the job cache.
+    ///
+    /// - Important: `doneGroups` inserts into `newSeenGroupIDs` **before**
+    ///   `freezeVanishedGroups` runs, so a group that appears in both the fetched
+    ///   completed list and in `snapPrevGroups` fires the hook exactly once.
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
@@ -117,15 +122,9 @@ public struct PollResultBuilder {
         let liveIDs = Set(liveGroups.map { $0.id })
         let now = Date()
         var newCache = evictFreshShas(from: snapGroupCache, freshGroups: allFetched)
-        freezeVanishedGroups(
-            snapPrev: snapPrevGroups,
-            liveIDs: liveIDs,
-            now: now,
-            into: &newCache,
-            seenGroupIDs: snapSeenGroupIDs,
-            scopeFromGroup: scopeFromGroup,
-            fireFailureHook: fireFailureHook
-        )
+        // IMPORTANT: populate newSeenGroupIDs from doneGroups BEFORE calling
+        // freezeVanishedGroups, so a group present in both paths fires the hook
+        // exactly once (freezeVanishedGroups checks seenGroupIDs before firing).
         var newSeenGroupIDs = snapSeenGroupIDs
         for group in doneGroups {
             // isNew is now keyed off seenGroupIDs, not the display cache.
@@ -145,6 +144,15 @@ public struct PollResultBuilder {
             dimmed.isDimmed = true
             newCache[group.id] = dimmed
         }
+        freezeVanishedGroups(
+            snapPrev: snapPrevGroups,
+            liveIDs: liveIDs,
+            now: now,
+            into: &newCache,
+            seenGroupIDs: newSeenGroupIDs,
+            scopeFromGroup: scopeFromGroup,
+            fireFailureHook: fireFailureHook
+        )
         trimGroupCache(&newCache, limit: groupCacheLimit)
         trimSeenGroupIDs(&newSeenGroupIDs, limit: seenGroupIDsLimit)
         let newPrevLive = [String: WorkflowActionGroup](uniqueKeysWithValues: liveGroups.map { ($0.id, $0) })
@@ -299,13 +307,12 @@ public struct PollResultBuilder {
 
     /// Trims the seen-group-IDs set to at most `limit` entries.
     ///
-    /// Because `Set` is unordered there is no true FIFO guarantee; this method
-    /// simply removes an arbitrary half of the oldest-excess entries when the set
-    /// exceeds `limit`. In practice the set grows by at most a handful of IDs per
-    /// poll cycle, so the approximation is acceptable.
+    /// `Set` is unordered so eviction order is arbitrary, not FIFO.
+    /// The set is trimmed to exactly `limit` entries by removing the minimum
+    /// overshoot — only entries beyond `limit` are dropped.
     public static func trimSeenGroupIDs(_ ids: inout Set<String>, limit: Int) {
         guard ids.count > limit else { return }
-        let excess = ids.count - limit / 2
+        let excess = ids.count - limit
         let toRemove = ids.prefix(excess)
         ids.subtract(toRemove)
     }

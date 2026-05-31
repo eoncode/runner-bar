@@ -616,8 +616,6 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             enrichJobs: { $0 }
         )
 
-        // Split assertions: routing to display vs cache must be checked independently
-        // so a bug that places the group in both buckets cannot mask itself.
         let displayForSha = result.display.filter { $0.headSha == sha }
         let cacheForSha   = result.newGroupCache.values.filter { $0.headSha == sha }
         XCTAssertEqual(displayForSha.count, 1, "Mixed-run group must appear exactly once in display")
@@ -631,40 +629,31 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
     /// This test locks in that behaviour so any future change (e.g. switching to a
     /// persisted seen-set) is intentional and visible in the diff.
     func testEvictedGroupIDRefiresHookOnNextPoll() {
-        let groupID = "group-evicted"
         let completedGroup = makeGroup(id: 1001, sha: "dead01", groupStatus: .completed)
-
-        // Simulate: group was seen, then its ID was evicted from seenGroupIDs by trim.
-        // On this poll, snapSeenGroupIDs does NOT contain the ID.
         var hookCallCount = 0
+
         _ = PollResultBuilder.buildGroupState(
             snapPrevGroups: [:],
             snapGroupCache: [:],
             snapSeenGroupIDs: [],         // evicted — ID is gone
             fetchGroups: { _ in [completedGroup] },
-            scopeFromGroup: { _ in "owner/repo" },
-            fireFailureHook: { id, _ in
-                if id.id == completedGroup.id { hookCallCount += 1 }
-            },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
             enrichJobs: { $0 }
         )
-        _ = groupID // suppress unused warning
 
         XCTAssertEqual(hookCallCount, 1,
             "A group whose ID was evicted from seenGroupIDs must re-fire the hook — known limitation")
     }
 
-    /// A group present in both doneGroups (fetched as completed) and snapPrevGroups
+    /// A group present in both the fetched completed list (doneGroups) and snapPrevGroups
     /// (was live last poll) must fire the failure hook exactly once.
     ///
-    /// This verifies the ordering invariant: doneGroups populates newSeenGroupIDs
-    /// before freezeVanishedGroups runs, so the vanished-group path sees the ID
-    /// as already seen and skips the second fire.
+    /// The ordering invariant: doneGroups populates newSeenGroupIDs BEFORE
+    /// freezeVanishedGroups runs, so when freezeVanishedGroups encounters the same
+    /// group ID it finds it already in seenGroupIDs and skips the second fire.
     func testDoneGroupsSeenBeforeFreezeVanishedGroupsPreventsDoubleFire() {
         let sha = "ff0011"
-        // Group was live last poll (snapPrevGroups) AND now comes back as completed
-        // (fetchGroups returns it as .completed). Both code paths would independently
-        // fire the hook if ordering were wrong.
         let liveVersion      = makeGroup(id: 1002, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
         let completedVersion = makeGroup(id: 1002, sha: sha, groupStatus: .completed)
         var hookCallCount = 0
