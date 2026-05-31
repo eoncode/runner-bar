@@ -1,6 +1,5 @@
 // WorkflowActionGroupFetch.swift
 // RunnerBarCore
-// swiftlint:disable missing_docs
 import Foundation
 import os
 
@@ -11,12 +10,14 @@ import os
 // keeping one instance avoids repeated allocation on every fetch cycle.
 // Safety: protected by iso8601Lock.
 
-/// A Sendable wrapper for ISO8601DateFormatter.
+/// A `Sendable` wrapper around `ISO8601DateFormatter`.
+/// Required because `ISO8601DateFormatter` is not `Sendable` itself.
 private struct SendableFormatter: @unchecked Sendable {
     /// The internal formatter instance.
     let iso = ISO8601DateFormatter()
 }
-/// Lock for the formatter.
+
+/// Lock protecting the shared `ISO8601DateFormatter` instance.
 private let iso8601Lock = OSAllocatedUnfairLock(initialState: SendableFormatter())
 
 /// Top-level response envelope for the GitHub Actions workflow runs list endpoint.
@@ -34,11 +35,11 @@ private struct ActionRunsResponse: Codable {
 private struct RunPayload: Codable {
     /// The unique run identifier.
     let id: Int
-    /// The workflow file name (e.g. "SwiftLint", "SonarQube").
+    /// The workflow file name (e.g. `"SwiftLint"`, `"SonarQube"`).
     let name: String
-    /// Current run status (e.g. "in_progress", "queued", "completed").
+    /// Current run status (e.g. `"in_progress"`, `"queued"`, `"completed"`).
     let status: String
-    /// Run conclusion once completed (e.g. "success", "failure"), or nil while running.
+    /// Run conclusion once completed (e.g. `"success"`, `"failure"`), or `nil` while running.
     let conclusion: String?
     /// The branch this run was triggered on.
     let headBranch: String?
@@ -56,13 +57,21 @@ private struct RunPayload: Codable {
     let pullRequests: [PRRef]?
     /// Maps Swift property names to their snake_case JSON keys.
     enum CodingKeys: String, CodingKey {
+        /// Direct-mapped keys whose JSON names match their Swift property names.
         case id, name, status, conclusion
+        /// JSON key `head_branch`.
         case headBranch   = "head_branch"
+        /// JSON key `head_sha`.
         case headSha      = "head_sha"
+        /// JSON key `display_title`.
         case displayTitle = "display_title"
+        /// JSON key `created_at`.
         case createdAt    = "created_at"
+        /// JSON key `html_url`.
         case htmlUrl      = "html_url"
+        /// JSON key `head_commit`.
         case headCommit   = "head_commit"
+        /// JSON key `pull_requests`.
         case pullRequests = "pull_requests"
     }
 }
@@ -79,8 +88,11 @@ private struct PRRef: Codable {
     let number: Int
 }
 
-/// Derives the short identifier for an action group row.
+/// Derives the short display label for an action group row.
+///
 /// Priority: PR number → branch-embedded number → sha[:7].
+/// - Parameter run: The representative `RunPayload` for this group.
+/// - Returns: A short label string, e.g. `"#1270"` or `"d6281b"`.
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
@@ -92,10 +104,16 @@ private func prLabel(from run: RunPayload) -> String {
 }
 
 // MARK: - Fetch + Group
-// swiftlint:disable:next function_body_length cyclomatic_complexity
+
 /// Fetches active workflow runs for a repo scope, groups them by `head_sha`,
 /// enriches each group with its flattened job list, and returns groups sorted:
-/// in_progress first, then queued, then done — newest first.
+/// in-progress first, then queued, then completed — newest first within each tier.
+///
+/// - Parameters:
+///   - scope: The `owner/repo` string identifying the repository scope.
+///   - cache: SHA-keyed group cache from the previous poll cycle. Used to skip
+///     re-fetching jobs for groups where all jobs are already concluded.
+/// - Returns: Sorted `[WorkflowActionGroup]` for the given scope, or `[]` for org scopes.
 public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionGroup] = [:]) -> [WorkflowActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
@@ -120,9 +138,8 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
     // Fix #1041: completed-only SHAs (groups that finished between polls) are
     // now included so they can be routed through the normal cache/display pipeline.
-    // This supersedes the previous restriction that only backfilled known SHAs.
-    // Note: de-duplication of old completed groups re-triggering the failure hook
-    // is handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
+    // De-duplication of old completed groups re-triggering the failure hook is
+    // handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
     if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
@@ -131,9 +148,9 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     }
 
     var groups: [WorkflowActionGroup] = bySha.map { sha, shaRuns in
-        let rep = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
-        let label    = prLabel(from: rep)
-        let rawTitle = rep.displayTitle ?? rep.headCommit
+        let representative = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
+        let label    = prLabel(from: representative)
+        let rawTitle = representative.displayTitle ?? representative.headCommit
             .map { String($0.message.components(separatedBy: "\n").first ?? "") }
             ?? String(sha.prefix(7))
         let title = String(rawTitle.prefix(40))
@@ -146,44 +163,29 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
                 htmlUrl: $0.htmlUrl
             )
         }
-        let allJobs: [ActiveJob]
-        if let cached = cache[sha],
-           !cached.jobs.isEmpty,
-           cached.jobs.allSatisfy({ $0.conclusion != nil }) &&
-           !cached.jobs.contains(where: { $0.steps.contains { $0.status == JobStatus.inProgress } }) {
-            allJobs = cached.jobs
-        } else {
-            var fetched: [ActiveJob] = []
-            var seenJobIDs = Set<Int>()
-            for runID in shaRuns.map({ $0.id }) {
-                for job in fetchJobsForRun(runID, scope: scope)
-                where seenJobIDs.insert(job.id).inserted {
-                    fetched.append(job)
-                }
-            }
-            fetched.sort { $0.id < $1.id }
-            allJobs = fetched
-        }
+        let allJobs = fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
         let starts = allJobs.compactMap { $0.startedAt }
         let ends   = allJobs.compactMap { $0.completedAt }
         return WorkflowActionGroup(
             headSha: sha,
             label: label,
             title: title,
-            headBranch: rep.headBranch,
+            headBranch: representative.headBranch,
             repo: scope,
             runs: runs,
             jobs: allJobs,
             firstJobStartedAt: starts.min(),
             lastJobCompletedAt: ends.max(),
-            createdAt: rep.createdAt.flatMap { dateStr in iso8601Lock.withLock { $0.iso.date(from: dateStr) } }
+            createdAt: representative.createdAt.flatMap { dateStr in
+                iso8601Lock.withLock { $0.iso.date(from: dateStr) }
+            }
         )
     }
-    groups.sort { leftGroup, rightGroup in
-        let leftPriority  = statusPriority(leftGroup.groupStatus)
-        let rightPriority = statusPriority(rightGroup.groupStatus)
-        if leftPriority != rightPriority { return leftPriority < rightPriority }
-        return (leftGroup.createdAt ?? .distantPast) > (rightGroup.createdAt ?? .distantPast)
+    groups.sort { lhs, rhs in
+        let lhsPriority = statusPriority(lhs.groupStatus)
+        let rhsPriority = statusPriority(rhs.groupStatus)
+        if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+        return (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
     }
     log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
     return groups
@@ -191,10 +193,54 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
 
 // MARK: - Private helpers
 
-/// Fetch and decode jobs for a single run ID.
-/// ❌ NEVER add filter=latest back — it omits queued jobs that haven't started yet,
-/// causing the main row to show a lower jobsTotal than the detail view.
-/// per_page=100 is the GitHub API maximum and covers all realistic job counts.
+/// Returns the flattened job list for all runs sharing a `head_sha`.
+///
+/// Uses the SHA-keyed cache when all cached jobs are concluded and none have
+/// in-progress steps, avoiding redundant API calls for finished groups.
+/// Falls back to a live fetch via `fetchJobsForRun` when the cache is stale
+/// or missing.
+///
+/// - Parameters:
+///   - shaRuns: All `RunPayload` values sharing the same `head_sha`.
+///   - scope: The `owner/repo` scope string.
+///   - cache: SHA-keyed group cache from the previous poll cycle.
+///   - sha: The `head_sha` key used to look up the cache entry.
+/// - Returns: Deduplicated, ID-sorted `[ActiveJob]` for this group.
+private func fetchJobsForGroup(
+    shaRuns: [RunPayload],
+    scope: String,
+    cache: [String: WorkflowActionGroup],
+    sha: String
+) -> [ActiveJob] {
+    if let cached = cache[sha],
+       !cached.jobs.isEmpty,
+       cached.jobs.allSatisfy({ $0.conclusion != nil }),
+       !cached.jobs.contains(where: { $0.steps.contains { $0.status == JobStatus.inProgress } }) {
+        return cached.jobs
+    }
+    var fetched: [ActiveJob] = []
+    var seenJobIDs = Set<Int>()
+    for runID in shaRuns.map({ $0.id }) {
+        for job in fetchJobsForRun(runID, scope: scope)
+        where seenJobIDs.insert(job.id).inserted {
+            fetched.append(job)
+        }
+    }
+    fetched.sort { $0.id < $1.id }
+    return fetched
+}
+
+/// Fetches and decodes the job list for a single run ID, refreshing any
+/// in-progress or inconclusive jobs with a targeted single-job API call.
+///
+/// - Parameters:
+///   - runID: The GitHub Actions run ID.
+///   - scope: The `owner/repo` scope string.
+/// - Returns: `[ActiveJob]` for this run, or `[]` on network/decode failure.
+///
+/// - Note: `filter=latest` is intentionally omitted — it drops queued jobs that
+///   haven’t started yet, causing `jobsTotal` to be lower than the detail view.
+///   `per_page=100` is the GitHub API maximum and covers all realistic job counts.
 private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     guard let data = ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
@@ -236,7 +282,11 @@ private func fetchJobsForRun(_ runID: Int, scope: String) -> [ActiveJob] {
     return result
 }
 
-/// Lower number = higher display priority for sort.
+/// Returns the sort priority for a `GroupStatus`.
+///
+/// Lower value = higher display priority (in-progress before queued before completed).
+/// - Parameter status: The `GroupStatus` to evaluate.
+/// - Returns: An integer priority where `0` = in-progress, `1` = queued, `2` = completed.
 private func statusPriority(_ status: GroupStatus) -> Int {
     switch status {
     case .inProgress: return 0
@@ -244,4 +294,3 @@ private func statusPriority(_ status: GroupStatus) -> Int {
     case .completed:  return 2
     }
 }
-// swiftlint:enable missing_docs
