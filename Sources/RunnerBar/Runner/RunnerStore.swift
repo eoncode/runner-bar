@@ -57,7 +57,7 @@ final class RunnerStore {
     /// The aggregateStatus property.
     var aggregateStatus: AggregateStatus {
         guard !runners.isEmpty else { return .allOffline }
-        let onlineCount = runners.filter { $0.status == "online" }.count
+        let onlineCount = runners.filter { $0.status == .online }.count
         if onlineCount == runners.count { return .allOnline }
         if onlineCount == 0 { return .allOffline }
         return .someOffline
