@@ -453,3 +453,135 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertEqual(result.newCache[11]?.status, "completed")
     }
 }
+
+// MARK: - PollResultBuilder.buildGroupState (fix #1041)
+
+final class PollResultBuilderGroupStateTests: XCTestCase {
+
+    // MARK: Helpers
+
+    private func makeGroup(
+        id runID: Int,
+        sha: String,
+        status: GroupStatus = .completed,
+        isDimmed: Bool = false
+    ) -> WorkflowActionGroup {
+        let runStatus: String
+        switch status {
+        case .inProgress: runStatus = "in_progress"
+        case .queued:     runStatus = "queued"
+        case .completed:  runStatus = "completed"
+        }
+        let job = ActiveJob(
+            id: runID * 10,
+            name: "job",
+            status: "completed",
+            conclusion: "success"
+        )
+        return WorkflowActionGroup(
+            headSha: sha,
+            label: String(sha.prefix(7)),
+            title: "commit message",
+            headBranch: "main",
+            repo: "owner/repo",
+            runs: [WorkflowRunRef(id: runID, name: "CI", status: runStatus, conclusion: "success", htmlUrl: nil)],
+            jobs: [job],
+            firstJobStartedAt: Date(timeIntervalSinceReferenceDate: 0),
+            lastJobCompletedAt: Date(timeIntervalSinceReferenceDate: 60),
+            isDimmed: isDimmed
+        )
+    }
+
+    // MARK: Tests
+
+    /// Verifies that a completed-only group (not present in the previous live snapshot)
+    /// is routed into the group cache by buildGroupState, not left as a live entry.
+    /// Regression test for #1041: groups that finish between polls were silently dropped
+    /// because fetchActionGroups only appended completed runs for SHAs already in bySha.
+    func testCompletedOnlyGroupIsRoutedToCacheNotLive() {
+        let completedGroup = makeGroup(id: 500, sha: "aabbcc", status: .completed)
+
+        let result = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertTrue(
+            result.display.filter { !$0.isDimmed }.isEmpty,
+            "Completed group must not appear as a live (non-dimmed) row"
+        )
+        XCTAssertFalse(
+            result.newGroupCache.isEmpty,
+            "Completed group must be stored in the group cache"
+        )
+    }
+
+    /// Verifies that a live in-progress group still appears as non-dimmed in the display list.
+    func testInProgressGroupAppearsLiveInDisplay() {
+        let liveGroup = makeGroup(id: 600, sha: "ddeeff", status: .inProgress)
+        let liveGroupWithLiveJob = WorkflowActionGroup(
+            headSha: liveGroup.headSha,
+            label: liveGroup.label,
+            title: liveGroup.title,
+            headBranch: liveGroup.headBranch,
+            repo: liveGroup.repo,
+            runs: liveGroup.runs,
+            jobs: [ActiveJob(id: 6000, name: "job", status: "in_progress")],
+            firstJobStartedAt: liveGroup.firstJobStartedAt,
+            lastJobCompletedAt: nil,
+            isDimmed: false
+        )
+
+        let result = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [liveGroupWithLiveJob] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertTrue(
+            result.display.contains(where: { !$0.isDimmed }),
+            "In-progress group must appear as a live (non-dimmed) row"
+        )
+    }
+
+    /// Verifies that fireFailureHook is called exactly once for a newly-completed group.
+    func testFireFailureHookCalledOnceForNewCompletedGroup() {
+        let completedGroup = makeGroup(id: 700, sha: "112233", status: .completed)
+        var hookCallCount = 0
+
+        _ = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertEqual(hookCallCount, 1, "fireFailureHook must fire exactly once for a new completed group")
+    }
+
+    /// Verifies that fireFailureHook is NOT called again for a group already present in the cache.
+    func testFireFailureHookNotCalledForAlreadyCachedGroup() {
+        let completedGroup = makeGroup(id: 800, sha: "445566", status: .completed, isDimmed: true)
+        var hookCallCount = 0
+
+        _ = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [completedGroup.id: completedGroup],
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertEqual(hookCallCount, 0, "fireFailureHook must not fire for a group already in the cache")
+    }
+}

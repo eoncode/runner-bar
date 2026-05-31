@@ -120,7 +120,11 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     if let data = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100"),
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
-            if bySha[run.headSha] != nil { bySha[run.headSha]!.append(run) }
+            // Fix #1041: always insert completed runs — not just for SHAs already seen
+            // as in_progress/queued. Groups that finish between polls have no live entry
+            // and were silently dropped by the old `if bySha[sha] != nil` guard, leaving
+            // stale in-progress UI rows that never resolved.
+            bySha[run.headSha, default: []].append(run)
         }
     }
 
