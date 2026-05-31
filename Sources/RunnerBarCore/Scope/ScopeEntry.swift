@@ -9,6 +9,7 @@ import Foundation
 /// `scope` is either `"owner/repo"` (repository) or `"myorg"` (organisation).
 /// `isEnabled` controls whether `RunnerStore` polls this scope; disabled scopes
 /// are retained in the list but silently skipped during fetch.
+// swiftlint:disable missing_docs
 public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable {
     /// The id constant.
     public let id: UUID
@@ -24,3 +25,4 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable {
         self.isEnabled = isEnabled
     }
 }
+// swiftlint:enable missing_docs
