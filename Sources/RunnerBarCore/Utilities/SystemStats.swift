@@ -4,16 +4,16 @@ import Foundation
 
 /// Snapshot of CPU and memory metrics sampled at a point in time.
 public struct SystemStats: Sendable {
-    /// CPU usage as a fraction in 0…100 (percentage).
-    public var cpuPct: Double
+    /// CPU usage percentage (0–100).
+    public let cpuPct: Double
     /// Used memory in gigabytes.
-    public var memUsedGB: Double
+    public let memUsedGB: Double
     /// Total physical memory in gigabytes.
-    public var memTotalGB: Double
+    public let memTotalGB: Double
     /// Used disk space in gigabytes.
-    public var diskUsedGB: Double
+    public let diskUsedGB: Double
     /// Total disk space in gigabytes.
-    public var diskTotalGB: Double
+    public let diskTotalGB: Double
 
     /// Creates a new instance.
     public init(
