@@ -15,9 +15,9 @@ private let unzipBinaryPath = "/usr/bin/unzip"
 /// Delegates to `ghRawTransport()` so the underlying mechanism (URLSession or
 /// `gh` CLI) can be swapped without touching call sites.
 /// Log endpoints 302-redirect to S3; the transport follows the redirect automatically.
-/// - Parameters:
-///   - endpoint: A relative GitHub REST path, e.g. `"repos/owner/repo/actions/jobs/123/logs"`.
-///   - timeout: Maximum seconds to wait for a response. Defaults to `60`.
+/// - Parameter endpoint: A relative GitHub REST path, e.g. `"repos/owner/repo/actions/jobs/123/logs"`.
+/// - Note: The `timeout` parameter is accepted for future use but is not yet forwarded
+///   to the underlying transport; the transport applies its own default timeout.
 /// - Returns: Raw response bytes, or `nil` when no token is available or the request fails.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     ghRawTransport()(endpoint)
@@ -30,6 +30,7 @@ private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
 /// `/actions/jobs/{id}/logs` 302-redirects to a short-lived S3 URL; the transport follows it.
 /// Returns `nil` when `scope` is not in `owner/repo` form, the request fails,
 /// or the response body looks like a JSON error object (starts with `"{"`)
+///
 /// - Parameters:
 ///   - jobID: The GitHub Actions job ID.
 ///   - scope: The `owner/repo` string identifying the repository.
@@ -86,9 +87,10 @@ public func fetchActionLogs(group: WorkflowActionGroup) -> String? {
 /// then enumerates the output directory for `.txt` files. The temporary directory
 /// is always removed on return via `defer`.
 /// - Parameter zipData: Raw ZIP archive bytes as returned by the GitHub logs API.
-/// - Returns: An array of `(name, text)` tuples where `name` is the relative path
-///   inside the archive (without `.txt` extension) and `text` is the file content.
-///   Returns `[]` if the write, unzip, or enumeration step fails.
+/// - Returns: An array of `(name, text)` tuples where `name` is the archive-relative
+///   path without the `.txt` extension (e.g. `"1_Build"` for `1_Build.txt`) and
+///   `text` is the file content. Returns `[]` if the write, unzip, or enumeration
+///   step fails.
 public func unzipLogs(_ zipData: Data) -> [(name: String, text: String)] {
     let fileManager = FileManager.default
     let tmp = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
