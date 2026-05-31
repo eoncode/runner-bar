@@ -159,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             { endpoint in ghAPI(endpoint) },
             isRateLimited: { ghIsRateLimited }
         )
+        configureGHRaw { endpoint in urlSessionRaw(endpoint) }
         setupStatusItem()
         setupPanel()
     }

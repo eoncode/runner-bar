@@ -594,7 +594,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(Color.rbDanger)
-                        .help("Remove OAuth token from Keychain. gh env token used as fallback if available.")
+                        .help("Remove OAuth token from Keychain. GH_TOKEN / GITHUB_TOKEN env vars used as fallback if available.")
                     }
                 } else if isCLIAuthenticated {
                     HStack(spacing: 10) {
@@ -604,7 +604,7 @@ struct SettingsView: View {
                                 Text("Authenticated")
                                     .font(.caption)
                                     .foregroundColor(Color.rbTextSecondary)
-                                Text("via gh env token")
+                                Text("via env token")
                                     .font(.caption2)
                                     .foregroundColor(Color.rbTextTertiary)
                             }

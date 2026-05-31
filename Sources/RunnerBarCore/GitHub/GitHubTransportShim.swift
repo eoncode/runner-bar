@@ -1,50 +1,50 @@
 // GitHubTransportShim.swift
 // RunnerBarCore
 //
-// Provides module-level `ghAPI` and `ghIsRateLimited` symbols for RunnerBarCore
-// consumers (WorkflowActionGroupFetch, RunnerStatusEnricher).
+// Provides module-level `ghAPI`, `ghRawTransport`, and `ghIsRateLimited` symbols
+// for RunnerBarCore consumers (WorkflowActionGroupFetch, RunnerStatusEnricher,
+// LogFetcher).
 //
-// These are thin forwarding stubs backed by a configurable transport closure so
+// These are thin forwarding stubs backed by configurable transport closures so
 // that:
 //   • RunnerBarCore stays independent of the RunnerBar app target.
-//   • Tests can inject a mock transport without touching URLSession or the gh CLI.
+//   • Tests can inject a mock transport without touching URLSession.
 //   • The app target wires the real GitHubURLSessionTransport at launch.
 //
 import Foundation
 import os
 
-// MARK: - Transport protocol
+// MARK: - Transport types
 
-/// A synchronous GitHub API fetch that returns raw JSON `Data` for a given
-/// REST endpoint path (no leading `https://api.github.com`).
-/// Returns `nil` on network error, rate-limit, or missing auth token.
+/// A synchronous GitHub API fetch returning raw JSON `Data`.
+/// Used for standard REST GET endpoints.
 public typealias GHAPITransport = @Sendable (_ endpoint: String) -> Data?
+
+/// A synchronous raw-bytes fetch for GitHub log endpoints.
+/// These endpoints 302-redirect to S3; the transport must follow redirects.
+public typealias GHRawTransport = @Sendable (_ endpoint: String) -> Data?
 
 // MARK: - Module-level state
 
-/// The active transport closure.  Set by the app target once at launch via
-/// `configureGHAPI(_:isRateLimited:)`.  Defaults to a no-op that always
-/// returns `nil` so RunnerBarCore builds cleanly in unit-test targets that
-/// don't wire up a real transport.
-///
+/// The active JSON transport closure.
 /// Safety: protected by transportLock.
 private let transportLock = OSAllocatedUnfairLock<GHAPITransport>(initialState: { _ in nil })
 
-/// Closure that reports the current rate-limit state.  Set alongside
-/// `_transport` by `configureGHAPI(_:isRateLimited:)`.
+/// The active raw-bytes transport closure (log endpoints).
+/// Safety: protected by rawTransportLock.
+private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialState: { _ in nil })
+
+/// Closure that reports the current rate-limit state.
 /// Safety: protected by rateLimitLock.
 private let rateLimitLock = OSAllocatedUnfairLock<@Sendable () -> Bool>(initialState: { false })
 
 // MARK: - Configuration
 
-/// Wire up the real (or mock) GitHub transport.  Call this once from the app
-/// target's `AppDelegate` (or equivalent entry point) before any fetch begins.
+/// Wire up the real (or mock) GitHub transports. Call once at launch before any fetch.
 ///
 /// - Parameters:
-///   - transport: Synchronous closure that calls the GitHub REST API and
-///     returns raw JSON data, or `nil` on failure / rate-limit.
-///   - isRateLimited: Closure that returns `true` when the API is currently
-///     rate-limited and calls should be skipped.
+///   - transport: Synchronous closure for JSON REST calls; returns `nil` on failure.
+///   - isRateLimited: Returns `true` when the API is rate-limited.
 public func configureGHAPI(
     _ transport: @escaping GHAPITransport,
     isRateLimited: @escaping @Sendable () -> Bool
@@ -53,20 +53,28 @@ public func configureGHAPI(
     rateLimitLock.withLock { $0 = isRateLimited }
 }
 
+/// Wire up the raw-bytes transport for log endpoints. Call once at launch.
+///
+/// - Parameter rawTransport: Synchronous closure that fetches raw log bytes;
+///   follows 302 redirects and returns `nil` on failure.
+public func configureGHRaw(_ rawTransport: @escaping GHRawTransport) {
+    rawTransportLock.withLock { $0 = rawTransport }
+}
+
 // MARK: - Module-level symbols consumed by RunnerBarCore files
 
 /// Calls the configured GitHub API transport for the given endpoint.
-///
-/// Matches the signature of `ghAPI` in `GitHubURLSessionTransport.swift` so
-/// that `WorkflowActionGroupFetch` and `RunnerStatusEnricher` compile without
-/// modification.
 func ghAPI(_ endpoint: String) -> Data? {
     transportLock.withLock { $0(endpoint) }
 }
 
+/// Returns the configured raw-bytes transport closure.
+/// Used by `LogFetcher` to fetch log data without importing the app target.
+func ghRawTransport() -> GHRawTransport {
+    rawTransportLock.withLock { $0 }
+}
+
 /// Returns `true` when the GitHub API is currently rate-limiting this client.
-///
-/// Matches the global `ghIsRateLimited` var in `GitHubURLSessionTransport.swift`.
 var ghIsRateLimited: Bool {
     rateLimitLock.withLock { $0() }
 }
