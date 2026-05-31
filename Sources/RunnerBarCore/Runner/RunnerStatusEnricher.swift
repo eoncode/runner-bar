@@ -1,9 +1,5 @@
 // RunnerStatusEnricher.swift
 // RunnerBarCore
-// swiftlint:disable function_parameter_count type_body_length
-import Foundation
-
-// MARK: - RunnerStatusEnricher
 //
 // Enriches a list of RunnerModel values with GitHub API data (status, busy, labels, group).
 //
@@ -29,17 +25,33 @@ import Foundation
 // independent API paths and may have different token permissions.
 //
 // All methods are synchronous and blocking — always call from a background thread.
-/// A value type representing RunnerStatusEnricher.
+// See: RunnerModel, RunnerStatus
+import Foundation
+
+// MARK: - RunnerStatusEnricher
+
+/// Enriches a `[RunnerModel]` snapshot with live GitHub API data.
+///
+/// Batches API calls by unique scope URL so a fleet of N runners registered to
+/// the same repo/org issues only one API call per scope per poll cycle.
+///
+/// - Important: All methods are synchronous and blocking. Always call from a
+///   background thread — never from `@MainActor`.
+/// - SeeAlso: `RunnerModel`, `RunnerStatus`, `LocalRunnerStore`
 public struct RunnerStatusEnricher: Sendable {
     // MARK: - Shared singleton
 
     /// The shared `RunnerStatusEnricher` instance used throughout the app.
     public static let shared = RunnerStatusEnricher()
 
-    /// Public memberwise initialiser.
+    /// Creates a new `RunnerStatusEnricher` instance.
     public init() {}
 
-    /// Performs the enrich operation.
+    /// Enriches `runners` with GitHub API status, busy flag, labels, and runner group.
+    ///
+    /// - Parameter runners: The locally-discovered runner list to enrich.
+    /// - Returns: A new array with the same runners, each enriched where an API match was found.
+    /// - Note: Runners whose `gitHubUrl` is `nil` are skipped and returned unchanged.
     public func enrich(runners: [RunnerModel]) -> [RunnerModel] {
         // Step 1: collect unique scope URLs and the runners belonging to each.
         var scopeToRunnerIndices: [String: [Int]] = [:]
@@ -96,16 +108,18 @@ public struct RunnerStatusEnricher: Sendable {
 
     /// Fetches the **complete** runner list for a scope URL via ghAPI, paginating
     /// through all pages (per_page=100) until exhausted.
-    /// Returns an empty array on failure.
+    ///
+    /// - Parameter scopeURL: The full GitHub URL for the repo or org scope.
+    /// - Returns: All runner dictionaries collected across all pages. Empty on failure.
     ///
     /// GitHub's default page size is 30. Without explicit pagination any org/repo
     /// with more than 30 runners would silently lose enrichment for runners beyond
     /// the first page. Using per_page=100 (the API maximum) minimises round-trips.
     ///
-    /// NOTE: This method intentionally does NOT gate on ghIsRateLimited. A permission
-    /// 403 on one scope (e.g. org) must not block a repo-scope fetch from running.
-    /// The transport layer handles real rate-limits; duplicating the check here causes
-    /// false skips when scopes are fetched sequentially and an org 403 fires first.
+    /// - Note: This method intentionally does NOT gate on `ghIsRateLimited`. A permission
+    ///   403 on one scope (e.g. org) must not block a repo-scope fetch from running.
+    ///   The transport layer handles real rate-limits; duplicating the check here causes
+    ///   false skips when scopes are fetched sequentially and an org 403 fires first.
     private func fetchRunnersForScope(_ scopeURL: String) -> [[String: Any]] {
         let stripped = scopeURL.replacingOccurrences(of: "https://github.com/", with: "")
         let parts = stripped.split(separator: "/").map(String.init)
@@ -153,9 +167,17 @@ public struct RunnerStatusEnricher: Sendable {
         return allRunners
     }
 
-    /// Applies fields from a raw GitHub API runner dictionary to a RunnerModel.
+    /// Applies fields from a raw GitHub API runner dictionary to a `RunnerModel`.
+    ///
+    /// - Parameters:
+    ///   - runner: The existing `RunnerModel` to enrich.
+    ///   - api: The raw API dictionary for this runner from `fetchRunnersForScope`.
+    /// - Returns: A new `RunnerModel` with API-sourced fields applied.
+    /// - Note: Platform and architecture are derived from API labels when the `.runner`
+    ///   JSON on disk did not supply them (older runner agent versions omit these fields).
     private func applyEnrichment(to runner: RunnerModel, from api: [String: Any]) -> RunnerModel {
-        let status = api["status"] as? String
+        let statusString = api["status"] as? String
+        let githubStatus = statusString.map { RunnerStatus(rawString: $0) }
         let busy = api["busy"] as? Bool ?? false
         let group = api["runner_group_name"] as? String
         let labelNames = (api["labels"] as? [[String: Any]])?
@@ -188,7 +210,7 @@ public struct RunnerStatusEnricher: Sendable {
             installPath: runner.installPath,
             isRunning: runner.isRunning,
             labels: effectiveLabels,
-            githubStatus: status,
+            githubStatus: githubStatus,
             isBusy: busy,
             lifecycleWarning: runner.lifecycleWarning,
             platform: platform,
@@ -200,4 +222,3 @@ public struct RunnerStatusEnricher: Sendable {
         )
     }
 }
-// swiftlint:enable function_parameter_count type_body_length

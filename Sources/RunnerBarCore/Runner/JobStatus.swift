@@ -1,18 +1,31 @@
 // JobStatus.swift
 // RunnerBarCore
-// swiftlint:disable missing_docs
+//
+// Typed enums for the GitHub Actions job/workflow status and conclusion fields.
+// Both use an unknown(String) fallback for forward-compatibility with new API values.
+// See: ActiveJob, WorkflowActionGroup, PollResultBuilder
 import Foundation
 
-// MARK: - Job status
+// MARK: - JobStatus
 
 /// The lifecycle status of a GitHub Actions job or workflow run.
 public enum JobStatus: Hashable, Sendable {
+    /// Job is waiting to be picked up by a runner.
     case queued
+    /// Job is currently executing on a runner.
     case inProgress
+    /// Job has finished (see `JobConclusion` for the outcome).
     case completed
+    /// Job is waiting on a required approval or environment protection rule.
     case waiting
+    /// Job has been requested but not yet queued.
     case requested
+    /// Job is pending deployment to a protected environment.
     case pending
+    /// A status value not recognised at compile time.
+    ///
+    /// - Note: Acts as a forward-compatible fallback so new GitHub API status
+    ///   values do not cause a decode failure or break polling logic.
     case unknown(String)
 
     /// The raw string value as returned by the GitHub API.
@@ -28,7 +41,9 @@ public enum JobStatus: Hashable, Sendable {
         }
     }
 
-    /// Initialise from a raw API string. Unknown values map to `.unknown(raw)`.
+    /// Initialises from a raw API string. Unknown values map to `.unknown(raw)`.
+    ///
+    /// - Parameter raw: The raw string value as returned by the GitHub REST API.
     public init(rawString raw: String) {
         switch raw {
         case "queued":       self = .queued
@@ -41,7 +56,11 @@ public enum JobStatus: Hashable, Sendable {
         }
     }
 
-    /// Returns `true` when the job / run is still active (not yet completed).
+    /// Returns `true` when the job or run is still active (not yet completed).
+    ///
+    /// - Note: `.unknown` is treated as **inactive** to avoid polling indefinitely
+    ///   if GitHub introduces a new status value this client does not yet recognise.
+    ///   Erring on the side of stopping the poll is safer than a stuck spinner.
     public var isActive: Bool {
         switch self {
         case .queued, .inProgress, .waiting, .requested, .pending: return true
@@ -50,40 +69,61 @@ public enum JobStatus: Hashable, Sendable {
     }
 }
 
+/// `Codable` conformance for `JobStatus` — encodes and decodes as a plain string.
 extension JobStatus: Codable {
+    /// Decodes from a single-value string container.
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = JobStatus(rawString: raw)
     }
+
+    /// Encodes as a single-value string container.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
 }
 
+/// `CustomStringConvertible` conformance for `JobStatus`.
 extension JobStatus: CustomStringConvertible {
+    /// Returns the raw API string value.
     public var description: String { rawValue }
 }
 
+/// `ExpressibleByStringLiteral` conformance for `JobStatus` — supports test literals.
 extension JobStatus: ExpressibleByStringLiteral {
+    /// Initialises from a string literal. Delegates to `init(rawString:)`.
     public init(stringLiteral value: String) {
         self = JobStatus(rawString: value)
     }
 }
 
-// MARK: - Job conclusion
+// MARK: - JobConclusion
 
 /// The outcome of a completed GitHub Actions job or workflow run.
 public enum JobConclusion: Hashable, Sendable {
+    /// All steps completed successfully.
     case success
+    /// One or more steps failed.
     case failure
+    /// The job was cancelled by a user or another workflow.
     case cancelled
+    /// The job was skipped due to an `if:` condition evaluating to false.
     case skipped
+    /// The job exceeded its configured timeout.
     case timedOut
+    /// A manual approval is required before the job can proceed.
     case actionRequired
+    /// The job completed without a definitive pass/fail outcome.
     case neutral
+    /// The job became stale waiting for an external event.
     case stale
+    /// The runner failed to initialise before the job could start.
     case startupFailure
+    /// A conclusion value not recognised at compile time.
+    ///
+    /// - Note: Acts as a forward-compatible fallback so new GitHub API conclusion
+    ///   values do not cause a decode failure.
     case unknown(String)
 
     /// The raw string value as returned by the GitHub API.
@@ -102,7 +142,9 @@ public enum JobConclusion: Hashable, Sendable {
         }
     }
 
-    /// Initialise from a raw API string. Unknown values map to `.unknown(raw)`.
+    /// Initialises from a raw API string. Unknown values map to `.unknown(raw)`.
+    ///
+    /// - Parameter raw: The raw string value as returned by the GitHub REST API.
     public init(rawString raw: String) {
         switch raw {
         case "success":          self = .success
@@ -118,7 +160,15 @@ public enum JobConclusion: Hashable, Sendable {
         }
     }
 
-    /// Returns `true` for terminal failure-like conclusions.
+    /// Returns `true` for terminal failure-like conclusions that should trigger alerts.
+    ///
+    /// - Note: `.cancelled` and `.skipped` are intentionally excluded — both are
+    ///   user-initiated or dependency-driven outcomes, not CI errors. Treating them
+    ///   as failures would trigger the failure hook for routine branch cancellations
+    ///   and conditional-skip patterns.
+    /// - Note: `.neutral` is also excluded — it represents an inconclusive outcome
+    ///   with no definitive pass/fail signal, not an error condition. Same class of
+    ///   outcome as `.skipped`: informational, not actionable.
     public var isFailure: Bool {
         switch self {
         case .failure, .timedOut, .startupFailure, .actionRequired: return true
@@ -127,24 +177,31 @@ public enum JobConclusion: Hashable, Sendable {
     }
 }
 
+/// `Codable` conformance for `JobConclusion` — encodes and decodes as a plain string.
 extension JobConclusion: Codable {
+    /// Decodes from a single-value string container.
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = JobConclusion(rawString: raw)
     }
+
+    /// Encodes as a single-value string container.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
 }
 
+/// `CustomStringConvertible` conformance for `JobConclusion`.
 extension JobConclusion: CustomStringConvertible {
+    /// Returns the raw API string value.
     public var description: String { rawValue }
 }
 
+/// `ExpressibleByStringLiteral` conformance for `JobConclusion` — supports test literals.
 extension JobConclusion: ExpressibleByStringLiteral {
+    /// Initialises from a string literal. Delegates to `init(rawString:)`.
     public init(stringLiteral value: String) {
         self = JobConclusion(rawString: value)
     }
 }
-// swiftlint:enable missing_docs

@@ -158,7 +158,7 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
     private func makeRunner(
         isRunning: Bool,
         isBusy: Bool = false,
-        githubStatus: String = "online",
+        githubStatus: RunnerStatus = .online,
         lifecycleWarning: String? = nil
     ) -> RunnerModel {
         RunnerModel(
@@ -184,14 +184,14 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
         XCTAssertEqual(makeRunner(isRunning: true, isBusy: true).displayStatus, "busy")
     }
 
-    /// Verifies that a non-running runner with GitHub status "online" displays "online".
+    /// Verifies that a non-running runner with GitHub status .online displays "online".
     func testDisplayStatusOnline() {
-        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "online").displayStatus, "online")
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .online).displayStatus, "online")
     }
 
-    /// Verifies that a non-running runner with GitHub status "offline" displays "offline".
+    /// Verifies that a non-running runner with GitHub status .offline displays "offline".
     func testDisplayStatusOffline() {
-        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "offline").displayStatus, "offline")
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .offline).displayStatus, "offline")
     }
 
     /// Verifies that a lifecycle warning overrides the running/busy status.
@@ -200,14 +200,104 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
         XCTAssertEqual(runner.displayStatus, "update required")
     }
 
-    /// Verifies that a non-running runner with GitHub status "busy" displays "busy".
+    /// Verifies that a non-running runner with GitHub status .busy displays "busy".
     func testDisplayStatusBusyGithubStatusWhenNotRunning() {
-        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "busy").displayStatus, "busy")
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .busy).displayStatus, "busy")
     }
 
     /// Verifies that a non-running runner with an unknown GitHub status defaults to "offline".
     func testDisplayStatusDefaultsToOfflineForUnknownStatus() {
-        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: "unknown").displayStatus, "offline")
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .unknown("draining")).displayStatus, "offline")
+    }
+}
+
+// MARK: - RunnerModel.statusColor
+
+final class RunnerModelStatusColorTests: XCTestCase {
+
+    private func makeRunner(
+        isRunning: Bool,
+        isBusy: Bool = false,
+        githubStatus: RunnerStatus = .online,
+        lifecycleWarning: String? = nil
+    ) -> RunnerModel {
+        RunnerModel(
+            runnerName: "test-runner",
+            gitHubUrl: nil,
+            agentId: nil,
+            workFolder: nil,
+            installPath: "/tmp/runner",
+            isRunning: isRunning,
+            githubStatus: githubStatus,
+            isBusy: isBusy,
+            lifecycleWarning: lifecycleWarning
+        )
+    }
+
+    /// Verifies that a running, non-busy runner gets the .running dot colour.
+    func testStatusColorRunning() {
+        XCTAssertEqual(makeRunner(isRunning: true).statusColor, .running)
+    }
+
+    /// Verifies that a running and busy runner gets the .busy dot colour.
+    func testStatusColorBusy() {
+        XCTAssertEqual(makeRunner(isRunning: true, isBusy: true).statusColor, .busy)
+    }
+
+    /// Verifies that a non-running runner that GitHub reports as online gets the .idle dot colour.
+    func testStatusColorGithubOnlineIsIdle() {
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .online).statusColor, .idle)
+    }
+
+    /// Verifies that a non-running runner with an offline GitHub status gets the .offline dot colour.
+    func testStatusColorOffline() {
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .offline).statusColor, .offline)
+    }
+
+    /// Verifies that a lifecycle warning maps to the .offline dot colour.
+    func testStatusColorLifecycleWarning() {
+        XCTAssertEqual(makeRunner(isRunning: true, lifecycleWarning: "restart failed").statusColor, .offline)
+    }
+
+    /// Verifies that an unknown GitHub status (not running locally) maps to .offline.
+    func testStatusColorUnknownGithubStatus() {
+        XCTAssertEqual(makeRunner(isRunning: false, githubStatus: .unknown("draining")).statusColor, .offline)
+    }
+}
+
+// MARK: - Runner.displayStatus
+
+final class RunnerDisplayStatusTests: XCTestCase {
+
+    private func makeRunner(status: RunnerStatus, busy: Bool = false, metrics: RunnerMetrics? = nil) -> Runner {
+        Runner(id: 1, name: "r", status: status, busy: busy, metrics: metrics)
+    }
+
+    /// Verifies that an offline runner returns "offline".
+    func testOfflineReturnsOffline() {
+        XCTAssertEqual(makeRunner(status: .offline).displayStatus, "offline")
+    }
+
+    /// Verifies that an unknown status returns "offline" (not idle/active).
+    func testUnknownReturnsOffline() {
+        XCTAssertEqual(makeRunner(status: .unknown("draining")).displayStatus, "offline")
+    }
+
+    /// Verifies that an online, non-busy runner with no metrics returns the idle placeholder.
+    func testOnlineIdleNoMetrics() {
+        XCTAssertEqual(makeRunner(status: .online, busy: false).displayStatus, "idle (CPU: — MEM: —)")
+    }
+
+    /// Verifies that an online, busy runner with metrics returns the active format.
+    func testOnlineBusyWithMetrics() {
+        let m = RunnerMetrics(cpu: 45.0, mem: 12.3)
+        XCTAssertEqual(makeRunner(status: .online, busy: true, metrics: m).displayStatus, "active (CPU: 45.0% MEM: 12.3%)")
+    }
+
+    /// Verifies that a busy status (from API) is treated same as online for display.
+    func testBusyStatusShowsActiveWithMetrics() {
+        let m = RunnerMetrics(cpu: 80.0, mem: 50.0)
+        XCTAssertEqual(makeRunner(status: .busy, busy: true, metrics: m).displayStatus, "active (CPU: 80.0% MEM: 50.0%)")
     }
 }
 
@@ -414,10 +504,7 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [liveJob] },
-            backfill: { _ in
-                // No backfill needed for this test — step-log fetching
-                // is exercised by integration tests, not unit tests.
-            }
+            backfill: { _ in }
         )
         XCTAssertTrue(result.display.contains(where: { $0.id == 99 }))
     }
@@ -429,9 +516,7 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [doneJob] },
-            backfill: { _ in
-                // No backfill needed — completed job already has full data.
-            }
+            backfill: { _ in }
         )
         XCTAssertTrue(result.newCache.keys.contains(42))
         XCTAssertEqual(result.newCache[42]?.isDimmed, true)
@@ -440,16 +525,72 @@ final class PollResultBuilderTests: XCTestCase {
     /// Verifies that a job that was live in the previous poll but is absent from fetchJobs is moved to the cache as vanished.
     func testBuildJobStateVanishedLiveJobAppearsInCache() {
         let prev = ActiveJob(id: 11, name: "Old", status: "in_progress")
-        // Job 11 was live last poll but fetchJobs returns nothing this poll
         let result = PollResultBuilder.buildJobState(
             snapPrev: [11: prev],
             snapCache: [:],
             fetchJobs: { [] },
-            backfill: { _ in
-                // No backfill needed — vanished job has no new data to fetch.
-            }
+            backfill: { _ in }
         )
         XCTAssertNotNil(result.newCache[11], "Vanished live job should appear in cache")
         XCTAssertEqual(result.newCache[11]?.status, "completed")
+    }
+}
+
+// MARK: - JobStatus.isActive
+
+final class JobStatusIsActiveTests: XCTestCase {
+
+    /// Verifies that queued, inProgress, waiting, requested, and pending are all active.
+    func testActiveStatuses() {
+        XCTAssertTrue(JobStatus.queued.isActive)
+        XCTAssertTrue(JobStatus.inProgress.isActive)
+        XCTAssertTrue(JobStatus.waiting.isActive)
+        XCTAssertTrue(JobStatus.requested.isActive)
+        XCTAssertTrue(JobStatus.pending.isActive)
+    }
+
+    /// Verifies that completed is not active.
+    func testCompletedIsNotActive() {
+        XCTAssertFalse(JobStatus.completed.isActive)
+    }
+
+    /// Verifies that an unknown status is treated as inactive to avoid infinite polling.
+    func testUnknownIsNotActive() {
+        XCTAssertFalse(JobStatus.unknown("draining").isActive)
+    }
+}
+
+// MARK: - JobConclusion.isFailure
+
+final class JobConclusionIsFailureTests: XCTestCase {
+
+    /// Verifies that failure, timedOut, startupFailure, and actionRequired are failures.
+    func testFailureConclusions() {
+        XCTAssertTrue(JobConclusion.failure.isFailure)
+        XCTAssertTrue(JobConclusion.timedOut.isFailure)
+        XCTAssertTrue(JobConclusion.startupFailure.isFailure)
+        XCTAssertTrue(JobConclusion.actionRequired.isFailure)
+    }
+
+    /// Verifies that success and neutral are not failures.
+    func testNonFailureConclusions() {
+        XCTAssertFalse(JobConclusion.success.isFailure)
+        XCTAssertFalse(JobConclusion.neutral.isFailure)
+        XCTAssertFalse(JobConclusion.stale.isFailure)
+    }
+
+    /// Verifies that cancelled is not a failure — it is user-initiated, not a CI error.
+    func testCancelledIsNotFailure() {
+        XCTAssertFalse(JobConclusion.cancelled.isFailure)
+    }
+
+    /// Verifies that skipped is not a failure — it is a dependency-driven outcome, not a CI error.
+    func testSkippedIsNotFailure() {
+        XCTAssertFalse(JobConclusion.skipped.isFailure)
+    }
+
+    /// Verifies that an unknown conclusion is not treated as a failure.
+    func testUnknownIsNotFailure() {
+        XCTAssertFalse(JobConclusion.unknown("neutral_extended").isFailure)
     }
 }
