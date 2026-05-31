@@ -46,12 +46,6 @@ func githubToken() -> String? {
         tokenCacheLock.withLock { $0 = token }
         return token
     }
-        let result = run.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !result.isEmpty && !result.hasPrefix("error") {
-            tokenCacheLock.withLock { $0 = result }
-            return result
-        }
-    }
     // 3–4. CI / environment variable fallbacks
     for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
         if let token = ProcessInfo.processInfo.environment[key], !token.isEmpty {
