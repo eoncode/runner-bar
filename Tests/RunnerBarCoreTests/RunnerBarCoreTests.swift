@@ -535,6 +535,36 @@ final class PollResultBuilderTests: XCTestCase {
         XCTAssertNotNil(result.newCache[11], "Vanished live job should appear in cache")
         XCTAssertEqual(result.newCache[11]?.status, "completed")
     }
+
+    // MARK: trimSeenGroupIDs
+
+    /// Set at exactly the limit must not be modified.
+    func testTrimSeenGroupIDsNoopAtLimit() {
+        var ids: Set<String> = Set((1...10).map { "group-\($0)" })
+        PollResultBuilder.trimSeenGroupIDs(&ids, limit: 10)
+        XCTAssertEqual(ids.count, 10, "Set at exactly the limit must not be trimmed")
+    }
+
+    /// One entry over the limit: must leave exactly `limit` entries, not `limit/2`.
+    ///
+    /// Guards against the off-by-half bug where `ids.count - limit/2` removes
+    /// too many entries and the set oscillates between limit/2 and limit.
+    func testTrimSeenGroupIDsTrimsToLimitNotHalf() {
+        let limit = 10
+        var ids: Set<String> = Set((1...(limit + 1)).map { "group-\($0)" })
+        PollResultBuilder.trimSeenGroupIDs(&ids, limit: limit)
+        XCTAssertEqual(ids.count, limit,
+            "One entry over limit must trim to exactly limit, not limit/2 (\(limit / 2))")
+    }
+
+    /// Well over the limit: must also leave exactly `limit` entries.
+    func testTrimSeenGroupIDsWellOverLimit() {
+        let limit = 10
+        var ids: Set<String> = Set((1...25).map { "group-\($0)" })
+        PollResultBuilder.trimSeenGroupIDs(&ids, limit: limit)
+        XCTAssertEqual(ids.count, limit,
+            "Set well over limit must trim to exactly limit entries")
+    }
 }
 
 // MARK: - JobStatus.isActive
@@ -593,5 +623,242 @@ final class JobConclusionIsFailureTests: XCTestCase {
     /// Verifies that an unknown conclusion is not treated as a failure.
     func testUnknownIsNotFailure() {
         XCTAssertFalse(JobConclusion.unknown("neutral_extended").isFailure)
+    }
+}
+
+// MARK: - PollResultBuilder.buildGroupState (fix #1041)
+
+final class PollResultBuilderGroupStateTests: XCTestCase {
+
+    // MARK: Helpers
+
+    private func makeGroup(
+        id runID: Int,
+        sha: String,
+        groupStatus: GroupStatus = .completed,
+        jobStatus: JobStatus? = nil,
+        isDimmed: Bool = false
+    ) -> WorkflowActionGroup {
+        let runStatus: String
+        switch groupStatus {
+        case .inProgress: runStatus = "in_progress"
+        case .queued:     runStatus = "queued"
+        case .completed:  runStatus = "completed"
+        }
+        let resolvedJobStatus: JobStatus = jobStatus ?? JobStatus(rawString: runStatus)
+        let jobConclusion: JobConclusion? = resolvedJobStatus == .completed ? .success : nil
+        let job = ActiveJob(
+            id: runID * 10,
+            name: "job",
+            status: resolvedJobStatus,
+            conclusion: jobConclusion
+        )
+        return WorkflowActionGroup(
+            headSha: sha,
+            label: String(sha.prefix(7)),
+            title: "commit message",
+            headBranch: "main",
+            repo: "owner/repo",
+            runs: [WorkflowRunRef(id: runID, name: "CI", status: runStatus, conclusion: jobConclusion.map { $0.rawValue }, htmlUrl: nil)],
+            jobs: [job],
+            firstJobStartedAt: Date(timeIntervalSinceReferenceDate: 0),
+            lastJobCompletedAt: resolvedJobStatus == .completed ? Date(timeIntervalSinceReferenceDate: 60) : nil,
+            isDimmed: isDimmed
+        )
+    }
+
+    // MARK: Tests
+
+    /// Regression test for #1041: completed-only group must land in cache, not live display.
+    func testCompletedOnlyGroupIsRoutedToCacheNotLive() {
+        let completedGroup = makeGroup(id: 500, sha: "aabbcc", groupStatus: .completed)
+
+        let result = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertTrue(
+            result.display.filter { !$0.isDimmed }.isEmpty,
+            "Completed group must not appear as a live (non-dimmed) row"
+        )
+        XCTAssertFalse(
+            result.newGroupCache.isEmpty,
+            "Completed group must be stored in the group cache"
+        )
+    }
+
+    /// Verifies that an in-progress group appears as a live (non-dimmed) display row.
+    func testInProgressGroupAppearsLiveInDisplay() {
+        let liveGroup = makeGroup(id: 600, sha: "ddeeff", groupStatus: .inProgress, jobStatus: .inProgress)
+
+        let result = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [liveGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertTrue(
+            result.display.contains(where: { !$0.isDimmed }),
+            "In-progress group must appear as a live (non-dimmed) row"
+        )
+    }
+
+    /// fireFailureHook must fire exactly once for a newly-completed group.
+    func testFireFailureHookCalledOnceForNewCompletedGroup() {
+        let completedGroup = makeGroup(id: 700, sha: "112233", groupStatus: .completed)
+        var hookCallCount = 0
+
+        _ = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            snapSeenGroupIDs: [],
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertEqual(hookCallCount, 1, "fireFailureHook must fire exactly once for a new completed group")
+    }
+
+    /// fireFailureHook must NOT re-fire when the group ID is already in snapSeenGroupIDs,
+    /// even if it has been evicted from snapGroupCache by trimGroupCache.
+    func testFireFailureHookNotCalledWhenGroupAlreadySeenEvenIfEvictedFromCache() {
+        let completedGroup = makeGroup(id: 800, sha: "445566", groupStatus: .completed, isDimmed: true)
+        var hookCallCount = 0
+
+        _ = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],                              // evicted from display cache
+            snapSeenGroupIDs: [completedGroup.id],           // but present in seen-IDs set
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertEqual(hookCallCount, 0,
+            "fireFailureHook must not re-fire for a group already in seenGroupIDs, even after cache eviction")
+    }
+
+    /// Stale-row self-heal: group that was live in snapPrevGroups comes back completed → must land in cache.
+    func testPreviouslyLiveGroupSelfHealsAfterCompletion() {
+        let sha = "cafe01"
+        let liveGroup      = makeGroup(id: 901, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
+        let completedGroup = makeGroup(id: 901, sha: sha, groupStatus: .completed)
+
+        let result = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [liveGroup.id: liveGroup],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertTrue(
+            result.display.filter { !$0.isDimmed }.isEmpty,
+            "Previously-live group must not remain as a live row after completing"
+        )
+        XCTAssertNotNil(
+            result.newGroupCache[completedGroup.id],
+            "Self-healed group must appear in the group cache"
+        )
+    }
+
+    /// A mixed-SHA group (one in_progress run + one completed run) must produce exactly
+    /// one live display entry and zero cache entries while still running.
+    func testShaWithBothLiveAndCompletedRunsProducesOneDisplayEntry() {
+        let sha = "beef02"
+        let mixedGroup = WorkflowActionGroup(
+            headSha: sha,
+            label: String(sha.prefix(7)),
+            title: "mixed commit",
+            headBranch: "main",
+            repo: "owner/repo",
+            runs: [
+                WorkflowRunRef(id: 902, name: "Lint",   status: "in_progress", conclusion: nil,       htmlUrl: nil),
+                WorkflowRunRef(id: 903, name: "Deploy", status: "completed",   conclusion: "success", htmlUrl: nil),
+            ],
+            jobs: [
+                ActiveJob(id: 9020, name: "lint-job",   status: JobStatus.inProgress),
+                ActiveJob(id: 9030, name: "deploy-job", status: JobStatus.completed, conclusion: JobConclusion.success),
+            ],
+            firstJobStartedAt: Date(timeIntervalSinceReferenceDate: 0),
+            lastJobCompletedAt: nil,
+            isDimmed: false
+        )
+
+        let result = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            fetchGroups: { _ in [mixedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in },
+            enrichJobs: { $0 }
+        )
+
+        let displayForSha = result.display.filter { $0.headSha == sha }
+        let cacheForSha   = result.newGroupCache.values.filter { $0.headSha == sha }
+        XCTAssertEqual(displayForSha.count, 1, "Mixed-run group must appear exactly once in display")
+        XCTAssertEqual(cacheForSha.count,   0, "Mixed-run group must not be duplicated in cache while still live")
+    }
+
+    /// An ID evicted from seenGroupIDs by trimSeenGroupIDs will re-trigger the failure
+    /// hook when it resurfaces in the feed on the next poll.
+    ///
+    /// This is a known limitation of the in-memory approximate eviction strategy.
+    /// This test locks in that behaviour so any future change (e.g. switching to a
+    /// persisted seen-set) is intentional and visible in the diff.
+    func testEvictedGroupIDRefiresHookOnNextPoll() {
+        let completedGroup = makeGroup(id: 1001, sha: "dead01", groupStatus: .completed)
+        var hookCallCount = 0
+
+        _ = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [:],
+            snapGroupCache: [:],
+            snapSeenGroupIDs: [],         // evicted — ID is gone
+            fetchGroups: { _ in [completedGroup] },
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertEqual(hookCallCount, 1,
+            "A group whose ID was evicted from seenGroupIDs must re-fire the hook — known limitation")
+    }
+
+    /// A group present in both the fetched completed list (doneGroups) and snapPrevGroups
+    /// (was live last poll) must fire the failure hook exactly once.
+    ///
+    /// The ordering invariant: doneGroups populates newSeenGroupIDs BEFORE
+    /// freezeVanishedGroups runs, so when freezeVanishedGroups encounters the same
+    /// group ID it finds it already in seenGroupIDs and skips the second fire.
+    func testDoneGroupsSeenBeforeFreezeVanishedGroupsPreventsDoubleFire() {
+        let sha = "ff0011"
+        let liveVersion      = makeGroup(id: 1002, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
+        let completedVersion = makeGroup(id: 1002, sha: sha, groupStatus: .completed)
+        var hookCallCount = 0
+
+        _ = PollResultBuilder.buildGroupState(
+            snapPrevGroups: [liveVersion.id: liveVersion],  // was live last poll
+            snapGroupCache: [:],
+            snapSeenGroupIDs: [],
+            fetchGroups: { _ in [completedVersion] },       // now returned as completed
+            scopeFromGroup: { $0.repo },
+            fireFailureHook: { _, _ in hookCallCount += 1 },
+            enrichJobs: { $0 }
+        )
+
+        XCTAssertEqual(hookCallCount, 1,
+            "Group in both doneGroups and snapPrevGroups must fire the hook exactly once")
     }
 }
