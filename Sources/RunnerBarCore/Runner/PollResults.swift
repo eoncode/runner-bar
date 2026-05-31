@@ -4,6 +4,7 @@ import Foundation
 
 // MARK: - Poll result value types
 
+// swiftlint:disable missing_docs
 /// Result returned by `PollResultBuilder.buildJobState`.
 public struct JobPollResult {
     /// Jobs to display in the popover (in_progress → queued → cached done).
@@ -23,9 +24,6 @@ public struct JobPollResult {
         self.newCache = newCache
         self.newPrevLive = newPrevLive
     }
-
-    // swiftlint:disable:next missing_docs
-    init() { display = []; newCache = [:]; newPrevLive = [:] }
 }
 
 /// Result returned by `PollResultBuilder.buildGroupState`.
@@ -47,7 +45,5 @@ public struct GroupPollResult {
         self.newGroupCache = newGroupCache
         self.newPrevLiveGroups = newPrevLiveGroups
     }
-
-    // swiftlint:disable:next missing_docs
-    init() { display = []; newGroupCache = [:]; newPrevLiveGroups = [:] }
 }
+// swiftlint:enable missing_docs

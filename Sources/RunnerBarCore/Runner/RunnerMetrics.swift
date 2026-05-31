@@ -1,15 +1,18 @@
 // RunnerMetrics.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
 public struct RunnerMetrics: Equatable {
-    /// The cpu constant.
+    /// CPU utilisation percentage for this runner process.
     public let cpu: Double
-    /// The mem constant.
+    /// Memory utilisation percentage for this runner process.
     public let mem: Double
 
-    /// Creates a new instance.
+    /// Creates a `RunnerMetrics` snapshot.
+    /// - Parameters:
+    ///   - cpu: CPU utilisation percentage.
+    ///   - mem: Memory utilisation percentage.
     public init(cpu: Double, mem: Double) {
         self.cpu = cpu
         self.mem = mem
@@ -50,13 +53,14 @@ private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInte
 
 // MARK: - Per-runner metrics
 
-/// Returns CPU+MEM metrics for the `Runner.Worker` / `Runner.Listener` processes
+/// Returns CPU and memory metrics for the `Runner.Worker` / `Runner.Listener` processes
 /// that belong to the runner installed at `installPath`.
 ///
 /// Matches by checking the process command line contains `installPath`, so each
-/// runner is identified individually — not by slot-index approximation.
-/// Sums CPU and MEM across all matching processes (Worker + Listener) for the runner.
+/// runner is identified individually. Sums CPU and MEM across all matching processes.
 /// Returns `nil` when no matching process is found.
+/// - Parameter installPath: Absolute path to the runner installation directory.
+/// - Returns: A `RunnerMetrics` snapshot, or `nil` if no matching process exists.
 public func metricsForRunner(installPath: String) -> RunnerMetrics? {
     log("metricsForRunner › ENTER installPath=\(installPath)")
     let pidsOutput = runProcess("/usr/bin/pgrep", ["-f", installPath], timeout: 3)
@@ -75,7 +79,7 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
         log("metricsForRunner › ps returned empty for installPath=\(installPath)")
         return nil
     }
-    let lines = output.components(separatedBy: "\n").dropFirst() // drop header
+    let lines = output.components(separatedBy: "\n").dropFirst()
     var totalCPU = 0.0
     var totalMEM = 0.0
     var count = 0
@@ -102,13 +106,14 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
 
 // MARK: - All-worker metrics
 
-/// Performs the allWorkerMetrics operation.
+/// Returns CPU and memory metrics for all `Runner.Worker` and `Runner.Listener`
+/// processes currently running on this machine, sorted by descending CPU usage.
+///
+/// Uses `pgrep` to find matching PIDs, then `ps` to read their resource usage.
+/// Returns an empty array when no matching processes are found.
+/// - Returns: Array of `RunnerMetrics` sorted by descending CPU utilisation.
 public func allWorkerMetrics() -> [RunnerMetrics] {
     log("allWorkerMetrics › ENTER — using direct pgrep + ps (no shell wrapper)")
-
-    // Step 1: find matching PIDs only — fast, doesn't walk full process table.
-    // Dots are escaped (\.) so pgrep treats them as literal characters,
-    // not regex wildcards — avoids false matches like 'RunnerXWorker'.
     let pidsOutput = runProcess(
         "/usr/bin/pgrep",
         ["-f", "Runner\\.Worker|Runner\\.Listener"],
@@ -124,15 +129,13 @@ public func allWorkerMetrics() -> [RunnerMetrics] {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("allWorkerMetrics › found pids=\(pidList)")
-
-    // Step 2: ps scoped to only those PIDs
     let output = runProcess("/bin/ps", ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
     log("allWorkerMetrics › ps returned — outputBytes=\(output.count) isEmpty=\(output.isEmpty)")
     guard !output.isEmpty else {
         log("allWorkerMetrics › ps returned empty — returning []")
         return []
     }
-    let lines = output.components(separatedBy: "\n").dropFirst() // drop header
+    let lines = output.components(separatedBy: "\n").dropFirst()
     log("allWorkerMetrics › scanning \(lines.count) line(s)")
     var results: [RunnerMetrics] = []
     for line in lines {
