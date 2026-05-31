@@ -57,13 +57,21 @@ private struct RunPayload: Codable {
     let pullRequests: [PRRef]?
     /// Maps Swift property names to their snake_case JSON keys.
     enum CodingKeys: String, CodingKey {
+        /// Direct-mapped keys whose JSON names match their Swift property names.
         case id, name, status, conclusion
+        /// JSON key `head_branch`.
         case headBranch   = "head_branch"
+        /// JSON key `head_sha`.
         case headSha      = "head_sha"
+        /// JSON key `display_title`.
         case displayTitle = "display_title"
+        /// JSON key `created_at`.
         case createdAt    = "created_at"
+        /// JSON key `html_url`.
         case htmlUrl      = "html_url"
+        /// JSON key `head_commit`.
         case headCommit   = "head_commit"
+        /// JSON key `pull_requests`.
         case pullRequests = "pull_requests"
     }
 }
