@@ -29,7 +29,10 @@ import Foundation
 public enum ProcessRunner {
     /// The collected output and exit status from a subprocess invocation.
     public struct Result {
-        /// Collected stdout bytes, or `nil` if the process failed to launch or produced no output.
+        /// Collected stdout bytes, or `nil` when the process failed to launch
+        /// or when the process ran successfully but produced no stdout.
+        /// - Note: `nil` does not imply failure — use `exitCode` to distinguish
+        ///   a launch failure (`Int32.max`) from a successful process that produced no output.
         public let data: Data?
         /// Process exit code. `Int32.max` indicates a launch failure rather than a process exit.
         public let exitCode: Int32
