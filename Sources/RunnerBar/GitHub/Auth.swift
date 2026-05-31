@@ -46,28 +46,13 @@ func githubToken() -> String? {
         tokenCacheLock.withLock { $0 = token }
         return token
     }
-    // 3. gh CLI fallback — existing users keep working without re-authenticating.
-    //    Uses ProcessRunner.run directly (no shell wrapper) to avoid /bin/zsh overhead
-    //    and shell-injection risk.
-    if let ghPath = GHBinaryLocator.ghBinaryPath() {
-        let run = ProcessRunner.run(
-            executableURL: URL(fileURLWithPath: ghPath),
-            arguments: ["auth", "token"],
-            timeout: 10
-        )
-        // Guard exit code: a non-zero exit with non-empty stdout (e.g. a deprecation
-        // warning) must not be cached as a valid token.
-        guard run.exitCode == 0 else {
-            log("Auth › gh auth token exited \(run.exitCode) — skipping")
-            return nil
-        }
         let result = run.output.trimmingCharacters(in: .whitespacesAndNewlines)
         if !result.isEmpty && !result.hasPrefix("error") {
             tokenCacheLock.withLock { $0 = result }
             return result
         }
     }
-    // 4–5. CI / environment variable fallbacks
+    // 3–4. CI / environment variable fallbacks
     for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
         if let token = ProcessInfo.processInfo.environment[key], !token.isEmpty {
             tokenCacheLock.withLock { $0 = token }

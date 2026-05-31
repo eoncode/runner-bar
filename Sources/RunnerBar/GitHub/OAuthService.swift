@@ -57,7 +57,7 @@ final class OAuthService {
     ///   Without this, dispatch and re-run actions fail with 403 even when `repo`
     ///   is present.
     /// - `gist`: Required by some GitHub CLI (`gh`) operations used internally via
-    ///   `GitHubCLITransport`. Absent from the token, `gh` prompts for re-auth
+    ///   Absent from the token, GitHub prompts for re-auth
     ///   interactively, breaking headless CLI calls.
     ///
     /// Previously only `repo` and `read:org` were requested. The additional scopes

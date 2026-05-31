@@ -32,7 +32,7 @@ private enum GitHubURIs {
 /// `~/Library/LaunchAgents/actions.runner.<owner>.<repo>.<name>.plist` directly
 /// via FileManager, and registers the runner in `LocalRunnerStore`.
 ///
-/// Requires a GitHub token for "Add new" only (`gh auth login`, GH_TOKEN, or GITHUB_TOKEN).
+/// Requires a GitHub token for "Add new" (OAuth sign-in, GH_TOKEN, or GITHUB_TOKEN).
 struct AddRunnerSheet: View {
     /// The isPresented property.
     @Binding var isPresented: Bool
@@ -380,7 +380,7 @@ struct AddRunnerSheet: View {
             }
             .buttonStyle(.plain)
             if selection.isEmpty {
-                Text("No \(label.lowercased())s found. Run `gh auth login` or set GH_TOKEN.")
+                Text("No \(label.lowercased())s found. Sign in with GitHub or set GH_TOKEN / GITHUB_TOKEN.")
                     .font(.caption2).foregroundColor(.secondary)
             }
         }
@@ -664,12 +664,10 @@ struct AddRunnerSheet: View {
             guard let token = fetchRegistrationToken(scope: scope) else {
                 await MainActor.run {
                     isRegistering = false
-                    if GHBinaryLocator.ghBinaryPath() == nil {
-                        errorMessage = "gh CLI not found. Install it with `brew install gh`."
-                    } else if currentScopeType == .org {
-                        errorMessage = "Not authorised to register org-level runners. Either add 'manage_runners:org' scope to your gh token, or sign in with OAuth via the GitHub button in Settings."
+                    if currentScopeType == .org {
+                        errorMessage = "Not authorised to register org-level runners. Ensure your token has the 'manage_runners:org' scope, or sign in via the GitHub button in Settings."
                     } else {
-                        errorMessage = "Could not get a registration token. Ensure `gh auth login` has been run or GH_TOKEN is set."
+                        errorMessage = "Could not get a registration token. Ensure a valid token is available via OAuth sign-in, or the GH_TOKEN / GITHUB_TOKEN environment variable."
                     }
                 }
                 return

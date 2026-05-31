@@ -7,39 +7,11 @@ import os
 /// The unzipBinaryPath constant.
 private let unzipBinaryPath = "/usr/bin/unzip"
 
-/// Calls `gh api` with `Accept: application/vnd.github.v3.raw` so log endpoints
-/// return the raw redirected body (plain text for jobs, ZIP bytes for runs)
-/// instead of the default JSON wrapper. Mirrors the pattern used by
-/// `fetchStepLog` in GitHub.swift but returns raw `Data` for binary support.
+/// Fetches raw bytes from a GitHub API endpoint via URLSession.
+/// Log endpoints 302-redirect to S3; URLSession follows the redirect automatically.
+/// Returns nil when no token is available or the request fails.
 private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard let ghPath = GHBinaryLocator.ghBinaryPath() else { log("ghRaw › gh not found"); return nil }
-    let task = Process()
-    let pipe = Pipe()
-    task.executableURL = URL(fileURLWithPath: ghPath)
-    task.arguments = ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"]
-    task.standardOutput = pipe
-    task.standardError = Pipe()
-    nonisolated(unsafe) var outputData = Data()
-    let lock = NSLock()
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-        let chunk = handle.availableData
-        guard !chunk.isEmpty else { return }
-        lock.lock(); outputData.append(chunk); lock.unlock()
-    }
-    do { try task.run() } catch {
-        log("ghRaw › launch error: \(error)")
-        pipe.fileHandleForReading.readabilityHandler = nil
-        return nil
-    }
-    let timeoutItem = DispatchWorkItem { if task.isRunning { task.terminate() } }
-    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
-    task.waitUntilExit()
-    timeoutItem.cancel()
-    pipe.fileHandleForReading.readabilityHandler = nil
-    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-    log("ghRaw › \(endpoint) → \(outputData.count)b exit \(task.terminationStatus)")
-    return outputData.isEmpty ? nil : outputData
+    ghRawTransport()(endpoint)
 }
 
 // MARK: - Job log (plain text, 1 call)

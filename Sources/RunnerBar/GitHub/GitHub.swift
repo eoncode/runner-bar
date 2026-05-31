@@ -183,7 +183,7 @@ private let noRedirectSession = URLSession(
     delegateQueue: nil
 )
 
-/// Fetches step logs via URLSession (token path) or gh CLI (fallback).
+/// Fetches the log for a single step via URLSession.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchStepLog › invalid scope: \(scopeString)")
@@ -196,15 +196,12 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
     let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
 
-    let raw: String?
-    if let token = githubToken() {
-        // TODO: migrate sem1/sem2 to async/await as part of #777
-        raw = fetchStepLogViaURLSession(endpoint: endpoint, token: token)
-            ?? fetchStepLogViaCLI(endpoint: endpoint)
-    } else {
-        log("fetchStepLog › no token, falling back to gh CLI")
-        raw = fetchStepLogViaCLI(endpoint: endpoint)
+    guard let token = githubToken() else {
+        log("fetchStepLog › no token available for job \(jobID)")
+        return nil
     }
+    // TODO: migrate sem1/sem2 to async/await as part of #777
+    let raw = fetchStepLogViaURLSession(endpoint: endpoint, token: token)
 
     guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty response for job \(jobID)")
@@ -218,7 +215,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
 }
 
 /// Step 1+2: resolve the 302 redirect then fetch the raw log body.
-/// Returns `nil` if step 1 does not yield a Location header (caller falls back to CLI).
+/// Returns `nil` if step 1 does not yield a Location header.
 private func fetchStepLogViaURLSession(endpoint: String, token: String) -> String? {
     let urlString = endpoint.hasPrefix("http")
         ? endpoint
@@ -251,7 +248,7 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
     sem1.wait()
 
     guard let s3URL = redirectURL.withLock({ $0 }) else {
-        log("fetchStepLogViaURLSession › no Location header, returning nil for CLI fallback")
+        log("fetchStepLogViaURLSession › no Location header in step-1 response")
         return nil
     }
 
@@ -277,15 +274,6 @@ private func fetchStepLogViaURLSession(endpoint: String, token: String) -> Strin
     return String(data: data, encoding: .utf8)
 }
 
-/// Fetches raw step log text using the `gh` CLI as a fallback.
-private func fetchStepLogViaCLI(endpoint: String) -> String? {
-    let (data, _) = runGHProcess(
-        arguments: ["api", endpoint, "--header", "Accept: application/vnd.github.v3.raw"],
-        timeout: 30
-    )
-    guard let data else { return nil }
-    return String(data: data, encoding: .utf8)
-}
 
 /// Parses a raw log string into sections delimited by `##[group]` markers
 /// and returns the section matching `stepNumber`.
