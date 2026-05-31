@@ -50,6 +50,7 @@ public enum RunnerStatus: Hashable, Sendable {
     }
 }
 
+/// `Codable` conformance for `RunnerStatus` — encodes and decodes as a plain string.
 extension RunnerStatus: Codable {
     /// Decodes from a single-value string container.
     public init(from decoder: Decoder) throws {
@@ -64,6 +65,7 @@ extension RunnerStatus: Codable {
     }
 }
 
+/// `CustomStringConvertible` conformance for `RunnerStatus`.
 extension RunnerStatus: CustomStringConvertible {
     /// Returns the raw API string value.
     public var description: String { rawValue }

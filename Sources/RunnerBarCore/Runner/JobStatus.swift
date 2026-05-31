@@ -69,6 +69,7 @@ public enum JobStatus: Hashable, Sendable {
     }
 }
 
+/// `Codable` conformance for `JobStatus` — encodes and decodes as a plain string.
 extension JobStatus: Codable {
     /// Decodes from a single-value string container.
     public init(from decoder: Decoder) throws {
@@ -83,11 +84,13 @@ extension JobStatus: Codable {
     }
 }
 
+/// `CustomStringConvertible` conformance for `JobStatus`.
 extension JobStatus: CustomStringConvertible {
     /// Returns the raw API string value.
     public var description: String { rawValue }
 }
 
+/// `ExpressibleByStringLiteral` conformance for `JobStatus` — supports test literals.
 extension JobStatus: ExpressibleByStringLiteral {
     /// Initialises from a string literal. Delegates to `init(rawString:)`.
     public init(stringLiteral value: String) {
@@ -171,6 +174,7 @@ public enum JobConclusion: Hashable, Sendable {
     }
 }
 
+/// `Codable` conformance for `JobConclusion` — encodes and decodes as a plain string.
 extension JobConclusion: Codable {
     /// Decodes from a single-value string container.
     public init(from decoder: Decoder) throws {
@@ -185,11 +189,13 @@ extension JobConclusion: Codable {
     }
 }
 
+/// `CustomStringConvertible` conformance for `JobConclusion`.
 extension JobConclusion: CustomStringConvertible {
     /// Returns the raw API string value.
     public var description: String { rawValue }
 }
 
+/// `ExpressibleByStringLiteral` conformance for `JobConclusion` — supports test literals.
 extension JobConclusion: ExpressibleByStringLiteral {
     /// Initialises from a string literal. Delegates to `init(rawString:)`.
     public init(stringLiteral value: String) {
