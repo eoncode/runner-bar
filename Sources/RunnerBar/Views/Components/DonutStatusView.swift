@@ -20,24 +20,18 @@ import SwiftUI
 /// ❌ NEVER remove the repeatForever animation — it is the liveness indicator.
 /// ❌ NEVER start the rotation for non-.inProgress states — it wastes CPU/GPU.
 struct DonutStatusView: View {
-    /// The status constant.
     let status: RBStatus
     /// Progress fraction 0.0–1.0 for in-progress state. Ignored for other states.
     var progress: Double = 0
-    /// The size property.
     var size: CGFloat = 16
 
-    /// The rotationAngle property.
     @State private var rotationAngle: Double = 0
-    /// The displayProgress property.
     @State private var displayProgress: Double = 0
 
-    /// The strokeWidth property.
     private var strokeWidth: CGFloat { size * 0.11 }
     /// Inner ring diameter derived from the outer size. // periphery:ignore
     private var innerSize: CGFloat { size * 0.82 }
 
-    /// The body property.
     var body: some View {
         ZStack {
             switch status {

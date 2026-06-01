@@ -5,31 +5,33 @@ import RunnerBarCore
 
 // MARK: - FailureHookRunner
 
-// #544: Fires the per-scope failure hook command when an WorkflowActionGroup transitions to failure.
-// #546: Resolves $LOCAL_PATH from ScopePreferencesStore.
-// #552: Fetches failed job/step details on background thread before building $FAILURE_LOG.
-// #560: Branch filter — skip if a branch filter is set and does not match group.headBranch.
-//
-// Called from RunnerStoreState.buildGroupState when a group is newly completed
-// with a failure conclusion. Resolves all $TOKEN variables then opens Terminal.app
-// via TerminalLauncher (AppleScript do script) so the command runs visibly.
-//
-// TOKEN RESOLUTION CONTRACT:
-// ALL tokens are resolved in Swift before the command string is passed to
-// /bin/zsh -c. There must be NO shell variables or $() subshells left in the
-// command by the time it reaches the shell — special characters in log content,
-// branch names, etc. would break shell parsing.
-//
-// $FAILURE_LOG contains the raw log tail of the failed job (last 150 lines).
-// If no log is available it falls back to failed job/step names only.
-// Wrap it in single quotes in your command:
-//     gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo
-//
-// Other tokens ($LOCAL_PATH, $SCOPE, $BRANCH, $COMMIT_SHA, $RUN_ID,
-// $WORKFLOW_NAME, $RUN_LINK, $COMMIT_LINK, $BRANCH_LINK, $REPO_LINK) are
-// available for use in the command but are NOT injected automatically —
-// the user must include them as placeholders in their command string.
-/// Enumerates possible values for FailureHookRunner.
+/// Fires the per-scope failure-hook terminal command when a `WorkflowActionGroup` transitions to failure.
+///
+/// Resolves `$LOCAL_PATH` from `ScopePreferencesStore` (see #546), fetches failed job/step details
+/// on a background thread before building `$FAILURE_LOG` (see #552), and applies an optional
+/// branch filter before firing (see #560).
+///
+/// Called from `RunnerStoreState.buildGroupState` when a group is newly completed
+/// with a failure conclusion. Resolves all `$TOKEN` variables then opens Terminal.app
+/// via `TerminalLauncher` (AppleScript `do script`) so the command runs visibly.
+///
+/// **Token resolution contract:**
+/// ALL tokens are resolved in Swift before the command string is passed to
+/// `/bin/zsh -c`. There must be NO shell variables or `$()` subshells left in the
+/// command by the time it reaches the shell — special characters in log content,
+/// branch names, etc. would break shell parsing.
+///
+/// `$FAILURE_LOG` contains the raw log tail of the failed job (last 150 lines).
+/// If no log is available it falls back to failed job/step names only.
+/// Wrap it in single quotes in your command:
+/// ```
+/// gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo
+/// ```
+///
+/// Other tokens (`$LOCAL_PATH`, `$SCOPE`, `$BRANCH`, `$COMMIT_SHA`, `$RUN_ID`,
+/// `$WORKFLOW_NAME`, `$RUN_LINK`, `$COMMIT_LINK`, `$BRANCH_LINK`, `$REPO_LINK`) are
+/// available for use in the command but are NOT injected automatically —
+/// the user must include them as placeholders in their command string.
 enum FailureHookRunner {
 
     /// Default command used when no command has been explicitly saved for the scope.
@@ -68,13 +70,15 @@ enum FailureHookRunner {
             return
         }
         log("FailureHookRunner › ALL CHECKS PASSED — dispatching background task for scope=\(scope) groupID=\(group.id)")
+        // TODO: #1077 — migrate off DispatchQueue.global to structured concurrency
         DispatchQueue.global(qos: .utility).async {
             log("FailureHookRunner › background thread START — fetching failed jobs for groupID=\(group.id)")
-            let jobs = fetchFailedJobs(group: group, scope: scope)
+            let jobs = fetchFailedJobs(group: group, scope: scope) // fetchFailedJobs defined below
             log("FailureHookRunner › background thread — fetchFailedJobs returned \(jobs.count) jobs: \(jobs.map { $0.job.name })")
             let resolved = resolveTokens(command, group: group, scope: scope, jobs: jobs)
             log("FailureHookRunner › background thread — resolved command (first 300): \(resolved.prefix(300))")
             log("FailureHookRunner › background thread — calling TerminalLauncher.open for groupID=\(group.id)")
+            // NSAppleScript must run on the main thread.
             DispatchQueue.main.async {
                 TerminalLauncher.open(command: resolved)
                 log("FailureHookRunner › main thread — TerminalLauncher.open returned for groupID=\(group.id)")
@@ -98,14 +102,16 @@ enum FailureHookRunner {
 
     /// Represents the result of fetching a single failed job, including its log tail.
     private struct FailedJobResult {
-        /// The job payload.
+        /// The job payload returned by the GitHub Jobs API.
         let job: JobPayload
-        /// The last 150 lines of the job log, or nil if unavailable.
+        /// The last 150 lines of the job log, or `nil` if the log was unavailable.
         let logTail: String?
     }
 
     /// Fetches jobs (with steps) and raw log tail for all failed runs in the group.
     /// Blocking — must be called from a background thread.
+    /// - Note: `fetchJobLog` is defined in `RunnerBarCore/API/JobLogFetcher`.
+    ///         `ghAPI` is defined in `RunnerBarCore/API/GHAPIClient`.
     private static func fetchFailedJobs(group: WorkflowActionGroup, scope: String) -> [FailedJobResult] {
         var result: [FailedJobResult] = []
         var seenIDs = Set<Int>()
