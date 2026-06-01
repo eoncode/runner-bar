@@ -44,8 +44,10 @@ final class RunnerViewModel: ObservableObject {
     /// Copies the latest state from `RunnerStore` and `LocalRunnerStore` into the published properties.
     ///
     /// Called by Combine sinks in `AppDelegate+PanelSetup` — one on `RunnerStore.didUpdate`
-    /// and one on `LocalRunnerStore.$runners`. Also calls `LocalRunnerStore.refresh()` to
-    /// trigger a re-scan of locally-installed runner agents.
+    /// and one on `LocalRunnerStore.$runners`. Also called eagerly in `AppDelegate.openPanel()`
+    /// to seed state on first panel open, since the Combine sinks only fire on store changes,
+    /// not on initial subscription. Also calls `LocalRunnerStore.refresh()` to trigger a
+    /// re-scan of locally-installed runner agents.
     func reload() {
         let localStore = localRunnerStore ?? LocalRunnerStore.shared
         let store = RunnerStore.shared
@@ -56,6 +58,8 @@ final class RunnerViewModel: ObservableObject {
         localRunners = localStore.runners
         isRateLimited = store.isRateLimited
         rateLimitResetDate = store.rateLimitResetDate
+        // Snapshot is taken before refresh() so the UI always shows the last completed scan,
+        // not a partial one mid-flight.
         localStore.refresh()
     }
 }

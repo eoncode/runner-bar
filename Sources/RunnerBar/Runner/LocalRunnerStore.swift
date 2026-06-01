@@ -105,8 +105,9 @@ final class LocalRunnerStore: ObservableObject {
         isScanning = true
         let index = runnerIndex
         // ⚠️ DispatchQueue.global + DispatchQueue.main.async: safe today but a Swift 6 migration
-        // candidate — tracked in #1077. Replace with Task.detached + MainActor.run when
-        // SWIFT_STRICT_CONCURRENCY = complete is enabled.
+        // candidate — tracked in #1077. Replace with a plain Task { } launched from this
+        // @MainActor context: background work runs off-actor during `await`, and the
+        // continuation returns to @MainActor automatically — no Task.detached needed.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
