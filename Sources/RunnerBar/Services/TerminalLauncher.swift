@@ -4,11 +4,11 @@ import Foundation
 
 // MARK: - TerminalLauncher
 
-// #546: Opens a normal Terminal.app window and runs the given command via AppleScript.
-//
-// Uses NSAppleScript + `do script` — requires no entitlements on an unsandboxed app.
-// Escapes backslashes, double quotes, and newlines before embedding in the AppleScript string.
-/// Enumerates possible values for TerminalLauncher.
+/// Opens a Terminal.app window and runs a shell command via AppleScript (`do script`).
+///
+/// Uses `NSAppleScript` — requires no entitlements on an unsandboxed app.
+/// Backslashes, double quotes, and newlines in the command are escaped before
+/// embedding in the AppleScript string. Tracked in #546.
 enum TerminalLauncher {
     /// Opens Terminal.app and runs `command` in a new window.
     static func open(command: String) {

@@ -1,6 +1,5 @@
 // ScopeStore.swift
 // RunnerBar
-// swiftlint:disable orphaned_doc_comment
 import Combine
 import Foundation
 
@@ -18,9 +17,9 @@ final class ScopeStore: ObservableObject {
     /// Shared singleton — single source of truth for all scope operations.
     static let shared = ScopeStore()
 
-    /// The entriesKey constant.
+    /// `UserDefaults` key for the JSON-encoded `[ScopeEntry]` array.
     private let entriesKey = "scopeEntries"
-    /// The legacyKey constant.
+    /// `UserDefaults` key for the legacy plain `[String]` scopes array, kept for migration only.
     private let legacyKey = "scopes"
 
     /// Emits after every structural mutation (add / remove). Callers subscribe and
@@ -29,10 +28,8 @@ final class ScopeStore: ObservableObject {
     let didMutate = PassthroughSubject<Void, Never>()
 
     /// All scope entries, persisted as JSON in `UserDefaults`.
-    /// Publishes `objectWillChange` before every write so observing views update.
-    @Published private(set) var entries: [ScopeEntry] = [] {
-        willSet { objectWillChange.send() }
-    }
+    /// `private(set)` — mutate only via `add(_:)`, `remove(id:)`, and `setEnabled(_:_:)`.
+    @Published private(set) var entries: [ScopeEntry] = []
 
     /// Scopes that are currently enabled — used by `RunnerStore` for polling.
     var activeScopes: [String] { entries.filter(\.isEnabled).map(\.scope) }
@@ -115,13 +112,13 @@ final class ScopeStore: ObservableObject {
 
     /// Toggles the `isEnabled` flag for the entry with the given ID.
     /// Does NOT send `didMutate` — enable/disable is not a structural change.
+    /// Publishes `objectWillChange` explicitly so `RunnerStore`'s Combine
+    /// subscription triggers a polling restart on toggle.
     func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[idx].isEnabled = enabled
         persist()
         log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(enabled)")
-        // Publish so RunnerStore's Combine subscription triggers a polling restart.
         objectWillChange.send()
     }
 }
-// swiftlint:enable orphaned_doc_comment
