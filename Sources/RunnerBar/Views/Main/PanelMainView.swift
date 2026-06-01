@@ -52,8 +52,12 @@ struct PanelMainView: View {
     ///   - store: The view model driving runner and workflow data.
     ///   - onStepTap: Closure called when the user taps a step row.
     ///   - onSelectSettings: Closure called when the user taps the settings gear button.
-    init(store: RunnerViewModel, onStepTap: @escaping (ActiveJob, JobStep) -> Void, onSelectSettings: @escaping () -> Void) {
-        self.store = store
+    init(
+        store: RunnerViewModel,
+        onStepTap: @escaping (ActiveJob, JobStep) -> Void,
+        onSelectSettings: @escaping () -> Void
+    ) {
+        _store = ObservedObject(wrappedValue: store)
         self.onStepTap = onStepTap
         self.onSelectSettings = onSelectSettings
     }
