@@ -32,7 +32,9 @@ struct ScopeEditSheet: View {
     @Binding var isPresented: Bool
 
     @ObservedObject private var scopeStore = ScopeStore.shared
+    /// Controls visibility of the failure-hook configuration sheet.
     @State private var showHookSheet = false
+    /// Controls visibility of the branch-filter picker sheet.
     @State private var showBranchSheet = false
     /// Draft: whether the failure hook is enabled. Written to store only on Save.
     @State private var hookEnabled: Bool
@@ -40,6 +42,7 @@ struct ScopeEditSheet: View {
     @State private var hookBranch: String?
     /// Draft: local repo path. Written to store only on Save.
     @State private var localRepoPath: String
+    /// Tracks whether the inline path text field is in edit mode.
     @State private var isEditingPath = false
 
     /// Creates the view, seeding `@State` values from `ScopePreferencesStore`
