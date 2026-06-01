@@ -31,6 +31,7 @@ struct ScopeEditSheet: View {
     /// `confirmSave()` sets it to `false` after persisting changes.
     @Binding var isPresented: Bool
 
+    /// Shared store providing the full list of scope entries.
     @ObservedObject private var scopeStore = ScopeStore.shared
     /// Controls visibility of the failure-hook configuration sheet.
     @State private var showHookSheet = false
@@ -77,6 +78,7 @@ struct ScopeEditSheet: View {
     /// The GitHub web URL for this scope, used to render the "Open on GitHub" link.
     private var gitHURL: URL? { URL(string: "https://github.com/\(scope)") }
 
+    /// Root layout: header, divider, scrollable content, and footer action bar.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             sheetHeader
@@ -113,6 +115,7 @@ struct ScopeEditSheet: View {
 }
 
 // MARK: - Header & Footer
+/// Header and footer views for the scope edit sheet.
 extension ScopeEditSheet {
     /// Sheet-style title header showing scope display name and type badge.
     var sheetHeader: some View {
@@ -156,6 +159,7 @@ extension ScopeEditSheet {
 }
 
 // MARK: - Sections
+/// Content section views: scope info, work folder, proxy, and failure-hook configuration.
 extension ScopeEditSheet {
     /// Card section displaying read-only scope metadata: raw scope string,
     /// type (repo vs org), and a link to open the scope on GitHub.
@@ -239,6 +243,7 @@ extension ScopeEditSheet {
 }
 
 // MARK: - Failure Hook Rows
+/// Row views for the failure-hook toggle and branch-filter picker.
 extension ScopeEditSheet {
     /// Toggle row enabling or disabling the failure-hook for this scope.
     /// Updates draft state only — not persisted until Save.
@@ -391,6 +396,7 @@ extension ScopeEditSheet {
 }
 
 // MARK: - Actions
+/// User-initiated actions: path editing, save, and cancel.
 extension ScopeEditSheet {
     /// Enters inline editing mode for the local-path field, pre-filling `~/`
     /// if the path is currently empty.
@@ -454,6 +460,7 @@ extension ScopeEditSheet {
 }
 
 // MARK: - Sub-view helpers
+/// Reusable sub-view factory methods shared across section extensions.
 extension ScopeEditSheet {
     /// Renders a styled section-header label.
     /// - Parameter title: The display text for the section heading.
