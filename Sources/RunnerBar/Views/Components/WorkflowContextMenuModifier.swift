@@ -6,9 +6,11 @@ import SwiftUI
 
 // MARK: - Pasteboard helper
 /// Copies `text` to the general pasteboard.
-/// Must be called on the main thread. Callers already on `MainActor` (e.g. button
-/// closures in `StepContextMenuModifier`) can call this directly and synchronously.
-/// Off-thread callers (e.g. after `fetchActionLogs`) should use `await MainActor.run`.
+/// Compiler-enforced `@MainActor` — `NSPasteboard` requires main-thread access.
+/// Callers on `MainActor` (e.g. button closures in `StepContextMenuModifier`) call
+/// this directly. Callers in a `Task.detached` context use `await copyToPasteboard(_:)`
+/// directly — the `@MainActor` annotation provides the actor hop; no `MainActor.run {}`
+/// wrapper is needed.
 @MainActor
 private func copyToPasteboard(_ text: String) {
     NSPasteboard.general.clearContents()
@@ -86,7 +88,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
             let g = group
             Task.detached(priority: .userInitiated) {
                 guard let text = fetchActionLogs(group: g), !text.isEmpty else { return }
-                await MainActor.run { copyToPasteboard(text) }
+                await copyToPasteboard(text)
             }
         } label: {
             Label("Copy Log", systemImage: "doc.on.doc")
@@ -170,7 +172,7 @@ private struct JobContextMenuModifier: ViewModifier {
             let scope = group.repo
             Task.detached(priority: .userInitiated) {
                 guard let text = fetchJobLog(jobID: j.id, scope: scope), !text.isEmpty else { return }
-                await MainActor.run { copyToPasteboard(text) }
+                await copyToPasteboard(text)
             }
         } label: {
             Label("Copy Log", systemImage: "doc.on.doc")

@@ -45,11 +45,14 @@ final class SystemStatsViewModel: ObservableObject {
     /// deinit before dispatching invalidation to the main run loop — Timer.invalidate()
     /// must be called on the thread that installed the timer (main run loop).
     nonisolated(unsafe) private var timer: Timer?
+    /// Previous `processor_info_array_t` sample, retained between `sampleCPU()` calls to
+    /// compute per-core deltas. Freed in `deinit` via `vm_deallocate`.
     /// Safety: accessed only from `sampleCPU()` (always called on MainActor) and
     /// `deinit` (which implies no other references exist, so no concurrent access is possible).
     nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
+    /// Entry count of the `prevCPUInfo` buffer, required by `vm_deallocate` for correct
+    /// deallocation size. Updated atomically alongside `prevCPUInfo` in `sampleCPU()`.
     /// Safety: same as `prevCPUInfo` — MainActor during sampling, no concurrency in deinit.
-    /// Tracks the count of the previously sampled `processor_info_array_t` entries.
     nonisolated(unsafe) private var prevNumCPUInfo: mach_msg_type_number_t = 0
     /// Root volume path used for disk-space queries.
     private static let rootVolumePath = NSOpenStepRootDirectory()

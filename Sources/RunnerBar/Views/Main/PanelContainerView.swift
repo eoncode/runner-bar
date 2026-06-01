@@ -168,7 +168,7 @@ struct PanelContainerView<Content: View>: View {
 
     /// Starts (or restarts) the repeating sheet-detection timer.
     ///
-    /// Always calls stopPolling() first to invalidate any existing timer.
+    /// Always calls `stopPolling()` first to invalidate any existing timer.
     /// Safe to call multiple times — will not create duplicate timers.
     private func startPolling() {
         stopPolling()
