@@ -115,21 +115,14 @@ final class ScopeStore: ObservableObject {
     ///
     /// `ScopeEntry` is a struct, so `entries[idx].isEnabled = enabled` replaces
     /// the array value and `@Published` fires `objectWillChange` automatically.
-    /// The explicit `objectWillChange.send()` below is therefore a second fire —
-    /// retained as a belt-and-suspenders guarantee for `RunnerStore`'s Combine
-    /// subscription even if the value-type contract changes in future.
-    ///
-    /// Note: `RunnerStore` currently treats `objectWillChange` as a catch-all;
-    /// both structural mutations (add/remove, via `@Published`) and state-only
-    /// toggles (this method) arrive on the same channel. If the two signals
-    /// ever need distinct handling, introduce a dedicated `didToggle` subject.
-    // TODO: consider a `didToggle: PassthroughSubject<Void, Never>` to let
-    // RunnerStore distinguish scope-added/removed from scope-enabled/disabled.
+    /// The explicit `objectWillChange.send()` below is a belt-and-suspenders call
+    /// that ensures `RunnerStore`'s Combine subscription triggers a polling restart
+    /// even if the value-type contract changes in future.
     func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[idx].isEnabled = enabled
         persist()
         log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(enabled)")
-        objectWillChange.send() // belt-and-suspenders: @Published already fired above
+        objectWillChange.send()
     }
 }

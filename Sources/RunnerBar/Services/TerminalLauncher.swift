@@ -7,14 +7,8 @@ import Foundation
 /// Uses `NSAppleScript` — requires no entitlements on an unsandboxed app.
 /// Backslashes, double quotes, and newlines in the command are escaped before
 /// embedding in the AppleScript string. Tracked in #546.
-///
-/// - Important: `NSAppleScript` must be called on the main thread.
-///   Always invoke `open(command:)` from the main actor or via `DispatchQueue.main`.
 enum TerminalLauncher {
     /// Opens Terminal.app and runs `command` in a new window.
-    ///
-    /// Must be called on the main thread — `NSAppleScript` is not thread-safe.
-    @MainActor
     static func open(command: String) {
         let escaped = command
             .replacingOccurrences(of: "\\", with: "\\\\")
