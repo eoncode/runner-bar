@@ -237,6 +237,8 @@ private struct WindowReader: NSViewRepresentable {
     /// Guards against redundant binding updates — nsView.window is stable after
     /// the first assignment and re-dispatching on every SwiftUI update would
     /// trigger unnecessary state invalidations in PanelContainerView.
+    /// Pointer equality is safe here because NSPopover reuses the same NSWindow
+    /// object across transient hide/restore cycles.
     func updateNSView(_ nsView: NSView, context: Context) {
         guard nsView.window != window else { return }
         DispatchQueue.main.async { window = nsView.window }
