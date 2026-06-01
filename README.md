@@ -70,7 +70,7 @@ RunnerBar uses a classic OAuth token. The following scopes are requested and are
 |---|---|
 | `repo` | Read workflow runs, jobs, steps, and logs across private repositories |
 | `read:org` | Discover which organisations the authenticated user belongs to |
-| `admin:org` | Call `GET /orgs/{org}/actions/runners` to fetch org-level runner labels (e.g. `arm64`, `macOS`). Required for classic OAuth tokens — `manage_runners:org` alone is only sufficient for fine-grained PATs |
+| `admin:org` | Call `GET /orgs/{org}/actions/runners` to fetch org-level runner labels (e.g. `arm64`, `macOS`) and managing org runners. Required for classic OAuth tokens — `manage_runners:org` alone is only sufficient for fine-grained PATs |
 | `manage_runners:org` | Forward-compatibility: GitHub is migrating runner APIs to require this scope for fine-grained tokens; included so the token stays valid as GitHub enforces newer auth requirements |
 | `workflow` | Trigger re-run, re-run failed, and cancel actions on workflow runs |
 
