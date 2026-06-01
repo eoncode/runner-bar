@@ -9,28 +9,37 @@ import RunnerBarCore
 // These extensions delegate to PollResultBuilder so RunnerStore.fetch() call
 // sites are unchanged while the logic lives in the independently testable builder.
 
-// Shared ISO-8601 date formatter for this file.
-// ISO8601DateFormatter is expensive to allocate (loads ICU calendars);
-// keeping one file-level instance avoids repeated allocation on every poll cycle.
-// Safety: protected by iso8601Lock.
-
-/// A Sendable wrapper for ISO8601DateFormatter.
+/// A `@unchecked Sendable` wrapper around `ISO8601DateFormatter`.
+///
+/// `ISO8601DateFormatter` is expensive to allocate (it loads ICU calendars on init).
+/// Keeping one file-level instance avoids repeated allocation on every poll cycle.
+/// Access is serialised via `iso8601Lock`; the `@unchecked` annotation is safe because
+/// no two threads ever call the formatter concurrently.
 private struct SendableFormatter: @unchecked Sendable {
-    /// The internal formatter instance.
+    /// The internal formatter instance. Access only while holding `iso8601Lock`.
     let iso = ISO8601DateFormatter()
 }
-/// Lock for the formatter.
+
+/// `OSAllocatedUnfairLock` protecting the shared `SendableFormatter`.
+/// Always access the formatter via `iso8601Lock.withLock { ... }` to avoid data races.
 private let iso8601Lock = OSAllocatedUnfairLock(initialState: SendableFormatter())
 
-/// Extension adding functionality to `RunnerStore`.
+/// `RunnerStore` extension that bridges `PollResultBuilder` for the `fetch()` call sites.
+///
+/// All methods are `nonisolated` because polling runs on a background thread.
+/// They read `ScopeStore.shared.scopes` via `DispatchQueue.main.sync` — this is safe
+/// only when called from a background thread. Do not call these methods from the main thread
+/// as `main.sync` from the main thread will deadlock.
 extension RunnerStore {
 
-    /// Performs the buildJobState operation.
+    /// Builds a `JobPollResult` by fetching live jobs for all monitored scopes,
+    /// backfilling step data from the cache, and diffing against `snapPrev`.
     nonisolated func buildJobState(snapPrev: [Int: ActiveJob], snapCache: [Int: ActiveJob]) -> JobPollResult {
         PollResultBuilder.buildJobState(
             snapPrev: snapPrev,
             snapCache: snapCache,
             fetchJobs: {
+                // ⚠️ main.sync — safe only from a background thread; deadlocks if called on main.
                 let scopes = DispatchQueue.main.sync { ScopeStore.shared.scopes }
                 var jobs: [ActiveJob] = []
                 for scope in scopes {
@@ -44,7 +53,9 @@ extension RunnerStore {
         )
     }
 
-    /// Performs the buildGroupState operation.
+    /// Builds a `GroupPollResult` by fetching live workflow action groups for all monitored scopes,
+    /// firing failure hooks for newly-failed groups, enriching jobs from the job cache,
+    /// and diffing against `snapPrevGroups`.
     nonisolated func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
@@ -56,6 +67,7 @@ extension RunnerStore {
             snapGroupCache: snapGroupCache,
             snapSeenGroupIDs: snapSeenGroupIDs,
             fetchGroups: { shaKeyedCache in
+                // ⚠️ main.sync — safe only from a background thread; deadlocks if called on main.
                 let scopes = DispatchQueue.main.sync { ScopeStore.shared.scopes }
                 var groups: [WorkflowActionGroup] = []
                 for scope in scopes {
@@ -73,7 +85,10 @@ extension RunnerStore {
 
     // MARK: - Backfill (retains ghAPI access via RunnerStore)
 
-    /// Performs the backfillSteps operation.
+    /// Backfills step data for cached jobs that finished without complete step information.
+    ///
+    /// Iterates jobs in `cache` that have a conclusion but missing or in-progress steps,
+    /// fetches the full job payload from the GitHub API, and updates the cache entry.
     nonisolated func backfillSteps(into cache: inout [Int: ActiveJob]) {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
@@ -92,7 +107,8 @@ extension RunnerStore {
 
     // MARK: - Group helpers (retain RunnerStore context)
 
-    /// Performs the scopeFromActionGroup operation.
+    /// Derives a scope string for `group` by first trying `group.repo`, then falling back
+    /// to parsing the `htmlUrl` of the first run. Returns an empty string if neither is available.
     nonisolated func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
         log("RunnerStore › scopeFromActionGroup — group.repo='\(group.repo)' groupID=\(group.id)")
         if !group.repo.isEmpty {
@@ -110,7 +126,8 @@ extension RunnerStore {
         return ""
     }
 
-    /// Performs the enrichGroupJobs operation.
+    /// Merges live job data with cached job data, preferring whichever has a conclusion
+    /// or more complete step information.
     nonisolated func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
