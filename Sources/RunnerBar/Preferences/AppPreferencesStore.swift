@@ -54,11 +54,8 @@ final class AppPreferencesStore: ObservableObject {
     /// return the intended values on first launch without requiring `object(forKey:) == nil`
     /// guards. This matches the pattern used by `NotificationPreferences`.
     private init() {
-        // #511: Default polling interval changed from 30 s to 15 s for more
-        // responsive monitoring. Registered here so UserDefaults returns 15
-        // on first launch rather than 0.
         UserDefaults.standard.register(defaults: [
-            Key.pollingInterval:   15,
+            Key.pollingInterval:   15,  // First-launch default: 15 s (see #511)
             Key.showDimmedRunners: true,
         ])
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
@@ -71,6 +68,9 @@ final class AppPreferencesStore: ObservableObject {
 
 /// Constrains a `Comparable` value to a closed range, returning `lowerBound`
 /// when the value is below the range and `upperBound` when it is above.
+///
+/// Declared `private` to avoid polluting the global `Comparable` namespace —
+/// this helper is an implementation detail of `AppPreferencesStore`.
 private extension Comparable {
     /// Returns the value clamped to `range`, i.e. `max(lowerBound, min(self, upperBound))`.
     func clamped(to range: ClosedRange<Self>) -> Self {
