@@ -82,9 +82,13 @@ struct RunnerLifecycleService {
 
     /// Stops and uninstalls the launchd service for `runner` by running `svc.sh stop` then `svc.sh uninstall`.
     ///
-    /// Returns `.corruptInstall` if the stop step detects a broken installation,
+    /// Returns `.corruptInstall` if either step detects a broken installation,
     /// `.success` if the stop step exits 0, or `.failed` with the first non-empty
     /// output line otherwise.
+    ///
+    /// - Note: The uninstall step (step 2) is best-effort — its exit code does not affect the
+    ///   return value because a successful `svc.sh stop` is sufficient to take the runner offline.
+    ///   A corrupt-install signal from `uninstallOutput` is still surfaced as `.corruptInstall`.
     @discardableResult
     func stop(runner: RunnerModel) -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
@@ -101,15 +105,21 @@ struct RunnerLifecycleService {
             workingDirectory: dir, timeout: 15, logTag: "svc.sh stop")
         logStep("STOP", "step1 done: ok=\(stopOk) output=\(stopOutput.prefix(300))")
         if isCorruptInstall(output: stopOutput) {
-            logStep("STOP", "RETURNING .corruptInstall for \(runner.runnerName)")
+            logStep("STOP", "RETURNING .corruptInstall after stop step for \(runner.runnerName)")
             return .corruptInstall
         }
 
         logStep("STOP", "step2: svc.sh uninstall")
-        let (uninstallOk, uninstallOutput) = runScriptWithOutput(
+        let (_, uninstallOutput) = runScriptWithOutput(
+            // uninstall exit code is intentionally ignored — best-effort after a successful stop.
             executableName: "svc.sh", arguments: ["uninstall"],
             workingDirectory: dir, timeout: 15, logTag: "svc.sh uninstall")
-        logStep("STOP", "step2 done: ok=\(uninstallOk) output=\(uninstallOutput.prefix(300))")
+        logStep("STOP", "step2 done: output=\(uninstallOutput.prefix(300))")
+        if isCorruptInstall(output: uninstallOutput) {
+            logStep("STOP", "RETURNING .corruptInstall after uninstall step for \(runner.runnerName)")
+            return .corruptInstall
+        }
+
         if stopOk {
             logStep("STOP", "RETURNING .success for \(runner.runnerName)")
             return .success
@@ -132,6 +142,9 @@ struct RunnerLifecycleService {
     /// - Note: Returns `Bool` rather than `LifecycleResult` because removal is a best-effort
     ///   multi-step operation — partial failures (e.g. corrupt install) are handled internally
     ///   via the API fallback rather than surfaced as distinct result cases.
+    /// - Note: Local file cleanup (install directory + LaunchAgent plist) is performed only
+    ///   when deregistration succeeds (`removeOk == true`). If both `config.sh` and the API
+    ///   fallback fail, no local files are deleted so the user can retry.
     @discardableResult
     func remove(runner: RunnerModel) -> Bool {
         let ip = runner.installPath ?? "nil"
@@ -184,7 +197,7 @@ struct RunnerLifecycleService {
             }
         }
 
-        if removeOk || (!cfgOk && runner.agentId != nil) {
+        if removeOk {
             logStep("REMOVE", "step4: deleting install dir \(path)")
             do {
                 try FileManager.default.removeItem(atPath: path)
@@ -193,6 +206,8 @@ struct RunnerLifecycleService {
                 logStep("REMOVE", "step4: failed to delete dir \(path): \(error)")
             }
             deleteLaunchAgentPlist(for: runner.runnerName)
+        } else {
+            logStep("REMOVE", "step4: skipping local cleanup — deregistration failed for \(runner.runnerName)")
         }
         logStep("REMOVE", "done: svcOk=\(svcOk) cfgOk=\(cfgOk) removeOk=\(removeOk) for \(runner.runnerName)")
         return removeOk
