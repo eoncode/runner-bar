@@ -21,6 +21,7 @@ private func copyToPasteboard(_ text: String) {
 //   copy log (always)
 //   show workflow file on GitHub (always, opens first run's html_url)
 //   show GitHub SHA (always, opens commit)
+/// `ViewModifier` that attaches a workflow-level right-click context menu to an `ActionRowView`.
 private struct WorkflowContextMenuModifier: ViewModifier {
     /// The workflow action group this menu acts on.
     let group: WorkflowActionGroup
@@ -114,6 +115,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 
 // MARK: - JobContextMenuModifier
 // Adds a right-click context menu to a JobRowCard (job level).
+/// `ViewModifier` that attaches a job-level right-click context menu to a `JobRowCard`.
 private struct JobContextMenuModifier: ViewModifier {
     /// The job this menu acts on.
     let job: ActiveJob
@@ -186,6 +188,7 @@ private struct JobContextMenuModifier: ViewModifier {
 }
 
 // MARK: - View extensions
+/// Convenience modifiers for attaching workflow, job, and step context menus to any `View`.
 extension View {
     /// Attaches a workflow-level right-click context menu (re-run, cancel, copy log, open on GitHub).
     func workflowContextMenu(group: WorkflowActionGroup) -> some View {
@@ -204,6 +207,7 @@ extension View {
 }
 
 // MARK: - StepContextMenuModifier
+/// `ViewModifier` that attaches a step-level right-click context menu to a step row.
 private struct StepContextMenuModifier: ViewModifier {
     /// The step this menu acts on.
     let step: JobStep
