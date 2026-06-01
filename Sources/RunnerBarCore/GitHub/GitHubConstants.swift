@@ -1,5 +1,5 @@
 // GitHubConstants.swift
-// RunnerBar
+// RunnerBarCore
 import Foundation
 
 // MARK: - Shared GitHub URI constants
