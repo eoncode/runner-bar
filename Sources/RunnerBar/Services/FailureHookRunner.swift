@@ -101,7 +101,7 @@ enum FailureHookRunner {
         }
     }
 
-    /// Represents the result of fetching a single failed job, including its log tail.
+    /// The result of fetching a single failed job, including its raw log tail.
     private struct FailedJobResult {
         /// The job payload returned by the GitHub Jobs API.
         let job: JobPayload
@@ -156,12 +156,17 @@ enum FailureHookRunner {
         return result
     }
 
-    /// Escapes a string so it is safe to embed between single-quotes in a shell command.
+    /// Escapes `s` so it is safe to embed between single-quotes in a shell command.
+    /// Replaces every `'` with `'\''` — the standard POSIX single-quote escape.
     private static func singleQuoteEscape(_ s: String) -> String {
         s.replacingOccurrences(of: "'", with: "'\\''")
     }
 
-    /// Builds the $FAILURE_LOG content from failed job results.
+    /// Builds the `$FAILURE_LOG` content from failed job results.
+    ///
+    /// Falls back to a run-level summary (failed run IDs and conclusions) when
+    /// `jobs` is empty. Otherwise concatenates available log tails, or
+    /// failed step names when no log tail was fetched.
     private static func buildLogContent(
         group: WorkflowActionGroup,
         scope _: String,

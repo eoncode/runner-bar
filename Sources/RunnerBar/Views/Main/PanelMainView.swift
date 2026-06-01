@@ -41,6 +41,22 @@ struct PanelMainView: View {
     @State private var displayTick: Int = 0
     /// Timer that fires displayTick increments.
     @State private var displayTickTimer: Timer?
+
+    /// Creates a `PanelMainView`.
+    /// - Parameters:
+    ///   - store: The view model driving runner and workflow data.
+    ///   - onStepTap: Closure called when the user taps a step row.
+    ///   - onSelectSettings: Closure called when the user taps the settings gear button.
+    init(
+        store: RunnerViewModel,
+        onStepTap: @escaping (ActiveJob, JobStep) -> Void,
+        onSelectSettings: @escaping () -> Void
+    ) {
+        _store = ObservedObject(wrappedValue: store)
+        self.onStepTap = onStepTap
+        self.onSelectSettings = onSelectSettings
+    }
+
     /// Maximum scroll height for the actions section (80% of screen height).
     private var screenScrollMaxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 0.80
@@ -142,6 +158,7 @@ struct PanelMainView: View {
     }
 
     /// Button to reveal the next batch of up to 10 workflow rows.
+    /// Hidden when all workflows are already visible.
     @ViewBuilder private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
         if nextBatch > 0 {
@@ -155,6 +172,7 @@ struct PanelMainView: View {
     }
 
     /// Starts the 1-second repeating timer that increments `displayTick`.
+    /// Calls `stopDisplayTickTimer()` first to avoid duplicate timers.
     /// SwiftUI view structs cannot form retain cycles, so no `[weak self]` capture is needed.
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
@@ -169,7 +187,10 @@ struct PanelMainView: View {
         displayTickTimer = nil
     }
 
-    /// Banner shown when the GitHub API rate limit is active.
+    /// Rate-limit warning banner showing a countdown to API reset.
+    ///
+    /// Reads `displayTick` as a SwiftUI dependency so the countdown label
+    /// refreshes every second without an explicit `@Published` on the formatted string.
     private var rateLimitBanner: some View {
         _ = displayTick // swiftlint:disable:this redundant_discardable_let
         // Forces re-evaluation on each displayTick without capturing the value.
