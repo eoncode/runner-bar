@@ -40,7 +40,6 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
-    /// Returns the API endpoint for workflow runs filtered by the given status.
     func runsEndpoint(status: String) -> String {
         "\(scope.apiPrefix)/actions/runs?status=\(status)&per_page=50"
     }
@@ -79,9 +78,8 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
 private struct WorkflowRunsResponse: Codable {
     /// The list of workflow runs returned by the API.
     let workflowRuns: [WorkflowRun]
-    /// Maps the snake_case API key to the camelCase Swift property.
+    /// Maps the snake_case `workflow_runs` key to the camelCase Swift property.
     enum CodingKeys: String, CodingKey {
-        /// The workflowRuns coding key.
         case workflowRuns = "workflow_runs"
     }
 }
@@ -125,7 +123,11 @@ private struct RunnersResponse: Codable {
 /// Returns the login names of all GitHub organisations the authenticated user belongs to.
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
-    struct Org: Decodable { let login: String }
+    /// Minimal org payload — only the login name is needed.
+    struct Org: Decodable {
+        /// The organisation's GitHub login name.
+        let login: String
+    }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
     return orgs.map(\.login)
 }
@@ -133,8 +135,11 @@ func fetchUserOrgs() -> [String] {
 /// Returns the `owner/repo` full names of all repositories visible to the authenticated user.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
+    /// Minimal repo payload — only the full name is needed.
     struct Repo: Decodable {
+        /// The repository's full name in `owner/repo` format.
         let fullName: String
+        /// Maps the snake_case `full_name` key to the camelCase Swift property.
         enum CodingKeys: String, CodingKey { case fullName = "full_name" }
     }
     guard let repos = try? JSONDecoder().decode([Repo].self, from: data) else { return [] }

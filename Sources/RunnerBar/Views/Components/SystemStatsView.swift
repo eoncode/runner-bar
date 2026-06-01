@@ -156,6 +156,7 @@ struct DiskPillBadge: View {
 /// Accepts an existing `SystemStatsViewModel` so it shares the sampler
 /// already running in `PopoverMainView` — no second timer is created.
 struct HeaderStatsBar: View {
+    /// The view model supplying live CPU, memory, and disk stats.
     @ObservedObject var statsVM: SystemStatsViewModel
 
     var body: some View {

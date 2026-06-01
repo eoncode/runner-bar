@@ -22,14 +22,17 @@ import SwiftUI
 // NSPopover provides its own glass chrome automatically.
 // ❌ NEVER add .background() or NSVisualEffectView at this level.
 /// Root panel view rendered inside the NSPopover.
+/// Composes the header stats bar, local runner rows, and the scrollable
+/// workflow actions section. Owns the 1-second `displayTick` timer used
+/// to drive live relative-time label refreshes across all `ActionRowView` instances.
 struct PanelMainView: View {
-    /// The store property.
+    /// The view model driving runner and workflow data.
     @ObservedObject var store: RunnerViewModel
     /// Called when user taps a step row.
     let onStepTap: (ActiveJob, JobStep) -> Void
-    /// The onSelectSettings constant.
+    /// Called when the user taps the settings gear button.
     let onSelectSettings: () -> Void
-    /// The panelVisibilityState property.
+    /// Panel open/close and transient-hide state from the environment.
     @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
     /// Whether the user has a stored GitHub token.
     @State private var isAuthenticated = (githubToken() != nil)

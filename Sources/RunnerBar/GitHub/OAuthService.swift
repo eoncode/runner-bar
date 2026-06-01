@@ -31,7 +31,7 @@ import Foundation
 /// Manages OAuthService state and behaviour.
 @MainActor
 final class OAuthService {
-    /// The shared constant.
+    /// The shared singleton instance.
     static let shared = OAuthService()
     /// Private initialiser — use `shared`.
     private init() {
@@ -65,9 +65,9 @@ final class OAuthService {
     private let scopes = "repo read:org admin:org manage_runners:org workflow gist"
 
     // MARK: - OAuth endpoint constants
-    /// The authorizeURL constant.
+    /// GitHub OAuth authorisation URL — entry point for the browser-based sign-in flow.
     private let authorizeURL    = "\(GitHubConstants.base)/login/oauth/authorize"
-    /// The accessTokenURL constant.
+    /// GitHub OAuth token-exchange URL — receives the code and returns the access token.
     private let accessTokenURL  = "\(GitHubConstants.base)/login/oauth/access_token"
 
     /// CSRF nonce generated in signIn(), verified in handleCallback().
@@ -84,7 +84,7 @@ final class OAuthService {
 
     // MARK: Sign In
 
-    /// Performs the signIn operation.
+    /// Opens the GitHub OAuth authorization page in the default browser to begin sign-in.
     func signIn() {
         let state = UUID().uuidString
         pendingState = state
@@ -101,7 +101,7 @@ final class OAuthService {
 
     // MARK: Sign Out
 
-    /// Performs the signOut operation.
+    /// Clears the stored token and emits `didSignOut`.
     func signOut() {
         pendingState = nil
         // Keychain.delete() returns false if SecItemDelete failed (token may still exist).
@@ -113,7 +113,7 @@ final class OAuthService {
 
     // MARK: Callback Handler
 
-    /// Performs the handleCallback operation.
+    /// Handles the OAuth redirect URL from AppDelegate, verifying state and exchanging the code.
     func handleCallback(_ url: URL) {
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
@@ -132,7 +132,7 @@ final class OAuthService {
 
     // MARK: Token Exchange
 
-    /// Performs the exchangeCode operation.
+    /// POSTs the authorization code to GitHub and saves the returned access token to Keychain.
     private func exchangeCode(_ code: String) async {
         guard let url = URL(string: accessTokenURL) else { return }
         var req = URLRequest(url: url)
