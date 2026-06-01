@@ -13,7 +13,9 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable {
     /// Stable identity for use in SwiftUI lists and `Codable` round-trips.
     public let id: UUID
     /// The GitHub scope string — either `"owner/repo"` or an org name.
-    public var scope: String
+    /// `let`: the scope string is immutable after construction. To change a scope,
+    /// remove the existing entry and add a new one via `ScopeStore`.
+    public let scope: String
     /// When `false`, `RunnerStore` skips this scope during polling.
     public var isEnabled: Bool
 
