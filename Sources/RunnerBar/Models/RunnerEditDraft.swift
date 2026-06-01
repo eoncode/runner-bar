@@ -98,8 +98,8 @@ struct RunnerEditDraft: Equatable {
     /// `autoUpdate` and `workFolder` to the draft.
     /// Returns the raw JSON dictionary so callers can extract additional fields
     /// (e.g. `platform`, `agentVersion`) without a second file read.
-    /// Currently only called from `load(installPath:)` which discards the return value;
-    /// the return type is preserved for future callers.
+    /// The return value may be discarded; it is exposed for callers that need
+    /// additional fields without a second file read.
     @discardableResult
     mutating func loadRunnerJSON(installPath: String) -> [String: Any]? {
         let url = URL(fileURLWithPath: installPath).appendingPathComponent(".runner")

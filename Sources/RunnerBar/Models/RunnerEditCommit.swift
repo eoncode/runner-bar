@@ -174,8 +174,15 @@ private func writeProxyFiles(installPath: String, url: String, user: String, pas
     // .proxy — contains the raw proxy URL on a single line
     do {
         if url.isEmpty {
-            try? FileManager.default.removeItem(at: proxyURL)
-            log("writeProxyFiles › removed .proxy")
+            do {
+                try FileManager.default.removeItem(at: proxyURL)
+                log("writeProxyFiles › removed .proxy")
+            } catch let err as NSError where err.code == NSFileNoSuchFileError {
+                // file already absent — no-op
+            } catch {
+                log("writeProxyFiles › failed to remove .proxy: \(error)")
+                ok = false
+            }
         } else {
             try url.write(to: proxyURL, atomically: true, encoding: .utf8)
             log("writeProxyFiles › wrote .proxy")
@@ -188,8 +195,15 @@ private func writeProxyFiles(installPath: String, url: String, user: String, pas
     // .proxycredentials — two-line format: line 1 = username, line 2 = password
     do {
         if user.isEmpty && password.isEmpty {
-            try? FileManager.default.removeItem(at: credURL)
-            log("writeProxyFiles › removed .proxycredentials")
+            do {
+                try FileManager.default.removeItem(at: credURL)
+                log("writeProxyFiles › removed .proxycredentials")
+            } catch let err as NSError where err.code == NSFileNoSuchFileError {
+                // file already absent — no-op
+            } catch {
+                log("writeProxyFiles › failed to remove .proxycredentials: \(error)")
+                ok = false
+            }
         } else {
             try "\(user)\n\(password)".write(to: credURL, atomically: true, encoding: .utf8)
             log("writeProxyFiles › wrote .proxycredentials")
