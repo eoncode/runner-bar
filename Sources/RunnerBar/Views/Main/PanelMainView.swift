@@ -176,7 +176,11 @@ struct PanelMainView: View {
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
             let remaining = max(0, resetDate.timeIntervalSinceNow)
-            if remaining < 1 { countdownLabel = "resuming\u{2026}" } else if remaining < 60 { countdownLabel = "resets in \(Int(remaining))s" } else {
+            if remaining < 1 {
+                countdownLabel = "resuming\u{2026}"
+            } else if remaining < 60 {
+                countdownLabel = "resets in \(Int(remaining))s"
+            } else {
                 let mins = Int(remaining) / 60; let secs = Int(remaining) % 60
                 countdownLabel = String(format: "resets in %dm %02ds", mins, secs)
             }
