@@ -40,6 +40,7 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     var runIDs: [Int] = []
     var seenRunIDs = Set<Int>()
 
+    /// Returns the API endpoint for workflow runs filtered by the given status.
     func runsEndpoint(status: String) -> String {
         "\(scope.apiPrefix)/actions/runs?status=\(status)&per_page=50"
     }
@@ -78,8 +79,9 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
 private struct WorkflowRunsResponse: Codable {
     /// The list of workflow runs returned by the API.
     let workflowRuns: [WorkflowRun]
-    /// Maps the snake_case `workflow_runs` key to the camelCase Swift property.
+    /// Maps the snake_case API key to the camelCase Swift property.
     enum CodingKeys: String, CodingKey {
+        /// The workflowRuns coding key.
         case workflowRuns = "workflow_runs"
     }
 }
@@ -125,7 +127,7 @@ func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     /// Minimal org payload — only the login name is needed.
     struct Org: Decodable {
-        /// The organisation's GitHub login name.
+        /// The organisation's GitHub login handle.
         let login: String
     }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
@@ -139,8 +141,11 @@ func fetchUserRepos() -> [String] {
     struct Repo: Decodable {
         /// The repository's full name in `owner/repo` format.
         let fullName: String
-        /// Maps the snake_case `full_name` key to the camelCase Swift property.
-        enum CodingKeys: String, CodingKey { case fullName = "full_name" }
+        /// Maps the snake_case API key to the camelCase Swift property.
+        enum CodingKeys: String, CodingKey {
+            /// The fullName coding key.
+            case fullName = "full_name"
+        }
     }
     guard let repos = try? JSONDecoder().decode([Repo].self, from: data) else { return [] }
     return repos.map(\.fullName)
@@ -219,8 +224,8 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
     return parseStepLog(raw, stepNumber: stepNumber)
 }
 
-/// Step 1+2: resolve the 302 redirect then fetch the raw log body.
-/// Returns `nil` if step 1 does not yield a Location header.
+/// Resolves the 302 redirect from the GitHub logs endpoint, then fetches the raw log body from S3.
+/// Returns `nil` if step 1 does not yield a `Location` header.
 private func fetchStepLogViaURLSession(endpoint: String, token: String) -> String? {
     let urlString = endpoint.hasPrefix("http")
         ? endpoint

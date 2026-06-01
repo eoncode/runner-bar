@@ -1,6 +1,7 @@
 // Auth.swift
 // RunnerBar
 import Foundation
+import os
 import RunnerBarCore
 
 // MARK: - Token cache
@@ -14,8 +15,6 @@ import RunnerBarCore
 //   - Keychain.save()         via invalidateTokenCache()
 //
 // Thread-safety: read/write guarded by tokenCacheLock (OSAllocatedUnfairLock).
-
-import os
 
 /// Lock-protected in-memory cache for the resolved GitHub token.
 private let tokenCacheLock = OSAllocatedUnfairLock(initialState: Optional<String>.none)
