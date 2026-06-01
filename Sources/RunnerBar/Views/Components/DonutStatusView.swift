@@ -37,8 +37,19 @@ struct DonutStatusView: View {
 
     /// Stroke width derived from the outer diameter (11% of `size`).
     private var strokeWidth: CGFloat { size * 0.11 }
-    /// Inner ring diameter derived from the outer size. // periphery:ignore
+    /// Inner ring diameter derived from `size` (82% of the outer diameter).
     private var innerSize: CGFloat { size * 0.82 }
+
+    /// Creates a `DonutStatusView`.
+    /// - Parameters:
+    ///   - status: The workflow/job status to display.
+    ///   - progress: Completion fraction 0.0–1.0. Defaults to `0`.
+    ///   - size: Outer ring diameter in points. Defaults to `16`.
+    init(status: RBStatus, progress: Double = 0, size: CGFloat = 16) {
+        self.status = status
+        self.progress = progress
+        self.size = size
+    }
 
     /// The SwiftUI body — switches between in-progress, terminal, and queued ring views.
     var body: some View {
