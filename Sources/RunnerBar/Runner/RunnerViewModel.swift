@@ -38,7 +38,10 @@ final class RunnerViewModel: ObservableObject {
     /// Tests **must** set this to avoid leaking into the shared production store.
     /// - Note: Because the class is `@MainActor`, this property must be set from a `@MainActor`
     ///   context in tests (e.g. `@MainActor func testFoo()` or `await MainActor.run { ... }`).
-    var localRunnerStore: LocalRunnerStore?
+    /// - Note: `RunnerStore` has no equivalent DI seam — `reload()` always reads `RunnerStore.shared`
+    ///   directly. Tests that need to stub GitHub API state must use the real singleton or a
+    ///   separate integration-test approach.
+    private(set) var localRunnerStore: LocalRunnerStore?
 
     // MARK: - Reload
 
@@ -49,6 +52,9 @@ final class RunnerViewModel: ObservableObject {
     /// to seed state on first panel open, since the Combine sinks only fire on store changes,
     /// not on initial subscription. Also calls `LocalRunnerStore.refresh()` to trigger a
     /// re-scan of locally-installed runner agents.
+    /// - Note: The `LocalRunnerStore.$runners` sink triggers this method, which then calls
+    ///   `refresh()`, which eventually publishes to `$runners` again. This is safe because
+    ///   `LocalRunnerStore.isScanning` prevents concurrent refresh cycles from stacking.
     func reload() {
         let localStore = localRunnerStore ?? LocalRunnerStore.shared
         let store = RunnerStore.shared
