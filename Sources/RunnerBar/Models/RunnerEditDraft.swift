@@ -1,6 +1,5 @@
 // RunnerEditDraft.swift
 // RunnerBar
-// swiftlint:disable missing_docs
 import Foundation
 import RunnerBarCore
 
@@ -36,6 +35,10 @@ struct RunnerEditDraft: Equatable {
     /// Seeds the draft from `runner` model values. Call `load(installPath:)` afterwards
     /// to override with on-disk values (auto-update, proxy) once the view appears.
     init(runner: RunnerModel) {
+        // Filter out GitHub-managed system labels that are automatically assigned
+        // by the runner registration process and should never be user-editable.
+        // These include the OS/arch labels GitHub injects: self-hosted, x64, arm64,
+        // linux, macos, windows. Only custom labels survive this filter.
         self.labelsText = runner.labels
             .filter { label in
                 !["self-hosted"].contains(label)
@@ -91,10 +94,12 @@ struct RunnerEditDraft: Equatable {
 
     // MARK: - Private disk helpers
 
-    /// Reads and parses the `.runner` JSON at `installPath`, applies `autoUpdate`
-    /// and `workFolder` to the draft, and returns the raw dictionary so callers
-    /// can extract additional fields (e.g. `platform`, `agentVersion`) without a
-    /// second read of the same file.
+    /// Reads and parses the `.runner` JSON at `installPath` and applies
+    /// `autoUpdate` and `workFolder` to the draft.
+    /// Returns the raw JSON dictionary so callers can extract additional fields
+    /// (e.g. `platform`, `agentVersion`) without a second file read.
+    /// Currently only called from `load(installPath:)` which discards the return value;
+    /// the return type is preserved for future callers.
     @discardableResult
     mutating func loadRunnerJSON(installPath: String) -> [String: Any]? {
         let path = installPath + "/.runner"
@@ -109,6 +114,10 @@ struct RunnerEditDraft: Equatable {
         return json
     }
 
+    /// Reads `.proxy` and `.proxycredentials` at `installPath` and applies values to the draft.
+    /// `.proxy` — single line containing the raw proxy URL.
+    /// `.proxycredentials` — two-line format: line 1 = username, line 2 = password.
+    /// Missing files leave the corresponding draft fields as empty strings.
     private mutating func loadProxy(installPath: String) {
         let proxyFilePath = installPath + "/.proxy"
         proxyUrl = (try? String(contentsOfFile: proxyFilePath, encoding: .utf8))
@@ -123,4 +132,3 @@ struct RunnerEditDraft: Equatable {
         }
     }
 }
-// swiftlint:enable missing_docs
