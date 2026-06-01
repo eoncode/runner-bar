@@ -44,6 +44,16 @@ struct PanelMainView: View {
     }
 
     /// Local runners that are currently executing a job in an in-progress workflow group.
+    ///
+    /// Three-pass match required because the relationship between local runners and
+    /// GitHub Actions jobs is not guaranteed to be 1:1 by a shared ID:
+    ///   1. runnerName match — most reliable when the job's runner label equals the
+    ///      local runner's name (self-hosted label set on the runner at registration).
+    ///   2. agentId match — falls back to the numeric agent ID when names differ
+    ///      (e.g. renamed runner, label mismatch).
+    ///   3. busyNames match — last resort using the runner API's `name` field, which
+    ///      may differ from the job's runner label in multi-runner environments.
+    /// All three are needed; collapsing them loses coverage for legitimate edge cases.
     private var activeLocalRunners: [RunnerModel] {
         guard store.actions.contains(where: { $0.groupStatus == .inProgress }) else { return [] }
         let activeNamesFromJobs = Set(
@@ -94,6 +104,9 @@ struct PanelMainView: View {
         .onChange(of: panelVisibilityState.isOpen) { _, open in
             if open { systemStats.start() } else { systemStats.stop() }
         }
+        // TODO: visibleCount resets on every actions identity change, including poll
+        // updates that don't change the list length. This snaps the user back to 10
+        // rows mid-scroll. Should reset only when store.actions.count decreases.
         .onChange(of: store.actions) { _, _ in visibleCount = 10 }
     }
 
@@ -137,7 +150,8 @@ struct PanelMainView: View {
         }
     }
 
-    /// Starts the 1-second timer that increments displayTick.
+    /// Starts the 1-second timer that increments `displayTick`.
+    /// SwiftUI view structs cannot form retain cycles, so no [weak self] capture is needed.
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
         displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in

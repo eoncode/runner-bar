@@ -34,10 +34,11 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         let isLive      = group.groupStatus == .inProgress
 
         // Re-run failed
+        // TODO: #1077 migrate to async/await once ghPost is async
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 runIDs.forEach { ghPost("repos/\(scope)/actions/runs/\($0)/rerun-failed-jobs") }
             }
         } label: {
@@ -46,10 +47,11 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         .disabled(!isConcluded)
 
         // Re-run all
+        // TODO: #1077 migrate to async/await once ghPost is async
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 runIDs.forEach { ghPost("repos/\(scope)/actions/runs/\($0)/rerun") }
             }
         } label: {
@@ -58,10 +60,11 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         .disabled(!isConcluded)
 
         // Cancel
+        // TODO: #1077 migrate to async/await once cancelRun is async
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 runIDs.forEach { cancelRun(runID: $0, scope: scope) }
             }
         } label: {
@@ -74,9 +77,9 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         // Copy log
         Button {
             let g = group
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 guard let text = fetchActionLogs(group: g), !text.isEmpty else { return }
-                DispatchQueue.main.async { copyToPasteboard(text) }
+                await MainActor.run { copyToPasteboard(text) }
             }
         } label: {
             Label("Copy Log", systemImage: "doc.on.doc")
@@ -121,11 +124,12 @@ private struct JobContextMenuModifier: ViewModifier {
         let isConcluded = job.conclusion != nil
         let isLive      = job.status == "in_progress"
 
-        // Re-run failed
+        // Re-run job
+        // TODO: #1077 migrate to async/await once ghPost is async
         Button {
             let scope = group.repo
             let jobID = job.id
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
             }
         } label: {
@@ -134,10 +138,11 @@ private struct JobContextMenuModifier: ViewModifier {
         .disabled(!isConcluded)
 
         // Cancel — ActiveJob has no runId; cancel all runs in the parent group
+        // TODO: #1077 migrate to async/await once cancelRun is async
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 runIDs.forEach { cancelRun(runID: $0, scope: scope) }
             }
         } label: {
@@ -151,9 +156,9 @@ private struct JobContextMenuModifier: ViewModifier {
         Button {
             let j = job
             let scope = group.repo
-            DispatchQueue.global(qos: .userInitiated).async {
+            Task.detached(priority: .userInitiated) {
                 guard let text = fetchJobLog(jobID: j.id, scope: scope), !text.isEmpty else { return }
-                DispatchQueue.main.async { copyToPasteboard(text) }
+                await MainActor.run { copyToPasteboard(text) }
             }
         } label: {
             Label("Copy Log", systemImage: "doc.on.doc")
@@ -199,8 +204,7 @@ private struct StepContextMenuModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.contextMenu {
             Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(step.name, forType: .string)
+                copyToPasteboard(step.name)
             } label: {
                 Label("Copy Step Name", systemImage: "doc.on.doc")
             }

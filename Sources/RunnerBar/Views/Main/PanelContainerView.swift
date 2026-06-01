@@ -233,9 +233,11 @@ private struct WindowReader: NSViewRepresentable {
     }
 
     /// Updates the window binding when the view's window changes.
+    /// Guards against redundant binding updates — nsView.window is stable after
+    /// the first assignment and re-dispatching on every SwiftUI update would
+    /// trigger unnecessary state invalidations in PanelContainerView.
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Re-capture on every update in case the view moves to a different window
-        // (e.g. after a transient hide/restore cycle).
+        guard nsView.window != window else { return }
         DispatchQueue.main.async { window = nsView.window }
     }
 }

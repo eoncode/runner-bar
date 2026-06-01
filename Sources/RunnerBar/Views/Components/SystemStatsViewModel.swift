@@ -192,6 +192,8 @@ final class SystemStatsViewModel: ObservableObject {
     // MARK: Disk (FileManager)
     /// Reads total and free bytes for the root volume via `FileManager` and returns used/total in GB.
     /// - Returns: `(used, total)` in GB, or `(0, 0)` if the file-system query fails.
+    /// - Note: Casts to `Int64`; safe for volumes up to ~9.2 EB. If Apple Silicon Macs ever
+    ///   ship volumes exceeding `Int64.max`, migrate to `UInt64` casts here.
     private func sampleDisk() -> (used: Double, total: Double) {
         guard
             let attrs = try? FileManager.default.attributesOfFileSystem(forPath: Self.rootVolumePath),

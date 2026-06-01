@@ -2,6 +2,15 @@
 // RunnerBar
 import RunnerBarCore
 import SwiftUI
+
+// MARK: - Set toggle helper
+private extension Set {
+    /// Removes `member` if present; inserts it if absent.
+    mutating func toggle(_ member: Element) {
+        if contains(member) { remove(member) } else { insert(member) }
+    }
+}
+
 // MARK: - TreeLineLeader
 /// Vertical tree-connector line drawn to the left of a job or step row.
 /// Renders a straight bar with an elbow arrow at the bottom for the last item.
@@ -286,13 +295,7 @@ struct InlineJobRowsView: View {
                             isLast: index == jobs.count - 1,
                             group: group,
                             isExpanded: expandedJobIDs.contains(job.id),
-                            onToggle: {
-                                if expandedJobIDs.contains(job.id) {
-                                    expandedJobIDs.remove(job.id)
-                                } else {
-                                    expandedJobIDs.insert(job.id)
-                                }
-                            },
+                            onToggle: { expandedJobIDs.toggle(job.id) },
                             onStepTap: { step in onStepTap(job, step) }
                         )
                         .id("\(job.id)-\(tickSnapshot)")
@@ -304,6 +307,9 @@ struct InlineJobRowsView: View {
             }
         }
     }
+    // TODO: jobStatus(for:) duplicates conclusion→RBStatus mapping that also exists in
+    // ActionRowView. Consider moving to an extension on ActiveJob or RBStatus in a future
+    // logic-pass batch so both call sites share one source of truth.
     /// Resolves the display status for a single job.
     private func jobStatus(for job: ActiveJob) -> RBStatus {
         if let conclusion = job.conclusion {
