@@ -334,3 +334,10 @@ struct RunnerDetailPopover: View {
         }
     }
 }
+
+/// Copies `text` to the system pasteboard. File-local helper used by copy buttons.
+@MainActor
+private func copyToPasteboard(text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+}
