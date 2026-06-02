@@ -147,15 +147,13 @@ extension Color {
     )
 
     /// Low-opacity amber tint for row backgrounds in warning/queued state.
-    public static let rbYellowTint = rbWarning.opacity(0.08)
+    static let rbYellowTint = rbWarning.opacity(0.08)
     /// Low-opacity blue tint for row backgrounds in in-progress state.
-    public static let rbBlueTint = rbBlue.opacity(0.08)
+    static let rbBlueTint = rbBlue.opacity(0.08)
     /// Low-opacity green tint for row backgrounds in success state.
-    public static let rbGreenTint = rbSuccess.opacity(0.08)
+    static let rbGreenTint = rbSuccess.opacity(0.08)
     /// Low-opacity red tint for row backgrounds in failed/danger state.
-    public static let rbRedTint = rbDanger.opacity(0.08)
-    /// Low-opacity orange tint — alias for `rbYellowTint`.
-    public static let rbOrangeTint = rbWarning.opacity(0.08)
+    static let rbRedTint = rbDanger.opacity(0.08)
 }
 
 // MARK: - Status helpers
@@ -185,18 +183,18 @@ enum RBStatus {
     }
 
     /// A low-opacity background tint to visually distinguish rows by status.
-    public var tint: Color {
+    var tint: Color {
         switch self {
         case .inProgress: return .rbBlueTint
-        case .success: return .rbGreenTint
-        case .failed: return .rbRedTint
-        case .queued: return .rbYellowTint
-        default: return .clear
+        case .success:    return .rbGreenTint
+        case .failed:     return .rbRedTint
+        case .queued:     return .rbYellowTint
+        case .unknown:    return .clear
         }
     }
 
     /// The SF Symbol name that represents this status.
-    public var sfSymbol: String {
+    var sfSymbol: String {
         switch self {
         case .inProgress: return "arrow.trianglehead.2.clockwise"
         case .success: return "checkmark"

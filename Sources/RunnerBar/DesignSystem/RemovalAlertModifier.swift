@@ -4,15 +4,17 @@ import SwiftUI
 
 // MARK: - RemovalAlertModifier
 
-/// `ViewModifier` that encapsulates the runner-removal confirmation alert.
-/// Extracted from `SettingsView.body` to satisfy `function_body_length`
-/// and `file_length` limits.
+/// Confirmation alert for runner removal.
+/// Presents a destructive action sheet with Cancel and Remove buttons.
+/// `onConfirm` is called on destructive confirmation; `onCancel` on dismissal.
+/// The `isAuthenticated` flag selects between two pre-composed message strings
+/// defined inside this modifier — only the flag itself is caller-supplied.
 struct RemovalAlertModifier: ViewModifier {
     /// The alert title string.
     let title: String
     /// Controls whether the alert is presented.
     @Binding var isPresented: Bool
-    /// Whether a GitHub token is available; changes the alert message.
+    /// Whether a GitHub token is available; selects the pre-composed message text.
     let isAuthenticated: Bool
     /// Called when the user taps Cancel.
     let onCancel: () -> Void
@@ -21,7 +23,6 @@ struct RemovalAlertModifier: ViewModifier {
 
     /// Wraps `content` with a runner-removal confirmation alert.
     func body(content: Content) -> some View {
-        // swiftlint:disable:next multiple_closures_with_trailing_closure
         content.alert(title, isPresented: $isPresented) {
             Button("Cancel", role: .cancel) { onCancel() }
             Button("Remove", role: .destructive) { onConfirm() }

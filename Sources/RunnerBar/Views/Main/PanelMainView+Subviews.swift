@@ -1,6 +1,5 @@
 // PanelMainView+Subviews.swift
 // RunnerBar
-// swiftlint:disable colon opening_brace
 
 import RunnerBarCore
 import SwiftUI
@@ -10,7 +9,7 @@ import SwiftUI
 struct SectionHeaderLabel: View {
     /// The title text displayed in uppercase.
     let title: String
-    /// The body property.
+    /// Renders the uppercased title in secondary caption color with standard panel insets.
     var body: some View {
         Text(title.uppercased())
             .font(RBFont.sectionCaption)
@@ -33,7 +32,7 @@ struct PanelHeaderView: View {
     let onSelectSettings: () -> Void
     /// Called when the user taps the sign-in button.
     let onSignIn: () -> Void
-    /// The body property.
+    /// Renders the header bar: system stats, sign-in button (shown when unauthenticated), settings and quit buttons.
     var body: some View {
         HStack(spacing: 6) {
             HeaderStatsBar(statsVM: statsVM)
@@ -101,7 +100,7 @@ struct PanelHeaderView: View {
 private struct RunnerTypeIcon: View {
     /// Whether the runner is self-hosted (local) or GitHub-hosted (cloud).
     let isLocal: Bool
-    /// The body property.
+    /// Renders a desktop or cloud SF Symbol in secondary color at 9 pt.
     var body: some View {
         Image(systemName: isLocal ? "desktopcomputer" : "cloud")
             .font(.system(size: 9))
@@ -118,7 +117,7 @@ private struct RunnerMetricsBadge: View {
     let cpu: Double
     /// Memory usage percentage (0–100).
     let mem: Double
-    /// The body property.
+    /// Renders CPU and MEM labels in a shared glass badge.
     var body: some View {
         HStack(spacing: 8) {
             metricItem(label: "CPU", value: String(format: "%.0f%%", cpu))
@@ -153,7 +152,7 @@ private struct RunnerMetricsBadge: View {
 struct PanelLocalRunnerRow: View {
     /// The list of runners to display.
     let runners: [RunnerModel]
-    /// The body property.
+    /// Renders the runner card list, or nothing if `runners` is empty.
     var body: some View {
         if !runners.isEmpty { runnerList(runners) }
     }
@@ -202,9 +201,7 @@ struct PanelLocalRunnerRow: View {
         let arch = rawArch.map { normaliseArch($0) }
         let os = rawOS.map { normalisePlatform($0) }
         let parts = [arch, os].compactMap { $0 }
-        let result = parts.isEmpty ? nil : parts.joined(separator: " · ")
-        print("[SubtitleDebug#1029] '\(runner.runnerName)' rawArch=\(rawArch ?? "nil") rawOS=\(rawOS ?? "nil") → subtitle=\(result ?? "nil (hidden)")")
-        return result
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
     /// Normalises raw architecture strings. Maps "ARM64"→"arm64", "X64"→"x64", "X86"→"x86".
     private func normaliseArch(_ raw: String) -> String {
@@ -246,7 +243,7 @@ struct ActionRowView: View {
     @State private var expandState: Bool?
     /// The row status observed on the previous tick, used to detect transitions.
     @State private var previousStatus: RBStatus?
-    /// The body property.
+    /// Routes to `glassMorphBody` on macOS 26+ or `legacyBody` on earlier OS versions.
     var body: some View {
         if #available(macOS 26, *) {
             glassMorphBody
@@ -423,9 +420,6 @@ struct ActionRowView: View {
     }
 
     /// Trailing meta: time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge.
-    ///
-    /// elapsed is only shown while the run is inProgress or queued — completed rows
-    /// show only time-ago to avoid a frozen clock.
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
@@ -442,6 +436,7 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
+        // Elapsed shown only while running or queued — snaps off on completion to avoid a frozen clock.
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.elapsed)
                 .font(DesignTokens.Fonts.mono)
@@ -498,4 +493,3 @@ private struct RowTapModifier: ViewModifier {
         }
     }
 }
-// swiftlint:enable colon opening_brace

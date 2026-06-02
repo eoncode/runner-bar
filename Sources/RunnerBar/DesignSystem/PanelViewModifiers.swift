@@ -32,23 +32,22 @@ struct GlassCard: ViewModifier {
     }
 
     /// Applies the glass card effect to the given content view.
+    @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             // glassEffect does not render a stroke automatically — add it as an
             // overlay so the card has the same subtle border in both OS paths.
-            AnyView(
-                content
-                    .glassEffect(
-                        .regular,
-                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
-                    )
-            )
+            content
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
+                )
         } else {
-            AnyView(materialFallback(content: content))
+            materialFallback(content: content)
         }
     }
 
@@ -127,40 +126,36 @@ struct GlassButton: ViewModifier {
 /// not a card container.
 struct StatPillBackground: ViewModifier {
     /// Applies a glass capsule background (macOS 26+) or ultra-thin material capsule (pre-26).
+    @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            AnyView(
-                content.glassEffect(.regular, in: Capsule())
-            )
+            content.glassEffect(.regular, in: Capsule())
         } else {
-            AnyView(
-                content.background(.ultraThinMaterial, in: Capsule())
-            )
+            content.background(.ultraThinMaterial, in: Capsule())
         }
     }
 }
 
 // MARK: - StatusBadgeBackground
 /// Background modifier for `StatusBadge` capsule badges.
-/// macOS 26+: colour tint layer + `.glassEffect(.regular, in: Capsule())`.
+/// macOS 26+: colour tint layer + stroke overlay on a `Capsule()` shape.
 /// macOS < 26: `Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)` (unchanged).
+/// Note: intentionally does NOT use `.glassEffect` — the tinted capsule design
+/// is distinct from the glass card pattern used in `GlassCard` and `StatPillBackground`.
 struct StatusBadgeBackground: ViewModifier {
     /// The status color used to tint the badge.
     let color: Color
 
-    /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies a tinted capsule background (macOS 26+) or stroke capsule border (pre-26).
+    @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            AnyView(
-                content
-                    .background(color.opacity(0.25), in: Capsule())
-                    .overlay(Capsule().strokeBorder(color.opacity(0.55), lineWidth: 0.5))
-            )
+            content
+                .background(color.opacity(0.25), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(0.55), lineWidth: 0.5))
         } else {
-            AnyView(
-                content.background(
-                    Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)
-                )
+            content.background(
+                Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)
             )
         }
     }
@@ -170,20 +165,20 @@ struct StatusBadgeBackground: ViewModifier {
 /// Background modifier for `BranchTagPill` capsule pills.
 /// macOS 26+: accent tint layer + `.glassEffect(.regular, in: Capsule())`.
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
+/// Note: the tint is applied *before* the glass effect so the accent colour tints
+/// the frosted glass layer. This is distinct from `StatPillBackground` (glass only)
+/// and `StatusBadgeBackground` (tint + stroke, no glass).
 struct BranchTagPillBackground: ViewModifier {
     /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
+    @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            AnyView(
-                content
-                    .background(Color.rbAccent.opacity(0.15), in: Capsule())
-                    .glassEffect(.regular, in: Capsule())
-            )
+            content
+                .background(Color.rbAccent.opacity(0.15), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
         } else {
-            AnyView(
-                content.background(
-                    Capsule().strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1)
-                )
+            content.background(
+                Capsule().strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1)
             )
         }
     }
@@ -310,7 +305,7 @@ struct StatusBadge: View {
 // MARK: - BranchTagPill
 /// Inline pill displaying a git branch or tag name.
 /// Uses an accent-tinted glass capsule on macOS 26+, stroke capsule pre-26.
-struct BranchTagPill: View { // periphery:ignore
+struct BranchTagPill: View { // periphery:ignore — used dynamically inside ActionRowView.rowContent; Periphery cannot trace the call site
     /// The branch or tag name displayed inside the pill.
     let name: String
 
