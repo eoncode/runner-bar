@@ -89,7 +89,11 @@ struct AddScopeSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: scopeType) { _, _ in
+                        // Reset picker selection to the first item in the new segment (or "" if not
+                        // loaded yet). Also clear manualScope so the text field doesn't show stale
+                        // input from the previous segment when falling back to manual mode.
                         selectedScope = pickerItems.first ?? ""
+                        manualScope = ""
                         showScopeSelector = false
                     }
 

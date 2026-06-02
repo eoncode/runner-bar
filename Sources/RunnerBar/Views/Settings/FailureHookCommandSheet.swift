@@ -97,7 +97,7 @@ extension FailureHookCommandSheet {
     /// Flow-wrapped pill buttons that append a variable token to `commandText`.
     var pillSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Insert variable at cursor:")
+            Text("Insert variable:")
                 .font(.caption2)
                 .foregroundColor(Color.rbTextTertiary)
             FlowLayout(spacing: 5) {

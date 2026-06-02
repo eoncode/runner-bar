@@ -476,13 +476,16 @@ struct AddRunnerSheet: View {
         openPanel.allowsMultipleSelection = false
         openPanel.message = "Select the runner install folder (must contain a .runner file)"
         openPanel.prompt = "Select"
-        guard let window = NSApp.keyWindow else {
-            log("AddRunnerSheet › pickExistingFolder: keyWindow is nil, cannot present panel")
-            return
-        }
-        openPanel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = openPanel.url else { return }
-            handlePickedFolder(url)
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            openPanel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = openPanel.url else { return }
+                handlePickedFolder(url)
+            }
+        } else {
+            // No key or main window available (e.g. panel not yet focused) — fall back to
+            // a modal run so the picker still works instead of silently doing nothing.
+            let response = openPanel.runModal()
+            if response == .OK, let url = openPanel.url { handlePickedFolder(url) }
         }
     }
 
