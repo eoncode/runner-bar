@@ -32,7 +32,7 @@ struct PanelHeaderView: View {
     let onSelectSettings: () -> Void
     /// Called when the user taps the sign-in button.
     let onSignIn: () -> Void
-    /// Renders the header bar: system stats, optional sign-in button, settings and quit buttons.
+    /// Renders the header bar: system stats, sign-in button (shown when unauthenticated), settings and quit buttons.
     var body: some View {
         HStack(spacing: 6) {
             HeaderStatsBar(statsVM: statsVM)
@@ -152,7 +152,7 @@ private struct RunnerMetricsBadge: View {
 struct PanelLocalRunnerRow: View {
     /// The list of runners to display.
     let runners: [RunnerModel]
-    /// Renders the runner card list, or nothing if `runners` is empty.
+    /// Renders the runner card list; emits nothing (no EmptyView placeholder) when `runners` is empty.
     var body: some View {
         if !runners.isEmpty { runnerList(runners) }
     }
@@ -439,7 +439,7 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        // Elapsed shown only while running or queued — snaps off on completion to avoid a frozen clock.
+        // Hidden when not running or queued — prevents a frozen elapsed display after completion.
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.elapsed)
                 .font(DesignTokens.Fonts.mono)

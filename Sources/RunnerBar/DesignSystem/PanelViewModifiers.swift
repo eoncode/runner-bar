@@ -104,7 +104,6 @@ struct GlassButton: ViewModifier {
     }
 
     /// Applies the interactive glass button effect to the given content view.
-    @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
@@ -139,13 +138,15 @@ struct StatPillBackground: ViewModifier {
 
 // MARK: - StatusBadgeBackground
 /// Background modifier for `StatusBadge` capsule badges.
-/// macOS 26+: colour tint layer + `.glassEffect(.regular, in: Capsule())`.
+/// macOS 26+: colour tint layer + stroke overlay on a `Capsule()` shape.
 /// macOS < 26: `Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)` (unchanged).
+/// Note: intentionally does NOT use `.glassEffect` — the tinted capsule design
+/// is distinct from the glass card pattern used in `GlassCard` and `StatPillBackground`.
 struct StatusBadgeBackground: ViewModifier {
     /// The status color used to tint the badge.
     let color: Color
 
-    /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies a tinted capsule background (macOS 26+) or stroke capsule border (pre-26).
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {

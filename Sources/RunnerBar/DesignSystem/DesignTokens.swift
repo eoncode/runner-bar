@@ -154,8 +154,6 @@ extension Color {
     static let rbGreenTint = rbSuccess.opacity(0.08)
     /// Low-opacity red tint for row backgrounds in failed/danger state.
     static let rbRedTint = rbDanger.opacity(0.08)
-    /// Duplicate of `rbYellowTint` — kept for call-site compatibility. Prefer `rbYellowTint` in new code.
-    static let rbOrangeTint = rbWarning.opacity(0.08)
 }
 
 // MARK: - Status helpers

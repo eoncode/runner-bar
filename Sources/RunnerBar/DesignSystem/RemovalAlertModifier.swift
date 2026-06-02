@@ -5,9 +5,10 @@ import SwiftUI
 // MARK: - RemovalAlertModifier
 
 /// Confirmation alert for runner removal.
-/// Shows authentication-aware message text: authenticated users see the `svc.sh`/`config.sh`
-/// command summary; unauthenticated users see the `gh auth login` sign-in instructions.
+/// Presents a destructive action sheet with Cancel and Remove buttons.
 /// `onConfirm` is called on destructive confirmation; `onCancel` on dismissal.
+/// The `isAuthenticated` flag selects between two pre-composed message strings
+/// supplied by the call site — this modifier owns no auth logic itself.
 struct RemovalAlertModifier: ViewModifier {
     /// The alert title string.
     let title: String
