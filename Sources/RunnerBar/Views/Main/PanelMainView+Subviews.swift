@@ -152,7 +152,7 @@ private struct RunnerMetricsBadge: View {
 struct PanelLocalRunnerRow: View {
     /// The list of runners to display.
     let runners: [RunnerModel]
-    /// Renders the runner card list; emits nothing (no EmptyView placeholder) when `runners` is empty.
+    /// Renders the runner card list, or nothing if `runners` is empty.
     var body: some View {
         if !runners.isEmpty { runnerList(runners) }
     }
@@ -420,9 +420,6 @@ struct ActionRowView: View {
     }
 
     /// Trailing meta: time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge.
-    ///
-    /// elapsed is only shown while the run is inProgress or queued — completed rows
-    /// show only time-ago to avoid a frozen clock.
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
@@ -439,7 +436,7 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        // Hidden when not running or queued — prevents a frozen elapsed display after completion.
+        // Elapsed shown only while running or queued — snaps off on completion to avoid a frozen clock.
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.elapsed)
                 .font(DesignTokens.Fonts.mono)

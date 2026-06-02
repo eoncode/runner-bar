@@ -165,6 +165,9 @@ struct StatusBadgeBackground: ViewModifier {
 /// Background modifier for `BranchTagPill` capsule pills.
 /// macOS 26+: accent tint layer + `.glassEffect(.regular, in: Capsule())`.
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
+/// Note: the tint is applied *before* the glass effect so the accent colour tints
+/// the frosted glass layer. This is distinct from `StatPillBackground` (glass only)
+/// and `StatusBadgeBackground` (tint + stroke, no glass).
 struct BranchTagPillBackground: ViewModifier {
     /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     @ViewBuilder
