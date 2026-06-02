@@ -1,6 +1,5 @@
 // SettingsView.swift
 // RunnerBar
-// swiftlint:disable orphaned_doc_comment missing_docs
 import Combine
 import RunnerBarCore
 import ServiceManagement
@@ -27,44 +26,53 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
-// swiftlint:disable:next type_body_length
-/// A value type representing SettingsView.
+/// Root settings view. Contains all six settings sections inside a ScrollView.
+/// See HEIGHT/WIDTH CONTRACT comments above before making layout changes.
 struct SettingsView: View {
-    /// The onBack constant.
+    // MARK: - Inputs
+    /// Callback invoked when the user taps the back button.
     let onBack: () -> Void
-    /// The store property.
+    /// The shared runner view-model; observed for remote runner list updates.
     @ObservedObject var store: RunnerViewModel
-    /// The settings property.
+
+    // MARK: - Observed stores
+    /// App-wide preferences (notifications, update channel, etc.).
     @ObservedObject private var settings = AppPreferencesStore.shared
-    /// The notifications property.
+    /// Notification opt-in preferences per scope.
     @ObservedObject private var notifications = NotificationPreferences.shared
-    /// The localRunnerStore property.
+    /// Index of locally-installed self-hosted runners.
     @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
-    /// The scopeStore property.
+    /// Registered remote runner scopes (org / repo URLs).
     @ObservedObject private var scopeStore = ScopeStore.shared
-    /// The launchAtLogin property.
+
+    // MARK: - Local UI state
+    /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
     @State private var launchAtLogin = LoginItem.isEnabled
-    /// The isOAuthAuthenticated property.
+    /// `true` when a valid OAuth token is stored in Keychain.
     @State private var isOAuthAuthenticated = (Keychain.token != nil)
-    /// The isCLIAuthenticated property.
+    /// `true` when a CLI token (GH_TOKEN / GITHUB_TOKEN) is present but no OAuth token.
     @State private var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
-    /// The isSigningIn property.
+    /// `true` while the OAuth sign-in flow is in progress.
     @State private var isSigningIn = false
-    /// The hasLoadedOnce property.
+    /// `true` once the initial local runner scan has completed.
     @State private var hasLoadedOnce = false
-    /// The runnerPendingRemoval property.
+    /// The runner awaiting user confirmation before removal.
     @State private var runnerPendingRemoval: RunnerModel?
-    /// The showAddRunnerSheet property.
+    /// Controls presentation of `AddRunnerSheet`.
     @State private var showAddRunnerSheet = false
-    /// The showAddScopeSheet property.
+    /// Controls presentation of `AddScopeSheet`.
     @State private var showAddScopeSheet = false
     /// #992: The scope entry currently being edited; non-nil while ScopeEditSheet is presented.
     @State private var selectedScopeEntry: ScopeEntry?
-    /// The removeErrorMessage property.
+    /// Non-nil when the last removal attempt failed; shown as an alert.
     @State private var removeErrorMessage: String?
-    /// Retains the Combine subscription for ScopeStore.didMutate.
+    // FIXME: AnyCancellable stored in @State risks silent subscription drop if SwiftUI
+    // recreates the view struct and reallocates @State storage. The correct pattern
+    // (used by RunnerViewModel) is to hold cancellables as stored properties on a
+    // @MainActor class. Tracked for refactor alongside #1077.
+    /// Retains the scope-mutation Combine subscription.
     @State private var scopeMutateCancellable: AnyCancellable?
-    /// Retains the Combine subscription for OAuthService.didSignOut.
+    /// Retains the sign-out Combine subscription.
     @State private var signOutCancellable: AnyCancellable?
 
     // MARK: - Popover editing state (#1001)
@@ -75,20 +83,23 @@ struct SettingsView: View {
     /// Non-nil when the last commit attempt produced errors; forwarded into `RunnerDetailPopover`.
     @State private var commitError: String?
 
-    /// The appVersion property.
+    // MARK: - Computed properties
+    /// Short version string from `CFBundleShortVersionString`.
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
-    /// The appBuild property.
+    /// Build number from `CFBundleVersion`.
     private var appBuild: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
-    /// The removalAlertTitle property.
+    /// Alert title incorporating the pending runner name.
     private var removalAlertTitle: String {
-        "Remove runner \"\(runnerPendingRemoval?.runnerName ?? "this runner\"")"
+        let name = runnerPendingRemoval?.runnerName ?? "this runner"
+        return "Remove runner \"\(name)\"?"
     }
 
-    /// The body property.
+    // MARK: - Body
+    /// Root layout: fixed header bar above a scrollable sections stack.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
@@ -106,6 +117,12 @@ struct SettingsView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .onAppear(perform: onAppearAction)
+        .onDisappear {
+            // Clear the singleton closure so a future SettingsView instance can claim it.
+            // Without this, the last-opened instance permanently owns onCompletion.
+            // Guard: do not clear while an OAuth flow is in progress — the callback must land.
+            if !isSigningIn { OAuthService.shared.onCompletion = nil }
+        }
         .onChange(of: localRunnerStore.isScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
         .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
         .sheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
@@ -165,11 +182,12 @@ struct SettingsView: View {
         )
     }
 
-    /// Performs the addRunnerSheet operation.
+    /// Returns the configured `AddRunnerSheet` for use as a `.sheet` content closure.
     private func addRunnerSheet() -> some View {
         AddRunnerSheet(isPresented: $showAddRunnerSheet) { localRunnerStore.refresh() }
     }
-    /// The removalAlertModifier property.
+
+    /// Pre-configured `RemovalAlertModifier` wired to `runnerPendingRemoval`.
     private var removalAlertModifier: RemovalAlertModifier {
         RemovalAlertModifier(
             title: removalAlertTitle,
@@ -183,7 +201,7 @@ struct SettingsView: View {
         )
     }
 
-    /// The sectionsStack property.
+    /// Vertical stack of all six settings sections.
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
             localRunnersSection
@@ -201,7 +219,7 @@ struct SettingsView: View {
         .padding(.bottom, 16)
     }
 
-    /// Performs the onAppearAction operation.
+    /// Runs on `.onAppear`: refreshes auth state and starts the scope-mutation listener.
     private func onAppearAction() {
         isOAuthAuthenticated = (Keychain.token != nil)
         isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
@@ -223,7 +241,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Header
-    /// The headerBar property.
+    /// Top bar with back button and "Settings" title.
     private var headerBar: some View {
         HStack {
             Button(action: onBack, label: {
@@ -241,7 +259,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Local Runners
-    /// The localRunnersSectionHeader property.
+    /// Section header row for the local runners list.
     private var localRunnersSectionHeader: some View {
         HStack {
             Text("Active local runners")
@@ -266,7 +284,7 @@ struct SettingsView: View {
         .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
     }
 
-    /// The localRunnersSection property.
+    /// Scrollable list of locally-installed runners.
     private var localRunnersSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             localRunnersSectionHeader
@@ -287,13 +305,12 @@ struct SettingsView: View {
         }
     }
 
-    /// Performs the localRunnerRow operation.
+    /// Full row view for a single local runner, including the detail popover.
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
-        // swiftlint:disable:next multiple_closures_with_trailing_closure
-        Button(action: {
+        Button {
             commitError = nil
             editingRunner = runner
-        }) {
+        } label: {
             localRunnerRowContent(runner)
                 .contentShape(Rectangle())
         }
@@ -303,7 +320,7 @@ struct SettingsView: View {
         .padding(.horizontal, RBSpacing.xs)
     }
 
-    /// Performs the localRunnerRowContent operation.
+    /// Inner content (status dot, name, start/stop buttons) for a local runner row.
     private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
         let hasWarning = runner.lifecycleWarning != nil
         let displayStatus = runner.displayStatus
@@ -347,53 +364,56 @@ struct SettingsView: View {
     }
 
     // MARK: - Resume / Stop actions
-
-    /// Performs the performResume operation.
-    private func performResume(runner: RunnerModel) {
+    // TODO: #1077 — migrate to async/await once RunnerLifecycleService.start/stop are async.
+    // Current pattern (Task + Task.detached) matches LocalRunnerStore.refresh() as the
+    // intermediate step: background work is off-actor, main-actor mutations happen in the
+    // Task continuation which returns to @MainActor automatically.
+    /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
+    @MainActor private func performResume(runner: RunnerModel) {
         log("SettingsView > performResume called runner=\(runner.runnerName)")
         LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = RunnerLifecycleService.shared.start(runner: runner)
-            DispatchQueue.main.async {
-                switch result {
-                case .success: break
-                case .corruptInstall:
-                    LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
-                case .failed(let msg):
-                    LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-                    let short = msg.components(separatedBy: "\n")
-                        .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(short)")
-                }
-                LocalRunnerStore.shared.refresh()
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                RunnerLifecycleService.shared.start(runner: runner)
+            }.value
+            switch result {
+            case .success: break
+            case .corruptInstall:
+                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
+            case .failed(let msg):
+                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                let short = msg.components(separatedBy: "\n")
+                    .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(short)")
             }
+            LocalRunnerStore.shared.refresh()
         }
     }
 
-    /// Performs the performStop operation.
-    private func performStop(runner: RunnerModel) {
+    /// Optimistically marks the runner as stopped then delegates to `RunnerLifecycleService`.
+    @MainActor private func performStop(runner: RunnerModel) {
         log("SettingsView > performStop called runner=\(runner.runnerName)")
         LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = RunnerLifecycleService.shared.stop(runner: runner)
-            DispatchQueue.main.async {
-                switch result {
-                case .success: break
-                case .corruptInstall:
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
-                case .failed(let msg):
-                    LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
-                    let short = msg.components(separatedBy: "\n")
-                        .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
-                    LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(short)")
-                }
-                LocalRunnerStore.shared.refresh()
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                RunnerLifecycleService.shared.stop(runner: runner)
+            }.value
+            switch result {
+            case .success: break
+            case .corruptInstall:
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ corrupt install")
+            case .failed(let msg):
+                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
+                let short = msg.components(separatedBy: "\n")
+                    .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "⚠ \(short)")
             }
+            LocalRunnerStore.shared.refresh()
         }
     }
 
-    /// Performs the localRunnerDotColor operation.
+    /// Maps a runner's `statusColor` to the corresponding design-system `Color`.
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
         case .running: return Color.rbSuccess
@@ -404,15 +424,15 @@ struct SettingsView: View {
     }
 
     // MARK: - Remote runner scopes
-
-    /// The remoteScopesSectionHeader property.
+    /// Section header row for the remote scopes list.
     private var remoteScopesSectionHeader: some View {
         HStack {
             Text("Remote runner scopes")
                 .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
             Spacer()
-            // swiftlint:disable:next multiple_closures_with_trailing_closure
-            Button(action: { showAddScopeSheet = true }) {
+            Button {
+                showAddScopeSheet = true
+            } label: {
                 Image(systemName: "plus").font(.caption).foregroundColor(Color.rbTextSecondary)
             }
             .buttonStyle(.plain)
@@ -422,7 +442,7 @@ struct SettingsView: View {
         .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
     }
 
-    /// The remoteScopesSection property.
+    /// Scrollable list of registered remote runner scopes.
     private var remoteScopesSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             remoteScopesSectionHeader
@@ -441,12 +461,13 @@ struct SettingsView: View {
         }
     }
 
-    /// Performs the scopeRow operation.
+    /// Row view for a single remote scope entry.
     private func scopeRow(_ entry: ScopeEntry) -> some View {
         let isRepo = entry.scope.contains("/")
         let displayName = ScopePreferencesStore.displayName(for: entry.scope)
-        // swiftlint:disable:next multiple_closures_with_trailing_closure
-        return Button(action: { selectedScopeEntry = entry }) {
+        return Button {
+            selectedScopeEntry = entry
+        } label: {
             HStack(spacing: 8) {
                 Text(isRepo ? "Repo" : "Org")
                     .font(.caption2)
@@ -490,12 +511,11 @@ struct SettingsView: View {
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
 
-                // swiftlint:disable:next multiple_closures_with_trailing_closure
-                Button(action: {
+                Button {
                     ScopePreferencesStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
                     RunnerStore.shared.start()
-                }) {
+                } label: {
                     Image(systemName: "minus.circle")
                         .font(.caption2)
                         .foregroundColor(Color.rbDanger)
@@ -514,7 +534,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Notifications
-    /// The notificationsSection property.
+    /// Notification opt-in toggles for each event type.
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notifications").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -536,7 +556,7 @@ struct SettingsView: View {
     }
 
     // MARK: - General
-    /// The generalSection property.
+    /// General section: launch-at-login toggle, version info, and sign-in controls.
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -563,7 +583,7 @@ struct SettingsView: View {
     }
 
     // MARK: - Account
-    /// The accountSection property.
+    /// GitHub sign-in / sign-out controls and authentication status.
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -628,7 +648,7 @@ struct SettingsView: View {
     }
 
     // MARK: - About
-    /// The aboutSection property.
+    /// App version, build number, and links to changelog / support.
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("About").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -642,32 +662,36 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
-    /// Performs the applyLaunchAtLogin operation.
+    /// Applies or removes the Login Item entry based on `enabled`.
     private func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
-    /// Performs the signInWithGitHub operation.
+    /// Initiates the OAuth sign-in flow via `OAuthService`.
     private func signInWithGitHub() {
         isSigningIn = true
         OAuthService.shared.signIn()
     }
 
-    /// Performs the signOutOfGitHub operation.
+    /// Signs out of GitHub and clears all stored tokens.
     private func signOutOfGitHub() {
         OAuthService.shared.signOut()
     }
 
-    /// Performs the performRemoval operation.
-    private func performRemoval() {
+    /// Optimistically removes the runner from the index then delegates to `RunnerLifecycleService`.
+    /// Rolls back the optimistic removal and surfaces an error message on failure.
+    @MainActor private func performRemoval() {
         guard let runner = runnerPendingRemoval else { return }
         runnerPendingRemoval = nil
+        removeErrorMessage = nil
         LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let ok = RunnerLifecycleService.shared.remove(runner: runner)
-            DispatchQueue.main.async {
-                if !ok { removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs." }
-                LocalRunnerStore.shared.refresh()
+        Task {
+            let ok = await Task.detached(priority: .userInitiated) {
+                RunnerLifecycleService.shared.remove(runner: runner)
+            }.value
+            if !ok {
+                LocalRunnerStore.shared.optimisticallyRestore(runner)
+                removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
             }
+            LocalRunnerStore.shared.refresh()
         }
     }
 }
-// swiftlint:enable orphaned_doc_comment missing_docs

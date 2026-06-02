@@ -24,26 +24,26 @@ private enum ScopeType: String, CaseIterable, Identifiable {
 ///
 /// On confirmation calls `ScopeStore.shared.add(_:)` + `RunnerStore.shared.start()`.
 struct AddScopeSheet: View {
-    /// The isPresented property.
+    /// Controls whether the sheet is shown.
     @Binding var isPresented: Bool
 
-    /// The scopeType property.
+    /// Whether the scope is org-level or repo-level.
     @State private var scopeType: ScopeType = .org
-    /// The selectedScope property.
+    /// The scope string chosen from the picker.
     @State private var selectedScope: String = ""
-    /// The manualScope property.
+    /// The scope string typed manually.
     @State private var manualScope: String = ""
-    /// The orgs property.
+    /// Available organisation names fetched from GitHub.
     @State private var orgs: [String] = []
-    /// The repos property.
+    /// Available repository names fetched from GitHub.
     @State private var repos: [String] = []
-    /// The isFetching property.
+    /// `true` while org/repo options are being fetched.
     @State private var isFetching = false
-    /// The errorMessage property.
+    /// Non-nil when fetching or validation fails.
     @State private var errorMessage: String?
-    /// The usePicker property.
+    /// `true` when the picker is shown instead of the text field.
     @State private var usePicker = false
-    /// The showScopeSelector property.
+    /// `true` while the scope-selector popover is presented.
     @State private var showScopeSelector = false
 
     /// The list of picker options matching the current `scopeType` (orgs or repos).
@@ -51,16 +51,22 @@ struct AddScopeSheet: View {
         scopeType == .org ? orgs : repos
     }
 
-    /// The scope string that will be saved: the selected picker value when `usePicker` is true,
-    /// otherwise the trimmed manual text-field input.
+    /// `true` only when picker mode is active **and** the current segment has items.
+    /// Prevents `effectiveScope` from reading `selectedScope` when the active segment is empty.
+    private var usesPickerForCurrentScope: Bool {
+        usePicker && !pickerItems.isEmpty
+    }
+
+    /// The scope string that will be saved: the selected picker value when the current segment
+    /// has picker items, otherwise the trimmed manual text-field input.
     private var effectiveScope: String {
-        usePicker ? selectedScope : manualScope.trimmingCharacters(in: .whitespacesAndNewlines)
+        usesPickerForCurrentScope ? selectedScope : manualScope.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Guards the Add button: `true` when `effectiveScope` is non-empty.
     private var canAdd: Bool { !effectiveScope.isEmpty }
 
-    /// The body property.
+    /// Root layout: header, form fields, and footer action bar.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Header ─────────────────────────────────────────────────────
@@ -83,7 +89,11 @@ struct AddScopeSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: scopeType) { _, _ in
+                        // Reset picker selection to the first item in the new segment (or "" if not
+                        // loaded yet). Also clear manualScope so the text field doesn't show stale
+                        // input from the previous segment when falling back to manual mode.
                         selectedScope = pickerItems.first ?? ""
+                        manualScope = ""
                         showScopeSelector = false
                     }
 
@@ -102,7 +112,7 @@ struct AddScopeSheet: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 6)
-                        } else if usePicker && !pickerItems.isEmpty {
+                        } else if usesPickerForCurrentScope {
                             // ── Searchable sheet trigger ─────────────────────
                             Button(action: { showScopeSelector = true }) {
                                 HStack {
@@ -194,7 +204,9 @@ struct AddScopeSheet: View {
 
     /// Fetches orgs and repos from GitHub on a background thread.
     /// Falls back to manual text entry when no token is present or the fetch returns empty results.
-    private func fetchScopeOptions() {
+    /// Pattern matches `LocalRunnerStore.refresh()`: background work is off-actor via
+    /// `Task.detached`, then the `Task` continuation returns to `@MainActor` automatically.
+    @MainActor private func fetchScopeOptions() {
         guard githubToken() != nil else {
             log("AddScopeSheet \u{203a} no token \u{2014} falling back to text field")
             usePicker = false
@@ -202,22 +214,21 @@ struct AddScopeSheet: View {
         }
         isFetching = true
         errorMessage = nil
-        DispatchQueue.global(qos: .userInitiated).async {
-            let fetchedOrgs  = fetchUserOrgs()
-            let fetchedRepos = fetchUserRepos()
-            DispatchQueue.main.async {
-                isFetching = false
-                if fetchedOrgs.isEmpty && fetchedRepos.isEmpty {
-                    log("AddScopeSheet \u{203a} fetch returned no orgs or repos \u{2014} using text field")
-                    usePicker = false
-                    errorMessage = "Could not load orgs/repos. Enter manually."
-                } else {
-                    orgs  = fetchedOrgs
-                    repos = fetchedRepos
-                    usePicker = true
-                    selectedScope = pickerItems.first ?? ""
-                    log("AddScopeSheet \u{203a} loaded orgs=\(orgs.count) repos=\(repos.count)")
-                }
+        Task {
+            let (fetchedOrgs, fetchedRepos) = await Task.detached(priority: .userInitiated) {
+                (fetchUserOrgs(), fetchUserRepos())
+            }.value
+            isFetching = false
+            if fetchedOrgs.isEmpty && fetchedRepos.isEmpty {
+                log("AddScopeSheet \u{203a} fetch returned no orgs or repos \u{2014} using text field")
+                usePicker = false
+                errorMessage = "Could not load orgs/repos. Enter manually."
+            } else {
+                orgs  = fetchedOrgs
+                repos = fetchedRepos
+                usePicker = true
+                selectedScope = pickerItems.first ?? ""
+                log("AddScopeSheet \u{203a} loaded orgs=\(orgs.count) repos=\(repos.count)")
             }
         }
     }
