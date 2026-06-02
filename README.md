@@ -15,6 +15,12 @@
 ![Periphery](https://github.com/eoncode/runner-bar/actions/workflows/periphery.yml/badge.svg)
 [![CodeQL](https://github.com/eoncode/runner-bar/actions/workflows/codeql.yml/badge.svg)](https://github.com/eoncode/runner-bar/actions/workflows/codeql.yml)
 
+**AI Reviewers**
+
+[![Greptile](https://img.shields.io/badge/AI%20Review-Greptile-6C47FF?logo=githubcopilot&logoColor=white)](https://greptile.com)
+[![CodeRabbit](https://img.shields.io/badge/AI%20Review-CodeRabbit-FF6B35?logo=rabbit&logoColor=white)](https://coderabbit.ai)
+[![Octopus Review](https://img.shields.io/badge/AI%20Review-Octopus-00B4D8?logo=octopusdeploy&logoColor=white)](https://octopusreview.com)
+
 **Code Quality**
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=eoncode_runner-bar&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=eoncode_runner-bar)
