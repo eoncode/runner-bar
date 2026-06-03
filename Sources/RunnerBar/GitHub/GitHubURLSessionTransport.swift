@@ -247,15 +247,18 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// is detected immediately rather than continuing with a stale credential.
 /// A `401 Unauthorized` response breaks the loop, discards any partial results,
 /// and returns `nil` so callers can distinguish auth failure from a complete dataset.
-/// A non-array page response (unexpected shape) also breaks the loop with a log.
+/// A non-array page response (e.g. an API error body) discards partial results
+/// and returns `nil` — earlier pages were fetched under the same bad conditions
+/// and may be unreliable.
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [[String: Any]] = []
-    // Plain var is safe here: DispatchSemaphore serialises each iteration so the
-    // completion closure has fully returned before the outer loop reads this flag.
+    // Plain vars are safe here: DispatchSemaphore serialises each iteration so the
+    // completion closure has fully returned before the outer loop reads these flags.
     var didFailAuthentication = false
+    var didEncounterUnexpectedPage = false
     while let urlString = nextURL {
         // Re-fetch token each iteration so a mid-pagination sign-out is detected early.
         guard let token = githubToken() else {
@@ -299,8 +302,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         // stays nil); a network error also leaves pageData nil — both break here.
         // The distinction is made after the loop via the didFailAuthentication flag.
         guard let data = pageData.withLock({ $0 }) else {
-            // Detect 401 path: no data AND no rate-limit AND no items accumulated
-            // on this iteration means auth likely failed.
+            // Detect 401 path: no data AND no rate-limit means auth likely failed.
             if !ghIsRateLimited {
                 didFailAuthentication = true
             }
@@ -309,16 +311,16 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             allItems.append(contentsOf: page)
         } else {
-            log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
+            // Non-array response is likely an API error body (e.g. {"message":"..."}).
+            // Discard all partial results — pages fetched so far may be unreliable.
+            log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — discarding \(allItems.count) partial item(s)")
+            didEncounterUnexpectedPage = true
             break
         }
         nextURL = extractNextURL(from: linkHeader.withLock({ $0 }))
     }
-    // Auth failure: discard partial results so callers see nil, not a truncated list.
-    if didFailAuthentication {
-        if !allItems.isEmpty {
-            log("urlSessionAPIPaginated › authentication failed mid-pagination — discarding \(allItems.count) partial items")
-        }
+    // Auth failure or unexpected page shape: discard partial results.
+    if didFailAuthentication || didEncounterUnexpectedPage {
         return nil
     }
     // Log partial results so callers know the list may be incomplete due to rate limit.
