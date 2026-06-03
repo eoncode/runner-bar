@@ -182,6 +182,7 @@ final class OAuthService {
             return
         }
         guard let token = json["access_token"] as? String, !token.isEmpty else {
+            log("OAuthService › exchangeCode: no access_token in response — keys=\(json.keys.sorted())")
             onCompletion?(false)
             return
         }
