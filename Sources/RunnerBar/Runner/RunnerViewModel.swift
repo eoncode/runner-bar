@@ -41,7 +41,7 @@ final class RunnerViewModel: ObservableObject {
     /// - Note: `RunnerStore` has no equivalent DI seam — `reload()` always reads `RunnerStore.shared`
     ///   directly. Tests that need to stub GitHub API state must use the real singleton or a
     ///   separate integration-test approach.
-    internal(set) var localRunnerStore: LocalRunnerStore?
+    var localRunnerStore: LocalRunnerStore?
 
     // MARK: - Reload
 

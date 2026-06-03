@@ -4,22 +4,19 @@ import SwiftUI
 
 // MARK: - SparklineView
 /// A mini sparkline graph using Path: polyline stroke + gradient fill.
-/// Color shifts green → orange → red based on the current value threshold.
-/// Fill uses .opacity(0.85) top → .opacity(0.05) bottom so it blends in both
-/// light and dark mode — satisfying Phase 2 transparency spec (#420).
-/// Renders on a transparent background so the glass panel from parent views shows through.
+/// Color shifts green -> orange -> red based on the current value threshold.
+/// Fill uses `.opacity(0.85)` top -> `.opacity(0.05)` bottom.
 struct SparklineView: View {
-    /// History ring buffer — ordered oldest→newest, values 0–100.
+    /// History ring buffer -- ordered oldest->newest, values 0-100.
     let history: [Double]
-    /// Current value used to determine the theme color (0–100).
+    /// Current value used to determine the theme color (0-100).
     let currentPct: Double
 
-    /// The SwiftUI body — renders a gradient fill path and a stroke polyline.
+    /// Renders a gradient fill path and a stroke polyline scaled to the available geometry.
     var body: some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         GeometryReader { geo in
             ZStack {
-                // Gradient fill — slight transparency blends with dark/light mode backgrounds (Phase 2 spec)
                 fillPath(in: geo.size)
                     .fill(
                         LinearGradient(
@@ -28,7 +25,6 @@ struct SparklineView: View {
                             endPoint: .bottom
                         )
                     )
-                // Stroke line
                 strokePath(in: geo.size)
                     .stroke(themeColor, lineWidth: 1.5)
             }
@@ -36,51 +32,42 @@ struct SparklineView: View {
         .background(Color.clear)
     }
 
-    // MARK: - Helpers
-    /// Color shifts green → orange → red as `currentPct` crosses 60 and 85.
-    /// - SeeAlso: `SparklineMetricView.labelColor` uses the same 60/85 breakpoints.
+    /// Accent color shifting green -> orange -> red as `currentPct` crosses 60 and 85.
     private var themeColor: Color {
         if currentPct > 85 { return .rbDanger }
         if currentPct > 60 { return .rbWarning }
         return .rbSuccess
     }
 
-    /// Builds the open polyline path for stroking.
+    /// Builds the open polyline `Path` used for the stroke layer.
     private func strokePath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
             guard !points.isEmpty else { return }
             path.move(to: points[0])
-            for point in points.dropFirst() {
-                path.addLine(to: point)
-            }
+            for point in points.dropFirst() { path.addLine(to: point) }
         }
     }
 
-    /// Builds the closed path (drop to bottom) for gradient fill.
+    /// Builds the closed `Path` (dropping to the bottom edge) used for the gradient fill layer.
     private func fillPath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
             guard !points.isEmpty, let lastPoint = points.last else { return }
             path.move(to: CGPoint(x: points[0].x, y: size.height))
             path.addLine(to: points[0])
-            for point in points.dropFirst() {
-                path.addLine(to: point)
-            }
+            for point in points.dropFirst() { path.addLine(to: point) }
             path.addLine(to: CGPoint(x: lastPoint.x, y: size.height))
             path.closeSubpath()
         }
     }
 
-    /// Converts history values (0–100) to CGPoints scaled to the view size.
+    /// Converts `history` values (0-100) to `CGPoint` coordinates scaled to `size`.
     private func normalised(in size: CGSize) -> [CGPoint] {
         guard history.count > 1 else {
             let val = history.first ?? 0
             let yPos = size.height - CGFloat(val / 100.0) * size.height
-            return [
-                CGPoint(x: 0, y: yPos),
-                CGPoint(x: size.width, y: yPos)
-            ]
+            return [CGPoint(x: 0, y: yPos), CGPoint(x: size.width, y: yPos)]
         }
         let count = history.count
         return history.enumerated().map { idx, val in
@@ -91,7 +78,6 @@ struct SparklineView: View {
     }
 }
 
-// MARK: - Preview
 #if DEBUG
 #Preview {
     HStack(spacing: 12) {

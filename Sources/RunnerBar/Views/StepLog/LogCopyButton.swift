@@ -4,21 +4,20 @@ import AppKit
 import SwiftUI
 
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
-/// States: idle (doc.on.doc + "Copy log") → loading (spinner + "Copying…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
+/// States: idle -> loading -> done (1.5 s) or failed (1.5 s) -> idle.
 struct LogCopyButton: View {
-    // Called on tap. Pass nil or empty string on failure — button still resets to idle.
-    /// The fetch constant.
+    /// Callback-based fetch. Invoke `completion` with the log text on success,
+    /// or `nil` / empty string on failure -- button resets to idle either way.
     let fetch: (@escaping @Sendable (String?) -> Void) -> Void
-    // When true the button is rendered at reduced opacity and cannot be tapped.
-    /// The isDisabled property.
+    /// When `true` the button is rendered at reduced opacity and cannot be tapped.
     var isDisabled: Bool = false
 
-    /// The phase property.
+    /// Current visual phase of the copy lifecycle.
     @State private var phase: Phase = .idle
 
     /// Visual states of the copy button lifecycle.
     enum Phase {
-        /// Normal tappable state.
+        /// Normal tappable state showing "Copy log".
         case idle
         /// Spinner shown while fetching log text.
         case loading
@@ -28,7 +27,7 @@ struct LogCopyButton: View {
         case failed
     }
 
-    /// The body property.
+    /// Renders the button in its current phase (idle, loading, done, or failed).
     var body: some View {
         Group {
             switch phase {
@@ -48,7 +47,7 @@ struct LogCopyButton: View {
             case .loading:
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
-                    Text("Copying…")
+                    Text("Copying\u{2026}")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize()
@@ -77,22 +76,24 @@ struct LogCopyButton: View {
         }
     }
 
-    /// Performs the startCopy operation.
+    /// Initiates the fetch, transitions to `.loading`, then resolves to `.done` or `.failed`.
     private func startCopy() {
         guard phase == .idle else { return }
         phase = .loading
-        let resetDelay: DispatchTimeInterval = .milliseconds(1500)
         fetch { copyText in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 if let text = copyText, !text.isEmpty {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                     phase = .done
-                    DispatchQueue.main.asyncAfter(deadline: .now() + resetDelay) { phase = .idle }
                 } else {
                     phase = .failed
-                    DispatchQueue.main.asyncAfter(deadline: .now() + resetDelay) { phase = .idle }
                 }
+                // try? intentionally swallows CancellationError -- phase = .idle
+                // runs unconditionally so the button is always reusable after the
+                // 1.5 s window, even if the view is dismissed mid-flight.
+                try? await Task.sleep(for: .milliseconds(1500))
+                phase = .idle
             }
         }
     }

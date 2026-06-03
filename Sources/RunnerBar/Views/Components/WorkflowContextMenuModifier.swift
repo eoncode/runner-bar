@@ -6,11 +6,7 @@ import SwiftUI
 
 // MARK: - Pasteboard helper
 /// Copies `text` to the general pasteboard.
-/// Compiler-enforced `@MainActor` — `NSPasteboard` requires main-thread access.
-/// Callers on `MainActor` (e.g. button closures in `StepContextMenuModifier`) call
-/// this directly. Callers in a `Task.detached` context use `await copyToPasteboard(_:)`
-/// directly — the `@MainActor` annotation provides the actor hop; no `MainActor.run {}`
-/// wrapper is needed.
+/// `@MainActor` enforced -- `NSPasteboard` requires main-thread access.
 @MainActor
 private func copyToPasteboard(_ text: String) {
     NSPasteboard.general.clearContents()
@@ -18,31 +14,21 @@ private func copyToPasteboard(_ text: String) {
 }
 
 // MARK: - WorkflowContextMenuModifier
-// Adds a right-click context menu to an ActionRowView (workflow level).
-// Actions mirror those in ActionDetailView's header bar:
-//   re-run failed (concluded only)
-//   re-run all (concluded only)
-//   cancel (in_progress only)
-//   copy log (always)
-//   show workflow file on GitHub (always, opens first run's html_url)
-//   show GitHub SHA (always, opens commit)
 /// `ViewModifier` that attaches a workflow-level right-click context menu to an `ActionRowView`.
 private struct WorkflowContextMenuModifier: ViewModifier {
     /// The workflow action group this menu acts on.
     let group: WorkflowActionGroup
 
-    /// Wraps `content` with a right-click context menu.
+    /// Wraps `content` with a right-click context menu containing workflow-level actions.
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
     }
 
-    /// Context menu items for workflow-level actions.
+    /// Context menu items: re-run failed, re-run all, cancel, copy log, open on GitHub.
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = group.groupStatus == .completed
         let isLive      = group.groupStatus == .inProgress
-
-        // Re-run failed
         // FIXME: #1077 Task.detached wraps a blocking call — migrating ghPost to async/await will unblock the cooperative thread pool
         Button {
             let scope  = group.repo
@@ -50,12 +36,8 @@ private struct WorkflowContextMenuModifier: ViewModifier {
             Task.detached(priority: .userInitiated) {
                 runIDs.forEach { ghPost("repos/\(scope)/actions/runs/\($0)/rerun-failed-jobs") }
             }
-        } label: {
-            Label("Re-run Failed Jobs", systemImage: "arrow.counterclockwise")
-        }
+        } label: { Label("Re-run Failed Jobs", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
-
-        // Re-run all
         // FIXME: #1077 Task.detached wraps a blocking call — migrating ghPost to async/await will unblock the cooperative thread pool
         Button {
             let scope  = group.repo
@@ -63,12 +45,8 @@ private struct WorkflowContextMenuModifier: ViewModifier {
             Task.detached(priority: .userInitiated) {
                 runIDs.forEach { ghPost("repos/\(scope)/actions/runs/\($0)/rerun") }
             }
-        } label: {
-            Label("Re-run All Jobs", systemImage: "arrow.clockwise")
-        }
+        } label: { Label("Re-run All Jobs", systemImage: "arrow.clockwise") }
         .disabled(!isConcluded)
-
-        // Cancel
         // FIXME: #1077 Task.detached wraps a blocking call — migrating cancelRun to async/await will unblock the cooperative thread pool
         Button {
             let scope  = group.repo
@@ -76,69 +54,50 @@ private struct WorkflowContextMenuModifier: ViewModifier {
             Task.detached(priority: .userInitiated) {
                 runIDs.forEach { cancelRun(runID: $0, scope: scope) }
             }
-        } label: {
-            Label("Cancel", systemImage: "xmark.circle")
-        }
+        } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
-
         Divider()
-
-        // Copy log
         Button {
             let g = group
             Task.detached(priority: .userInitiated) {
                 guard let text = fetchActionLogs(group: g), !text.isEmpty else { return }
                 await copyToPasteboard(text)
             }
-        } label: {
-            Label("Copy Log", systemImage: "doc.on.doc")
-        }
-
+        } label: { Label("Copy Log", systemImage: "doc.on.doc") }
         Divider()
-
-        // Show workflow file on GitHub
         Button {
             guard let htmlUrl = group.runs.first?.htmlUrl,
                   let runUrl  = URL(string: htmlUrl) else { return }
             NSWorkspace.shared.open(runUrl)
-        } label: {
-            Label("Show Workflow on GitHub", systemImage: "doc.text")
-        }
+        } label: { Label("Show Workflow on GitHub", systemImage: "doc.text") }
         .disabled(group.runs.first?.htmlUrl == nil)
-
-        // Show GitHub SHA
         Button {
             let sha  = group.headSha
             let repo = group.repo
             guard let url = URL(string: "https://github.com/\(repo)/commit/\(sha)") else { return }
             NSWorkspace.shared.open(url)
-        } label: {
-            Label("Show Commit on GitHub", systemImage: "number")
-        }
+        } label: { Label("Show Commit on GitHub", systemImage: "number") }
     }
 }
 
 // MARK: - JobContextMenuModifier
-// Adds a right-click context menu to a JobRowCard (job level).
 /// `ViewModifier` that attaches a job-level right-click context menu to a `JobRowCard`.
 private struct JobContextMenuModifier: ViewModifier {
     /// The job this menu acts on.
     let job: ActiveJob
-    /// The parent workflow action group, used for run-level cancel.
+    /// The parent workflow action group, used for run-level re-run and cancel actions.
     let group: WorkflowActionGroup
 
-    /// Wraps `content` with a right-click context menu.
+    /// Wraps `content` with a right-click context menu containing job-level actions.
     func body(content: Content) -> some View {
         content.contextMenu { menuItems }
     }
 
-    /// Context menu items for job-level actions.
+    /// Context menu items: re-run job, cancel, copy log, open on GitHub.
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = job.conclusion != nil
         let isLive      = job.status == "in_progress"
-
-        // Re-run job
         // FIXME: #1077 Task.detached wraps a blocking call — migrating ghPost to async/await will unblock the cooperative thread pool
         Button {
             let scope = group.repo
@@ -146,12 +105,8 @@ private struct JobContextMenuModifier: ViewModifier {
             Task.detached(priority: .userInitiated) {
                 ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
             }
-        } label: {
-            Label("Re-run Job", systemImage: "arrow.counterclockwise")
-        }
+        } label: { Label("Re-run Job", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
-
-        // Cancel — ActiveJob has no runId; cancel all runs in the parent group
         // FIXME: #1077 Task.detached wraps a blocking call — migrating cancelRun to async/await will unblock the cooperative thread pool
         Button {
             let scope  = group.repo
@@ -159,14 +114,9 @@ private struct JobContextMenuModifier: ViewModifier {
             Task.detached(priority: .userInitiated) {
                 runIDs.forEach { cancelRun(runID: $0, scope: scope) }
             }
-        } label: {
-            Label("Cancel", systemImage: "xmark.circle")
-        }
+        } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
-
         Divider()
-
-        // Copy log
         Button {
             let j = job
             let scope = group.repo
@@ -174,20 +124,12 @@ private struct JobContextMenuModifier: ViewModifier {
                 guard let text = fetchJobLog(jobID: j.id, scope: scope), !text.isEmpty else { return }
                 await copyToPasteboard(text)
             }
-        } label: {
-            Label("Copy Log", systemImage: "doc.on.doc")
-        }
-
+        } label: { Label("Copy Log", systemImage: "doc.on.doc") }
         Divider()
-
-        // Show job on GitHub
         Button {
-            guard let htmlUrl = job.htmlUrl,
-                  let url = URL(string: htmlUrl) else { return }
+            guard let htmlUrl = job.htmlUrl, let url = URL(string: htmlUrl) else { return }
             NSWorkspace.shared.open(url)
-        } label: {
-            Label("Show Job on GitHub", systemImage: "doc.text")
-        }
+        } label: { Label("Show Job on GitHub", systemImage: "doc.text") }
         .disabled(job.htmlUrl == nil)
     }
 }
@@ -216,17 +158,15 @@ extension View {
 private struct StepContextMenuModifier: ViewModifier {
     /// The step this menu acts on.
     let step: JobStep
-    /// Called when the user selects "View Log".
+    /// Called when the user selects "View Log" from the context menu.
     let onTap: () -> Void
 
-    /// Wraps `content` with a right-click context menu for step-level actions.
+    /// Wraps `content` with step-level context menu actions (copy name, view log).
     func body(content: Content) -> some View {
         content.contextMenu {
             Button {
                 copyToPasteboard(step.name)
-            } label: {
-                Label("Copy Step Name", systemImage: "doc.on.doc")
-            }
+            } label: { Label("Copy Step Name", systemImage: "doc.on.doc") }
             Button(action: onTap) {
                 Label("View Log", systemImage: "text.alignleft")
             }

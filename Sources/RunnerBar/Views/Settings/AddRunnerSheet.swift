@@ -182,8 +182,8 @@ struct AddRunnerSheet: View {
                     label: "Repository",
                     onDismiss: { showRepoSelector = false },
                     onSelect: { item in
+                        // No dismiss here -- RepoSelectorSheet.itemRow calls onDismiss after onSelect.
                         selectedRepo = item
-                        showRepoSelector = false
                     }
                 )
             }
@@ -199,8 +199,8 @@ struct AddRunnerSheet: View {
                     label: "Organisation",
                     onDismiss: { showOrgSelector = false },
                     onSelect: { item in
+                        // No dismiss here -- RepoSelectorSheet.itemRow calls onDismiss after onSelect.
                         selectedOrg = item
-                        showOrgSelector = false
                     }
                 )
             }

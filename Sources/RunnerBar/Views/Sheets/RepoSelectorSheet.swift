@@ -14,31 +14,33 @@ import SwiftUI
 //     items: repos,
 //     label: "Repository",
 //     onDismiss: { showSheet = false },
-//     onSelect: { selectedRepo = $0; showSheet = false }
+//     onSelect: { selectedRepo = $0 }   // do NOT dismiss here; itemRow calls onDismiss
 // )
 
-/// A value type representing RepoSelectorSheet.
+/// Reusable searchable sheet for picking a repository or organisation from a
+/// pre-loaded list. Filters client-side. `onSelect` is called with the chosen
+/// item string; `onDismiss` is called on every exit path (cancel or after selection).
 struct RepoSelectorSheet: View {
-    /// The items constant.
+    /// The pre-loaded list of item strings to display and filter.
     let items: [String]
-    /// The label constant.
+    /// Human-readable label shown in the header and search placeholder (e.g. "Repository").
     let label: String
-    /// The onDismiss constant.
+    /// Called on every exit path (selection or cancel).
     let onDismiss: () -> Void
-    /// The onSelect constant.
+    /// Called with the selected item string. Do NOT call `onDismiss` here -- `itemRow` handles it.
     let onSelect: (String) -> Void
 
-    /// The searchText property.
+    /// Current search query; filters `items` into `filtered`.
     @State private var searchText = ""
 
-    /// The filtered property.
+    /// Items matching `searchText` (case-insensitive); equals `items` when `searchText` is empty.
     private var filtered: [String] {
         searchText.isEmpty
             ? items
             : items.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
 
-    /// The body property.
+    /// Root body -- header, search field, item list, and cancel footer.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerSection
@@ -55,9 +57,9 @@ struct RepoSelectorSheet: View {
 
 // MARK: - Subviews
 
-/// Extension adding functionality to `RepoSelectorSheet`.
+/// Subview factories for `RepoSelectorSheet`.
 extension RepoSelectorSheet {
-    /// The headerSection property.
+    /// Title and subtitle header shown at the top of the sheet.
     var headerSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Select \(label)")
@@ -72,7 +74,7 @@ extension RepoSelectorSheet {
         .padding(.bottom, 10)
     }
 
-    /// The searchSection property.
+    /// Search field row with clear button.
     var searchSection: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -99,10 +101,9 @@ extension RepoSelectorSheet {
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
-    /// The listSection computed view.
     }
 
-    /// The listSection computed view.
+    /// Scrollable item list; shows empty-state messages when `items` or `filtered` is empty.
     @ViewBuilder
     var listSection: some View {
         if items.isEmpty {
@@ -144,11 +145,12 @@ extension RepoSelectorSheet {
         }
     }
 
-    /// Performs the itemRow operation.
+    /// Row button for a single item. Calls `onSelect` then `onDismiss` on tap.
     func itemRow(_ item: String) -> some View {
         Button(action: {
             log("RepoSelectorSheet \u{203a} selected item='\(item)'")
             onSelect(item)
+            onDismiss()
         }) {
             HStack(spacing: 8) {
                 Image(systemName: "externaldrive")
@@ -168,7 +170,7 @@ extension RepoSelectorSheet {
         .buttonStyle(.plain)
     }
 
-    /// The footerSection property.
+    /// Cancel button footer bar.
     var footerSection: some View {
         HStack {
             Spacer()
