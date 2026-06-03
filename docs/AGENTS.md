@@ -55,18 +55,17 @@ Keep files small and single-responsibility. Add new files rather than growing ex
 
 ## Auth
 
-Never prompt the user for a token or PAT. Auth works like this:
+Never prompt the user for a token or PAT. Auth is handled by `Auth.swift`. The supported
+sources in priority order are:
 
-```swift
-// Shell out to gh CLI
-let token = shell("gh auth token")
-```
-
-Fallback order:
-1. `gh auth token` output
+1. `gh auth token` output (gh CLI)
 2. `GH_TOKEN` environment variable
 3. `GITHUB_TOKEN` environment variable
-4. If all fail: show message in popover — "Run `gh auth login` in Terminal"
+4. Settings OAuth flow (user signs in via the in-app Settings panel)
+5. If all fail: show message in popover — `"Sign in via Settings or set GH_TOKEN / GITHUB_TOKEN env var, then try again."`
+
+> ⚠️ `gh auth login` is **not** a supported auth path and was removed in Batch 18 (`Auth.swift`).
+> Do not reference it in user-facing strings, code comments, or agent instructions.
 
 ---
 

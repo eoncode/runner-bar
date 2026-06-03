@@ -150,17 +150,19 @@ private struct RunnerMetricsBadge: View {
 /// on a separate background cycle and will always lag behind the RunnerStore
 /// fetch cycle, causing rows to be silently swallowed. (#948)
 struct PanelLocalRunnerRow: View {
+    /// Maximum number of runner cards shown inline before the overflow label.
+    private static let maxVisibleRunners = 3
     /// The list of runners to display.
     let runners: [RunnerModel]
     /// Renders the runner card list, or nothing if `runners` is empty.
     var body: some View {
         if !runners.isEmpty { runnerList(runners) }
     }
-    /// Renders a vertical stack of runner cards, capped at 3 with an overflow label.
+    /// Renders a vertical stack of runner cards, capped at `maxVisibleRunners` with an overflow label.
     @ViewBuilder private func runnerList(_ active: [RunnerModel]) -> some View {
-        ForEach(active.prefix(3)) { runner in runnerCard(runner) }
-        if active.count > 3 {
-            Text("+ \(active.count - 3) more…")
+        ForEach(active.prefix(Self.maxVisibleRunners)) { runner in runnerCard(runner) }
+        if active.count > Self.maxVisibleRunners {
+            Text("+ \(active.count - Self.maxVisibleRunners) more…")
                 .font(.caption2).foregroundColor(.secondary)
                 .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
         }
@@ -226,9 +228,9 @@ struct PanelLocalRunnerRow: View {
 /// Row representing one GitHub Actions workflow run.
 /// Tapping expands inline job rows; long-press opens the run URL in Safari.
 ///
-/// macOS 26+: the card background uses `.glassCard()` directly on the VStack,
-/// identical structure to the pre-26 path. Animation is `.easeInOut(duration: 0.15)`
-/// on both paths — matching main branch exactly.
+/// macOS 26+: the card background uses `.glassCard()` inside the shared `rowContainer`
+/// background ZStack, identical structure to the pre-26 path. Animation is
+/// `.easeInOut(duration: 0.15)` on both paths — matching main branch exactly.
 ///
 /// ⚠️ Do NOT add GlassEffectContainer, .glassEffectID, .bouncy, or
 /// .glassEffectTransition — they cause staggered/slow expand animations (#957).
@@ -243,21 +245,30 @@ struct ActionRowView: View {
     @State private var expandState: Bool?
     /// The row status observed on the previous tick, used to detect transitions.
     @State private var previousStatus: RBStatus?
-    /// Routes to `glassMorphBody` on macOS 26+ or `legacyBody` on earlier OS versions.
+    /// Routes to the macOS 26+ glass path or the pre-26 legacy path.
     var body: some View {
         if #available(macOS 26, *) {
-            glassMorphBody
+            rowContainer {
+                // macOS 26+: glassCard rendered as background element inside rowContainer's ZStack.
+                Color.clear.glassCard(cornerRadius: RBRadius.card)
+                statusAccentBar
+            }
         } else {
-            legacyBody
+            rowContainer {
+                glassCardBackground
+                statusAccentBar
+            }
         }
     }
 
-    // MARK: macOS 26+ body
-    /// macOS 26+ path — uses .glassCard() directly on the VStack with the same
-    /// .easeInOut(duration: 0.15) animation as main. No GlassEffectContainer,
-    /// no .bouncy, no .glassEffectTransition — these caused staggered/slow animation.
-    @available(macOS 26, *)
-    @ViewBuilder private var glassMorphBody: some View {
+    // MARK: Shared row container
+
+    /// Shared layout structure used by both the macOS 26+ and pre-26 paths.
+    /// Only the background layer differs between the two paths — all other
+    /// modifiers (clip, content shape, context menu, tap, padding, lifecycle)
+    /// are applied once here to eliminate duplication.
+    @ViewBuilder
+    private func rowContainer<Background: View>(@ViewBuilder background: () -> Background) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: RBSpacing.md)
@@ -269,52 +280,15 @@ struct ActionRowView: View {
         }
         .frame(maxWidth: .infinity)
         .background {
-            Rectangle()
-                .fill(rowStatus.color)
-                .frame(width: 4)
-                .frame(maxHeight: .infinity)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        }
-        .glassCard(cornerRadius: RBRadius.card)
-        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        .workflowContextMenu(group: group)
-        .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus, useBouncyAnimation: false))
-        .padding(.horizontal, RBSpacing.md)
-        .padding(.vertical, RBSpacing.xxs)
-        .onAppear { applyInitialExpandState() }
-        .onChange(of: rowStatus) { _, newStatus in handleStatusChange(newStatus) }
-    }
-
-    // MARK: Pre-macOS-26 body
-    /// Pre-macOS-26 fallback body using plain animations and no glass morphing.
-    @ViewBuilder private var legacyBody: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 0) {
-                Color.clear.frame(width: RBSpacing.md)
-                rowContent
-            }
-            if let fullExpand = expandState {
-                InlineJobRowsView(group: group, tick: tick, fullExpand: fullExpand, onStepTap: onStepTap)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .background(
             ZStack {
-                glassCardBackground
-                Rectangle()
-                    .fill(rowStatus.color)
-                    .frame(width: 4)
-                    .frame(maxHeight: .infinity)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                background()
             }
             .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
-        )
+        }
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .workflowContextMenu(group: group)
-        .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus, useBouncyAnimation: false))
+        .modifier(RowTapModifier(jobs: group.jobs, expandState: $expandState, rowStatus: rowStatus))
         .padding(.horizontal, RBSpacing.md)
         .padding(.vertical, RBSpacing.xxs)
         .onAppear { applyInitialExpandState() }
@@ -322,6 +296,15 @@ struct ActionRowView: View {
     }
 
     // MARK: Shared helpers
+
+    /// Left-edge status accent bar — 4 pt wide, clipped to the card shape.
+    @ViewBuilder private var statusAccentBar: some View {
+        Rectangle()
+            .fill(rowStatus.color)
+            .frame(width: 4)
+            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     /// Glass card background used by the pre-26 path.
     /// Routes through `.glassCard()` — nothing outside `PanelViewModifiers` calls `.glassEffect()` directly.
@@ -366,12 +349,12 @@ struct ActionRowView: View {
     /// Main body of the action row.
     ///
     /// Column order (#984):
-    /// graph-dot · local-remote-icon · sha · repo-name · commit-title · branch-icon+name · Spacer
+    /// graph-dot · local-remote-icon · sha · repo-name · commit-title · branch-pill · Spacer
     /// · time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge
     ///
     /// - sha: `group.label` (7-char sha or PR#), muted mono
     /// - repo-name: `group.repoShortName` stripped from owner/repo
-    /// - branch: `arrow.triangle.branch` icon + text capped at maxWidth 80, hidden when nil
+    /// - branch: `BranchTagPill` capped at maxWidth 80, hidden when nil
     private var rowContent: some View {
         let tickSnapshot = tick
         return HStack(spacing: 6) {
@@ -396,21 +379,12 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
-            // Branch icon + name (hidden when nil)
+            // Branch pill — hidden when nil. Uses BranchTagPill for consistent icon + truncation.
             if let branch = group.headBranch {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                    Text(branch)
-                        .font(DesignTokens.Fonts.mono)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 80, alignment: .leading)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(0)
+                BranchTagPill(name: branch)
+                    .frame(maxWidth: 80, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(0)
             }
             Spacer()
             metaTrailing(tick: tickSnapshot)
@@ -464,8 +438,9 @@ struct ActionRowView: View {
 
 // MARK: - RowTapModifier
 /// Applies the expand-on-tap interaction to an action row card.
-/// Shared by both `glassMorphBody` (macOS 26+) and `legacyBody` (pre-26)
-/// to eliminate duplicated `.onTapGesture` blocks.
+/// Shared by both the macOS 26+ and pre-26 paths via `rowContainer` to
+/// eliminate duplicated `.onTapGesture` blocks.
+/// Animation is always `.easeInOut(duration: 0.15)` — do NOT add `.bouncy` (#957).
 private struct RowTapModifier: ViewModifier {
     /// The jobs to inspect before allowing expansion.
     let jobs: [ActiveJob]
@@ -473,17 +448,12 @@ private struct RowTapModifier: ViewModifier {
     @Binding var expandState: Bool?
     /// Current display status of the row.
     let rowStatus: RBStatus
-    /// When true, uses `.bouncy` animation (macOS 26+); otherwise `.easeInOut`.
-    let useBouncyAnimation: Bool
 
-    /// Applies the tap gesture with the appropriate animation.
+    /// Applies the tap gesture with easeInOut animation.
     func body(content: Content) -> some View {
         content.onTapGesture {
             guard !jobs.isEmpty else { return }
-            let animation: Animation = useBouncyAnimation
-                ? .bouncy
-                : .easeInOut(duration: 0.15)
-            withAnimation(animation) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 if expandState == true {
                     expandState = (rowStatus == .inProgress) ? false : nil
                 } else {

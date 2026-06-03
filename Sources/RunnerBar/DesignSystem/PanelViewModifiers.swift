@@ -112,6 +112,7 @@ struct GlassButton: ViewModifier {
                     in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 )
         } else {
+            // pre-macOS-26: no interactive glass button style available — passes through unstyled intentionally.
             content
         }
     }
