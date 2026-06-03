@@ -174,12 +174,15 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
 
     guard let data = urlSessionRaw(endpoint) else {
-        log("fetchStepLog › empty response for job \(jobID)")
+        log("fetchStepLog › urlSessionRaw returned nil for job \(jobID)")
         return nil
     }
-    guard let raw = String(data: data, encoding: .utf8),
-          !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        log("fetchStepLog › empty response for job \(jobID)")
+    guard let raw = String(data: data, encoding: .utf8) else {
+        log("fetchStepLog › UTF-8 decode failed for job \(jobID) (\(data.count) bytes)")
+        return nil
+    }
+    guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        log("fetchStepLog › empty body for job \(jobID)")
         return nil
     }
     if raw.hasPrefix("{") {
