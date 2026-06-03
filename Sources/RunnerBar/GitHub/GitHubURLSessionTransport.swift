@@ -114,6 +114,15 @@ private func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLR
 
 /// Builds a URLRequest with `application/vnd.github.v3.raw` Accept header.
 /// Used for log endpoints that 302-redirect to raw S3 content.
+///
+/// # S3 redirect safety
+/// The `Authorization: Bearer` header set here is sent only to api.github.com.
+/// When GitHub replies with 302 to a pre-signed S3 URL (*.amazonaws.com),
+/// Apple's URLSession automatically strips sensitive headers — including
+/// `Authorization` — before following the redirect to a different domain
+/// (cross-origin redirect semantics per RFC 7235 / Apple URLSession behaviour).
+/// S3 therefore receives only the pre-signed query-param credentials and no
+/// conflicting `Authorization` header. No custom redirect delegate is required.
 private func makeRawRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
     var req = URLRequest(url: url, timeoutInterval: timeout)
     req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -277,7 +286,17 @@ private func extractNextURL(from header: String?) -> String? {
 // MARK: - Raw (log endpoints)
 
 /// Fetches raw bytes from a GitHub API endpoint that 302-redirects to S3.
-/// URLSession follows the redirect automatically.
+///
+/// # Redirect safety
+/// GitHub's job-log endpoint (`/actions/jobs/{id}/logs`) returns 302 to a
+/// pre-signed S3 URL on `*.amazonaws.com`. URLSession follows this redirect
+/// automatically. Apple's URLSession strips the `Authorization` header before
+/// replaying a request to a different domain (cross-origin redirect — RFC 7235
+/// / Apple URLSession cross-origin redirect semantics), so the Bearer token is
+/// never forwarded to S3. S3 authenticates purely via the pre-signed query
+/// params already embedded in the redirect URL. No custom redirect delegate is
+/// required or appropriate here.
+///
 /// ⚠️ Must be called from a background thread.
 func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
