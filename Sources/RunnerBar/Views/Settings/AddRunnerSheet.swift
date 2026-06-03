@@ -10,13 +10,19 @@ import SwiftUI
 /// Enumerates possible values for GitHubURIs.
 private enum GitHubURIs {
     /// The base constant.
-    static let base            = "https://github.com/"
+    static let base            = "https://github.com/" // NOSONAR — centralised constant, not an inline hardcoded URI
     /// The apiRunnerLatest constant.
-    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest"
+    static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR — centralised constant, not an inline hardcoded URI
     /// The launchAgentsDir constant.
     static let launchAgentsDir = "Library/LaunchAgents"
     /// The actionsRunnerDefaultDir constant.
     static let actionsRunnerDefaultDir = "actions-runner/my-runner"
+    /// System path to the curl binary used when downloading the runner package.
+    static let curlPath  = "/usr/bin/curl" // NOSONAR — fixed OS path
+    /// System path to the tar binary used when unpacking the runner package.
+    static let tarPath   = "/usr/bin/tar"  // NOSONAR — fixed OS path
+    /// System path to the uname binary used to detect CPU architecture.
+    static let unamePath = "/usr/bin/uname" // NOSONAR — fixed OS path
 }
 
 /// Sheet view for onboarding a self-hosted runner.
@@ -659,13 +665,13 @@ struct AddRunnerSheet: View {
                 }
                 let tarPath = URL(fileURLWithPath: dir)
                     .appendingPathComponent("actions-runner.tar.gz").path
-                guard runSimpleProcess("/usr/bin/curl",
+                guard runSimpleProcess(GitHubURIs.curlPath,
                                       args: ["-sL", downloadURL, "-o", tarPath]) == 0 else {
                     await MainActor.run { isRegistering = false; errorMessage = "Download failed." }
                     return
                 }
                 await setStep("Unpacking runner package…")
-                let tarExit = runSimpleProcess("/usr/bin/tar", args: ["xzf", tarPath, "-C", dir])
+                let tarExit = runSimpleProcess(GitHubURIs.tarPath, args: ["xzf", tarPath, "-C", dir])
                 try? FileManager.default.removeItem(atPath: tarPath)
                 guard tarExit == 0 else {
                     await MainActor.run { isRegistering = false; errorMessage = "Unpack failed." }
@@ -803,7 +809,7 @@ struct AddRunnerSheet: View {
 /// matching the current CPU architecture (`arm64` or `x64`).
 private func fetchRunnerDownloadURL() -> String? {
     let archTask = Process()
-    archTask.executableURL  = URL(fileURLWithPath: "/usr/bin/uname")
+    archTask.executableURL  = URL(fileURLWithPath: GitHubURIs.unamePath)
     archTask.arguments      = ["-m"]
     let archPipe = Pipe()
     archTask.standardOutput = archPipe

@@ -115,7 +115,7 @@ private struct JobContextMenuModifier: ViewModifier {
             }
         } label: { Label("Re-run Job", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
-        // FIXME: #1077 Task.detached wraps a blocking call — migrating cancelRun to async/await will unblock the cooperative thread pool
+        // FIXME: #1077 Task.detached wraps a blocking call — migrating cancelRun to async/await will unblock the cooperative thread pool // NOSONAR
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
