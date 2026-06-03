@@ -284,8 +284,10 @@ enum RBFont {
 /// - Note: **Deprecated shim** — prefer `RBFont`, `RBSpacing`, `RBRadius`, and the `Color`
 /// token extensions directly in all new code. This namespace exists only to avoid a
 /// mass rename of existing call sites. Do not add new members here.
-/// TODO: Remove once all remaining call sites (`DesignTokens.Fonts.*`, `DesignTokens.Spacing.*`,
+/// TODO: Remove once all remaining call sites (`DesignTokens.Fonts.*`, `DesignTokens.Spacing.*`, // NOSONAR
 /// `DesignTokens.Radius.*`, `DesignTokens.Colors.*`) are migrated to the `RB*` equivalents.
+/// Active call sites as of Batch 22: `SystemStatsView` (×2), `PanelMainView+Subviews` (×6),
+/// `InlineJobRowsView` (×3) — 11 total. Migrate those files before removing this shim.
 enum DesignTokens {
     /// Font aliases forwarded from `RBFont`.
     /// - Note: Deprecated — use `RBFont` directly.

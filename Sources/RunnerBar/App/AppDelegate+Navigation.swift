@@ -88,7 +88,7 @@ extension AppDelegate {
         case .settings:
             return settingsView()
         case .stepLog(let job, let step):
-            // TODO(#1099): This guard checks the live store which is empty until the first
+            // TODO(#1099): This guard checks the live store which is empty until the first // NOSONAR
             // poll (~2–5 s after launch). A user who reopens the app quickly after
             // viewing a step log will always fail this guard and land on main instead.
             // Preferred fix: let StepLogView render a loading/empty state and remove
