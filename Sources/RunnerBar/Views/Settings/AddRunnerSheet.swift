@@ -168,7 +168,7 @@ struct AddRunnerSheet: View {
         if isLoadingScopes {
             HStack {
                 ProgressView().scaleEffect(0.7)
-                Text("Loading\u{2026}").font(.caption).foregroundColor(.secondary)
+                Text("Loading…").font(.caption).foregroundColor(.secondary)
             }
         } else if scopeType == .repo {
             selectorButton(
@@ -259,7 +259,7 @@ struct AddRunnerSheet: View {
                 if isRegistering {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7).frame(width: 14, height: 14)
-                        Text("Registering\u{2026}")
+                        Text("Registering…")
                     }
                 } else {
                     Text("Add new runner")
@@ -291,7 +291,7 @@ struct AddRunnerSheet: View {
                     Button {
                         pickExistingFolder()
                     } label: {
-                        Text("Choose\u{2026}")
+                        Text("Choose…")
                     }
                     .controlSize(.small)
                 }
@@ -300,3 +300,556 @@ struct AddRunnerSheet: View {
                 .cornerRadius(6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
+            }
+
+            // Detected fields (shown once a valid folder is picked)
+            if !detectedName.isEmpty {
+                labeledReadOnly("Runner name (detected)", value: detectedName)
+
+                if detectedGitHubURL.isEmpty {
+                    // Fallback: let user supply the GitHub URL manually
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("GitHub URL").font(.caption).foregroundColor(.secondary)
+                        TextField("\(GitHubURIs.base)owner/repo", text: $githubURLOverride)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                        Text("The .runner file has no GitHub URL. Paste the repo or org URL above.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    labeledReadOnly("GitHub URL (detected)", value: detectedGitHubURL)
+                }
+            }
+
+            // Error state
+            if let err = existingError {
+                Label(err, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(8)
+                    .background(Color.red.opacity(0.08))
+                    .cornerRadius(6)
+            }
+
+            // Duplicate warning
+            if isDuplicate {
+                Label(
+                    "This runner is already tracked by RunnerBar.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundColor(.orange)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
+                Button("Import Runner", action: importExistingRunner)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canImport)
+            }
+        }
+    }
+
+    // MARK: - Sub-views
+
+    /// Selector button that opens the searchable RepoSelectorSheet.
+    @ViewBuilder
+    private func selectorButton(label: String, selection: String,
+                                action: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption).foregroundColor(.secondary)
+            Button(action: action) {
+                HStack {
+                    Text(selection.isEmpty ? "— select —" : selection)
+                        .font(.system(size: 12))
+                        .foregroundColor(selection.isEmpty ? .secondary : .primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(5)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            if selection.isEmpty {
+                Text("No \(label.lowercased())s found. Sign in with GitHub or set GH_TOKEN / GITHUB_TOKEN.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+        }
+    }
+
+    /// Helper that renders a caption label above a `TextField` with rounded-border style.
+    @ViewBuilder
+    private func labeledField(_ title: String, placeholder: String,
+                              text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundColor(.secondary)
+            TextField(placeholder, text: text).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    /// Read-only display field used in the pre-existing form.
+    @ViewBuilder
+    private func labeledReadOnly(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundColor(.secondary)
+            Text(value)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(5)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
+        }
+    }
+
+    // MARK: - Helpers (Add new)
+
+    /// The effectiveScope property.
+    private var effectiveScope: String { scopeType == .repo ? selectedRepo : selectedOrg }
+
+    /// Returns `true` when the chosen install directory already contains a `.runner` file,
+    /// preventing accidental double-registration of the same path.
+    private var dirAlreadyConfigured: Bool {
+        let dir = installDir.trimmingCharacters(in: .whitespaces)
+        guard !dir.isEmpty else { return false }
+        return FileManager.default.fileExists(
+            atPath: URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
+        )
+    }
+
+    /// Guards the Register button: requires a non-empty runner name, a selected scope,
+    /// and an install directory that has not already been configured.
+    private var canRegister: Bool {
+        !runnerName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !effectiveScope.isEmpty
+            && !dirAlreadyConfigured
+    }
+
+    // MARK: - Helpers (Add pre-existing)
+
+    /// The GitHub URL to use for the import: detected from .runner or the manual override.
+    private var effectiveGitHubURL: String {
+        detectedGitHubURL.isEmpty ? githubURLOverride.trimmingCharacters(in: .whitespaces)
+                                  : detectedGitHubURL
+    }
+
+    /// Guards the Import button: requires a detected runner name, no parse error,
+    /// no duplicate in the store, and a non-empty GitHub URL.
+    private var canImport: Bool {
+        !detectedName.isEmpty
+            && existingError == nil
+            && !isDuplicate
+            && !effectiveGitHubURL.isEmpty
+    }
+
+    /// Checks whether the runner name is already tracked in LocalRunnerStore's index.
+    private func checkDuplicate(runnerName: String) -> Bool {
+        LocalRunnerStore.shared.isTracked(runnerName: runnerName)
+    }
+
+    // MARK: - Actions (Add pre-existing)
+
+    /// Opens an `NSOpenPanel` to let the user select a pre-configured runner directory.
+    private func pickExistingFolder() {
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = false
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = false
+        openPanel.message = "Select the runner install folder (must contain a .runner file)"
+        openPanel.prompt = "Select"
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            openPanel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = openPanel.url else { return }
+                handlePickedFolder(url)
+            }
+        } else {
+            // No key or main window available (e.g. panel not yet focused) — fall back to
+            // a modal run so the picker still works instead of silently doing nothing.
+            let response = openPanel.runModal()
+            if response == .OK, let url = openPanel.url { handlePickedFolder(url) }
+        }
+    }
+
+    /// Validates the picked folder and populates the detected-runner state.
+    private func handlePickedFolder(_ url: URL) {
+        resetExistingState()
+        existingDir = url.path
+
+        let runnerFileURL = url.appendingPathComponent(".runner")
+        guard FileManager.default.fileExists(atPath: runnerFileURL.path) else {
+            existingError = "No .runner file found in the selected folder. Is this a valid runner install directory?"
+            return
+        }
+
+        guard let data = try? Data(contentsOf: runnerFileURL) else {
+            existingError = "Could not read .runner file."
+            return
+        }
+
+        /// Minimal `.runner` JSON payload — only name and GitHub URL are needed.
+        struct RunnerJSON: Decodable {
+            /// The URL of the GitHub repo or org this runner is registered to.
+            let gitHubUrl: String?
+            /// The registered runner name.
+            let runnerName: String?
+        }
+
+        guard let json = try? JSONDecoder().decode(RunnerJSON.self, from: data) else {
+            existingError = "Could not parse .runner file. It may be malformed."
+            return
+        }
+
+        detectedName = json.runnerName ?? url.lastPathComponent
+        detectedGitHubURL = json.gitHubUrl ?? ""
+        isDuplicate = checkDuplicate(runnerName: detectedName)
+
+        log("AddRunnerSheet › pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")
+    }
+
+    /// Writes the LaunchAgent plist, registers with LocalRunnerStore, and dismisses.
+    private func importExistingRunner() {
+        guard canImport else { return }
+
+        let scope = effectiveGitHubURL
+            .replacingOccurrences(of: GitHubURIs.base, with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        guard !scope.isEmpty else {
+            existingError = "Could not derive a scope from the GitHub URL. Please check the URL."
+            return
+        }
+
+        writeLaunchAgentPlist(
+            scope: scope,
+            runnerName: detectedName,
+            workingDirectory: existingDir
+        )
+        LocalRunnerStore.shared.add(runnerName: detectedName, installPath: existingDir)
+
+        isPresented = false
+        onComplete()
+    }
+
+    // MARK: - State reset helpers
+
+    /// Resets all "Add new" form fields to their default values.
+    private func resetAddNewState() {
+        runnerName       = ""
+        labelsText       = "self-hosted,macOS"
+        installDir       = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
+        isRegistering    = false
+        registrationStep = ""
+        errorMessage     = nil
+        scopeType        = .repo
+        selectedRepo     = repos.first ?? ""
+        selectedOrg      = orgs.first  ?? ""
+        if addMode == .addNew && repos.isEmpty && orgs.isEmpty {
+            loadScopes()
+        }
+    }
+
+    /// Clears all "Add pre-existing" detection state so a fresh folder can be picked.
+    private func resetExistingState() {
+        existingDir       = ""
+        detectedName      = ""
+        detectedGitHubURL = ""
+        existingError     = nil
+        githubURLOverride = ""
+        isDuplicate       = false
+    }
+
+    // MARK: - Scopes loader
+
+    /// Fetches the user's repos and organisations on a background thread.
+    private func loadScopes() {
+        isLoadingScopes = true
+        Task.detached(priority: .userInitiated) {
+            let fetchedRepos = fetchUserRepos()
+            let fetchedOrgs  = fetchUserOrgs()
+            await MainActor.run {
+                repos = fetchedRepos
+                orgs  = fetchedOrgs
+                if let first = fetchedRepos.first { selectedRepo = first }
+                if let first = fetchedOrgs.first  { selectedOrg  = first }
+                isLoadingScopes = false
+            }
+        }
+    }
+
+    /// Updates `registrationStep` on the main thread.
+    @MainActor private func setStep(_ msg: String) {
+        registrationStep = msg
+    }
+
+    // MARK: - Register (Add new)
+
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
+    /// Downloads, unpacks, configures a new runner, registers with LocalRunnerStore, and dismisses.
+    private func register() async {
+        guard canRegister else { return }
+        errorMessage = nil
+        registrationStep = ""
+        isRegistering = true
+        let scope  = effectiveScope
+        let name   = runnerName.trimmingCharacters(in: .whitespaces)
+        let labels = labelsText.trimmingCharacters(in: .whitespaces)
+        let dir    = installDir.trimmingCharacters(in: .whitespaces)
+        let currentScopeType = scopeType
+
+        await Task.detached(priority: .userInitiated) {
+            let homeDir     = FileManager.default.homeDirectoryForCurrentUser
+                .resolvingSymlinksInPath().path
+            let resolvedDir = URL(fileURLWithPath: dir).resolvingSymlinksInPath().path
+            guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
+                await MainActor.run {
+                    isRegistering = false
+                    errorMessage  = "Install directory must be inside your home folder (~/…)."
+                }
+                return
+            }
+
+            let runnerFile = URL(fileURLWithPath: dir).appendingPathComponent(".runner").path
+            if FileManager.default.fileExists(atPath: runnerFile) {
+                await MainActor.run { isRegistering = false }
+                return
+            }
+
+            do {
+                try FileManager.default.createDirectory(atPath: dir,
+                                                        withIntermediateDirectories: true)
+            } catch {
+                await MainActor.run {
+                    isRegistering = false
+                    errorMessage  = "Failed to create directory: \(error.localizedDescription)"
+                }
+                return
+            }
+
+            let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
+
+            if !FileManager.default.fileExists(atPath: configPath) {
+                await setStep("Downloading runner package…")
+                guard let downloadURL = fetchRunnerDownloadURL() else {
+                    await MainActor.run {
+                        isRegistering = false
+                        errorMessage  = "Could not determine runner download URL. Check your internet connection."
+                    }
+                    return
+                }
+                let tarPath = URL(fileURLWithPath: dir)
+                    .appendingPathComponent("actions-runner.tar.gz").path
+                guard runSimpleProcess("/usr/bin/curl",
+                                      args: ["-sL", downloadURL, "-o", tarPath]) == 0 else {
+                    await MainActor.run { isRegistering = false; errorMessage = "Download failed." }
+                    return
+                }
+                await setStep("Unpacking runner package…")
+                let tarExit = runSimpleProcess("/usr/bin/tar", args: ["xzf", tarPath, "-C", dir])
+                try? FileManager.default.removeItem(atPath: tarPath)
+                guard tarExit == 0 else {
+                    await MainActor.run { isRegistering = false; errorMessage = "Unpack failed." }
+                    return
+                }
+            }
+
+            await setStep("Fetching registration token…")
+            guard let token = fetchRegistrationToken(scope: scope) else {
+                await MainActor.run {
+                    isRegistering = false
+                    if currentScopeType == .org {
+                        errorMessage = "Not authorised to register org-level runners. Ensure your token has the 'manage_runners:org' scope, or sign in via the GitHub button in Settings."
+                    } else {
+                        errorMessage = "Could not get a registration token. Ensure a valid token is available via OAuth sign-in, or the GH_TOKEN / GITHUB_TOKEN environment variable."
+                    }
+                }
+                return
+            }
+
+            await setStep("Configuring runner…")
+            let ghURL      = "\(GitHubURIs.base)\(scope)"
+            let configExit = runRegistrationCommand(dir: dir, ghURL: ghURL,
+                                                    token: token, name: name, labels: labels)
+            guard configExit == 0 else {
+                await MainActor.run {
+                    isRegistering = false
+                    errorMessage  = "config.sh failed (exit \(configExit)). Check the token is valid and the runner name is unique."
+                }
+                return
+            }
+
+            await setStep("Registering service…")
+            writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
+
+            await MainActor.run {
+                LocalRunnerStore.shared.add(runnerName: name, installPath: dir)
+                isRegistering    = false
+                registrationStep = ""
+                isPresented      = false
+                onComplete()
+            }
+        }.value
+    }
+
+    // MARK: - Plist writer (shared by both modes)
+
+    /// Writes a minimal LaunchAgent plist to `~/Library/LaunchAgents/`.
+    nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
+        let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(GitHubURIs.launchAgentsDir)
+        let scopeParts = scope.components(separatedBy: "/")
+        let owner      = scopeParts[0]
+        let repo       = scopeParts.count > 1 ? scopeParts[1] : scopeParts[0]
+        let label      = "actions.runner.\(owner).\(repo).\(runnerName)"
+        let plistURL   = launchAgentsDir.appendingPathComponent("\(label).plist")
+
+        do {
+            try FileManager.default.createDirectory(
+                at: launchAgentsDir, withIntermediateDirectories: true)
+            let plistData = try PropertyListSerialization.data(
+                fromPropertyList: ["Label": label, "WorkingDirectory": workingDirectory],
+                format: .xml,
+                options: 0
+            )
+            try plistData.write(to: plistURL, options: .atomic)
+            log("AddRunnerSheet › wrote LaunchAgent plist: \(plistURL.path)")
+        } catch {
+            log("AddRunnerSheet › failed to write LaunchAgent plist: \(error)")
+        }
+    }
+
+    // MARK: - Process helpers (Add new)
+
+    /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
+    nonisolated private func runRegistrationCommand(
+        dir: String, ghURL: String, token: String, name: String, labels: String
+    ) -> Int32 {
+        let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
+        let task = Process()
+        task.executableURL       = configURL
+        task.currentDirectoryURL = URL(fileURLWithPath: dir)
+        var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
+        if !labels.isEmpty { args += ["--labels", labels] }
+        task.arguments = args
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError  = pipe
+        nonisolated(unsafe) var outputData = Data()
+        let lock = NSLock()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            lock.lock(); outputData.append(chunk); lock.unlock()
+        }
+        do { try task.run() } catch {
+            pipe.fileHandleForReading.readabilityHandler = nil
+            log("runRegistrationCommand › launch error: \(error)")
+            return 1
+        }
+        let timeoutItem = DispatchWorkItem { [weak task] in task?.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
+        pipe.fileHandleForReading.readabilityHandler = nil
+        let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+        if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
+        log("runRegistrationCommand › exit=\(task.terminationStatus): \((String(data: outputData, encoding: .utf8) ?? "").prefix(500))")
+        return task.terminationStatus
+    }
+
+    /// Launches `executable` with `args` synchronously and returns the termination status.
+    nonisolated private func runSimpleProcess(_ executable: String, args: [String]) -> Int32 {
+        let task = Process()
+        task.executableURL  = URL(fileURLWithPath: executable)
+        task.arguments      = args
+        task.standardOutput = Pipe()
+        task.standardError  = Pipe()
+        do { try task.run() } catch {
+            log("runSimpleProcess › \(executable) launch error: \(error)")
+            return 1
+        }
+        let timeoutItem = DispatchWorkItem { [weak task] in task?.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeoutItem)
+        task.waitUntilExit()
+        timeoutItem.cancel()
+        log("runSimpleProcess › \(executable) exit \(task.terminationStatus)")
+        return task.terminationStatus
+    }
+}
+
+// MARK: - Runner download URL
+
+/// Queries the GitHub API for the latest macOS runner release and returns the `.tar.gz` download URL
+/// matching the current CPU architecture (`arm64` or `x64`).
+private func fetchRunnerDownloadURL() -> String? {
+    let archTask = Process()
+    archTask.executableURL  = URL(fileURLWithPath: "/usr/bin/uname")
+    archTask.arguments      = ["-m"]
+    let archPipe = Pipe()
+    archTask.standardOutput = archPipe
+    archTask.standardError  = Pipe()
+    guard (try? archTask.run()) != nil else { return nil }
+    archTask.waitUntilExit()
+    let archRaw   = archPipe.fileHandleForReading.readDataToEndOfFile()
+    let arch      = String(data: archRaw, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let assetArch = (arch == "arm64") ? "arm64" : "x64"
+    let assetName = "actions-runner-osx-\(assetArch)"
+    log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
+
+    // TODO: #1077 — synchronous network call; blocks the detached task thread. Replace with URLSession once the call chain is async.
+    guard let url  = URL(string: GitHubURIs.apiRunnerLatest),
+          let data = try? Data(contentsOf: url) else {
+        log("fetchRunnerDownloadURL › failed to fetch release JSON")
+        return nil
+    }
+    /// Minimal GitHub release asset payload.
+    struct Asset: Decodable {
+        /// The asset file name.
+        let name: String
+        /// The direct download URL for this asset.
+        let browserDownloadUrl: String
+        /// Maps snake_case API keys to camelCase Swift properties.
+        enum CodingKeys: String, CodingKey {
+            /// The name coding key.
+            case name
+            /// The browserDownloadUrl coding key.
+            case browserDownloadUrl = "browser_download_url"
+        }
+    }
+    /// Minimal GitHub release payload — only assets are needed.
+    struct Release: Decodable {
+        /// The list of release assets.
+        let assets: [Asset]
+    }
+    guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
+        log("fetchRunnerDownloadURL › decode failed")
+        return nil
+    }
+    let match = release.assets.first {
+        $0.name.hasPrefix(assetName) && $0.name.hasSuffix(".tar.gz")
+    }
+    log("fetchRunnerDownloadURL › match=\(match?.name ?? "nil")")
+    return match?.browserDownloadUrl
+}
+// swiftlint:enable type_body_length
