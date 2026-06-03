@@ -110,7 +110,7 @@ struct PanelMainView: View {
         .onChange(of: panelVisibilityState.isOpen) { _, open in
             if open { systemStats.start() } else { systemStats.stop() }
         }
-        // TODO: visibleCount resets on every actions identity change, including poll
+        // TODO: visibleCount resets on every actions identity change, including poll // NOSONAR
         // updates that don't change the list length. This snaps the user back to 10
         // rows mid-scroll. Should reset only when store.actions.count decreases.
         .onChange(of: store.actions) { _, _ in visibleCount = 10 }

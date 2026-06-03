@@ -232,7 +232,7 @@ private struct WindowReader: NSViewRepresentable {
     @Binding var window: NSWindow?
 
     /// Creates the underlying NSView and reports its window asynchronously.
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context _: Context) -> NSView {
         let view = NSView(frame: .zero)
         // Async because view.window is nil synchronously at make time.
         DispatchQueue.main.async { window = view.window }
@@ -245,7 +245,7 @@ private struct WindowReader: NSViewRepresentable {
     /// trigger unnecessary state invalidations in PanelContainerView.
     /// Pointer equality is safe here because NSPopover reuses the same NSWindow
     /// object across transient hide/restore cycles.
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: NSView, context _: Context) {
         guard nsView.window != window else { return }
         DispatchQueue.main.async { window = nsView.window }
     }

@@ -314,7 +314,7 @@ struct InlineJobRowsView: View {
             }
         }
     }
-    // TODO: jobStatus(for:) duplicates conclusion→RBStatus mapping that also exists in
+    // TODO: jobStatus(for:) duplicates conclusion→RBStatus mapping that also exists in // NOSONAR
     // ActionRowView. Consider moving to an extension on ActiveJob or RBStatus in a future
     // logic-pass batch so both call sites share one source of truth.
     /// Resolves the display ``RBStatus`` for a single job from its conclusion and status fields.
