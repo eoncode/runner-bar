@@ -3,6 +3,10 @@
 import Foundation
 import os
 
+// MARK: - File-level constants
+/// Regex that extracts a PR number from a GitHub merge-ref branch name (e.g. `refs/pull/123/merge`).
+private let prNumberPattern = #"/(\d+)/"# // NOSONAR — fixed regex pattern
+
 // MARK: - Codable helpers (private to this file)
 
 // Shared ISO-8601 date formatter for this file.
@@ -96,11 +100,16 @@ private struct PRRef: Codable {
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
-       let range = branch.range(of: #"/(\d+)/"#, options: .regularExpression) {
+       let range = branch.range(of: prNumberPattern, options: .regularExpression) {
         let digits = branch[range].filter { $0.isNumber }
         return "#\(digits)"
     }
     return String(run.headSha.prefix(7))
+}
+
+/// Parses an ISO-8601 date string using the shared thread-safe formatter.
+private func parseCreatedAt(_ dateStr: String) -> Date? {
+    iso8601Lock.withLock { $0.iso.date(from: dateStr) }
 }
 
 // MARK: - Fetch + Group
@@ -176,9 +185,7 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
             jobs: allJobs,
             firstJobStartedAt: starts.min(),
             lastJobCompletedAt: ends.max(),
-            createdAt: representative.createdAt.flatMap { dateStr in
-                iso8601Lock.withLock { $0.iso.date(from: dateStr) }
-            }
+            createdAt: representative.createdAt.flatMap(parseCreatedAt)
         )
     }
     groups.sort { lhs, rhs in

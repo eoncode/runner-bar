@@ -140,6 +140,7 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     ///   - lastJobCompletedAt: Latest job completion time across all runs.
     ///   - createdAt: Fallback creation time from the representative run.
     ///   - isDimmed: `true` when frozen into the completed cache. Defaults to `false`.
+    /// - Note: 11 parameters faithfully model the workflow group payload; splitting would break all call sites. // NOSONAR
     public init(
         headSha: String,
         label: String,

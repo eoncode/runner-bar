@@ -21,7 +21,7 @@ import Foundation
 ///   properties that prevent the compiler from synthesising `Sendable` conformance
 ///   automatically. All mutations occur on `@MainActor` in practice (via
 ///   `LocalRunnerStore` and `RunnerStatusEnricher`), making this safe.
-///   TODO: Remove `@unchecked` once all mutable properties are actor-isolated or `let`.
+///   TODO: Remove `@unchecked` once all mutable properties are actor-isolated or `let`. // NOSONAR — tracked deferred refactor
 /// - SeeAlso: `Runner`, `RunnerStatus`, `RunnerStatusEnricher`, `LocalRunnerStore`
 public struct RunnerModel: @unchecked Sendable, Identifiable, Equatable {
     // MARK: Stored Properties
@@ -106,6 +106,7 @@ public struct RunnerModel: @unchecked Sendable, Identifiable, Equatable {
     ///   - isEphemeral: Whether the runner is registered as ephemeral.
     ///   - runnerGroup: Runner group name from the GitHub API.
     ///   - metrics: Optional CPU/memory snapshot from `ps aux`.
+    /// - Note: 17 parameters faithfully model the GitHub API runner payload; splitting would break all call sites. // NOSONAR
     public init(
         id: String? = nil,
         runnerName: String,

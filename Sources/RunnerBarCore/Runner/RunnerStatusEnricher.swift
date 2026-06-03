@@ -45,7 +45,7 @@ public struct RunnerStatusEnricher: Sendable {
     public static let shared = RunnerStatusEnricher()
 
     /// Creates a new `RunnerStatusEnricher` instance.
-    public init() {}
+    public init() { /* No setup required; all enrichment work is stateless. */ }
 
     /// Enriches `runners` with GitHub API status, busy flag, labels, and runner group.
     ///
@@ -121,7 +121,7 @@ public struct RunnerStatusEnricher: Sendable {
     ///   The transport layer handles real rate-limits; duplicating the check here causes
     ///   false skips when scopes are fetched sequentially and an org 403 fires first.
     private func fetchRunnersForScope(_ scopeURL: String) -> [[String: Any]] {
-        let stripped = scopeURL.replacingOccurrences(of: "https://github.com/", with: "")
+        let stripped = scopeURL.replacingOccurrences(of: GitHubConstants.base + "/", with: "")
         let parts = stripped.split(separator: "/").map(String.init)
         guard !parts.isEmpty else { return [] }
 
