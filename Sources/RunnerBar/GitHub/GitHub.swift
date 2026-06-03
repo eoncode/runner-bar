@@ -48,11 +48,10 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
         guard let data = ghAPI(runsEndpoint(status: status)),
               let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
-        // swiftlint:disable for_where
+        // swiftlint:disable:next for_where — filter() cannot replace this: insert() mutates seenRunIDs as a side effect.
         for run in resp.workflowRuns {
             if seenRunIDs.insert(run.id).inserted { runIDs.append(run.id) }
         }
-        // swiftlint:enable for_where
     }
 
     var jobs: [ActiveJob] = []
@@ -126,7 +125,7 @@ func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated("/user/orgs?per_page=100") else { return [] }
     /// Minimal org payload — only the login name is needed.
     struct Org: Decodable {
-        /// The organisation’s GitHub login name.
+        /// The organisation's GitHub login name.
         let login: String
     }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
@@ -138,7 +137,7 @@ func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated("/user/repos?per_page=100&sort=updated") else { return [] }
     /// Minimal repo payload — only the full name is needed.
     struct Repo: Decodable {
-        /// The repository’s full name in `owner/repo` format.
+        /// The repository's full name in `owner/repo` format.
         let fullName: String
         /// Maps the snake_case `full_name` key to the camelCase Swift property.
         enum CodingKeys: String, CodingKey {
@@ -158,41 +157,10 @@ private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
     pattern: "\u{001B}\\[[0-9;]*[A-Za-z]"
 )
 
-// URLSession configured to NOT follow redirects.
-// Used for the first leg of fetchStepLog so we can capture the pre-signed S3
-// Location URL from the GitHub 302 response before fetching the log body.
-// Lifetime: module-level singleton — allocated once at app start, shared for
-// the process lifetime. URLSession is thread-safe and designed for reuse.
-/// `URLSessionTaskDelegate` that prevents automatic redirect following.
-/// Captures the `Location` header from GitHub's 302 response so the caller
-/// can fetch the pre-signed S3 URL directly.
-private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
-    /// Intercepts redirect responses and calls the completion handler with `nil`
-    /// to prevent URLSession from following the redirect automatically.
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
-    ) {
-        _ = session; _ = task; _ = response; _ = request
-        completionHandler(nil)
-    }
-}
-
-/// Module-level `NoRedirectDelegate` singleton.
-/// Safety: allocated once at module load; only ever passed to URLSession(configuration:delegate:delegateQueue:).
-private let noRedirectDelegate = NoRedirectDelegate()
-/// URLSession that never follows HTTP redirects — used for step-1 of `fetchStepLogViaURLSession`.
-/// Safety: URLSession is thread-safe by design; concurrent use is explicitly supported by Apple.
-private let noRedirectSession = URLSession(
-    configuration: .default,
-    delegate: noRedirectDelegate,
-    delegateQueue: nil
-)
-
-/// Fetches the log for a single step via URLSession.
+/// Fetches the log for a single step via the transport layer's `urlSessionRaw()`.
+/// `urlSessionRaw` uses `application/vnd.github.v3.raw` and lets URLSession follow
+/// the GitHub 302→S3 redirect automatically, eliminating the need for a manual
+/// two-step redirect implementation.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchStepLog › invalid scope: \(scopeString)")
@@ -205,14 +173,12 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
     let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
 
-    guard let token = githubToken() else {
-        log("fetchStepLog › no token available for job \(jobID)")
+    guard let data = urlSessionRaw(endpoint) else {
+        log("fetchStepLog › empty response for job \(jobID)")
         return nil
     }
-    // TODO: migrate sem1/sem2 to async/await as part of #777
-    let raw = fetchStepLogViaURLSession(endpoint: endpoint, token: token)
-
-    guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    guard let raw = String(data: data, encoding: .utf8),
+          !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         log("fetchStepLog › empty response for job \(jobID)")
         return nil
     }
@@ -221,66 +187,6 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
         return nil
     }
     return parseStepLog(raw, stepNumber: stepNumber)
-}
-
-/// Step 1+2: resolve the 302 redirect then fetch the raw log body.
-/// Returns `nil` if step 1 does not yield a Location header.
-private func fetchStepLogViaURLSession(endpoint: String, token: String) -> String? {
-    let urlString = endpoint.hasPrefix("http")
-        ? endpoint
-        : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
-    guard let url = URL(string: urlString) else {
-        log("fetchStepLogViaURLSession › invalid URL: \(urlString)")
-        return nil
-    }
-
-    let redirectURL = OSAllocatedUnfairLock<URL?>(initialState: nil)
-    var step1Request = URLRequest(url: url, timeoutInterval: 20)
-    step1Request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    step1Request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-    step1Request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-    let sem1 = DispatchSemaphore(value: 0) // TODO: #777 async/await
-    noRedirectSession.dataTask(with: step1Request) { _, response, error in
-        defer { sem1.signal() }
-        if let error {
-            log("fetchStepLogViaURLSession › step1 error: \(error.localizedDescription)")
-            return
-        }
-        if let http = response as? HTTPURLResponse {
-            log("fetchStepLogViaURLSession › step1 status=\(http.statusCode)")
-            if let location = http.value(forHTTPHeaderField: "Location"),
-               let locURL = URL(string: location) {
-                redirectURL.withLock { $0 = locURL }
-            }
-        }
-    }.resume()
-    sem1.wait()
-
-    guard let s3URL = redirectURL.withLock({ $0 }) else {
-        log("fetchStepLogViaURLSession › no Location header in step-1 response")
-        return nil
-    }
-
-    let sem2 = DispatchSemaphore(value: 0) // TODO: #777 async/await
-    let logData = OSAllocatedUnfairLock<Data?>(initialState: nil)
-    var plainRequest = URLRequest(url: s3URL, timeoutInterval: 30)
-    plainRequest.setValue("text/plain", forHTTPHeaderField: "Accept")
-    URLSession.shared.dataTask(with: plainRequest) { data, response, error in
-        defer { sem2.signal() }
-        if let error {
-            log("fetchStepLogViaURLSession › step2 error: \(error.localizedDescription)")
-            return
-        }
-        if let http = response as? HTTPURLResponse {
-            log("fetchStepLogViaURLSession › step2 status=\(http.statusCode)")
-            guard (200..<300).contains(http.statusCode) else { return }
-        }
-        logData.withLock { $0 = data }
-    }.resume()
-    sem2.wait()
-
-    guard let data = logData.withLock({ $0 }) else { return nil }
-    return String(data: data, encoding: .utf8)
 }
 
 /// Parses a raw log string into sections delimited by `##[group]` markers

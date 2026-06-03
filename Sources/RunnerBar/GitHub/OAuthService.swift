@@ -88,7 +88,10 @@ final class OAuthService {
     func signIn() {
         let state = UUID().uuidString
         pendingState = state
-        var comps = URLComponents(string: authorizeURL)!
+        guard var comps = URLComponents(string: authorizeURL) else {
+            log("OAuthService › signIn: malformed authorizeURL — aborting")
+            return
+        }
         comps.queryItems = [
             URLQueryItem(name: "client_id", value: Secrets.clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
@@ -119,8 +122,12 @@ final class OAuthService {
               let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
         else { onCompletion?(false); return }
         // CSRF guard: verify the state param matches what we sent in signIn().
-        let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value
-        guard let returnedState, returnedState == pendingState else {
+        guard let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value else {
+            log("OAuthService › handleCallback: no state param in redirect URL")
+            onCompletion?(false)
+            return
+        }
+        guard returnedState == pendingState else {
             log("OAuthService › handleCallback: state mismatch — possible CSRF attempt, rejecting")
             pendingState = nil
             onCompletion?(false)
@@ -145,10 +152,19 @@ final class OAuthService {
             "code": code
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = json["access_token"] as? String,
-              !token.isEmpty
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { onCompletion?(false); return }
+        // GitHub returns 200 even on failure; check for an error field before access_token.
+        if let errorCode = json["error"] as? String {
+            let desc = json["error_description"] as? String ?? ""
+            log("OAuthService › exchangeCode: GitHub error=\(errorCode) \(desc)")
+            onCompletion?(false)
+            return
+        }
+        guard let token = json["access_token"] as? String, !token.isEmpty else {
+            onCompletion?(false)
+            return
+        }
         // Gate success on whether the token was actually persisted to Keychain.
         // If Keychain.save fails, report failure so the UI does not show signed-in
         // while Keychain.token remains nil and subsequent API calls lack auth.

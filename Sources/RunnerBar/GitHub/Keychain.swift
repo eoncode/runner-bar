@@ -56,9 +56,17 @@ enum Keychain {
     static func save(_ token: String) -> Bool {
         guard let data = token.data(using: .utf8) else { return false }
         // Try update first; fall back to add if item does not exist.
+        // kSecAttrAccessibleAfterFirstUnlock is included on both paths so that a
+        // legacy item created without this attribute (e.g. from an older build or
+        // different signing identity) is upgraded in place. Without it, the existing
+        // accessibility attribute is preserved, and a legacy item may be inaccessible
+        // at launch before the first device unlock.
         let updateStatus = SecItemUpdate(
             baseQuery() as CFDictionary,
-            [kSecValueData as String: data] as CFDictionary
+            [
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            ] as CFDictionary
         )
         var succeeded = updateStatus == errSecSuccess
         if updateStatus == errSecItemNotFound {
@@ -75,7 +83,10 @@ enum Keychain {
                 // Retry the update now that the item exists.
                 let retryStatus = SecItemUpdate(
                     baseQuery() as CFDictionary,
-                    [kSecValueData as String: data] as CFDictionary
+                    [
+                        kSecValueData as String: data,
+                        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+                    ] as CFDictionary
                 )
                 if retryStatus == errSecSuccess { succeeded = true } else { log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)") }
             } else if addStatus == errSecSuccess {

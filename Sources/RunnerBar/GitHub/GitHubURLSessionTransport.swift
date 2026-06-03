@@ -450,21 +450,13 @@ func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
 /// Calls the GitHub REST API for a single page via URLSession.
 /// Returns nil when no token is available or the request fails.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    guard githubToken() != nil else {
-        log("ghAPI › no token available for: \(endpoint)")
-        return nil
-    }
-    return urlSessionAPI(endpoint, timeout: timeout)
+    urlSessionAPI(endpoint, timeout: timeout)
 }
 
 /// Calls the GitHub REST API for all pages via URLSession.
 /// Returns nil when no token is available or the request fails.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    guard githubToken() != nil else {
-        log("ghAPIPaginated › no token available for: \(endpoint)")
-        return nil
-    }
-    return urlSessionAPIPaginated(endpoint, timeout: timeout)
+    urlSessionAPIPaginated(endpoint, timeout: timeout)
 }
 
 // MARK: - Runner mutation helpers
