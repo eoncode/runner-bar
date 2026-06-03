@@ -4,7 +4,7 @@ import AppKit
 import SwiftUI
 
 /// Top-bar copy button shared by ActionDetailView, JobDetailView, and StepLogView.
-/// States: idle (doc.on.doc + "Copy log") → loading (spinner + "Copying\u2026") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
+/// States: idle (doc.on.doc + "Copy log") → loading (spinner + "Copying…") → done (✓ + "Done", 1.5s) OR failed (✗ + "Failed", 1.5s) → idle
 struct LogCopyButton: View {
     /// Callback-based fetch. Invoke `completion` with the log text on success,
     /// or `nil` / empty string on failure — button resets to idle either way.
@@ -45,7 +45,7 @@ struct LogCopyButton: View {
             case .loading:
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
-                    Text("Copying\u2026")
+                    Text("Copying…")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize()
