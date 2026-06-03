@@ -80,7 +80,7 @@ extension AppDelegate: NSPopoverDelegate {
     /// Always allow close. Outside-tap during a sheet hides the popover so the
     /// user can interact with other apps. Nav state is preserved and restored
     /// on next open via savedNavState.
-    public func popoverShouldClose(_ popover: NSPopover) -> Bool {
+    public func popoverShouldClose(_ _: NSPopover) -> Bool {
         return true
     }
 
@@ -89,7 +89,7 @@ extension AppDelegate: NSPopoverDelegate {
     /// When `closePanel()` or `hidePanel()` drives the close, they call
     /// `tearDownOpenState()` directly — by the time this fires, `panelIsOpen`
     /// is already `false` and the guard exits immediately.
-    public func popoverDidClose(_ notification: Notification) {
+    public func popoverDidClose(_ _: Notification) {
         guard panelIsOpen else { return }
         tearDownOpenState()
     }

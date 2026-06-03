@@ -17,32 +17,35 @@ import SwiftUI
 // An empty result after a successful fetch is treated as a load error so
 // the user is not misled by a silent blank list.
 
-/// A value type representing BranchSelectorSheet.
+/// Searchable sheet for picking a branch to attach to a failure hook scope.
+/// Fetches all branches from the GitHub API on a background task and filters
+/// them client-side. `onSelect(nil)` clears the filter; `onSelect(branch)`
+/// restricts the hook to that branch only. Calls `onDismiss()` on any exit path.
 struct BranchSelectorSheet: View {
-    /// The scope constant.
+    /// The `owner/repo` scope string used to build the branches API URL.
     let scope: String
-    /// The onDismiss constant.
+    /// Called on every exit path (selection, cancel, or "All branches").
     let onDismiss: () -> Void
-    /// The onSelect constant.
+    /// Called with the selected branch name, or `nil` to clear the filter.
     let onSelect: (String?) -> Void
 
-    /// The branches property.
+    /// Full branch list populated by `loadBranches()`.
     @State private var branches: [String] = []
-    /// The searchText property.
+    /// Current search query; filters `branches` into `filtered`.
     @State private var searchText = ""
-    /// The isLoading property.
+    /// `true` while the background branch fetch is in flight.
     @State private var isLoading = true
-    /// The loadError property.
+    /// `true` when the fetch returned nil or an empty list.
     @State private var loadError = false
 
-    /// The filtered property.
+    /// Branches matching `searchText` (case-insensitive); equals `branches` when `searchText` is empty.
     private var filtered: [String] {
         searchText.isEmpty
             ? branches
             : branches.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
 
-    /// The body property.
+    /// Root body — header, search field, branch list, and footer.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerSection
@@ -60,9 +63,9 @@ struct BranchSelectorSheet: View {
 
 // MARK: - Subviews
 
-/// Extension adding functionality to `BranchSelectorSheet`.
+/// Subview factories for `BranchSelectorSheet`.
 extension BranchSelectorSheet {
-    /// The headerSection property.
+    /// Title and subtitle header shown at the top of the sheet.
     var headerSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Select Branch")
@@ -77,7 +80,7 @@ extension BranchSelectorSheet {
         .padding(.bottom, 10)
     }
 
-    /// The searchSection property.
+    /// Search bar for filtering the branch list.
     var searchSection: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -104,10 +107,9 @@ extension BranchSelectorSheet {
         )
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
-    /// The listSection computed view.
     }
 
-    /// The listSection computed view.
+    /// Scrollable branch list, or loading/error/empty state placeholder.
     @ViewBuilder
     var listSection: some View {
         if isLoading {
@@ -157,7 +159,7 @@ extension BranchSelectorSheet {
         }
     }
 
-    /// Performs the branchRow operation.
+    /// Row button for a single branch. Calls `onSelect` then `onDismiss` on tap.
     func branchRow(_ branch: String) -> some View {
         Button(action: {
             log("BranchSelectorSheet › selected branch='\(branch)' for scope='\(scope)'")
@@ -182,7 +184,7 @@ extension BranchSelectorSheet {
         .buttonStyle(.plain)
     }
 
-    /// The footerSection property.
+    /// Footer with "All branches" clear button and Cancel.
     var footerSection: some View {
         HStack {
             Button(action: {
@@ -211,14 +213,15 @@ extension BranchSelectorSheet {
 
 // MARK: - Data loading
 
-/// Extension adding functionality to `BranchSelectorSheet`.
+/// Data-loading logic for `BranchSelectorSheet`.
 extension BranchSelectorSheet {
-    /// Performs the loadBranches operation.
+    /// Kicks off a background fetch of all branches for `scope`, then updates
+    /// `branches` / `loadError` / `isLoading` on the MainActor.
     func loadBranches() {
         log("BranchSelectorSheet › loadBranches START scope='\(scope)'")
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             let names = fetchBranchNames(scope: scope)
-            DispatchQueue.main.async {
+            await MainActor.run {
                 if let names, !names.isEmpty {
                     log("BranchSelectorSheet › loadBranches — loaded \(names.count) branches")
                     branches = names
@@ -232,7 +235,7 @@ extension BranchSelectorSheet {
         }
     }
 
-    /// Blocking — must be called from a background thread.
+    /// Blocking — must be called from a background task.
     /// Paginates through all pages (per_page=100) until GitHub returns fewer
     /// than 100 items, collecting all branch names across pages.
     nonisolated private func fetchBranchNames(scope: String) -> [String]? {

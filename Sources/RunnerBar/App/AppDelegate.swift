@@ -163,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - App lifecycle
 
     /// Sets activation policy during UI tests so XCTest can see windows.
-    func applicationWillFinishLaunching(_ notification: Notification) {
+    func applicationWillFinishLaunching(_ _: Notification) {
         guard ProcessInfo.processInfo.environment["UI_TESTING"] != nil else { return }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -171,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Entry point after launch. Configures the GitHub API clients, builds the
     /// status-bar item, and constructs the NSPopover panel.
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationDidFinishLaunching(_ _: Notification) {
         configureGHAPI(
             { endpoint in ghAPI(endpoint) },
             isRateLimited: { ghIsRateLimited }
@@ -186,8 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Handles the OAuth callback URL (`runnerbar://oauth/…`) delivered by the OS
     /// after the user authorises the GitHub OAuth flow in the browser.
     func application(_ _: NSApplication, open urls: [URL]) {
-        guard let url = urls.first(where: { $0.scheme == "runnerbar" && $0.host == "oauth" })
-        else { return }
+        guard let url = urls.first(where: {
+            $0.scheme == GitHubConstants.oauthScheme && $0.host == GitHubConstants.oauthHost
+        }) else { return }
         OAuthService.shared.handleCallback(url)
     }
 
@@ -392,10 +393,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // current rootView identity via a flag set in navigate(to:).
         // Simpler approach: only navigate when savedNavState is set AND
         // hasActiveSheet is false (if sheet is open, rootView is correct already).
-        if let saved = savedNavState, !hasActiveSheet {
-            if let restored = validatedView(for: saved) {
-                navigate(to: restored)
-            }
+        if let saved = savedNavState, !hasActiveSheet,
+           let restored = validatedView(for: saved) {
+            navigate(to: restored)
         }
 
         DispatchQueue.main.async { [weak self] in

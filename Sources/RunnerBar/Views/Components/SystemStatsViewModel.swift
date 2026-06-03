@@ -8,10 +8,13 @@ import RunnerBarCore
 // MARK: - RingBuffer
 /// Fixed-capacity circular buffer whose `values` property returns elements oldest-first.
 struct RingBuffer {
-    /// Backing array storing samples in insertion order.
+    /// Backing array storing samples in insertion order (index 0 = oldest).
     private var storage: [Double]
 
-    /// Creates a new instance.
+    /// Creates a new ring buffer pre-filled with `fill`.
+    /// - Parameters:
+    ///   - capacity: Number of slots in the buffer.
+    ///   - fill: Initial value for every slot (default `0`).
     init(capacity: Int, fill: Double = 0) {
         self.storage = Array(repeating: fill, count: capacity)
     }
@@ -23,7 +26,7 @@ struct RingBuffer {
         storage.append(value)
     }
 
-    /// Elements in insertion order (oldest first).
+    /// Elements in insertion order, oldest first.
     var values: [Double] { storage }
 }
 
@@ -40,27 +43,22 @@ final class SystemStatsViewModel: ObservableObject {
     @Published private(set) var memHistory: RingBuffer = RingBuffer(capacity: 60)
     /// Rolling 60-sample history for disk-usage sparkline charts.
     @Published private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
-
     /// Safety: only mutated on MainActor (start/stop). Captured as a local `let` in
     /// deinit before dispatching invalidation to the main run loop — Timer.invalidate()
     /// must be called on the thread that installed the timer (main run loop).
     nonisolated(unsafe) private var timer: Timer?
-    /// Previous `processor_info_array_t` sample, retained between `sampleCPU()` calls to
-    /// compute per-core deltas. Freed in `deinit` via `vm_deallocate`.
     /// Safety: accessed only from `sampleCPU()` (always called on MainActor) and
     /// `deinit` (which implies no other references exist, so no concurrent access is possible).
+    /// Previous `processor_info_array_t` sample retained between `sampleCPU()` calls.
     nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
-    /// Entry count of the `prevCPUInfo` buffer, required by `vm_deallocate` for correct
-    /// deallocation size. Updated atomically alongside `prevCPUInfo` in `sampleCPU()`.
     /// Safety: same as `prevCPUInfo` — MainActor during sampling, no concurrency in deinit.
+    /// Entry count of `prevCPUInfo`, required by `vm_deallocate` for correct deallocation size.
     nonisolated(unsafe) private var prevNumCPUInfo: mach_msg_type_number_t = 0
-    /// Root volume path used for disk-space queries.
+    /// Root volume path used for disk-space queries via `FileManager.attributesOfFileSystem`.
     private static let rootVolumePath = NSOpenStepRootDirectory()
 
     /// Creates a new instance; all properties are default-initialised.
-    init() {
-        // No custom initialisation needed; all properties have defaults.
-    }
+    init() {}
 
     deinit {
         // Timer.invalidate() must be called on the thread that installed the timer (main run loop).
@@ -72,7 +70,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: Lifecycle
     /// Starts the 2-second repeating timer and takes an immediate first sample.
-    /// Safe to call multiple times — no-ops if the timer is already running.
+    /// Safe to call multiple times -- no-ops if the timer is already running.
     func start() {
         guard timer == nil else { return }
         sample()
@@ -88,8 +86,7 @@ final class SystemStatsViewModel: ObservableObject {
     }
 
     // MARK: Sampling
-    /// Collects CPU, memory, and disk snapshots and publishes the new ``stats``
-    /// and updated history ring-buffers. Runs on the MainActor.
+    /// Collects CPU, memory, and disk snapshots and publishes updated stats and history buffers.
     private func sample() {
         let cpu = sampleCPU()
         let mem = sampleMemory()
@@ -115,24 +112,16 @@ final class SystemStatsViewModel: ObservableObject {
         self.diskHistory = newDisk
     }
 
-    // MARK: CPU (Mach host_processor_info)
+    // MARK: CPU
     // swiftlint:disable:next function_body_length
     // Mach host_processor_info diff loop — cannot be extracted without losing clarity.
-    /// Reads per-core tick counts via `host_processor_info` and returns the
-    /// aggregate CPU utilisation as a percentage (0–100).
-    /// Diffs against the previous sample stored in `prevCPUInfo`; returns `0` on the first call.
-    /// - Returns: CPU usage percentage, or `0` if the kernel call fails.
+    /// Reads per-core tick counts via `host_processor_info` and returns aggregate CPU usage (0-100).
+    /// Diffs against the previous sample; returns `0` on the first call or if the kernel call fails.
     private func sampleCPU() -> Double {
         var numCPUsU: natural_t = 0
         var cpuInfo: processor_info_array_t?
         var numCPUInfo: mach_msg_type_number_t = 0
-        let kr = host_processor_info(
-            mach_host_self(),
-            PROCESSOR_CPU_LOAD_INFO,
-            &numCPUsU,
-            &cpuInfo,
-            &numCPUInfo
-        )
+        let kr = host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &numCPUsU, &cpuInfo, &numCPUInfo)
         guard kr == KERN_SUCCESS, let cpuInfo else { return 0 }
         defer {
             deallocPrevCPUInfo()
@@ -145,10 +134,10 @@ final class SystemStatsViewModel: ObservableObject {
         let numCPUs = Int(numCPUsU)
         for i in 0 ..< numCPUs {
             let base = Int(CPU_STATE_MAX) * i
-            let userDelta   = Double(cpuInfo[base + Int(CPU_STATE_USER)]   - prevInfo[base + Int(CPU_STATE_USER)])
-            let sysDelta    = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)] - prevInfo[base + Int(CPU_STATE_SYSTEM)])
-            let idleDelta   = Double(cpuInfo[base + Int(CPU_STATE_IDLE)]   - prevInfo[base + Int(CPU_STATE_IDLE)])
-            let niceDelta   = Double(cpuInfo[base + Int(CPU_STATE_NICE)]   - prevInfo[base + Int(CPU_STATE_NICE)])
+            let userDelta = Double(cpuInfo[base + Int(CPU_STATE_USER)]   - prevInfo[base + Int(CPU_STATE_USER)])
+            let sysDelta  = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)] - prevInfo[base + Int(CPU_STATE_SYSTEM)])
+            let idleDelta = Double(cpuInfo[base + Int(CPU_STATE_IDLE)]   - prevInfo[base + Int(CPU_STATE_IDLE)])
+            let niceDelta = Double(cpuInfo[base + Int(CPU_STATE_NICE)]   - prevInfo[base + Int(CPU_STATE_NICE)])
             let used = userDelta + sysDelta + niceDelta
             totalUsed += used
             totalAll  += used + idleDelta
@@ -157,10 +146,8 @@ final class SystemStatsViewModel: ObservableObject {
         return totalUsed / totalAll * 100
     }
 
-    /// Deallocates the Mach `processor_info_array_t` buffer stored in `prevCPUInfo`
-    /// using `vm_deallocate`, then nils the pointer. Safe to call when `prevCPUInfo` is `nil`.
-    /// `nonisolated` so it can be called from `deinit` (which is always nonisolated) and from
-    /// `sampleCPU()`'s `defer` block without crossing an actor boundary.
+    /// Deallocates the `prevCPUInfo` Mach buffer via `vm_deallocate` and nils the pointer.
+    /// `nonisolated` so it is callable from `deinit` and `sampleCPU()`'s `defer` without an actor hop.
     nonisolated private func deallocPrevCPUInfo() {
         guard let prev = prevCPUInfo else { return }
         let infoSize  = vm_size_t(MemoryLayout<integer_t>.size)
@@ -169,34 +156,28 @@ final class SystemStatsViewModel: ObservableObject {
         prevCPUInfo = nil
     }
 
-    // MARK: Memory (vm_statistics64)
+    // MARK: Memory
     /// Queries `host_statistics64` for `HOST_VM_INFO64` and converts page counts to gigabytes.
-    /// - Returns: `(used, total)` in GB; `used` counts active + wired + compressor pages.
+    /// - Returns: `(used, total)` in GB where `used` counts active + wired + compressor pages.
     private func sampleMemory() -> (used: Double, total: Double) {
         var vmStats = vm_statistics64()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size
-        )
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let kr = withUnsafeMutablePointer(to: &vmStats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        let pageSize = Double(Int(vm_kernel_page_size))
+        let pageSize   = Double(Int(vm_kernel_page_size))
         let totalBytes = Double(ProcessInfo.processInfo.physicalMemory)
         let totalGB    = totalBytes / 1_000_000_000
         guard kr == KERN_SUCCESS else { return (0, totalGB) }
-        let usedPages = Double(
-            vmStats.active_count +
-            vmStats.wire_count +
-            vmStats.compressor_page_count
-        )
+        let usedPages = Double(vmStats.active_count + vmStats.wire_count + vmStats.compressor_page_count)
         let usedGB = usedPages * pageSize / 1_000_000_000
         return (usedGB, totalGB)
     }
 
-    // MARK: Disk (FileManager)
-    /// Reads total and free bytes for the root volume via `FileManager` and returns used/total in GB.
+    // MARK: Disk
+    /// Reads total and free bytes for the root volume and returns used/total in GB.
     /// - Returns: `(used, total)` in GB, or `(0, 0)` if the file-system query fails.
     /// - Note: Casts to `Int64`; safe for volumes up to ~9.2 EB. If Apple Silicon Macs ever
     ///   ship volumes exceeding `Int64.max`, migrate to `UInt64` casts here.

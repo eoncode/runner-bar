@@ -10,7 +10,7 @@ import SwiftUI
 struct SystemStatsView: View {
     /// The view model providing live CPU, memory, and disk stats.
     @StateObject private var viewModel = SystemStatsViewModel()
-    /// The SwiftUI body — renders a vertical list of labelled stat rows.
+    /// Renders a vertical list of labelled stat rows.
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("System Stats")
@@ -28,7 +28,7 @@ struct SystemStatsView: View {
         .onDisappear { viewModel.stop() }
     }
 
-    /// Returns a single label/value row for display in the stats panel.
+    /// Returns a single label/value `HStack` row for display in the stats panel.
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
@@ -45,20 +45,19 @@ struct SystemStatsView: View {
 
 /// A stable glass wrapper for live-updating chip content (CPU, MEM, DISK chips only).
 ///
-/// macOS 26+: uses `GlassEffectContainer { content.glassButton() }` — identical
-/// to the settings/quit toolbar button pattern in `PanelHeaderView`. This gives
-/// the same subtle frosted look with no fill, no tint, no stroke.
+/// macOS 26+: uses `GlassEffectContainer { content.glassButton() }` -- identical
+/// to the settings/quit toolbar button pattern in `PanelHeaderView`.
 /// Pre-26: plain `.background` with a faint fill + stroke.
 ///
-/// Corner radius: `RBRadius.small` (6 pt) — matches toolbar button rounding.
+/// Corner radius: `RBRadius.small` (6 pt) -- matches toolbar button rounding.
 ///
-/// ❌ Do NOT apply to DiskPillBadge (the "22% free" pill) — that has its own styling.
-/// ❌ Do NOT add fill, tint, or stroke on macOS 26+ — the glass handles all rendering.
+/// Do NOT apply to DiskPillBadge (the "22% free" pill) -- that has its own styling.
+/// Do NOT add fill, tint, or stroke on macOS 26+ -- the glass handles all rendering.
 struct GlassBadgeContainer<Content: View>: View {
     /// The live-updating chip content rendered in the foreground.
     @ViewBuilder let content: () -> Content
 
-    /// The SwiftUI body — renders glass on macOS 26+, plain background on earlier versions.
+    /// Renders glass on macOS 26+, plain background on earlier versions.
     var body: some View {
         if #available(macOS 26, *) {
             GlassEffectContainer {
@@ -85,10 +84,9 @@ struct GlassBadgeContainer<Content: View>: View {
 
 // MARK: - SparklineMetricView
 
-/// A single header metric chip: label + inline sparkline + monospaced value,
-/// all in one horizontal row -- matching the reference compact header design.
+/// A single header metric chip: label + inline sparkline + monospaced value in one horizontal row.
 ///
-/// Layout: CPU [▄6▄6▄6] 41.1% MEM [▄6▄6▄6] 6.4/16.0GB
+/// Layout: CPU [sparkline] 41.1% MEM [sparkline] 6.4/16.0GB
 ///
 /// Do NOT restore the VStack layout -- it makes the header ~70pt tall.
 struct SparklineMetricView: View {
@@ -96,11 +94,12 @@ struct SparklineMetricView: View {
     let label: String
     /// The formatted value string displayed to the right of the sparkline.
     let value: String
-    /// Ring-buffer history of samples (0–100) ordered oldest → newest, used to draw the sparkline.
+    /// Ring-buffer history of samples (0-100) ordered oldest to newest, used to draw the sparkline.
     let history: [Double]
-    /// Current value (0–100) used to derive `labelColor`.
+    /// Current value (0-100) used to derive `labelColor`.
     let currentPct: Double
-    /// The SwiftUI body — renders label, sparkline, and value in a horizontal stack.
+
+    /// Renders label, sparkline, and value in a horizontal stack.
     var body: some View {
         HStack(spacing: 5) {
             Text(label)
@@ -119,7 +118,7 @@ struct SparklineMetricView: View {
         .fixedSize()
     }
 
-    /// Color shifts green → orange → red as `currentPct` crosses 60 and 85.
+    /// Foreground color shifting green -> orange -> red as `currentPct` crosses 60 and 85.
     /// - SeeAlso: `SparklineView.themeColor` uses the same 60/85 breakpoints.
     var labelColor: Color {
         if currentPct > 85 { return .rbDanger }
@@ -133,13 +132,14 @@ struct SparklineMetricView: View {
 /// Compact pill showing disk FREE percentage.
 ///
 /// Color thresholds (based on free space, not used):
-/// - `freePct < 15` → `rbDanger` (disk nearly full)
-/// - `freePct < 40` → `rbWarning` (disk getting full)
-/// - `freePct >= 40` → `rbSuccess` (plenty of space)
+/// - `freePct < 15` -> `rbDanger` (disk nearly full)
+/// - `freePct < 40` -> `rbWarning` (disk getting full)
+/// - `freePct >= 40` -> `rbSuccess` (plenty of space)
 struct DiskPillBadge: View {
-    /// Free disk space as a percentage (0–100).
+    /// Free disk space as a percentage (0-100).
     let freePct: Double
-    /// The SwiftUI body — renders a styled percentage pill.
+
+    /// Renders a styled percentage pill with danger/warning/success color.
     var body: some View {
         Text(String(format: "%.0f%% free", freePct))
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -153,7 +153,6 @@ struct DiskPillBadge: View {
     }
 
     /// Pill foreground and tint color based on free disk percentage.
-    /// Mirrors the danger/warning/success thresholds used by `DiskPillBadge`'s type doc.
     private var pillColor: Color {
         if freePct < 15 { return .rbDanger }
         if freePct < 40 { return .rbWarning }
@@ -166,11 +165,12 @@ struct DiskPillBadge: View {
 /// Compact single-row stats bar: CPU | MEM | DISK inline chips for the panel header.
 ///
 /// Accepts an existing `SystemStatsViewModel` so it shares the sampler
-/// already running in `PopoverMainView` — no second timer is created.
+/// already running in `PanelMainView` -- no second timer is created.
 struct HeaderStatsBar: View {
     /// The view model supplying live CPU, memory, and disk stats.
     @ObservedObject var statsVM: SystemStatsViewModel
-    /// The SwiftUI body — renders CPU, MEM, and DISK chips separated by thin dividers.
+
+    /// Renders CPU, MEM, and DISK chips separated by thin dividers.
     var body: some View {
         HStack(spacing: RBSpacing.md) {
             let cpuPct = statsVM.stats.cpuPct
@@ -182,8 +182,7 @@ struct HeaderStatsBar: View {
                     currentPct: cpuPct
                 )
             }
-            Color.secondary.opacity(0.3)
-                .frame(width: 1, height: 14)
+            Color.secondary.opacity(0.3).frame(width: 1, height: 14)
             let memTotal = statsVM.stats.memTotalGB
             let memUsed  = statsVM.stats.memUsedGB
             let memPct   = memTotal > 0 ? memUsed / memTotal * 100 : 0.0
@@ -195,8 +194,7 @@ struct HeaderStatsBar: View {
                     currentPct: memPct
                 )
             }
-            Color.secondary.opacity(0.3)
-                .frame(width: 1, height: 14)
+            Color.secondary.opacity(0.3).frame(width: 1, height: 14)
             HStack(spacing: RBSpacing.xs) {
                 let diskTotal   = statsVM.stats.diskTotalGB
                 let diskUsed    = statsVM.stats.diskUsedGB

@@ -38,8 +38,9 @@ final class OAuthService {
         // Singleton — intentionally empty; default property values are sufficient.
     }
 
-    /// The redirectURI constant.
-    private let redirectURI = "runnerbar://oauth/callback"
+    /// The OAuth redirect URI. Must match the value registered in the GitHub OAuth app settings.
+    /// Sourced from `GitHubConstants.oauthRedirectURI` — do not duplicate this string inline.
+    private let redirectURI = GitHubConstants.oauthRedirectURI
     /// OAuth scopes requested during sign-in.
     ///
     /// - `repo`: Read access to repository runners, workflow runs, and job logs.

@@ -145,8 +145,8 @@ struct AddScopeSheet: View {
                                     label: scopeType == .org ? "Organisation" : "Repository",
                                     onDismiss: { showScopeSelector = false },
                                     onSelect: { item in
+                                        // No dismiss here -- RepoSelectorSheet.itemRow calls onDismiss after onSelect.
                                         selectedScope = item
-                                        showScopeSelector = false
                                     }
                                 )
                             }

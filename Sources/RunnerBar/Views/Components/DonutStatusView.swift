@@ -5,53 +5,44 @@ import SwiftUI
 // MARK: - DonutStatusView
 /// Replaces the PieProgressDot for the action row status indicator.
 /// Three visual states:
-/// - in_progress : animated rotating shimmer arc (blue) + arc trim from 0 → progress
+/// - in_progress : animated rotating shimmer arc (blue) + arc trim from 0 to progress
 /// - success     : full green circle stroke + checkmark SF Symbol
 /// - failed      : full red circle stroke + xmark SF Symbol
 /// - queued      : solid yellow circle stroke
 ///
 /// Animation contract:
 /// - In-progress background ring uses `@State rotationAngle` driven by
-///   `.linear(duration: 2).repeatForever(autoreverses: false)` — reassures the
-///   user the row hasn't frozen.
+///   `.linear(duration: 2).repeatForever(autoreverses: false)`.
 /// - Progress arc uses `trim(from: 0, to: fraction)` animated with `.easeInOut`.
-/// - Color transitions use `.easeInOut(duration: 0.35)`.
 ///
-/// ❌ NEVER remove the repeatForever animation — it is the liveness indicator.
-/// ❌ NEVER start the rotation for non-.inProgress states — it wastes CPU/GPU.
+/// Do NOT remove the repeatForever animation -- it is the liveness indicator.
+/// Do NOT start the rotation for non-.inProgress states -- it wastes CPU/GPU.
 struct DonutStatusView: View {
     /// The workflow/job status this donut reflects.
     let status: RBStatus
-    /// Progress fraction 0.0–1.0 for in-progress state.
-    /// Drives `displayProgress` via `withAnimation(.easeInOut)` on every change.
-    /// Ignored for non-`.inProgress` states.
+    /// Progress fraction 0.0-1.0 for in-progress state; ignored for other states.
     var progress: Double = 0
     /// Outer ring diameter in points.
     var size: CGFloat = 16
 
     /// Current rotation angle for the shimmer ring; driven by `startRotationIfNeeded()`.
     @State private var rotationAngle: Double = 0
-    /// Animated copy of `progress` — updated via `withAnimation(.easeInOut)` on every
-    /// `progress` change so the arc trim interpolates smoothly rather than jumping.
+    /// Animated copy of `progress` updated via `withAnimation(.easeInOut)` for smooth arc trim.
     @State private var displayProgress: Double = 0
 
     /// Stroke width derived from the outer diameter (11% of `size`).
     private var strokeWidth: CGFloat { size * 0.11 }
-    /// Inner ring diameter derived from `size` (82% of the outer diameter).
+    /// Inner ring diameter (82% of the outer diameter).
     private var innerSize: CGFloat { size * 0.82 }
 
     /// Creates a `DonutStatusView`.
-    /// - Parameters:
-    ///   - status: The workflow/job status to display.
-    ///   - progress: Completion fraction 0.0–1.0. Defaults to `0`.
-    ///   - size: Outer ring diameter in points. Defaults to `16`.
     init(status: RBStatus, progress: Double = 0, size: CGFloat = 16) {
         self.status = status
         self.progress = progress
         self.size = size
     }
 
-    /// The SwiftUI body — switches between in-progress, terminal, and queued ring views.
+    /// Renders the donut ring, switching between in-progress, terminal, and queued states.
     var body: some View {
         ZStack {
             switch status {
@@ -74,38 +65,26 @@ struct DonutStatusView: View {
             displayProgress = max(0, min(1, progress))
             startRotationIfNeeded()
         }
-        // Single-argument form for macOS 13 compatibility.
         .onChange(of: progress) { _, _ in
             withAnimation(.easeInOut(duration: 0.4)) {
                 displayProgress = max(0, min(1, progress))
             }
         }
-        // Start rotation if we transition into .inProgress after appearing
-        // (e.g. queued → inProgress). No-op for any other transition.
-        .onChange(of: status) { _, _ in
-            startRotationIfNeeded()
-        }
+        .onChange(of: status) { _, _ in startRotationIfNeeded() }
     }
 
-    // MARK: - Helpers
-    /// Starts the repeatForever rotation animation only when status is .inProgress.
-    /// Safe to call multiple times — SwiftUI deduplicates identical in-flight
-    /// animations on the same state variable.
+    /// Starts the `repeatForever` rotation animation only when status is `.inProgress`.
+    /// Safe to call multiple times -- SwiftUI deduplicates identical in-flight animations.
     private func startRotationIfNeeded() {
         guard status == .inProgress else { return }
-        withAnimation(
-            .linear(duration: 2)
-            .repeatForever(autoreverses: false)
-        ) {
+        withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
             rotationAngle = 360
         }
     }
 
-    // MARK: - Sub-views
     /// Animated in-progress ring: faint shimmer background + blue arc trim.
     private var inProgressRing: some View {
         ZStack {
-            // Shimmer background ring
             Circle()
                 .stroke(
                     AngularGradient(
@@ -116,27 +95,22 @@ struct DonutStatusView: View {
                 )
                 .frame(width: size, height: size)
                 .rotationEffect(.degrees(rotationAngle))
-            // Progress arc
             Circle()
                 .trim(from: 0, to: CGFloat(displayProgress))
-                .stroke(
-                    Color.rbBlue,
-                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
-                )
+                .stroke(Color.rbBlue, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round))
                 .frame(width: size, height: size)
                 .rotationEffect(.degrees(-90))
         }
     }
 
-    /// Queued ring: solid yellow stroke — spec: queued = yellow.
-    /// fix(#419): was dashed blue, corrected to solid rbWarning.
+    /// Queued state ring: solid yellow stroke.
     private var queuedRing: some View {
         Circle()
             .stroke(Color.rbWarning, lineWidth: strokeWidth)
             .frame(width: size, height: size)
     }
 
-    /// Terminal state (success/failed): solid ring + SF Symbol centre.
+    /// Terminal state (success/failed): solid colored ring + SF Symbol in the centre.
     private func terminalRing(color: Color, symbol: String) -> some View {
         ZStack {
             Circle()
@@ -149,7 +123,6 @@ struct DonutStatusView: View {
     }
 }
 
-// MARK: - Preview
 #if DEBUG
 #Preview {
     HStack(spacing: 16) {
