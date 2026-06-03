@@ -29,17 +29,23 @@ struct BranchSelectorSheet: View {
     /// Called with the selected branch name, or `nil` to clear the filter.
     let onSelect: (String?) -> Void
 
+    /// Full branch list populated by `loadBranches()`.
     @State private var branches: [String] = []
+    /// Current search query; filters `branches` into `filtered`.
     @State private var searchText = ""
+    /// `true` while the background branch fetch is in flight.
     @State private var isLoading = true
+    /// `true` when the fetch returned nil or an empty list.
     @State private var loadError = false
 
+    /// Branches matching `searchText` (case-insensitive); equals `branches` when `searchText` is empty.
     private var filtered: [String] {
         searchText.isEmpty
             ? branches
             : branches.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
 
+    /// Root body — header, search field, branch list, and footer.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerSection
@@ -58,6 +64,7 @@ struct BranchSelectorSheet: View {
 // MARK: - Subviews
 
 extension BranchSelectorSheet {
+    /// Title and subtitle header shown at the top of the sheet.
     var headerSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Select Branch")
