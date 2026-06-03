@@ -229,7 +229,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Resets `panelIsOpen`, the visibility state flag, and removes both monitors.
     /// Extracted to eliminate the duplicated 4-line block that existed in
     /// `closePanel()`, `hidePanel()`, and `popoverDidClose()`.
-    private func tearDownOpenState() {
+    /// Internal (not private) — called cross-file from AppDelegate+PanelSetup.swift.
+    func tearDownOpenState() {
         panelIsOpen = false
         panelVisibilityState.isOpen = false
         removeEventMonitor()
