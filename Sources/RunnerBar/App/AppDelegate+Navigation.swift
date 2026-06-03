@@ -23,18 +23,11 @@ extension AppDelegate {
 
     // MARK: - View factories
 
-    /// Root view. PanelContainerView applied HERE and ONLY here.
-    /// All child views navigated to via navigate(to:) are NOT wrapped in
-    /// PanelContainerView — the root wrapper persists across rootView swaps
-    /// because it is the outermost container, not the rootView content itself.
-    ///
-    /// IMPORTANT: PanelContainerView wraps only PanelMainView (the root content).
-    /// When navigate(to:) swaps rootView to settingsView/stepLogView, those
-    /// views are placed directly — PanelContainerView stays as the outer shell
-    /// only when we are at the main view. For settings/stepLog we do NOT need
-    /// the dim wrapper because sheets are only launched from SettingsView which
-    /// is a full rootView swap — the hosting controller root is SettingsView
-    /// itself at that point, so we wrap it too.
+    /// Builds the root SwiftUI view. PanelContainerView is applied HERE and ONLY here.
+    /// When `navigate(to:)` swaps `rootView` to settings or step-log, those views are
+    /// placed directly — the PanelContainerView shell is NOT re-applied.
+    /// ❌ NEVER wrap StepLogView or SettingsView in PanelContainerView here —
+    ///    nesting causes multiple overlapping dim overlays → gray/black flash.
     func mainView() -> AnyView {
         let inner = PanelMainView(
             store: observable,
@@ -56,8 +49,10 @@ extension AppDelegate {
         return wrapEnv(PanelContainerView(content: inner))
     }
 
-    /// Settings view. Also wrapped in PanelContainerView because sheets are
-    /// launched from here and we need the dim overlay.
+    /// Builds the settings view, wrapped in PanelContainerView because sheets are
+    /// launched from SettingsView and the dim overlay is required.
+    /// ❌ NEVER wrap StepLogView in PanelContainerView — StepLogView has no sheets;
+    ///    a double-wrap here causes the gray/black flash regression.
     func settingsView() -> AnyView {
         let inner = SettingsView(
             onBack: { [weak self] in
@@ -91,6 +86,11 @@ extension AppDelegate {
         case .settings:
             return settingsView()
         case .stepLog(let job, let step):
+            // TODO: This guard checks the live store which is empty until the first
+            // poll (~2–5 s after launch). A user who reopens the app quickly after
+            // viewing a step log will always fail this guard and land on main instead.
+            // Options: remove the guard and let StepLogView handle a missing-job state,
+            // or persist the last-seen job ID and validate against that.
             guard RunnerStore.shared.jobs.contains(where: { $0.id == job.id }) else { return nil }
             // No PanelContainerView here — StepLogView has no sheets.
             return wrapEnv(StepLogView(
