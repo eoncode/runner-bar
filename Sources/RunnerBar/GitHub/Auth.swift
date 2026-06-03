@@ -6,8 +6,8 @@ import RunnerBarCore
 // MARK: - Token cache
 //
 // githubToken() is called on every API request, often concurrently from multiple
-// background threads. Without caching, each call spawns 1-2 shell subprocesses
-// (security + gh auth token), flooding the log and wasting threads.
+// background threads. Without caching, each call reads from Keychain or the
+// environment on every invocation, which adds unnecessary overhead.
 //
 // The cache is populated on first successful resolution and cleared by:
 //   - OAuthService.signOut() via invalidateTokenCache()
@@ -30,12 +30,10 @@ func invalidateTokenCache() {
 /// Returns a GitHub personal access token from the first available source.
 ///
 /// Priority order:
-/// 1. In-memory cache — avoids repeated shell spawns; invalidated on sign-in/sign-out.
+/// 1. In-memory cache — avoids repeated Keychain reads; invalidated on sign-in/sign-out.
 /// 2. Keychain — OAuth token stored by OAuthService after the user signs in via the native flow.
-/// 3. `gh auth token` — fallback for existing users who authenticated via the gh CLI.
-///    Keeps working zero-friction during and after the transition to native OAuth.
-/// 4. `GH_TOKEN` environment variable — useful in CI or scripted contexts.
-/// 5. `GITHUB_TOKEN` environment variable — fallback for Actions-style environments.
+/// 3. `GH_TOKEN` environment variable — useful in CI or scripted contexts.
+/// 4. `GITHUB_TOKEN` environment variable — fallback for Actions-style environments.
 ///
 /// Returns `nil` if no token is available from any source.
 func githubToken() -> String? {

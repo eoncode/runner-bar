@@ -88,27 +88,49 @@ final class OAuthService {
     func signIn() {
         let state = UUID().uuidString
         pendingState = state
-        var comps = URLComponents(string: authorizeURL)!
+        guard var comps = URLComponents(string: authorizeURL) else {
+            log("OAuthService › signIn: malformed authorizeURL — aborting")
+            pendingState = nil
+            onCompletion?(false)
+            return
+        }
         comps.queryItems = [
             URLQueryItem(name: "client_id", value: Secrets.clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "scope", value: scopes),
             URLQueryItem(name: "state", value: state)
         ]
-        guard let url = comps.url else { return }
+        guard let url = comps.url else {
+            log("OAuthService › signIn: failed to build authorization URL — aborting")
+            pendingState = nil
+            onCompletion?(false)
+            return
+        }
+        // NOTE: pendingState is left set if the browser open fails silently.
+        // handleCallback will CSRF-reject any eventual redirect with a mismatched
+        // or absent state, so a stuck pendingState is safe — it will be cleared
+        // on the next signIn(), signOut(), or a rejected handleCallback().
         NSWorkspace.shared.open(url)
     }
 
     // MARK: Sign Out
 
-    /// Clears the stored token and emits `didSignOut`.
+    /// Clears the stored token and emits `didSignOut` — but only when the token
+    /// was actually removed from Keychain.
+    ///
+    /// Gating `didSignOut` on `deleted == true` prevents a "ghost sign-in" state
+    /// where the UI shows signed-out while the old token remains in Keychain and
+    /// subsequent API calls succeed as if the user were still authenticated.
+    /// Mirrors the same pattern used in `exchangeCode()` where `onCompletion` is
+    /// gated on the actual Keychain save result.
     func signOut() {
         pendingState = nil
-        // Keychain.delete() returns false if SecItemDelete failed (token may still exist).
-        // Only report sign-out success when the token was actually removed.
         let deleted = Keychain.delete()
-        if !deleted { log("OAuthService › signOut: Keychain.delete failed") }
-        didSignOut.send()
+        if deleted {
+            didSignOut.send()
+        } else {
+            log("OAuthService › signOut: Keychain.delete failed — sign-out suppressed to prevent ghost sign-in")
+        }
     }
 
     // MARK: Callback Handler
@@ -119,8 +141,13 @@ final class OAuthService {
               let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
         else { onCompletion?(false); return }
         // CSRF guard: verify the state param matches what we sent in signIn().
-        let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value
-        guard let returnedState, returnedState == pendingState else {
+        guard let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value else {
+            log("OAuthService › handleCallback: no state param in redirect URL")
+            pendingState = nil
+            onCompletion?(false)
+            return
+        }
+        guard returnedState == pendingState else {
             log("OAuthService › handleCallback: state mismatch — possible CSRF attempt, rejecting")
             pendingState = nil
             onCompletion?(false)
@@ -145,10 +172,20 @@ final class OAuthService {
             "code": code
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = json["access_token"] as? String,
-              !token.isEmpty
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { onCompletion?(false); return }
+        // GitHub returns 200 even on failure; check for an error field before access_token.
+        if let errorCode = json["error"] as? String {
+            let desc = json["error_description"] as? String ?? ""
+            log("OAuthService › exchangeCode: GitHub error=\(errorCode) \(desc)")
+            onCompletion?(false)
+            return
+        }
+        guard let token = json["access_token"] as? String, !token.isEmpty else {
+            log("OAuthService › exchangeCode: no access_token in response — keys=\(json.keys.sorted())")
+            onCompletion?(false)
+            return
+        }
         // Gate success on whether the token was actually persisted to Keychain.
         // If Keychain.save fails, report failure so the UI does not show signed-in
         // while Keychain.token remains nil and subsequent API calls lack auth.
