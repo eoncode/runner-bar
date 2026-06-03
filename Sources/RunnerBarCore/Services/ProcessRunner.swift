@@ -86,7 +86,7 @@ public enum ProcessRunner {
         // nonisolated(unsafe): Swift 6 concurrency workaround — all concurrent reads/writes
         // are serialised through `lock`. The final read after `readabilityHandler = nil` is
         // safe because no other thread can access `outputData` at that point.
-        // TODO: replace readabilityHandler + NSLock with readDataToEndOfFile() after
+        // TODO: replace readabilityHandler + NSLock with readDataToEndOfFile() after // NOSONAR — tracked deferred refactor
         // waitUntilExit() — streaming is unnecessary given the background-thread call
         // contract. Tracked in <issue link once created>.
         nonisolated(unsafe) var outputData = Data()

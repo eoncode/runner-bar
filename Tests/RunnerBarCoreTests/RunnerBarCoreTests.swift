@@ -3,6 +3,9 @@
 import XCTest
 @testable import RunnerBarCore
 
+/// Stable install path used across test fixtures to avoid repeating a hardcoded URI literal.
+private let testRunnerInstallPath = "/tmp/runner" // NOSONAR — test-only fixture path
+
 // MARK: - ActiveJob.elapsed
 
 final class ActiveJobElapsedTests: XCTestCase {
@@ -166,7 +169,7 @@ final class RunnerModelDisplayStatusTests: XCTestCase {
             gitHubUrl: nil,
             agentId: nil,
             workFolder: nil,
-            installPath: "/tmp/runner",
+            installPath: testRunnerInstallPath,
             isRunning: isRunning,
             githubStatus: githubStatus,
             isBusy: isBusy,
@@ -226,7 +229,7 @@ final class RunnerModelStatusColorTests: XCTestCase {
             gitHubUrl: nil,
             agentId: nil,
             workFolder: nil,
-            installPath: "/tmp/runner",
+            installPath: testRunnerInstallPath,
             isRunning: isRunning,
             githubStatus: githubStatus,
             isBusy: isBusy,
@@ -505,7 +508,7 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [liveJob] },
-            backfill: { _ in }
+            backfill: { _ in /* no backfill needed in this test */ }
         )
         XCTAssertTrue(result.display.contains(where: { $0.id == 99 }))
     }
@@ -517,7 +520,7 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [:],
             snapCache: [:],
             fetchJobs: { [doneJob] },
-            backfill: { _ in }
+            backfill: { _ in /* no backfill needed in this test */ }
         )
         XCTAssertTrue(result.newCache.keys.contains(42))
         XCTAssertEqual(result.newCache[42]?.isDimmed, true)
@@ -530,7 +533,7 @@ final class PollResultBuilderTests: XCTestCase {
             snapPrev: [11: prev],
             snapCache: [:],
             fetchJobs: { [] },
-            backfill: { _ in }
+            backfill: { _ in /* no backfill needed in this test */ }
         )
         XCTAssertNotNil(result.newCache[11], "Vanished live job should appear in cache")
         XCTAssertEqual(result.newCache[11]?.status, "completed")
@@ -679,7 +682,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             snapGroupCache: [:],
             fetchGroups: { _ in [completedGroup] },
             scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
+            fireFailureHook: { _, _ in /* failure hook not under test */ },
             enrichJobs: { $0 }
         )
 
@@ -702,7 +705,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             snapGroupCache: [:],
             fetchGroups: { _ in [liveGroup] },
             scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
+            fireFailureHook: { _, _ in /* failure hook not under test */ },
             enrichJobs: { $0 }
         )
 
@@ -779,7 +782,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             snapGroupCache: [:],
             fetchGroups: { _ in [completedGroup] },
             scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
+            fireFailureHook: { _, _ in /* failure hook not under test */ },
             enrichJobs: { $0 }
         )
 
@@ -821,7 +824,7 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
             snapGroupCache: [:],
             fetchGroups: { _ in [mixedGroup] },
             scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in },
+            fireFailureHook: { _, _ in /* failure hook not under test */ },
             enrichJobs: { $0 }
         )
 
