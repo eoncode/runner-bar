@@ -89,12 +89,10 @@ struct LogCopyButton: View {
                 } else {
                     phase = .failed
                 }
-                do {
-                    try await Task.sleep(for: .milliseconds(1500))
-                } catch is CancellationError {
-                    // Task was cancelled -- exit cleanly without resetting phase.
-                    return
-                }
+                // try? intentionally swallows CancellationError -- phase = .idle
+                // runs unconditionally so the button is always reusable after the
+                // 1.5 s window, even if the view is dismissed mid-flight.
+                try? await Task.sleep(for: .milliseconds(1500))
                 phase = .idle
             }
         }
