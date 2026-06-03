@@ -17,7 +17,11 @@ extension Color {
                 .accessibilityHighContrastDarkAqua,
                 .accessibilityHighContrastVibrantDark
             ]
-            return darkMatches.contains(appearance.bestMatch(from: darkMatches + [.aqua])!)
+            // Use nil-coalescing instead of force-unwrap — bestMatch returns nil if the
+            // provided array is empty, which cannot happen here, but crashing on a novel
+            // system appearance name is worse than silently falling back to light mode.
+            let best = appearance.bestMatch(from: darkMatches + [.aqua])
+            return darkMatches.contains(best ?? .aqua)
                 ? NSColor(dark)
                 : NSColor(light)
         })
@@ -275,9 +279,16 @@ enum RBFont {
 // MARK: - DesignTokens namespace shim
 
 /// Backwards-compatibility namespace that delegates to the primary `RBFont`, `RBSpacing`,
-/// and `Color` token types. Prefer the `RB*` types directly in new code.
+/// and `Color` token types.
+///
+/// - Note: **Deprecated shim** — prefer `RBFont`, `RBSpacing`, `RBRadius`, and the `Color`
+/// token extensions directly in all new code. This namespace exists only to avoid a
+/// mass rename of existing call sites. Do not add new members here.
+/// TODO: Remove once all remaining call sites (`DesignTokens.Fonts.*`, `DesignTokens.Spacing.*`,
+/// `DesignTokens.Radius.*`, `DesignTokens.Colors.*`) are migrated to the `RB*` equivalents.
 enum DesignTokens {
     /// Font aliases forwarded from `RBFont`.
+    /// - Note: Deprecated — use `RBFont` directly.
     enum Fonts {
         /// Monospaced label font — alias for `RBFont.monoSmall`.
         static let monoLabel: Font = RBFont.monoSmall
@@ -285,16 +296,19 @@ enum DesignTokens {
         static let mono: Font = RBFont.mono
     }
     /// Spacing aliases forwarded from `RBSpacing`.
+    /// - Note: Deprecated — use `RBSpacing` directly.
     enum Spacing {
         /// Horizontal row padding — alias for `RBSpacing.md`.
         static let rowHPad: CGFloat = RBSpacing.md
     }
     /// Radius aliases forwarded from `RBRadius`.
+    /// - Note: Deprecated — use `RBRadius` directly.
     enum Radius {
         /// Card corner radius — alias for `RBRadius.card`.
         static let card: CGFloat = RBRadius.card
     }
     /// Color helpers forwarded from the `Color` token extensions.
+    /// - Note: Deprecated — use the `Color.rb*` extensions directly.
     enum Colors {
         /// Returns a traffic-light color based on a usage percentage (0–100).
         /// - Green below 60 %, amber 60–85 %, red above 85 %.
