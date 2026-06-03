@@ -4,22 +4,22 @@ import SwiftUI
 
 // MARK: - SparklineView
 /// A mini sparkline graph using Path: polyline stroke + gradient fill.
-/// Color shifts green → orange → red based on the current value threshold.
-/// Fill uses .opacity(0.85) top → .opacity(0.05) bottom so it blends in both
-/// light and dark mode — satisfying Phase 2 transparency spec (#420).
+/// Color shifts green -> orange -> red based on the current value threshold.
+/// Fill uses .opacity(0.85) top -> .opacity(0.05) bottom so it blends in both
+/// light and dark mode -- satisfying Phase 2 transparency spec (#420).
 /// Renders on a transparent background so the glass panel from parent views shows through.
 struct SparklineView: View {
-    /// History ring buffer — ordered oldest→newest, values 0–100.
+    /// History ring buffer -- ordered oldest->newest, values 0-100.
     let history: [Double]
-    /// Current value used to determine the theme color (0–100).
+    /// Current value used to determine the theme color (0-100).
     let currentPct: Double
 
-    /// The SwiftUI body — renders a gradient fill path and a stroke polyline.
+    /// Renders a gradient fill path and a stroke polyline scaled to the available geometry.
     var body: some View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         GeometryReader { geo in
             ZStack {
-                // Gradient fill — slight transparency blends with dark/light mode backgrounds (Phase 2 spec)
+                // Gradient fill -- slight transparency blends with dark/light mode backgrounds (Phase 2 spec)
                 fillPath(in: geo.size)
                     .fill(
                         LinearGradient(
@@ -37,7 +37,7 @@ struct SparklineView: View {
     }
 
     // MARK: - Helpers
-    /// Color shifts green → orange → red as `currentPct` crosses 60 and 85.
+    /// Accent color that shifts green -> orange -> red as `currentPct` crosses 60 and 85.
     /// - SeeAlso: `SparklineMetricView.labelColor` uses the same 60/85 breakpoints.
     private var themeColor: Color {
         if currentPct > 85 { return .rbDanger }
@@ -45,7 +45,9 @@ struct SparklineView: View {
         return .rbSuccess
     }
 
-    /// Builds the open polyline path for stroking.
+    /// Builds the open polyline `Path` used for the stroke layer.
+    /// - Parameter size: The size of the enclosing `GeometryReader`.
+    /// - Returns: A `Path` connecting each history sample from left to right.
     private func strokePath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
@@ -57,7 +59,9 @@ struct SparklineView: View {
         }
     }
 
-    /// Builds the closed path (drop to bottom) for gradient fill.
+    /// Builds the closed `Path` (dropping to the bottom edge) used for the gradient fill layer.
+    /// - Parameter size: The size of the enclosing `GeometryReader`.
+    /// - Returns: A closed `Path` suitable for use with `.fill()`.
     private func fillPath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
@@ -72,7 +76,10 @@ struct SparklineView: View {
         }
     }
 
-    /// Converts history values (0–100) to CGPoints scaled to the view size.
+    /// Converts `history` values (0-100) to `CGPoint` coordinates scaled to `size`.
+    /// Returns a two-point horizontal line when fewer than two samples are available.
+    /// - Parameter size: The view size to scale into.
+    /// - Returns: Array of `CGPoint` values ordered left to right.
     private func normalised(in size: CGSize) -> [CGPoint] {
         guard history.count > 1 else {
             let val = history.first ?? 0

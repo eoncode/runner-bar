@@ -8,10 +8,13 @@ import RunnerBarCore
 // MARK: - RingBuffer
 /// Fixed-capacity circular buffer whose `values` property returns elements oldest-first.
 struct RingBuffer {
-    /// Backing array storing samples in insertion order.
+    /// Backing array storing samples in insertion order (index 0 = oldest).
     private var storage: [Double]
 
-    /// Creates a new instance.
+    /// Creates a new ring buffer pre-filled with `fill`.
+    /// - Parameters:
+    ///   - capacity: Number of slots in the buffer.
+    ///   - fill: Initial value for every slot (default `0`).
     init(capacity: Int, fill: Double = 0) {
         self.storage = Array(repeating: fill, count: capacity)
     }
@@ -42,7 +45,7 @@ final class SystemStatsViewModel: ObservableObject {
     @Published private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
 
     /// Safety: only mutated on MainActor (start/stop). Captured as a local `let` in
-    /// deinit before dispatching invalidation to the main run loop — Timer.invalidate()
+    /// deinit before dispatching invalidation to the main run loop -- Timer.invalidate()
     /// must be called on the thread that installed the timer (main run loop).
     nonisolated(unsafe) private var timer: Timer?
     /// Previous `processor_info_array_t` sample, retained between `sampleCPU()` calls to
@@ -52,9 +55,9 @@ final class SystemStatsViewModel: ObservableObject {
     nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
     /// Entry count of the `prevCPUInfo` buffer, required by `vm_deallocate` for correct
     /// deallocation size. Updated atomically alongside `prevCPUInfo` in `sampleCPU()`.
-    /// Safety: same as `prevCPUInfo` — MainActor during sampling, no concurrency in deinit.
+    /// Safety: same as `prevCPUInfo` -- MainActor during sampling, no concurrency in deinit.
     nonisolated(unsafe) private var prevNumCPUInfo: mach_msg_type_number_t = 0
-    /// Root volume path used for disk-space queries.
+    /// Root volume path used for disk-space queries via `FileManager.attributesOfFileSystem`.
     private static let rootVolumePath = NSOpenStepRootDirectory()
 
     /// Creates a new instance; all properties are default-initialised.
@@ -72,7 +75,7 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: Lifecycle
     /// Starts the 2-second repeating timer and takes an immediate first sample.
-    /// Safe to call multiple times — no-ops if the timer is already running.
+    /// Safe to call multiple times -- no-ops if the timer is already running.
     func start() {
         guard timer == nil else { return }
         sample()
@@ -117,9 +120,9 @@ final class SystemStatsViewModel: ObservableObject {
 
     // MARK: CPU (Mach host_processor_info)
     // swiftlint:disable:next function_body_length
-    // Mach host_processor_info diff loop — cannot be extracted without losing clarity.
+    // Mach host_processor_info diff loop -- cannot be extracted without losing clarity.
     /// Reads per-core tick counts via `host_processor_info` and returns the
-    /// aggregate CPU utilisation as a percentage (0–100).
+    /// aggregate CPU utilisation as a percentage (0-100).
     /// Diffs against the previous sample stored in `prevCPUInfo`; returns `0` on the first call.
     /// - Returns: CPU usage percentage, or `0` if the kernel call fails.
     private func sampleCPU() -> Double {
