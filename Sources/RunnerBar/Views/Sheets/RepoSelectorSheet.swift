@@ -14,12 +14,12 @@ import SwiftUI
 //     items: repos,
 //     label: "Repository",
 //     onDismiss: { showSheet = false },
-//     onSelect: { selectedRepo = $0; showSheet = false }
+//     onSelect: { selectedRepo = $0 }   // ← do NOT dismiss here; itemRow calls onDismiss
 // )
 
 /// Reusable searchable sheet for picking a repository or organisation from a
 /// pre-loaded list. Filters client-side. `onSelect` is called with the chosen
-/// item string; `onDismiss` is called on cancel or after selection.
+/// item string; `onDismiss` is called on every exit path (cancel or after selection).
 struct RepoSelectorSheet: View {
     /// The pre-loaded list of item strings to display and filter.
     let items: [String]
@@ -27,7 +27,7 @@ struct RepoSelectorSheet: View {
     let label: String
     /// Called on every exit path (selection or cancel).
     let onDismiss: () -> Void
-    /// Called with the selected item string.
+    /// Called with the selected item string. Do NOT call `onDismiss` here — `itemRow` handles it.
     let onSelect: (String) -> Void
 
     @State private var searchText = ""

@@ -146,7 +146,6 @@ struct AddScopeSheet: View {
                                     onDismiss: { showScopeSelector = false },
                                     onSelect: { item in
                                         selectedScope = item
-                                        showScopeSelector = false
                                     }
                                 )
                             }
