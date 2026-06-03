@@ -53,8 +53,9 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════════════
 
 /// Observable wrapper for NSPanel open/closed state + one-shot height callback.
-// Note: mutated exclusively on the main thread by AppDelegate — no @MainActor annotation
-// because PanelContainerView reads it via @EnvironmentObject which handles dispatch.
+///
+/// Mutated exclusively on the main thread by AppDelegate — no `@MainActor` annotation
+/// because `PanelContainerView` reads it via `@EnvironmentObject` which handles dispatch.
 final class PanelVisibilityState: ObservableObject {
     /// `true` from immediately before the panel opens until after it closes.
     @Published var isOpen: Bool = false
