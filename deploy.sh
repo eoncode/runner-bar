@@ -5,7 +5,7 @@ VERSION=$(cat dist/version.txt)
 
 echo "→ Deploying $VERSION to gh-pages..."
 
-if [ ! -d "_pages" ]; then
+if [[ ! -d "_pages" ]]; then
     git worktree add _pages gh-pages
 fi
 
