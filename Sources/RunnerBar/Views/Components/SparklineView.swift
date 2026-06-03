@@ -19,7 +19,6 @@ struct SparklineView: View {
         // swiftlint:disable:next multiple_closures_with_trailing_closure
         GeometryReader { geo in
             ZStack {
-                // Gradient fill -- slight transparency blends with dark/light mode backgrounds (Phase 2 spec)
                 fillPath(in: geo.size)
                     .fill(
                         LinearGradient(
@@ -28,7 +27,6 @@ struct SparklineView: View {
                             endPoint: .bottom
                         )
                     )
-                // Stroke line
                 strokePath(in: geo.size)
                     .stroke(themeColor, lineWidth: 1.5)
             }
@@ -36,9 +34,7 @@ struct SparklineView: View {
         .background(Color.clear)
     }
 
-    // MARK: - Helpers
-    /// Accent color that shifts green -> orange -> red as `currentPct` crosses 60 and 85.
-    /// - SeeAlso: `SparklineMetricView.labelColor` uses the same 60/85 breakpoints.
+    /// Accent color shifting green -> orange -> red as `currentPct` crosses 60 and 85.
     private var themeColor: Color {
         if currentPct > 85 { return .rbDanger }
         if currentPct > 60 { return .rbWarning }
@@ -46,48 +42,34 @@ struct SparklineView: View {
     }
 
     /// Builds the open polyline `Path` used for the stroke layer.
-    /// - Parameter size: The size of the enclosing `GeometryReader`.
-    /// - Returns: A `Path` connecting each history sample from left to right.
     private func strokePath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
             guard !points.isEmpty else { return }
             path.move(to: points[0])
-            for point in points.dropFirst() {
-                path.addLine(to: point)
-            }
+            for point in points.dropFirst() { path.addLine(to: point) }
         }
     }
 
     /// Builds the closed `Path` (dropping to the bottom edge) used for the gradient fill layer.
-    /// - Parameter size: The size of the enclosing `GeometryReader`.
-    /// - Returns: A closed `Path` suitable for use with `.fill()`.
     private func fillPath(in size: CGSize) -> Path {
         Path { path in
             let points = normalised(in: size)
             guard !points.isEmpty, let lastPoint = points.last else { return }
             path.move(to: CGPoint(x: points[0].x, y: size.height))
             path.addLine(to: points[0])
-            for point in points.dropFirst() {
-                path.addLine(to: point)
-            }
+            for point in points.dropFirst() { path.addLine(to: point) }
             path.addLine(to: CGPoint(x: lastPoint.x, y: size.height))
             path.closeSubpath()
         }
     }
 
     /// Converts `history` values (0-100) to `CGPoint` coordinates scaled to `size`.
-    /// Returns a two-point horizontal line when fewer than two samples are available.
-    /// - Parameter size: The view size to scale into.
-    /// - Returns: Array of `CGPoint` values ordered left to right.
     private func normalised(in size: CGSize) -> [CGPoint] {
         guard history.count > 1 else {
             let val = history.first ?? 0
             let yPos = size.height - CGFloat(val / 100.0) * size.height
-            return [
-                CGPoint(x: 0, y: yPos),
-                CGPoint(x: size.width, y: yPos)
-            ]
+            return [CGPoint(x: 0, y: yPos), CGPoint(x: size.width, y: yPos)]
         }
         let count = history.count
         return history.enumerated().map { idx, val in
@@ -98,7 +80,6 @@ struct SparklineView: View {
     }
 }
 
-// MARK: - Preview
 #if DEBUG
 #Preview {
     HStack(spacing: 12) {
