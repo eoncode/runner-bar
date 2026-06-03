@@ -48,12 +48,15 @@ private let rateLimitLock = OSAllocatedUnfairLock(initialState: RateLimitState()
 var ghIsRateLimited: Bool {
     get { rateLimitLock.withLock { $0.isLimited } }
     set {
-        rateLimitLock.withLock {
-            $0.isLimited = newValue
-            if !newValue { $0.resetDate = nil }
-        }
         if newValue {
             scheduleRateLimitReset(resetAt: nil)
+        } else {
+            rateLimitLock.withLock {
+                $0.isLimited = false
+                $0.resetDate = nil
+                $0.resetItem?.cancel()
+                $0.resetItem = nil
+            }
         }
     }
 }
@@ -99,6 +102,7 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
         log("ghIsRateLimited › auto-reset fired after \(Int(delay))s")
     }
     rateLimitLock.withLock {
+        $0.isLimited = true
         $0.resetItem?.cancel()
         $0.resetItem = item
         $0.resetDate = resetDate
@@ -190,8 +194,6 @@ private func handleRateLimitResponse(
     if isRealRateLimit {
         logErrorBody(data, endpoint: endpoint, status: statusCode)
         log("URLSessionTransport › ⚠️ rate limited — \(endpoint) status=\(statusCode)")
-        // Write isLimited=true and resetDate in one critical section via scheduleRateLimitReset.
-        rateLimitLock.withLock { $0.isLimited = true }
         scheduleRateLimitReset(resetAt: resetTS)
     } else {
         log("URLSessionTransport › 403 permission error (not rate limit) — \(endpoint)")
@@ -243,17 +245,20 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 ///
 /// Token is re-fetched on every loop iteration so that a sign-out mid-pagination
 /// is detected immediately rather than continuing with a stale credential.
-/// A `401 Unauthorized` response breaks the loop and logs clearly.
+/// A `401 Unauthorized` response breaks the loop, discards any partial results,
+/// and returns `nil` so callers can distinguish auth failure from a complete dataset.
 /// A non-array page response (unexpected shape) also breaks the loop with a log.
 /// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [[String: Any]] = []
+    let didFailAuthentication = OSAllocatedUnfairLock<Bool>(initialState: false)
     while let urlString = nextURL {
         // Re-fetch token each iteration so a mid-pagination sign-out is detected early.
         guard let token = githubToken() else {
             log("urlSessionAPIPaginated › no token available, stopping pagination")
+            didFailAuthentication.withLock { $0 = true }
             break
         }
         guard let url = URL(string: urlString) else { break }
@@ -270,6 +275,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
             guard let http = response as? HTTPURLResponse else { return }
             if http.statusCode == 401 {
                 log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
+                didFailAuthentication.withLock { $0 = true }
                 return  // pageData stays nil → guard below breaks the loop
             }
             if http.statusCode == 403 || http.statusCode == 429 {
@@ -294,7 +300,14 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         }
         nextURL = extractNextURL(from: linkHeader.withLock({ $0 }))
     }
-    // Log partial results so callers know the list may be incomplete.
+    // Auth failure: discard partial results so callers see nil, not a truncated list.
+    if didFailAuthentication.withLock({ $0 }) {
+        if !allItems.isEmpty {
+            log("urlSessionAPIPaginated › authentication failed mid-pagination — discarding \(allItems.count) partial items")
+        }
+        return nil
+    }
+    // Log partial results so callers know the list may be incomplete due to rate limit.
     if ghIsRateLimited && !allItems.isEmpty {
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
