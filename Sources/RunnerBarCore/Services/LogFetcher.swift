@@ -6,7 +6,7 @@ import os
 // MARK: - Filesystem path constants
 
 /// Absolute path to the system `unzip` binary, always present on macOS.
-private let unzipBinaryPath = "/usr/bin/unzip"
+private let unzipBinaryPath = "/usr/bin/unzip" // NOSONAR — fixed OS path
 
 // MARK: - Transport shim
 
@@ -19,7 +19,7 @@ private let unzipBinaryPath = "/usr/bin/unzip"
 /// - Parameter timeout: Reserved for transport implementations that support request timeouts.
 ///   The current transport shim does not consume this value.
 /// - Returns: Raw response bytes, or `nil` when no token is available or the request fails.
-private func ghRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
+private func ghRaw(_ endpoint: String, _ timeout: TimeInterval = 60) -> Data? {
     ghRawTransport()(endpoint)
 }
 
