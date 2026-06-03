@@ -106,19 +106,31 @@ final class OAuthService {
             onCompletion?(false)
             return
         }
+        // NOTE: pendingState is left set if the browser open fails silently.
+        // handleCallback will CSRF-reject any eventual redirect with a mismatched
+        // or absent state, so a stuck pendingState is safe — it will be cleared
+        // on the next signIn(), signOut(), or a rejected handleCallback().
         NSWorkspace.shared.open(url)
     }
 
     // MARK: Sign Out
 
-    /// Clears the stored token and emits `didSignOut`.
+    /// Clears the stored token and emits `didSignOut` — but only when the token
+    /// was actually removed from Keychain.
+    ///
+    /// Gating `didSignOut` on `deleted == true` prevents a "ghost sign-in" state
+    /// where the UI shows signed-out while the old token remains in Keychain and
+    /// subsequent API calls succeed as if the user were still authenticated.
+    /// Mirrors the same pattern used in `exchangeCode()` where `onCompletion` is
+    /// gated on the actual Keychain save result.
     func signOut() {
         pendingState = nil
-        // Keychain.delete() returns false if SecItemDelete failed (token may still exist).
-        // Only report sign-out success when the token was actually removed.
         let deleted = Keychain.delete()
-        if !deleted { log("OAuthService › signOut: Keychain.delete failed") }
-        didSignOut.send()
+        if deleted {
+            didSignOut.send()
+        } else {
+            log("OAuthService › signOut: Keychain.delete failed — sign-out suppressed to prevent ghost sign-in")
+        }
     }
 
     // MARK: Callback Handler
