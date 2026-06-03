@@ -40,7 +40,7 @@ extension AppDelegate {
             store: observable,
             onStepTap: { [weak self] job, step in
                 guard let self else { return }
-                self.savedNavState = .stepLog(job, step)
+                self.savedNavState = .stepLog(job: job, step: step)
                 self.navigate(to: self.wrapEnv(StepLogView(
                     job: job,
                     step: step,

@@ -23,7 +23,7 @@ enum NavState {
     /// - Parameters:
     ///   - job: The active job providing context for the selected step.
     ///   - step: The specific step whose log is displayed.
-    case stepLog(ActiveJob, JobStep)
+    case stepLog(job: ActiveJob, step: JobStep)
     /// The Settings sheet.
     case settings
 }

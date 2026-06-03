@@ -1,7 +1,6 @@
 // PanelSheetState.swift
 // RunnerBar
 import Combine
-import Foundation
 import RunnerBarCore
 
 // MARK: - PanelSheetState
@@ -31,6 +30,7 @@ final class PanelSheetState: ObservableObject {
         // Only restore if no sheet is already active — prevents overwriting a concurrently set runner.
         guard editingRunner == nil, let runnerSheetSnapshot else { return }
         editingRunner = runnerSheetSnapshot
+        self.runnerSheetSnapshot = nil
     }
 
     /// Clears all runner sheet state for explicit close/reset paths.
