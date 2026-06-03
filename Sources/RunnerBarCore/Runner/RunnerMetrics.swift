@@ -20,9 +20,10 @@ public struct RunnerMetrics: Equatable {
 }
 
 // MARK: - System binary paths
-// Extracted to suppress SonarCloud hardcoded-URI warnings (fixed OS paths, not configurable).
+/// Fixed OS path to `pgrep`; extracted to suppress SonarCloud hardcoded-URI warnings.
 private let pgrepPath = "/usr/bin/pgrep" // NOSONAR — fixed OS path
-private let psPath    = "/bin/ps"        // NOSONAR — fixed OS path
+/// Fixed OS path to `ps`; extracted to suppress SonarCloud hardcoded-URI warnings.
+private let psPath = "/bin/ps" // NOSONAR — fixed OS path
 
 // MARK: - Direct-execution helper
 
