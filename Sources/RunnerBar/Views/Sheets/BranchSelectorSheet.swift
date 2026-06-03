@@ -63,6 +63,7 @@ struct BranchSelectorSheet: View {
 
 // MARK: - Subviews
 
+/// Subview factories for `BranchSelectorSheet`.
 extension BranchSelectorSheet {
     /// Title and subtitle header shown at the top of the sheet.
     var headerSection: some View {
@@ -79,6 +80,7 @@ extension BranchSelectorSheet {
         .padding(.bottom, 10)
     }
 
+    /// Search bar for filtering the branch list.
     var searchSection: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -107,6 +109,7 @@ extension BranchSelectorSheet {
         .padding(.bottom, 8)
     }
 
+    /// Scrollable branch list, or loading/error/empty state placeholder.
     @ViewBuilder
     var listSection: some View {
         if isLoading {
@@ -181,6 +184,7 @@ extension BranchSelectorSheet {
         .buttonStyle(.plain)
     }
 
+    /// Footer with "All branches" clear button and Cancel.
     var footerSection: some View {
         HStack {
             Button(action: {
@@ -209,6 +213,7 @@ extension BranchSelectorSheet {
 
 // MARK: - Data loading
 
+/// Data-loading logic for `BranchSelectorSheet`.
 extension BranchSelectorSheet {
     /// Kicks off a background fetch of all branches for `scope`, then updates
     /// `branches` / `loadError` / `isLoading` on the MainActor.

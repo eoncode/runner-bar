@@ -57,6 +57,7 @@ struct RepoSelectorSheet: View {
 
 // MARK: - Subviews
 
+/// Subview factories for `RepoSelectorSheet`.
 extension RepoSelectorSheet {
     /// Title and subtitle header shown at the top of the sheet.
     var headerSection: some View {
