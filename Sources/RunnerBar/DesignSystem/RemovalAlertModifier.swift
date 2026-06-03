@@ -31,8 +31,10 @@ struct RemovalAlertModifier: ViewModifier {
                 Text("This will run ./svc.sh uninstall and ./config.sh remove. "
                     + "A GitHub token is required for de-registration.")
             } else {
+                // Note: gh auth login is no longer a supported auth path (removed in Batch 18 Auth.swift).
+                // Direct users to Settings OAuth flow or the GH_TOKEN / GITHUB_TOKEN env vars instead.
                 Text("A GitHub token is required to de-register the runner from GitHub. "
-                    + "Sign in via `gh auth login` or set GH_TOKEN / GITHUB_TOKEN env var, then try again.")
+                    + "Sign in via Settings or set GH_TOKEN / GITHUB_TOKEN env var, then try again.")
             }
         }
     }
