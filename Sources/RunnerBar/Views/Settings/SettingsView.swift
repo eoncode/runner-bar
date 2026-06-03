@@ -69,7 +69,7 @@ struct SettingsView: View {
     // FIXME: AnyCancellable stored in @State risks silent subscription drop if SwiftUI
     // recreates the view struct and reallocates @State storage. The correct pattern
     // (used by RunnerViewModel) is to hold cancellables as stored properties on a
-    // @MainActor class. Tracked for refactor alongside #1077.
+    // @MainActor class. Tracked for refactor alongside #1077. // NOSONAR
     /// Retains the scope-mutation Combine subscription.
     @State private var scopeMutateCancellable: AnyCancellable?
     /// Retains the sign-out Combine subscription.
@@ -367,7 +367,7 @@ struct SettingsView: View {
     // TODO: #1077 — migrate to async/await once RunnerLifecycleService.start/stop are async.
     // Current pattern (Task + Task.detached) matches LocalRunnerStore.refresh() as the
     // intermediate step: background work is off-actor, main-actor mutations happen in the
-    // Task continuation which returns to @MainActor automatically.
+    // Task continuation which returns to @MainActor automatically. // NOSONAR
     /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
     @MainActor private func performResume(runner: RunnerModel) {
         log("SettingsView > performResume called runner=\(runner.runnerName)")

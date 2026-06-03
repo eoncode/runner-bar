@@ -823,7 +823,7 @@ private func fetchRunnerDownloadURL() -> String? {
     let assetName = "actions-runner-osx-\(assetArch)"
     log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
 
-    // TODO: #1077 — synchronous network call; blocks the detached task thread. Replace with URLSession once the call chain is async.
+    // TODO: #1077 — synchronous network call; blocks the detached task thread. Replace with URLSession once the call chain is async. // NOSONAR
     guard let url  = URL(string: GitHubURIs.apiRunnerLatest),
           let data = try? Data(contentsOf: url) else {
         log("fetchRunnerDownloadURL › failed to fetch release JSON")

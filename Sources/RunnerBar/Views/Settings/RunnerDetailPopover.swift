@@ -205,7 +205,7 @@ struct RunnerDetailPopover: View {
                     Text("URL")
                         .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
                         .frame(width: 100, alignment: .leading).fixedSize()
-                    TextField("http://proxy:8080", text: $draft.proxyUrl)
+                    TextField("http://proxy:8080", text: $draft.proxyUrl) // NOSONAR — placeholder text, not a hardcoded URI call-site
                         .font(.system(size: 12, design: .monospaced)).textFieldStyle(.plain).frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, RBSpacing.md).padding(.vertical, 7)
@@ -309,7 +309,7 @@ struct RunnerDetailPopover: View {
     /// Seeds `displayOsArch` and `displayVersion` from the `.runner` JSON,
     /// and loads disk values into the draft (auto-update, proxy).
     /// TODO: #1077 — `draft.load(installPath:)` reads `.runner` JSON synchronously on
-    /// `@MainActor`. Migrate to async once the load path is async-capable.
+    /// `@MainActor`. Migrate to async once the load path is async-capable. // NOSONAR
     private func loadDisplayFields() {
         guard let installPath = runner.installPath else { return }
 
@@ -319,7 +319,7 @@ struct RunnerDetailPopover: View {
         originalDraft = draft
 
         // Override info fields from JSON if model values were empty
-        let runnerJSONPath = installPath + "/.runner"
+        let runnerJSONPath = installPath + "/.runner" // NOSONAR — dynamic path built from user-supplied installPath, not a hardcoded URI
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }

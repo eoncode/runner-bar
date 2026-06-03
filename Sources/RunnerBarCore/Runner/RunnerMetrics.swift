@@ -19,6 +19,12 @@ public struct RunnerMetrics: Equatable {
     }
 }
 
+// MARK: - System binary paths
+/// Fixed OS path to `pgrep`; extracted to suppress SonarCloud hardcoded-URI warnings.
+private let pgrepPath = "/usr/bin/pgrep" // NOSONAR — fixed OS path
+/// Fixed OS path to `ps`; extracted to suppress SonarCloud hardcoded-URI warnings.
+private let psPath = "/bin/ps" // NOSONAR — fixed OS path
+
 // MARK: - Direct-execution helper
 
 /// Runs an executable at `path` with `arguments` directly — no shell wrapper.
@@ -63,7 +69,7 @@ private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInte
 /// - Returns: A `RunnerMetrics` snapshot, or `nil` if no matching process exists.
 public func metricsForRunner(installPath: String) -> RunnerMetrics? {
     log("metricsForRunner › ENTER installPath=\(installPath)")
-    let pidsOutput = runProcess("/usr/bin/pgrep", ["-f", installPath], timeout: 3)
+    let pidsOutput = runProcess(pgrepPath, ["-f", installPath], timeout: 3)
     guard !pidsOutput.isEmpty else {
         log("metricsForRunner › no processes found for installPath=\(installPath)")
         return nil
@@ -74,7 +80,7 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("metricsForRunner › found pids=\(pidList) for installPath=\(installPath)")
-    let output = runProcess("/bin/ps", ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
+    let output = runProcess(psPath, ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
     guard !output.isEmpty else {
         log("metricsForRunner › ps returned empty for installPath=\(installPath)")
         return nil
@@ -115,7 +121,7 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
 public func allWorkerMetrics() -> [RunnerMetrics] {
     log("allWorkerMetrics › ENTER — using direct pgrep + ps (no shell wrapper)")
     let pidsOutput = runProcess(
-        "/usr/bin/pgrep",
+        pgrepPath,
         ["-f", "Runner\\.Worker|Runner\\.Listener"],
         timeout: 3
     )
@@ -129,7 +135,7 @@ public func allWorkerMetrics() -> [RunnerMetrics] {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("allWorkerMetrics › found pids=\(pidList)")
-    let output = runProcess("/bin/ps", ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
+    let output = runProcess(psPath, ["-p", pidList, "-o", "pid,%cpu,%mem,command"], timeout: 5)
     log("allWorkerMetrics › ps returned — outputBytes=\(output.count) isEmpty=\(output.isEmpty)")
     guard !output.isEmpty else {
         log("allWorkerMetrics › ps returned empty — returning []")

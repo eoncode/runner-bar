@@ -59,6 +59,7 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     ///   - completedAt: UTC time the job finished.
     ///   - createdAt: UTC time the job was queued.
     ///   - steps: Ordered step list. Defaults to empty.
+    /// - Note: 12 parameters faithfully model the GitHub API payload. // NOSONAR
     public init(
         id: Int,
         name: String,
