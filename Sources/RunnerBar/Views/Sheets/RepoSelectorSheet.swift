@@ -80,7 +80,7 @@ extension RepoSelectorSheet {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11))
                 .foregroundColor(Color.rbTextTertiary)
-            TextField("Search \(label.lowercased())s...", text: $searchText)
+            TextField("Search \(label.lowercased())s\u{2026}", text: $searchText)
                 .font(.system(size: 12))
                 .textFieldStyle(.plain)
             if !searchText.isEmpty {
@@ -148,7 +148,7 @@ extension RepoSelectorSheet {
     /// Row button for a single item. Calls `onSelect` then `onDismiss` on tap.
     func itemRow(_ item: String) -> some View {
         Button(action: {
-            log("RepoSelectorSheet > selected item='\(item)'")
+            log("RepoSelectorSheet \u{203a} selected item='\(item)'")
             onSelect(item)
             onDismiss()
         }) {

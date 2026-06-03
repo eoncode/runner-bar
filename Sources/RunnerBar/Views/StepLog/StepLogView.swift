@@ -153,13 +153,13 @@ struct StepLogView: View {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(startLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("->").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("\u{2192}").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(endLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text(".").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("\u{00B7}").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(step.elapsed)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text(".").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
+                Text("\u{00B7}").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
                 Text(dateLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
                 Spacer()
@@ -211,13 +211,20 @@ struct StepLogView: View {
 
     // MARK: - Log loading
     /// Kicks off a background fetch of the step log and publishes the result to `logText`.
+    ///
+    /// Fails fast when `repoScopeForFetch` is `""` (missing or malformed `htmlUrl`) to avoid
+    /// querying an unrelated scope from `ScopeStore` in multi-repo setups.
     private func loadLog() {
         isLoading = true
         let jobID = job.id
         let stepNum = step.id
-        let scope = repoSlug == "-"
-            ? ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
-            : repoSlug
+        let scope = repoScopeForFetch
+        guard !scope.isEmpty else {
+            logText = ""
+            isLoading = false
+            onLogLoaded?()
+            return
+        }
         Task.detached(priority: .userInitiated) {
             let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
             await MainActor.run {
@@ -232,22 +239,41 @@ struct StepLogView: View {
 // MARK: - Derived helpers
 /// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
 extension StepLogView {
-    /// Repo slug derived from `job.htmlUrl`, e.g. `"owner/repo"`. Returns `"-"` when unavailable.
+    /// Repo slug derived from `job.htmlUrl` for **display** purposes, e.g. `"owner/repo"`.
+    /// Returns `"\u{2014}"` (em dash) when the URL is absent or malformed.
+    /// Use `repoScopeForFetch` for network calls.
     var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "-" }
+        guard parts.count >= 5 else {
+            log("StepLogView \u{203a} repoSlug: htmlUrl has < 5 parts — '\(job.htmlUrl ?? "nil")'")
+            return "\u{2014}"
+        }
         let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "-" : "\(owner)/\(repo)"
+        guard !owner.isEmpty, !repo.isEmpty else {
+            log("StepLogView \u{203a} repoSlug: empty owner or repo in '\(job.htmlUrl ?? "")'")
+            return "\u{2014}"
+        }
+        return "\(owner)/\(repo)"
     }
 
-    /// Step conclusion label with icon, or live/queued status text.
+    /// Repo slug derived from `job.htmlUrl` for **fetch/network** use.
+    /// Returns `""` (empty string) when the URL is absent or malformed,
+    /// so callers can guard on `scope.isEmpty` without comparing against a display sentinel.
+    private var repoScopeForFetch: String {
+        let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
+        guard parts.count >= 5 else { return "" }
+        let owner = parts[3]; let repo = parts[4]
+        return (owner.isEmpty || repo.isEmpty) ? "" : "\(owner)/\(repo)"
+    }
+
+    /// Step conclusion label with icon prefix for at-a-glance visual differentiation.
     var stepStatusLabel: String {
         switch step.conclusion {
-        case "success": return "success"
-        case "failure": return "failure"
-        case "skipped": return "skipped"
-        case "cancelled": return "cancelled"
-        default: return step.status == "in_progress" ? "running" : "queued"
+        case "success":  return "\u{2713} success"
+        case "failure":  return "\u{2717} failure"
+        case "skipped":  return "\u{2296} skipped"
+        case "cancelled": return "\u{2296} cancelled"
+        default: return step.status == "in_progress" ? "\u{25B6} running" : "\u{00B7} queued"
         }
     }
 
@@ -261,23 +287,23 @@ extension StepLogView {
         }
     }
 
-    /// Formatted start time (`HH:mm:ss`), or `"-"` if unavailable.
+    /// Formatted start time (`HH:mm:ss`), or `"\u{2014}"` if unavailable.
     var startLabel: String {
-        guard let dateValue = step.startedAt else { return "-" }
+        guard let dateValue = step.startedAt else { return "\u{2014}" }
         return Self.timeFmt.string(from: dateValue)
     }
 
-    /// Formatted end time (`HH:mm:ss`), or `"-"` / `"running..."` if unavailable.
+    /// Formatted end time (`HH:mm:ss`), or `"\u{2014}"` / `"running\u{2026}"` if unavailable.
     var endLabel: String {
         guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running..." : "-"
+            return step.status == "in_progress" ? "running\u{2026}" : "\u{2014}"
         }
         return Self.timeFmt.string(from: dateValue)
     }
 
     /// Date string (`yyyy-MM-dd`) for context on when the step ran.
     var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "-" }
+        guard let dateValue = step.startedAt ?? step.completedAt else { return "\u{2014}" }
         return Self.dateFmt.string(from: dateValue)
     }
 }

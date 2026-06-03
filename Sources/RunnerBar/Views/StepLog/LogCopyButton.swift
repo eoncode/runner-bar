@@ -47,7 +47,7 @@ struct LogCopyButton: View {
             case .loading:
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
-                    Text("Copying...")
+                    Text("Copying\u{2026}")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize()
@@ -89,7 +89,12 @@ struct LogCopyButton: View {
                 } else {
                     phase = .failed
                 }
-                try? await Task.sleep(for: .milliseconds(1500))
+                do {
+                    try await Task.sleep(for: .milliseconds(1500))
+                } catch is CancellationError {
+                    // Task was cancelled -- exit cleanly without resetting phase.
+                    return
+                }
                 phase = .idle
             }
         }
