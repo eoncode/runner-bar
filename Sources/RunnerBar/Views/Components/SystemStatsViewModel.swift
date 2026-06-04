@@ -58,7 +58,7 @@ final class SystemStatsViewModel: ObservableObject {
     private static let rootVolumePath = NSOpenStepRootDirectory()
 
     /// Creates a new instance; all properties are default-initialised.
-    init() {}
+    init() { /* no custom setup required — all stored properties have default values */ }
 
     deinit {
         // Timer.invalidate() must be called on the thread that installed the timer (main run loop).
