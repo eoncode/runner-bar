@@ -19,7 +19,7 @@ private let unzipBinaryPath = "/usr/bin/unzip" // NOSONAR — fixed OS path
 /// - Parameter timeout: Reserved for transport implementations that support request timeouts.
 ///   The current transport shim does not consume this value.
 /// - Returns: Raw response bytes, or `nil` when no token is available or the request fails.
-private func ghRaw(_ endpoint: String, _ timeout: TimeInterval = 60) -> Data? {
+private func ghRaw(_ endpoint: String, _  timeout: TimeInterval = 60) -> Data? {
     ghRawTransport()(endpoint)
 }
 
