@@ -61,14 +61,14 @@ final class LocalRunnerStore: ObservableObject {
     /// Already runs on the main actor via @MainActor class isolation.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
-        runners[idx].isRunning = isRunning
+        runners[idx] = runners[idx].copying(isRunning: isRunning)
     }
 
     /// Sets or clears the lifecycle warning badge for a runner (e.g. "Failed to connect").
     /// Already runs on the main actor via @MainActor class isolation.
     func setLifecycleWarning(_ runnerName: String, warning: String?) {
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
-        runners[idx].lifecycleWarning = warning
+        runners[idx] = runners[idx].copying(lifecycleWarning: warning)
     }
 
     /// Removes a runner from both the index and the published list immediately.
@@ -148,8 +148,8 @@ final class LocalRunnerStore: ObservableObject {
             // during JSON parsing (step 1) and updated to its real value only at this point.
             // Do not remove this call or assume isRunning is always false.
             let liveLabels = scanLiveServices()
-            for idx in hydrated.indices {
-                hydrated[idx].isRunning = liveLabels.contains { $0.contains(hydrated[idx].runnerName) }
+            hydrated = hydrated.map { runner in
+                runner.copying(isRunning: liveLabels.contains { $0.contains(runner.runnerName) })
             }
 
             // 3. Enrich via GitHub API
