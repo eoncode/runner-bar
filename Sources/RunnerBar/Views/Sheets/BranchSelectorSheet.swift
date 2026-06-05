@@ -220,7 +220,7 @@ extension BranchSelectorSheet {
     func loadBranches() {
         log("BranchSelectorSheet › loadBranches START scope='\(scope)'")
         Task.detached(priority: .userInitiated) {
-            let names = fetchBranchNames(scope: scope)
+            let names = await fetchBranchNames(scope: scope)
             await MainActor.run {
                 if let names, !names.isEmpty {
                     log("BranchSelectorSheet › loadBranches — loaded \(names.count) branches")
@@ -235,15 +235,15 @@ extension BranchSelectorSheet {
         }
     }
 
-    /// Blocking — must be called from a background task.
+    /// Async — called from a background task via `Task.detached`.
     /// Paginates through all pages (per_page=100) until GitHub returns fewer
     /// than 100 items, collecting all branch names across pages.
-    nonisolated private func fetchBranchNames(scope: String) -> [String]? {
+    nonisolated private func fetchBranchNames(scope: String) async -> [String]? {
         struct BranchItem: Decodable { let name: String }
         var allNames: [String] = []
         var page = 1
         while true {
-            guard let data = ghAPI("repos/\(scope)/branches?per_page=100&page=\(page)") else {
+            guard let data = await ghAPI("repos/\(scope)/branches?per_page=100&page=\(page)") else {
                 log("BranchSelectorSheet › fetchBranchNames — ghAPI returned nil scope='\(scope)' page=\(page)")
                 return allNames.isEmpty ? nil : allNames.sorted()
             }
