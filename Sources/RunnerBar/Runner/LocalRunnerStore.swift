@@ -167,14 +167,16 @@ final class LocalRunnerStore: ObservableObject {
 
     /// Runs `launchctl list` and returns lines containing `actions.runner`.
     ///
-    /// Marked `async` so it can be awaited from the `Task` body in `refresh()`
-    /// and to allow the blocking `ProcessRunner.run` call to suspend off the
-    /// main actor.
+    /// Uses `ProcessRunner.runAsync` so the cooperative thread pool is not
+    /// blocked while `launchctl` runs. If the enclosing `Task` is cancelled
+    /// (e.g. because `start()` was called again), `launchctl` is terminated
+    /// immediately via the cancellation handler wired inside `runAsync`.
     private nonisolated func scanLiveServices() async -> [String] {
-        let result = ProcessRunner.run(
+        let result = await ProcessRunner.runAsync(
             executableURL: Self.launchctlURL,
             arguments: ["list"],
-            timeout: 5
+            timeout: 5,
+            qos: .userInitiated
         )
         guard let data = result.data,
               let output = String(data: data, encoding: .utf8) else { return [] }
