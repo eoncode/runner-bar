@@ -316,6 +316,7 @@ public struct PollResultBuilder {
         }
     }
 
+    /// Trims the group cache to at most `limit` entries, keeping the most recently completed.
     public static func trimGroupCache(_ cache: inout [String: WorkflowActionGroup], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted {
@@ -325,6 +326,7 @@ public struct PollResultBuilder {
         cache = [String: WorkflowActionGroup](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
+    /// Prunes the seen-group-IDs set to at most `limit` entries by arbitrary eviction.
     public static func trimSeenGroupIDs(_ ids: inout Set<String>, limit: Int) {
         guard ids.count > limit else { return }
         let excess = ids.count - limit
@@ -332,6 +334,10 @@ public struct PollResultBuilder {
         ids.subtract(toRemove)
     }
 
+    /// Builds the ordered group display list from live groups and the completed cache.
+    ///
+    /// Display order: in-progress → queued → cached (most-recently-completed first).
+    /// The combined list is capped at `groupDisplayLimit`.
     public static func buildGroupDisplay(
         live: [WorkflowActionGroup],
         cache: [String: WorkflowActionGroup]
