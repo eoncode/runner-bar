@@ -26,6 +26,13 @@ import Foundation
 /// cause of the main-thread hang tracked in bug #477. The `DispatchWorkItem`
 /// approach guarantees termination within `timeout` seconds even in that case.
 /// Do NOT remove the timeout guard.
+///
+/// ## ⚠️ Pipe-drain concurrency — do NOT move readDataToEndOfFile after waitUntilExit
+/// The stdout pipe is drained on a background thread *while* `waitUntilExit()`
+/// blocks. If the drain is deferred until after exit, the kernel pipe buffer
+/// (~64 KB on macOS) can fill up, causing the child process to block writing
+/// and `waitUntilExit()` to spin forever (Apple QA1858). `launchctl list` on
+/// a loaded Mac easily exceeds 64 KB.
 public enum ProcessRunner {
     /// The collected output and exit status from a subprocess invocation.
     public struct Result {
@@ -96,6 +103,18 @@ public enum ProcessRunner {
             inputPipe.fileHandleForWriting.closeFile()
         }
 
+        // Drain stdout pipe on a background thread *concurrently* with
+        // waitUntilExit(). Deferring the read until after exit deadlocks
+        // when stdout exceeds the kernel pipe buffer (~64 KB on macOS) —
+        // the child blocks writing and waitUntilExit() never returns.
+        // The semaphore joins the drain thread before we read outputData.
+        let drainSemaphore = DispatchSemaphore(value: 0)
+        var outputData = Data()
+        DispatchQueue.global().async {
+            outputData = outPipe.fileHandleForReading.readDataToEndOfFile()
+            drainSemaphore.signal()
+        }
+
         // ⚠️ DO NOT remove this DispatchWorkItem timeout.
         // See class-level doc comment and bug #477 for full context.
         let timeoutItem = DispatchWorkItem {
@@ -110,10 +129,10 @@ public enum ProcessRunner {
         task.waitUntilExit()
         timeoutItem.cancel()
 
-        // readDataToEndOfFile() drains any remaining buffered output after the
-        // process exits. No lock or readabilityHandler needed — the process is
-        // already gone, so this is the only reader.
-        let outputData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        // Wait for the drain thread to finish consuming any buffered output.
+        // Bounded by the process lifetime + one pipe-flush; effectively instant
+        // after waitUntilExit() returns.
+        drainSemaphore.wait()
 
         let exitCode = task.terminationStatus
         log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
