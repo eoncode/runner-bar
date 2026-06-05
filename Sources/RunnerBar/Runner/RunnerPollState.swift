@@ -81,7 +81,9 @@ extension RunnerStore {
             fireFailureHook: { group, scope in
                 FailureHookRunner.fireIfNeeded(group: group, scope: scope, callsite: "pollResultBuilder")
             },
-            enrichJobs: { jobs in self.enrichGroupJobs(jobs, jobCache: jobCache) }
+            enrichJobs: { jobs in
+                await MainActor.run { self.enrichGroupJobs(jobs, jobCache: jobCache) }
+            }
         )
     }
 

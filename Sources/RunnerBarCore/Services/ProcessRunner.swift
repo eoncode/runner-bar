@@ -108,8 +108,14 @@ public enum ProcessRunner {
         // when stdout exceeds the kernel pipe buffer (~64 KB on macOS) —
         // the child blocks writing and waitUntilExit() never returns.
         // The semaphore joins the drain thread before we read outputData.
+        //
+        // `nonisolated(unsafe)`: the DispatchSemaphore.wait() below provides
+        // the happens-before guarantee that the background write to outputData
+        // is complete before this thread reads it. The Swift concurrency
+        // checker cannot see through semaphores, so we suppress the diagnostic
+        // explicitly rather than restructuring the intentional concurrency here.
         let drainSemaphore = DispatchSemaphore(value: 0)
-        var outputData = Data()
+        nonisolated(unsafe) var outputData = Data()
         DispatchQueue.global().async {
             outputData = outPipe.fileHandleForReading.readDataToEndOfFile()
             drainSemaphore.signal()
