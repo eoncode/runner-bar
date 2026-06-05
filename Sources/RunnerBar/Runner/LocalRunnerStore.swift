@@ -8,22 +8,35 @@ import Foundation
 /// Owns the list of locally-installed GitHub Actions runner agents.
 /// Hydrates from `installPath/.runner` JSON, marks live services via launchctl,
 /// then enriches with GitHub API data (status, busy, labels, group).
+/// A single refresh cycle runs at a time; `isScanning` reflects in-flight state
+/// to views and prevents concurrent refreshes.
 @MainActor
 final class LocalRunnerStore: ObservableObject {
+    // MARK: - Shared singleton
+    /// The app-wide singleton. Always accessed on the main actor.
     static let shared = LocalRunnerStore()
 
+    // MARK: - Published state
+    /// The current list of locally-installed runners, sorted by name.
     @Published private(set) var runners: [RunnerModel] = []
+    /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     @Published private(set) var isScanning: Bool = false
 
+    // MARK: - Index persistence
+    /// The UserDefaults key used to persist the local runner name → install path index.
     private static let indexKey = "localRunnerIndex"
+    /// Maps runnerName → installPath, persisted to UserDefaults.
     private var runnerIndex: [String: String] = [:]
 
+    // MARK: - Init
+    /// Initialises the store and loads the persisted runner index from UserDefaults.
     private init() {
         loadIndex()
     }
 
     // MARK: - Index helpers
 
+    /// Adds or updates the index entry for `name`, mapping it to `installPath`, then persists.
     func register(name: String, installPath: String) {
         runnerIndex[name] = installPath
         persistIndex()
