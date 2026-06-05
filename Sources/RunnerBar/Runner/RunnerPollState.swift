@@ -129,21 +129,4 @@ extension RunnerStore {
     }
 }
 
-// MARK: - Empty sentinels
 
-/// Empty-state sentinel for `JobPollResult`.
-extension JobPollResult {
-    /// A zero-state sentinel used when the fetch is skipped (e.g. empty scopes).
-    static let empty = JobPollResult(display: [], newCache: [:], newPrevLive: [:])
-}
-
-/// Empty-state sentinel for `GroupPollResult`.
-extension GroupPollResult {
-    /// A zero-state sentinel used when the fetch is skipped (e.g. empty scopes).
-    static let empty = GroupPollResult(
-        display: [],
-        newGroupCache: [:],
-        newPrevLiveGroups: [:],
-        newSeenGroupIDs: []
-    )
-}

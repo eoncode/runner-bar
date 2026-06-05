@@ -590,9 +590,9 @@ struct AddRunnerSheet: View {
     /// Fetches the user's repos and organisations on a background thread.
     private func loadScopes() {
         isLoadingScopes = true
-        Task.detached(priority: .userInitiated) {
-            let fetchedRepos = fetchUserRepos()
-            let fetchedOrgs  = fetchUserOrgs()
+        Task(priority: .userInitiated) {
+            let fetchedRepos = await fetchUserRepos()
+            let fetchedOrgs  = await fetchUserOrgs()
             await MainActor.run {
                 repos = fetchedRepos
                 orgs  = fetchedOrgs

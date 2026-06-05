@@ -191,8 +191,7 @@ final class LocalRunnerStore: ObservableObject {
         let result = await ProcessRunner.runAsync(
             executableURL: Self.launchctlURL,
             arguments: ["list"],
-            timeout: 5,
-            qos: .userInitiated
+            timeout: 5
         )
         guard let data = result.data,
               let output = String(data: data, encoding: .utf8) else { return [] }

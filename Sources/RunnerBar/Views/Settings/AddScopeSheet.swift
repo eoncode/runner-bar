@@ -216,7 +216,7 @@ struct AddScopeSheet: View {
         errorMessage = nil
         Task {
             let (fetchedOrgs, fetchedRepos) = await Task.detached(priority: .userInitiated) {
-                (fetchUserOrgs(), fetchUserRepos())
+                await (fetchUserOrgs(), fetchUserRepos())
             }.value
             isFetching = false
             if fetchedOrgs.isEmpty && fetchedRepos.isEmpty {

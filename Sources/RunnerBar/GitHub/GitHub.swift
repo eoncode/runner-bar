@@ -111,8 +111,8 @@ private struct RunnersResponse: Codable {
 // MARK: - User orgs and repos
 
 /// Returns the login names of all GitHub organisations the authenticated user belongs to.
-func fetchUserOrgs() -> [String] {
-    guard let data = ghAPIPaginated(GitHubConstants.userOrgsPath) else { return [] }
+func fetchUserOrgs() async -> [String] {
+    guard let data = await ghAPIPaginated(GitHubConstants.userOrgsPath) else { return [] }
     /// Minimal org payload — only the login name is needed.
     struct Org: Decodable {
         /// The organisation's GitHub login name.
@@ -123,8 +123,8 @@ func fetchUserOrgs() -> [String] {
 }
 
 /// Returns the `owner/repo` full names of all repositories visible to the authenticated user.
-func fetchUserRepos() -> [String] {
-    guard let data = ghAPIPaginated(GitHubConstants.userReposPath) else { return [] }
+func fetchUserRepos() async -> [String] {
+    guard let data = await ghAPIPaginated(GitHubConstants.userReposPath) else { return [] }
     /// Minimal repo payload — only the full name is needed.
     struct Repo: Decodable {
         /// The repository's full name in `owner/repo` format.
