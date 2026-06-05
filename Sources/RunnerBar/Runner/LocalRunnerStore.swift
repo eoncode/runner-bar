@@ -10,12 +10,17 @@ import Foundation
 /// then enriches with GitHub API data (status, busy, labels, group).
 @MainActor
 final class LocalRunnerStore: ObservableObject {
+    /// Shared singleton instance.
     static let shared = LocalRunnerStore()
 
+    /// Locally-discovered runner list, sorted by name after each refresh.
     @Published private(set) var runners: [RunnerModel] = []
+    /// `true` while a background refresh is in progress.
     @Published private(set) var isScanning: Bool = false
 
+    /// `UserDefaults` key for the persisted `runnerIndex` dictionary.
     private static let indexKey = "localRunnerIndex"
+    /// Persisted map of runnerName → installPath.
     private var runnerIndex: [String: String] = [:]
 
     private init() {
@@ -24,20 +29,24 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - Index helpers
 
+    /// Records a runner in the persisted index so it survives app restart.
     func register(name: String, installPath: String) {
         runnerIndex[name] = installPath
         persistIndex()
         log("LocalRunnerStore > register — '\(name)' at \(installPath)")
     }
 
+    /// Returns `true` if `runnerName` is present in the persisted index.
     func isTracked(runnerName: String) -> Bool {
         runnerIndex[runnerName] != nil
     }
 
+    /// Convenience alias for `register(name:installPath:)`. Called from `RunnerLifecycleService` after a successful registration.
     func add(runnerName: String, installPath: String) {
         register(name: runnerName, installPath: installPath)
     }
 
+    /// Immediately flips `isRunning` on the matching runner without waiting for the next `refresh()` cycle.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
         runners[idx] = runners[idx].copying(isRunning: isRunning)
