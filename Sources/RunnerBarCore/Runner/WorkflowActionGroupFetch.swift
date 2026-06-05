@@ -16,36 +16,57 @@ private let prNumberPattern = #"/(\d+)/"# // NOSONAR — fixed regex pattern
 /// boilerplate and no `@unchecked Sendable` escape hatch — consistent with the
 /// `DateParserActor` pattern used in `RunnerPollState.swift`.
 private actor WorkflowDateParserActor {
+    /// The shared ISO-8601 formatter instance.
     private let iso = ISO8601DateFormatter()
+    /// Parses an ISO-8601 date string into a `Date`.
     func parse(_ str: String) -> Date? { iso.date(from: str) }
-    func makeJob(from payload: JobPayload, iso formatter: ISO8601DateFormatter? = nil) -> ActiveJob {
+    /// Constructs an `ActiveJob` using the actor-isolated formatter.
+    func makeJob(from payload: JobPayload) -> ActiveJob {
         makeActiveJob(from: payload, iso: iso)
     }
 }
 
+/// The shared `WorkflowDateParserActor` instance for this module.
 private let workflowDateParser = WorkflowDateParserActor()
 
 // MARK: - Codable helpers (private to this file)
 
+/// Response envelope for the workflow runs list API endpoint.
 private struct ActionRunsResponse: Codable {
+    /// The list of workflow runs returned by the API.
     let workflowRuns: [RunPayload]
+    /// Maps the snake_case `workflow_runs` key to the camelCase Swift property.
     enum CodingKeys: String, CodingKey {
+        /// Maps `workflow_runs` JSON key to `workflowRuns`.
         case workflowRuns = "workflow_runs"
     }
 }
 
+/// Minimal workflow run payload used for group construction.
 private struct RunPayload: Codable {
+    /// The unique run identifier.
     let id: Int
+    /// The workflow name.
     let name: String
+    /// The current run status (e.g. `"in_progress"`, `"queued"`, `"completed"`).
     let status: String
+    /// The run conclusion, if completed (e.g. `"success"`, `"failure"`).
     let conclusion: String?
+    /// The branch name the run is targeting.
     let headBranch: String?
+    /// The full SHA of the head commit.
     let headSha: String
+    /// The human-readable display title shown in the GitHub UI.
     let displayTitle: String?
+    /// ISO-8601 timestamp when the run was created.
     let createdAt: String?
+    /// URL to the run in the GitHub web UI.
     let htmlUrl: String?
+    /// The head commit metadata.
     let headCommit: HeadCommit?
+    /// Pull request references associated with this run.
     let pullRequests: [PRRef]?
+    /// CodingKeys mapping snake_case API fields to camelCase Swift properties.
     enum CodingKeys: String, CodingKey {
         case id, name, status, conclusion
         case headBranch   = "head_branch"
@@ -58,14 +79,19 @@ private struct RunPayload: Codable {
     }
 }
 
+/// The first line of the head commit message, used as a fallback display title.
 private struct HeadCommit: Codable {
+    /// The full commit message (only the first line is used).
     let message: String
 }
 
+/// A pull request reference attached to a workflow run.
 private struct PRRef: Codable {
+    /// The pull request number.
     let number: Int
 }
 
+/// Returns a short human-readable label for a run: PR number, SHA-derived branch ref, or abbreviated SHA.
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
@@ -74,10 +100,6 @@ private func prLabel(from run: RunPayload) -> String {
         return "#\(digits)"
     }
     return String(run.headSha.prefix(7))
-}
-
-private func parseCreatedAt(_ dateStr: String) async -> Date? {
-    await workflowDateParser.parse(dateStr)
 }
 
 // MARK: - Fetch + Group
@@ -148,7 +170,13 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
                 let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
                 let starts = allJobs.compactMap { $0.startedAt }
                 let ends   = allJobs.compactMap { $0.completedAt }
-                let createdAt = await representative.createdAt.flatMap { await parseCreatedAt($0) }
+                // Optional.flatMap does not accept an async closure — use if let instead.
+                let createdAt: Date?
+                if let dateStr = representative.createdAt {
+                    createdAt = await workflowDateParser.parse(dateStr)
+                } else {
+                    createdAt = nil
+                }
                 return (i, WorkflowActionGroup(
                     headSha: sha,
                     label: label,
@@ -228,9 +256,6 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
     }
 
     // Refresh in-progress/inconclusive jobs concurrently.
-    // Filter first, then cap at 3 — the cap is a rate guard on API calls,
-    // not a positional guard (old code did prefix(3).filter which silently
-    // skipped jobs at index >=3 even if they needed refresh).
     let needsRefresh = initial.enumerated().filter { _, job in
         job.conclusion == nil || job.steps.contains { $0.status == JobStatus.inProgress }
     }.prefix(3)

@@ -3,7 +3,7 @@
 import Foundation
 
 /// CPU and memory utilisation snapshot for a single `Runner.Worker` process.
-public struct RunnerMetrics: Equatable {
+public struct RunnerMetrics: Equatable, Sendable {
     /// CPU utilisation percentage for this runner process.
     public let cpu: Double
     /// Memory utilisation percentage for this runner process.

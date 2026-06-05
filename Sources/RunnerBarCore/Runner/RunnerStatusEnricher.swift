@@ -8,7 +8,7 @@
 //   2. Issue ONE ghAPI call per unique scope — not one call per runner.
 //      Pages through all results (per_page=100) so fleets larger than
 //      GitHub's default page size of 30 are fully covered.
-//   3. Build a name → APIRunner dictionary per scope.
+//   3. Build a name → APIRunnerPayload dictionary per scope.
 //   4. Second pass: apply enrichment from the dictionary.
 //
 // Scope fetches run concurrently via withTaskGroup — poll latency is bounded
@@ -16,6 +16,39 @@
 //
 // See: RunnerModel, RunnerStatus
 import Foundation
+
+// MARK: - Codable payload
+
+/// Minimal `Sendable` representation of a single runner object returned by the
+/// GitHub `/actions/runners` API endpoint.
+///
+/// Using a typed struct instead of `[String: Any]` lets `withTaskGroup` cross
+/// concurrency boundaries safely — `Any` does not conform to `Sendable`.
+private struct APIRunnerPayload: Sendable {
+    /// The runner's display name as registered with GitHub.
+    let name: String
+    /// The runner's online/offline status string (e.g. `"online"`, `"offline"`).
+    let status: String?
+    /// Whether the runner is currently executing a job.
+    let busy: Bool
+    /// The runner group name the runner belongs to, if any.
+    let runnerGroupName: String?
+    /// The label names attached to this runner.
+    let labelNames: [String]
+
+    /// Decodes an `APIRunnerPayload` from a raw JSON dictionary produced by
+    /// `JSONSerialization`. Returns `nil` if the required `name` key is absent.
+    /// - Parameter dict: A `[String: Any]` dictionary from the GitHub API response.
+    init?(dict: [String: Any]) {
+        guard let name = dict["name"] as? String else { return nil }
+        self.name = name
+        self.status = dict["status"] as? String
+        self.busy = dict["busy"] as? Bool ?? false
+        self.runnerGroupName = dict["runner_group_name"] as? String
+        self.labelNames = (dict["labels"] as? [[String: Any]])?
+            .compactMap { $0["name"] as? String } ?? []
+    }
+}
 
 // MARK: - RunnerStatusEnricher
 
@@ -28,7 +61,9 @@ import Foundation
 /// - SeeAlso: `RunnerModel`, `RunnerStatus`, `LocalRunnerStore`
 public struct RunnerStatusEnricher: Sendable {
     // MARK: - Shared singleton
+    /// The shared enricher instance.
     public static let shared = RunnerStatusEnricher()
+    /// Creates a new enricher instance.
     public init() { }
 
     /// Enriches `runners` with GitHub API status, busy flag, labels, and runner group.
@@ -48,16 +83,16 @@ public struct RunnerStatusEnricher: Sendable {
         }
 
         // Step 2: fetch all scopes concurrently.
-        var nameToAPI: [String: [String: Any]] = [:]
-        await withTaskGroup(of: [[String: Any]].self) { group in
+        // Use [APIRunnerPayload] (Sendable) rather than [[String: Any]] (not Sendable)
+        // so the task-group result type satisfies Swift 6 strict concurrency.
+        var nameToAPI: [String: APIRunnerPayload] = [:]
+        await withTaskGroup(of: [APIRunnerPayload].self) { group in
             for scopeURL in scopeToRunnerIndices.keys {
                 group.addTask { await self.fetchRunnersForScope(scopeURL) }
             }
             for await fetched in group {
-                for apiRunner in fetched {
-                    if let name = apiRunner["name"] as? String {
-                        nameToAPI[name] = apiRunner
-                    }
+                for payload in fetched {
+                    nameToAPI[payload.name] = payload
                 }
             }
         }
@@ -82,7 +117,7 @@ public struct RunnerStatusEnricher: Sendable {
                 result[idx] = applyEnrichment(to: result[idx], from: api)
                 continue
             }
-            log("[Enricher] NO MATCH for '\(name)' — available API names: \(nameToAPI.keys.sorted()) gitHubUrl=\(result[idx].gitHubUrl ?? "NIL")")
+            log("[Enricher] NO MATCH for '\(name)' — available API names: \(nameToAPI.keys.sorted()) gitHubUrl=\(result[idx].gitHubUrl ?? \"NIL\")")
         }
         return result
     }
@@ -91,7 +126,7 @@ public struct RunnerStatusEnricher: Sendable {
 
     /// Fetches the complete runner list for a scope URL via ghAPI, paginating
     /// through all pages (per_page=100) until exhausted.
-    private func fetchRunnersForScope(_ scopeURL: String) async -> [[String: Any]] {
+    private func fetchRunnersForScope(_ scopeURL: String) async -> [APIRunnerPayload] {
         let stripped = scopeURL.replacingOccurrences(of: GitHubConstants.base + "/", with: "")
         let parts = stripped.split(separator: "/").map(String.init)
         guard !parts.isEmpty else { return [] }
@@ -103,7 +138,7 @@ public struct RunnerStatusEnricher: Sendable {
             baseEndpoint = "orgs/\(parts[0])/actions/runners"
         }
 
-        var allRunners: [[String: Any]] = []
+        var allRunners: [APIRunnerPayload] = []
         var page = 1
         let perPage = 100
 
@@ -120,7 +155,7 @@ public struct RunnerStatusEnricher: Sendable {
                 break
             }
             log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) returned \(pageRunners.count) runners (total_count=\(totalCount))")
-            allRunners.append(contentsOf: pageRunners)
+            allRunners.append(contentsOf: pageRunners.compactMap { APIRunnerPayload(dict: $0) })
             guard pageRunners.count == perPage else { break }
             page += 1
         }
@@ -129,15 +164,10 @@ public struct RunnerStatusEnricher: Sendable {
         return allRunners
     }
 
-    private func applyEnrichment(to runner: RunnerModel, from api: [String: Any]) -> RunnerModel {
-        let statusString = api["status"] as? String
-        let githubStatus = statusString.map { RunnerStatus(rawString: $0) }
-        let busy = api["busy"] as? Bool ?? false
-        let group = api["runner_group_name"] as? String
-        let labelNames = (api["labels"] as? [[String: Any]])?
-            .compactMap { $0["name"] as? String } ?? []
-
-        let effectiveLabels = labelNames.isEmpty ? runner.labels : labelNames
+    /// Applies enrichment data from an `APIRunnerPayload` to a `RunnerModel`.
+    private func applyEnrichment(to runner: RunnerModel, from api: APIRunnerPayload) -> RunnerModel {
+        let githubStatus = api.status.map { RunnerStatus(rawString: $0) }
+        let effectiveLabels = api.labelNames.isEmpty ? runner.labels : api.labelNames
         let labelPlatform = effectiveLabels.first(where: { label in
             let l = label.lowercased()
             return l == "macos" || l == "linux" || l == "windows"
@@ -159,13 +189,13 @@ public struct RunnerStatusEnricher: Sendable {
             isRunning: runner.isRunning,
             labels: effectiveLabels,
             githubStatus: githubStatus,
-            isBusy: busy,
+            isBusy: api.busy,
             lifecycleWarning: runner.lifecycleWarning,
             platform: platform,
             platformArchitecture: platformArchitecture,
             agentVersion: runner.agentVersion,
             isEphemeral: runner.isEphemeral,
-            runnerGroup: group,
+            runnerGroup: api.runnerGroupName,
             metrics: runner.metrics
         )
     }
