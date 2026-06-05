@@ -143,13 +143,22 @@ public struct PollResultBuilder {
             "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
             + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
-        let enriched = await withTaskGroup(of: WorkflowActionGroup.self) { group in
-            for g in display { group.addTask { g.withJobs(await enrichJobs(g.jobs)) } }
-            var out: [WorkflowActionGroup] = []
-            for await g in group { out.append(g) }
-            return out
+        // Enrich jobs concurrently while preserving the sort order produced by
+        // buildGroupDisplay. withTaskGroup yields results in completion order, so
+        // we key tasks by index and re-sort before returning.
+        let enriched: [WorkflowActionGroup] = await withTaskGroup(
+            of: (Int, WorkflowActionGroup).self
+        ) { group in
+            for (idx, g) in display.enumerated() {
+                group.addTask { (idx, g.withJobs(await enrichJobs(g.jobs))) }
+            }
+            var out: [(Int, WorkflowActionGroup)] = []
+            for await pair in group { out.append(pair) }
+            return out.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
-        let enrichedCache: [String: WorkflowActionGroup] = await withTaskGroup(of: (String, WorkflowActionGroup).self) { group in
+        let enrichedCache: [String: WorkflowActionGroup] = await withTaskGroup(
+            of: (String, WorkflowActionGroup).self
+        ) { group in
             for (key, g) in newCache { group.addTask { (key, g.withJobs(await enrichJobs(g.jobs))) } }
             var out: [String: WorkflowActionGroup] = [:]
             for await (key, g) in group { out[key] = g }
