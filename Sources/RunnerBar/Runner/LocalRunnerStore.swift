@@ -43,14 +43,20 @@ final class LocalRunnerStore: ObservableObject {
         log("LocalRunnerStore > register — '\(name)' at \(installPath)")
     }
 
+    /// Returns `true` if `runnerName` has an entry in the persisted index.
     func isTracked(runnerName: String) -> Bool {
         runnerIndex[runnerName] != nil
     }
 
+    /// Registers a new runner by name and install path.
+    /// Convenience alias for `register(name:installPath:)` with view-friendly parameter labels
+    /// so SwiftUI call sites read `store.add(runnerName: x, installPath: y)` naturally.
     func add(runnerName: String, installPath: String) {
         register(name: runnerName, installPath: installPath)
     }
 
+    /// Immediately reflects a start/stop action in the UI before the next refresh cycle.
+    /// Already runs on the main actor via @MainActor class isolation.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
         runners[idx] = runners[idx].copying(isRunning: isRunning)
@@ -68,11 +74,21 @@ final class LocalRunnerStore: ObservableObject {
         runners.removeAll { $0.runnerName == runnerName }
     }
 
-    /// Re-adds a previously removed runner to the index and display list (undo support).
+    /// Rolls back an `optimisticallyRemove` by re-registering the runner and restoring it
+    /// to the published list. Call this when the underlying removal operation fails.
+    /// Already runs on the main actor via @MainActor class isolation.
+    ///
+    /// - Note: If `runner.installPath` is nil the index entry cannot be restored; the runner
+    ///   is still appended to `runners` for immediate UI consistency, but the subsequent
+    ///   `refresh()` call in `performRemoval` will drop it again (index is the source of truth).
+    ///   In practice every runner that reaches the removal flow has an installPath — this
+    ///   guard is a defensive fallback, not an expected code path.
     func optimisticallyRestore(_ runner: RunnerModel) {
         if let installPath = runner.installPath {
             register(name: runner.runnerName, installPath: installPath)
         } else {
+            // Cannot restore index entry without installPath — the runner will disappear
+            // from the UI again once the subsequent refresh() rebuilds from the index.
             log("LocalRunnerStore > optimisticallyRestore: no installPath for '\(runner.runnerName)' — index entry not restored")
         }
         if !runners.contains(where: { $0.runnerName == runner.runnerName }) {
@@ -118,6 +134,9 @@ final class LocalRunnerStore: ObservableObject {
             log("LocalRunnerStore > refresh() background — hydrated \(hydrated.count) runner(s)")
 
             // 2. Mark live services via launchctl.
+            // scanLiveServices() is always called here — isRunning is intentionally set to false
+            // during JSON parsing (step 1) and updated to its real value only at this point.
+            // Do not remove this call or assume isRunning is always false.
             let liveLabels = await self.scanLiveServices()
             let isLive: (RunnerModel) -> Bool = { runner in
                 liveLabels.contains { $0.contains(runner.runnerName) }
@@ -165,12 +184,23 @@ final class LocalRunnerStore: ObservableObject {
 
 // MARK: - .runner JSON parser
 
+/// Reads `installPath/.runner` JSON and builds a RunnerModel.
+/// Returns nil if the file is missing — runner may have been uninstalled outside the app.
+///
+/// The GitHub Actions runner agent writes .runner files with a UTF-8 BOM (0xEF 0xBB 0xBF).
+/// Swift's JSONDecoder does not strip BOMs and silently returns nil for the entire decode.
+/// We strip the BOM from the raw Data before passing it to the decoder.
+///
+/// The agent also writes "gitHubUrl" in camelCase; the CodingKey must match exactly
+/// since JSONDecoder is case-sensitive.
 private func runnerModelFromIndex(name: String, installPath: String) -> RunnerModel? {
     let jsonURL = URL(fileURLWithPath: installPath).appendingPathComponent(".runner")
     guard var data = try? Data(contentsOf: jsonURL) else {
         log("LocalRunnerStore > runnerModelFromIndex — no .runner at \(installPath), skipping \(name)")
         return nil
     }
+
+    // Strip UTF-8 BOM (0xEF 0xBB 0xBF) — runner agent writes BOM-prefixed JSON on all platforms.
     let bom: [UInt8] = [0xEF, 0xBB, 0xBF]
     if data.prefix(3).elementsEqual(bom) {
         data = data.dropFirst(3)
@@ -184,7 +214,7 @@ private func runnerModelFromIndex(name: String, installPath: String) -> RunnerMo
         let agentVersion: String?
         let ephemeral: Bool?
         enum CodingKeys: String, CodingKey {
-            case gitHubUrl            = "gitHubUrl" // must match runner agent JSON exactly — agent writes camelCase
+            case gitHubUrl            = "gitHubUrl"           // camelCase — matches runner agent output
             case agentId              = "AgentId"
             case workFolder           = "WorkFolder"
             case platform             = "Platform"
