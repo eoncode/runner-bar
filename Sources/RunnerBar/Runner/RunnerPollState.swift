@@ -1,30 +1,7 @@
-// RunnerPollState.swift
-// RunnerBar
+import Combine
 import Foundation
 import os
 import RunnerBarCore
-
-// MARK: - DateParserActor
-
-/// Actor-isolated ISO-8601 date parser.
-///
-/// `ISO8601DateFormatter` is expensive to allocate (it loads ICU calendars on init).
-/// Keeping one file-level instance avoids repeated allocation on every poll cycle.
-/// Wrapping it in an actor gives thread-safe access with no lock
-/// boilerplate and no `@unchecked Sendable` escape hatch.
-private actor DateParserActor {
-    /// Shared formatter instance, allocated once per actor.
-    private let iso = ISO8601DateFormatter()
-    /// Parses an ISO-8601 date string, returning `nil` on failure.
-    func parse(_ str: String) -> Date? { iso.date(from: str) }
-    /// Builds an `ActiveJob` from a decoded payload using the actor-owned formatter.
-    func makeJob(from payload: JobPayload, isDimmed: Bool) -> ActiveJob {
-        makeActiveJob(from: payload, iso: iso, isDimmed: isDimmed)
-    }
-}
-
-/// Shared `DateParserActor` for this file.
-private let dateParser = DateParserActor()
 
 // MARK: - RunnerStore thin wrappers
 
@@ -87,9 +64,7 @@ extension RunnerStore {
         )
     }
 
-    // MARK: - Backfill (retains ghAPI access via RunnerStore)
-
-    /// Backfills step data for cached jobs that finished without complete step information.
+    /// Backfills step data into the completed-job cache.
     ///
     /// Iterates jobs in `cache` that have a conclusion but missing or in-progress steps,
     /// fetches the full job payload from the GitHub API, and updates the cache entry.
@@ -103,7 +78,7 @@ extension RunnerStore {
                   let fresh = try? JSONDecoder().decode(JobPayload.self, from: data),
                   !fresh.steps.isEmpty
             else { continue }
-            cache[cacheID] = await dateParser.makeJob(from: fresh, isDimmed: true)
+            cache[cacheID] = await ISO8601DateParser.shared.makeJob(from: fresh, isDimmed: true)
         }
     }
 
@@ -117,14 +92,14 @@ extension RunnerStore {
             log("RunnerStore › scopeFromActionGroup — using group.repo='\(group.repo)'")
             return group.repo
         }
-        if let firstRun = group.runs.first, let url = firstRun.htmlUrl {
-            log("RunnerStore › scopeFromActionGroup — group.repo empty, trying htmlUrl='\(url)'")
-            if let derived = scopeFromHtmlUrl(url) {
-                log("RunnerStore › scopeFromActionGroup — derived scope='\(derived)' from htmlUrl")
-                return derived
-            }
+        log("RunnerStore › scopeFromActionGroup — group.repo is empty, trying htmlUrl of first run")
+        if let firstRun = group.runs.first,
+           let url = firstRun.htmlUrl,
+           let scope = scopeFromHtmlUrl(url) {
+            log("RunnerStore › scopeFromActionGroup — derived scope '\(scope)' from htmlUrl '\(url)'")
+            return scope
         }
-        log("RunnerStore › ⚠️ scopeFromActionGroup — could not derive scope, returning empty string! groupID=\(group.id)")
+        log("RunnerStore › scopeFromActionGroup — ⚠️ could not derive scope for groupID=\(group.id)")
         return ""
     }
 
@@ -133,8 +108,42 @@ extension RunnerStore {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
             let cacheHasConclusion = cached.conclusion != nil && job.conclusion == nil
-            let cacheHasMoreSteps  = cached.steps.count > job.steps.count
-            return (cacheHasConclusion || cacheHasMoreSteps) ? cached : job
+            let cacheHasBetterSteps = !cached.steps.isEmpty
+                && (job.steps.isEmpty || job.steps.contains { $0.status == .inProgress })
+                && !cached.steps.contains { $0.status == .inProgress }
+            guard cacheHasConclusion || cacheHasBetterSteps else { return job }
+            return ActiveJob(
+                id: job.id,
+                name: job.name,
+                htmlUrl: job.htmlUrl,
+                status: job.status,
+                conclusion: cached.conclusion ?? job.conclusion,
+                isDimmed: job.isDimmed,
+                runnerName: job.runnerName,
+                scope: job.scope,
+                startedAt: job.startedAt,
+                completedAt: cached.completedAt ?? job.completedAt,
+                steps: cacheHasBetterSteps ? cached.steps : job.steps
+            )
         }
     }
+}
+
+// MARK: - Empty sentinels
+
+/// Empty-state sentinel for `JobPollResult`.
+extension JobPollResult {
+    /// A zero-state sentinel used when the fetch is skipped (e.g. empty scopes).
+    static let empty = JobPollResult(display: [], newCache: [:], newPrevLive: [:])
+}
+
+/// Empty-state sentinel for `GroupPollResult`.
+extension GroupPollResult {
+    /// A zero-state sentinel used when the fetch is skipped (e.g. empty scopes).
+    static let empty = GroupPollResult(
+        display: [],
+        newGroupCache: [:],
+        newPrevLiveGroups: [:],
+        newSeenGroupIDs: []
+    )
 }

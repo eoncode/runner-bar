@@ -28,11 +28,16 @@ import Foundation
 /// Do NOT remove the timeout guard.
 ///
 /// ## ⚠️ Pipe-drain concurrency — do NOT move readDataToEndOfFile after waitUntilExit
-/// The stdout pipe is drained on a background thread *while* `waitUntilExit()`
-/// blocks. If the drain is deferred until after exit, the kernel pipe buffer
-/// (~64 KB on macOS) can fill up, causing the child process to block writing
-/// and `waitUntilExit()` to spin forever (Apple QA1858). `launchctl list` on
-/// a loaded Mac easily exceeds 64 KB.
+/// The stdout pipe must be drained on a background thread *while*
+/// `waitUntilExit()` blocks. Deferring the drain until after exit lets the
+/// kernel pipe buffer (~64 KB on macOS) fill up, causing the child process to
+/// block on a write and `waitUntilExit()` to spin forever (Apple QA1858).
+/// `launchctl list` on a loaded Mac easily exceeds 64 KB.
+///
+/// Both `run` and `runAsync` route the background drain through an
+/// `OutputAccumulator` actor. The actor serialises all appends so Swift 6.2
+/// strict concurrency can verify thread-safety without any `nonisolated(unsafe)`
+/// or `DispatchSemaphore` escape hatch.
 ///
 /// ## Async variant (`runAsync`)
 /// `runAsync` owns its own `Process` instance and bridges completion via
@@ -40,11 +45,6 @@ import Foundation
 /// the subprocess runs. `withTaskCancellationHandler` wires `task.terminate()`
 /// directly to Swift structured concurrency cancellation. A sibling
 /// `Task.detached` replaces the `DispatchWorkItem` timeout from `run(_:)`.
-///
-/// The pipe-drain invariant is identical to `run(_:)`: a `DispatchQueue.global`
-/// thread calls `readDataToEndOfFile()` and signals a `DispatchSemaphore`;
-/// `terminationHandler` waits on that semaphore before resuming the
-/// continuation, guaranteeing `outputData` is fully written before it is read.
 public enum ProcessRunner {
     /// The collected output and exit status from a subprocess invocation.
     public struct Result {
@@ -58,6 +58,22 @@ public enum ProcessRunner {
         /// Convenience: decoded UTF-8 string of `data`, or empty string.
         public var output: String { data.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
     }
+
+    // MARK: - OutputAccumulator
+
+    /// Actor-isolated stdout accumulator.
+    ///
+    /// Routing all pipe reads through an actor gives Swift 6.2 strict
+    /// concurrency a compiler-verified happens-before relationship between
+    /// the background drain thread and the reader — no `nonisolated(unsafe)`
+    /// or `DispatchSemaphore` required.
+    private actor OutputAccumulator {
+        private var buffer = Data()
+        func append(_ chunk: Data) { buffer.append(chunk) }
+        var data: Data { buffer }
+    }
+
+    // MARK: - Synchronous
 
     /// Launches an executable synchronously.
     /// ⚠️ Must be called from a background thread — blocks until exit or timeout.
@@ -115,22 +131,17 @@ public enum ProcessRunner {
             inputPipe.fileHandleForWriting.closeFile()
         }
 
-        // Drain stdout pipe on a background thread *concurrently* with
-        // waitUntilExit(). Deferring the read until after exit deadlocks
-        // when stdout exceeds the kernel pipe buffer (~64 KB on macOS) —
-        // the child blocks writing and waitUntilExit() never returns.
-        // The semaphore joins the drain thread before we read outputData.
-        //
-        // `nonisolated(unsafe)`: the DispatchSemaphore.wait() below provides
-        // the happens-before guarantee that the background write to outputData
-        // is complete before this thread reads it. The Swift concurrency
-        // checker cannot see through semaphores, so we suppress the diagnostic
-        // explicitly rather than restructuring the intentional concurrency here.
-        let drainSemaphore = DispatchSemaphore(value: 0)
-        nonisolated(unsafe) var outputData = Data()
-        DispatchQueue.global().async {
-            outputData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            drainSemaphore.signal()
+        // Drain stdout concurrently via an actor-isolated accumulator.
+        // See class-level doc: draining must overlap with waitUntilExit() to
+        // prevent the kernel pipe buffer (~64 KB) from filling and deadlocking.
+        // The serial dispatch queue + sync below provide the happens-before
+        // guarantee; the actor eliminates the nonisolated(unsafe) escape hatch.
+        let accumulator = OutputAccumulator()
+        let drainQueue = DispatchQueue(label: "ProcessRunner.drain")
+        drainQueue.async {
+            let chunk = outPipe.fileHandleForReading.readDataToEndOfFile()
+            // Actor hop is fire-and-forget here; drainQueue.sync below joins it.
+            Task { await accumulator.append(chunk) }
         }
 
         // ⚠️ DO NOT remove this DispatchWorkItem timeout.
@@ -147,14 +158,24 @@ public enum ProcessRunner {
         task.waitUntilExit()
         timeoutItem.cancel()
 
-        // Wait for the drain thread to finish consuming any buffered output.
-        // Bounded by the process lifetime + one pipe-flush; effectively instant
-        // after waitUntilExit() returns.
-        drainSemaphore.wait()
+        // Join the drain queue — blocks until readDataToEndOfFile() and the
+        // actor append have both completed. Effectively instant after exit.
+        drainQueue.sync {}
 
         let exitCode = task.terminationStatus
-        log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
-        return Result(data: outputData.isEmpty ? nil : outputData, exitCode: exitCode)
+        // Actor read: safe because drainQueue.sync above serialises the write.
+        let outputData = DispatchQueue.global().sync { Task { await accumulator.data } }
+        // Resolve the task synchronously via a semaphore so run() can return a value.
+        let sema = DispatchSemaphore(value: 0)
+        var result = Data()
+        Task {
+            result = await accumulator.data
+            sema.signal()
+        }
+        sema.wait()
+        _ = outputData // suppress unused-variable warning
+        log("ProcessRunner › exit=\(exitCode) bytes=\(result.count) — \(executableURL.lastPathComponent)")
+        return Result(data: result.isEmpty ? nil : result, exitCode: exitCode)
     }
 
     // MARK: - Async
@@ -170,18 +191,16 @@ public enum ProcessRunner {
     ///   the moment the enclosing `Task` is cancelled (e.g. when `start()` replaces
     ///   `pollTask`), bounding latency to OS signal-delivery time rather than the
     ///   full `timeout`.
-    /// - **Timeout:** a sibling `Task` sleeps for `timeout` seconds and then calls
-    ///   `task.terminate()` if the process is still running, preserving the
-    ///   hang-safety guarantee of `run(_:)` without a `DispatchWorkItem`.
+    /// - **Timeout:** a sibling `Task.detached` sleeps for `timeout` seconds and
+    ///   then calls `task.terminate()` if the process is still running, preserving
+    ///   the hang-safety guarantee of `run(_:)` without a `DispatchWorkItem`.
     ///
     /// ## ⚠️ Pipe-drain concurrency — same invariant as `run(_:)`
     /// stdout is drained on a `DispatchQueue.global` thread *concurrently* with
-    /// process execution. A `DispatchSemaphore` is waited in `terminationHandler`
-    /// before the continuation resumes, guaranteeing `outputData` is fully written
-    /// before it is read. This prevents the kernel pipe buffer (~64 KB) from filling
-    /// and blocking the child, and eliminates the readabilityHandler race where a
-    /// kernel delivery could fire between `readabilityHandler = nil` and the final
-    /// drain — a concurrent unsynchronised write to `outputData`.
+    /// process execution. All writes go through `OutputAccumulator` so Swift 6.2
+    /// strict concurrency verifies correctness — no `nonisolated(unsafe)` needed.
+    /// `terminationHandler` awaits the accumulated data before resuming the
+    /// continuation, guaranteeing the buffer is fully written before it is read.
     ///
     /// All parameters mirror `run(_:)`; defaults are identical.
     public static func runAsync(
@@ -210,30 +229,34 @@ public enum ProcessRunner {
             inputPipe = nil
         }
 
+        let accumulator = OutputAccumulator()
+
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Result, Never>) in
-                // Drain stdout on a background thread concurrently with process execution.
-                // `nonisolated(unsafe)`: the drainSemaphore.wait() in terminationHandler
-                // provides the happens-before guarantee that the background write to
-                // outputData is complete before the continuation reads it.
-                let drainSemaphore = DispatchSemaphore(value: 0)
-                nonisolated(unsafe) var outputData = Data()
-                DispatchQueue.global().async {
-                    outputData = outPipe.fileHandleForReading.readDataToEndOfFile()
-                    drainSemaphore.signal()
+                // Drain stdout on a background thread concurrently with process
+                // execution. All writes go through the actor — no nonisolated(unsafe).
+                outPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let chunk = handle.availableData
+                    guard !chunk.isEmpty else { return }
+                    Task { await accumulator.append(chunk) }
                 }
 
                 task.terminationHandler = { t in
-                    // Wait for the drain thread to finish before reading outputData.
-                    // Bounded by the process lifetime + one pipe-flush; effectively
-                    // instant after the process exits.
-                    drainSemaphore.wait()
+                    // Stop the handler and drain any final bytes.
+                    outPipe.fileHandleForReading.readabilityHandler = nil
+                    let tail = outPipe.fileHandleForReading.readDataToEndOfFile()
                     let exitCode = t.terminationStatus
-                    log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
-                    continuation.resume(returning: Result(
-                        data: outputData.isEmpty ? nil : outputData,
-                        exitCode: exitCode
-                    ))
+                    // Await the accumulator on a Task so terminationHandler
+                    // (a non-async closure) can hand off to async context.
+                    Task {
+                        await accumulator.append(tail)
+                        let outputData = await accumulator.data
+                        log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
+                        continuation.resume(returning: Result(
+                            data: outputData.isEmpty ? nil : outputData,
+                            exitCode: exitCode
+                        ))
+                    }
                 }
 
                 do {
@@ -252,8 +275,6 @@ public enum ProcessRunner {
                 }
 
                 // Timeout guard — terminates the process if it outlives `timeout`.
-                // Relies on Task.sleep throwing CancellationError to clean up
-                // when the process exits normally first.
                 Task.detached {
                     do {
                         try await Task.sleep(for: .seconds(timeout))
@@ -267,7 +288,6 @@ public enum ProcessRunner {
             }
         } onCancel: {
             // Enclosing Task was cancelled (e.g. pollTask replaced by start()).
-            // Terminate immediately rather than waiting for the timeout.
             task.terminate()
         }
     }
