@@ -17,24 +17,31 @@ func scopeFromHtmlUrl(_ urlString: String?) -> String? {
     return "\(components[1])/\(components[2])"
 }
 
-// MARK: - Fetch all jobs from active runs
+// MARK: - Date parsing
 
-// Shared ISO-8601 date formatter.
-// Safety: protected by iso8601Lock.
-
-/// A Sendable wrapper for ISO8601DateFormatter.
-private struct SendableFormatter: @unchecked Sendable {
-    /// The internal formatter instance.
-    let iso = ISO8601DateFormatter()
+/// Actor-isolated ISO-8601 date parser.
+///
+/// `ISO8601DateFormatter` is expensive to allocate (ICU calendars) and not
+/// `Sendable`. Wrapping it in an actor gives thread-safe access with no lock
+/// boilerplate and no `@unchecked Sendable` escape hatch — consistent with the
+/// `DateParserActor` pattern used in `RunnerPollState.swift` and
+/// `WorkflowActionGroupFetch.swift`.
+private actor GitHubDateParserActor {
+    private let iso = ISO8601DateFormatter()
+    func makeJob(from payload: JobPayload, isDimmed: Bool) -> ActiveJob {
+        makeActiveJob(from: payload, iso: iso, isDimmed: isDimmed)
+    }
 }
-/// Lock for the shared ISO-8601 date formatter.
-private let iso8601Lock = OSAllocatedUnfairLock(initialState: SendableFormatter())
+
+private let githubDateParser = GitHubDateParserActor()
+
+// MARK: - Fetch all jobs from active runs
 
 /// Fetches all active (in-progress and queued) jobs for a given scope.
 /// Supports both repo-scoped (`owner/repo`) and org-scoped (`org`) runners.
-func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
+func fetchActiveJobs(for scopeString: String) async -> [ActiveJob] {
     guard let scope = Scope.parse(scopeString) else {
-        log("fetchActiveJobs › invalid scope: \(scopeString)")
+        log("fetchActiveJobs \u203a invalid scope: \(scopeString)")
         return []
     }
     var runIDs: [Int] = []
@@ -45,7 +52,7 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     }
 
     for status in ["in_progress", "queued"] {
-        guard let data = ghAPI(runsEndpoint(status: status)),
+        guard let data = await ghAPI(runsEndpoint(status: status)),
               let resp = try? JSONDecoder().decode(WorkflowRunsResponse.self, from: data)
         else { continue }
         // filter() cannot replace this loop: insert() mutates seenRunIDs as a side effect.
@@ -59,17 +66,15 @@ func fetchActiveJobs(for scopeString: String) -> [ActiveJob] {
     var jobs: [ActiveJob] = []
     var seenJobIDs = Set<Int>()
     for runID in runIDs {
-        guard let data = ghAPI("\(scope.apiPrefix)/actions/runs/\(runID)/jobs?per_page=100"),
+        guard let data = await ghAPI("\(scope.apiPrefix)/actions/runs/\(runID)/jobs?per_page=100"),
               let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
         else { continue }
         for payload in resp.jobs {
             guard seenJobIDs.insert(payload.id).inserted else { continue }
-            jobs.append(iso8601Lock.withLock { wrapper in
-                makeActiveJob(from: payload, iso: wrapper.iso, isDimmed: false)
-            })
+            jobs.append(await githubDateParser.makeJob(from: payload, isDimmed: false))
         }
     }
-    log("fetchActiveJobs › \(jobs.count) job(s) for \(scopeString)")
+    log("fetchActiveJobs \u203a \(jobs.count) job(s) for \(scopeString)")
     return jobs
 }
 
@@ -95,22 +100,22 @@ private struct WorkflowRun: Codable {
 // MARK: - Runners
 
 /// Fetches all registered runners for the given scope string.
-func fetchRunners(for scopeString: String) -> [Runner] {
+func fetchRunners(for scopeString: String) async -> [Runner] {
     guard let scope = Scope.parse(scopeString) else {
-        log("fetchRunners › invalid scope: \(scopeString)")
+        log("fetchRunners \u203a invalid scope: \(scopeString)")
         return []
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners"
-    log("fetchRunners › \(endpoint)")
-    guard let data = ghAPI(endpoint) else {
-        log("fetchRunners › no data for scope: \(scopeString)")
+    log("fetchRunners \u203a \(endpoint)")
+    guard let data = await ghAPI(endpoint) else {
+        log("fetchRunners \u203a no data for scope: \(scopeString)")
         return []
     }
     guard let response = try? JSONDecoder().decode(RunnersResponse.self, from: data) else {
-        log("fetchRunners › decode failed for scope: \(scopeString)")
+        log("fetchRunners \u203a decode failed for scope: \(scopeString)")
         return []
     }
-    log("fetchRunners › found \(response.runners.count) runner(s) for \(scopeString)")
+    log("fetchRunners \u203a found \(response.runners.count) runner(s) for \(scopeString)")
     return response.runners
 }
 
@@ -161,34 +166,34 @@ private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
 
 /// Fetches the log for a single step via the transport layer's `urlSessionRaw()`.
 /// `urlSessionRaw` uses `application/vnd.github.v3.raw` and lets URLSession follow
-/// the GitHub 302→S3 redirect automatically, eliminating the need for a manual
+/// the GitHub 302\u2192S3 redirect automatically, eliminating the need for a manual
 /// two-step redirect implementation.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
-        log("fetchStepLog › invalid scope: \(scopeString)")
+        log("fetchStepLog \u203a invalid scope: \(scopeString)")
         return nil
     }
     guard case .repo = scope else {
-        log("fetchStepLog › skipped: org-scoped logs not supported (scope=\(scopeString))")
+        log("fetchStepLog \u203a skipped: org-scoped logs not supported (scope=\(scopeString))")
         return nil
     }
     let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
-    log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
+    log("fetchStepLog \u203a fetching \(endpoint) step=\(stepNumber)")
 
     guard let data = urlSessionRaw(endpoint) else {
-        log("fetchStepLog › urlSessionRaw returned nil for job \(jobID)")
+        log("fetchStepLog \u203a urlSessionRaw returned nil for job \(jobID)")
         return nil
     }
     guard let raw = String(data: data, encoding: .utf8) else {
-        log("fetchStepLog › UTF-8 decode failed for job \(jobID) (\(data.count) bytes)")
+        log("fetchStepLog \u203a UTF-8 decode failed for job \(jobID) (\(data.count) bytes)")
         return nil
     }
     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        log("fetchStepLog › empty body for job \(jobID)")
+        log("fetchStepLog \u203a empty body for job \(jobID)")
         return nil
     }
     if raw.hasPrefix("{") {
-        log("fetchStepLog › error JSON returned: \(raw.prefix(120))")
+        log("fetchStepLog \u203a error JSON returned: \(raw.prefix(120))")
         return nil
     }
     return parseStepLog(raw, stepNumber: stepNumber)
@@ -211,21 +216,21 @@ private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
         }
     }
     if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
-    log("parseStepLog › parsed \(sections.count) section(s) from log")
+    log("parseStepLog \u203a parsed \(sections.count) section(s) from log")
     if sections.isEmpty || (sections.count == 1 && !sections[0].contains("##[group]")) {
-        log("parseStepLog › no group markers, returning full raw log")
+        log("parseStepLog \u203a no group markers, returning full raw log")
         return cleaned
     }
     let index = stepNumber - 1
     guard index >= 0, index < sections.count else {
         log(
-            "parseStepLog › stepNumber \(stepNumber) out of range "
+            "parseStepLog \u203a stepNumber \(stepNumber) out of range "
             + "(sections=\(sections.count)), returning full log"
         )
         return cleaned
     }
     let section = sections[index]
-    log("parseStepLog › step \(stepNumber) → \(section.count)ch")
+    log("parseStepLog \u203a step \(stepNumber) \u2192 \(section.count)ch")
     return section.isEmpty ? cleaned : section
 }
 
