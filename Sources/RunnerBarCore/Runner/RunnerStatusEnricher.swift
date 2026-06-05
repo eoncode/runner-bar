@@ -14,6 +14,16 @@
 // Scope fetches run concurrently via withTaskGroup — poll latency is bounded
 // by the slowest scope rather than the sum of all scopes.
 //
+// NOTE: fetchRunnersForScope decodes the API response via JSONSerialization
+// rather than casting directly — a direct `as? [String: Any]` cast from Data? always
+// fails at runtime because Data and Dictionary are unrelated types.
+//
+// NOTE: fetchRunnersForScope intentionally does NOT check ghIsRateLimited before
+// calling ghAPI. The transport layer (GitHubURLSessionTransport) is the single
+// source of truth for rate-limit state. A permission 403 on an org-scope endpoint
+// must NOT prevent a subsequent repo-scope fetch from running — the two scopes use
+// independent API paths and may have different token permissions.
+//
 // See: RunnerModel, RunnerStatus
 import Foundation
 
@@ -61,10 +71,11 @@ private struct APIRunnerPayload: Sendable {
 /// - SeeAlso: `RunnerModel`, `RunnerStatus`, `LocalRunnerStore`
 public struct RunnerStatusEnricher: Sendable {
     // MARK: - Shared singleton
-    /// The shared enricher instance.
+    /// The shared `RunnerStatusEnricher` instance used throughout the app.
     public static let shared = RunnerStatusEnricher()
-    /// Creates a new enricher instance.
-    public init() { }
+
+    /// Creates a new `RunnerStatusEnricher` instance.
+    public init() { /* No setup required; all enrichment work is stateless. */ }
 
     /// Enriches `runners` with GitHub API status, busy flag, labels, and runner group.
     ///
@@ -101,16 +112,19 @@ public struct RunnerStatusEnricher: Sendable {
         var result = runners
         for idx in result.indices {
             let name = result[idx].runnerName
+            // Try exact match first.
             if let api = nameToAPI[name] {
                 result[idx] = applyEnrichment(to: result[idx], from: api)
                 continue
             }
+            // Try case-insensitive match.
             let nameLower = name.lowercased()
             if let key = nameToAPI.keys.first(where: { $0.lowercased() == nameLower }),
                let api = nameToAPI[key] {
                 result[idx] = applyEnrichment(to: result[idx], from: api)
                 continue
             }
+            // Try trimmed whitespace match.
             let nameTrimmed = name.trimmingCharacters(in: .whitespaces)
             if let key = nameToAPI.keys.first(where: { $0.trimmingCharacters(in: .whitespaces) == nameTrimmed }),
                let api = nameToAPI[key] {
