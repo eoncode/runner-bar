@@ -285,34 +285,39 @@ final class RunnerStore {
             }
         }
         log("RunnerStore › fetchAndEnrichRunners — installPathMap.byFullKey keys=\(installPathMap.byFullKey.keys.sorted())")
-        var result: [Runner] = []
-        for (scope, var runner) in runnersWithScope {
-            guard runner.busy else {
-                runner.metrics = nil
-                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) is idle, metrics=nil")
-                result.append(runner)
-                continue
+        // Resolve install paths and nil-out idle runners first (no async work needed).
+        var indexed: [(scope: String, runner: Runner)] = runnersWithScope
+        for i in indexed.indices {
+            if !indexed[i].runner.busy {
+                indexed[i].runner.metrics = nil
+                log("RunnerStore › fetchAndEnrichRunners — \(indexed[i].runner.name) (scope=\(indexed[i].scope)) is idle, metrics=nil")
             }
-            let fullKey = "\(scope)/\(runner.name)"
-            // metricsForRunner calls DispatchSemaphore.wait() internally (via runProcess).
-            // Running it inside Task.detached(priority:) moves the blocking wait onto a
-            // GCD thread rather than the cooperative thread pool, preventing thread
-            // starvation when multiple busy runners are enriched per poll cycle (#1151).
-            if let installPath = installPathMap.byId[runner.id] {
-                runner.metrics = await Task.detached(priority: .utility) { metricsForRunner(installPath: installPath) }.value
-                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) metrics via id=\(runner.id)")
-            } else if let installPath = installPathMap.byFullKey[fullKey] {
-                runner.metrics = await Task.detached(priority: .utility) { metricsForRunner(installPath: installPath) }.value
-                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) metrics via fullKey=\(fullKey)")
-            } else if let installPath = installPathMap.byName[runner.name] {
-                runner.metrics = await Task.detached(priority: .utility) { metricsForRunner(installPath: installPath) }.value
-                log("RunnerStore › fetchAndEnrichRunners — ⚠️ \(runner.name) name-only fallback")
-            } else {
-                runner.metrics = nil
-                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) busy but no installPath for key=\(fullKey), metrics=nil")
-            }
-            result.append(runner)
         }
+        // Fetch metrics for all busy runners concurrently. metricsForRunner is now
+        // async (uses ProcessRunner.runAsync internally) so no Task.detached needed.
+        // Poll latency is bounded by the slowest single runner, not their sum (#1156, #1157).
+        await withTaskGroup(of: (Int, RunnerMetrics?).self) { group in
+            for (idx, (scope, runner)) in indexed.enumerated() {
+                guard runner.busy else { continue }
+                let fullKey = "\(scope)/\(runner.name)"
+                let installPath = installPathMap.byId[runner.id]
+                    ?? installPathMap.byFullKey[fullKey]
+                    ?? installPathMap.byName[runner.name]
+                guard let installPath else {
+                    log("RunnerStore › fetchAndEnrichRunners — \(runner.name) busy but no installPath for key=\(fullKey), metrics=nil")
+                    continue
+                }
+                group.addTask {
+                    let metrics = await metricsForRunner(installPath: installPath)
+                    log("RunnerStore › fetchAndEnrichRunners — \(runner.name) metrics fetched installPath=\(installPath)")
+                    return (idx, metrics)
+                }
+            }
+            for await (idx, metrics) in group {
+                indexed[idx].runner.metrics = metrics
+            }
+        }
+        let result = indexed.map(\.runner)
         log("RunnerStore › fetchAndEnrichRunners EXIT — returning \(result.count) runner(s)")
         return result
     }

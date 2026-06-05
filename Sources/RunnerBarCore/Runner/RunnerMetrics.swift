@@ -31,34 +31,16 @@ private let pgrepWorkerPattern = #"Runner\.Worker|Runner\.Listener"# // NOSONAR 
 
 // MARK: - Direct-execution helper
 
-/// Runs an executable at `path` with `arguments` directly — no shell wrapper.
+/// Runs an executable at `path` with `arguments` directly via `ProcessRunner.runAsync`.
 /// Avoids `/bin/zsh -c` overhead, shell quoting edge-cases, and command-injection risk.
-/// Timeout is enforced via `DispatchSemaphore`; the process is terminated on expiry.
 /// Returns trimmed stdout, or an empty string on timeout / launch failure.
-private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInterval = 5) -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: path)
-    process.arguments = arguments
-    let outPipe = Pipe()
-    process.standardOutput = outPipe
-    process.standardError = Pipe()
-    do { try process.run() } catch {
-        log("runProcess › launch failed path=\(path) args=\(arguments) error=\(error)")
-        return ""
-    }
-    let sema = DispatchSemaphore(value: 0)
-    DispatchQueue.global(qos: .utility).async { [sema] in
-        process.waitUntilExit()
-        sema.signal()
-    }
-    guard sema.wait(timeout: .now() + timeout) == .success else {
-        log("runProcess › timeout after \(timeout)s — terminating \(path)")
-        process.terminate()
-        return ""
-    }
-    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-    return String(data: data, encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInterval = 5) async -> String {
+    let result = await ProcessRunner.runAsync(
+        executableURL: URL(fileURLWithPath: path),
+        arguments: arguments,
+        timeout: timeout
+    )
+    return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 // MARK: - Per-runner metrics
@@ -71,9 +53,9 @@ private func runProcess(_ path: String, _ arguments: [String], timeout: TimeInte
 /// Returns `nil` when no matching process is found.
 /// - Parameter installPath: Absolute path to the runner installation directory.
 /// - Returns: A `RunnerMetrics` snapshot, or `nil` if no matching process exists.
-public func metricsForRunner(installPath: String) -> RunnerMetrics? {
+public func metricsForRunner(installPath: String) async -> RunnerMetrics? {
     log("metricsForRunner › ENTER installPath=\(installPath)")
-    let pidsOutput = runProcess(pgrepPath, ["-f", installPath], timeout: 3)
+    let pidsOutput = await runProcess(pgrepPath, ["-f", installPath], timeout: 3)
     guard !pidsOutput.isEmpty else {
         log("metricsForRunner › no processes found for installPath=\(installPath)")
         return nil
@@ -84,7 +66,7 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("metricsForRunner › found pids=\(pidList) for installPath=\(installPath)")
-    let output = runProcess(psPath, ["-p", pidList, "-o", psOutputFormat], timeout: 5)
+    let output = await runProcess(psPath, ["-p", pidList, "-o", psOutputFormat], timeout: 5)
     guard !output.isEmpty else {
         log("metricsForRunner › ps returned empty for installPath=\(installPath)")
         return nil
@@ -122,9 +104,9 @@ public func metricsForRunner(installPath: String) -> RunnerMetrics? {
 /// Uses `pgrep` to find matching PIDs, then `ps` to read their resource usage.
 /// Returns an empty array when no matching processes are found.
 /// - Returns: Array of `RunnerMetrics` sorted by descending CPU utilisation.
-public func allWorkerMetrics() -> [RunnerMetrics] {
+public func allWorkerMetrics() async -> [RunnerMetrics] {
     log("allWorkerMetrics › ENTER — using direct pgrep + ps (no shell wrapper)")
-    let pidsOutput = runProcess(
+    let pidsOutput = await runProcess(
         pgrepPath,
         ["-f", pgrepWorkerPattern],
         timeout: 3
@@ -139,7 +121,7 @@ public func allWorkerMetrics() -> [RunnerMetrics] {
         .filter { !$0.isEmpty }
         .joined(separator: ",")
     log("allWorkerMetrics › found pids=\(pidList)")
-    let output = runProcess(psPath, ["-p", pidList, "-o", psOutputFormat], timeout: 5)
+    let output = await runProcess(psPath, ["-p", pidList, "-o", psOutputFormat], timeout: 5)
     log("allWorkerMetrics › ps returned — outputBytes=\(output.count) isEmpty=\(output.isEmpty)")
     guard !output.isEmpty else {
         log("allWorkerMetrics › ps returned empty — returning []")

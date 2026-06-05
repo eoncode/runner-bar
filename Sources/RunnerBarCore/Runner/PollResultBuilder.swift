@@ -101,7 +101,7 @@ public struct PollResultBuilder {
     ///     hook in a previous poll cycle. Keyed by `WorkflowActionGroup.id`.
     ///     Survives `trimGroupCache` eviction so the hook cannot re-fire for old groups.
     ///   - fetchGroups: Async closure that fetches live groups for every active scope.
-    ///   - scopeFromGroup: Async closure that derives a scope string from a WorkflowActionGroup.
+    ///   - scopeFromGroup: Synchronous closure that derives a scope string from a WorkflowActionGroup.
     ///   - fireFailureHook: Async closure invoked the first time a group transitions to a failure conclusion.
     ///   - enrichJobs: Async closure that enriches a job list from the job cache.
     ///
@@ -113,7 +113,7 @@ public struct PollResultBuilder {
         snapGroupCache: [String: WorkflowActionGroup],
         snapSeenGroupIDs: Set<String> = [],
         fetchGroups: @Sendable ([String: WorkflowActionGroup]) async -> [WorkflowActionGroup],
-        scopeFromGroup: @Sendable (WorkflowActionGroup) async -> String,
+        scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
         fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void,
         enrichJobs: @escaping @Sendable ([ActiveJob]) async -> [ActiveJob]
     ) async -> GroupPollResult {
@@ -141,7 +141,7 @@ public struct PollResultBuilder {
             let runSummary = group.runs.map { "\($0.id):\($0.conclusion ?? "nil")" }.joined(separator: ", ")
             log("PollResultBuilder › doneGroups — groupID=\(group.id) isNew=\(isNew) runs=[\(runSummary)]")
             if isNew {
-                let scope = await scopeFromGroup(group)
+                let scope = scopeFromGroup(group)
                 log("PollResultBuilder › doneGroups — groupID=\(group.id) isNew=true → scope=\(scope)")
                 // Only fire the failure hook when the group actually failed.
                 // Success/cancelled/skipped completions must not trigger an alert.
@@ -297,7 +297,7 @@ public struct PollResultBuilder {
         now: Date,
         into cache: inout [String: WorkflowActionGroup],
         seenGroupIDs: Set<String> = [],
-        scopeFromGroup: @Sendable (WorkflowActionGroup) async -> String,
+        scopeFromGroup: @Sendable (WorkflowActionGroup) -> String,
         fireFailureHook: @Sendable (WorkflowActionGroup, String) async -> Void
     ) async {
         log("PollResultBuilder › freezeVanishedGroups — snapPrev=\(snapPrev.count) liveIDs=\(liveIDs)")
@@ -308,7 +308,7 @@ public struct PollResultBuilder {
                 continue
             }
             if !seenGroupIDs.contains(groupID) && cache[groupID] == nil {
-                let scope = await scopeFromGroup(group)
+                let scope = scopeFromGroup(group)
                 // Only alert on genuine failures — do not fire for successful or
                 // cancelled groups that vanished from the live feed normally.
                 let isFailure = group.runs.contains { $0.conclusion == "failure" || $0.conclusion == "timed_out" }
