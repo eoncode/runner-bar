@@ -134,13 +134,10 @@ public enum ProcessRunner {
         // Drain stdout concurrently via an actor-isolated accumulator.
         // See class-level doc: draining must overlap with waitUntilExit() to
         // prevent the kernel pipe buffer (~64 KB) from filling and deadlocking.
-        // The serial dispatch queue + sync below provide the happens-before
-        // guarantee; the actor eliminates the nonisolated(unsafe) escape hatch.
         let accumulator = OutputAccumulator()
         let drainQueue = DispatchQueue(label: "ProcessRunner.drain")
         drainQueue.async {
             let chunk = outPipe.fileHandleForReading.readDataToEndOfFile()
-            // Actor hop is fire-and-forget here; drainQueue.sync below joins it.
             Task { await accumulator.append(chunk) }
         }
 
@@ -159,21 +156,23 @@ public enum ProcessRunner {
         timeoutItem.cancel()
 
         // Join the drain queue — blocks until readDataToEndOfFile() and the
-        // actor append have both completed. Effectively instant after exit.
+        // actor append Task have been submitted. The sema below joins the actor hop.
         drainQueue.sync {}
 
         let exitCode = task.terminationStatus
-        // Actor read: safe because drainQueue.sync above serialises the write.
-        let outputData = DispatchQueue.global().sync { Task { await accumulator.data } }
-        // Resolve the task synchronously via a semaphore so run() can return a value.
+
+        // Read the accumulated data synchronously.
+        // `nonisolated(unsafe)` is safe here: the DispatchSemaphore provides the
+        // happens-before relationship — sema.wait() returns only after the Task
+        // has written `result`, so no concurrent access is possible.
+        nonisolated(unsafe) var result = Data()
         let sema = DispatchSemaphore(value: 0)
-        var result = Data()
-        Task {
+        Task.detached {
             result = await accumulator.data
             sema.signal()
         }
         sema.wait()
-        _ = outputData // suppress unused-variable warning
+
         log("ProcessRunner › exit=\(exitCode) bytes=\(result.count) — \(executableURL.lastPathComponent)")
         return Result(data: result.isEmpty ? nil : result, exitCode: exitCode)
     }
