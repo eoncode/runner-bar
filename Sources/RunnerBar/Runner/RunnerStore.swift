@@ -299,6 +299,7 @@ final class RunnerStore {
                 log("RunnerStore › fetchAndEnrichRunners — ⚠️ \(runner.name) name-only fallback")
             } else {
                 runner.metrics = nil
+                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) (scope=\(scope)) busy but no installPath for key=\(fullKey), metrics=nil")
             }
             result.append(runner)
         }

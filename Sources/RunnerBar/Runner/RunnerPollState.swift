@@ -124,7 +124,7 @@ extension RunnerStore {
                 return derived
             }
         }
-        log("RunnerStore › scopeFromActionGroup — could not derive scope, returning empty string! groupID=\(group.id)")
+        log("RunnerStore › ⚠️ scopeFromActionGroup — could not derive scope, returning empty string! groupID=\(group.id)")
         return ""
     }
 
