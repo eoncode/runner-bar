@@ -197,6 +197,8 @@ public struct PollResultBuilder {
 
     // MARK: - Job helpers
 
+    /// Snapshots jobs that were live in the previous poll but are no longer
+    /// present in the current fetch, adding them to `cache` as completed/dimmed.
     public static func applyVanishedJobs(
         snapPrev: [Int: ActiveJob],
         liveIDs: Set<Int>,
@@ -221,6 +223,7 @@ public struct PollResultBuilder {
         }
     }
 
+    /// Trims the job cache to at most `limit` entries, keeping the most recently completed.
     public static func trimJobCache(_ cache: inout [Int: ActiveJob], limit: Int) {
         guard cache.count > limit else { return }
         let sorted = cache.values.sorted {
@@ -229,6 +232,11 @@ public struct PollResultBuilder {
         cache = [Int: ActiveJob](uniqueKeysWithValues: sorted.prefix(limit).map { ($0.id, $0) })
     }
 
+    /// Builds the ordered job display list from live jobs and the completed cache.
+    ///
+    /// Display order: in-progress → queued → cached (most-recently-completed first).
+    /// Live jobs are never capped by `jobCacheLimit`; the combined list is capped
+    /// at `jobDisplayLimit` so the panel UI stays manageable.
     public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress: [ActiveJob] = live.filter { $0.status == .inProgress }
         let queued: [ActiveJob]     = live.filter { $0.status == .queued }
@@ -244,6 +252,7 @@ public struct PollResultBuilder {
 
     // MARK: - Group helpers
 
+    /// Returns a copy of the cache re-keyed by `headSha` instead of group ID.
     public static func makeShaKeyedCache(_ cache: [String: WorkflowActionGroup]) -> [String: WorkflowActionGroup] {
         Dictionary(
             cache.values.map { ($0.headSha, $0) },
@@ -251,6 +260,7 @@ public struct PollResultBuilder {
         )
     }
 
+    /// Removes cache entries whose `headSha` appears in the freshly-fetched group list.
     public static func evictFreshShas(
         from cache: [String: WorkflowActionGroup],
         freshGroups: [WorkflowActionGroup]
