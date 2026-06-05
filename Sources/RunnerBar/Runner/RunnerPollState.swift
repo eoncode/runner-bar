@@ -71,7 +71,9 @@ extension RunnerStore {
                 }
                 return groups
             },
-            scopeFromGroup: { group in self.scopeFromActionGroup(group) },
+            scopeFromGroup: { group in
+                await MainActor.run { self.scopeFromActionGroup(group) }
+            },
             fireFailureHook: { group, scope in
                 FailureHookRunner.fireIfNeeded(group: group, scope: scope, callsite: "pollResultBuilder")
             },
@@ -101,6 +103,7 @@ extension RunnerStore {
 
     // MARK: - Group helpers
 
+    @MainActor
     func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
         log("RunnerStore › scopeFromActionGroup — group.repo='\(group.repo)' groupID=\(group.id)")
         if !group.repo.isEmpty {
@@ -114,7 +117,7 @@ extension RunnerStore {
                 return derived
             }
         }
-        log("RunnerStore › ⚠️ scopeFromActionGroup — could not derive scope, returning empty string! groupID=\(group.id)")
+        log("RunnerStore › scopeFromActionGroup — could not derive scope, returning empty string! groupID=\(group.id)")
         return ""
     }
 
