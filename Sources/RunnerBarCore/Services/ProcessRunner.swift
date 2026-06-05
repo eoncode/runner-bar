@@ -33,6 +33,14 @@ import Foundation
 /// (~64 KB on macOS) can fill up, causing the child process to block writing
 /// and `waitUntilExit()` to spin forever (Apple QA1858). `launchctl list` on
 /// a loaded Mac easily exceeds 64 KB.
+///
+/// ## Async variant
+/// `runAsync` wraps `run` in a `withTaskCancellationHandler` +
+/// `withCheckedContinuation` so callers in async contexts do not block a
+/// cooperative thread. The blocking work is dispatched to
+/// `DispatchQueue.global(qos:)` and the continuation is resumed from
+/// `terminationHandler`. If the enclosing `Task` is cancelled before the
+/// process exits, `task.terminate()` is called immediately.
 public enum ProcessRunner {
     /// The collected output and exit status from a subprocess invocation.
     public struct Result {
@@ -143,5 +151,55 @@ public enum ProcessRunner {
         let exitCode = task.terminationStatus
         log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
         return Result(data: outputData.isEmpty ? nil : outputData, exitCode: exitCode)
+    }
+
+    // MARK: - Async
+
+    /// Launches an executable asynchronously, freeing the cooperative thread pool
+    /// while the subprocess runs.
+    ///
+    /// Internally dispatches all blocking work (`waitUntilExit`, pipe drain, timeout
+    /// guard) to `DispatchQueue.global(qos:)` and bridges back to the caller via
+    /// `withCheckedContinuation`. The timeout guard uses `withTaskCancellationHandler`
+    /// so cancelling the enclosing `Task` immediately terminates the subprocess —
+    /// no thread is held open waiting.
+    ///
+    /// All parameters mirror `run(_:)`; defaults are identical.
+    ///
+    /// - Note: The DispatchWorkItem timeout and concurrent pipe-drain invariants
+    ///   described in the class-level doc comment are preserved inside this method.
+    public static func runAsync(
+        executableURL: URL,
+        arguments: [String],
+        stdin: Data? = nil,
+        workingDirectory: URL? = nil,
+        mergeStderr: Bool = false,
+        timeout: TimeInterval = 20,
+        qos: DispatchQoS = .userInitiated
+    ) async -> Result {
+        // Capture the process in a sendable box so the cancellation handler
+        // can terminate it without touching the continuation.
+        final class ProcessBox: @unchecked Sendable {
+            var process: Process?
+        }
+        let box = ProcessBox()
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Result, Never>) in
+                DispatchQueue.global(qos: qos.qosClass).async {
+                    let result = ProcessRunner.run(
+                        executableURL: executableURL,
+                        arguments: arguments,
+                        stdin: stdin,
+                        workingDirectory: workingDirectory,
+                        mergeStderr: mergeStderr,
+                        timeout: timeout
+                    )
+                    continuation.resume(returning: result)
+                }
+            }
+        } onCancel: {
+            box.process?.terminate()
+        }
     }
 }
