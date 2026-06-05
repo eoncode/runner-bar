@@ -7,28 +7,6 @@ import os
 /// Regex that extracts a PR number from a GitHub merge-ref branch name (e.g. `refs/pull/123/merge`).
 private let prNumberPattern = #"/(\d+)/"# // NOSONAR — fixed regex pattern
 
-// MARK: - Date parsing
-
-/// Actor-isolated ISO-8601 date parser.
-///
-/// `ISO8601DateFormatter` is expensive to allocate (ICU calendars) and not
-/// `Sendable`. Wrapping it in an actor gives thread-safe access with no lock
-/// boilerplate and no `@unchecked Sendable` escape hatch — consistent with the
-/// `DateParserActor` pattern used in `RunnerPollState.swift`.
-private actor WorkflowDateParserActor {
-    /// The shared ISO-8601 formatter instance.
-    private let iso = ISO8601DateFormatter()
-    /// Parses an ISO-8601 date string into a `Date`.
-    func parse(_ str: String) -> Date? { iso.date(from: str) }
-    /// Constructs an `ActiveJob` using the actor-isolated formatter.
-    func makeJob(from payload: JobPayload) -> ActiveJob {
-        makeActiveJob(from: payload, iso: iso)
-    }
-}
-
-/// The shared `WorkflowDateParserActor` instance for this module.
-private let workflowDateParser = WorkflowDateParserActor()
-
 // MARK: - Codable helpers (private to this file)
 
 /// Response envelope for the workflow runs list API endpoint.
@@ -68,27 +46,16 @@ private struct RunPayload: Codable {
     let pullRequests: [PRRef]?
     /// CodingKeys mapping snake_case API fields to camelCase Swift properties.
     enum CodingKeys: String, CodingKey {
-        /// The workflow run's unique integer ID.
         case id
-        /// The workflow name.
         case name
-        /// The run's lifecycle status (e.g. `"in_progress"`, `"completed"`).
         case status
-        /// The run's conclusion once completed (e.g. `"success"`, `"failure"`).
         case conclusion
-        /// The branch the run was triggered on.
         case headBranch   = "head_branch"
-        /// The commit SHA the run was triggered on.
         case headSha      = "head_sha"
-        /// Human-readable title shown in the GitHub UI.
         case displayTitle = "display_title"
-        /// ISO-8601 timestamp when the run was created.
         case createdAt    = "created_at"
-        /// URL to the run in the GitHub web UI.
         case htmlUrl      = "html_url"
-        /// The head commit metadata.
         case headCommit   = "head_commit"
-        /// Pull request references associated with this run.
         case pullRequests = "pull_requests"
     }
 }
@@ -108,8 +75,6 @@ private struct PRRef: Codable {
 /// Derives the short display label for an action group row.
 ///
 /// Priority: PR number → branch-embedded number → sha[:7].
-/// - Parameter run: The representative `RunPayload` for this group.
-/// - Returns: A short label string, e.g. `"#1270"` or `"d6281b"`.
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
@@ -128,6 +93,7 @@ private func prLabel(from run: RunPayload) -> String {
 ///
 /// All three status fetches (in_progress, queued, completed) run concurrently.
 /// Per-run job fetches within each group also run concurrently.
+/// Date parsing goes through `ISO8601DateParser.shared` — one actor, one formatter.
 public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionGroup] = [:]) async -> [WorkflowActionGroup] {
     guard scope.contains("/") else {
         log("fetchActionGroups › skipping org scope \(scope)")
@@ -155,10 +121,6 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     for run in runPayloads { bySha[run.headSha, default: []].append(run) }
 
     // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
-    // Fix #1041: completed-only SHAs (groups that finished between polls) are
-    // now included so they can be routed through the normal cache/display pipeline.
-    // De-duplication of old completed groups re-triggering the failure hook is
-    // handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
     if let data = cData,
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
@@ -166,9 +128,7 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
         }
     }
 
-    // Build groups concurrently — use index keys so results are reconstructed
-    // in insertion order, not network-latency order (prevents UI churn within
-    // the same statusPriority tier across polls).
+    // Build groups concurrently — index-keyed to preserve insertion order.
     let shaEntries = Array(bySha)
     var groups = Array(repeating: WorkflowActionGroup?.none, count: shaEntries.count)
     await withTaskGroup(of: (Int, WorkflowActionGroup).self) { group in
@@ -192,10 +152,10 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
                 let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
                 let starts = allJobs.compactMap { $0.startedAt }
                 let ends   = allJobs.compactMap { $0.completedAt }
-                // Optional.flatMap does not accept an async closure — use if let instead.
+                // Optional.flatMap does not accept an async closure — use if let.
                 let createdAt: Date?
                 if let dateStr = representative.createdAt {
-                    createdAt = await workflowDateParser.parse(dateStr)
+                    createdAt = await ISO8601DateParser.shared.parse(dateStr)
                 } else {
                     createdAt = nil
                 }
@@ -233,8 +193,7 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
 ///
 /// Uses the SHA-keyed cache when all cached jobs are concluded and none have
 /// in-progress steps, avoiding redundant API calls for finished groups.
-/// Falls back to a live fetch via `fetchJobsForRun` when the cache is stale
-/// or missing.
+/// Falls back to a live fetch via `fetchJobsForRun` when the cache is stale or missing.
 ///
 /// Per-run job fetches run concurrently via `withTaskGroup`.
 private func fetchJobsForGroup(
@@ -250,7 +209,6 @@ private func fetchJobsForGroup(
         return cached.jobs
     }
 
-    // Fetch jobs for all run IDs concurrently.
     var fetched: [ActiveJob] = []
     var seenJobIDs = Set<Int>()
     await withTaskGroup(of: [ActiveJob].self) { group in
@@ -275,6 +233,7 @@ private func fetchJobsForGroup(
 ///   `per_page=100` is the GitHub API maximum and covers all realistic job counts.
 ///
 /// Refresh calls for in-progress/inconclusive jobs run concurrently (capped at 3).
+/// All date parsing goes through `ISO8601DateParser.shared`.
 private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
     guard let data = await ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
@@ -282,7 +241,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
 
     let initial = await withTaskGroup(of: ActiveJob.self) { group in
         for payload in resp.jobs {
-            group.addTask { await workflowDateParser.makeJob(from: payload) }
+            group.addTask { await ISO8601DateParser.shared.makeJob(from: payload) }
         }
         var out: [ActiveJob] = []
         for await job in group { out.append(job) }
@@ -290,7 +249,6 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
     }
 
     // Refresh in-progress/inconclusive jobs concurrently, capped at 3.
-    // Filter first so the cap applies to *eligible* jobs, not array position.
     let needsRefresh = initial.enumerated().filter { _, job in
         job.conclusion == nil || job.steps.contains { $0.status == JobStatus.inProgress }
     }.prefix(3)
@@ -303,7 +261,7 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
                 guard let freshData = await ghAPI("repos/\(scope)/actions/jobs/\(job.id)"),
                       let fresh = try? JSONDecoder().decode(JobPayload.self, from: freshData)
                 else { return (idx, nil) }
-                let freshJob = await workflowDateParser.makeJob(from: fresh)
+                let freshJob = await ISO8601DateParser.shared.makeJob(from: fresh)
                 if fresh.conclusion != nil { return (idx, freshJob) }
                 let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
                 if betterSteps {
@@ -334,8 +292,6 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
 /// Returns the sort priority for a `GroupStatus`.
 ///
 /// Lower value = higher display priority (in-progress before queued before completed).
-/// - Parameter status: The `GroupStatus` to evaluate.
-/// - Returns: An integer priority where `0` = in-progress, `1` = queued, `2` = completed.
 private func statusPriority(_ status: GroupStatus) -> Int {
     switch status {
     case .inProgress: return 0
