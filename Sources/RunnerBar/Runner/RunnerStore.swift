@@ -101,9 +101,6 @@ final class RunnerStore {
     func start() {
         let scopes = ScopeStore.shared.activeScopes
         log("RunnerStore › start — activeScopes=\(scopes)")
-        if scopes.isEmpty {
-            log("RunnerStore › ⚠️ start called but activeScopes is EMPTY — actions will not load")
-        }
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             guard let self else { return }
@@ -312,23 +309,4 @@ final class RunnerStore {
         log("RunnerStore › fetchAndEnrichRunners EXIT — returning \(result.count) runner(s)")
         return result
     }
-}
-
-// MARK: - Empty sentinels
-
-/// Empty-state sentinel for `JobPollResult`.
-extension JobPollResult {
-    /// A zero-state sentinel used when the fetch is skipped (e.g. empty scopes).
-    static let empty = JobPollResult(display: [], newCache: [:], newPrevLive: [:])
-}
-
-/// Empty-state sentinel for `GroupPollResult`.
-extension GroupPollResult {
-    /// A zero-state sentinel used when the fetch is skipped (e.g. empty scopes).
-    static let empty = GroupPollResult(
-        display: [],
-        newGroupCache: [:],
-        newPrevLiveGroups: [:],
-        newSeenGroupIDs: []
-    )
 }

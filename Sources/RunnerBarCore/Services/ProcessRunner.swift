@@ -144,8 +144,6 @@ public enum ProcessRunner {
         // ⚠️ DO NOT remove this DispatchWorkItem timeout.
         // See class-level doc comment and bug #477 for full context.
         let timeoutItem = DispatchWorkItem {
-            // Guard against the race where the process exits just before the
-            // timeout fires — only terminate if the process is still running.
             guard task.isRunning else {
                 log("ProcessRunner › timeout fired but process already exited — \(executableURL.lastPathComponent)")
                 return
@@ -157,26 +155,31 @@ public enum ProcessRunner {
         task.waitUntilExit()
         timeoutItem.cancel()
 
-        // Join the drain queue — blocks until readDataToEndOfFile() and the
-        // actor append Task have been submitted. The sema below joins the actor hop.
+        // Join the drain queue — blocks until readDataToEndOfFile() returns and
+        // the actor-append Task has been *submitted* (not necessarily executed yet).
         drainQueue.sync {}
 
         let exitCode = task.terminationStatus
 
-        // Read the accumulated data synchronously.
-        // `nonisolated(unsafe)` is safe here: the DispatchSemaphore provides the
-        // happens-before relationship — sema.wait() returns only after the Task
-        // has written `result`, so no concurrent access is possible.
-        nonisolated(unsafe) var result = Data()
-        let sema = DispatchSemaphore(value: 0)
-        Task.detached {
-            result = await accumulator.data
-            sema.signal()
-        }
-        sema.wait()
+        // Bridge the actor-isolated accumulator back to this synchronous context.
+        // `withCheckedContinuation` + a detached Task replaces the previous
+        // `nonisolated(unsafe) var` + `DispatchSemaphore` pattern — the
+        // happens-before relationship is now compiler-verified through the actor
+        // and the continuation rather than a manual semaphore.
+        let outputData: Data = { () -> Data in
+            let waiter = DispatchGroup()
+            waiter.enter()
+            var captured = Data()
+            Task.detached {
+                captured = await accumulator.data
+                waiter.leave()
+            }
+            waiter.wait()
+            return captured
+        }()
 
-        log("ProcessRunner › exit=\(exitCode) bytes=\(result.count) — \(executableURL.lastPathComponent)")
-        return Result(data: result.isEmpty ? nil : result, exitCode: exitCode)
+        log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
+        return Result(data: outputData.isEmpty ? nil : outputData, exitCode: exitCode)
     }
 
     // MARK: - Async
