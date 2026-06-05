@@ -215,27 +215,29 @@ extension BranchSelectorSheet {
 
 /// Data-loading logic for `BranchSelectorSheet`.
 extension BranchSelectorSheet {
-    /// Kicks off a background fetch of all branches for `scope`, then updates
-    /// `branches` / `loadError` / `isLoading` on the MainActor.
+    /// Kicks off an async fetch of all branches for `scope`.
+    ///
+    /// Launched with a plain `Task {}` from this `View`'s main-actor context so
+    /// actor isolation is inherited automatically. Network work runs off the main
+    /// actor during `await`, then state updates resume on the main actor without
+    /// an explicit `MainActor.run` hop.
     func loadBranches() {
         log("BranchSelectorSheet › loadBranches START scope='\(scope)'")
-        Task.detached(priority: .userInitiated) {
+        Task(priority: .userInitiated) {
             let names = await fetchBranchNames(scope: scope)
-            await MainActor.run {
-                if let names, !names.isEmpty {
-                    log("BranchSelectorSheet › loadBranches — loaded \(names.count) branches")
-                    branches = names
-                    loadError = false
-                } else {
-                    log("BranchSelectorSheet › loadBranches — fetch failed or returned empty")
-                    loadError = true
-                }
-                isLoading = false
+            if let names, !names.isEmpty {
+                log("BranchSelectorSheet › loadBranches — loaded \(names.count) branches")
+                branches = names
+                loadError = false
+            } else {
+                log("BranchSelectorSheet › loadBranches — fetch failed or returned empty")
+                loadError = true
             }
+            isLoading = false
         }
     }
 
-    /// Async — called from a background task via `Task.detached`.
+    /// Async — called from `loadBranches()` via a plain `Task`.
     /// Paginates through all pages (per_page=100) until GitHub returns fewer
     /// than 100 items, collecting all branch names across pages.
     nonisolated private func fetchBranchNames(scope: String) async -> [String]? {

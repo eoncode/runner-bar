@@ -322,85 +322,66 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 /// Fetches all pages of a GitHub API endpoint, concatenating JSON arrays.
 /// Follows the `Link: <url>; rel="next"` header automatically.
 ///
+/// Fetches and concatenates all pages for a GitHub paginated endpoint using
+/// `URLSession.data(for:)` async/await.
+///
 /// Token is re-fetched on every loop iteration so that a sign-out mid-pagination
 /// is detected immediately rather than continuing with a stale credential.
 /// A `401 Unauthorized` response breaks the loop, discards any partial results,
 /// and returns `nil` so callers can distinguish auth failure from a complete dataset.
 /// A non-array page response (unexpected shape) also breaks the loop with a log.
-/// ⚠️ Must be called from a background thread, never from the main thread.
-func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    dispatchPrecondition(condition: .notOnQueue(.main))
+func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [[String: Any]] = []
-    // Plain vars are safe here: DispatchSemaphore serialises each iteration so the
-    // completion closure has fully returned before the outer loop reads these flags.
     var didFailAuthentication = false
+
     while let urlString = nextURL {
-        // Re-fetch token each iteration so a mid-pagination sign-out is detected early.
         guard let token = githubToken() else {
             log("urlSessionAPIPaginated › no token available, stopping pagination")
             didFailAuthentication = true
             break
         }
         guard let url = URL(string: urlString) else { break }
+
         let req = makeRequest(url: url, token: token, timeout: timeout)
-        let sem = DispatchSemaphore(value: 0)
-        let pageData = OSAllocatedUnfairLock<Data?>(initialState: nil)
-        let linkHeader = OSAllocatedUnfairLock<String?>(initialState: nil)
-        // Dedicated flag set only on a confirmed 401, so the guard below can
-        // distinguish a real auth failure from a transient network error (both
-        // leave pageData nil, but only 401 should discard partial results).
-        let got401 = OSAllocatedUnfairLock(initialState: false)
-        URLSession.shared.dataTask(with: req) { data, response, error in
-            defer { sem.signal() }
-            if let error {
-                log("URLSessionTransport(paginated) › \(urlString) network error: \(error.localizedDescription)")
-                return
-            }
-            guard let http = response as? HTTPURLResponse else { return }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse else { break }
+
             if http.statusCode == 401 {
                 log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
-                // Mark the precise 401 path so the guard below can distinguish it
-                // from a plain network error (both leave pageData nil).
-                got401.withLock { $0 = true }
-                return
+                didFailAuthentication = true
+                break
             }
             if http.statusCode == 403 || http.statusCode == 429 {
                 handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-                return
+                break
             }
             guard (200..<300).contains(http.statusCode) else {
                 logErrorBody(data, endpoint: urlString, status: http.statusCode)
-                return
+                break
             }
+
             clearRateLimitIfNeeded()
-            linkHeader.withLock { $0 = http.value(forHTTPHeaderField: "Link") }
-            pageData.withLock { $0 = data }
-        }.resume()
-        sem.wait()
-        // pageData is nil for both a 401 and a network error; use got401 to tell
-        // them apart. A network error breaks the loop but does NOT set
-        // didFailAuthentication, so any pages already fetched are preserved.
-        guard let data = pageData.withLock({ $0 }) else {
-            if got401.withLock({ $0 }) { didFailAuthentication = true }
+            if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                allItems.append(contentsOf: page)
+            } else {
+                log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
+                break
+            }
+            nextURL = extractNextURL(from: http.value(forHTTPHeaderField: "Link"))
+        } catch {
+            log("URLSessionTransport(paginated) › \(urlString) network error: \(error.localizedDescription)")
             break
         }
-        if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-            allItems.append(contentsOf: page)
-        } else {
-            log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
-            break
-        }
-        nextURL = extractNextURL(from: linkHeader.withLock({ $0 }))
     }
-    // Auth failure: discard partial results so callers see nil, not a truncated list.
+
     if didFailAuthentication {
         if !allItems.isEmpty {
             log("urlSessionAPIPaginated › authentication failed mid-pagination — discarding \(allItems.count) partial items")
         }
         return nil
     }
-    // Log partial results so callers know the list may be incomplete due to rate limit.
     if ghIsRateLimited && !allItems.isEmpty {
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
@@ -623,8 +604,8 @@ func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
 
 /// Calls the GitHub REST API for all pages via URLSession.
 /// Returns nil when no token is available or the request fails.
-func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    urlSessionAPIPaginated(endpoint, timeout: timeout)
+func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+    await urlSessionAPIPaginated(endpoint, timeout: timeout)
 }
 
 // MARK: - Runner mutation helpers
