@@ -8,8 +8,9 @@ import RunnerBarCore
 
 /// Actor-isolated ISO-8601 date parser.
 ///
-/// `ISO8601DateFormatter` is expensive to allocate (ICU calendars) and not
-/// `Sendable`. Wrapping it in an actor gives thread-safe access with no lock
+/// `ISO8601DateFormatter` is expensive to allocate (it loads ICU calendars on init).
+/// Keeping one file-level instance avoids repeated allocation on every poll cycle.
+/// Wrapping it in an actor gives thread-safe access with no lock
 /// boilerplate and no `@unchecked Sendable` escape hatch.
 private actor DateParserActor {
     private let iso = ISO8601DateFormatter()
@@ -23,6 +24,10 @@ private let dateParser = DateParserActor()
 
 // MARK: - RunnerStore thin wrappers
 
+// These extensions delegate to PollResultBuilder so RunnerStore.fetch() call
+// sites are unchanged while the logic lives in the independently testable builder.
+
+/// `RunnerStore` extension that bridges `PollResultBuilder` for the `fetch()` call sites.
 extension RunnerStore {
 
     /// Builds a `JobPollResult` by fetching live jobs for all monitored scopes,
@@ -74,9 +79,12 @@ extension RunnerStore {
         )
     }
 
-    // MARK: - Backfill
+    // MARK: - Backfill (retains ghAPI access via RunnerStore)
 
     /// Backfills step data for cached jobs that finished without complete step information.
+    ///
+    /// Iterates jobs in `cache` that have a conclusion but missing or in-progress steps,
+    /// fetches the full job payload from the GitHub API, and updates the cache entry.
     func backfillSteps(into cache: inout [Int: ActiveJob]) async {
         for cacheID in Array(cache.keys) {
             guard let cached = cache[cacheID] else { continue }
