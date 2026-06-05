@@ -43,16 +43,19 @@ final class LocalRunnerStore: ObservableObject {
         runners[idx] = runners[idx].copying(isRunning: isRunning)
     }
 
+    /// Sets or clears the `lifecycleWarning` string shown in the runner row.
     func setLifecycleWarning(_ runnerName: String, warning: String?) {
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else { return }
         runners[idx] = runners[idx].copying(lifecycleWarning: warning)
     }
 
+    /// Immediately removes `runnerName` from the index and display list without waiting for a refresh.
     func optimisticallyRemove(_ runnerName: String) {
         unregister(name: runnerName)
         runners.removeAll { $0.runnerName == runnerName }
     }
 
+    /// Re-adds a previously removed runner to the index and display list (undo support).
     func optimisticallyRestore(_ runner: RunnerModel) {
         if let installPath = runner.installPath {
             register(name: runner.runnerName, installPath: installPath)
@@ -64,18 +67,21 @@ final class LocalRunnerStore: ObservableObject {
         }
     }
 
+    /// Removes `name` from the persisted index and writes through to `UserDefaults`.
     func unregister(name: String) {
         runnerIndex.removeValue(forKey: name)
         persistIndex()
         log("LocalRunnerStore > unregister — '\(name)'")
     }
 
+    /// Hydrates `runnerIndex` from `UserDefaults` at init time.
     private func loadIndex() {
         runnerIndex = UserDefaults.standard
             .dictionary(forKey: Self.indexKey) as? [String: String] ?? [:]
         log("LocalRunnerStore > loadIndex — \(runnerIndex.count) entry(ies)")
     }
 
+    /// Writes the current `runnerIndex` to `UserDefaults`.
     private func persistIndex() {
         UserDefaults.standard.set(runnerIndex, forKey: Self.indexKey)
     }
@@ -114,6 +120,7 @@ final class LocalRunnerStore: ObservableObject {
         }
     }
 
+    /// Applies enriched runner data back on the main actor and clears the scanning flag.
     @MainActor
     private func applyRefreshResults(_ enriched: [RunnerModel]) {
         runners = enriched.sorted { $0.runnerName < $1.runnerName }
@@ -123,6 +130,7 @@ final class LocalRunnerStore: ObservableObject {
 
     // MARK: - launchctl scan
 
+    /// Fixed path to the `launchctl` binary used to query live LaunchAgent services.
     nonisolated private static let launchctlURL = URL(fileURLWithPath: "/bin/launchctl") // NOSONAR — fixed OS path
 
     /// Runs `launchctl list` and returns lines containing `actions.runner`.
