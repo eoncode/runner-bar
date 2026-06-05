@@ -214,10 +214,10 @@ struct AddScopeSheet: View {
         }
         isFetching = true
         errorMessage = nil
-        Task {
-            let (fetchedOrgs, fetchedRepos) = await Task.detached(priority: .userInitiated) {
-                await (fetchUserOrgs(), fetchUserRepos())
-            }.value
+        Task(priority: .userInitiated) {
+            async let orgs  = fetchUserOrgs()
+            async let repos = fetchUserRepos()
+            let (fetchedOrgs, fetchedRepos) = await (orgs, repos)
             isFetching = false
             if fetchedOrgs.isEmpty && fetchedRepos.isEmpty {
                 log("AddScopeSheet \u{203a} fetch returned no orgs or repos \u{2014} using text field")

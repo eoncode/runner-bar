@@ -113,13 +113,18 @@ public struct RunnerStatusEnricher: Sendable {
         }
 
         // Step 3: apply enrichment in a second pass.
+        // `fallbackAPI` is hoisted outside the loop — `apiByScope` is immutable
+        // after Step 2, so recomputing the merged dict on every iteration is O(N×S)
+        // work for no benefit. Compute once here: O(S × runners-per-scope).
+        let fallbackAPI = apiByScope.values.reduce(into: [String: APIRunnerPayload]()) {
+            $0.merge($1) { first, _ in first }
+        }
         var result = runners
         for idx in result.indices {
             let name = result[idx].runnerName
             // Restrict lookup to the runner's own scope first to avoid cross-scope
             // name collisions, then fall back to a scan across all scopes.
             let scopedAPI = result[idx].gitHubUrl.flatMap { apiByScope[$0] } ?? [:]
-            let fallbackAPI = apiByScope.values.reduce(into: [String: APIRunnerPayload]()) { $0.merge($1) { first, _ in first } }
 
             func findPayload(in dict: [String: APIRunnerPayload]) -> APIRunnerPayload? {
                 if let api = dict[name] { return api }

@@ -34,10 +34,11 @@ import Foundation
 /// block on a write and `waitUntilExit()` to spin forever (Apple QA1858).
 /// `launchctl list` on a loaded Mac easily exceeds 64 KB.
 ///
-/// Both `run` and `runAsync` route the background drain through an
-/// `OutputAccumulator` actor. The actor serialises all appends so Swift 6.2
-/// strict concurrency can verify thread-safety without any `nonisolated(unsafe)`
-/// or `DispatchSemaphore` escape hatch.
+/// `run` drains stdout into a plain `var` inside a `DispatchQueue.async` block
+/// and reads it back after `drainQueue.sync {}` — the queue provides the
+/// happens-before guarantee with zero unsafe annotations.
+/// `runAsync` routes the drain through an `OutputAccumulator` actor, which
+/// Swift 6.2 strict concurrency can verify independently.
 ///
 /// ## Async variant (`runAsync`)
 /// `runAsync` owns its own `Process` instance and bridges completion via
@@ -134,14 +135,19 @@ public enum ProcessRunner {
             inputPipe.fileHandleForWriting.closeFile()
         }
 
-        // Drain stdout concurrently via an actor-isolated accumulator.
+        // Drain stdout on a dedicated queue concurrently with waitUntilExit().
         // See class-level doc: draining must overlap with waitUntilExit() to
         // prevent the kernel pipe buffer (~64 KB) from filling and deadlocking.
-        let accumulator = OutputAccumulator()
+        //
+        // `outputData` is written inside `drainQueue.async` and read only after
+        // `drainQueue.sync {}` returns — the queue provides the happens-before
+        // guarantee that the compiler can verify. No `nonisolated(unsafe)` or
+        // `DispatchSemaphore` needed; the variable never crosses a concurrent
+        // boundary.
+        var outputData = Data()
         let drainQueue = DispatchQueue(label: "ProcessRunner.drain")
         drainQueue.async {
-            let chunk = outPipe.fileHandleForReading.readDataToEndOfFile()
-            Task.detached { await accumulator.append(chunk) }
+            outputData = outPipe.fileHandleForReading.readDataToEndOfFile()
         }
 
         // ⚠️ DO NOT remove this DispatchWorkItem timeout.
@@ -158,28 +164,12 @@ public enum ProcessRunner {
         task.waitUntilExit()
         timeoutItem.cancel()
 
-        // Join the drain queue — blocks until readDataToEndOfFile() returns and
-        // the actor-append Task has been *submitted* (not necessarily executed yet).
+        // Join the drain queue — blocks until readDataToEndOfFile() has finished
+        // writing `outputData`. After this point `outputData` is safe to read on
+        // the calling thread; the queue serialisation is the happens-before edge.
         drainQueue.sync {}
 
         let exitCode = task.terminationStatus
-
-        // Bridge the actor-isolated accumulator back to this synchronous context.
-        // `withCheckedContinuation` + a detached Task replaces the previous
-        // `nonisolated(unsafe) var` + `DispatchSemaphore` pattern — the
-        // happens-before relationship is now compiler-verified through the actor
-        // and the continuation rather than a manual semaphore.
-        // `nonisolated(unsafe)` is safe here: the DispatchSemaphore provides the
-        // happens-before relationship — sema.wait() returns only after the Task
-        // has written `outputData`, so no concurrent access is possible.
-        nonisolated(unsafe) var outputData = Data()
-        let sema = DispatchSemaphore(value: 0)
-        Task.detached {
-            outputData = await accumulator.data
-            sema.signal()
-        }
-        sema.wait()
-
         log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
         return Result(data: outputData.isEmpty ? nil : outputData, exitCode: exitCode)
     }
