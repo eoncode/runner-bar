@@ -124,8 +124,10 @@ final class RunnerStore {
     // MARK: - Fetch
 
     func fetch() async {
-        // Reset the transport-layer rate-limit flag at the start of each cycle so a
-        // stale flag from the previous cycle cannot persist after the window expires.
+        // Proactively reset the transport-layer rate-limit flag at the start of each
+        // cycle. The transport clears it automatically on a successful 2xx response
+        // via clearRateLimitIfNeeded(), but resetting here ensures a stale flag from
+        // a previous window cannot linger if the next cycle starts before a 2xx fires.
         ghIsRateLimited = false
 
         let scopesSnapshot = ScopeStore.shared.activeScopes
@@ -143,7 +145,10 @@ final class RunnerStore {
             localRunners: LocalRunnerStore.shared.runners
         )
 
-        // Run heavy network work off the main actor.
+        // Run heavy network work off the main actor at background priority.
+        // Task.detached is used rather than a plain Task to ensure the work
+        // runs at .background priority even when fetch() is called from a
+        // .userInitiated context (plain Task inherits caller priority).
         let (enrichedRunners, jobResult, groupResult) = await Task.detached(priority: .background) { [weak self] in
             guard let self else {
                 return ([Runner](), JobPollResult.empty, GroupPollResult.empty)
