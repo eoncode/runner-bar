@@ -14,24 +14,35 @@ final class RunnerStore {
     /// The shared constant.
     static let shared = RunnerStore()
 
+    /// Live runner list, updated after each poll cycle.
     private(set) var runners: [Runner] = []
+    /// Jobs currently shown in the panel, including dimmed completed entries.
     private(set) var jobs: [ActiveJob] = []
+    /// Workflow action groups currently shown in the panel.
     private(set) var actions: [WorkflowActionGroup] = []
 
+    /// Live-job snapshot from the previous poll, used to detect vanished jobs.
     private var prevLiveJobs: [Int: ActiveJob] = [:]
+    /// Completed-job cache keyed by job ID; capped at `PollResultBuilder.jobCacheLimit`.
     private var completedCache: [Int: ActiveJob] = [:]
+    /// Live-group snapshot from the previous poll, used to detect vanished groups.
     private var prevLiveGroups: [String: WorkflowActionGroup] = [:]
+    /// Group cache keyed by group ID; capped at `PollResultBuilder.groupCacheLimit`.
     private var actionGroupCache: [String: WorkflowActionGroup] = [:]
     /// IDs of action groups whose failure hook has already been fired.
     private var seenGroupIDs: Set<String> = []
 
+    /// Whether the GitHub API is currently rate-limiting this client.
     private(set) var isRateLimited = false
+    /// The exact `Date` at which the current rate-limit window expires; `nil` when not rate-limited.
     private(set) var rateLimitResetDate: Date?
 
     /// Active structured poll task. Cancelled and replaced on every `start()` call.
     private var pollTask: Task<Void, Never>?
 
+    /// Combine subscription that restarts the poll loop when `pollingInterval` changes.
     private var intervalCancellable: AnyCancellable?
+    /// Combine subscription that restarts the poll loop when active scopes change.
     private var scopeCancellable: AnyCancellable?
 
     /// Emits whenever a fetch cycle completes and the store's state has been updated.
