@@ -12,14 +12,39 @@ import os
 ///
 /// Both `isLimited` and `resetDate` are mutated together so that a reader
 /// can never observe `isLimited == true` with a stale / nil `resetDate`.
+///
+/// Pipeline:
+///   1. `urlSessionAPI` / `urlSessionAPIPaginated` receive a 403/429.
+///   2. They write `isLimited = true` + `resetDate` under this lock and call
+///      `scheduleRateLimitReset(resetAt:)` to auto-clear after the window.
+///   3. `ghIsRateLimited` / `ghRateLimitResetDate` module vars expose the
+///      current values for consumption on any thread.
+///   4. `RunnerStore.applyFetchResult` copies both into its own
+///      `@MainActor` properties (`isRateLimited`, `rateLimitResetDate`).
+///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
+///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
+///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
+///
+/// `@unchecked Sendable` because `DispatchWorkItem?` is not itself `Sendable`;
+/// all mutation is serialised through `rateLimitLock`.
 private struct RateLimitState: @unchecked Sendable {
+    /// Whether the GitHub API is currently rate-limiting this client.
     var isLimited: Bool = false
+    /// The moment at which the rate-limit window expires (mirrors X-RateLimit-Reset).
+    /// `nil` when the reset time is unknown.
     var resetDate: Date?
+    /// Pending work item that clears `isLimited` when it fires.
     var resetItem: DispatchWorkItem?
 }
 
+/// Lock that serialises all reads and writes to `RateLimitState`.
 private let rateLimitLock = OSAllocatedUnfairLock(initialState: RateLimitState())
 
+/// Thread-safe read/write access to the rate-limited flag.
+///
+/// The setter coordinates `isLimited` and `resetDate` within the same critical
+/// section via `scheduleRateLimitReset`, so readers never observe
+/// `isLimited == true` with `resetDate == nil`.
 var ghIsRateLimited: Bool {
     get { rateLimitLock.withLock { $0.isLimited } }
     set {
@@ -29,6 +54,7 @@ var ghIsRateLimited: Bool {
             rateLimitLock.withLock {
                 $0.isLimited = false
                 $0.resetDate = nil
+                // cancel() is thread-safe and non-blocking; safe to call under the lock.
                 $0.resetItem?.cancel()
                 $0.resetItem = nil
             }
@@ -36,10 +62,25 @@ var ghIsRateLimited: Bool {
     }
 }
 
+/// The exact `Date` at which the current rate-limit window expires.
+///
+/// `nil` when no rate-limit is active or when the reset time is unknown.
 var ghRateLimitResetDate: Date? {
     rateLimitLock.withLock { $0.resetDate }
 }
 
+/// Schedules an automatic reset of `ghIsRateLimited` to `false`.
+///
+/// Sets `isLimited = true` and `resetDate` together inside the lock before
+/// scheduling the work item, so the `isLimited == true` / `resetDate != nil`
+/// invariant is always satisfied when `handleRateLimitResponse` calls this.
+///
+/// Uses a cancel-and-replace `DispatchWorkItem` so that multiple concurrent
+/// 403/429 responses never leave more than one pending reset timer in flight.
+///
+/// - Parameter resetAt: Unix timestamp from the `X-RateLimit-Reset` response
+///   header. When non-nil the reset fires precisely at that time; otherwise
+///   falls back to 60 minutes from now.
 private func scheduleRateLimitReset(resetAt: TimeInterval?) {
     let delay: TimeInterval
     let resetDate: Date
@@ -52,6 +93,7 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
         resetDate = Date().addingTimeInterval(delay)
     }
     log("ghIsRateLimited › auto-reset scheduled in \(Int(delay))s (resetDate=\(resetDate))")
+
     let item = DispatchWorkItem {
         rateLimitLock.withLock {
             $0.isLimited = false
@@ -70,9 +112,20 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
 }
 
 // MARK: - URLSession transport
+//
+// All GitHub API calls use URLSession + Authorization: Bearer header.
+// All functions block the calling thread via DispatchSemaphore.
+// ⚠️ Must always be called from a background thread.
 
+// MARK: - Request builder
+
+/// Module-level constant reused by `resolveURL` to avoid allocating a new
+/// `CharacterSet` on every API call and pagination iteration.
 private let slashCharacterSet = CharacterSet(charactersIn: "/")
 
+/// Builds a URLRequest with the standard GitHub API headers shared by all
+/// request types: `Authorization`, `X-GitHub-Api-Version`.
+/// Callers set the `Accept` header for their specific media type.
 private func makeBaseRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
     var req = URLRequest(url: url, timeoutInterval: timeout)
     req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
