@@ -27,12 +27,15 @@ public typealias GHRawTransport = @Sendable (_ endpoint: String) -> Data?
 // MARK: - Module-level state
 
 /// The active JSON transport closure.
+/// Serialises all reads and writes to the active transport closure.
 private let transportLock = OSAllocatedUnfairLock<GHAPITransport>(initialState: { _ in nil })
 
 /// The active raw-bytes transport closure (log endpoints).
+/// Serialises all reads and writes to the active raw transport closure.
 private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialState: { _ in nil })
 
 /// Closure that reports the current rate-limit state.
+/// Serialises all reads and writes to the rate-limit closure.
 private let rateLimitLock = OSAllocatedUnfairLock<@Sendable () -> Bool>(initialState: { false })
 
 // MARK: - Configuration
@@ -69,6 +72,8 @@ func ghAPI(_ endpoint: String) async -> Data? {
 }
 
 /// Returns the configured raw-bytes transport closure.
+/// Used by `LogFetcher` to fetch log data without importing the app target.
+/// - Note: Returns the closure itself, not the result of a call — callers invoke it directly.
 func ghRawTransport() -> GHRawTransport {
     rawTransportLock.withLock { $0 }
 }
