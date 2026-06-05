@@ -401,6 +401,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
     return try? JSONSerialization.data(withJSONObject: allItems)
 }
 
+/// Parses the `Link` header from a GitHub paginated response and returns the `next` URL, if any.
 private func extractNextURL(from header: String?) -> String? {
     guard let header else { return nil }
     for part in header.components(separatedBy: ",") {
