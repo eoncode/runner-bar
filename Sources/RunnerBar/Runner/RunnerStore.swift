@@ -124,6 +124,10 @@ final class RunnerStore {
     // MARK: - Fetch
 
     func fetch() async {
+        // Reset the transport-layer rate-limit flag at the start of each cycle so a
+        // stale flag from the previous cycle cannot persist after the window expires.
+        ghIsRateLimited = false
+
         let scopesSnapshot = ScopeStore.shared.activeScopes
         log("RunnerStore › fetch ENTER — activeScopesSnapshot=\(scopesSnapshot)")
         if scopesSnapshot.isEmpty {
