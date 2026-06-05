@@ -112,10 +112,13 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
         }
     }
 
-    // Build groups concurrently — each group's job fetches run in parallel.
-    var groups: [WorkflowActionGroup] = []
-    await withTaskGroup(of: WorkflowActionGroup.self) { group in
-        for (sha, shaRuns) in bySha {
+    // Build groups concurrently — use index keys so results are reconstructed
+    // in insertion order, not network-latency order (prevents UI churn within
+    // the same statusPriority tier across polls).
+    let shaEntries = Array(bySha)
+    var groups = Array(repeating: WorkflowActionGroup?.none, count: shaEntries.count)
+    await withTaskGroup(of: (Int, WorkflowActionGroup).self) { group in
+        for (i, (sha, shaRuns)) in shaEntries.enumerated() {
             group.addTask {
                 let representative = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
                 let label    = prLabel(from: representative)
@@ -135,7 +138,7 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
                 let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
                 let starts = allJobs.compactMap { $0.startedAt }
                 let ends   = allJobs.compactMap { $0.completedAt }
-                return WorkflowActionGroup(
+                return (i, WorkflowActionGroup(
                     headSha: sha,
                     label: label,
                     title: title,
@@ -146,20 +149,21 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
                     firstJobStartedAt: starts.min(),
                     lastJobCompletedAt: ends.max(),
                     createdAt: representative.createdAt.flatMap(parseCreatedAt)
-                )
+                ))
             }
         }
-        for await g in group { groups.append(g) }
+        for await (i, g) in group { groups[i] = g }
     }
 
-    groups.sort { lhs, rhs in
+    var result = groups.compactMap { $0 }
+    result.sort { lhs, rhs in
         let lhsPriority = statusPriority(lhs.groupStatus)
         let rhsPriority = statusPriority(rhs.groupStatus)
         if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
         return (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
     }
-    log("fetchActionGroups › \(groups.count) group(s) for \(scope)")
-    return groups
+    log("fetchActionGroups › \(result.count) group(s) for \(scope)")
+    return result
 }
 
 // MARK: - Private helpers
@@ -197,7 +201,7 @@ private func fetchJobsForGroup(
 }
 
 /// Fetches and decodes the job list for a single run ID.
-/// Refresh calls for in-progress/inconclusive jobs run concurrently.
+/// Refresh calls for in-progress/inconclusive jobs run concurrently (capped at 3).
 private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
     guard let data = await ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
           let resp = try? JSONDecoder().decode(JobsResponse.self, from: data)
@@ -207,10 +211,13 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
         resp.jobs.map { makeActiveJob(from: $0, iso: wrapper.iso) }
     }
 
-    // Refresh in-progress/inconclusive jobs concurrently (cap at 3).
-    let needsRefresh = initial.prefix(3).enumerated().filter { _, job in
+    // Refresh in-progress/inconclusive jobs concurrently.
+    // Filter first, then cap at 3 — the cap is a rate guard on API calls,
+    // not a positional guard (old code did prefix(3).filter which silently
+    // skipped jobs at index >=3 even if they needed refresh).
+    let needsRefresh = initial.enumerated().filter { _, job in
         job.conclusion == nil || job.steps.contains { $0.status == JobStatus.inProgress }
-    }
+    }.prefix(3)
     guard !needsRefresh.isEmpty else { return initial }
 
     var result = initial
