@@ -28,6 +28,10 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     /// Absolute path to the runner agent installation directory on disk.
     public let installPath: String?
     /// The GitHub URL scope this runner is registered to (repo or org URL).
+    ///
+    /// Previously `var` because `LocalRunnerScanner` could patch this after initial init
+    /// when the `.runner` config file is read separately from the LaunchAgent plist.
+    /// Now immutable — use `copying(gitHubUrl:)` to produce an updated value.
     public let gitHubUrl: String?
     /// GitHub's internal numeric agent ID for this runner.
     public let agentId: Int?
@@ -50,6 +54,10 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     public let runnerGroup: String?
 
     /// Launchctl / process running state.
+    ///
+    /// Previously `var` so optimistic UI updates and the live-service check could
+    /// mutate it in-place on the array. Now immutable — use `copying(isRunning:)`
+    /// to produce an updated value without breaking `Sendable` conformance.
     public let isRunning: Bool
 
     /// GitHub API-reported connectivity status. Set by `RunnerStatusEnricher`.

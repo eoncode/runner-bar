@@ -113,7 +113,9 @@ private struct RunnersResponse: Codable {
 /// Returns the login names of all GitHub organisations the authenticated user belongs to.
 func fetchUserOrgs() -> [String] {
     guard let data = ghAPIPaginated(GitHubConstants.userOrgsPath) else { return [] }
+    /// Minimal org payload — only the login name is needed.
     struct Org: Decodable {
+        /// The organisation's GitHub login name.
         let login: String
     }
     guard let orgs = try? JSONDecoder().decode([Org].self, from: data) else { return [] }
@@ -123,9 +125,13 @@ func fetchUserOrgs() -> [String] {
 /// Returns the `owner/repo` full names of all repositories visible to the authenticated user.
 func fetchUserRepos() -> [String] {
     guard let data = ghAPIPaginated(GitHubConstants.userReposPath) else { return [] }
+    /// Minimal repo payload — only the full name is needed.
     struct Repo: Decodable {
+        /// The repository's full name in `owner/repo` format.
         let fullName: String
+        /// Maps the snake_case `full_name` key to the camelCase Swift property.
         enum CodingKeys: String, CodingKey {
+            /// Maps `full_name` JSON key to `fullName`.
             case fullName = "full_name"
         }
     }
@@ -142,6 +148,9 @@ private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
 )
 
 /// Fetches the log for a single step via the transport layer's `urlSessionRaw()`.
+/// `urlSessionRaw` uses `application/vnd.github.v3.raw` and lets URLSession follow
+/// the GitHub 302→S3 redirect automatically, eliminating the need for a manual
+/// two-step redirect implementation.
 func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchStepLog › invalid scope: \(scopeString)")
@@ -175,6 +184,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
 
 /// Parses a raw log string into sections delimited by `##[group]` markers
 /// and returns the section matching `stepNumber`.
+/// Falls back to the full log if sections cannot be parsed or the index is out of range.
 private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
     let cleaned = stripAnsi(raw)
     let lines = cleaned.components(separatedBy: "\n")

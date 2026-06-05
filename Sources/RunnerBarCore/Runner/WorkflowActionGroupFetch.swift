@@ -75,6 +75,8 @@ private struct PRRef: Codable {
 /// Derives the short display label for an action group row.
 ///
 /// Priority: PR number → branch-embedded number → sha[:7].
+/// - Parameter run: The representative `RunPayload` for this group.
+/// - Returns: A short label string, e.g. `"#1270"` or `"d6281b"`.
 private func prLabel(from run: RunPayload) -> String {
     if let pr = run.pullRequests?.first { return "#\(pr.number)" }
     if let branch = run.headBranch,
@@ -121,6 +123,10 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     for run in runPayloads { bySha[run.headSha, default: []].append(run) }
 
     // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
+    // Fix #1041: completed-only SHAs (groups that finished between polls) are
+    // now included so they can be routed through the normal cache/display pipeline.
+    // De-duplication of old completed groups re-triggering the failure hook is
+    // handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
     if let data = cData,
        let resp = try? JSONDecoder().decode(ActionRunsResponse.self, from: data) {
         for run in resp.workflowRuns where seenIDs.insert(run.id).inserted {
@@ -292,6 +298,8 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
 /// Returns the sort priority for a `GroupStatus`.
 ///
 /// Lower value = higher display priority (in-progress before queued before completed).
+/// - Parameter status: The `GroupStatus` to evaluate.
+/// - Returns: An integer priority where `0` = in-progress, `1` = queued, `2` = completed.
 private func statusPriority(_ status: GroupStatus) -> Int {
     switch status {
     case .inProgress: return 0
