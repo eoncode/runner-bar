@@ -97,7 +97,9 @@ public struct PollResultBuilder {
     /// - Parameters:
     ///   - snapPrevGroups: Live-group snapshot from the previous poll.
     ///   - snapGroupCache: Completed-group cache from the previous poll.
-    ///   - snapSeenGroupIDs: Set of group IDs that have already triggered the failure hook.
+    ///   - snapSeenGroupIDs: Set of group IDs that have already triggered the failure
+    ///     hook in a previous poll cycle. Keyed by `WorkflowActionGroup.id`.
+    ///     Survives `trimGroupCache` eviction so the hook cannot re-fire for old groups.
     ///   - fetchGroups: Async closure that fetches live groups for every active scope.
     ///   - scopeFromGroup: Closure that derives a scope string from a WorkflowActionGroup.
     ///   - fireFailureHook: Async closure invoked the first time a group transitions to a failure conclusion.
