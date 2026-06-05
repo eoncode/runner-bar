@@ -199,8 +199,19 @@ private func handleRateLimitResponse(
 
 // MARK: - Async GET (primary transport)
 
-/// Fetches a single GitHub API page using async/await URLSession.
-/// Replaces the DispatchSemaphore bridge. Safe to call from any async context.
+/// Fetches a single GitHub API page using `URLSession.data(for:)` async/await.
+///
+/// This is the primary transport for all `ghAPI` calls. It is non-blocking and
+/// natively cancellable via `Task.cancel()`.
+///
+/// - S3 redirect safety: GitHub artifact/log endpoints can redirect to S3.
+///   `URLSession` follows redirects automatically; the `Authorization` header
+///   is intentionally stripped on redirect by Foundation to avoid credential
+///   leakage to third-party hosts.
+/// - Rate limiting: a 403 with `X-RateLimit-Remaining: 0` or a 429 sets
+///   `ghIsRateLimited` via `handleRateLimitResponse`. A successful response
+///   clears it via `clearRateLimitIfNeeded()`. The flag is also reset at the
+///   start of each poll cycle in `RunnerStore.fetch()`.
 func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     guard let token = githubToken() else {
         log("urlSessionAPIAsync › no token available")
@@ -519,7 +530,7 @@ func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
 
 // MARK: - Public API entry points (GET)
 
-/// Async entry point — backed by URLSession.data(for:), no semaphore.
+/// Async entry point — backed by `urlSessionAPIAsync`, no semaphore.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
 }
