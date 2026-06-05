@@ -12,14 +12,21 @@ import RunnerBarCore
 /// Keeping one file-level instance avoids repeated allocation on every poll cycle.
 /// Wrapping it in an actor gives thread-safe access with no lock
 /// boilerplate and no `@unchecked Sendable` escape hatch.
+/// Actor-isolated ISO-8601 date parser.
+/// `ISO8601DateFormatter` is not `Sendable`; wrapping it in an actor
+/// gives thread-safe access without `@unchecked Sendable`.
 private actor DateParserActor {
+    /// Shared formatter instance, allocated once per actor.
     private let iso = ISO8601DateFormatter()
+    /// Parses an ISO-8601 date string, returning `nil` on failure.
     func parse(_ str: String) -> Date? { iso.date(from: str) }
+    /// Builds an `ActiveJob` from a decoded payload using the actor-owned formatter.
     func makeJob(from payload: JobPayload, isDimmed: Bool) -> ActiveJob {
         makeActiveJob(from: payload, iso: iso, isDimmed: isDimmed)
     }
 }
 
+/// Shared `DateParserActor` for this file.
 private let dateParser = DateParserActor()
 
 // MARK: - RunnerStore thin wrappers
@@ -101,6 +108,7 @@ extension RunnerStore {
 
     // MARK: - Group helpers
 
+    /// Derives the scope string (repo or org URL) from a `WorkflowActionGroup`.
     func scopeFromActionGroup(_ group: WorkflowActionGroup) -> String {
         log("RunnerStore › scopeFromActionGroup — group.repo='\(group.repo)' groupID=\(group.id)")
         if !group.repo.isEmpty {
@@ -118,6 +126,7 @@ extension RunnerStore {
         return ""
     }
 
+    /// Enriches a group's job list with step and conclusion data from the job cache.
     func enrichGroupJobs(_ jobs: [ActiveJob], jobCache: [Int: ActiveJob]) -> [ActiveJob] {
         jobs.map { job in
             guard let cached = jobCache[job.id] else { return job }
