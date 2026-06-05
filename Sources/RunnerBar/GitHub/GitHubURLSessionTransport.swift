@@ -419,6 +419,17 @@ private func extractNextURL(from header: String?) -> String? {
 
 // MARK: - Raw (log endpoints)
 
+/// Fetches raw bytes from a GitHub API endpoint that 302-redirects to S3.
+/// # Redirect safety
+/// GitHub's job-log endpoint (`/actions/jobs/{id}/logs`) returns 302 to a
+/// pre-signed S3 URL on `*.amazonaws.com`. URLSession follows this redirect
+/// automatically. Apple's URLSession strips the `Authorization` header before
+/// replaying a request to a different domain (cross-origin redirect — RFC 7235
+/// / Apple URLSession cross-origin redirect semantics), so the Bearer token is
+/// never forwarded to S3. S3 authenticates purely via the pre-signed query
+/// params already embedded in the redirect URL. No custom redirect delegate is
+/// required or appropriate here.
+/// ⚠️ Must be called from a background thread.
 func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     guard let token = githubToken() else {
@@ -457,8 +468,15 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     return data
 }
 
-// MARK: - POST / DELETE / PUT
+// MARK: - POST / DELETE / PUT (mutation)
 
+/// Sends a POST to the given GitHub API endpoint. Returns the response body, or nil on failure.
+/// Return value semantics:
+/// - `nil`      — network failure or non-2xx status (request failed).
+/// - `Data()`   — 2xx response with no body (e.g. 204 No Content); treat as success.
+/// - `Data(…)`  — 2xx response with a body; decode as needed.
+/// Callers that decode the response body should guard against empty `Data()` first.
+/// ⚠️ Must be called from a background thread.
 @discardableResult
 func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -502,6 +520,8 @@ func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval
     return result.withLock { $0 }
 }
 
+/// Sends a PUT to the given GitHub API endpoint with a JSON body. Returns the response body, or nil on failure.
+/// ⚠️ Must be called from a background thread.
 func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     guard let token = githubToken() else {
@@ -542,6 +562,8 @@ func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -
     return result.withLock { $0 }
 }
 
+/// Sends a DELETE to the given GitHub API endpoint. Returns true on success (2xx).
+/// ⚠️ Must be called from a background thread.
 @discardableResult
 func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -581,18 +603,22 @@ func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
 
 // MARK: - Public API entry points (GET)
 
-/// Async entry point — backed by `urlSessionAPIAsync`, no semaphore.
+/// Calls the GitHub REST API for a single page via URLSession.
+/// Returns nil when no token is available or the request fails.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
 }
 
-/// Paginated entry point — retained for non-async callers (GitHub.swift, etc.).
+/// Calls the GitHub REST API for all pages via URLSession.
+/// Returns nil when no token is available or the request fails.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     urlSessionAPIPaginated(endpoint, timeout: timeout)
 }
 
 // MARK: - Runner mutation helpers
 
+/// Directly deregisters a runner from GitHub via DELETE.
+/// Returns true on success (HTTP 204 No Content).
 @discardableResult
 func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
     guard let scope = Scope.parse(scopeString) else {
@@ -606,6 +632,8 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
     return success
 }
 
+/// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
+/// Returns the updated label names on success, or nil on failure.
 @discardableResult
 func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
@@ -623,7 +651,9 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
         return nil
     }
     struct LabelsResponse: Decodable {
+        /// A single runner label.
         struct Label: Decodable { let name: String }
+        /// The updated labels list.
         let labels: [Label]
     }
     guard let resp = try? JSONDecoder().decode(LabelsResponse.self, from: outData) else {
