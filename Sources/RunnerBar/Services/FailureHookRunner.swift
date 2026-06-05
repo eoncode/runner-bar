@@ -40,7 +40,7 @@ enum FailureHookRunner {
     static let defaultCommand = "cd $LOCAL_PATH && gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo"
 
     /// Call this whenever a group transitions to done with a failure conclusion.
-    /// Dispatches to a background thread, fetches failed job/step details, then fires.
+    /// Spawns a detached background Task, fetches failed job/step details, then fires.
     static func fireIfNeeded(group: WorkflowActionGroup, scope: String, callsite: String = "unknown") {
         log("FailureHookRunner › fireIfNeeded ENTER — callsite=\(callsite) scope=\(scope) groupID=\(group.id) groupTitle=\(group.title) headSha=\(group.headSha) groupStatus=\(group.groupStatus)")
         let hookEnabled = ScopePreferencesStore.failureHookEnabled(for: scope)
@@ -49,7 +49,7 @@ enum FailureHookRunner {
             log("FailureHookRunner › SKIP — hook not enabled for scope=\(scope)")
             return
         }
-        // #560: Branch filter — skip if a branch filter is set and doesn't match
+        // #560: Branch filter — skip if a branch filter is set and doesn’t match
         let filterBranch = ScopePreferencesStore.failureHookBranch(for: scope)
         if let filter = filterBranch {
             let groupBranch = group.headBranch ?? ""
@@ -70,19 +70,17 @@ enum FailureHookRunner {
             log("FailureHookRunner › SKIP — group is not a failure, groupID=\(group.id)")
             return
         }
-        log("FailureHookRunner › ALL CHECKS PASSED — dispatching background task for scope=\(scope) groupID=\(group.id)")
-        // TODO: #1077 — migrate off DispatchQueue.global to structured concurrency (async/await + Task) // NOSONAR
-        DispatchQueue.global(qos: .utility).async {
-            log("FailureHookRunner › background thread START — fetching failed jobs for groupID=\(group.id)")
-            let jobs = fetchFailedJobs(group: group, scope: scope)
-            log("FailureHookRunner › background thread — fetchFailedJobs returned \(jobs.count) jobs: \(jobs.map { $0.job.name })")
+        log("FailureHookRunner › ALL CHECKS PASSED — dispatching background Task for scope=\(scope) groupID=\(group.id)")
+        Task.detached(priority: .utility) {
+            log("FailureHookRunner › Task START — fetching failed jobs for groupID=\(group.id)")
+            let jobs = await fetchFailedJobs(group: group, scope: scope)
+            log("FailureHookRunner › Task — fetchFailedJobs returned \(jobs.count) jobs: \(jobs.map { $0.job.name })")
             let resolved = resolveTokens(command, group: group, scope: scope, jobs: jobs)
-            log("FailureHookRunner › background thread — resolved command (first 300): \(resolved.prefix(300))")
-            log("FailureHookRunner › background thread — calling TerminalLauncher.open for groupID=\(group.id)")
-            // NSAppleScript must run on the main thread.
-            DispatchQueue.main.async {
+            log("FailureHookRunner › Task — resolved command (first 300): \(resolved.prefix(300))")
+            log("FailureHookRunner › Task — calling TerminalLauncher.open for groupID=\(group.id)")
+            await MainActor.run {
                 TerminalLauncher.open(command: resolved)
-                log("FailureHookRunner › main thread — TerminalLauncher.open returned for groupID=\(group.id)")
+                log("FailureHookRunner › main actor — TerminalLauncher.open returned for groupID=\(group.id)")
             }
         }
     }
@@ -110,11 +108,10 @@ enum FailureHookRunner {
     }
 
     /// Fetches jobs (with steps) and raw log tail for all failed runs in the group.
-    /// Blocking — must be called from a background thread.
     /// - Note: `fetchJobLog` → `RunnerBarCore/Services/LogFetcher.swift`.
     ///         `ghAPI` → `RunnerBarCore/GitHub/GitHubTransportShim.swift` (shim),
     ///                   `RunnerBar/GitHub/GitHubURLSessionTransport.swift` (app target).
-    private static func fetchFailedJobs(group: WorkflowActionGroup, scope: String) -> [FailedJobResult] {
+    private static func fetchFailedJobs(group: WorkflowActionGroup, scope: String) async -> [FailedJobResult] {
         var result: [FailedJobResult] = []
         var seenIDs = Set<Int>()
         for run in group.runs {
@@ -123,7 +120,7 @@ enum FailureHookRunner {
                 continue
             }
             log("FailureHookRunner › fetchFailedJobs — fetching jobs for failed run=\(run.id) conclusion=\(c)")
-            guard let data = ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100") else {
+            guard let data = await ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100") else {
                 log("FailureHookRunner › fetchFailedJobs — ghAPI returned nil for run=\(run.id)")
                 continue
             }
@@ -137,7 +134,7 @@ enum FailureHookRunner {
                 if let jobConclusion = job.conclusion,
                    failureConclusions.contains(jobConclusion.rawValue.lowercased()) {
                     log("FailureHookRunner › fetchFailedJobs — fetching log for failed jobID=\(job.id) name=\(job.name)")
-                    if let fullLog = fetchJobLog(jobID: job.id, scope: scope) {
+                    if let fullLog = await fetchJobLog(jobID: job.id, scope: scope) {
                         let lines = fullLog.components(separatedBy: "\n")
                         let kept = lines.suffix(150).joined(separator: "\n")
                         tail = kept
@@ -159,7 +156,7 @@ enum FailureHookRunner {
     /// Escapes `s` so it is safe to embed between single-quotes in a shell command.
     /// Replaces every `'` with `'\''` — the standard POSIX single-quote escape.
     private static func singleQuoteEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "'", with: "'\\''")
+        s.replacingOccurrences(of: "'", with: "'\\''") 
     }
 
     /// Builds the `$FAILURE_LOG` content from failed job results.
