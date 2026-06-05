@@ -119,14 +119,14 @@ final class LocalRunnerStore: ObservableObject {
 
     /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.
     ///
-    /// Runs background work in a plain `Task` so actor context, priority, and
-    /// cancellation are inherited from the `@MainActor` caller. The continuation
-    /// returns to `@MainActor` automatically via `applyRefreshResults`.
+    /// Uses a plain `Task { }` so actor context, priority, and cancellation are inherited
+    /// from the `@MainActor` caller. Background work runs off the main actor during each
+    /// `await`; the continuation returns to `@MainActor` automatically via `applyRefreshResults`.
     func refresh() {
         guard !isScanning else { return }
         isScanning = true
         let index = runnerIndex
-        Task(priority: .userInitiated) { [weak self] in
+        Task { [weak self] in
             guard let self else { return }
 
             // 1. Hydrate from installPath/.runner JSON

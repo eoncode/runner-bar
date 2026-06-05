@@ -140,6 +140,10 @@ final class RunnerStore {
 
     /// Performs one complete poll cycle: fetches runners, jobs, and action groups,
     /// then applies results on the main actor via `applyFetchResult`.
+    ///
+    /// The three async calls below suspend off the main actor for their network work
+    /// and return automatically — no Task.detached wrapper is needed. Priority is
+    /// inherited from the poll loop Task launched in `start()`.
     func fetch() async {
         // Proactively reset the transport-layer rate-limit flag at the start of each
         // cycle. The transport clears it automatically on a successful 2xx response
@@ -162,27 +166,17 @@ final class RunnerStore {
             localRunners: LocalRunnerStore.shared.runners
         )
 
-        // Run heavy network work off the main actor at background priority.
-        // Task.detached is used rather than a plain Task to ensure the work
-        // runs at .background priority even when fetch() is called from a
-        // .userInitiated context (plain Task inherits caller priority).
-        let (enrichedRunners, jobResult, groupResult) = await Task.detached(priority: .background) { [weak self] in
-            guard let self else {
-                return ([Runner](), JobPollResult.empty, GroupPollResult.empty)
-            }
-            let enrichedRunners = await self.fetchAndEnrichRunners(
-                scopes: scopesSnapshot,
-                installPathMap: installPathMap
-            )
-            let jobResult = await self.buildJobState(snapPrev: snapPrev, snapCache: snapCache)
-            let groupResult = await self.buildGroupState(
-                snapPrevGroups: snapPrevGroups,
-                snapGroupCache: snapGroupCache,
-                snapSeenGroupIDs: snapSeenGroupIDs,
-                jobCache: jobResult.newCache
-            )
-            return (enrichedRunners, jobResult, groupResult)
-        }.value
+        let enrichedRunners = await fetchAndEnrichRunners(
+            scopes: scopesSnapshot,
+            installPathMap: installPathMap
+        )
+        let jobResult = await buildJobState(snapPrev: snapPrev, snapCache: snapCache)
+        let groupResult = await buildGroupState(
+            snapPrevGroups: snapPrevGroups,
+            snapGroupCache: snapGroupCache,
+            snapSeenGroupIDs: snapSeenGroupIDs,
+            jobCache: jobResult.newCache
+        )
 
         applyFetchResult(
             enrichedRunners: enrichedRunners,
