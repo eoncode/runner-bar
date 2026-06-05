@@ -173,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// status-bar item, and constructs the NSPopover panel.
     func applicationDidFinishLaunching(_ _: Notification) {
         configureGHAPI(
-            { endpoint in ghAPI(endpoint) },
+            { endpoint in await ghAPI(endpoint) },
             isRateLimited: { ghIsRateLimited }
         )
         configureGHRaw { endpoint in urlSessionRaw(endpoint) }
