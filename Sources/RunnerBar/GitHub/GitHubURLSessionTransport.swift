@@ -133,24 +133,39 @@ private func makeBaseRequest(url: URL, token: String, timeout: TimeInterval) -> 
     return req
 }
 
+/// Builds a pre-configured URLRequest with standard GitHub API headers.
 private func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
     var req = makeBaseRequest(url: url, token: token, timeout: timeout)
     req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
     return req
 }
 
+/// Builds a URLRequest with `application/vnd.github.v3.raw` Accept header.
+/// Used for log endpoints that 302-redirect to raw S3 content.
+///
+/// # S3 redirect safety
+/// The `Authorization: Bearer` header set here is sent only to api.github.com.
+/// When GitHub replies with 302 to a pre-signed S3 URL (*.amazonaws.com),
+/// Apple's URLSession automatically strips sensitive headers — including
+/// `Authorization` — before following the redirect to a different domain
+/// (cross-origin redirect semantics per RFC 7235 / Apple URLSession behaviour).
+/// S3 therefore receives only the pre-signed query-param credentials and no
+/// conflicting `Authorization` header. No custom redirect delegate is required.
 private func makeRawRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
     var req = makeBaseRequest(url: url, token: token, timeout: timeout)
     req.setValue("application/vnd.github.v3.raw", forHTTPHeaderField: "Accept")
     return req
 }
 
+/// Resolves an endpoint string to a full GitHub API URL string.
 private func resolveURL(_ endpoint: String) -> String {
     endpoint.hasPrefix("http")
         ? endpoint
         : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: slashCharacterSet))"
 }
 
+/// Clears the rate-limit flag and cancels any pending reset timer.
+/// Called after every successful (2xx) URLSession response.
 private func clearRateLimitIfNeeded() {
     rateLimitLock.withLock {
         guard $0.isLimited else { return }
@@ -161,6 +176,7 @@ private func clearRateLimitIfNeeded() {
     }
 }
 
+/// Logs the response body (up to 400 chars) for non-2xx responses.
 private func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
     guard let data, !data.isEmpty else { return }
     let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
@@ -168,6 +184,18 @@ private func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
     log("URLSessionTransport › \(endpoint) status=\(status) body: \(preview)")
 }
 
+/// Handles a 403/429 HTTP response, setting rate-limit state when appropriate.
+///
+/// Sets `isLimited = true` and `resetDate` atomically inside `scheduleRateLimitReset`
+/// so that `isLimited == true` with `resetDate == nil` is never observable.
+///
+/// **Primary rate limits** (`429`, or `403` with `X-RateLimit-Remaining == 0`):
+/// detected via status code or the remaining-quota header.
+///
+/// **Secondary rate limits** (`403` with a `Retry-After` header and non-zero remaining):
+/// GitHub uses this for per-minute abuse / concurrency throttling. The `Retry-After`
+/// value (seconds) is used as the reset delay so the timer honours the server window.
+/// See https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api#secondary-rate-limits
 private func handleRateLimitResponse(
     statusCode: Int,
     _ data: Data?,
@@ -176,8 +204,12 @@ private func handleRateLimitResponse(
 ) {
     let resetTS = response.value(forHTTPHeaderField: "X-RateLimit-Reset")
         .flatMap { TimeInterval($0) }
+    // Use Int() conversion to tolerate whitespace or non-canonical zero strings
+    // (e.g. " 0", "00") that string equality == "0" would miss.
     let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
         .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+    // Retry-After is present on GitHub secondary rate-limit 403s (non-zero remaining).
+    // Its value is in seconds and is used as the reset delay.
     let retryAfter = response.value(forHTTPHeaderField: "Retry-After")
         .flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }
     let isRealRateLimit = statusCode == 429 || remaining == 0 || retryAfter != nil
@@ -283,12 +315,23 @@ func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
 }
 
 /// Fetches all pages of a GitHub API endpoint, concatenating JSON arrays.
+/// Follows the `Link: <url>; rel="next"` header automatically.
+///
+/// Token is re-fetched on every loop iteration so that a sign-out mid-pagination
+/// is detected immediately rather than continuing with a stale credential.
+/// A `401 Unauthorized` response breaks the loop, discards any partial results,
+/// and returns `nil` so callers can distinguish auth failure from a complete dataset.
+/// A non-array page response (unexpected shape) also breaks the loop with a log.
+/// ⚠️ Must be called from a background thread, never from the main thread.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [[String: Any]] = []
+    // Plain vars are safe here: DispatchSemaphore serialises each iteration so the
+    // completion closure has fully returned before the outer loop reads these flags.
     var didFailAuthentication = false
     while let urlString = nextURL {
+        // Re-fetch token each iteration so a mid-pagination sign-out is detected early.
         guard let token = githubToken() else {
             log("urlSessionAPIPaginated › no token available, stopping pagination")
             didFailAuthentication = true
@@ -299,6 +342,9 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
         let sem = DispatchSemaphore(value: 0)
         let pageData = OSAllocatedUnfairLock<Data?>(initialState: nil)
         let linkHeader = OSAllocatedUnfairLock<String?>(initialState: nil)
+        // Dedicated flag set only on a confirmed 401, so the guard below can
+        // distinguish a real auth failure from a transient network error (both
+        // leave pageData nil, but only 401 should discard partial results).
         let got401 = OSAllocatedUnfairLock(initialState: false)
         URLSession.shared.dataTask(with: req) { data, response, error in
             defer { sem.signal() }
@@ -308,7 +354,9 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
             }
             guard let http = response as? HTTPURLResponse else { return }
             if http.statusCode == 401 {
-                log("urlSessionAPIPaginated › 401 Unauthorized — stopping pagination")
+                log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
+                // Mark the precise 401 path so the guard below can distinguish it
+                // from a plain network error (both leave pageData nil).
                 got401.withLock { $0 = true }
                 return
             }
@@ -325,6 +373,9 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) -> D
             pageData.withLock { $0 = data }
         }.resume()
         sem.wait()
+        // pageData is nil for both a 401 and a network error; use got401 to tell
+        // them apart. A network error breaks the loop but does NOT set
+        // didFailAuthentication, so any pages already fetched are preserved.
         guard let data = pageData.withLock({ $0 }) else {
             if got401.withLock({ $0 }) { didFailAuthentication = true }
             break
