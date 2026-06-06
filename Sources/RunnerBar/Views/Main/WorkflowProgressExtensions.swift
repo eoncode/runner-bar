@@ -28,7 +28,7 @@ enum RelativeTimeFormatter {
 // MARK: - WorkflowActionGroup progress helpers
 
 /// UI-layer extensions on `WorkflowActionGroup` for deriving progress fractions
-/// and display strings used by the panel’s action rows.
+/// and display strings used by the panel's action rows.
 extension WorkflowActionGroup {
 
     /// Returns the overall completion fraction (0.0–1.0) across all jobs in the group.
@@ -49,11 +49,6 @@ extension WorkflowActionGroup {
         guard !jobs.isEmpty else { return "" }
         let done = jobs.filter { $0.conclusion != nil }.count
         return "\(done)/\(jobs.count)"
-    }
-
-    /// The name of the currently running job, or an empty string when no job is active.
-    var currentJobName: String {
-        jobs.first { $0.status == .inProgress }?.name ?? ""
     }
 
     /// Elapsed time as a `mm:ss` string, computed from `firstJobStartedAt` to
@@ -83,7 +78,7 @@ extension WorkflowActionGroup {
 
     /// `true` when the group originated from a self-hosted (local) runner.
     ///
-    /// Derived from the first job’s runner name; returns `nil` when ambiguous.
+    /// Derived from the first job's runner name; returns `nil` when ambiguous.
     var isLocalGroup: Bool? {
         guard let first = jobs.first else { return nil }
         return first.runnerName?.lowercased().contains("self-hosted") == true

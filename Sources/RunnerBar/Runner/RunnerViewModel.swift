@@ -14,9 +14,6 @@ import Foundation
 /// on the main thread to satisfy SwiftUI's rendering requirements.
 @MainActor
 final class RunnerViewModel: ObservableObject {
-    // MARK: - Shared singleton
-    /// The app-wide singleton. Always accessed on the main actor.
-    static let shared = RunnerViewModel()
 
     // MARK: - Published state
     /// GitHub API-backed runners for the authenticated user's repos and orgs.
