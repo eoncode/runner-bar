@@ -16,10 +16,8 @@ private let unzipBinaryPath = "/usr/bin/unzip" // NOSONAR — fixed OS path
 /// `gh` CLI) can be swapped without touching call sites.
 /// Log endpoints 302-redirect to S3; the transport follows the redirect automatically.
 /// - Parameter endpoint: A relative GitHub REST path, e.g. `"repos/owner/repo/actions/jobs/123/logs"`.
-/// - Parameter timeout: Reserved for transport implementations that support request timeouts.
-///   The current transport shim does not consume this value.
 /// - Returns: Raw response bytes, or `nil` when no token is available or the request fails.
-private func ghRaw(_ endpoint: String, _  timeout: TimeInterval = 60) -> Data? {
+private func ghRaw(_ endpoint: String) -> Data? {
     ghRawTransport()(endpoint)
 }
 

@@ -32,9 +32,6 @@ struct DonutStatusView: View {
 
     /// Stroke width derived from the outer diameter (11% of `size`).
     private var strokeWidth: CGFloat { size * 0.11 }
-    /// Inner ring diameter (82% of the outer diameter).
-    private var innerSize: CGFloat { size * 0.82 }
-
     /// Creates a `DonutStatusView`.
     init(status: RBStatus, progress: Double = 0, size: CGFloat = 16) {
         self.status = status
