@@ -14,7 +14,7 @@ import os
 /// can never observe `isLimited == true` with a stale / nil `resetDate`.
 ///
 /// Pipeline:
-///   1. `urlSessionAPIAsync` / `urlSessionAPIPaginated` receive a 403/429.
+///   1. `urlSessionAPI` / `urlSessionAPIPaginated` receive a 403/429.
 ///   2. They write `isLimited = true` + `resetDate` under this lock and call
 ///      `scheduleRateLimitReset(resetAt:)` to auto-clear after the window.
 ///   3. `ghIsRateLimited` / `ghRateLimitResetDate` module vars expose the
@@ -49,6 +49,8 @@ var ghIsRateLimited: Bool {
     get { rateLimitLock.withLock { $0.isLimited } }
     set {
         if newValue {
+            // No X-RateLimit-Reset header available at this call site;
+            // scheduleRateLimitReset falls back to a 60-minute window.
             scheduleRateLimitReset(resetAt: nil)
         } else {
             rateLimitLock.withLock {
@@ -255,8 +257,9 @@ private func handleRateLimitResponse(
 ///
 /// - S3 redirect safety: GitHub artifact/log endpoints can redirect to S3.
 ///   `URLSession` follows redirects automatically; the `Authorization` header
-///   is intentionally stripped on redirect by Foundation to avoid credential
-///   leakage to third-party hosts.
+///   is stripped before replaying to a different domain (cross-origin redirect
+///   semantics per RFC 7235 / Apple URLSession behaviour), so the Bearer token
+///   is never forwarded to S3. No custom redirect delegate is required.
 /// - Rate limiting: a 403 with `X-RateLimit-Remaining: 0` or a 429 sets
 ///   `ghIsRateLimited` via `handleRateLimitResponse`. A successful response
 ///   clears it via `clearRateLimitIfNeeded()`. The flag is also reset at the
@@ -293,17 +296,60 @@ func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async ->
 
 // MARK: - Legacy synchronous GET (retained for non-async call sites)
 
-/// Fetches all pages of a GitHub API endpoint, concatenating JSON arrays.
-/// Follows the `Link: <url>; rel="next"` header automatically.
-///
+/// Fetches a single GitHub API page synchronously (blocking the calling thread).
+/// ⚠️ Must be called from a background thread, never from the main thread.
+func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
+    dispatchPrecondition(condition: .notOnQueue(.main))
+    guard let token = githubToken() else {
+        log("urlSessionAPI › no token available")
+        return nil
+    }
+    let urlString = resolveURL(endpoint)
+    guard let url = URL(string: urlString) else {
+        log("urlSessionAPI › invalid URL: \(urlString)")
+        return nil
+    }
+    let req = makeRequest(url: url, token: token, timeout: timeout)
+    let sem = DispatchSemaphore(value: 0)
+    let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
+    URLSession.shared.dataTask(with: req) { data, response, error in
+        defer { sem.signal() }
+        if let error {
+            log("URLSessionTransport › \(urlString) network error: \(error.localizedDescription)")
+            return
+        }
+        guard let http = response as? HTTPURLResponse else { return }
+        if http.statusCode == 403 || http.statusCode == 429 {
+            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
+            return
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            logErrorBody(data, endpoint: urlString, status: http.statusCode)
+            return
+        }
+        clearRateLimitIfNeeded()
+        result.withLock { $0 = data }
+    }.resume()
+    sem.wait()
+    return result.withLock { $0 }
+}
+
 /// Fetches and concatenates all pages for a GitHub paginated endpoint using
 /// `URLSession.data(for:)` async/await.
 ///
-/// Token is re-fetched on every loop iteration so that a sign-out mid-pagination
-/// is detected immediately rather than continuing with a stale credential.
-/// A `401 Unauthorized` response breaks the loop, discards any partial results,
-/// and returns `nil` so callers can distinguish auth failure from a complete dataset.
-/// A non-array page response (unexpected shape) also breaks the loop with a log.
+/// Follows the `Link: <url>; rel="next"` header automatically until all pages
+/// are consumed or an error stops pagination.
+///
+/// - S3 redirect safety: `URLSession` follows redirects automatically; the
+///   `Authorization` header is stripped before replaying to a different domain
+///   (cross-origin redirect semantics per RFC 7235 / Apple URLSession behaviour),
+///   so the Bearer token is never forwarded to third-party hosts such as S3.
+///   No custom redirect delegate is required.
+/// - Token is re-fetched on every loop iteration so that a sign-out mid-pagination
+///   is detected immediately rather than continuing with a stale credential.
+/// - A `401 Unauthorized` response breaks the loop, discards any partial results,
+///   and returns `nil` so callers can distinguish auth failure from a complete dataset.
+/// - A non-array page response (unexpected shape) also breaks the loop with a log.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [[String: Any]] = []

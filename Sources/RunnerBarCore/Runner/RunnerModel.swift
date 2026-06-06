@@ -26,17 +26,14 @@ import Foundation
 public struct RunnerModel: Sendable, Identifiable, Equatable {
     // MARK: Stored Properties
 
-    /// String-based ID so `LocalRunnerScanner` can use `runnerName` as the dedup key.
+    /// String-based ID so `LocalRunnerStore` can use `runnerName` as the dedup key.
     public let id: String
     /// The human-readable name of the runner as configured on the host machine.
     public let runnerName: String
     /// Absolute path to the runner agent installation directory on disk.
     public let installPath: String?
     /// The GitHub URL scope this runner is registered to (repo or org URL).
-    ///
-    /// Previously `var` because `LocalRunnerScanner` could patch this after initial init
-    /// when the `.runner` config file is read separately from the LaunchAgent plist.
-    /// Now immutable — use `copying(gitHubUrl:)` to produce an updated value.
+    /// Use `copying(gitHubUrl:)` to produce an updated value.
     public let gitHubUrl: String?
     /// GitHub's internal numeric agent ID for this runner.
     public let agentId: Int?
@@ -59,10 +56,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     public let runnerGroup: String?
 
     /// Launchctl / process running state.
-    ///
-    /// Previously `var` so optimistic UI updates and the live-service check could
-    /// mutate it in-place on the array. Now immutable — use `copying(isRunning:)`
-    /// to produce an updated value without breaking `Sendable` conformance.
+    /// Use `copying(isRunning:)` to produce an updated value.
     public let isRunning: Bool
 
     /// GitHub API-reported connectivity status. Set by `RunnerStatusEnricher`.
@@ -108,7 +102,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     ///   - isEphemeral: Whether the runner is registered as ephemeral.
     ///   - runnerGroup: Runner group name from the GitHub API.
     ///   - metrics: Optional CPU/memory snapshot from `ps aux`.
-    /// - Note: 17 parameters faithfully model the GitHub API runner payload; splitting would break all call sites. // NOSONAR
+    // NOSONAR — 17 parameters faithfully model the GitHub API runner payload; splitting would break all call sites.
     public init(
         id: String? = nil,
         runnerName: String,
