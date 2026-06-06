@@ -20,7 +20,7 @@ Liquid Glass features real-time light bending (lensing), specular highlights res
 
 ---
 
-## Part 1: Foundation \u0026 Basics
+## Part 1: Foundation & Basics
 
 ### 1.1 Core Concepts
 
@@ -161,7 +161,7 @@ Maintains perfect alignment between elements and containers across devices:
 RoundedRectangle(cornerRadius: .containerConcentric, style: .continuous)
 ```
 
-### 1.5 Text \u0026 Icons with Glass
+### 1.5 Text & Icons with Glass
 
 **Text Rendering**
 ```swift
@@ -1031,7 +1031,7 @@ func createTextPath(_ string: String, font: UIFont) -> Path {
 
 ---
 
-## Part 4: Edge Cases \u0026 Advanced Topics
+## Part 4: Edge Cases & Advanced Topics
 
 ### 4.1 Handling Complex Background Content
 
@@ -1239,7 +1239,7 @@ let button = UIButton(configuration: configuration)
 - Handle `UIBarButtonItem` sizing for glass context
 - Use `hidesSharedBackground = true` to remove glass from specific items
 
-### 4.6 Known Issues \u0026 Workarounds
+### 4.6 Known Issues & Workarounds
 
 **Issue 1: Interactive Shape Mismatch**
 **Problem**: `.glassEffect(.regular.interactive(), in: RoundedRectangle())` responds with Capsule shape
@@ -1291,7 +1291,7 @@ ToolbarItem(id: "constantID") {
 
 ---
 
-## Part 5: Best Practices \u0026 Design Patterns
+## Part 5: Best Practices & Design Patterns
 
 ### 5.1 When to Use Glass vs Traditional UI
 
@@ -1477,182 +1477,6 @@ struct ContentView: View {
         }
     }
 }
-
-struct HomeView: View {
-    @State private var showActions = false
-    @Namespace private var namespace
-    
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 20) {
-                    ForEach(0..<20) { index in
-                        ContentCard(index: index)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Home")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Notifications", systemImage: "bell") {
-                        // action
-                    }
-                    .badge(3)
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                FloatingActionButton(showActions: $showActions, namespace: namespace)
-                    .padding()
-            }
-        }
-    }
-}
-
-struct ContentCard: View {
-    let index: Int
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: "photo.fill")
-                .font(.system(size: 60))
-                .frame(maxWidth: .infinity)
-                .frame(height: 180)
-                .background(Color.blue.opacity(0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            
-            Text("Item \(index + 1)")
-                .font(.headline)
-            
-            Text("Description for item \(index + 1)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-struct FloatingActionButton: View {
-    @Binding var showActions: Bool
-    var namespace: Namespace.ID
-    
-    let actions = [
-        ("photo", "Photo", Color.blue),
-        ("video", "Video", Color.purple),
-        ("doc.text", "Document", Color.green)
-    ]
-    
-    var body: some View {
-        GlassEffectContainer(spacing: 16) {
-            VStack(spacing: 12) {
-                if showActions {
-                    ForEach(actions, id: \.0) { action in
-                        actionButton(icon: action.0, label: action.1, color: action.2)
-                            .glassEffectID(action.0, in: namespace)
-                    }
-                }
-                
-                Button {
-                    withAnimation(.bouncy(duration: 0.35)) {
-                        showActions.toggle()
-                    }
-                } label: {
-                    Image(systemName: showActions ? "xmark" : "plus")
-                        .font(.title2.bold())
-                        .frame(width: 56, height: 56)
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .tint(.orange)
-                .glassEffectID("toggle", in: namespace)
-            }
-        }
-    }
-    
-    func actionButton(icon: String, label: String, color: Color) -> some View {
-        Button {
-            // action
-        } label: {
-            HStack {
-                Image(systemName: icon)
-                if showActions {
-                    Text(label)
-                        .font(.callout.bold())
-                }
-            }
-            .frame(height: 48)
-            .padding(.horizontal, showActions ? 16 : 12)
-        }
-        .buttonStyle(.glass)
-        .tint(color)
-    }
-}
-
-struct NowPlayingView: View {
-    @Environment(\.tabViewBottomAccessoryPlacement) var placement
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "music.note")
-                .font(.title3)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Song Title")
-                    .font(.subheadline.bold())
-                Text("Artist Name")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            Button(action: {}) {
-                Image(systemName: "play.fill")
-            }
-            .buttonStyle(.glass)
-            .controlSize(.small)
-        }
-        .padding()
-        .opacity(placement == .collapsed ? 0.7 : 1.0)
-    }
-}
-
-struct FavoritesView: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(0..<10) { index in
-                    HStack {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow)
-                        Text("Favorite \(index + 1)")
-                    }
-                }
-            }
-            .navigationTitle("Favorites")
-        }
-    }
-}
-
-struct SearchView: View {
-    @Binding var searchText: String
-    
-    var body: some View {
-        List {
-            if searchText.isEmpty {
-                Text("Start typing to search")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(0..<5) { index in
-                    Text("Result \(index + 1) for '\(searchText)'")
-                }
-            }
-        }
-        .navigationTitle("Search")
-    }
-}
 ```
 
 ---
@@ -1710,7 +1534,7 @@ GlassEffectContainer(spacing: CGFloat) {
 }
 ```
 
-### Toolbar \u0026 Navigation
+### Toolbar & Navigation
 
 ```swift
 .toolbar { }                           // Automatic glass styling
@@ -1737,7 +1561,7 @@ ToolbarSpacer(.flexible)
 DefaultToolbarItem(kind: .search, placement: .bottomBar)
 ```
 
-### Sheets \u0026 Presentations
+### Sheets & Presentations
 
 ```swift
 .presentationDetents([.medium, .large])
@@ -1801,41 +1625,9 @@ DefaultToolbarItem(kind: .search, placement: .bottomBar)
 - Create with Swift: Design principles guide
 - SerialCoder.dev: Morphing implementations
 
-**Stack Overflow:**
-- Active community discussions
-- Implementation challenges and solutions
-- Widget background workarounds
-- UIKit integration patterns
-
 ---
 
-## Conclusion
-
-iOS 26 Liquid Glass represents a fundamental evolution in iOS design, requiring thoughtful implementation to balance visual appeal with usability, performance, and accessibility. This reference document provides comprehensive coverage from basic implementation through advanced techniques, real-world examples, and production best practices.
-
-**Key Takeaways:**
-1. Reserve Liquid Glass for navigation layer only
-2. Always use GlassEffectContainer for multiple glass elements
-3. Test extensively with accessibility settings enabled
-4. Monitor performance on older devices
-5. Respect user preferences and system settings
-6. Prioritize content legibility over visual effects
-7. Use morphing transitions for smooth state changes
-8. Follow Apple's design guidelines and HIG
-
-**Next Steps:**
-- Watch WWDC 2025 sessions 219 and 323
-- Download and study Landmarks sample code
-- Experiment with basic implementations
-- Test on physical devices
-- Gather user feedback
-- Iterate on designs based on real-world usage
-
-iOS 26 Liquid Glass provides powerful tools for creating beautiful, functional interfaces when used appropriately and thoughtfully. This reference serves as your comprehensive guide to implementation excellence.
-
----
-
-**Document Version:** 1.0
-**Last Updated:** November 16, 2025
-**iOS Version:** 26.0+
+**Document Version:** 1.0  
+**Last Updated:** November 16, 2025  
+**iOS Version:** 26.0+  
 **Xcode Version:** 26.0+

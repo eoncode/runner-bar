@@ -46,4 +46,3 @@ The most likely culprit: the old `NSPanel` code called `resizeAndRepositionPanel
 <div align="center">⁂</div>
 
 [^1]: https://developer.apple.com/documentation/appkit/nspopover/contentsize
-
