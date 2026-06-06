@@ -36,14 +36,21 @@ struct SettingsView: View {
     @ObservedObject var store: RunnerViewModel
 
     // MARK: - Observed stores
+    // @StateObject — NOT @ObservedObject — because these are singleton instances
+    // assigned inline. @ObservedObject re-creates its subscription wrapper on every
+    // render cycle; when the singleton publishes a change SwiftUI re-renders, tears
+    // down the wrapper, re-subscribes, and can fire objectWillChange again before the
+    // render settles → infinite glitchy loop. @StateObject is owned by SwiftUI for the
+    // lifetime of this view's identity, so the subscription is stable.
+    // store (RunnerViewModel) is injected by the caller and must stay @ObservedObject.
     /// App-wide preferences (notifications, update channel, etc.).
-    @ObservedObject private var settings = AppPreferencesStore.shared
+    @StateObject private var settings = AppPreferencesStore.shared
     /// Notification opt-in preferences per scope.
-    @ObservedObject private var notifications = NotificationPreferences.shared
+    @StateObject private var notifications = NotificationPreferences.shared
     /// Index of locally-installed self-hosted runners.
-    @ObservedObject private var localRunnerStore = LocalRunnerStore.shared
+    @StateObject private var localRunnerStore = LocalRunnerStore.shared
     /// Registered remote runner scopes (org / repo URLs).
-    @ObservedObject private var scopeStore = ScopeStore.shared
+    @StateObject private var scopeStore = ScopeStore.shared
 
     // MARK: - Local UI state
     /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
