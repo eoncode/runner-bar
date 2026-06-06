@@ -21,31 +21,17 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PanelHeaderView
-/// Top bar of the popover panel showing the RunnerBar logo, sign-in state,
-/// and the settings gear button.
+/// Top bar of the popover panel showing system stats and the settings/quit buttons.
 struct PanelHeaderView: View {
     /// The stats view model driving the header sparklines.
     @ObservedObject var statsVM: SystemStatsViewModel
-    /// Whether the user is currently authenticated with GitHub.
-    let isAuthenticated: Bool
     /// Called when the user taps the settings gear button.
     let onSelectSettings: () -> Void
-    /// Called when the user taps the sign-in button.
-    let onSignIn: () -> Void
-    /// Renders the header bar: system stats, sign-in button (shown when unauthenticated), settings and quit buttons.
+    /// Renders the header bar: system stats, settings and quit buttons.
     var body: some View {
         HStack(spacing: 6) {
             HeaderStatsBar(statsVM: statsVM)
             Spacer()
-            if !isAuthenticated {
-                Button(action: onSignIn, label: {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.orange).frame(width: 7, height: 7)
-                        Text("Sign in").font(.caption2).foregroundColor(.secondary)
-                    }
-                })
-                .buttonStyle(.plain).help("Sign in with GitHub")
-            }
             // macOS 26+: wrap both toolbar buttons in a single shared GlassEffectContainer
             // so they share a CABackdropLayer sampling region, enabling interactive glass
             // (scaling-on-press, shimmer, bounce) and morphing between sibling buttons.
