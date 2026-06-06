@@ -283,6 +283,12 @@ public enum ProcessRunner {
                     try task.run()
                 } catch {
                     log("ProcessRunner › launch error: \(error) — \(executableURL.lastPathComponent) \(arguments.joined(separator: " "))")
+                    // Close the write end of the pipe so readDataToEndOfFile() in the
+                    // already-dispatched drainQueue.async block receives EOF and returns.
+                    // Without this, the drain closure blocks indefinitely (Process.deinit
+                    // skips pipe teardown when hasLaunched == false), leaking the GCD
+                    // worker thread for the lifetime of the app.
+                    outPipe.fileHandleForWriting.closeFile()
                     continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
                     return
                 }
