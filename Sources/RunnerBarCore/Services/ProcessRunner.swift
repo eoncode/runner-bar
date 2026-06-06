@@ -305,10 +305,16 @@ public enum ProcessRunner {
                 if let inputPipe, let stdinData = stdin {
                     // stdin writing remains on DispatchQueue.global deliberately:
                     // no current call site of runAsync passes stdin, so this path
-                    // is dormant. Migrating to async (e.g. a Task writing to a
-                    // FileHandle) is deferred until a real call site requires it
-                    // — at that point the write-completion ordering should also be
-                    // revisited (currently fire-and-forget before process exits).
+                    // is dormant and has never been exercised in production.
+                    //
+                    // WARNING — do not activate without fixing the ordering first:
+                    // this fire-and-forget write has no synchronisation with
+                    // terminationHandler. If the process exits before the write
+                    // completes, closeFile() races against drainQueue.sync{} and
+                    // continuation.resume() — a data race on the pipe file handle.
+                    // Fix: write stdin synchronously before drainQueue.async, or
+                    // use a dedicated serial queue with an explicit barrier.
+                    // Tracked as part of issue #1077 (mutation-path async migration).
                     DispatchQueue.global(qos: .userInitiated).async {
                         inputPipe.fileHandleForWriting.write(stdinData)
                         inputPipe.fileHandleForWriting.closeFile()

@@ -648,6 +648,9 @@ struct AddRunnerSheet: View {
     /// - `FileManager` calls run synchronously on a pool thread (cheap, non-blocking — fine).
     /// - `fetchRegistrationToken` is synchronous + `DispatchSemaphore`-based and is called from
     ///   the pool, never from the main actor. The semaphore blocks a pool thread only.
+    ///   Blocking a cooperative pool thread is a known limitation tracked as issue #1077
+    ///   (migrate mutation helpers to async/await). It is acceptable here because runner
+    ///   registration is a rare, user-initiated, one-shot action — not a hot path.
     ///   `urlSessionPost` contains `dispatchPrecondition(.notOnQueue(.main))` — this is the
     ///   runtime canary: it would trap in every debug build if we were ever accidentally on
     ///   `@MainActor`. It has never fired.
