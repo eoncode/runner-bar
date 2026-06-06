@@ -31,8 +31,10 @@ struct PanelMainView: View {
     let onSelectSettings: () -> Void
     /// Panel open/close and transient-hide state from the environment.
     @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
-    /// Whether the user has a stored GitHub token.
-    @State private var isAuthenticated = (githubToken() != nil)
+    /// Whether the user has a stored GitHub token (OAuth Keychain or env var).
+    /// Checked against both sources so that OAuth-authenticated users don't see
+    /// the sign-in badge when no env token is present.
+    @State private var isAuthenticated = (Keychain.token != nil || githubToken() != nil)
     /// View model for CPU/memory stats displayed in the header.
     @StateObject private var systemStats = SystemStatsViewModel()
     /// Number of workflow rows currently shown in the actions section.
@@ -99,7 +101,7 @@ struct PanelMainView: View {
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
-            isAuthenticated = (githubToken() != nil)
+            isAuthenticated = (Keychain.token != nil || githubToken() != nil)
             if panelVisibilityState.isOpen { systemStats.start() }
             startDisplayTickTimer()
         }
