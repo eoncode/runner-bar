@@ -88,6 +88,16 @@ final class RunnerStore {
             }
     }
 
+    /// Cancels the active poll task on deallocation.
+    ///
+    /// `RunnerStore` is a `@MainActor` singleton so `deinit` is never called in
+    /// normal app operation, but the guard makes lifecycle intent explicit and
+    /// prevents a dangling task if the class is ever instantiated in tests or
+    /// refactored away from a singleton (#1160).
+    deinit {
+        pollTask?.cancel()
+    }
+
     // MARK: - Poll loop
 
     /// Starts (or restarts) the structured async poll loop.

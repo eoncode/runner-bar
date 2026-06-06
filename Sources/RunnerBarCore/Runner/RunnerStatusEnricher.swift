@@ -119,6 +119,22 @@ public struct RunnerStatusEnricher: Sendable {
         let fallbackAPI = apiByScope.values.reduce(into: [String: APIRunnerPayload]()) {
             $0.merge($1) { first, _ in first }
         }
+
+        // Warn when two different scopes expose a runner with the same name.
+        // The scoped-first lookup mitigates this for the common case, but a runner
+        // whose gitHubUrl is nil will fall through to fallbackAPI and may be
+        // enriched with data from the wrong scope (#1160).
+        var seenInFallback: [String: String] = [:]
+        for (scopeURL, payloads) in apiByScope {
+            for name in payloads.keys {
+                if let previousScope = seenInFallback[name] {
+                    log("[Enricher] ⚠️ fallback collision — runner '\(name)' appears in both '\(previousScope)' and '\(scopeURL)'; scoped lookup takes priority")
+                } else {
+                    seenInFallback[name] = scopeURL
+                }
+            }
+        }
+
         var result = runners
         for idx in result.indices {
             let name = result[idx].runnerName

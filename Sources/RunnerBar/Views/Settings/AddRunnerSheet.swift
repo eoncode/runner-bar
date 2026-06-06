@@ -656,7 +656,7 @@ struct AddRunnerSheet: View {
 
             if !FileManager.default.fileExists(atPath: configPath) {
                 await setStep("Downloading runner package…")
-                guard let downloadURL = fetchRunnerDownloadURL() else {
+                guard let downloadURL = await fetchRunnerDownloadURL() else {
                     await MainActor.run {
                         isRegistering = false
                         errorMessage  = "Could not determine runner download URL. Check your internet connection."
@@ -665,15 +665,23 @@ struct AddRunnerSheet: View {
                 }
                 let tarPath = URL(fileURLWithPath: dir)
                     .appendingPathComponent("actions-runner.tar.gz").path
-                guard runSimpleProcess(GitHubURIs.curlPath,
-                                      args: ["-sL", downloadURL, "-o", tarPath]) == 0 else {
+                let curlResult = await ProcessRunner.runAsync(
+                    executableURL: URL(fileURLWithPath: GitHubURIs.curlPath),
+                    arguments: ["-sL", downloadURL, "-o", tarPath],
+                    timeout: 300
+                )
+                guard curlResult.exitCode == 0 else {
                     await MainActor.run { isRegistering = false; errorMessage = "Download failed." }
                     return
                 }
                 await setStep("Unpacking runner package…")
-                let tarExit = runSimpleProcess(GitHubURIs.tarPath, args: ["xzf", tarPath, "-C", dir])
+                let tarResult = await ProcessRunner.runAsync(
+                    executableURL: URL(fileURLWithPath: GitHubURIs.tarPath),
+                    arguments: ["xzf", tarPath, "-C", dir],
+                    timeout: 120
+                )
                 try? FileManager.default.removeItem(atPath: tarPath)
-                guard tarExit == 0 else {
+                guard tarResult.exitCode == 0 else {
                     await MainActor.run { isRegistering = false; errorMessage = "Unpack failed." }
                     return
                 }
@@ -694,8 +702,8 @@ struct AddRunnerSheet: View {
 
             await setStep("Configuring runner…")
             let ghURL      = "\(GitHubURIs.base)\(scope)"
-            let configExit = runRegistrationCommand(dir: dir, ghURL: ghURL,
-                                                    token: token, name: name, labels: labels)
+            let configExit = await runRegistrationCommand(dir: dir, ghURL: ghURL,
+                                                          token: token, name: name, labels: labels)
             guard configExit == 0 else {
                 await MainActor.run {
                     isRegistering = false
@@ -747,59 +755,24 @@ struct AddRunnerSheet: View {
     // MARK: - Process helpers (Add new)
 
     /// Invokes `config.sh` with the GitHub URL, registration token, runner name and labels.
+    ///
+    /// Uses `ProcessRunner.runAsync` so the cooperative thread pool is not blocked
+    /// while `config.sh` runs (replaces the former `nonisolated(unsafe)` + `NSLock`
+    /// + `readabilityHandler` pattern — #1158, #1159).
     nonisolated private func runRegistrationCommand(
         dir: String, ghURL: String, token: String, name: String, labels: String
-    ) -> Int32 {
-        let configURL = URL(fileURLWithPath: dir).appendingPathComponent("config.sh")
-        let task = Process()
-        task.executableURL       = configURL
-        task.currentDirectoryURL = URL(fileURLWithPath: dir)
+    ) async -> Int32 {
         var args = ["--url", ghURL, "--token", token, "--name", name, "--unattended"]
         if !labels.isEmpty { args += ["--labels", labels] }
-        task.arguments = args
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError  = pipe
-        nonisolated(unsafe) var outputData = Data()
-        let lock = NSLock()
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            lock.lock(); outputData.append(chunk); lock.unlock()
-        }
-        do { try task.run() } catch {
-            pipe.fileHandleForReading.readabilityHandler = nil
-            log("runRegistrationCommand › launch error: \(error)")
-            return 1
-        }
-        let timeoutItem = DispatchWorkItem { [weak task] in task?.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        pipe.fileHandleForReading.readabilityHandler = nil
-        let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-        if !tail.isEmpty { lock.lock(); outputData.append(tail); lock.unlock() }
-        log("runRegistrationCommand › exit=\(task.terminationStatus): \((String(data: outputData, encoding: .utf8) ?? "").prefix(500))")
-        return task.terminationStatus
-    }
-
-    /// Launches `executable` with `args` synchronously and returns the termination status.
-    nonisolated private func runSimpleProcess(_ executable: String, args: [String]) -> Int32 {
-        let task = Process()
-        task.executableURL  = URL(fileURLWithPath: executable)
-        task.arguments      = args
-        task.standardOutput = Pipe()
-        task.standardError  = Pipe()
-        do { try task.run() } catch {
-            log("runSimpleProcess › \(executable) launch error: \(error)")
-            return 1
-        }
-        let timeoutItem = DispatchWorkItem { [weak task] in task?.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: timeoutItem)
-        task.waitUntilExit()
-        timeoutItem.cancel()
-        log("runSimpleProcess › \(executable) exit \(task.terminationStatus)")
-        return task.terminationStatus
+        let result = await ProcessRunner.runAsync(
+            executableURL: URL(fileURLWithPath: dir).appendingPathComponent("config.sh"),
+            arguments: args,
+            workingDirectory: URL(fileURLWithPath: dir),
+            mergeStderr: true,
+            timeout: 120
+        )
+        log("runRegistrationCommand › exit=\(result.exitCode): \(result.output.prefix(500))")
+        return result.exitCode
     }
 }
 
@@ -807,55 +780,58 @@ struct AddRunnerSheet: View {
 
 /// Queries the GitHub API for the latest macOS runner release and returns the `.tar.gz` download URL
 /// matching the current CPU architecture (`arm64` or `x64`).
-private func fetchRunnerDownloadURL() -> String? {
-    let archTask = Process()
-    archTask.executableURL  = URL(fileURLWithPath: GitHubURIs.unamePath)
-    archTask.arguments      = ["-m"]
-    let archPipe = Pipe()
-    archTask.standardOutput = archPipe
-    archTask.standardError  = Pipe()
-    guard (try? archTask.run()) != nil else { return nil }
-    archTask.waitUntilExit()
-    let archRaw   = archPipe.fileHandleForReading.readDataToEndOfFile()
-    let arch      = String(data: archRaw, encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+///
+/// Architecture detection uses `ProcessRunner.runAsync` (replaces bare `Process` + `waitUntilExit`).
+/// Release JSON is fetched via `URLSession.data(for:)` async/await (replaces blocking
+/// `Data(contentsOf:)` — #1158).
+private func fetchRunnerDownloadURL() async -> String? {
+    let archResult = await ProcessRunner.runAsync(
+        executableURL: URL(fileURLWithPath: GitHubURIs.unamePath),
+        arguments: ["-m"],
+        timeout: 5
+    )
+    let arch      = archResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
     let assetArch = (arch == "arm64") ? "arm64" : "x64"
     let assetName = "actions-runner-osx-\(assetArch)"
     log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
 
-    // TODO: #1077 — synchronous network call; blocks the detached task thread. Replace with URLSession once the call chain is async. // NOSONAR
-    guard let url  = URL(string: GitHubURIs.apiRunnerLatest),
-          let data = try? Data(contentsOf: url) else {
-        log("fetchRunnerDownloadURL › failed to fetch release JSON")
+    guard let url = URL(string: GitHubURIs.apiRunnerLatest) else {
+        log("fetchRunnerDownloadURL › invalid URL")
         return nil
     }
-    /// Minimal GitHub release asset payload.
-    struct Asset: Decodable {
-        /// The asset file name.
-        let name: String
-        /// The direct download URL for this asset.
-        let browserDownloadUrl: String
-        /// Maps snake_case API keys to camelCase Swift properties.
-        enum CodingKeys: String, CodingKey {
-            /// The name coding key.
-            case name
-            /// The browserDownloadUrl coding key.
-            case browserDownloadUrl = "browser_download_url"
+    do {
+        let (data, _) = try await URLSession.shared.data(from: url)
+        /// Minimal GitHub release asset payload.
+        struct Asset: Decodable {
+            /// The asset file name.
+            let name: String
+            /// The direct download URL for this asset.
+            let browserDownloadUrl: String
+            /// Maps snake_case API keys to camelCase Swift properties.
+            enum CodingKeys: String, CodingKey {
+                /// The name coding key.
+                case name
+                /// The browserDownloadUrl coding key.
+                case browserDownloadUrl = "browser_download_url"
+            }
         }
-    }
-    /// Minimal GitHub release payload — only assets are needed.
-    struct Release: Decodable {
-        /// The list of release assets.
-        let assets: [Asset]
-    }
-    guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
-        log("fetchRunnerDownloadURL › decode failed")
+        /// Minimal GitHub release payload — only assets are needed.
+        struct Release: Decodable {
+            /// The list of release assets.
+            let assets: [Asset]
+        }
+        guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
+            log("fetchRunnerDownloadURL › decode failed")
+            return nil
+        }
+        let match = release.assets.first {
+            $0.name.hasPrefix(assetName) && $0.name.hasSuffix(".tar.gz")
+        }
+        log("fetchRunnerDownloadURL › match=\(match?.name ?? \"nil\")")
+        return match?.browserDownloadUrl
+    } catch {
+        log("fetchRunnerDownloadURL › network error: \(error.localizedDescription)")
         return nil
     }
-    let match = release.assets.first {
-        $0.name.hasPrefix(assetName) && $0.name.hasSuffix(".tar.gz")
-    }
-    log("fetchRunnerDownloadURL › match=\(match?.name ?? "nil")")
-    return match?.browserDownloadUrl
 }
 // swiftlint:enable type_body_length
