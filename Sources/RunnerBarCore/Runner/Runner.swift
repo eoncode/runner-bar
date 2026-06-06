@@ -72,10 +72,10 @@ public struct Runner: Codable, Identifiable, Sendable {
     /// and no default value, so this explicit implementation is required.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id     = try c.decode(Int.self,          forKey: .id)
-        name   = try c.decode(String.self,       forKey: .name)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
         status = try c.decode(RunnerStatus.self, forKey: .status)
-        busy   = try c.decode(Bool.self,         forKey: .busy)
+        busy = try c.decode(Bool.self, forKey: .busy)
         metrics = nil
     }
 
