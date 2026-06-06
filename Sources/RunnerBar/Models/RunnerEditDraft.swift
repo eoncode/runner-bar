@@ -62,15 +62,6 @@ struct RunnerEditDraft: Equatable {
         loadProxy(installPath: installPath)
     }
 
-    // MARK: - Dirty check
-
-    /// Returns `true` when any field differs from `original`.
-    ///
-    /// Use this to decide whether to prompt the user before discarding changes.
-    func isDirty(comparedTo original: RunnerEditDraft) -> Bool {
-        self != original
-    }
-
     // MARK: - Parsed helpers
 
     /// Parsed, trimmed, non-empty label array derived from `labelsText`.

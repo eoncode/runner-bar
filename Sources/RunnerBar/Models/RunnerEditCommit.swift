@@ -11,16 +11,6 @@ enum CommitResult {
     case success
     /// One or more writes failed. `errors` contains human-readable messages.
     case failure([String])
-
-    /// `true` when the result has no errors.
-    var isSuccess: Bool {
-        if case .success = self { true } else { false }
-    }
-
-    /// Convenience accessor for the error messages, empty on success.
-    var errors: [String] {
-        if case .failure(let msgs) = self { msgs } else { [] }
-    }
 }
 
 // MARK: - commitRunnerEdit
