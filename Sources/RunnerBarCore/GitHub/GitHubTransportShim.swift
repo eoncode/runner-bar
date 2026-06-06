@@ -1,7 +1,7 @@
 // GitHubTransportShim.swift
 // RunnerBarCore
 //
-// Provides module-level `ghAPI`, `ghRawTransport`, and `ghIsRateLimited` symbols
+// Provides module-level `ghAPI`, `ghRawTransport` symbols
 // for RunnerBarCore consumers (WorkflowActionGroupFetch, RunnerStatusEnricher,
 // LogFetcher).
 //
@@ -34,10 +34,6 @@ private let transportLock = OSAllocatedUnfairLock<GHAPITransport>(initialState: 
 /// Serialises all reads and writes to the active raw transport closure.
 private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialState: { _ in nil })
 
-/// Closure that reports the current rate-limit state.
-/// Serialises all reads and writes to the rate-limit closure.
-private let rateLimitLock = OSAllocatedUnfairLock<@Sendable () -> Bool>(initialState: { false })
-
 // MARK: - Configuration
 
 /// Wire up the real (or mock) GitHub transports. Call once at launch before any fetch.
@@ -50,7 +46,6 @@ public func configureGHAPI(
     isRateLimited: @escaping @Sendable () -> Bool
 ) {
     transportLock.withLock { $0 = transport }
-    rateLimitLock.withLock { $0 = isRateLimited }
 }
 
 /// Wire up the raw-bytes transport for log endpoints. Call once at launch.
@@ -76,11 +71,4 @@ func ghAPI(_ endpoint: String) async -> Data? {
 /// - Note: Returns the closure itself, not the result of a call — callers invoke it directly.
 func ghRawTransport() -> GHRawTransport {
     rawTransportLock.withLock { $0 }
-}
-
-/// Returns `true` when the GitHub API is currently rate-limiting this client.
-/// periphery:ignore — cross-target visibility: getter is called from the RunnerBar app target
-/// via `GitHubURLSessionTransport`; Periphery cannot trace the cross-module read path.
-var ghIsRateLimited: Bool { // periphery:ignore
-    rateLimitLock.withLock { $0() }
 }
