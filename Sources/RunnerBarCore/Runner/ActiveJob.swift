@@ -28,7 +28,7 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     /// The repo or org scope string this job belongs to.
     ///
     /// - Note: Always `nil` at decode time — scope is not part of the GitHub API job payload.
-    ///   `RunnerStore` injects the correct scope after fetch via `ActiveJob` mutation.
+    ///   `RunnerStore` injects the correct scope by constructing a new `ActiveJob` after fetch.
     ///   Do not attempt to derive scope from runner name or URL here.
     public let scope: String?
 
@@ -59,7 +59,7 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     ///   - completedAt: UTC time the job finished.
     ///   - createdAt: UTC time the job was queued.
     ///   - steps: Ordered step list. Defaults to empty.
-    /// - Note: 12 parameters faithfully model the GitHub API payload. // NOSONAR
+    // NOSONAR — 12 parameters faithfully model the GitHub API payload.
     public init(
         id: Int,
         name: String,
@@ -306,10 +306,11 @@ public struct JobsResponse: Decodable, Sendable {
 /// Converts a raw `JobPayload` into a fully-typed `ActiveJob`.
 ///
 /// This is the single canonical factory — both `WorkflowActionGroupFetch` and
-/// `GitHub.swift` delegate here. Do not duplicate this logic elsewhere.
+/// `ISO8601DateParser` delegate here. Do not duplicate this logic elsewhere.
 ///
 /// - Note: `scope` is always set to `nil` here because scope is not present in
-///   the GitHub API job payload. Callers in `RunnerStore` inject scope after fetch.
+///   the GitHub API job payload. Callers in `RunnerStore` inject scope after fetch
+///   by constructing a new `ActiveJob` with the correct value.
 public func makeActiveJob(
     from payload: JobPayload,
     iso: ISO8601DateFormatter,

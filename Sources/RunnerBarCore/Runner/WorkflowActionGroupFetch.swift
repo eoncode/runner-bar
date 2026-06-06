@@ -7,6 +7,12 @@ import os
 /// Regex that extracts a PR number from a GitHub merge-ref branch name (e.g. `refs/pull/123/merge`).
 private let prNumberPattern = #"/(\d+)/"# // NOSONAR — fixed regex pattern
 
+/// Maximum number of in-progress/inconclusive jobs refreshed concurrently per run.
+///
+/// Capped to avoid a thundering-herd of single-job API calls when a run has
+/// many steps still in-progress simultaneously (e.g. a large matrix job).
+private let maxRefreshConcurrency = 3
+
 // MARK: - Codable helpers (private to this file)
 
 /// Response envelope for the workflow runs list API endpoint.
@@ -221,6 +227,9 @@ private func fetchJobsForGroup(
 ) async -> [ActiveJob] {
     if let cached = cache[sha],
        !cached.jobs.isEmpty,
+       // Both conditions required: a job can be concluded while one of its steps
+       // is still marked in-progress (stale step data from a mid-poll snapshot).
+       // Serving that cache entry would show a spinning step on an already-finished job.
        cached.jobs.allSatisfy({ $0.conclusion != nil }),
        !cached.jobs.contains(where: { $0.steps.contains { $0.status == JobStatus.inProgress } }) {
         return cached.jobs
@@ -249,7 +258,9 @@ private func fetchJobsForGroup(
 ///   haven't started yet, causing `jobsTotal` to be lower than the detail view.
 ///   `per_page=100` is the GitHub API maximum and covers all realistic job counts.
 ///
-/// Refresh calls for in-progress/inconclusive jobs run concurrently (capped at 3).
+/// Refresh calls for in-progress/inconclusive jobs run concurrently,
+/// capped at `maxRefreshConcurrency` to avoid a thundering-herd of single-job
+/// API calls on runs with many simultaneously in-progress steps.
 /// All date parsing goes through `ISO8601DateParser.shared`.
 private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
     guard let data = await ghAPI("repos/\(scope)/actions/runs/\(runID)/jobs?per_page=100"),
@@ -265,10 +276,10 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
         return out
     }
 
-    // Refresh in-progress/inconclusive jobs concurrently, capped at 3.
+    // Refresh in-progress/inconclusive jobs concurrently, capped at maxRefreshConcurrency.
     let needsRefresh = initial.enumerated().filter { _, job in
         job.conclusion == nil || job.steps.contains { $0.status == JobStatus.inProgress }
-    }.prefix(3)
+    }.prefix(maxRefreshConcurrency)
     guard !needsRefresh.isEmpty else { return initial }
 
     var result = initial
