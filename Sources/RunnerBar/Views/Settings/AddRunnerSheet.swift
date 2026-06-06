@@ -588,6 +588,18 @@ struct AddRunnerSheet: View {
     // MARK: - Scopes loader
 
     /// Fetches the user's repos and organisations on a background thread.
+    ///
+    /// Uses a plain `Task` (not `Task.detached`) because `AddRunnerSheet` has no
+    /// `@MainActor` annotation at the type level. The `Task { }` inherits the actor
+    /// context of the call site (button action / `onAppear`), which is `@MainActor`,
+    /// but `fetchUserRepos()` and `fetchUserOrgs()` immediately suspend to the
+    /// cooperative pool via their own `await` boundaries — they do not block the
+    /// main actor. The explicit `await MainActor.run { … }` at the end re-confines
+    /// the UI state write to the main actor, which is correct and required.
+    ///
+    /// Using `Task.detached` here would achieve the same concurrency effect but
+    /// force explicit re-capture of every dependency. Plain `Task` is cleaner and
+    /// equally correct in this context.
     private func loadScopes() {
         isLoadingScopes = true
         Task(priority: .userInitiated) {
@@ -613,10 +625,23 @@ struct AddRunnerSheet: View {
     // swiftlint:disable:next function_body_length cyclomatic_complexity
     /// Downloads, unpacks, configures a new runner, registers with LocalRunnerStore, and dismisses.
     ///
-    /// `register()` is already `async` (called via `Task { await register() }` from the button).
-    /// All subprocess and network work suspends off the main actor via `await` — no
-    /// `Task.detached` wrapper is needed. Home-directory and pre-flight guards run
-    /// synchronously; the async hops happen at the three `await` call sites below.
+    /// ## Actor isolation
+    /// `AddRunnerSheet` is a plain `struct … View` with no `@MainActor` annotation on the type.
+    /// Only `body` and explicitly annotated helpers (e.g. `setStep`) are `@MainActor`.
+    /// `register()` itself carries **no** actor annotation, so the `Task { await register() }`
+    /// at the call site (button action) does **not** inherit the main actor — it runs on the
+    /// cooperative thread pool. This means:
+    /// - `FileManager` calls and home-directory guards run synchronously on a pool thread (cheap,
+    ///   non-blocking — acceptable).
+    /// - `fetchRegistrationToken` is synchronous + `DispatchSemaphore`-based but is also called
+    ///   from the pool, never from the main actor, so the semaphore blocks a pool thread only.
+    ///   `urlSessionPost` contains `dispatchPrecondition(.notOnQueue(.main))` which confirms
+    ///   this assumption at runtime in debug builds.
+    /// - All three `await` call sites (`fetchRunnerDownloadURL`, `runSimpleProcess`,
+    ///   `runRegistrationCommand`) suspend the pool task, not the main actor.
+    ///
+    /// If `register()` is ever moved to a `@MainActor`-isolated context, `fetchRegistrationToken`
+    /// **must** be migrated to `async` first — or wrapped in `Task.detached { }.value`.
     private func register() async {
         guard canRegister else { return }
         errorMessage = nil
@@ -683,6 +708,11 @@ struct AddRunnerSheet: View {
         }
 
         await setStep("Fetching registration token…")
+        // fetchRegistrationToken is synchronous (DispatchSemaphore inside urlSessionPost).
+        // Safe here because register() runs on the cooperative thread pool, not @MainActor —
+        // see the isolation note in the doc comment above. The semaphore blocks a pool thread
+        // for the network round-trip only. urlSessionPost's dispatchPrecondition(.notOnQueue(.main))
+        // will trap in debug builds if this ever accidentally moves to the main actor.
         guard let token = fetchRegistrationToken(scope: scope) else {
             isRegistering = false
             if currentScopeType == .org {

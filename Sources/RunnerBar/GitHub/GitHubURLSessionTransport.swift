@@ -114,8 +114,20 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
 // MARK: - URLSession transport
 //
 // All GitHub API calls use URLSession + Authorization: Bearer header.
-// All functions block the calling thread via DispatchSemaphore.
-// ⚠️ Must always be called from a background thread.
+// The mutation helpers in this file (`urlSessionPost`, `urlSessionPut`,
+// `urlSessionDelete`, `urlSessionRaw`) are intentionally synchronous legacy
+// wrappers built on `URLSession.dataTask + DispatchSemaphore.wait()`.
+//
+// Safety contract:
+// - Never call them from `@MainActor` / the main queue.
+// - Never call them from an `async` function that is expected to suspend rather
+//   than block a cooperative pool thread.
+// - Safe call sites are synchronous background work or non-main-actor pool tasks
+//   that explicitly accept a brief blocking section.
+//
+// These helpers remain in place because PR #1138 migrated the GET transport to
+// `async/await` first; mutation-path migration is a separate follow-up. Each helper
+// defends its contract with `dispatchPrecondition(.notOnQueue(.main))`.
 
 // MARK: - Request builder
 
@@ -472,7 +484,16 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
 /// - `Data(…)`  — 2xx response with a body; decode as needed.
 ///
 /// Callers that decode the response body should guard against empty `Data()` first.
-/// ⚠️ Must be called from a background thread.
+///
+/// ## Threading
+/// Synchronous: blocks the calling thread via `DispatchSemaphore` until the response
+/// arrives. Must **not** be called from `@MainActor` / the main queue (enforced by
+/// `dispatchPrecondition` — will trap in debug builds) and must **not** be called
+/// directly from an `async` function that runs on `@MainActor`, as that would block
+/// the main actor for the full network round-trip. Safe call sites are synchronous
+/// background threads or cooperative-pool tasks that do not hold the main actor.
+/// Future work: migrate to `async` backed by `URLSession.data(for:)` to match the
+/// GET transport layer.
 @discardableResult
 func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -517,7 +538,9 @@ func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval
 }
 
 /// Sends a PUT to the given GitHub API endpoint with a JSON body. Returns the response body, or nil on failure.
-/// ⚠️ Must be called from a background thread.
+///
+/// Synchronous — see `urlSessionPost` threading contract. Must not be called from
+/// `@MainActor` or directly from an `async` function running on the main actor.
 func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     guard let token = githubToken() else {
@@ -559,7 +582,9 @@ func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -
 }
 
 /// Sends a DELETE to the given GitHub API endpoint. Returns true on success (2xx).
-/// ⚠️ Must be called from a background thread.
+///
+/// Synchronous — see `urlSessionPost` threading contract. Must not be called from
+/// `@MainActor` or directly from an `async` function running on the main actor.
 @discardableResult
 func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -615,6 +640,10 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Dat
 
 /// Directly deregisters a runner from GitHub via DELETE.
 /// Returns true on success (HTTP 204 No Content).
+///
+/// Synchronous — delegates to `urlSessionDelete` (DispatchSemaphore).
+/// Must not be called from `@MainActor`. Called from `LocalRunnerStore` on a
+/// background `Task` that does not hold the main actor.
 @discardableResult
 func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
     guard let scope = Scope.parse(scopeString) else {
@@ -630,6 +659,10 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
 
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
 /// Returns the updated label names on success, or nil on failure.
+///
+/// Synchronous — delegates to `urlSessionPut` (DispatchSemaphore).
+/// Must not be called from `@MainActor`. Called from `RunnerStore` on a
+/// background `Task` that does not hold the main actor.
 @discardableResult
 func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
@@ -669,6 +702,10 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
 /// Both functions are structurally identical; this helper keeps any future
 /// change (retry logic, timeout, error format) in one place.
 ///
+/// Synchronous — delegates to `urlSessionPost` (DispatchSemaphore). Inherits the
+/// same threading contract: must not be called from `@MainActor` or from an `async`
+/// function that holds the main actor.
+///
 /// - Parameters:
 ///   - type: The token endpoint suffix, e.g. `"registration-token"` or `"remove-token"`.
 ///   - scope: The parsed `Scope` value providing the API prefix.
@@ -693,6 +730,11 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) -> 
 }
 
 /// Fetches a short-lived runner registration token for the given scope.
+///
+/// Synchronous — delegates to `fetchRunnerToken` → `urlSessionPost` (DispatchSemaphore).
+/// Must not be called from `@MainActor`. The one active call site is
+/// `AddRunnerSheet.register()`, which runs on the cooperative thread pool (not the
+/// main actor) — see the isolation note in that function's doc comment.
 func fetchRegistrationToken(scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRegistrationToken › invalid scope: \(scopeString)")
@@ -704,6 +746,9 @@ func fetchRegistrationToken(scope scopeString: String) -> String? {
 }
 
 /// Fetches a runner removal token for the given scope.
+///
+/// Synchronous — same threading contract as `fetchRegistrationToken`.
+/// Must not be called from `@MainActor` or from an `async` function on the main actor.
 func fetchRemovalToken(scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRemovalToken › invalid scope: \(scopeString)")
@@ -715,7 +760,11 @@ func fetchRemovalToken(scope scopeString: String) -> String? {
 }
 
 /// Sends a POST to the given GitHub API endpoint. Returns true on success (2xx).
-/// ⚠️ Must be called from a background thread.
+///
+/// Thin convenience wrapper over `urlSessionPost`. Synchronous — inherits the same
+/// threading contract: must not be called from `@MainActor` or from an `async`
+/// function that holds the main actor. Used only for fire-and-forget mutation
+/// endpoints that return no meaningful body (e.g. cancel-run).
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
     let result = urlSessionPost(endpoint)
@@ -724,7 +773,11 @@ func ghPost(_ endpoint: String) -> Bool {
     return success
 }
 
-/// Cancels a workflow run.
+/// Cancels a workflow run via the GitHub Actions API.
+///
+/// Synchronous — delegates to `ghPost` → `urlSessionPost` (DispatchSemaphore).
+/// Must not be called from `@MainActor`. Called from `RunnerStore` on a
+/// background `Task` that does not hold the main actor.
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")

@@ -296,7 +296,7 @@ final class RunnerStore {
         // Resolve install paths and nil-out idle runners first (no async work needed).
         var indexed: [(scope: String, runner: Runner)] = runnersWithScope
         for i in indexed.indices where !indexed[i].runner.busy {
-            indexed[i].runner.metrics = nil
+            indexed[i].runner = indexed[i].runner.copying(metrics: nil)
             log("RunnerStore › fetchAndEnrichRunners — \(indexed[i].runner.name) (scope=\(indexed[i].scope)) is idle, metrics=nil")
         }
         // Fetch metrics for all busy runners concurrently. metricsForRunner is now
@@ -320,7 +320,7 @@ final class RunnerStore {
                 }
             }
             for await (idx, metrics) in group {
-                indexed[idx].runner.metrics = metrics
+                indexed[idx].runner = indexed[idx].runner.copying(metrics: metrics)
             }
         }
         let result = indexed.map(\.runner)

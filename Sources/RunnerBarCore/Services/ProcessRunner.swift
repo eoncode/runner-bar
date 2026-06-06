@@ -47,10 +47,20 @@ import Foundation
 /// Minimal heap-allocated mutable box.
 ///
 /// Used by `ProcessRunner.run(_:)` to let a `DispatchQueue.async` closure
-/// mutate a value without triggering Swift 6.2 `#SendableClosureCaptures`.
-/// The *box itself* is a `let` constant captured by the closure; only the
-/// stored `value` property is written. A `drainQueue.sync {}` barrier after
-/// `waitUntilExit()` provides the happens-before guarantee.
+/// Tiny mutable reference wrapper used only to bridge `DispatchQueue.async` /
+/// `terminationHandler` closures to outer local state without tripping Swift 6.2
+/// `#SendableClosureCaptures` diagnostics.
+///
+/// Why `@unchecked Sendable` is acceptable here:
+/// - The *box reference* is captured as a `let` constant by the `@Sendable` closure.
+/// - Only the stored `value` field is mutated.
+/// - Mutation is serialised by a dedicated private queue (`drainQueue`).
+/// - A matching `drainQueue.sync {}` barrier establishes the happens-before edge
+///   before the outer function reads `value`.
+///
+/// In other words, this is not shared unsynchronised mutable state; it is a tiny,
+/// queue-confined handoff cell. Replacing it with an actor would complicate the
+/// subprocess drain path without improving safety.
 private final class Box<T>: @unchecked Sendable {
     /// The wrapped mutable value.
     var value: T

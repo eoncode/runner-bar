@@ -32,7 +32,7 @@ public struct Runner: Codable, Identifiable, Sendable {
     /// `nil` if no matching `Runner.Worker` process was found for this runner's slot.
     /// Populated by `RunnerStore.fetch()` after the API response is decoded —
     /// not present in the JSON payload.
-    public var metrics: RunnerMetrics?
+    public let metrics: RunnerMetrics?
 
     /// Creates a new `Runner` instance.
     ///
@@ -61,6 +61,15 @@ public struct Runner: Codable, Identifiable, Sendable {
         case status
         /// Maps to the `busy` JSON field.
         case busy
+    }
+
+    /// Returns a copy of this runner with the given `metrics` value.
+    ///
+    /// Mirrors the `copying(…)` pattern used by `RunnerModel` for immutable mutation.
+    /// Use `nil` to clear metrics (idle runners), or pass a `RunnerMetrics` value for
+    /// busy runners whose process stats were resolved via `ps aux`.
+    public func copying(metrics: RunnerMetrics?) -> Runner {
+        Runner(id: id, name: name, status: status, busy: busy, metrics: metrics)
     }
 
     /// A single-line status string for display in the runner list row.
