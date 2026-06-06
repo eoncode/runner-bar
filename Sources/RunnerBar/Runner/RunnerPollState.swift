@@ -1,6 +1,5 @@
 // RunnerPollState.swift
 // RunnerBar
-import Combine
 import Foundation
 import os
 import RunnerBarCore

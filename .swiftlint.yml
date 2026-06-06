@@ -13,6 +13,7 @@ excluded:
 opt_in_rules:
   - closure_spacing        # consistent spacing inside closure braces
   - explicit_init          # disallow explicit .init() calls where redundant
+
   - sorted_imports         # keep import statements sorted
   - vertical_whitespace_closing_braces  # no blank line before closing brace
   - collection_alignment   # align collection literal elements
