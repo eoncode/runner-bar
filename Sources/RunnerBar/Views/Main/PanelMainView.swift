@@ -1,6 +1,5 @@
 // PanelMainView.swift
 // RunnerBar
-import Combine
 import RunnerBarCore
 import SwiftUI
 // REGRESSION GUARD -- DO NOT REMOVE - see regression history (ref #52 #54 #57 #375 #376 #377)
@@ -32,11 +31,6 @@ struct PanelMainView: View {
     let onSelectSettings: () -> Void
     /// Panel open/close and transient-hide state from the environment.
     @EnvironmentObject private var panelVisibilityState: PanelVisibilityState
-    /// Whether the user has a stored GitHub token (OAuth Keychain or env var).
-    /// Re-evaluated on every panel open and on sign-out — kept live via
-    /// .onChange(of: panelVisibilityState.isOpen) and didSignOut subscription.
-    /// NOTE: onCompletion is NOT set here — it belongs to SettingsView per OAuthService contract.
-    @State private var isAuthenticated = (githubToken() != nil)
     /// View model for CPU/memory stats displayed in the header.
     @StateObject private var systemStats = SystemStatsViewModel()
     /// Number of workflow rows currently shown in the actions section.
@@ -45,9 +39,6 @@ struct PanelMainView: View {
     @State private var displayTick: Int = 0
     /// Timer that fires `displayTick` increments; managed by `startDisplayTickTimer()`.
     @State private var displayTickTimer: Timer?
-    /// Retains the OAuthService.didSignOut Combine subscription.
-    /// Cancelled automatically when the view is deallocated.
-    @State private var signOutCancellable: AnyCancellable?
 
     /// Creates a `PanelMainView`.
     init(
@@ -87,9 +78,7 @@ struct PanelMainView: View {
         VStack(alignment: .leading, spacing: 0) {
             PanelHeaderView(
                 statsVM: systemStats,
-                isAuthenticated: isAuthenticated,
-                onSelectSettings: onSelectSettings,
-                onSignIn: signInWithGitHub
+                onSelectSettings: onSelectSettings
             )
             .onAppear { systemStats.start() }
             Divider()
@@ -106,14 +95,6 @@ struct PanelMainView: View {
         }
         .frame(minWidth: 280, maxWidth: 900, alignment: .top)
         .onAppear {
-            isAuthenticated = (githubToken() != nil)
-            // Subscribe to sign-out events so the badge clears immediately when the
-            // user signs out via Settings without needing a panel open/close cycle.
-            // NOTE: onCompletion is intentionally NOT assigned here — it belongs to
-            // SettingsView.onAppearAction per the OAuthService contract.
-            signOutCancellable = OAuthService.shared.didSignOut
-                .receive(on: DispatchQueue.main)
-                .sink { isAuthenticated = false }
             if panelVisibilityState.isOpen { systemStats.start() }
             startDisplayTickTimer()
         }
@@ -122,14 +103,7 @@ struct PanelMainView: View {
             stopDisplayTickTimer()
         }
         .onChange(of: panelVisibilityState.isOpen) { _, open in
-            if open {
-                // Re-read auth state every time the panel opens so that a sign-in
-                // completed via Settings is reflected without an app restart.
-                isAuthenticated = (githubToken() != nil)
-                systemStats.start()
-            } else {
-                systemStats.stop()
-            }
+            if open { systemStats.start() } else { systemStats.stop() }
         }
         // Reset the visible row count only when the list shrinks (e.g. a runner is removed),
         // not on every poll update — avoids snapping the user back mid-scroll.
@@ -213,13 +187,5 @@ struct PanelMainView: View {
             Text("GitHub rate limit reached -- \(countdownLabel)").font(.caption).foregroundColor(.secondary)
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
-    }
-
-    /// Opens the GitHub PAT documentation page in the default browser.
-    private func signInWithGitHub() {
-        let urlString = "\(GitHubConstants.base)/en/authentication/"
-            + "keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
-        guard let url = URL(string: urlString) else { return }
-        NSWorkspace.shared.open(url)
     }
 }
