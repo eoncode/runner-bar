@@ -303,6 +303,12 @@ public enum ProcessRunner {
                 }
 
                 if let inputPipe, let stdinData = stdin {
+                    // stdin writing remains on DispatchQueue.global deliberately:
+                    // no current call site of runAsync passes stdin, so this path
+                    // is dormant. Migrating to async (e.g. a Task writing to a
+                    // FileHandle) is deferred until a real call site requires it
+                    // — at that point the write-completion ordering should also be
+                    // revisited (currently fire-and-forget before process exits).
                     DispatchQueue.global(qos: .userInitiated).async {
                         inputPipe.fileHandleForWriting.write(stdinData)
                         inputPipe.fileHandleForWriting.closeFile()
