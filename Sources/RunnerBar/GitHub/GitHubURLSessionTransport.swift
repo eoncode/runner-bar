@@ -614,6 +614,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
 
 // MARK: - Runner token helpers
 
+    /// Requests a runner token of the given `type` (e.g. registration or removal) for `scope`.
 private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) -> String? {
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(type)"
     log("\(logPrefix) › POSTing \(endpoint)")
