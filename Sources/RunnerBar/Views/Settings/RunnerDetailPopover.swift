@@ -31,10 +31,10 @@ struct RunnerDetailPopover: View {
 
     /// Mutable draft buffering all editable values until OK is tapped.
     @State private var draft: RunnerEditDraft
+    /// Snapshot of the draft at load time; used to detect unsaved changes.
     // Intentionally set twice: seeded in init() from the model, then overwritten in
     // loadDisplayFields() after disk values are loaded so the dirty-check baseline
     // reflects actual persisted state rather than the model-only snapshot.
-    /// Snapshot of the draft at load time; used to detect unsaved changes.
     @State private var originalDraft: RunnerEditDraft
 
     // MARK: - Info fields (read-only, loaded from .runner JSON)
@@ -69,7 +69,6 @@ struct RunnerDetailPopover: View {
     }
 
     // MARK: - Body
-
     /// Root popover layout: header, form fields, and action bar.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
