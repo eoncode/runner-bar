@@ -258,6 +258,7 @@ final class RunnerStore {
 
     // MARK: - Apply result
 
+    /// Commits a completed fetch cycle's results to the store and notifies observers.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -279,6 +280,7 @@ final class RunnerStore {
 
     // MARK: - fetchAndEnrichRunners
 
+    /// Fetches runners from GitHub for each scope and enriches busy runners with local CPU/MEM metrics.
     func fetchAndEnrichRunners(
         scopes: [String],
         installPathMap: InstallPathMap
