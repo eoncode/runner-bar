@@ -87,6 +87,7 @@ final class OAuthService {
 
     /// Opens the GitHub OAuth authorization page in the default browser to begin sign-in.
     func signIn() {
+        log("OAuthService › signIn — initiating OAuth flow")
         let state = UUID().uuidString
         pendingState = state
         guard var comps = URLComponents(string: authorizeURL) else {
@@ -111,6 +112,7 @@ final class OAuthService {
         // handleCallback will CSRF-reject any eventual redirect with a mismatched
         // or absent state, so a stuck pendingState is safe — it will be cleared
         // on the next signIn(), signOut(), or a rejected handleCallback().
+        log("OAuthService › signIn — opening browser for OAuth")
         NSWorkspace.shared.open(url)
     }
 
@@ -125,9 +127,12 @@ final class OAuthService {
     /// Mirrors the same pattern used in `exchangeCode()` where `onCompletion` is
     /// gated on the actual Keychain save result.
     func signOut() {
+        log("OAuthService › signOut — called, pendingState=\(pendingState != nil ? "set" : "nil")")
         pendingState = nil
         let deleted = Keychain.delete()
+        log("OAuthService › signOut — Keychain.delete result=\(deleted)")
         if deleted {
+            log("OAuthService › signOut — emitting didSignOut")
             didSignOut.send()
         } else {
             log("OAuthService › signOut: Keychain.delete failed — sign-out suppressed to prevent ghost sign-in")
@@ -138,9 +143,14 @@ final class OAuthService {
 
     /// Handles the OAuth redirect URL from AppDelegate, verifying state and exchanging the code.
     func handleCallback(_ url: URL) {
+        log("OAuthService › handleCallback — url=\(url.absoluteString)")
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
-        else { onCompletion?(false); return }
+        else {
+            log("OAuthService › handleCallback — missing code param, calling onCompletion(false)")
+            onCompletion?(false)
+            return
+        }
         // CSRF guard: verify the state param matches what we sent in signIn().
         guard let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value else {
             log("OAuthService › handleCallback: no state param in redirect URL")
@@ -154,6 +164,7 @@ final class OAuthService {
             onCompletion?(false)
             return
         }
+        log("OAuthService › handleCallback — state OK, exchanging code")
         pendingState = nil
         Task { await exchangeCode(code) }
     }
@@ -162,6 +173,7 @@ final class OAuthService {
 
     /// POSTs the authorization code to GitHub and saves the returned access token to Keychain.
     private func exchangeCode(_ code: String) async {
+        log("OAuthService › exchangeCode — POST to GitHub")
         guard let url = URL(string: accessTokenURL) else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -174,7 +186,11 @@ final class OAuthService {
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { onCompletion?(false); return }
+        else {
+            log("OAuthService › exchangeCode — network/parse failure, calling onCompletion(false)")
+            onCompletion?(false)
+            return
+        }
         // GitHub returns 200 even on failure; check for an error field before access_token.
         if let errorCode = json["error"] as? String {
             let desc = json["error_description"] as? String ?? ""
@@ -190,7 +206,9 @@ final class OAuthService {
         // Gate success on whether the token was actually persisted to Keychain.
         // If Keychain.save fails, report failure so the UI does not show signed-in
         // while Keychain.token remains nil and subsequent API calls lack auth.
+        log("OAuthService › exchangeCode — got access_token (len=\(token.count)), saving to Keychain")
         let saved = Keychain.save(token)
+        log("OAuthService › exchangeCode — Keychain.save result=\(saved), calling onCompletion(\(saved))")
         if !saved { log("OAuthService › exchangeCode: Keychain.save failed") }
         onCompletion?(saved)
     }

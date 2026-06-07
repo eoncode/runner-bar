@@ -58,6 +58,7 @@ extension AppDelegate: NSPopoverDelegate {
     /// Builds the NSPopover, embeds the SwiftUI hosting controller, wires KVO
     /// and Combine subscriptions.
     func setupPanel() {
+        log("AppDelegate › setupPanel — begin")
         let controller = NSHostingController(rootView: mainView())
         controller.sizingOptions = .preferredContentSize
         hostingController = controller
@@ -70,9 +71,11 @@ extension AppDelegate: NSPopoverDelegate {
         newPopover.delegate = self
 
         popover = newPopover
+        log("AppDelegate › setupPanel — popover created, wiring KVO + Combine")
 
         setupKVO(controller: controller)
         setupCombineSubscriptions()
+        log("AppDelegate › setupPanel — complete")
     }
 
     // MARK: NSPopoverDelegate
@@ -90,7 +93,11 @@ extension AppDelegate: NSPopoverDelegate {
     /// `tearDownOpenState()` directly — by the time this fires, `panelIsOpen`
     /// is already `false` and the guard exits immediately.
     public func popoverDidClose(_ _: Notification) {
-        guard panelIsOpen else { return }
+        log("AppDelegate › popoverDidClose — panelIsOpen=\(panelIsOpen)")
+        guard panelIsOpen else {
+            log("AppDelegate › popoverDidClose — guard exit (panelIsOpen already false)")
+            return
+        }
         tearDownOpenState()
     }
 
@@ -98,6 +105,7 @@ extension AppDelegate: NSPopoverDelegate {
 
     /// Observes `preferredContentSize` and updates both width and height.
     private func setupKVO(controller: NSHostingController<AnyView>) {
+        log("AppDelegate › setupKVO — attaching preferredContentSize observer")
         sizeObservation = controller.observe(
             \.preferredContentSize,
             options: [.new]
@@ -112,17 +120,23 @@ extension AppDelegate: NSPopoverDelegate {
 
     /// Starts all Combine subscriptions.
     private func setupCombineSubscriptions() {
+        log("AppDelegate › setupCombineSubscriptions — begin")
+
         // $runners — local runner list changed on disk (added/removed runner config).
         LocalRunnerStore.shared.$runners
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] runners in
                 guard let self else { return }
+                log("AppDelegate › LocalRunnerStore.$runners fired — count=\(runners.count)")
                 self.observable.reload()
             }
             .store(in: &cancellables)
 
         // Everything below makes live network calls — skip entirely in UI tests.
-        guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else { return }
+        guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else {
+            log("AppDelegate › setupCombineSubscriptions — UI_TESTING detected, skipping network setup")
+            return
+        }
 
         // didUpdate — API poll cycle complete; refresh icon and view-model.
         RunnerStore.shared.didUpdate
@@ -135,7 +149,18 @@ extension AppDelegate: NSPopoverDelegate {
             }
             .store(in: &cancellables)
 
+        // FIX (#1179): Seed localRunners BEFORE starting the poll loop.
+        // LocalRunnerStore.init() only calls loadIndex() which populates
+        // runnerIndex (name→path map) but leaves runners=[] until refresh()
+        // runs the disk-hydration + launchctl + GitHub-enrichment pipeline.
+        // Without this call, RunnerStore.buildInstallPathMap always receives
+        // localRunners=[] → installPathMap is always empty → busy runners
+        // never get their installPath → metrics are never fetched.
+        log("AppDelegate › setupCombineSubscriptions — triggering LocalRunnerStore.refresh() BEFORE starting poll loop")
+        LocalRunnerStore.shared.refresh()
+
         // Start the polling loop. Guarded above — never runs during UI tests.
+        log("AppDelegate › setupCombineSubscriptions — starting RunnerStore poll loop")
         RunnerStore.shared.start()
 
         // didMutate — scope changed; must restart the store entirely so it polls
@@ -148,5 +173,7 @@ extension AppDelegate: NSPopoverDelegate {
                 RunnerStore.shared.start()
             }
             .store(in: &cancellables)
+
+        log("AppDelegate › setupCombineSubscriptions — complete")
     }
 }

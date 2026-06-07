@@ -228,18 +228,26 @@ struct SettingsView: View {
 
     /// Runs on `.onAppear`: refreshes auth state and starts the scope-mutation listener.
     private func onAppearAction() {
-        isOAuthAuthenticated = (Keychain.token != nil)
-        isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
+        let keychainToken = Keychain.token
+        let envToken = githubToken()
+        isOAuthAuthenticated = (keychainToken != nil)
+        isCLIAuthenticated = (keychainToken == nil && envToken != nil)
+        log("SettingsView › onAppear — Keychain.token=\(keychainToken != nil ? "present(len=\(keychainToken!.count))" : "nil") githubToken=\(envToken != nil ? "present(len=\(envToken!.count))" : "nil") isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
         OAuthService.shared.onCompletion = { success in
+            log("SettingsView › onCompletion — success=\(success), updating auth state")
             isOAuthAuthenticated = success
             isCLIAuthenticated = !success && githubToken() != nil
+            log("SettingsView › onCompletion — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             isSigningIn = false
         }
         signOutCancellable = OAuthService.shared.didSignOut
             .receive(on: DispatchQueue.main)
             .sink {
+                let postToken = githubToken()
+                log("SettingsView › didSignOut sink — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
                 isOAuthAuthenticated = false
-                isCLIAuthenticated = githubToken() != nil
+                isCLIAuthenticated = postToken != nil
+                log("SettingsView › didSignOut sink — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             }
         scopeMutateCancellable = ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
@@ -674,12 +682,14 @@ struct SettingsView: View {
 
     /// Initiates the OAuth sign-in flow via `OAuthService`.
     private func signInWithGitHub() {
+        log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
         OAuthService.shared.signIn()
     }
 
     /// Signs out of GitHub and clears all stored tokens.
     private func signOutOfGitHub() {
+        log("SettingsView › signOutOfGitHub — calling OAuthService.shared.signOut()")
         OAuthService.shared.signOut()
     }
 
