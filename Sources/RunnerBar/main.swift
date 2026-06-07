@@ -7,6 +7,11 @@
 /// ❌ NEVER remove this wrapper — it prevents a strict-concurrency build error.
 import AppKit
 
+// RunnerBar requires Apple Silicon. Building for x86_64 is not supported.
+#if !arch(arm64)
+#error("RunnerBar requires Apple Silicon (arm64). x86_64 is not supported.")
+#endif
+
 MainActor.assumeIsolated {
     let delegate = AppDelegate()
     NSApplication.shared.delegate = delegate

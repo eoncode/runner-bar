@@ -5,8 +5,8 @@ APP_NAME="RunnerBar"
 VERSION="0.7.0"
 OUT_DIR="dist"
 
-echo "→ Compiling universal binary..."
-swift build -c release --arch arm64 --arch x86_64
+echo "→ Compiling arm64 binary..."
+swift build -c release --arch arm64
 
 echo "→ Assembling .app bundle..."
 rm -rf "$OUT_DIR"
