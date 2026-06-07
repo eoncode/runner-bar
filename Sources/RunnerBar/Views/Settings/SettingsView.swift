@@ -571,7 +571,7 @@ struct SettingsView: View {
     }
 
     // MARK: - General
-    /// General section: launch-at-login toggle, version info, and sign-in controls.
+    /// General section: launch-at-login toggle, polling interval, and popover arrow toggle.
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
@@ -594,6 +594,19 @@ struct SettingsView: View {
             Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
                 .font(.caption).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
+            Divider().padding(.leading, RBSpacing.md)
+            // #1184: show/hide the NSPopover anchor arrow
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show popover arrow").font(.system(size: 12))
+                    Text("Controls whether the anchor arrow is shown on the menu bar popover. Takes effect on next open.")
+                        .font(.caption2).foregroundColor(Color.rbTextSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: $settings.showPopoverArrow)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
         }
     }
 
