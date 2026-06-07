@@ -119,6 +119,25 @@ final class LocalRunnerStore: ObservableObject {
         UserDefaults.standard.set(runnerIndex, forKey: Self.indexKey)
     }
 
+    // MARK: - Metrics write-back
+
+    /// Applies a CPU/memory snapshot to the matching `RunnerModel` in place.
+    ///
+    /// Called by `RunnerStore.fetchAndEnrichRunners` after each poll cycle so the
+    /// metrics fetched for busy `Runner` objects are reflected in the `RunnerModel`
+    /// list that the main-view runner row reads from.
+    ///
+    /// Matches by `agentId` first (stable across renames), then falls back to `runnerName`.
+    /// No-op when no matching runner is found.
+    /// Does NOT trigger a full `refresh()` — it is a lightweight in-place `copying(metrics:)`.
+    func applyMetrics(_ metrics: RunnerMetrics?, forAgentId agentId: Int?, name: String) {
+        guard let idx = runners.firstIndex(where: { runner in
+            if let aid = agentId, let rid = runner.agentId { return aid == rid }
+            return runner.runnerName == name
+        }) else { return }
+        runners[idx] = runners[idx].copying(metrics: metrics)
+    }
+
     // MARK: - Refresh
 
     /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.

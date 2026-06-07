@@ -322,6 +322,16 @@ final class RunnerStore {
                 indexed[idx].runner = indexed[idx].runner.copying(metrics: metrics)
             }
         }
+        // Write metrics back to LocalRunnerStore so the main-view runner row badge
+        // reflects the latest CPU/MEM values. applyMetrics is a lightweight in-place
+        // copying(metrics:) — no disk I/O, no API call, no refresh() cycle.
+        for (_, runner) in indexed {
+            LocalRunnerStore.shared.applyMetrics(
+                runner.metrics,
+                forAgentId: runner.id,
+                name: runner.name
+            )
+        }
         let result = indexed.map(\.runner)
         log("RunnerStore › fetchAndEnrichRunners EXIT — returning \(result.count) runner(s)")
         return result
