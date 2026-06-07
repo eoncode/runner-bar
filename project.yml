@@ -28,7 +28,6 @@ targets:
         AD_HOC_CODE_SIGNING_ALLOWED: YES
         INFOPLIST_FILE: Resources/Info.plist
         ARCHS: arm64
-        VALID_ARCHS: arm64
         EXCLUDED_ARCHS: x86_64
         # LSUIElement makes the app a menu bar agent (no Dock icon) in production.
         # It lives here as a build setting rather than in Info.plist so that it
@@ -60,7 +59,6 @@ targets:
         AD_HOC_CODE_SIGNING_ALLOWED: YES
         GENERATE_INFOPLIST_FILE: YES
         ARCHS: arm64
-        VALID_ARCHS: arm64
         EXCLUDED_ARCHS: x86_64
 
 schemes:
