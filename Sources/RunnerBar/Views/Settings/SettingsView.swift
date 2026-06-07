@@ -599,7 +599,7 @@ struct SettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show popover arrow").font(.system(size: 12))
-                    Text("Hides the anchor arrow on the menu bar popover. Takes effect on next open.")
+                    Text("Controls whether the anchor arrow is shown on the menu bar popover. Takes effect on next open.")
                         .font(.caption2).foregroundColor(Color.rbTextSecondary)
                 }
                 Spacer()

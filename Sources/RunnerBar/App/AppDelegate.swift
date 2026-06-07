@@ -38,6 +38,8 @@ import SwiftUI
 // The preference is stored in AppPreferencesStore.showPopoverArrow (default: true).
 // ⚠️ The arrow state is baked in at show() time — changing the pref takes
 //    effect on the NEXT open. Never call show() mid-session to apply it.
+// ⚠️ The KVC call is guarded by responds(to:) so the app degrades silently
+//    (arrow stays visible) rather than crashing if Apple removes the key.
 //
 // TEXT INPUT:
 // NSPopover windows are key-capable natively. NSApp.activate() is
@@ -422,8 +424,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // shouldHideAnchor is a private KVC key — not App Store safe, but
             // RunnerBar is not App Store distributed so this is acceptable.
             // ⚠️ Must be set immediately before show() — the value is latched at show() time.
+            // ⚠️ Guarded by responds(to:) so the app degrades silently (arrow stays
+            //    visible) rather than crashing if Apple removes the key on a future macOS.
             let hideArrow = !AppPreferencesStore.shared.showPopoverArrow
-            popover.setValue(hideArrow, forKeyPath: "shouldHideAnchor")
+            if popover.responds(to: NSSelectorFromString("setShouldHideAnchor:")) {
+                popover.setValue(hideArrow, forKey: "shouldHideAnchor")
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
         makePopoverWindowKeyIfPossible()
