@@ -14,7 +14,7 @@ import os
 /// can never observe `isLimited == true` with a stale / nil `resetDate`.
 ///
 /// Pipeline:
-///   1. `urlSessionAPI` / `urlSessionAPIPaginated` receive a 403/429.
+///   1. `urlSessionAPIAsync` / `urlSessionAPIPaginated` receive a 403/429.
 ///   2. They write `isLimited = true` + `resetDate` under this lock and call
 ///      `scheduleRateLimitReset(resetAt:)` to auto-clear after the window.
 ///   3. `ghIsRateLimited` / `ghRateLimitResetDate` module vars expose the
@@ -124,12 +124,8 @@ private func scheduleRateLimitReset(resetAt: TimeInterval?) {
 // - Never call them from `@MainActor` / the main queue.
 // - Never call them from an `async` function that is expected to suspend rather
 //   than block a cooperative pool thread.
-// - Safe call sites are synchronous background work or non-main-actor pool tasks
+// - Safe call sites are synchronous background threads or non-main-actor pool tasks
 //   that explicitly accept a brief blocking section.
-//
-// These helpers remain in place because PR #1138 migrated the GET transport to
-// `async/await` first; mutation-path migration is a separate follow-up. Each helper
-// defends its contract with `dispatchPrecondition(.notOnQueue(.main))`.
 
 // MARK: - Request builder
 
@@ -218,14 +214,8 @@ private func handleRateLimitResponse(
 ) {
     let resetTS = response.value(forHTTPHeaderField: "X-RateLimit-Reset")
         .flatMap { TimeInterval($0) }
-    // Use Int() conversion to tolerate whitespace or non-canonical zero strings
-    // (e.g. " 0", "00") that string equality == "0" would miss.
     let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
         .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-    // Retry-After is present on GitHub secondary rate-limit 403s (non-zero remaining).
-    // Its value is the number of seconds to wait before retrying.
-    // Note: this function is only called for 403/429 responses (see all call sites),
-    // so retryAfter != nil is only treated as a rate-limit signal in that context.
     let retryAfter = response.value(forHTTPHeaderField: "Retry-After")
         .flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }
     let isRealRateLimit = statusCode == 429 || remaining == 0 || retryAfter != nil
@@ -233,9 +223,6 @@ private func handleRateLimitResponse(
         logErrorBody(data, endpoint: endpoint, status: statusCode)
         let limitKind = retryAfter != nil && remaining != 0 ? "secondary" : "primary"
         log("URLSessionTransport › ⚠️ rate limited (\(limitKind)) — \(endpoint) status=\(statusCode)")
-        // For secondary limits, convert Retry-After (relative seconds) to an
-        // absolute Unix timestamp so scheduleRateLimitReset can use it directly.
-        // Date() is called immediately on response receipt; latency is negligible.
         let effectiveResetTS: TimeInterval?
         if let retryAfter, resetTS == nil {
             effectiveResetTS = Date().timeIntervalSince1970 + retryAfter
@@ -294,57 +281,12 @@ func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async ->
     }
 }
 
-// MARK: - Legacy synchronous GET (retained for non-async call sites)
-
-/// Fetches a single GitHub API page synchronously (blocking the calling thread).
-/// ⚠️ Must be called from a background thread, never from the main thread.
-func urlSessionAPI(_ endpoint: String, timeout: TimeInterval = 20) -> Data? {
-    dispatchPrecondition(condition: .notOnQueue(.main))
-    guard let token = githubToken() else {
-        log("urlSessionAPI › no token available")
-        return nil
-    }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionAPI › invalid URL: \(urlString)")
-        return nil
-    }
-    let req = makeRequest(url: url, token: token, timeout: timeout)
-    let sem = DispatchSemaphore(value: 0)
-    let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
-    URLSession.shared.dataTask(with: req) { data, response, error in
-        defer { sem.signal() }
-        if let error {
-            log("URLSessionTransport › \(urlString) network error: \(error.localizedDescription)")
-            return
-        }
-        guard let http = response as? HTTPURLResponse else { return }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            logErrorBody(data, endpoint: urlString, status: http.statusCode)
-            return
-        }
-        clearRateLimitIfNeeded()
-        result.withLock { $0 = data }
-    }.resume()
-    sem.wait()
-    return result.withLock { $0 }
-}
-
 /// Fetches and concatenates all pages for a GitHub paginated endpoint using
 /// `URLSession.data(for:)` async/await.
 ///
 /// Follows the `Link: <url>; rel="next"` header automatically until all pages
 /// are consumed or an error stops pagination.
 ///
-/// - S3 redirect safety: `URLSession` follows redirects automatically; the
-///   `Authorization` header is stripped before replaying to a different domain
-///   (cross-origin redirect semantics per RFC 7235 / Apple URLSession behaviour),
-///   so the Bearer token is never forwarded to third-party hosts such as S3.
-///   No custom redirect delegate is required.
 /// - Token is re-fetched on every loop iteration so that a sign-out mid-pagination
 ///   is detected immediately rather than continuing with a stale credential.
 /// - A `401 Unauthorized` response breaks the loop, discards any partial results,
@@ -356,7 +298,6 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
     var didFailAuthentication = false
 
     while let urlString = nextURL {
-        // Re-fetch token each iteration so a mid-pagination sign-out is detected early.
         guard let token = githubToken() else {
             log("urlSessionAPIPaginated › no token available, stopping pagination")
             didFailAuthentication = true
@@ -397,14 +338,12 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
         }
     }
 
-    // Auth failure: discard partial results so callers see nil, not a truncated list.
     if didFailAuthentication {
         if !allItems.isEmpty {
             log("urlSessionAPIPaginated › authentication failed mid-pagination — discarding \(allItems.count) partial items")
         }
         return nil
     }
-    // Log partial results so callers know the list may be incomplete due to rate limit.
     if ghIsRateLimited && !allItems.isEmpty {
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
@@ -490,18 +429,6 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
 /// - `nil`      — network failure or non-2xx status (request failed).
 /// - `Data()`   — 2xx response with no body (e.g. 204 No Content); treat as success.
 /// - `Data(…)`  — 2xx response with a body; decode as needed.
-///
-/// Callers that decode the response body should guard against empty `Data()` first.
-///
-/// ## Threading
-/// Synchronous: blocks the calling thread via `DispatchSemaphore` until the response
-/// arrives. Must **not** be called from `@MainActor` / the main queue (enforced by
-/// `dispatchPrecondition` — will trap in debug builds) and must **not** be called
-/// directly from an `async` function that runs on `@MainActor`, as that would block
-/// the main actor for the full network round-trip. Safe call sites are synchronous
-/// background threads or cooperative-pool tasks that do not hold the main actor.
-/// Future work: migrate to `async` backed by `URLSession.data(for:)` to match the
-/// GET transport layer.
 @discardableResult
 func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -546,9 +473,6 @@ func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval
 }
 
 /// Sends a PUT to the given GitHub API endpoint with a JSON body. Returns the response body, or nil on failure.
-///
-/// Synchronous — see `urlSessionPost` threading contract. Must not be called from
-/// `@MainActor` or directly from an `async` function running on the main actor.
 func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -> Data? {
     dispatchPrecondition(condition: .notOnQueue(.main))
     guard let token = githubToken() else {
@@ -590,9 +514,6 @@ func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -
 }
 
 /// Sends a DELETE to the given GitHub API endpoint. Returns true on success (2xx).
-///
-/// Synchronous — see `urlSessionPost` threading contract. Must not be called from
-/// `@MainActor` or directly from an `async` function running on the main actor.
 @discardableResult
 func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
     dispatchPrecondition(condition: .notOnQueue(.main))
@@ -647,11 +568,6 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Dat
 // MARK: - Runner mutation helpers
 
 /// Directly deregisters a runner from GitHub via DELETE.
-/// Returns true on success (HTTP 204 No Content).
-///
-/// Synchronous — delegates to `urlSessionDelete` (DispatchSemaphore).
-/// Must not be called from `@MainActor`. Called from `LocalRunnerStore` on a
-/// background `Task` that does not hold the main actor.
 @discardableResult
 func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
     guard let scope = Scope.parse(scopeString) else {
@@ -666,11 +582,6 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
 }
 
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
-/// Returns the updated label names on success, or nil on failure.
-///
-/// Synchronous — delegates to `urlSessionPut` (DispatchSemaphore).
-/// Must not be called from `@MainActor`. Called from `RunnerStore` on a
-/// background `Task` that does not hold the main actor.
 @discardableResult
 func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
@@ -688,9 +599,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
         return nil
     }
     struct LabelsResponse: Decodable {
-        /// A single runner label.
         struct Label: Decodable { let name: String }
-        /// The updated labels list.
         let labels: [Label]
     }
     guard let resp = try? JSONDecoder().decode(LabelsResponse.self, from: outData) else {
@@ -705,26 +614,9 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
 
 // MARK: - Runner token helpers
 
-/// Shared implementation for `fetchRegistrationToken` and `fetchRemovalToken`.
-///
-/// Both functions are structurally identical; this helper keeps any future
-/// change (retry logic, timeout, error format) in one place.
-///
-/// Synchronous — delegates to `urlSessionPost` (DispatchSemaphore). Inherits the
-/// same threading contract: must not be called from `@MainActor` or from an `async`
-/// function that holds the main actor.
-///
-/// - Parameters:
-///   - type: The token endpoint suffix, e.g. `"registration-token"` or `"remove-token"`.
-///   - scope: The parsed `Scope` value providing the API prefix.
-///   - logPrefix: Label used in log messages to identify the caller.
-/// - Returns: The short-lived token string, or `nil` on failure.
 private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) -> String? {
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(type)"
     log("\(logPrefix) › POSTing \(endpoint)")
-    // Token endpoints must return a body; empty Data() is failure here, not
-    // success. This overrides urlSessionPost's documented Data() == success
-    // semantics, which apply to bodyless 2xx responses like 204 No Content.
     guard let outputData = urlSessionPost(endpoint), !outputData.isEmpty else {
         log("\(logPrefix) › no data for \(endpoint)")
         return nil
@@ -738,11 +630,6 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) -> 
 }
 
 /// Fetches a short-lived runner registration token for the given scope.
-///
-/// Synchronous — delegates to `fetchRunnerToken` → `urlSessionPost` (DispatchSemaphore).
-/// Must not be called from `@MainActor`. The one active call site is
-/// `AddRunnerSheet.register()`, which runs on the cooperative thread pool (not the
-/// main actor) — see the isolation note in that function's doc comment.
 func fetchRegistrationToken(scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRegistrationToken › invalid scope: \(scopeString)")
@@ -754,9 +641,6 @@ func fetchRegistrationToken(scope scopeString: String) -> String? {
 }
 
 /// Fetches a runner removal token for the given scope.
-///
-/// Synchronous — same threading contract as `fetchRegistrationToken`.
-/// Must not be called from `@MainActor` or from an `async` function on the main actor.
 func fetchRemovalToken(scope scopeString: String) -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRemovalToken › invalid scope: \(scopeString)")
@@ -767,12 +651,7 @@ func fetchRemovalToken(scope scopeString: String) -> String? {
     return token
 }
 
-/// Sends a POST to the given GitHub API endpoint. Returns true on success (2xx).
-///
-/// Thin convenience wrapper over `urlSessionPost`. Synchronous — inherits the same
-/// threading contract: must not be called from `@MainActor` or from an `async`
-/// function that holds the main actor. Used only for fire-and-forget mutation
-/// endpoints that return no meaningful body (e.g. cancel-run).
+/// Thin convenience wrapper over `urlSessionPost` for fire-and-forget mutation endpoints.
 @discardableResult
 func ghPost(_ endpoint: String) -> Bool {
     let result = urlSessionPost(endpoint)
@@ -782,10 +661,6 @@ func ghPost(_ endpoint: String) -> Bool {
 }
 
 /// Cancels a workflow run via the GitHub Actions API.
-///
-/// Synchronous — delegates to `ghPost` → `urlSessionPost` (DispatchSemaphore).
-/// Must not be called from `@MainActor`. Called from `RunnerStore` on a
-/// background `Task` that does not hold the main actor.
 @discardableResult
 func cancelRun(runID: Int, scope: String) -> Bool {
     let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
