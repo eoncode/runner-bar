@@ -183,7 +183,9 @@ final class RunnerStore {
         if localRunners.isEmpty {
             log("RunnerStore › ⚠️ fetch — localRunners is EMPTY; installPathMap will be empty; busy runners will have no metrics this cycle")
         } else {
+#if DEBUG
             log("RunnerStore › fetch — localRunners=\(localRunners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)))" })")
+#endif
         }
         let installPathMap   = buildInstallPathMap(
             scopes: scopesSnapshot,

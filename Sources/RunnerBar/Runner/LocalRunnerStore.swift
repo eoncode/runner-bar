@@ -154,7 +154,7 @@ final class LocalRunnerStore: ObservableObject {
     /// init() only loads runnerIndex (name→path). runners stays [] until refresh() runs.
     /// Must be called:
     ///   1. At app startup (AppDelegate+PanelSetup, BEFORE RunnerStore.start())
-    ///   2. Each poll cycle (RunnerStore.fetch(), so installPathMap stays current)
+    ///   2. On-demand from views that need a fresh scan (e.g. SettingsView lifecycle actions)
     ///   3. From any view that needs a fresh scan (SettingsView, lifecycle actions)
     func refresh() {
         log("LocalRunnerStore › refresh() called — isScanning=\(isScanning) runnerIndex.count=\(runnerIndex.count) runners.count=\(runners.count)")
