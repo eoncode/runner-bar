@@ -119,6 +119,25 @@ final class LocalRunnerStore: ObservableObject {
         UserDefaults.standard.set(runnerIndex, forKey: Self.indexKey)
     }
 
+    // MARK: - Metrics write-back
+
+    /// Applies a CPU/memory snapshot to the matching `RunnerModel` in place.
+    ///
+    /// Called by `RunnerStore.fetchAndEnrichRunners` after each poll cycle so the
+    /// metrics fetched for busy `Runner` objects are reflected in the `RunnerModel`
+    /// list that the main-view runner row reads from.
+    ///
+    /// Matches by `agentId` first (stable across renames), then falls back to `runnerName`.
+    /// No-op when no matching runner is found.
+    /// Does NOT trigger a full `refresh()` — it is a lightweight in-place `copying(metrics:)`.
+    func applyMetrics(_ metrics: RunnerMetrics?, forAgentId agentId: Int?, name: String) {
+        guard let idx = runners.firstIndex(where: { runner in
+            if let aid = agentId, let rid = runner.agentId { return aid == rid }
+            return runner.runnerName == name
+        }) else { return }
+        runners[idx] = runners[idx].copying(metrics: metrics)
+    }
+
     // MARK: - Refresh
 
     /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.
@@ -162,9 +181,32 @@ final class LocalRunnerStore: ObservableObject {
 
     /// Applies enriched runner data back on the main actor and clears the scanning flag.
     /// Extracted from `refresh()` to keep closure nesting within the 2-level limit.
+    ///
+    /// Preserves any live CPU/MEM metrics that were written by `RunnerStore.fetchAndEnrichRunners`
+    /// via `applyMetrics()` since the last refresh started. Without this, overwriting `runners`
+    /// with freshly-hydrated models (which have `metrics = nil`) stomps the badge values.
+    /// Metrics are keyed by `agentId` first (stable across renames), then `runnerName`.
     @MainActor
     private func applyRefreshResults(_ enriched: [RunnerModel]) {
-        runners = enriched.sorted { $0.runnerName < $1.runnerName }
+        // Snapshot current metrics before overwriting so the CPU/MEM badge survives the refresh.
+        var metricsByAgentId: [Int: RunnerMetrics] = [:]
+        var metricsByName: [String: RunnerMetrics] = [:]
+        for runner in runners {
+            guard let m = runner.metrics else { continue }
+            if let aid = runner.agentId { metricsByAgentId[aid] = m }
+            metricsByName[runner.runnerName] = m
+        }
+        // Re-apply preserved metrics to the new list.
+        let preserved: [RunnerModel] = enriched.map { runner in
+            if let aid = runner.agentId, let m = metricsByAgentId[aid] {
+                return runner.copying(metrics: m)
+            }
+            if let m = metricsByName[runner.runnerName] {
+                return runner.copying(metrics: m)
+            }
+            return runner
+        }
+        runners = preserved.sorted { $0.runnerName < $1.runnerName }
         isScanning = false
         log("LocalRunnerStore > refresh() main — done. runners.count=\(runners.count)")
     }
