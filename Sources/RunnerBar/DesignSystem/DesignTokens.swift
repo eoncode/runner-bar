@@ -169,8 +169,6 @@ enum RBSpacing {
     static let xs: CGFloat = 4
     /// 6 pt — tight gap between related elements.
     static let sm: CGFloat = 6
-    /// 8 pt — standard label/row gap.
-    static let label: CGFloat = 8
     /// 10 pt — default row horizontal padding.
     static let md: CGFloat = 10
 }
