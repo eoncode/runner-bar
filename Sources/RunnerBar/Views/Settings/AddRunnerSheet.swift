@@ -767,7 +767,7 @@ struct AddRunnerSheet: View {
     ///
     /// The plist label is derived as `actions.runner.<owner>.<repo>.<runnerName>` and written
     /// atomically. Used by both the "Add new" and "Add pre-existing" flows.
-    nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
+    private nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
         let scopeParts = scope.components(separatedBy: "/")
