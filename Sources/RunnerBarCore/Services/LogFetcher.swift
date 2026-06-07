@@ -27,7 +27,7 @@ private func ghRaw(_ endpoint: String) -> Data? {
 ///
 /// `/actions/jobs/{id}/logs` 302-redirects to a short-lived S3 URL; the transport follows it.
 /// Returns `nil` when `scope` is not in `owner/repo` form, the request fails,
-/// or the response body looks like a JSON error object (starts with `"{"`)
+/// or the response body looks like a JSON error object (starts with `"{"`).
 ///
 /// - Parameters:
 ///   - jobID: The GitHub Actions job ID.

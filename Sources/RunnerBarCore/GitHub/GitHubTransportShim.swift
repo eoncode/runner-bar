@@ -40,10 +40,8 @@ private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialStat
 ///
 /// - Parameters:
 ///   - transport: Async closure for JSON REST calls; returns `nil` on failure.
-///   - isRateLimited: Returns `true` when the API is rate-limited.
 public func configureGHAPI(
-    _ transport: @escaping GHAPITransport,
-    isRateLimited: @escaping @Sendable () -> Bool
+    _ transport: @escaping GHAPITransport
 ) {
     transportLock.withLock { $0 = transport }
 }
