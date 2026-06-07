@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
+    </clipPath>
+    <radialGradient id="bgTone" cx="50%" cy="40%" r="80%">
+      <stop offset="0%"  stop-color="#3A3A3C"/>
+      <stop offset="100%" stop-color="#1C1C1E"/>
+    </radialGradient>
+    <linearGradient id="boltStroke" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#bgTone)"/>
+
+    <!-- Bolt outline — system applies user's tint -->
+    <g transform="translate(512 512) scale(28) translate(-12 -12)">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+               fill="none"
+               stroke="url(#boltStroke)" stroke-width="1.4"
+               stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-label="RunnerBar status bar icon">
+  <!--
+    macOS status bar template image.
+    22pt canvas (also export @1x, @2x, @3x: 22, 44, 66 px).
+    Uses currentColor so NSImage(isTemplate:true) tints automatically.
+    Optically centered: bolt is slightly smaller than 22pt source to leave 2pt safe margin.
+  -->
+  <g transform="translate(11 11) scale(0.78) translate(-12 -12)">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+             fill="none"
+             stroke="currentColor" stroke-width="1.6"
+             stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RunnerBar — Brand Style Guide</title>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+</head>
+<body>
+
+<!-- =================== TOP NAV =================== -->
+<nav class="topnav" aria-label="Style guide sections">
+  <a href="#top" class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+               stroke="currentColor" stroke-width="1.7"
+               stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <span>RunnerBar</span>
+    <span class="brand-tag">Brand v1.0</span>
+  </a>
+  <ul class="topnav-links">
+    <li><a href="#identity">Identity</a></li>
+    <li><a href="#logo">Logo</a></li>
+    <li><a href="#color">Color</a></li>
+    <li><a href="#type">Type</a></li>
+    <li><a href="#voice">Voice</a></li>
+    <li><a href="#ui">UI</a></li>
+    <li><a href="#icons">Icons</a></li>
+    <li><a href="#hero">Hero</a></li>
+  </ul>
+</nav>
+
+<!-- =================== HERO =================== -->
+<header id="top" class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <div class="eyebrow">
+      <span class="dot"></span> Brand Style Guide · v1.0 · June 2026
+    </div>
+    <h1 class="display">
+      RunnerBar.<br/>
+      <span class="muted">The menu bar for GitHub Actions.</span>
+    </h1>
+    <p class="lede">
+      A native macOS utility for managing GitHub self-hosted runners — with live workflow status and AI-powered failure recovery. This guide defines how RunnerBar looks, sounds, and behaves.
+    </p>
+    <div class="hero-meta">
+      <div><span class="kbd">⌘</span><span class="kbd">R</span><span class="kbd-label">Refresh runs</span></div>
+      <div class="hero-meta-sep">·</div>
+      <div><code class="inline-code">curl -fsSL eoncode.github.io/runner-bar/install.sh | bash</code></div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- =================== 1. IDENTITY =================== -->
+<section id="identity" class="section">
+  <header class="section-head">
+    <span class="section-num">1.0</span>
+    <h2>Brand Identity</h2>
+    <p class="section-sub">Who RunnerBar is, in one breath.</p>
+  </header>
+
+  <div class="identity-grid">
+    <div class="card card-lg">
+      <div class="card-label">Positioning</div>
+      <p class="card-body-lg">
+        A <strong>macOS-native menu bar utility</strong> that puts GitHub Actions, self-hosted runners, and AI failure recovery one click from the system tray.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Category</div>
+      <p>Developer tool · macOS utility · CI runner management</p>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Stack signals</div>
+      <p>macOS 26+ · Apple Silicon · Swift 6.2 · Liquid Glass UI</p>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Audience</div>
+      <p>macOS-first engineers maintaining GitHub Actions pipelines and self-hosted runners.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Personality</div>
+      <ul class="adjective-list">
+        <li>Native</li>
+        <li>Precise</li>
+        <li>Restrained</li>
+        <li>Self-healing</li>
+        <li>Quietly powerful</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="pillars">
+    <div class="pillar">
+      <div class="pillar-num">01</div>
+      <h3>Workflow status</h3>
+      <p>Live runs across all repos and orgs — drilled into jobs, steps, and logs from a single popover.</p>
+    </div>
+    <div class="pillar">
+      <div class="pillar-num">02</div>
+      <h3>Local runner manager</h3>
+      <p>Auto-discovers runners on this Mac. Start, stop, add, remove — without touching Terminal or github.com.</p>
+    </div>
+    <div class="pillar">
+      <div class="pillar-num">03</div>
+      <h3>Failure hooks</h3>
+      <p>When a run fails, fire a shell command with <code class="inline-code-sm">$FAILURE_LOG</code>, <code class="inline-code-sm">$RUN_LINK</code>, and friends. Default: hand the log to Gemini.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 2. LOGO =================== -->
+<section id="logo" class="section">
+  <header class="section-head">
+    <span class="section-num">2.0</span>
+    <h2>Logo</h2>
+    <p class="section-sub">A single bolt. Energy. A run firing. The hook landing. One mark, four contexts.</p>
+  </header>
+
+  <div class="logo-stage logo-stage-primary">
+    <svg width="200" height="200" viewBox="0 0 24 24" fill="none" aria-label="RunnerBar mark">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+               stroke="currentColor" stroke-width="1.6"
+               stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="logo-stage-caption">Primary mark · outline · scales to 16 px</div>
+  </div>
+
+  <div class="logo-grid">
+    <div class="logo-tile">
+      <svg width="120" height="120" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--ink)">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                 stroke="currentColor" stroke-width="1.6"
+                 stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+      <div class="logo-tile-label">Outline · on paper</div>
+    </div>
+
+    <div class="logo-tile logo-tile-dark">
+      <svg width="120" height="120" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:#fff">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                 stroke="currentColor" stroke-width="1.6"
+                 stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+      <div class="logo-tile-label">Outline · on ink</div>
+    </div>
+
+    <div class="logo-tile logo-tile-blue">
+      <svg width="120" height="120" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:#fff">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                 stroke="currentColor" stroke-width="1.6"
+                 stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+      <div class="logo-tile-label">Outline · on accent</div>
+    </div>
+
+    <div class="logo-tile">
+      <div class="lockup">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--action)">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                   stroke="currentColor" stroke-width="1.6"
+                   stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+        <span class="wordmark">RunnerBar</span>
+      </div>
+      <div class="logo-tile-label">Horizontal lockup</div>
+    </div>
+  </div>
+
+  <div class="rules-grid">
+    <div class="rule-card">
+      <h4>Clear space</h4>
+      <p>Minimum padding around the bolt equals the width of its narrowest leg (≈ 1/8 of the icon canvas) on every side.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Minimum size</h4>
+      <p>Outline mark: 16 px (12 px for the status bar template). Lockup: 96 px wide — below that, drop the wordmark.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Wordmark</h4>
+      <p>Always set in <strong>Satoshi 700</strong> with capital R and B. One word, no space, no slash. The bolt sits left of the wordmark, never above.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Don't</h4>
+      <p>Don't rotate, mirror, recolor with multiple hues, fill the bolt, stretch, or place on busy photography. Outline only — always.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 3. COLOR =================== -->
+<section id="color" class="section">
+  <header class="section-head">
+    <span class="section-num">3.0</span>
+    <h2>Color</h2>
+    <p class="section-sub">A single Apple-system accent against neutrals. Status colors borrow from macOS conventions.</p>
+  </header>
+
+  <h3 class="subhead">Primary</h3>
+  <div class="swatch-row">
+    <div class="swatch" style="--bg:#0A0A0A;--fg:#fff">
+      <div class="swatch-color"></div>
+      <div class="swatch-meta">
+        <div class="swatch-name">Ink</div>
+        <code>#0A0A0A</code>
+        <div class="swatch-role">Surfaces · primary background</div>
+      </div>
+    </div>
+    <div class="swatch" style="--bg:#0A84FF;--fg:#fff">
+      <div class="swatch-color"></div>
+      <div class="swatch-meta">
+        <div class="swatch-name">Action Blue</div>
+        <code>#0A84FF</code>
+        <div class="swatch-role">Sole accent · CTAs · active state</div>
+      </div>
+    </div>
+    <div class="swatch" style="--bg:#FAFAFA;--fg:#0A0A0A;--border:1px solid #E6E6E6">
+      <div class="swatch-color"></div>
+      <div class="swatch-meta">
+        <div class="swatch-name">Paper</div>
+        <code>#FAFAFA</code>
+        <div class="swatch-role">Light surface · marketing site</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="subhead">Neutrals</h3>
+  <div class="swatch-row swatch-row-sm">
+    <div class="swatch" style="--bg:#141414;--fg:#fff"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Surface 1</div><code>#141414</code></div></div>
+    <div class="swatch" style="--bg:#1C1C1E;--fg:#fff"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Surface 2</div><code>#1C1C1E</code></div></div>
+    <div class="swatch" style="--bg:#2A2A2C;--fg:#fff"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Surface 3</div><code>#2A2A2C</code></div></div>
+    <div class="swatch" style="--bg:#8E8E93;--fg:#fff"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Mute</div><code>#8E8E93</code></div></div>
+    <div class="swatch" style="--bg:#E6E6E6;--fg:#0A0A0A"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Line</div><code>#E6E6E6</code></div></div>
+    <div class="swatch" style="--bg:#FFFFFF;--fg:#0A0A0A;--border:1px solid #E6E6E6"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Snow</div><code>#FFFFFF</code></div></div>
+  </div>
+
+  <h3 class="subhead">Status</h3>
+  <div class="swatch-row swatch-row-sm">
+    <div class="swatch" style="--bg:#30D158;--fg:#0A0A0A"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Success</div><code>#30D158</code><div class="swatch-role">Run passed</div></div></div>
+    <div class="swatch" style="--bg:#FF9F0A;--fg:#0A0A0A"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">In-flight</div><code>#FF9F0A</code><div class="swatch-role">Run queued / progressing</div></div></div>
+    <div class="swatch" style="--bg:#FF453A;--fg:#fff"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Failure</div><code>#FF453A</code><div class="swatch-role">Run failed · triggers hook</div></div></div>
+    <div class="swatch" style="--bg:#F05138;--fg:#fff"><div class="swatch-color"></div><div class="swatch-meta"><div class="swatch-name">Swift</div><code>#F05138</code><div class="swatch-role">Stack badge only</div></div></div>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">Rule of one accent</div>
+    <p>RunnerBar uses <strong>Action Blue</strong> as its single brand accent. Status colors are functional, not decorative — they appear only where the system reports actual state. Avoid gradients across multiple hues.</p>
+  </div>
+</section>
+
+<!-- =================== 4. TYPE =================== -->
+<section id="type" class="section">
+  <header class="section-head">
+    <span class="section-num">4.0</span>
+    <h2>Typography</h2>
+    <p class="section-sub">Satoshi for display. General Sans for UI. Geist Mono for everything technical.</p>
+  </header>
+
+  <div class="type-stack">
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">Display · Satoshi 900</div>
+        <div class="type-label-meta">64 / 56 · -0.03em</div>
+      </div>
+      <div class="type-sample type-sample-display">Self-healing CI, in your menu bar.</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">H1 · Satoshi 700</div>
+        <div class="type-label-meta">40 / 48 · -0.02em</div>
+      </div>
+      <div class="type-sample type-sample-h1">Live runs across every repo</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">H2 · Satoshi 700</div>
+        <div class="type-label-meta">28 / 36 · -0.015em</div>
+      </div>
+      <div class="type-sample type-sample-h2">Failure hooks, with substitution tokens</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">Lede · General Sans 500</div>
+        <div class="type-label-meta">20 / 32 · -0.005em</div>
+      </div>
+      <div class="type-sample type-sample-lede">When a run fails, RunnerBar fires a shell command in Terminal with the failure log already substituted.</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">Body · General Sans 400</div>
+        <div class="type-label-meta">16 / 26</div>
+      </div>
+      <div class="type-sample type-sample-body">Auto-discovers runners on this Mac — LaunchAgents, <code class="inline-code-sm">.runner</code> files, and launchctl entries — without touching Terminal or github.com.</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">UI · General Sans 500</div>
+        <div class="type-label-meta">14 / 20</div>
+      </div>
+      <div class="type-sample type-sample-ui">Re-run failed jobs · Cancel run · Copy YAML · Open in browser</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">Mono · Geist Mono 500</div>
+        <div class="type-label-meta">13 / 22 · for code, IDs, hotkeys</div>
+      </div>
+      <div class="type-sample type-sample-mono">$FAILURE_LOG · $RUN_LINK · $LOCAL_PATH · feature/refactor-runner-discovery</div>
+    </div>
+
+    <div class="type-row">
+      <div class="type-label">
+        <div class="type-label-name">Caption · General Sans 500</div>
+        <div class="type-label-meta">12 / 16 · uppercase · 0.08em tracking</div>
+      </div>
+      <div class="type-sample type-sample-caption">macOS 26 · Apple Silicon · Swift 6.2</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">Type rules</div>
+    <ul>
+      <li>Maximum <strong>three families</strong>: Satoshi (display), General Sans (UI &amp; body), Geist Mono (mono).</li>
+      <li>Display sizes only above 24 px. Body sizes never above 20 px.</li>
+      <li>Mono is reserved for code, paths, shell variables, run IDs, hotkeys, and SHAs. Never set marketing prose in mono.</li>
+      <li>Tracking tightens as size grows. Body copy stays at default tracking.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- =================== 5. VOICE =================== -->
+<section id="voice" class="section">
+  <header class="section-head">
+    <span class="section-num">5.0</span>
+    <h2>Voice &amp; Copy</h2>
+    <p class="section-sub">Direct. Technical. Quietly confident. Engineer to engineer.</p>
+  </header>
+
+  <div class="voice-grid">
+    <div class="voice-card">
+      <h4>We are</h4>
+      <ul class="voice-list">
+        <li>Specific about what we do</li>
+        <li>Honest about what we don't</li>
+        <li>Using developer vocabulary correctly</li>
+        <li>Short. Active. Present tense.</li>
+      </ul>
+    </div>
+    <div class="voice-card">
+      <h4>We are not</h4>
+      <ul class="voice-list voice-list-no">
+        <li>"Revolutionizing", "transforming", "unleashing"</li>
+        <li>Calling ourselves "AI-powered" as an adjective</li>
+        <li>Stacking three buzzwords in one sentence</li>
+        <li>Apologetic, hedged, or fluffy</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="subhead">Canonical taglines</h3>
+  <div class="tagline-stack">
+    <div class="tagline tagline-primary">
+      <div class="tagline-rank">Primary</div>
+      <div class="tagline-line">The menu bar for GitHub Actions.</div>
+    </div>
+    <div class="tagline">
+      <div class="tagline-rank">Alt · function-led</div>
+      <div class="tagline-line">Local runners, live workflows, AI failure recovery — without leaving your menu bar.</div>
+    </div>
+    <div class="tagline">
+      <div class="tagline-rank">Alt · outcome-led</div>
+      <div class="tagline-line">Stop watching Actions. Let RunnerBar watch them for you.</div>
+    </div>
+    <div class="tagline">
+      <div class="tagline-rank">Alt · self-healing</div>
+      <div class="tagline-line">When CI breaks, the hook fires before you do.</div>
+    </div>
+  </div>
+
+  <h3 class="subhead">Copy patterns</h3>
+  <div class="copy-grid">
+    <div class="copy-card">
+      <div class="copy-label">CTA</div>
+      <div class="copy-do">Install with one line</div>
+      <div class="copy-mono">curl -fsSL eoncode.github.io/runner-bar/install.sh | bash</div>
+    </div>
+    <div class="copy-card">
+      <div class="copy-label">Empty state</div>
+      <div class="copy-do">No runs in the last 24 hours. Nothing to watch.</div>
+    </div>
+    <div class="copy-card">
+      <div class="copy-label">Failure notification</div>
+      <div class="copy-do">ui-tests failed on <code class="inline-code-sm">feature/foo</code>. Hook fired.</div>
+    </div>
+    <div class="copy-card">
+      <div class="copy-label">Success notification</div>
+      <div class="copy-do">All green. 6 jobs · 4m 12s.</div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 6. UI =================== -->
+<section id="ui" class="section">
+  <header class="section-head">
+    <span class="section-num">6.0</span>
+    <h2>UI Components</h2>
+    <p class="section-sub">Buttons, badges, hotkeys, and run rows — the building blocks of the popover.</p>
+  </header>
+
+  <h3 class="subhead">Buttons</h3>
+  <div class="component-row">
+    <button class="btn btn-primary">Install RunnerBar</button>
+    <button class="btn btn-secondary">View on GitHub</button>
+    <button class="btn btn-ghost">Read the docs</button>
+    <button class="btn btn-danger">Cancel run</button>
+  </div>
+
+  <h3 class="subhead">Run status badges</h3>
+  <div class="component-row">
+    <span class="badge badge-success"><span class="badge-dot"></span> Passed</span>
+    <span class="badge badge-progress"><span class="badge-dot badge-dot-pulse"></span> In progress</span>
+    <span class="badge badge-fail"><span class="badge-dot"></span> Failed</span>
+    <span class="badge badge-queued"><span class="badge-dot"></span> Queued</span>
+    <span class="badge badge-cancelled"><span class="badge-dot"></span> Cancelled</span>
+  </div>
+
+  <h3 class="subhead">Keyboard chips</h3>
+  <div class="component-row">
+    <span class="kbd-chip"><span class="kbd">⌘</span><span class="kbd">R</span><span class="kbd-chip-label">Refresh</span></span>
+    <span class="kbd-chip"><span class="kbd">⌘</span><span class="kbd">⇧</span><span class="kbd">L</span><span class="kbd-chip-label">Open log</span></span>
+    <span class="kbd-chip"><span class="kbd">⌘</span><span class="kbd">.</span><span class="kbd-chip-label">Cancel</span></span>
+  </div>
+
+  <h3 class="subhead">Popover example — run row</h3>
+  <div class="popover">
+    <div class="popover-head">
+      <div class="popover-title">eoncode / runner-bar</div>
+      <div class="popover-meta">main · 2 min ago</div>
+    </div>
+    <div class="popover-runs">
+      <div class="run-row">
+        <span class="badge badge-success"><span class="badge-dot"></span></span>
+        <div class="run-row-name">unit-tests</div>
+        <div class="run-row-meta">3m 02s</div>
+        <span class="kbd">⌘</span><span class="kbd">↵</span>
+      </div>
+      <div class="run-row">
+        <span class="badge badge-progress"><span class="badge-dot badge-dot-pulse"></span></span>
+        <div class="run-row-name">ui-tests</div>
+        <div class="run-row-meta">1m 48s</div>
+      </div>
+      <div class="run-row run-row-fail">
+        <span class="badge badge-fail"><span class="badge-dot"></span></span>
+        <div class="run-row-name">periphery</div>
+        <div class="run-row-meta">42s</div>
+        <div class="run-row-action">Hook fired →</div>
+      </div>
+      <div class="run-row">
+        <span class="badge badge-queued"><span class="badge-dot"></span></span>
+        <div class="run-row-name">codeql</div>
+        <div class="run-row-meta">queued</div>
+      </div>
+    </div>
+    <div class="popover-foot">
+      <span class="popover-foot-link">Re-run failed</span>
+      <span class="popover-foot-sep">·</span>
+      <span class="popover-foot-link">Open in browser</span>
+    </div>
+  </div>
+
+  <h3 class="subhead">Hook command</h3>
+  <div class="code-block">
+    <div class="code-block-head">
+      <span class="code-block-dot" style="background:#FF453A"></span>
+      <span class="code-block-dot" style="background:#FF9F0A"></span>
+      <span class="code-block-dot" style="background:#30D158"></span>
+      <span class="code-block-title">failure-hook.sh</span>
+    </div>
+    <pre><code><span class="tk-c"># default — hand the failure log to Gemini</span>
+cd <span class="tk-v">$LOCAL_PATH</span> &amp;&amp; gemini \
+  -p <span class="tk-s">'$FAILURE_LOG'</span> \
+  --model=gemini-2.5-flash \
+  --approval-mode=yolo</code></pre>
+  </div>
+</section>
+
+<!-- =================== 7. ICONS =================== -->
+<section id="icons" class="section">
+  <header class="section-head">
+    <span class="section-num">7.0</span>
+    <h2>Icon System</h2>
+    <p class="section-sub">One bolt. Three platforms. Five status states. The mark is the message: a CI run firing.</p>
+  </header>
+
+  <!-- ICON CONCEPT -->
+  <div class="icon-concept">
+    <div class="icon-concept-mark">
+      <svg width="180" height="180" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                 stroke="currentColor" stroke-width="1.6"
+                 stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="icon-concept-copy">
+      <div class="card-label">The metaphor</div>
+      <p class="card-body-lg">
+        A <strong>bolt</strong> is the smallest unit of RunnerBar: a workflow firing, a hook landing, a runner waking up. It carries the brand at <strong>12 px</strong> in the menu bar and at <strong>1024 px</strong> on the App Store.
+      </p>
+    </div>
+  </div>
+
+  <!-- macOS ICON -->
+  <h3 class="subhead">macOS app icon · 1024 × 1024</h3>
+  <div class="icon-stage">
+    <div class="icon-card icon-card-lg">
+      <img src="icons/macos-icon-512.png" alt="RunnerBar macOS icon" width="320" height="320"/>
+      <div class="icon-card-meta">
+        <div class="icon-card-name">macOS · default</div>
+        <code>macos-icon.svg → 1024.png</code>
+      </div>
+    </div>
+    <div class="icon-notes">
+      <h4>Recipe</h4>
+      <ul class="voice-list">
+        <li>Continuous-corner squircle · 228 px radius on a 1024 canvas (~22%).</li>
+        <li>Background: radial blue-to-ink gradient anchored top-left.</li>
+        <li>Faint 64 px blueprint grid for technical density.</li>
+        <li>Bolt: <strong>outline only</strong> — stroked with an Action Blue gradient (#7CC0FF → #0066D6), 1.4 stroke at 24px source, round joins.</li>
+        <li>Glassy top sheen (Tahoe-era) over everything.</li>
+        <li>Export sizes: <code class="inline-code-sm">16 32 64 128 256 512 1024</code> for <code class="inline-code-sm">AppIcon.appiconset</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- iOS ICONS -->
+  <h3 class="subhead">iOS app icon · light · dark · tinted</h3>
+  <div class="ios-grid">
+    <div class="icon-card">
+      <img src="icons/ios-light-512.png" alt="iOS light variant" width="220" height="220"/>
+      <div class="icon-card-meta">
+        <div class="icon-card-name">Light</div>
+        <code>ios-light.svg</code>
+        <div class="icon-card-note">Paper background, blue bolt, soft drop shadow.</div>
+      </div>
+    </div>
+    <div class="icon-card">
+      <img src="icons/ios-dark-512.png" alt="iOS dark variant" width="220" height="220"/>
+      <div class="icon-card-meta">
+        <div class="icon-card-name">Dark</div>
+        <code>ios-dark.svg</code>
+        <div class="icon-card-note">Ink background, grid texture, glowing bolt.</div>
+      </div>
+    </div>
+    <div class="icon-card">
+      <img src="icons/ios-tinted-512.png" alt="iOS tinted variant" width="220" height="220"/>
+      <div class="icon-card-meta">
+        <div class="icon-card-name">Tinted</div>
+        <code>ios-tinted.svg</code>
+        <div class="icon-card-note">Grayscale with depth via opacity gradient. The system applies the user's tint.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">iOS 18+ export rules</div>
+    <ul>
+      <li>All three variants are <strong>1024 × 1024 PNG</strong>, fully opaque, no pre-rounded corners — the system applies the squircle mask.</li>
+      <li>Tinted variant uses grayscale only. Depth comes from <code class="inline-code-sm">stop-opacity</code> on the bolt gradient (100% → 55%).</li>
+      <li>Add all three to the asset catalog under one <code class="inline-code-sm">AppIcon</code> entry with <code class="inline-code-sm">Appearances: Any, Dark, Tinted</code>.</li>
+    </ul>
+  </div>
+
+  <!-- STATUS BAR -->
+  <h3 class="subhead">macOS status bar icon · 22 pt template</h3>
+  <div class="statusbar-stage">
+    <div class="statusbar-mock">
+      <img src="icons/statusbar-states-3x.png" alt="Status bar states" width="660" height="132"/>
+    </div>
+    <div class="icon-notes">
+      <h4>Recipe</h4>
+      <ul class="voice-list">
+        <li><strong>22 pt canvas</strong>, exported @1x/@2x/@3x as 22/44/66 px PNGs.</li>
+        <li>Stroked outline at 1.6 pt with rounded joins. Bolt is scaled to 0.78× of source for a 2 pt optical margin.</li>
+        <li>Marked <strong>template image</strong> in Swift: <code class="inline-code-sm">image.isTemplate = true</code>. macOS handles light/dark/accent tinting automatically — do not bake in color.</li>
+        <li>Running state: same outline tinted Action Blue with a soft glow. Success / failure: outline plus a green or red dot. State variants override the template flag.</li>
+      </ul>
+      <h4 style="margin-top: 22px;">Swift</h4>
+      <div class="code-block" style="max-width: none;">
+        <pre><code><span class="tk-c">// Status bar item with template image</span>
+<span class="tk-v">let</span> statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+<span class="tk-v">if let</span> button = statusItem.button {
+  <span class="tk-v">let</span> image = NSImage(named: <span class="tk-s">"StatusBolt"</span>)
+  image?.isTemplate = <span class="tk-v">true</span>
+  button.image = image
+}</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- USAGE GUIDE -->
+  <h3 class="subhead">Where each icon lives</h3>
+  <div class="rules-grid">
+    <div class="rule-card">
+      <h4>Status bar (22 pt)</h4>
+      <p>The only icon the user sees daily. Template image, monochrome, outline by default — fills in when a run is active.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Dock &amp; Finder (macOS)</h4>
+      <p>Full gradient icon. Appears in Spotlight, Dock, Finder, and the About panel.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Home Screen (iOS)</h4>
+      <p>Three variants ship together. The system swaps based on user appearance preference.</p>
+    </div>
+    <div class="rule-card">
+      <h4>README &amp; web</h4>
+      <p>Use the macOS icon at 96–128 px for the README hero. Use the outline mark for inline copy and favicons.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 8. HERO PATTERN =================== -->
+<section id="hero" class="section">
+  <header class="section-head">
+    <span class="section-num">8.0</span>
+    <h2>Hero pattern</h2>
+    <p class="section-sub">How RunnerBar shows up at the top of a page or README.</p>
+  </header>
+
+  <div class="hero-pattern">
+    <div class="hero-pattern-grid"></div>
+    <div class="hero-pattern-inner">
+      <div class="hero-pattern-badge">v1.0 · macOS 26+ · Apple Silicon</div>
+      <h2 class="hero-pattern-h1">The menu bar for <span class="hero-pattern-em">GitHub Actions</span>.</h2>
+      <p class="hero-pattern-lede">Live workflow status, local runner management, and AI failure recovery — without leaving the system tray.</p>
+      <div class="hero-pattern-cta">
+        <div class="hero-pattern-install">
+          <span class="hero-pattern-install-prompt">$</span>
+          <code>curl -fsSL eoncode.github.io/runner-bar/install.sh | bash</code>
+          <button class="hero-pattern-copy" type="button" aria-label="Copy install command">Copy</button>
+        </div>
+        <a class="btn btn-ghost btn-ghost-dark" href="https://github.com/eoncode/runner-bar">View on GitHub →</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="rules-grid">
+    <div class="rule-card">
+      <h4>Hero structure</h4>
+      <p>Eyebrow chip → tight headline (max 7 words) → one-sentence subhead → install command as the primary CTA → secondary "GitHub" link.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Imagery</h4>
+      <p>The Liquid Glass popover, floating over a desaturated macOS desktop. No stock photography. No 3D renders.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Backdrop</h4>
+      <p>Ink background with a faint blueprint grid. Action Blue glow may bloom from behind the headline — never as a gradient ramp.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Wordmark in marketing</h4>
+      <p>Use "RunnerBar" as the headline anchor only once. In body copy, treat it as a regular brand name without bold or accent color.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================== FOOTER =================== -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-mark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                 stroke="currentColor" stroke-width="1.7"
+                 stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+      <span>RunnerBar</span>
+    </div>
+    <div class="footer-meta">
+      Brand Style Guide v1.0 · June 2026 · Repo: <a href="https://github.com/eoncode/runner-bar">eoncode/runner-bar</a>
+    </div>
+    <div class="footer-stack">macOS 26+ · Apple Silicon · Swift 6.2 · Liquid Glass</div>
+  </div>
+</footer>
+
+</main>
+
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>

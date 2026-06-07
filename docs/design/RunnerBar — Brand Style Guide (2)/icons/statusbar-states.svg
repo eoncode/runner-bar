@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="132" viewBox="0 0 660 132">
+  <!-- Menu bar mock — dark macOS style. All states use the outline mark only.
+       State is communicated through accent color and adjacent dots/count. -->
+  <defs>
+    <linearGradient id="menubarBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#1C1C1E"/>
+      <stop offset="100%" stop-color="#141416"/>
+    </linearGradient>
+    <filter id="runGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.6"/>
+    </filter>
+  </defs>
+
+  <rect width="660" height="132" fill="url(#menubarBg)"/>
+  <line x1="0" y1="131.5" x2="660" y2="131.5" stroke="#000" stroke-opacity="0.6" stroke-width="1"/>
+
+  <!-- Labels above each state -->
+  <g font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#8E8E93" letter-spacing="0.8">
+    <text x="33"  y="22" text-anchor="middle">IDLE</text>
+    <text x="158" y="22" text-anchor="middle">RUNNING</text>
+    <text x="283" y="22" text-anchor="middle">SUCCESS</text>
+    <text x="408" y="22" text-anchor="middle">FAILURE</text>
+    <text x="555" y="22" text-anchor="middle">WITH COUNT</text>
+  </g>
+
+  <!-- State 1 · Idle (white outline, template) -->
+  <g transform="translate(33 76) scale(2.4) translate(-11 -11)">
+    <polygon transform="translate(11 11) scale(0.78) translate(-12 -12)" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+             fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+
+  <!-- State 2 · Running (Action Blue outline + soft glow) -->
+  <g transform="translate(158 76) scale(2.4) translate(-11 -11)">
+    <polygon transform="translate(11 11) scale(0.78) translate(-12 -12)" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+             fill="none" stroke="#0A84FF" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"
+             opacity="0.6" filter="url(#runGlow)"/>
+    <polygon transform="translate(11 11) scale(0.78) translate(-12 -12)" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+             fill="none" stroke="#5BB0FF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+
+  <!-- State 3 · Success (outline + green dot) -->
+  <g transform="translate(283 76) scale(2.4) translate(-11 -11)">
+    <polygon transform="translate(11 11) scale(0.78) translate(-12 -12)" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+             fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="18.5" cy="3.5" r="3" fill="#30D158"/>
+  </g>
+
+  <!-- State 4 · Failure (outline + red dot) -->
+  <g transform="translate(408 76) scale(2.4) translate(-11 -11)">
+    <polygon transform="translate(11 11) scale(0.78) translate(-12 -12)" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+             fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="18.5" cy="3.5" r="3" fill="#FF453A"/>
+  </g>
+
+  <!-- State 5 · With count (outline + count) -->
+  <g transform="translate(540 76)">
+    <g transform="scale(2.4) translate(-11 -11)">
+      <polygon transform="translate(11 11) scale(0.78) translate(-12 -12)" points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+               fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <text x="44" y="6" font-family="ui-monospace, Menlo, monospace" font-size="20" font-weight="600" fill="#FFFFFF">3</text>
+  </g>
+</svg>
