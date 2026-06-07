@@ -1,0 +1,1359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>RunnerBar — Investor &amp; user briefing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ─── Palette (v34 light glass) ─────────────────────────────────────── */
+  :root {
+    --bg:       #EAF1FB;
+    --surface:  #FFFFFF;
+    --surface2: #F6F9FD;
+    --border:   #D8E1EE;
+    --text:     #0D1117;
+    --muted:    #57606A;
+    --faint:    #8C97A8;
+    --accent:   #0969DA;
+    --accent-d: #0550AE;
+    --accent-soft: #DBE9FC;
+    --green:    #1A7F37;
+    --red:      #CF222E;
+    --orange:   #BC4C00;
+
+    --f-head: 'Manrope', system-ui, sans-serif;
+    --f-body: 'Inter', system-ui, sans-serif;
+    --f-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --slide-w: 1280px;
+    --slide-h: 720px;
+    --radius:  16px;
+
+    /* Slide layout tokens */
+    --pad-x: 56px;
+    --pad-y: 48px;
+    --footer-h: 56px;     /* reserved bottom band for footer + sources */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--f-body);
+    color: var(--text);
+    background:
+      radial-gradient(1200px 800px at -10% -20%, #DCE7F8 0%, transparent 60%),
+      radial-gradient(1000px 700px at 110% -20%, #E2F1EA 0%, transparent 60%),
+      var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ─── Top utility bar ─────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    background: rgba(234,241,251,0.75);
+    border-bottom: 1px solid rgba(216,225,238,0.6);
+  }
+  .topbar-inner {
+    max-width: var(--slide-w);
+    margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: linear-gradient(135deg, #0969DA 0%, #218BFF 60%, #79C0FF 100%);
+    box-shadow: 0 2px 6px rgba(9,105,218,0.3), inset 0 1px 0 rgba(255,255,255,0.4);
+    position: relative;
+  }
+  .brand-mark::after {
+    content: ''; position: absolute; inset: 6px;
+    border-radius: 3px;
+    border: 1.8px solid rgba(255,255,255,0.9);
+    border-left-width: 0; border-right-width: 0;
+  }
+  .brand-name { font-family: var(--f-head); font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .topbar-meta { display: flex; gap: 18px; align-items: center; font-size: 13px; color: var(--muted); }
+  .topbar-meta .dot { color: var(--green); }
+  .nav-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .nav-pill {
+    font-family: var(--f-mono); font-size: 11px;
+    padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,0.55);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer; transition: all .15s ease;
+  }
+  .nav-pill:hover { background: var(--surface); color: var(--text); border-color: var(--accent); text-decoration: none; }
+  .nav-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* ─── Slide container ─────────────────────────────────────────────── */
+  .deck { max-width: var(--slide-w); margin: 0 auto; padding: 32px 24px 96px; }
+  .slide {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1280 / 720;
+    margin: 0 0 32px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow:
+      0 1px 1px rgba(13,17,23,0.04),
+      0 8px 24px rgba(13,17,23,0.06),
+      0 24px 64px rgba(13,17,23,0.06);
+    display: grid;
+    grid-template-rows: 1fr var(--footer-h);
+  }
+
+  /* Aurora background — pastel gradient blobs matching v34 */
+  .slide::before, .slide::after,
+  .slide .aurora-c, .slide .aurora-d {
+    content: '';
+    position: absolute; pointer-events: none;
+    border-radius: 50%;
+    filter: blur(60px);
+    z-index: 0;
+  }
+  .slide::before {
+    top: -180px; left: -180px; width: 620px; height: 420px;
+    background: radial-gradient(ellipse at center, rgba(186,218,255,0.85) 0%, transparent 70%);
+  }
+  .slide::after {
+    top: -150px; right: -180px; width: 580px; height: 360px;
+    background: radial-gradient(ellipse at center, rgba(182,244,195,0.7) 0%, transparent 70%);
+  }
+  .slide .aurora-c {
+    bottom: -150px; right: -150px; width: 520px; height: 340px;
+    background: radial-gradient(ellipse at center, rgba(255,220,160,0.6) 0%, transparent 70%);
+  }
+  .slide .aurora-d {
+    bottom: -160px; left: -120px; width: 460px; height: 320px;
+    background: radial-gradient(ellipse at center, rgba(210,190,255,0.55) 0%, transparent 70%);
+  }
+  .slide > * { position: relative; z-index: 1; }
+
+  /* Body region: the main canvas above the footer band */
+  .slide-body {
+    padding: var(--pad-y) var(--pad-x) 8px;
+    display: flex; flex-direction: column;
+    min-height: 0;       /* allow children to size correctly inside grid */
+    overflow: hidden;
+  }
+
+  /* Footer band: always reserved; never overlaps content */
+  .slide-footer {
+    padding: 0 var(--pad-x) 18px;
+    display: grid; grid-template-rows: auto auto;
+    row-gap: 6px;
+    align-content: end;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .source-line { line-height: 1.4; }
+  .source-line .lbl { color: var(--faint); margin-right: 4px; }
+  .source-line a { color: var(--muted); border-bottom: 1px dotted var(--faint); }
+  .source-line a:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
+  .meta-line { display: flex; justify-content: space-between; align-items: baseline; }
+  .meta-line .fbrand {
+    font-family: var(--f-head); font-weight: 700; color: var(--text);
+    font-size: 12.5px; letter-spacing: -0.01em;
+  }
+  .meta-line .ftag { color: var(--muted); margin-left: 14px; }
+  .meta-line .fpage { font-family: var(--f-mono); font-size: 11px; color: var(--faint); }
+
+  /* ─── Headings & text ───────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--f-body); font-size: 12px; font-weight: 600;
+    color: var(--accent); letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .h1 {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 46px; line-height: 1.08; letter-spacing: -0.02em;
+    margin: 8px 0 12px;
+    color: var(--text);
+  }
+  .h1.tight { margin-bottom: 8px; }
+  .sub {
+    font-family: var(--f-body); font-size: 17px; line-height: 1.5;
+    color: var(--muted); max-width: 980px; margin: 0;
+  }
+
+  /* ─── Card primitives ────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+  }
+  .card.glass {
+    background: rgba(255,255,255,0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .card.accent-frame { border-color: var(--accent); }
+
+  /* ─── Slide 1: Cover ─────────────────────────────────────────────── */
+  .cover-body {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 24px;
+  }
+  .cover-top {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .brand--big .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+  .brand--big .brand-name { font-size: 19px; }
+  .cover-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .cover-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+  .cover-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr);
+    gap: 36px;
+    align-items: center;
+  }
+  .cover-hero .h1 {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 60px; line-height: 1.05; letter-spacing: -0.025em;
+    margin: 0 0 22px;
+    color: var(--text);
+  }
+  .cover-hero .h1 .accent { color: var(--accent); }
+  .cover-hero .sub {
+    font-size: 17px; line-height: 1.55; max-width: 620px;
+  }
+  .cover-stat {
+    background: rgba(255,255,255,0.7);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px 24px 22px;
+    text-align: center;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .cover-stat .big {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 80px; line-height: 1; color: var(--accent);
+    letter-spacing: -0.04em;
+  }
+  .cover-stat .lbl {
+    color: var(--text); font-size: 14px; font-weight: 500;
+    margin-top: 10px; line-height: 1.45;
+  }
+  .cover-stat .src { font-size: 11px; color: var(--faint); margin-top: 14px; }
+  .cover-stat .src a { color: var(--muted); }
+
+  .install-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 18px;
+    align-items: center;
+  }
+  .install-pill {
+    display: flex; align-items: center; gap: 12px;
+    background: #0D1117;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-family: var(--f-mono); font-size: 13.5px;
+    color: #E6EDF3;
+    overflow: hidden;
+  }
+  .install-pill .prompt { color: #8B949E; }
+  .install-pill .cmd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .install-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  /* ─── Generic slide layout (slides 2-8) ──────────────────────────── */
+  .slide-head { margin-bottom: 20px; }
+  .slide-head .sub { margin-top: 4px; }
+
+  .body-grid {
+    display: grid;
+    grid-template-columns: 1.45fr 1fr;
+    gap: 22px;
+    flex: 1;
+    min-height: 0;
+  }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 0;
+  }
+  .chart-card img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .stat-stack {
+    display: grid; gap: 12px; align-content: stretch;
+    grid-template-rows: 1fr 1fr 1fr;
+    min-height: 0;
+  }
+  .stat-row {
+    display: grid; grid-template-columns: 160px 1fr; gap: 16px;
+    align-items: center;
+    padding: 16px 22px;
+  }
+  .stat-row .v {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 30px; color: var(--accent); letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+  .stat-row .l { font-size: 13.5px; line-height: 1.45; color: var(--text); }
+
+  /* ─── Pull-quote (slide 3) ───────────────────────────────────────── */
+  .quote-card {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 30px 28px;
+    min-height: 0;
+  }
+  .quote-card .mark {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 56px; line-height: 0.6; color: var(--accent);
+    margin: 0 0 18px;
+  }
+  .quote-card .q {
+    font-family: var(--f-body); font-style: italic;
+    font-size: 17px; line-height: 1.55; color: var(--text);
+    margin: 0 0 22px;
+  }
+  .quote-card .attrib {
+    font-size: 12.5px; color: var(--muted);
+    border-top: 1px solid var(--border); padding-top: 14px;
+  }
+  .quote-card .attrib a { color: var(--accent); }
+
+  /* ─── Pillar columns (slide 4) ───────────────────────────────────── */
+  .pillars {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    flex: 1;
+    min-height: 0;
+  }
+  .pillar {
+    padding: 28px 26px;
+    display: flex; flex-direction: column;
+  }
+  .pillar .head {
+    display: flex; align-items: baseline; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .pillar .num { font-family: var(--f-mono); font-size: 13px; font-weight: 600; }
+  .pillar .num.c-green { color: var(--green); }
+  .pillar .num.c-accent { color: var(--accent); }
+  .pillar .num.c-orange { color: var(--orange); }
+  .pillar .lbl {
+    font-size: 10.5px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.12em;
+  }
+  .pillar .ptitle {
+    font-family: var(--f-head); font-weight: 700;
+    font-size: 24px; line-height: 1.2; letter-spacing: -0.015em;
+    margin: 0 0 16px;
+    min-height: 58px;     /* equalize across cards: 2 lines max */
+    display: flex; align-items: flex-start;
+  }
+  .pillar .pbody {
+    color: var(--muted); font-size: 14.5px; line-height: 1.55;
+    margin: 0;
+  }
+  .pillar .stamp {
+    margin-top: auto; padding-top: 18px;
+    font-family: var(--f-mono); font-size: 11px;
+    color: var(--faint);
+  }
+
+  /* ─── Compare columns (slide 5) ──────────────────────────────────── */
+  .compare {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    flex: 1;
+    min-height: 0;
+  }
+  .compare .col {
+    padding: 26px 30px;
+    display: flex; flex-direction: column;
+  }
+  .compare .col-lbl {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  }
+  .compare .col-lbl.red { color: var(--red); }
+  .compare .col-lbl.blue { color: var(--accent); }
+  .compare .col-h {
+    font-family: var(--f-head); font-weight: 700;
+    font-size: 24px; margin: 8px 0 20px; letter-spacing: -0.015em;
+  }
+  .compare ul {
+    list-style: none; padding: 0; margin: 0;
+    display: grid; gap: 14px; flex: 1; align-content: center;
+  }
+  .compare li {
+    display: grid; grid-template-columns: 22px 1fr; gap: 12px;
+    font-size: 14.5px; line-height: 1.45;
+    align-items: center;
+  }
+  .mark-icon {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; line-height: 1;
+  }
+  .mark-icon.x { background: rgba(207,34,46,0.1); color: var(--red); }
+  .mark-icon.v { background: rgba(26,127,55,0.12); color: var(--green); }
+
+  /* ─── Product slide (slide 6) ────────────────────────────────────── */
+  .product {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 22px;
+    flex: 1;
+    min-height: 0;
+  }
+  .shot-frame {
+    padding: 0;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #1B2230 0%, #0D1117 100%);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 1px 1px rgba(13,17,23,0.05),
+      0 12px 32px rgba(13,17,23,0.12);
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 0;
+  }
+  .shot-frame img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .feature-stack {
+    display: grid; gap: 12px;
+    grid-template-rows: 1fr 1fr 1fr;
+    min-height: 0;
+  }
+  .feature {
+    padding: 18px 22px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .feature .head {
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px;
+  }
+  .feature .fnum {
+    font-family: var(--f-mono); font-size: 11px;
+    color: var(--accent); font-weight: 600;
+  }
+  .feature .ftitle {
+    font-family: var(--f-head); font-weight: 700;
+    font-size: 18px; letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .feature .fbody {
+    color: var(--muted); font-size: 13px; line-height: 1.5;
+    margin: 0;
+  }
+
+  /* ─── Aesthetics (slide 7) ───────────────────────────────────────── */
+  .aes-grid {
+    display: grid; grid-template-rows: auto 1fr;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+  }
+  .aes-top {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  }
+  .aes-card {
+    padding: 18px 20px;
+  }
+  .aes-card h3 {
+    font-family: var(--f-head); font-weight: 700;
+    font-size: 17px; margin: 0 0 6px; letter-spacing: -0.01em;
+  }
+  .aes-card p {
+    margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted);
+  }
+  .aes-charts {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    min-height: 0;
+  }
+  .aes-charts .chart-card { padding: 10px; }
+
+  /* ─── Closing (slide 8) ──────────────────────────────────────────── */
+  .closing {
+    display: grid;
+    grid-template-rows: 1fr auto auto;
+    gap: 28px;
+  }
+  .closing-hero .h1 {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 56px; line-height: 1.05; letter-spacing: -0.025em;
+    margin: 0 0 18px;
+  }
+  .closing-hero .h1 .accent { color: var(--accent); display: block; }
+  .closing-hero .sub {
+    font-size: 17px; line-height: 1.55; max-width: 900px;
+  }
+  .kpis {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .kpi {
+    padding: 22px 24px;
+  }
+  .kpi .v {
+    font-family: var(--f-head); font-weight: 800;
+    font-size: 36px; color: var(--accent); letter-spacing: -0.025em;
+    line-height: 1;
+  }
+  .kpi .l {
+    font-size: 13px; color: var(--muted);
+    margin-top: 10px; line-height: 1.5;
+  }
+  .install-bar {
+    display: flex; align-items: center; gap: 14px;
+    background: #0D1117;
+    border-radius: 12px;
+    padding: 12px 18px;
+    color: #E6EDF3;
+  }
+  .install-bar .lbl { color: #8B949E; font-size: 12px; }
+  .install-bar code, .install-bar a {
+    font-family: var(--f-mono); color: #E6EDF3; font-size: 13.5px;
+    text-decoration: none;
+  }
+  .install-bar a:hover { color: #79C0FF; }
+
+  /* ─── Print: one slide per page ──────────────────────────────────── */
+  @media print {
+    @page { size: 13.33in 7.5in; margin: 0; }
+    body { background: white; }
+    .topbar, .deck-intro { display: none; }
+    .deck { max-width: none; padding: 0; }
+    .slide {
+      width: 13.33in; height: 7.5in;
+      aspect-ratio: auto;
+      margin: 0; border-radius: 0; border: none;
+      box-shadow: none;
+      page-break-after: always;
+      break-after: page;
+    }
+    .slide:last-child { page-break-after: auto; }
+  }
+
+  /* ─── Responsive shrink ─────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .slide { padding: 0; }
+    .slide-body { padding: 28px 24px 0; }
+    .slide-footer { padding: 0 24px 14px; }
+    :root { --pad-x: 24px; --pad-y: 28px; --footer-h: 64px; }
+    .h1 { font-size: 32px; }
+    .cover-hero .h1, .closing-hero .h1 { font-size: 36px; }
+    .pillars, .compare, .product, .aes-top, .aes-charts, .kpis, .body-grid,
+    .cover-main, .install-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-name">RunnerBar</div>
+    </div>
+    <nav class="nav-pills" aria-label="Slide navigation">
+      <a class="nav-pill" href="#s1">01 · Cover</a>
+      <a class="nav-pill" href="#s2">02 · Problem</a>
+      <a class="nav-pill" href="#s3">03 · Defects</a>
+      <a class="nav-pill" href="#s4">04 · CI</a>
+      <a class="nav-pill" href="#s5">05 · The gap</a>
+      <a class="nav-pill" href="#s6">06 · Product</a>
+      <a class="nav-pill" href="#s7">07 · Aesthetics</a>
+      <a class="nav-pill" href="#s8">08 · Close</a>
+    </nav>
+    <div class="topbar-meta">
+      <span><span class="dot">●</span> macOS 26+</span>
+      <a href="https://github.com/eoncode/runner-bar" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</header>
+
+<main class="deck">
+
+  <!-- ─── Slide 1 — Cover ─────────────────────────────────────────── -->
+  <section class="slide" id="s1" aria-label="Slide 1 of 8 — Cover">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body cover-body">
+
+      <div class="cover-top">
+        <div class="brand brand--big">
+          <div class="brand-mark"></div>
+          <div class="brand-name">RunnerBar</div>
+        </div>
+        <div class="cover-pill">
+          <span class="dot"></span>
+          <span>macOS 26+ · Swift 6.2 · Open source</span>
+        </div>
+      </div>
+
+      <div class="cover-main">
+        <div class="cover-hero">
+          <h1 class="h1">
+            GitHub Actions, <span class="accent">local runners &amp; AI recovery</span> in your menu bar.
+          </h1>
+          <p class="sub">
+            The macOS menu bar app that brings order to the chaos of AI-driven coding —
+            live workflow status, one-click local runners, and automatic AI failure recovery.
+          </p>
+        </div>
+
+        <aside class="cover-stat">
+          <div class="big">41%</div>
+          <div class="lbl">of all new code on GitHub is now AI-authored</div>
+          <div class="src">Source: <a href="https://github.blog/news-insights/octoverse/" target="_blank" rel="noopener">GitHub Octoverse 2024</a></div>
+        </aside>
+      </div>
+
+      <div class="install-row">
+        <div class="install-pill">
+          <span class="prompt">$</span>
+          <span class="cmd">curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash</span>
+        </div>
+        <div class="install-meta">Investor &amp; user briefing · June 2026</div>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">01 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 2 — AI chaos ──────────────────────────────────────── -->
+  <section class="slide" id="s2" aria-label="Slide 2 of 8 — AI coding chaos">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body">
+
+      <div class="slide-head">
+        <div class="eyebrow">01 — The problem</div>
+        <h2 class="h1 tight">AI coding is generating chaos</h2>
+        <p class="sub">
+          Agents ship code faster than humans can review. Codebases drift into entropy without an automated safety net.
+        </p>
+      </div>
+
+      <div class="body-grid">
+        <div class="chart-card">
+          <img src="assets/charts/01_ai_share.png" alt="AI share of new code on GitHub" />
+        </div>
+        <div class="stat-stack">
+          <div class="stat-row card">
+            <div class="v">8×</div>
+            <div class="l">gap between AI-authored commits (5%) and AI-generated code (41%)</div>
+          </div>
+          <div class="stat-row card">
+            <div class="v">100s</div>
+            <div class="l">of agent commits per developer per day in active flows</div>
+          </div>
+          <div class="stat-row card">
+            <div class="v">$200–300</div>
+            <div class="l">daily cloud CI cost per developer in AI-heavy workflows</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="source-line">
+        <span class="lbl">Source:</span>
+        <a href="https://github.blog/news-insights/octoverse/" target="_blank" rel="noopener">GitHub Octoverse 2024</a>,
+        <a href="https://github.com/eoncode/runner-bar" target="_blank" rel="noopener">RunnerBar founder analysis</a>,
+        <a href="https://docs.github.com/en/billing/reference/actions-runner-pricing" target="_blank" rel="noopener">GitHub Actions billing</a>
+      </div>
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">02 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 3 — Defects ───────────────────────────────────────── -->
+  <section class="slide" id="s3" aria-label="Slide 3 of 8 — Defect data">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body">
+
+      <div class="slide-head">
+        <div class="eyebrow">02 — Why it matters</div>
+        <h2 class="h1 tight">Velocity without verification</h2>
+        <p class="sub">
+          AI ships code that looks plausible — but breaks at the edges. Without CI, bugs compound silently.
+        </p>
+      </div>
+
+      <div class="body-grid" style="grid-template-columns: 1.55fr 1fr;">
+        <div class="chart-card">
+          <img src="assets/charts/02_ai_defects.png" alt="Defects in AI-generated code vs human-written baseline" />
+        </div>
+        <article class="card quote-card">
+          <div class="mark">“</div>
+          <p class="q">
+            AI-generated pull requests contain 1.7× more issues than human-written PRs.
+            Silent logic failures — code that passes review but fails at runtime —
+            now account for 60% of faults.
+          </p>
+          <div class="attrib">
+            — <a href="https://arxiv.org/html/2512.05239v1" target="_blank" rel="noopener">Survey of Bugs in AI-Generated Code</a>, arXiv 2025
+          </div>
+        </article>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="source-line">
+        <span class="lbl">Source:</span>
+        <a href="https://arxiv.org/html/2512.05239v1" target="_blank" rel="noopener">arXiv 2512.05239</a>,
+        <a href="https://arxiv.org/abs/2108.09293" target="_blank" rel="noopener">Pearce et al. on Copilot</a>,
+        <a href="https://www.ranger.net/post/common-bugs-ai-generated-code-fixes" target="_blank" rel="noopener">GitClear / Ranger 2025</a>
+      </div>
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">03 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 4 — CI is the answer ──────────────────────────────── -->
+  <section class="slide" id="s4" aria-label="Slide 4 of 8 — CI is the antidote">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body">
+
+      <div class="slide-head">
+        <div class="eyebrow">03 — The solution</div>
+        <h2 class="h1 tight">CI is the antidote to AI chaos</h2>
+        <p class="sub">
+          Continuous integration is the only system that can keep up with code generated faster than it can be read.
+        </p>
+      </div>
+
+      <div class="pillars">
+        <article class="pillar card">
+          <div class="head">
+            <span class="num c-green">01</span><span class="lbl">CATCH</span>
+          </div>
+          <h3 class="ptitle">Catches every regression</h3>
+          <p class="pbody">Every commit runs the full test suite — unit, integration, UI. Bugs are caught the moment they ship, not in the user's lap.</p>
+          <div class="stamp">// runs on every push</div>
+        </article>
+        <article class="pillar card">
+          <div class="head">
+            <span class="num c-accent">02</span><span class="lbl">CONTAIN</span>
+          </div>
+          <h3 class="ptitle">Contains AI mistakes</h3>
+          <p class="pbody">Failing tests block AI-generated PRs from merging. Hallucinated APIs, broken dependencies, and silent logic errors get stopped at the gate.</p>
+          <div class="stamp">// branch protection · required checks</div>
+        </article>
+        <article class="pillar card">
+          <div class="head">
+            <span class="num c-orange">03</span><span class="lbl">CORRECT</span>
+          </div>
+          <h3 class="ptitle">Closes the loop automatically</h3>
+          <p class="pbody">Failure hooks let agents diagnose, push fixes, and re-run — so the codebase self-heals while you sleep.</p>
+          <div class="stamp">// on:failure → $AGENT_CLI</div>
+        </article>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="source-line">
+        <span class="lbl">Source:</span>
+        <a href="https://github.com/eoncode/runner-bar" target="_blank" rel="noopener">RunnerBar product thesis</a>,
+        <a href="https://blog.jetbrains.com/teamcity/2025/10/the-state-of-cicd/" target="_blank" rel="noopener">JetBrains State of CI/CD 2025</a>
+      </div>
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">04 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 5 — UX gap ────────────────────────────────────────── -->
+  <section class="slide" id="s5" aria-label="Slide 5 of 8 — The UX gap">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body">
+
+      <div class="slide-head">
+        <div class="eyebrow">04 — The gap</div>
+        <h2 class="h1 tight">CI has won the backend. The UX is still 2015.</h2>
+        <p class="sub">
+          Developers spend their day in the menu bar — but CI lives in 8 browser tabs and a terminal window.
+        </p>
+      </div>
+
+      <div class="compare">
+        <div class="col card glass">
+          <div class="col-lbl red">TODAY</div>
+          <div class="col-h">CI without a UI</div>
+          <ul>
+            <li><span class="mark-icon x">✕</span><span>Refresh GitHub.com tabs to see if a run finished</span></li>
+            <li><span class="mark-icon x">✕</span><span>SSH into a Mac mini to start or stop a runner</span></li>
+            <li><span class="mark-icon x">✕</span><span>Copy-paste registration tokens between tabs</span></li>
+            <li><span class="mark-icon x">✕</span><span>No notification when a failure interrupts AI agents</span></li>
+            <li><span class="mark-icon x">✕</span><span>Logs buried 4 clicks deep behind a workflow run</span></li>
+          </ul>
+        </div>
+        <div class="col card accent-frame">
+          <div class="col-lbl blue">WITH RUNNERBAR</div>
+          <div class="col-h">CI lives in the menu bar</div>
+          <ul>
+            <li><span class="mark-icon v">✓</span><span>Live workflow status across every repo and org</span></li>
+            <li><span class="mark-icon v">✓</span><span>Start, stop, and add local runners with one click</span></li>
+            <li><span class="mark-icon v">✓</span><span>AI failure hooks auto-fire Claude, Codex, or Gemini</span></li>
+            <li><span class="mark-icon v">✓</span><span>Copy logs, SHAs, and YAML at any nesting level</span></li>
+            <li><span class="mark-icon v">✓</span><span>Re-run, re-run-failed, or cancel from the popover</span></li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">05 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 6 — Product ───────────────────────────────────────── -->
+  <section class="slide" id="s6" aria-label="Slide 6 of 8 — The product">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body">
+
+      <div class="slide-head">
+        <div class="eyebrow">05 — The product</div>
+        <h2 class="h1 tight">Run-bar is the missing piece</h2>
+        <p class="sub">
+          Three primitives, one popover. Built native in Swift 6.2 with Liquid Glass for macOS 26.
+        </p>
+      </div>
+
+      <div class="product">
+        <div class="shot-frame">
+          <img src="assets/runnerbar_screenshot.png" alt="RunnerBar popover screenshot showing workflow status, local runners, and AI failure hooks" />
+        </div>
+        <div class="feature-stack">
+          <article class="feature card">
+            <div class="head"><span class="fnum">01</span><h3 class="ftitle">Workflow status</h3></div>
+            <p class="fbody">Live runs, jobs, and steps across every repo and org. Re-run, cancel, copy logs — no browser, no terminal.</p>
+          </article>
+          <article class="feature card">
+            <div class="head"><span class="fnum">02</span><h3 class="ftitle">Local runner manager</h3></div>
+            <p class="fbody">Auto-discovers runners on this Mac. Add, start, stop, deregister — tokens and install commands handled for you.</p>
+          </article>
+          <article class="feature card">
+            <div class="head"><span class="fnum">03</span><h3 class="ftitle">AI failure hooks</h3></div>
+            <p class="fbody">On failure, fire a shell command in Terminal. <code style="font-family:var(--f-mono);font-size:12px;color:var(--accent-d);background:var(--accent-soft);padding:1px 5px;border-radius:4px;">$FAILURE_LOG</code> + <code style="font-family:var(--f-mono);font-size:12px;color:var(--accent-d);background:var(--accent-soft);padding:1px 5px;border-radius:4px;">$BRANCH</code> inject context. Claude, Codex, Gemini, Aider — any CLI.</p>
+          </article>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">06 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 7 — Aesthetics + value ────────────────────────────── -->
+  <section class="slide" id="s7" aria-label="Slide 7 of 8 — Aesthetics and core value">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body">
+
+      <div class="slide-head">
+        <div class="eyebrow">06 — Aesthetics &amp; core value</div>
+        <h2 class="h1 tight">A native Mac surface for CI</h2>
+        <p class="sub">
+          Built on Apple's Liquid Glass. Designed to disappear when you're shipping — and surface the moment something breaks.
+        </p>
+      </div>
+
+      <div class="aes-grid">
+        <div class="aes-top">
+          <article class="aes-card card">
+            <h3>Translucent depth</h3>
+            <p>Liquid Glass surfaces, aurora gradients, depth-aware shadows. Looks like the OS, not a webview.</p>
+          </article>
+          <article class="aes-card card">
+            <h3>Zero ceremony</h3>
+            <p>Install with one curl. Picks up your existing GitHub token. No Apple Developer account required.</p>
+          </article>
+          <article class="aes-card card">
+            <h3>Private by default</h3>
+            <p>No analytics, no telemetry. Talks only to api.github.com. Tokens stay in Keychain.</p>
+          </article>
+        </div>
+        <div class="aes-charts">
+          <div class="chart-card"><img src="assets/charts/04_speed.png" alt="Local Mac runners vs GitHub-hosted runner speed comparison"></div>
+          <div class="chart-card"><img src="assets/charts/03_cost_curve.png" alt="Daily CI cost per developer — GitHub-hosted vs local runner"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="source-line">
+        <span class="lbl">Source:</span>
+        <a href="https://docs.github.com/en/billing/reference/actions-runner-pricing" target="_blank" rel="noopener">GitHub Actions billing</a>,
+        <a href="https://github.com/eoncode/runner-bar" target="_blank" rel="noopener">RunnerBar internal benchmarks</a>
+      </div>
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar</span></div>
+        <div class="fpage">07 / 08</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Slide 8 — Closing ───────────────────────────────────────── -->
+  <section class="slide" id="s8" aria-label="Slide 8 of 8 — Closing">
+    <div class="aurora-c"></div><div class="aurora-d"></div>
+    <div class="slide-body closing">
+
+      <div class="closing-hero">
+        <div class="eyebrow">07 — Where this goes</div>
+        <h2 class="h1">
+          When AI writes the code,
+          <span class="accent">CI becomes the operating system.</span>
+        </h2>
+        <p class="sub">
+          RunnerBar is the developer surface for that operating system —
+          a native, open-source menu bar that turns every Mac on the desk
+          into a CI runner with an AI safety net built in.
+        </p>
+      </div>
+
+      <div class="kpis">
+        <article class="kpi card">
+          <div class="v">5×</div>
+          <div class="l">faster builds on local Mac runners vs. GitHub-hosted</div>
+        </article>
+        <article class="kpi card">
+          <div class="v">$0</div>
+          <div class="l">open source, no Apple Developer account required</div>
+        </article>
+        <article class="kpi card">
+          <div class="v">Any CLI</div>
+          <div class="l">Claude, Codex, Gemini, Aider — bring your own agent</div>
+        </article>
+      </div>
+
+      <div class="install-bar">
+        <span class="lbl">Install</span>
+        <a href="https://github.com/eoncode/runner-bar" target="_blank" rel="noopener">curl -fsSL https://eoncode.github.io/runner-bar/install.sh | bash</a>
+      </div>
+
+    </div>
+
+    <div class="slide-footer">
+      <div class="meta-line">
+        <div><span class="fbrand">RunnerBar</span><span class="ftag">GitHub Actions, local runners &amp; AI recovery in your menu bar · github.com/eoncode/runner-bar</span></div>
+        <div class="fpage">08 / 08</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  const pills = document.querySelectorAll('.nav-pill');
+  const slides = document.querySelectorAll('.slide');
+  const map = new Map();
+  pills.forEach(p => map.set(p.getAttribute('href').slice(1), p));
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        pills.forEach(p => p.classList.remove('active'));
+        const pill = map.get(e.target.id);
+        if (pill) pill.classList.add('active');
+      }
+    });
+  }, { threshold: 0.55 });
+  slides.forEach(s => io.observe(s));
+
+  // Keyboard nav (← → / j k / PgUp PgDn)
+  const order = Array.from(slides);
+  function go(delta) {
+    const mid = window.scrollY + window.innerHeight / 2;
+    let curr = 0;
+    order.forEach((s, i) => {
+      const r = s.getBoundingClientRect();
+      const top = r.top + window.scrollY;
+      if (top < mid) curr = i;
+    });
+    const next = Math.max(0, Math.min(order.length - 1, curr + delta));
+    order[next].scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (['ArrowRight', 'PageDown', 'j', ' '].includes(e.key)) { e.preventDefault(); go(1); }
+    else if (['ArrowLeft', 'PageUp', 'k'].includes(e.key)) { e.preventDefault(); go(-1); }
+  });
+</script>
+
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
