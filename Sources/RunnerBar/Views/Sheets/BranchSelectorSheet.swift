@@ -240,7 +240,7 @@ extension BranchSelectorSheet {
     /// Async — called from `loadBranches()` via a plain `Task`.
     /// Paginates through all pages (per_page=100) until GitHub returns fewer
     /// than 100 items, collecting all branch names across pages.
-    nonisolated func fetchBranchNames(scope: String) async -> [String]? {
+    private nonisolated func fetchBranchNames(scope: String) async -> [String]? {
         // Minimal decodable model for a GitHub branch API response item.
         struct BranchItem: Decodable { let name: String }
         var allNames: [String] = []
