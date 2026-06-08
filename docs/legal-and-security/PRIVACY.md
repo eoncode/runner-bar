@@ -49,7 +49,7 @@ Fine-grained tokens do not yet support all Actions and runner management endpoin
 
 ### What RunnerBar does NOT do with your token
 
-- ❌ Does not read, write, or access repository source code or file contents
+- ❌ Does not make any API calls to read, write, or access repository source code or file contents (even though the `repo` scope technically permits this)
 - ❌ Does not open issues, create pull requests, or write to repositories on your behalf
 - ❌ Does not transmit your token to any server other than `api.github.com` and `github.com` (for the OAuth exchange)
 - ❌ Does not log your token in console output, crash reports, or analytics
@@ -119,6 +119,7 @@ RunnerBar makes HTTPS requests **only** to:
 
 - `api.github.com` — GitHub REST API (runs, jobs, steps, logs, runners)
 - `github.com` — OAuth token exchange only (at sign-in)
+- `*.amazonaws.com` — GitHub's job log endpoints (`/actions/jobs/{id}/logs`) return a 302 redirect to a pre-signed S3 URL. RunnerBar's `Authorization` token is **not** forwarded to S3; Apple's URLSession automatically strips the `Authorization` header before following cross-origin redirects (per RFC 7235). S3 authenticates purely via the pre-signed query parameters embedded in the redirect URL.
 
 No analytics, telemetry, crash reporting, or third-party network calls are made. All API requests are made over TLS with your OAuth token in the `Authorization` header.
 
