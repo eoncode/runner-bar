@@ -1,6 +1,6 @@
 # GitHub OAuth Permission Rationale
 
-RunnerBar requests two OAuth scopes when you sign in with GitHub: `repo` and `read:org`. This document explains exactly why each is needed.
+RunnerBar requests five OAuth scopes when you sign in with GitHub: `repo`, `read:org`, `admin:org`, `manage_runners:org`, and `workflow`. This document explains exactly why each is needed.
 
 ---
 
@@ -35,7 +35,7 @@ These are the primary data source for everything shown in the menu bar popover.
 
 ## `read:org`
 
-The `read:org` scope grants read-only access to organisation membership and org-level Actions data. RunnerBar uses it to support organisation-scoped runner monitoring:
+The `read:org` scope grants read-only access to organisation membership and org-level Actions data. RunnerBar uses it to support organisation-scoped runner monitoring for users who are **org members but not owners**:
 
 - `GET /orgs/{org}/actions/runners` — lists self-hosted runners for an org
 - `GET /orgs/{org}/actions/runs` — fetches active workflow runs across an org
@@ -45,10 +45,34 @@ Without `read:org`, only `owner/repo`-scoped monitoring works. Users who add an 
 
 ---
 
+## `admin:org`
+
+The `admin:org` scope is required to call the runners API on organisations where the authenticated user is an **owner**. For org owners, `read:org` alone is insufficient — `GET /orgs/{org}/actions/runners` returns 403 without `admin:org`. This is a GitHub API requirement for owner-level accounts, not a RunnerBar design choice.
+
+---
+
+## `manage_runners:org`
+
+The `manage_runners:org` scope is a fine-grained runner management scope introduced by GitHub in 2023. It is requested alongside `admin:org` for forward-compatibility: GitHub is progressively migrating runner management APIs to require this explicit scope on fine-grained tokens. Requesting it now ensures RunnerBar continues to work without requiring users to re-authenticate as GitHub narrows the older broad scopes.
+
+---
+
+## `workflow`
+
+The `workflow` scope is required to trigger write actions on workflow runs via the GitHub API. RunnerBar uses it for:
+
+- `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun` — Re-run a workflow run
+- `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs` — Re-run only failed jobs
+- `POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel` — Cancel a running workflow
+
+Without `workflow`, these write actions fail silently with 403 even when `repo` is present. Read-only monitoring still works, but the Re-run and Cancel buttons do not.
+
+---
+
 ## What RunnerBar does NOT do
 
-- Does not read, write, or access repository source code or file contents beyond what is listed above
+- Does not make any API calls to read, write, or access repository source code or file contents (even though the `repo` scope technically permits this)
 - Does not write to repositories, open issues, or create pull requests on your behalf
 - Does not access private user data beyond organisation membership
 - Does not store your token anywhere other than the macOS Keychain on your local machine
-- Does not transmit your token to any server other than `api.github.com`
+- Does not transmit your token to any server other than `api.github.com` and `github.com` (for the OAuth exchange)
