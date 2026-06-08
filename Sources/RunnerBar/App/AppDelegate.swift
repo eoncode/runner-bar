@@ -475,11 +475,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
-            let loc = event.locationInWindow
-            log("AppDelegate › outsideClickMonitor — FIRED type=\(event.type.rawValue) loc=\(loc)")
-            // the correct isolation domain. Without this the Swift 6 closure
-            // may see stale values (the 'main actor-isolated property can not
-            // be referenced from a Sendable closure' warning is the tell).
+            // Capture screen-coordinate synchronously at fire time.
+            // NSEvent.addGlobalMonitorForEvents delivers on the main thread,
+            // but Task { @MainActor } reschedules onto the cooperative queue —
+            // by the time the task runs, NSEvent.mouseLocation may reflect a
+            // different cursor position. Capturing here ensures the check uses
+            // the exact click that triggered this handler.
+            let screenLoc = event.window?.convertToScreen(
+                NSRect(origin: event.locationInWindow, size: .zero)
+            ).origin ?? NSEvent.mouseLocation
+            log("AppDelegate › outsideClickMonitor — FIRED type=\(event.type.rawValue) screenLoc=\(screenLoc)")
+            // Hop to MainActor for the correct isolation domain. Without this
+            // the Swift 6 closure may see stale values (the 'main actor-isolated
+            // property can not be referenced from a Sendable closure' warning).
             Task { @MainActor [weak self] in
                 guard let self else {
                     log("AppDelegate › outsideClickMonitor — self is nil, skipping")
@@ -503,32 +511,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // interactive rows inside the popover — so without this check
                 // any tap inside the popover triggers hidePanel() before the
                 // row's action even runs.
-                let mouseLoc = NSEvent.mouseLocation
                 if let popoverWindow = self.popover?.contentViewController?.view.window {
-                    log("AppDelegate › outsideClickMonitor — popoverFrame=\(popoverWindow.frame) mouseLoc=\(mouseLoc) contains=\(popoverWindow.frame.contains(mouseLoc))")
-                    if popoverWindow.frame.contains(mouseLoc) {
+                    log("AppDelegate › outsideClickMonitor — popoverFrame=\(popoverWindow.frame) screenLoc=\(screenLoc) contains=\(popoverWindow.frame.contains(screenLoc))")
+                    if popoverWindow.frame.contains(screenLoc) {
                         log("AppDelegate › outsideClickMonitor — click inside popover window, ignoring")
                         return
                     }
                 } else {
-                    log("AppDelegate › outsideClickMonitor — WARNING: popoverWindow is nil, mouseLoc=\(mouseLoc)")
+                    log("AppDelegate › outsideClickMonitor — WARNING: popoverWindow is nil, screenLoc=\(screenLoc)")
                 }
-                log("AppDelegate › outsideClickMonitor — calling hidePanel() mouseLoc=\(mouseLoc)")
+                log("AppDelegate › outsideClickMonitor — calling hidePanel() screenLoc=\(screenLoc)")
                 self.hidePanel()
             }
         }
         log("AppDelegate › openPanel — outsideClickMonitor installed: \(String(describing: outsideClickMonitor))")
 
-        // Install app-switch observer. Fires when another app becomes frontmost.
-        // not collapse the popover.
+        // Install app-switch observer. Fires when any app becomes frontmost,
+        // including RunnerBar itself. Guard against self-activation so that
+        // returning from an NSOpenPanel picker (which re-activates the parent
+        // app) does not immediately collapse the popover.
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            let appName = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.localizedName ?? "unknown"
+            let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let appName = activatedApp?.localizedName ?? "unknown"
             log("AppDelegate › workspaceObserver — FIRED activated=\(appName)")
-            // the correct isolation domain (same fix as outsideClickMonitor).
+            // Do nothing when RunnerBar itself is the newly-activated app.
+            // This prevents the popover from self-dismissing when the user
+            // returns focus to RunnerBar (e.g. after dismissing a file picker).
+            guard activatedApp != NSRunningApplication.current else {
+                log("AppDelegate › workspaceObserver — guard exit: RunnerBar self-activated, skipping hidePanel")
+                return
+            }
+            // Hop to MainActor for the correct isolation domain (same fix as
+            // outsideClickMonitor).
             Task { @MainActor [weak self] in
                 guard let self else {
                     log("AppDelegate › workspaceObserver — self is nil, skipping")
