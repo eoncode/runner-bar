@@ -26,8 +26,7 @@ import SwiftUI
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
 // is major major major.
 
-/// Root settings view. Contains all settings sections inside a ScrollView.
-/// Local runner management is in `LocalRunnersView`, reached via `manageLocalRunnersRow`.
+/// Root settings view. Navigation rows lead to `LocalRunnersView` and `ScopesView`.
 /// See HEIGHT/WIDTH CONTRACT comments above before making layout changes.
 struct SettingsView: View {
     // MARK: - Inputs
@@ -48,8 +47,6 @@ struct SettingsView: View {
     @StateObject private var settings = AppPreferencesStore.shared
     /// Notification opt-in preferences per scope.
     @StateObject private var notifications = NotificationPreferences.shared
-    /// Registered remote runner scopes (org / repo URLs).
-    @StateObject private var scopeStore = ScopeStore.shared
 
     // MARK: - Local UI state
     /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
@@ -60,39 +57,37 @@ struct SettingsView: View {
     @State private var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
     /// `true` while the OAuth sign-in flow is in progress.
     @State private var isSigningIn = false
-    /// Controls presentation of `AddScopeSheet`.
-    @State private var showAddScopeSheet = false
-    /// #992: The scope entry currently being edited; non-nil while ScopeEditSheet is presented.
-    @State private var selectedScopeEntry: ScopeEntry?
     // FIXME: AnyCancellable stored in @State risks silent subscription drop if SwiftUI
     // recreates the view struct and reallocates @State storage. The correct pattern
     // (used by RunnerViewModel) is to hold cancellables as stored properties on a
     // @MainActor class. Tracked for refactor alongside #1077. // NOSONAR
-    /// Retains the scope-mutation Combine subscription.
-    @State private var scopeMutateCancellable: AnyCancellable?
     /// Retains the sign-out Combine subscription.
     @State private var signOutCancellable: AnyCancellable?
     /// `true` while `LocalRunnersView` is displayed instead of the main settings scroll.
     @State private var showLocalRunners = false
+    /// `true` while `ScopesView` is displayed instead of the main settings scroll.
+    @State private var showScopes = false
 
     // MARK: - Computed properties
     /// Short version string from `CFBundleShortVersionString`.
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "\u2014"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
     /// Build number from `CFBundleVersion`.
     private var appBuild: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "\u2014"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
     // MARK: - Body
-    /// Root view: swaps between the settings scroll and `LocalRunnersView` via `showLocalRunners`.
+    /// Root view: swaps between the settings scroll, `LocalRunnersView`, and `ScopesView`.
     var body: some View {
         if showLocalRunners {
             LocalRunnersView(
                 onBack: { showLocalRunners = false },
                 isAuthenticated: isOAuthAuthenticated || isCLIAuthenticated
             )
+        } else if showScopes {
+            ScopesView(onBack: { showScopes = false })
         } else {
             settingsBody
         }
@@ -100,7 +95,7 @@ struct SettingsView: View {
 
     /// The main settings layout (header + sections scroll).
     ///
-    /// Extracted from `body` so `LocalRunnersView` can replace it cleanly
+    /// Extracted from `body` so `LocalRunnersView` and `ScopesView` can replace it cleanly
     /// without any structural duplication.
     ///
     /// HEIGHT CONTRACT: headerBar is OUTSIDE the ScrollView — back button always visible.
@@ -132,17 +127,6 @@ struct SettingsView: View {
             // Guard: do not clear while an OAuth flow is in progress — the callback must land.
             if !isSigningIn { OAuthService.shared.onCompletion = nil }
         }
-        .sheet(isPresented: $showAddScopeSheet) { AddScopeSheet(isPresented: $showAddScopeSheet) }
-        .sheet(item: $selectedScopeEntry) { entry in
-            // #992: ScopeEditSheet replaces the old nav drill-down.
-            ScopeEditSheet(
-                scopeEntry: entry,
-                isPresented: Binding(
-                    get: { selectedScopeEntry != nil },
-                    set: { if !$0 { selectedScopeEntry = nil } }
-                )
-            )
-        }
     }
 
     /// Vertical stack of all settings sections.
@@ -150,7 +134,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             manageLocalRunnersRow
             Divider()
-            remoteScopesSection
+            manageScopesRow
             Divider()
             notificationsSection
             Divider()
@@ -163,32 +147,29 @@ struct SettingsView: View {
         .padding(.bottom, 16)
     }
 
-    /// Runs on `.onAppear`: refreshes auth state and starts the scope-mutation listener.
+    /// Runs on `.onAppear`: refreshes auth state and starts the sign-out listener.
     private func onAppearAction() {
         let keychainToken = Keychain.token
         let envToken = githubToken()
         isOAuthAuthenticated = (keychainToken != nil)
         isCLIAuthenticated = (keychainToken == nil && envToken != nil)
-        log("SettingsView \u203a onAppear \u2014 Keychain.token=\(keychainToken != nil ? "present(len=\(keychainToken!.count))" : "nil") githubToken=\(envToken != nil ? "present(len=\(envToken!.count))" : "nil") isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+        log("SettingsView › onAppear — Keychain.token=\(keychainToken != nil ? "present(len=\(keychainToken!.count))" : "nil") githubToken=\(envToken != nil ? "present(len=\(envToken!.count))" : "nil") isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
         OAuthService.shared.onCompletion = { success in
-            log("SettingsView \u203a onCompletion \u2014 success=\(success), updating auth state")
+            log("SettingsView › onCompletion — success=\(success), updating auth state")
             isOAuthAuthenticated = success
             isCLIAuthenticated = !success && githubToken() != nil
-            log("SettingsView \u203a onCompletion \u2014 isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+            log("SettingsView › onCompletion — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             isSigningIn = false
         }
         signOutCancellable = OAuthService.shared.didSignOut
             .receive(on: DispatchQueue.main)
             .sink {
                 let postToken = githubToken()
-                log("SettingsView \u203a didSignOut sink \u2014 githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
+                log("SettingsView › didSignOut sink — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = postToken != nil
-                log("SettingsView \u203a didSignOut sink \u2014 isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+                log("SettingsView › didSignOut sink — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             }
-        scopeMutateCancellable = ScopeStore.shared.didMutate
-            .receive(on: DispatchQueue.main)
-            .sink { [weak store] in store?.reload() }
     }
 
     // MARK: - Header
@@ -209,7 +190,7 @@ struct SettingsView: View {
         .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 8)
     }
 
-    // MARK: - Manage Local Runners
+    // MARK: - Navigation rows
 
     /// Navigation row that drills into `LocalRunnersView`.
     private var manageLocalRunnersRow: some View {
@@ -234,114 +215,27 @@ struct SettingsView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Remote runner scopes
-    /// Section header row for the remote scopes list.
-    private var remoteScopesSectionHeader: some View {
-        HStack {
-            Text("Remote runner scopes")
-                .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
-            Spacer()
-            Button {
-                showAddScopeSheet = true
-            } label: {
-                Image(systemName: "plus").font(.caption).foregroundColor(Color.rbTextSecondary)
-            }
-            .buttonStyle(.plain)
-            .help("Add a remote scope")
-            .accessibilityIdentifier("addScopeButton")
-        }
-        .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 2)
-    }
-
-    /// Scrollable list of registered remote runner scopes.
-    private var remoteScopesSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            remoteScopesSectionHeader
-            Text("GitHub repos or orgs whose runners are fetched via the API.")
-                .font(.caption).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
-            if scopeStore.entries.isEmpty {
-                Text("No remote scopes added")
-                    .font(.caption).foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
-            } else {
-                ForEach(scopeStore.entries) { entry in
-                    scopeRow(entry)
-                }
-            }
-        }
-    }
-
-    /// Row view for a single remote scope entry.
-    private func scopeRow(_ entry: ScopeEntry) -> some View {
-        let isRepo = entry.scope.contains("/")
-        let displayName = ScopePreferencesStore.displayName(for: entry.scope)
-        return Button {
-            selectedScopeEntry = entry
+    /// Navigation row that drills into `ScopesView`.
+    private var manageScopesRow: some View {
+        Button {
+            showScopes = true
         } label: {
-            HStack(spacing: 8) {
-                Text(isRepo ? "Repo" : "Org")
-                    .font(.caption2)
-                    .foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.rbSurfaceElevated))
-                    .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(displayName)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if ScopePreferencesStore.alias(for: entry.scope) != nil {
-                        Text(entry.scope)
-                            .font(.caption2)
-                            .foregroundColor(Color.rbTextTertiary)
-                            .lineLimit(1).truncationMode(.middle)
-                    }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Manage scopes").font(.system(size: 12))
+                    Text("Add, remove, and configure GitHub repos or orgs to monitor.")
+                        .font(.caption2).foregroundColor(Color.rbTextSecondary)
                 }
-
                 Spacer()
-
-                Text(entry.isEnabled ? "Active" : "Paused")
-                    .font(.caption2)
-                    .foregroundColor(entry.isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
-
-                Toggle("", isOn: Binding(
-                    get: { entry.isEnabled },
-                    set: { ScopeStore.shared.setEnabled(entry.id, $0); RunnerStore.shared.start() }
-                ))
-                .toggleStyle(.switch)
-                .tint(Color.rbSuccess)
-                .labelsHidden()
-                .help(entry.isEnabled ? "Pause monitoring" : "Resume monitoring")
-                .scaleEffect(0.8, anchor: .trailing)
-                .buttonStyle(.borderless)
-
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
-
-                Button {
-                    ScopePreferencesStore.cleanUp(scope: entry.scope)
-                    ScopeStore.shared.remove(id: entry.id)
-                    RunnerStore.shared.start()
-                } label: {
-                    Image(systemName: "minus.circle")
-                        .font(.caption2)
-                        .foregroundColor(Color.rbDanger)
-                }
-                .buttonStyle(.borderless)
-                .help("Remove scope")
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.horizontal, RBSpacing.md)
-        .padding(.vertical, 5)
-        .glassCard(cornerRadius: RBRadius.small)
-        .padding(.horizontal, RBSpacing.xs)
-        .opacity(entry.isEnabled ? 1.0 : 0.5)
+        .padding(.vertical, 8)
     }
 
     // MARK: - Notifications
@@ -418,7 +312,7 @@ struct SettingsView: View {
                 if isSigningIn {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7)
-                        Text("Waiting for browser\u2026").font(.caption).foregroundColor(Color.rbTextSecondary)
+                        Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
                     }
                 } else if isOAuthAuthenticated {
                     HStack(spacing: 10) {
@@ -491,14 +385,14 @@ struct SettingsView: View {
 
     /// Initiates the OAuth sign-in flow via `OAuthService`.
     private func signInWithGitHub() {
-        log("SettingsView \u203a signInWithGitHub \u2014 isSigningIn=true")
+        log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
         OAuthService.shared.signIn()
     }
 
     /// Signs out of GitHub and clears all stored tokens.
     private func signOutOfGitHub() {
-        log("SettingsView \u203a signOutOfGitHub \u2014 calling OAuthService.shared.signOut()")
+        log("SettingsView › signOutOfGitHub — calling OAuthService.shared.signOut()")
         OAuthService.shared.signOut()
     }
 }
