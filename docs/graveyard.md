@@ -179,12 +179,45 @@ and bail out of `hidePanel()` before it runs.
   to before `NSApp.activate(ignoringOtherApps: true)`. Updated comment to explain why.
 - `docs/graveyard.md`: this entry.
 
-**Status:** In testing as of 2026-06-08 15:53 CEST.
+**Status:** ❌ FAILED — confirmed on device 2026-06-08 16:04 CEST.
 
-**Known risk:** If `picker.begin`'s completion handler fires on a non-main thread before
-`isFilePickerActive = false` is processed, the flag could get stuck `true` and permanently
-block `hidePanel()`. In practice `NSOpenPanel` completions arrive on main, so this is not
-an issue — but worth noting.
+**Why it failed:**
+The Swift 6 compiler emitted `warning: main actor-isolated property 'isFilePickerActive'
+can not be referenced from a Sendable closure` for both the `outsideClickMonitor` and
+`workspaceObserver` closures. These closures are non-isolated `Sendable` contexts;
+Swift cannot guarantee they read `isFilePickerActive` on the `@MainActor`. The
+ordering fix (set flag before `NSApp.activate`) was correct but irrelevant — the
+closures were reading a potentially-stale or un-isolated copy of the property
+regardless of when it was set.
+
+---
+
+## Attempt 7 — #1195 (2026-06-08 16:04 CEST): `Task { @MainActor }` hop in both closures
+
+**Theory:** Both `outsideClickMonitor` and `workspaceObserver` closures are
+non-isolated `Sendable` contexts. Swift 6 warns that reading `@MainActor`-isolated
+properties (`isFilePickerActive`, `panelIsOpen`) from them is unsafe — the value
+may be stale or read off the main actor entirely. Wrapping the body of each closure
+in `Task { @MainActor [weak self] in ... }` forces evaluation onto the main actor,
+ensuring the flag read is sequenced correctly after `isFilePickerActive = true`.
+
+**Changes:**
+- `AppDelegate.swift` `openPanel()`: wrapped `outsideClickMonitor` closure body
+  in `Task { @MainActor [weak self] in ... }`.
+- `AppDelegate.swift` `openPanel()`: wrapped `workspaceObserver` closure body
+  in `Task { @MainActor [weak self] in ... }`.
+- Both changes eliminate the Swift 6 actor-isolation warnings — build is now
+  warning-free for these properties.
+- `docs/graveyard.md`: Attempt 6 marked failed with root cause explanation.
+
+**Status:** In testing as of 2026-06-08 16:04 CEST.
+
+**Known risk:** `Task { @MainActor }` schedules asynchronously on the main actor
+cooperative queue. If a click arrives and the task hasn't run yet, `isFilePickerActive`
+may still read `false` in a pathological timing window. This is extremely unlikely
+since `isFilePickerActive = true` is set synchronously on main before the picker
+opens — but if it recurs, the next step is `@MainActor` annotation on the closures
+directly or moving to `DispatchQueue.main.sync`.
 
 ---
 

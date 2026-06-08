@@ -467,21 +467,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] event in
             let loc = event.locationInWindow
             log("AppDelegate › outsideClickMonitor — FIRED type=\(event.type.rawValue) loc=\(loc)")
-            guard let self else {
-                log("AppDelegate › outsideClickMonitor — self is nil, skipping")
-                return
+            // Hop to MainActor so we read isFilePickerActive / panelIsOpen on
+            // the correct isolation domain. Without this the Swift 6 closure
+            // may see stale values (the 'main actor-isolated property can not
+            // be referenced from a Sendable closure' warning is the tell).
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    log("AppDelegate › outsideClickMonitor — self is nil, skipping")
+                    return
+                }
+                log("AppDelegate › outsideClickMonitor — panelIsOpen=\(self.panelIsOpen) isFilePickerActive=\(self.isFilePickerActive)")
+                guard self.panelIsOpen else {
+                    log("AppDelegate › outsideClickMonitor — guard exit: panel not open")
+                    return
+                }
+                guard !self.isFilePickerActive else {
+                    log("AppDelegate › outsideClickMonitor — guard exit: file picker active, NOT hiding")
+                    return
+                }
+                log("AppDelegate › outsideClickMonitor — calling hidePanel()")
+                self.hidePanel()
             }
-            log("AppDelegate › outsideClickMonitor — panelIsOpen=\(self.panelIsOpen) isFilePickerActive=\(self.isFilePickerActive)")
-            guard self.panelIsOpen else {
-                log("AppDelegate › outsideClickMonitor — guard exit: panel not open")
-                return
-            }
-            guard !self.isFilePickerActive else {
-                log("AppDelegate › outsideClickMonitor — guard exit: file picker active, NOT hiding")
-                return
-            }
-            log("AppDelegate › outsideClickMonitor — calling hidePanel()")
-            self.hidePanel()
         }
         log("AppDelegate › openPanel — outsideClickMonitor installed: \(String(describing: outsideClickMonitor))")
 
@@ -495,21 +501,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] notification in
             let appName = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.localizedName ?? "unknown"
             log("AppDelegate › workspaceObserver — FIRED activated=\(appName)")
-            guard let self else {
-                log("AppDelegate › workspaceObserver — self is nil, skipping")
-                return
+            // Hop to MainActor so isFilePickerActive / panelIsOpen are read on
+            // the correct isolation domain (same fix as outsideClickMonitor).
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    log("AppDelegate › workspaceObserver — self is nil, skipping")
+                    return
+                }
+                log("AppDelegate › workspaceObserver — panelIsOpen=\(self.panelIsOpen) isFilePickerActive=\(self.isFilePickerActive)")
+                guard self.panelIsOpen else {
+                    log("AppDelegate › workspaceObserver — guard exit: panel not open")
+                    return
+                }
+                guard !self.isFilePickerActive else {
+                    log("AppDelegate › workspaceObserver — guard exit: file picker active, NOT hiding")
+                    return
+                }
+                log("AppDelegate › workspaceObserver — calling hidePanel()")
+                self.hidePanel()
             }
-            log("AppDelegate › workspaceObserver — panelIsOpen=\(self.panelIsOpen) isFilePickerActive=\(self.isFilePickerActive)")
-            guard self.panelIsOpen else {
-                log("AppDelegate › workspaceObserver — guard exit: panel not open")
-                return
-            }
-            guard !self.isFilePickerActive else {
-                log("AppDelegate › workspaceObserver — guard exit: file picker active, NOT hiding")
-                return
-            }
-            log("AppDelegate › workspaceObserver — calling hidePanel()")
-            self.hidePanel()
         }
         log("AppDelegate › openPanel — workspaceObserver installed")
     }
