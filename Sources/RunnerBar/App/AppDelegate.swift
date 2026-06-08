@@ -304,8 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Closes the popover explicitly (Escape / back navigation / manual close).
     /// Resets rootView to main so next open starts fresh.
-    /// ❌ Do NOT call this from outside-tap / workspace-switch — use hidePanel() or
-    ///    rely on .transient behavior.
+    /// ❌ Do NOT call this from outside-tap / workspace-switch — use hidePanel().
     func closePanel() {
         log("AppDelegate › closePanel — panelIsOpen=\(panelIsOpen)")
         guard panelIsOpen else {
