@@ -18,7 +18,7 @@ import SwiftUI
 // attachment. Rounded corners survive .sheet natively.
 //
 // HOW THE POPOVER WORKS:
-// 1. NSPopover with animates=false, behavior=.applicationDefined.
+// 1. NSPopover with animates=false, behavior=.transient.
 // 2. Shown via popover.show(relativeTo: button.bounds, of: button,
 //    preferredEdge: .minY) — anchors to the status bar button once on open.
 //    The arrow anchor is determined by positioningRect+view at show() time
@@ -28,8 +28,11 @@ import SwiftUI
 //    ⚠️ Do NOT call popover.show() again on resize — that re-anchors and jumps.
 //    Updating contentSize alone resizes in place with the arrow fixed.
 // 4. Width is clamped to [minWidth..maxWidth] from screen bounds.
-// 5. Dismiss: popover.performClose(nil) or NSEvent global monitor
-//    + NSWorkspace app-switch notification (same as before).
+// 5. Dismiss: .transient behavior — AppKit auto-dismisses on outside clicks
+//    and app-switch. popoverDidClose(_:) is the delegate safety net.
+//    ❌ NEVER restore a manual NSEvent global monitor or NSWorkspace observer
+//    here — they were removed in #1195 because they could not correctly
+//    detect system-owned windows like NSOpenPanel.
 //
 // ARROW VISIBILITY (#1184):
 // The NSPopover anchor arrow visibility is controlled by the `shouldHideAnchor`
@@ -115,15 +118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ❌ NEVER read outside hidePopoverWindowsPreservingSheets / restorePopoverWindowsPreservingSheetsIfNeeded / closePanel()
     var preservedSheetWindowHide = false
 
-    /// Opaque token returned by `NSEvent.addGlobalMonitorForEvents`.
-    /// Typed `Any?` because that is what AppKit returns — `removeMonitor(_:)` also takes `Any`.
-    var eventMonitor: Any?
     /// KVO observation token for `NSHostingController.preferredContentSize`.
     /// Drives popover resize without re-calling `popover.show()`.
     var sizeObservation: NSKeyValueObservation?
-    /// Observer token returned by `NSWorkspace.notificationCenter.addObserver(forName:…)`.
-    /// Typed `NSObjectProtocol?` to match the API's actual return type.
-    var workspaceObserver: NSObjectProtocol?
     /// Combine cancellable bag for all long-lived subscriptions wired in `setupCombineSubscriptions()`.
     var cancellables = Set<AnyCancellable>()
 
@@ -268,8 +265,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Dismiss
 
     /// Shared teardown called by every close/hide path.
-    /// Resets `panelIsOpen`, the visibility state flag, and removes both monitors.
-    /// Extracted to eliminate the duplicated 4-line block that existed in
+    /// Resets `panelIsOpen` and the visibility state flag.
+    /// Extracted to eliminate the duplicated block that existed in
     /// `closePanel()`, `hidePanel()`, and `popoverDidClose()`.
     /// Internal (not private) — called cross-file from AppDelegate+PanelSetup.swift.
     /// ⚠️ Must be called on the main actor. AppDelegate is @MainActor;
@@ -281,8 +278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor func tearDownOpenState() {
         panelIsOpen = false
         panelVisibilityState.isOpen = false
-        removeEventMonitor()
-        removeWorkspaceObserver()
     }
 
     /// Closes the popover explicitly (Escape / back navigation / manual close).
@@ -376,21 +371,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popoverWindow.makeKey()
     }
 
-    /// Nil-safe teardown for the global mouse-event monitor.
-    /// Safe to call when `eventMonitor` is already nil.
-    func removeEventMonitor() {
-        if let monitor = eventMonitor { NSEvent.removeMonitor(monitor); eventMonitor = nil }
-    }
-
-    /// Nil-safe teardown for the workspace app-switch observer.
-    /// Safe to call when `workspaceObserver` is already nil.
-    func removeWorkspaceObserver() {
-        if let opt = workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(opt)
-            workspaceObserver = nil
-        }
-    }
-
     // MARK: - Toggle
 
     /// Toggles the popover: opens it if closed, closes it if open.
@@ -435,8 +415,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Only navigate if we have a saved state AND the current rootView is
         // NOT already showing that view (i.e. we came from closePanel/mainView reset,
         // not from hidePanel which preserves rootView).
-        // We detect "already correct" by checking savedNavState against the
-        // current rootView identity via a flag set in navigate(to:).
         // Simpler approach: only navigate when savedNavState is set AND
         // hasActiveSheet is false (if sheet is open, rootView is correct already).
         if let saved = savedNavState, !hasActiveSheet,
@@ -447,48 +425,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.preservedSheetWindowHide else { return }
             self.panelSheetState.restoreTransientHideStateIfNeeded()
-        }
-
-        guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else { return }
-
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] event in
-            guard let self, let popover = self.popover else { return }
-            let loc = event.locationInWindow
-            let screenLoc = event.window?.convertToScreen(
-                NSRect(origin: loc, size: .zero)
-            ).origin ?? loc
-            guard let popoverWindow = popover.contentViewController?.view.window else { return }
-            let sheetWindows = popoverWindow.sheets
-            let inSheet = sheetWindows.contains { $0.frame.contains(screenLoc) }
-            // Don't hide if a modal panel (e.g. NSOpenPanel/NSSavePanel) is running.
-            // NSOpenPanel opens as a standalone NSWindow or modal session, not as an
-            // attached sheet, so it is invisible to the sheetWindows check above.
-            // Without this guard any click — including clicks inside the file dialog —
-            // would satisfy !inSheet and incorrectly trigger hidePanel(). (#1186)
-            let hasModalSession = NSApp.modalWindow != nil
-            // Don't hide if the click landed inside another visible app-owned window
-            // (e.g. alert dialogs presented as separate windows).
-            // ⚠️ isVisible is required: NSApp.windows includes offscreen/hidden windows
-            // whose frames could overlap the click location and falsely suppress hidePanel().
-            let inOtherAppWindow = NSApp.windows.contains {
-                $0 !== popoverWindow && !sheetWindows.contains($0) && $0.isVisible && $0.frame.contains(screenLoc)
-            }
-            if !popoverWindow.frame.contains(screenLoc) && !inSheet && !hasModalSession && !inOtherAppWindow {
-                self.hidePanel()
-            }
-        }
-
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            if NSRunningApplication.current != NSWorkspace.shared.frontmostApplication {
-                Task { @MainActor [weak self] in self?.hidePanel() }
-            }
         }
     }
 }

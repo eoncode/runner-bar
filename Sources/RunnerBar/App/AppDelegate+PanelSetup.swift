@@ -18,6 +18,19 @@ import SwiftUI
 // window-server compositor. Rounded corners survive SwiftUI .sheet
 // attachment natively — no CALayer manipulation required or desired.
 //
+// POPOVER BEHAVIOR: .transient (#1195)
+// .transient causes AppKit to dismiss the popover automatically on any
+// outside click or app-switch. This replaces the manual NSEvent global
+// monitor and NSWorkspace observer that existed when the app used NSPanel
+// (.applicationDefined behavior).
+//
+// Crucially, AppKit's native .transient dismiss is aware of system panels
+// (e.g. NSOpenPanel) spawned by the app and will NOT dismiss the popover
+// while such a panel is active. The manual event monitor could not achieve
+// this because:
+//   - NSApp.modalWindow is nil when picker.begin { } is used (async, non-modal)
+//   - NSApp.windows does not include system-owned NSOpenPanel windows
+//
 // SHEET HANDLING:
 // SwiftUI .sheet() attaches as a child NSWindow to the popover's backing
 // window. Two problems arise:
@@ -35,13 +48,9 @@ import SwiftUI
 //    - popoverShouldClose always returns true. AppKit is never blocked.
 //    - popoverDidClose saves hasActiveSheet into a flag before state clears.
 //    - openPanel restores via savedNavState (already the case).
-//    - The global event monitor no longer has a hasActiveSheet guard —
-//      outside clicks always trigger closePanel().
-//    - closePanel() does NOT call endSheet on any open sheet. The sheet
-//      window is a child of the popover window; when the popover window
-//      closes, AppKit removes all child windows including the sheet.
-//      On re-open, SwiftUI re-presents the sheet if the binding is still true
-//      (e.g. showAddScopeSheet = true is preserved in @State in SettingsView).
+//    - The sheet NSWindow is a child of the popover window; when the popover
+//      window closes, AppKit removes all child windows including the sheet.
+//      On re-open, SwiftUI re-presents the sheet if the binding is still true.
 //      savedNavState = .settings ensures we navigate back to SettingsView.
 //
 // SIZE NOTE:
@@ -67,7 +76,10 @@ extension AppDelegate: NSPopoverDelegate {
         newPopover.contentViewController = controller
         newPopover.contentSize = NSSize(width: 480, height: 300)
         newPopover.animates = false
-        newPopover.behavior = .applicationDefined
+        // .transient: AppKit auto-dismisses on outside clicks and app-switch.
+        // This replaces the manual NSEvent monitor + NSWorkspace observer
+        // that were needed under .applicationDefined (#1195).
+        newPopover.behavior = .transient
         newPopover.delegate = self
 
         popover = newPopover
