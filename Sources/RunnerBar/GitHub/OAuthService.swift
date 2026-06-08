@@ -57,13 +57,11 @@ final class OAuthService {
     /// - `workflow`: Required to trigger and re-run workflow runs via the API.
     ///   Without this, dispatch and re-run actions fail with 403 even when `repo`
     ///   is present.
-    /// - `gist`: Required by some legacy GitHub operations. Absent from the token,
-    ///   GitHub prompts for re-auth interactively.
     ///
     /// Previously only `repo` and `read:org` were requested. The additional scopes
     /// were added because org-runner listing and workflow dispatch were returning 403
     /// for accounts with org-owner or org-admin roles.
-    private let scopes = "repo read:org admin:org manage_runners:org workflow gist"
+    private let scopes = "repo read:org admin:org manage_runners:org workflow"
 
     // MARK: - OAuth endpoint constants
     /// GitHub OAuth authorisation URL — entry point for the browser-based sign-in flow.

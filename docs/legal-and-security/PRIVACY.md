@@ -42,7 +42,6 @@ RunnerBar requests the following scopes at sign-in (from `OAuthService.swift`):
 | `admin:org` | Required to list and manage self-hosted runners on organisations where the user is an **owner**. Without this, `/orgs/{org}/actions/runners` returns 403 for owner-level accounts. |
 | `manage_runners:org` | Fine-grained runner-management scope (introduced 2023). Requested alongside `admin:org` for forward-compatibility as GitHub migrates runner APIs to require it on fine-grained tokens. |
 | `workflow` | Required to **Re-run**, **Re-run failed**, and **Cancel** workflow runs via the API. Read-only tokens silently fail these write actions. |
-| `gist` | Required by certain GitHub API operations; absent from the token GitHub prompts for interactive re-auth. |
 
 ### Why not a fine-grained PAT?
 
