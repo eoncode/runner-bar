@@ -136,21 +136,34 @@ private struct RunnerMetricsBadge: View {
 /// on a separate background cycle and will always lag behind the RunnerStore
 /// fetch cycle, causing rows to be silently swallowed. (#948)
 struct PanelLocalRunnerRow: View {
-    /// Maximum number of runner cards shown inline before the overflow label.
-    private static let maxVisibleRunners = 3
+    /// Number of runner cards revealed per page (initial cap and increment).
+    private static let pageSize = 6
     /// The list of runners to display.
     let runners: [RunnerModel]
+    /// How many runner cards are currently visible; increments by `pageSize` on each "Show more" tap.
+    /// Resets to `pageSize` whenever the view is recreated (e.g. panel close/reopen).
+    @State private var visibleCount: Int = pageSize
     /// Renders the runner card list, or nothing if `runners` is empty.
     var body: some View {
         if !runners.isEmpty { runnerList(runners) }
     }
-    /// Renders a vertical stack of runner cards, capped at `maxVisibleRunners` with an overflow label.
+    /// Renders a vertical stack of runner cards up to `visibleCount`, with an
+    /// animated "Show N more…" button when additional runners remain hidden.
     @ViewBuilder private func runnerList(_ active: [RunnerModel]) -> some View {
-        ForEach(active.prefix(Self.maxVisibleRunners)) { runner in runnerCard(runner) }
-        if active.count > Self.maxVisibleRunners {
-            Text("+ \(active.count - Self.maxVisibleRunners) more…")
-                .font(.caption2).foregroundColor(.secondary)
-                .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
+        ForEach(active.prefix(visibleCount)) { runner in runnerCard(runner) }
+        if active.count > visibleCount {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    visibleCount = min(visibleCount + Self.pageSize, active.count)
+                }
+            } label: {
+                Text("Show \(min(Self.pageSize, active.count - visibleCount)) more…")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+            .padding(.vertical, 2)
         }
         Divider()
     }
