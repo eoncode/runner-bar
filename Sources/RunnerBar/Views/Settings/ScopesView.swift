@@ -166,6 +166,7 @@ struct ScopesView: View {
                 .labelsHidden()
                 .help(entry.isEnabled ? "Pause monitoring" : "Resume monitoring")
                 .scaleEffect(0.8, anchor: .trailing)
+                .buttonStyle(.borderless)
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
