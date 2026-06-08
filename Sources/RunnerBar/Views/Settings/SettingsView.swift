@@ -130,15 +130,15 @@ struct SettingsView: View {
     }
 
     /// Vertical stack of all settings sections.
+    ///
+    /// Order: Management nav rows → Account → General → About
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
-            manageLocalRunnersRow
-            Divider()
-            manageScopesRow
-            Divider()
-            generalSection
+            managementSection
             Divider()
             accountSection
+            Divider()
+            generalSection
             Divider()
             aboutSection
         }
@@ -188,7 +188,17 @@ struct SettingsView: View {
         .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 8)
     }
 
-    // MARK: - Navigation rows
+    // MARK: - Management section
+    /// "Management" section: header label + nav rows for local runners and scopes.
+    private var managementSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Management").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+            manageLocalRunnersRow
+            Divider().padding(.leading, RBSpacing.md)
+            manageScopesRow
+        }
+    }
 
     /// Navigation row that drills into `LocalRunnersView`.
     private var manageLocalRunnersRow: some View {
@@ -237,14 +247,22 @@ struct SettingsView: View {
     }
 
     // MARK: - General
-    /// General section: notification toggles, launch-at-login, polling interval, and popover arrow.
-    ///
-    /// The former standalone Notifications section has been merged here
-    /// as its two toggles are closely related to the other app-behaviour controls.
+    /// General section: polling interval (first), then notification toggles, launch-at-login, and popover arrow.
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+            HStack {
+                Text("Polling interval").font(.system(size: 12)); Spacer()
+                Text("\(settings.pollingInterval)s").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                    .frame(minWidth: 36, alignment: .trailing)
+                Stepper("", value: $settings.pollingInterval, in: 10...300).labelsHidden()
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
+            Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
+                .font(.caption).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
+            Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Notify on success").font(.system(size: 12)); Spacer()
                 Toggle("", isOn: $notifications.notifyOnSuccess)
@@ -266,17 +284,6 @@ struct SettingsView: View {
                     .onChange(of: launchAtLogin) { _, newVal in applyLaunchAtLogin(newVal) }
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-            Divider().padding(.leading, RBSpacing.md)
-            HStack {
-                Text("Polling interval").font(.system(size: 12)); Spacer()
-                Text("\(settings.pollingInterval)s").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                    .frame(minWidth: 36, alignment: .trailing)
-                Stepper("", value: $settings.pollingInterval, in: 10...300).labelsHidden()
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
-            Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
-                .font(.caption).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
             Divider().padding(.leading, RBSpacing.md)
             popoverArrowRow
         }
