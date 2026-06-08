@@ -451,12 +451,15 @@ extension ScopeEditSheet {
     /// The host window reference is captured early by `WindowGrabber` (attached in
     /// `body`) so there is no key-window race at call time.
     func openFolderPicker() {
-        log("[PICKER] openFolderPicker — ENTER hostWindow=\(String(describing: hostWindow))")
+        let delegate = NSApp.delegate as? AppDelegate
+        log("[PICKER] openFolderPicker — ENTER hostWindow=\(String(describing: hostWindow)) isFilePickerActive=\(delegate?.isFilePickerActive ?? false) panelIsOpen=\(delegate?.panelIsOpen ?? false)")
 
         guard let window = hostWindow else {
-            log("[PICKER] openFolderPicker — ERROR: hostWindow is nil, cannot present sheet")
+            log("[PICKER] openFolderPicker — ERROR: hostWindow is nil — picker will NOT open. popoverWindow=\(String(describing: delegate?.popover?.contentViewController?.view.window))")
             return
         }
+
+        log("[PICKER] openFolderPicker — window OK: \(window) isKey=\(window.isKeyWindow) isVisible=\(window.isVisible) sheets=\(window.sheets.count)")
 
         let picker = NSOpenPanel()
         picker.canChooseFiles = false
@@ -471,9 +474,17 @@ extension ScopeEditSheet {
             picker.directoryURL = FileManager.default.homeDirectoryForCurrentUser
         }
 
-        log("[PICKER] openFolderPicker — calling beginSheetModal on window=\(window)")
+        // ✅ Set isFilePickerActive = true BEFORE beginSheetModal.
+        // outsideClickMonitor and workspaceObserver both check this flag on
+        // the main actor. Setting it here means any click or app-switch event
+        // that arrives during the picker session sees the flag = true and
+        // bails before calling hidePanel().
+        delegate?.isFilePickerActive = true
+        log("[PICKER] openFolderPicker — isFilePickerActive SET TRUE, calling beginSheetModal on window=\(window)")
+
         picker.beginSheetModal(for: window) { response in
-            log("[PICKER] openFolderPicker — sheet completion fired response=\(response.rawValue)")
+            delegate?.isFilePickerActive = false
+            log("[PICKER] openFolderPicker — completion: response=\(response.rawValue) isFilePickerActive SET FALSE panelIsOpen=\(delegate?.panelIsOpen ?? false)")
             if response == .OK, let url = picker.url {
                 let home = FileManager.default.homeDirectoryForCurrentUser.path
                 let abs = url.path
@@ -484,7 +495,7 @@ extension ScopeEditSheet {
                 log("[PICKER] openFolderPicker — user cancelled or no URL")
             }
         }
-        log("[PICKER] openFolderPicker — beginSheetModal called (sheet attached, waiting for user)")
+        log("[PICKER] openFolderPicker — beginSheetModal returned (sheet now attached, window.sheets=\(window.sheets.count))")
     }
 }
 
