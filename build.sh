@@ -5,6 +5,13 @@ APP_NAME="RunnerBar"
 VERSION="0.7.0"
 OUT_DIR="dist"
 
+# ── ⚠️  DO NOT CHANGE THE ARCH OR BUILD PATH BELOW ────────────────────────
+# This project targets Apple Silicon (arm64) ONLY.
+# The explicit --arch arm64 flag and the .build/arm64-apple-macosx/release/
+# output path are INTENTIONAL. The previous arch-neutral path
+# (.build/apple/Products/Release/) caused stale build artefacts that led to
+# hours of wasted debugging. Do not revert to the generic path.
+# ───────────────────────────────────────────────────────────────────────────
 echo "→ Compiling arm64 binary..."
 swift build -c release --arch arm64
 
