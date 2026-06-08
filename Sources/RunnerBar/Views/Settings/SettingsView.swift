@@ -239,67 +239,66 @@ struct SettingsView: View {
     // MARK: - General
     /// General section: notification toggles, launch-at-login, polling interval, and popover arrow.
     ///
-    /// The former standalone Notifications section has been merged here.
-    ///
-    /// Children are split across two `Group`s to stay under Swift's
-    /// ViewBuilder 10-direct-child limit. Without the groups the popover
-    /// arrow row (11th child) is silently dropped at compile time.
+    /// The former standalone Notifications section has been merged here
+    /// as its two toggles are closely related to the other app-behaviour controls.
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Group 1: header + notifications + launch at login (5 children)
-            Group {
-                Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
-                HStack {
-                    Text("Notify on success").font(.system(size: 12)); Spacer()
-                    Toggle("", isOn: $notifications.notifyOnSuccess)
-                        .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-                Divider().padding(.leading, RBSpacing.md)
-                HStack {
-                    Text("Notify on failure").font(.system(size: 12)); Spacer()
-                    Toggle("", isOn: $notifications.notifyOnFailure)
-                        .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-                Divider().padding(.leading, RBSpacing.md)
+            Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+            HStack {
+                Text("Notify on success").font(.system(size: 12)); Spacer()
+                Toggle("", isOn: $notifications.notifyOnSuccess)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
-            // Group 2: launch at login + polling interval + popover arrow (6 children)
-            Group {
-                HStack {
-                    Text("Launch at login").font(.system(size: 12)); Spacer()
-                    Toggle("", isOn: $launchAtLogin)
-                        .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
-                        .onChange(of: launchAtLogin) { _, newVal in applyLaunchAtLogin(newVal) }
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
-                Divider().padding(.leading, RBSpacing.md)
-                HStack {
-                    Text("Polling interval").font(.system(size: 12)); Spacer()
-                    Text("\(settings.pollingInterval)s").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
-                        .frame(minWidth: 36, alignment: .trailing)
-                    Stepper("", value: $settings.pollingInterval, in: 10...300).labelsHidden()
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
-                Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
-                    .font(.caption).foregroundColor(Color.rbTextSecondary)
-                    .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
-                Divider().padding(.leading, RBSpacing.md)
-                // #1184: show/hide the NSPopover anchor arrow
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Show popover arrow").font(.system(size: 12))
-                        Text("Controls whether the anchor arrow is shown on the menu bar popover. Takes effect on next open.")
-                            .font(.caption2).foregroundColor(Color.rbTextSecondary)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $settings.showPopoverArrow)
-                        .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
-                }
-                .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
+            Divider().padding(.leading, RBSpacing.md)
+            HStack {
+                Text("Notify on failure").font(.system(size: 12)); Spacer()
+                Toggle("", isOn: $notifications.notifyOnFailure)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
+            Divider().padding(.leading, RBSpacing.md)
+            HStack {
+                Text("Launch at login").font(.system(size: 12)); Spacer()
+                Toggle("", isOn: $launchAtLogin)
+                    .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
+                    .onChange(of: launchAtLogin) { _, newVal in applyLaunchAtLogin(newVal) }
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
+            Divider().padding(.leading, RBSpacing.md)
+            HStack {
+                Text("Polling interval").font(.system(size: 12)); Spacer()
+                Text("\(settings.pollingInterval)s").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
+                    .frame(minWidth: 36, alignment: .trailing)
+                Stepper("", value: $settings.pollingInterval, in: 10...300).labelsHidden()
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
+            Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
+                .font(.caption).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
+            Divider().padding(.leading, RBSpacing.md)
+            popoverArrowRow
         }
+    }
+
+    // MARK: - Popover arrow row (#1184)
+    /// Toggle row that shows or hides the NSPopover anchor arrow.
+    ///
+    /// Extracted as its own computed var so it is a first-class child of
+    /// `generalSection`'s VStack, identical in structure to every other row.
+    private var popoverArrowRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Show popover arrow").font(.system(size: 12))
+                Text("Controls whether the anchor arrow is shown on the menu bar popover. Takes effect on next open.")
+                    .font(.caption2).foregroundColor(Color.rbTextSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: $settings.showPopoverArrow)
+                .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
     }
 
     // MARK: - Account
