@@ -92,10 +92,22 @@ extension AppDelegate: NSPopoverDelegate {
 
     // MARK: NSPopoverDelegate
 
-    /// Always allow close. Outside-tap during a sheet hides the popover so the
-    /// user can interact with other apps. Nav state is preserved and restored
+    /// Block close while a file picker is open; otherwise always allow close.
+    ///
+    /// `.transient` dismisses on any outside click, including clicks inside a
+    /// free-floating `NSOpenPanel` launched via `picker.begin { }`. The
+    /// `isFilePickerActive` flag is set by `ScopeEditSheet.openFolderPicker()`
+    /// before the picker opens and cleared in its completion handler, so we can
+    /// return `false` here and let AppKit retry the close once the picker is gone.
+    ///
+    /// Outside-tap during a sheet (without a picker) still hides the popover so
+    /// the user can interact with other apps. Nav state is preserved and restored
     /// on next open via savedNavState.
     public func popoverShouldClose(_ _: NSPopover) -> Bool {
+        guard !isFilePickerActive else {
+            log("AppDelegate › popoverShouldClose — blocked (isFilePickerActive=true)")
+            return false
+        }
         return true
     }
 

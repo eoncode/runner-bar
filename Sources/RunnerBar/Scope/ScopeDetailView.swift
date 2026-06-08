@@ -448,7 +448,13 @@ extension ScopeEditSheet {
         // TODO: NSApp.activate(ignoringOtherApps:) is deprecated on macOS 14+. // NOSONAR
         // Replace with NSApp.activate() (no argument) once the deployment target allows.
         NSApp.activate(ignoringOtherApps: true)
+        // Set isFilePickerActive so popoverShouldClose returns false while the picker
+        // is open. Without this, .transient behavior dismisses the popover when the
+        // user clicks inside the NSOpenPanel window (which is a separate, free-floating
+        // system window invisible to AppKit's popover dismiss logic). (#1193)
+        (NSApp.delegate as? AppDelegate)?.isFilePickerActive = true
         picker.begin { response in
+            (NSApp.delegate as? AppDelegate)?.isFilePickerActive = false
             if response == .OK, let url = picker.url {
                 let home = FileManager.default.homeDirectoryForCurrentUser.path
                 let abs = url.path

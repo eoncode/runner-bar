@@ -117,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is hidden without closing, so the sheet NSWindow survives.
     /// ❌ NEVER read outside hidePopoverWindowsPreservingSheets / restorePopoverWindowsPreservingSheetsIfNeeded / closePanel()
     var preservedSheetWindowHide = false
+    /// Set to `true` while an `NSOpenPanel` file picker is open (e.g. from `ScopeEditSheet`).
+    /// `popoverShouldClose` returns `false` while this is `true`, preventing `.transient`
+    /// from dismissing the popover when the user clicks inside the file picker window. (#1193)
+    var isFilePickerActive = false
 
     /// KVO observation token for `NSHostingController.preferredContentSize`.
     /// Drives popover resize without re-calling `popover.show()`.
