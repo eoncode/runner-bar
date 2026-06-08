@@ -18,18 +18,17 @@ import SwiftUI
 // window-server compositor. Rounded corners survive SwiftUI .sheet
 // attachment natively — no CALayer manipulation required or desired.
 //
-// POPOVER BEHAVIOR: .transient (#1195)
-// .transient causes AppKit to dismiss the popover automatically on any
-// outside click or app-switch. This replaces the manual NSEvent global
-// monitor and NSWorkspace observer that existed when the app used NSPanel
-// (.applicationDefined behavior).
+// POPOVER BEHAVIOR: .applicationDefined (#1195 Attempt 5)
+// Using .applicationDefined so that AppKit delegates close decisions to
+// popoverShouldClose(_:). This lets us return false while isFilePickerActive
+// is true, blocking the dismiss when the user clicks inside NSOpenPanel.
 //
-// Crucially, AppKit's native .transient dismiss is aware of system panels
-// (e.g. NSOpenPanel) spawned by the app and will NOT dismiss the popover
-// while such a panel is active. The manual event monitor could not achieve
-// this because:
-//   - NSApp.modalWindow is nil when picker.begin { } is used (async, non-modal)
-//   - NSApp.windows does not include system-owned NSOpenPanel windows
+// .transient was tried (Attempt 2) and failed — AppKit's .transient dismiss
+// fires on ANY outside interaction, including clicks inside NSOpenPanel.
+// .transient does NOT have special awareness of system panels.
+//
+// The manual NSEvent global monitor + NSWorkspace observer are restored and
+// handle app-switch hide. popoverShouldClose gates all AppKit-driven closes.
 //
 // SHEET HANDLING:
 // SwiftUI .sheet() attaches as a child NSWindow to the popover's backing
@@ -76,10 +75,11 @@ extension AppDelegate: NSPopoverDelegate {
         newPopover.contentViewController = controller
         newPopover.contentSize = NSSize(width: 480, height: 300)
         newPopover.animates = false
-        // .transient: AppKit auto-dismisses on outside clicks and app-switch.
-        // This replaces the manual NSEvent monitor + NSWorkspace observer
-        // that were needed under .applicationDefined (#1195).
-        newPopover.behavior = .transient
+        // .applicationDefined: popoverShouldClose(_:) is consulted on every
+        // AppKit-driven close attempt. Returns false while isFilePickerActive
+        // is true, keeping the popover alive when user clicks in NSOpenPanel.
+        // Manual NSEvent monitor + NSWorkspace observer handle hide-on-app-switch.
+        newPopover.behavior = .applicationDefined
         newPopover.delegate = self
 
         popover = newPopover

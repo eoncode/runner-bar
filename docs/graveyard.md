@@ -95,6 +95,66 @@ doing nothing.
 
 ---
 
+## Attempt 4 — #1195 commit 3 (2026-06-08): `isFilePickerActive` flag + `popoverShouldClose` guard
+
+**Theory:** `beginSheetModal` (Attempt 3) required a valid `NSWindow` reference at call
+time obtained via `NSApp.keyWindow`. In practice the sheet attachment either failed
+or the picker still opened free-floating. The new approach adds a boolean flag
+`isFilePickerActive` to `AppDelegate`. `ScopeDetailView.openFolderPicker()` sets it
+`true` before calling `picker.begin { }` and clears it `false` in the completion
+handler. `AppDelegate+PanelSetup.popoverShouldClose(_:)` returns `false` while the
+flag is `true`, directly blocking AppKit from dismissing the popover.
+
+**Changes:**
+- `AppDelegate.swift`: added `var isFilePickerActive = false` (line 122).
+- `AppDelegate+PanelSetup.swift`: `popoverShouldClose` now guards on
+  `!isFilePickerActive` and logs when the close is blocked.
+- `ScopeDetailView.swift`: `openFolderPicker()` sets/clears the flag around
+  `picker.begin { }`.
+- Reverted back to plain `picker.begin { }` (free-floating) since the flag
+  makes sheet attachment unnecessary.
+
+**Status:** ❌ FAILED — confirmed on device 2026-06-08 15:13 CEST.
+
+**Why it failed:**
+`popoverShouldClose(_:)` is **only called when `behavior = .applicationDefined`**.
+At the time of this attempt the popover was still set to `.transient` (left
+over from Attempt 2). With `.transient`, AppKit never consults the delegate —
+it closes the popover directly, bypassing `popoverShouldClose` entirely.
+The `isFilePickerActive` flag and the delegate guard were structurally dead
+code. The comment in `AppDelegate+PanelSetup.swift` line 48 even stated
+"popoverShouldClose always returns true. AppKit is never blocked" — that was
+written for the `.transient` world and proved the mechanism was inert.
+
+---
+
+## Attempt 5 — #1195 (2026-06-08 15:18 CEST): `.applicationDefined` + `isFilePickerActive` flag
+
+**Theory:** Attempt 4 had the right mechanism (`isFilePickerActive` flag +
+`popoverShouldClose` guard) but the wrong behavior mode. `popoverShouldClose`
+is only consulted by AppKit when `behavior = .applicationDefined`. Switching
+back to `.applicationDefined` and keeping the flag should finally work:
+when the user taps inside the NSOpenPanel, AppKit asks `popoverShouldClose`,
+we return `false`, the popover stays open.
+
+**Changes:**
+- `AppDelegate+PanelSetup.swift`: `newPopover.behavior = .applicationDefined`
+  (was `.transient`). Updated the POPOVER BEHAVIOR comment block to reflect
+  the correct reasoning.
+- `docs/graveyard.md`: Attempt 4 marked failed with root cause explanation.
+- No changes to `ScopeDetailView.swift` or `AppDelegate.swift` — the
+  `isFilePickerActive` flag and `popoverShouldClose` guard from Attempt 4
+  are correct and remain in place.
+
+**Status:** Built and deployed — **in testing as of 2026-06-08 15:18 CEST**.
+
+**Known risk:** `.applicationDefined` requires the manual NSEvent global
+monitor and NSWorkspace observer to handle outside-click-hide and
+app-switch-hide. These were restored in Attempt 3/4 and are present.
+If they were accidentally removed again, the popover would never close.
+
+---
+
 ## Reading list / references
 
 - https://ohanaware.com/swift/macOSOpenPanelSheet.html — documents the
