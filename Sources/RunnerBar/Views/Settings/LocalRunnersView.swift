@@ -1,0 +1,349 @@
+// LocalRunnersView.swift
+// RunnerBar
+import RunnerBarCore
+import SwiftUI
+
+// MARK: - LocalRunnersView
+
+/// Full runner-management screen, reached from the "Manage local runners" row in Settings.
+///
+/// Owns all runner-specific state and lifecycle actions that previously lived in `SettingsView`.
+/// Presented by `SettingsView` via a `showLocalRunners` flag using the same back-callback
+/// pattern established by the rest of the panel navigation model.
+@MainActor
+struct LocalRunnersView: View {
+
+    // MARK: - Inputs
+
+    /// Callback invoked when the user taps the back button.
+    let onBack: () -> Void
+    /// Combined OAuth + CLI auth state forwarded from `SettingsView`; required by `RemovalAlertModifier`.
+    let isAuthenticated: Bool
+
+    // MARK: - Observed stores
+
+    /// Index of locally-installed self-hosted runners.
+    @StateObject private var localRunnerStore = LocalRunnerStore.shared
+
+    // MARK: - Local UI state
+
+    /// `true` once the initial local runner scan has completed.
+    @State private var hasLoadedOnce = false
+    /// The runner awaiting user confirmation before removal.
+    @State private var runnerPendingRemoval: RunnerModel?
+    /// Controls presentation of `AddRunnerSheet`.
+    @State private var showAddRunnerSheet = false
+    /// The runner currently being edited in `RunnerDetailPopover`. `nil` = popover dismissed.
+    @State private var editingRunner: RunnerModel?
+    /// `true` while `commitRunnerEdit` is in-flight.
+    @State private var isCommitting = false
+    /// Non-nil when the last commit attempt produced errors; forwarded into `RunnerDetailPopover`.
+    @State private var commitError: String?
+    /// Non-nil when the last removal attempt failed; shown as an inline error label.
+    @State private var removeErrorMessage: String?
+
+    // MARK: - Computed properties
+
+    /// Alert title incorporating the pending runner name.
+    private var removalAlertTitle: String {
+        let name = runnerPendingRemoval?.runnerName ?? "this runner"
+        return "Remove runner \"\(name)\"?"
+    }
+
+    // MARK: - Body
+
+    /// Root layout: fixed header bar above a scrollable runner list.
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            headerBar
+            Divider()
+            ScrollView(.vertical, showsIndicators: true) {
+                contentStack
+                    .padding(.bottom, 16)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(idealWidth: 480, maxWidth: .infinity)
+        .onAppear { localRunnerStore.refresh() }
+        .onChange(of: localRunnerStore.isScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
+        .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
+        .modifier(removalAlertModifier)
+        .popover(item: $editingRunner) { runner in runnerEditingPopover(runner: runner) }
+    }
+
+    // MARK: - Header
+
+    /// Top bar with back button and "Manage local runners" title.
+    private var headerBar: some View {
+        HStack {
+            Button(action: onBack, label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Manage local runners").font(.headline)
+                }
+                .foregroundColor(.primary)
+            })
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 8)
+    }
+
+    // MARK: - Content
+
+    /// Vertical stack of the runner list and related controls.
+    private var contentStack: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeader
+            descriptionLabel
+            errorLabel
+            runnerList
+        }
+    }
+
+    /// Section header row with add and refresh buttons.
+    private var sectionHeader: some View {
+        HStack {
+            Text("Active local runners")
+                .font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
+            Spacer()
+            Button(action: { showAddRunnerSheet = true }, label: {
+                Image(systemName: "plus").font(.caption).foregroundColor(Color.rbTextSecondary)
+            })
+            .buttonStyle(.plain)
+            .help("Add a new runner")
+            .accessibilityIdentifier("addRunnerButton")
+            .padding(.trailing, 4)
+            if localRunnerStore.isScanning {
+                ProgressView().scaleEffect(0.6).frame(width: 14, height: 14)
+            } else {
+                Button(action: { removeErrorMessage = nil; localRunnerStore.refresh() }, label: {
+                    Image(systemName: "arrow.clockwise").font(.caption).foregroundColor(Color.rbTextSecondary)
+                })
+                .buttonStyle(.plain).help("Refresh local runner list")
+            }
+        }
+        .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+    }
+
+    /// Subtitle describing what local runners are.
+    private var descriptionLabel: some View {
+        Text("Self-hosted runners installed on this machine, discovered via LaunchAgent plists.")
+            .font(.caption).foregroundColor(Color.rbTextSecondary)
+            .padding(.horizontal, RBSpacing.md).padding(.bottom, 6)
+    }
+
+    /// Inline error label shown when the last removal failed.
+    @ViewBuilder
+    private var errorLabel: some View {
+        if let errMsg = removeErrorMessage {
+            Text(errMsg).font(.caption).foregroundColor(Color.rbDanger)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
+                .background(Color.rbDanger.opacity(0.07))
+        }
+    }
+
+    /// Empty-state placeholder or populated list of runner rows.
+    @ViewBuilder
+    private var runnerList: some View {
+        if localRunnerStore.runners.isEmpty && !localRunnerStore.isScanning && hasLoadedOnce {
+            Text("No local runners found").font(.caption).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 4)
+        } else {
+            ForEach(localRunnerStore.runners) { runner in localRunnerRow(runner) }
+        }
+    }
+
+    // MARK: - Runner rows
+
+    /// Full row view for a single local runner, including the detail popover trigger.
+    private func localRunnerRow(_ runner: RunnerModel) -> some View {
+        Button {
+            commitError = nil
+            editingRunner = runner
+        } label: {
+            localRunnerRowContent(runner)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, RBSpacing.md).padding(.vertical, 5)
+        .glassCard(cornerRadius: RBRadius.small)
+        .padding(.horizontal, RBSpacing.xs)
+    }
+
+    /// Inner content (status dot, name, start/stop toggle, remove button) for a local runner row.
+    private func localRunnerRowContent(_ runner: RunnerModel) -> some View {
+        let hasWarning = runner.lifecycleWarning != nil
+        let displayStatus = runner.displayStatus
+        return HStack(spacing: 6) {
+            Circle().fill(localRunnerDotColor(for: runner)).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(runner.runnerName).font(.system(size: 13)).lineLimit(1)
+                if let url = runner.gitHubUrl {
+                    Text(url).font(.caption2).foregroundColor(Color.rbTextSecondary).lineLimit(1)
+                }
+            }
+            Spacer()
+            Text(displayStatus)
+                .font(.caption)
+                .foregroundColor(hasWarning ? Color.rbWarning : Color.rbTextSecondary)
+                .lineLimit(1)
+                .fixedSize()
+            Toggle("", isOn: Binding(
+                get: { runner.isRunning },
+                set: { isOn in
+                    if isOn { performResume(runner: runner) } else { performStop(runner: runner) }
+                }
+            ))
+            .toggleStyle(.switch)
+            .tint(Color.rbSuccess)
+            .labelsHidden()
+            .help(runner.isRunning ? "Stop runner service" : "Start runner service")
+            .scaleEffect(0.8, anchor: .trailing)
+            .buttonStyle(.borderless)
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(Color.rbTextTertiary)
+            Button(action: { runnerPendingRemoval = runner },
+                   label: { Image(systemName: "minus.circle").font(.caption2).foregroundColor(Color.rbDanger) })
+            .buttonStyle(.plain).help("Remove runner")
+        }
+    }
+
+    // MARK: - Lifecycle actions
+    // TODO: #1077 — migrate to async/await once RunnerLifecycleService.start/stop are async.
+    // Current pattern (Task + Task.detached) matches LocalRunnerStore.refresh() as the
+    // intermediate step: background work is off-actor, main-actor mutations happen in the
+    // Task continuation which returns to @MainActor automatically. // NOSONAR
+
+    /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
+    @MainActor private func performResume(runner: RunnerModel) {
+        log("LocalRunnersView > performResume called runner=\(runner.runnerName)")
+        LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                RunnerLifecycleService.shared.start(runner: runner)
+            }.value
+            switch result {
+            case .success: break
+            case .corruptInstall:
+                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} corrupt install")
+            case .failed(let msg):
+                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                let short = msg.components(separatedBy: "\n")
+                    .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} \(short)")
+            }
+            LocalRunnerStore.shared.refresh()
+        }
+    }
+
+    /// Optimistically marks the runner as stopped then delegates to `RunnerLifecycleService`.
+    @MainActor private func performStop(runner: RunnerModel) {
+        log("LocalRunnersView > performStop called runner=\(runner.runnerName)")
+        LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                RunnerLifecycleService.shared.stop(runner: runner)
+            }.value
+            switch result {
+            case .success: break
+            case .corruptInstall:
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} corrupt install")
+            case .failed(let msg):
+                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
+                let short = msg.components(separatedBy: "\n")
+                    .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
+                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} \(short)")
+            }
+            LocalRunnerStore.shared.refresh()
+        }
+    }
+
+    /// Optimistically removes the runner then delegates to `RunnerLifecycleService`. Rolls back on failure.
+    @MainActor private func performRemoval() {
+        guard let runner = runnerPendingRemoval else { return }
+        runnerPendingRemoval = nil
+        removeErrorMessage = nil
+        LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
+        Task {
+            let ok = await Task.detached(priority: .userInitiated) {
+                RunnerLifecycleService.shared.remove(runner: runner)
+            }.value
+            if !ok {
+                LocalRunnerStore.shared.optimisticallyRestore(runner)
+                removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
+            }
+            LocalRunnerStore.shared.refresh()
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// Maps a runner's `statusColor` to the corresponding design-system `Color`.
+    private func localRunnerDotColor(for runner: RunnerModel) -> Color {
+        switch runner.statusColor {
+        case .running: return Color.rbSuccess
+        case .busy:    return Color.rbWarning
+        case .idle:    return Color.rbTextTertiary
+        case .offline: return Color.rbDanger
+        }
+    }
+
+    /// Returns the configured `AddRunnerSheet` for use as a `.sheet` content closure.
+    private func addRunnerSheet() -> some View {
+        AddRunnerSheet(isPresented: $showAddRunnerSheet) { localRunnerStore.refresh() }
+    }
+
+    /// Pre-configured `RemovalAlertModifier` wired to `runnerPendingRemoval`.
+    private var removalAlertModifier: RemovalAlertModifier {
+        RemovalAlertModifier(
+            title: removalAlertTitle,
+            isPresented: Binding(
+                get: { runnerPendingRemoval != nil },
+                set: { if !$0 { runnerPendingRemoval = nil } }
+            ),
+            isAuthenticated: isAuthenticated,
+            onCancel: { runnerPendingRemoval = nil },
+            onConfirm: performRemoval
+        )
+    }
+
+    /// Builds the `RunnerDetailPopover` with commit/cancel wiring.
+    @ViewBuilder
+    private func runnerEditingPopover(runner: RunnerModel) -> some View {
+        RunnerDetailPopover(
+            runner: runner,
+            commitError: commitError,
+            onCommit: { draft in
+                guard !isCommitting else { return }
+                isCommitting = true
+                commitError = nil
+                // Build original from disk so the dirty-check in commitRunnerEdit
+                // compares against actual persisted values, not model defaults.
+                // (#1001 fix: was RunnerEditDraft(runner: runner) which left
+                // autoUpdate=true and proxy fields empty regardless of disk state.)
+                var original = RunnerEditDraft(runner: runner)
+                if let installPath = runner.installPath {
+                    original.load(installPath: installPath)
+                }
+                commitRunnerEdit(runner: runner, draft: draft, original: original) { @MainActor result in
+                    isCommitting = false
+                    switch result {
+                    case .success:
+                        localRunnerStore.refresh()
+                        editingRunner = nil
+                    case .failure(let msgs):
+                        commitError = msgs.joined(separator: "\n")
+                    }
+                }
+            },
+            onCancel: {
+                commitError = nil
+                editingRunner = nil
+            }
+        )
+    }
+}
