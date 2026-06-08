@@ -607,6 +607,7 @@ struct SettingsView: View {
                     .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
+            .onAppear { log("SettingsView › showPopoverArrow row rendered — showPopoverArrow=\(settings.showPopoverArrow)") }
         }
     }
 
