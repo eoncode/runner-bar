@@ -124,6 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// KVO observation token for `NSHostingController.preferredContentSize`.
     /// Drives popover resize without re-calling `popover.show()`.
     var sizeObservation: NSKeyValueObservation?
+    /// Global NSEvent monitor installed by `openPanel()` to hide the popover on
+    /// outside clicks. Removed by `tearDownOpenState()`.
+    var outsideClickMonitor: Any?
+    /// NSWorkspace observer installed by `openPanel()` to hide the popover when
+    /// another app is activated. Removed by `tearDownOpenState()`.
+    var workspaceObserver: NSObjectProtocol?
     /// Combine cancellable bag for all long-lived subscriptions wired in `setupCombineSubscriptions()`.
     var cancellables = Set<AnyCancellable>()
 
@@ -279,6 +285,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor func tearDownOpenState() {
         panelIsOpen = false
         panelVisibilityState.isOpen = false
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+        if let observer = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            workspaceObserver = nil
+        }
     }
 
     /// Closes the popover explicitly (Escape / back navigation / manual close).
@@ -428,6 +442,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.preservedSheetWindowHide else { return }
             self.panelSheetState.restoreTransientHideStateIfNeeded()
+        }
+
+        // Install outside-click monitor. Fires on every left/right click outside
+        // the app. Guard isFilePickerActive so taps inside NSOpenPanel don't hide
+        // the popover. tearDownOpenState() removes the monitor on every close path.
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            guard let self, self.panelIsOpen, !self.isFilePickerActive else { return }
+            log("AppDelegate › outsideClickMonitor — hiding panel")
+            self.hidePanel()
+        }
+
+        // Install app-switch observer. Fires when another app becomes frontmost.
+        // Same isFilePickerActive guard — the NSOpenPanel activation change must
+        // not collapse the popover.
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.panelIsOpen, !self.isFilePickerActive else { return }
+            log("AppDelegate › workspaceObserver — other app activated, hiding panel")
+            self.hidePanel()
         }
     }
 }
