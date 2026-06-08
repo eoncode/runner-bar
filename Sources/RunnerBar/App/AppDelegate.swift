@@ -488,6 +488,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // by the time the task runs, NSEvent.mouseLocation may reflect a
             // different cursor position. Capturing here ensures the check uses
             // the exact click that triggered this handler.
+            // NSEvent.mouseLocation is the primary path in practice — global monitor
+            // events for clicks on the desktop or other apps have event.window == nil,
+            // so convertToScreen is never called. Both paths capture synchronously at
+            // fire time, before the Task { @MainActor } hop, ensuring the coordinate
+            // reflects the exact click that triggered this handler.
             let screenLoc = event.window?.convertToScreen(
                 NSRect(origin: event.locationInWindow, size: .zero)
             ).origin ?? NSEvent.mouseLocation
