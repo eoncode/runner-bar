@@ -131,12 +131,12 @@ struct SettingsView: View {
 
     /// Vertical stack of all settings sections.
     ///
-    /// Order: Management nav rows → Account → General → About
+    /// Order: Account → Management → General → About
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
-            managementSection
-            Divider()
             accountSection
+            Divider()
+            managementSection
             Divider()
             generalSection
             Divider()
@@ -186,6 +186,71 @@ struct SettingsView: View {
             Spacer()
         }
         .padding(.horizontal, RBSpacing.md).padding(.top, 12).padding(.bottom, 8)
+    }
+
+    // MARK: - Account
+    /// GitHub sign-in / sign-out controls and authentication status.
+    private var accountSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
+                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
+            HStack(alignment: .center) {
+                Text("GitHub").font(.system(size: 12))
+                Spacer()
+                if isSigningIn {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.7)
+                        Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
+                    }
+                } else if isOAuthAuthenticated {
+                    HStack(spacing: 10) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.rbSuccess).frame(width: 7, height: 7)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Authenticated")
+                                    .font(.caption)
+                                    .foregroundColor(Color.rbTextSecondary)
+                                Text("via OAuth")
+                                    .font(.caption2)
+                                    .foregroundColor(Color.rbTextTertiary)
+                            }
+                        }
+                        Button(action: signOutOfGitHub) {
+                            Text("Sign out").font(.caption2)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.rbDanger)
+                        .help("Remove OAuth token from Keychain. GH_TOKEN / GITHUB_TOKEN env vars used as fallback if available.")
+                    }
+                } else if isCLIAuthenticated {
+                    HStack(spacing: 10) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.rbSuccess).frame(width: 7, height: 7)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Authenticated")
+                                    .font(.caption)
+                                    .foregroundColor(Color.rbTextSecondary)
+                                Text("via env token")
+                                    .font(.caption2)
+                                    .foregroundColor(Color.rbTextTertiary)
+                            }
+                        }
+                        Button(action: signInWithGitHub) {
+                            Text("Sign in with GitHub").font(.caption2)
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
+                    }
+                } else {
+                    Button(action: signInWithGitHub) {
+                        Text("Sign in with GitHub").font(.caption2)
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
+                }
+            }
+            .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
+        }
     }
 
     // MARK: - Management section
@@ -306,71 +371,6 @@ struct SettingsView: View {
                 .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
         }
         .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)
-    }
-
-    // MARK: - Account
-    /// GitHub sign-in / sign-out controls and authentication status.
-    private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
-                .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
-            HStack(alignment: .center) {
-                Text("GitHub").font(.system(size: 12))
-                Spacer()
-                if isSigningIn {
-                    HStack(spacing: 6) {
-                        ProgressView().scaleEffect(0.7)
-                        Text("Waiting for browser…").font(.caption).foregroundColor(Color.rbTextSecondary)
-                    }
-                } else if isOAuthAuthenticated {
-                    HStack(spacing: 10) {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.rbSuccess).frame(width: 7, height: 7)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Authenticated")
-                                    .font(.caption)
-                                    .foregroundColor(Color.rbTextSecondary)
-                                Text("via OAuth")
-                                    .font(.caption2)
-                                    .foregroundColor(Color.rbTextTertiary)
-                            }
-                        }
-                        Button(action: signOutOfGitHub) {
-                            Text("Sign out").font(.caption2)
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(Color.rbDanger)
-                        .help("Remove OAuth token from Keychain. GH_TOKEN / GITHUB_TOKEN env vars used as fallback if available.")
-                    }
-                } else if isCLIAuthenticated {
-                    HStack(spacing: 10) {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.rbSuccess).frame(width: 7, height: 7)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Authenticated")
-                                    .font(.caption)
-                                    .foregroundColor(Color.rbTextSecondary)
-                                Text("via env token")
-                                    .font(.caption2)
-                                    .foregroundColor(Color.rbTextTertiary)
-                            }
-                        }
-                        Button(action: signInWithGitHub) {
-                            Text("Sign in with GitHub").font(.caption2)
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
-                    }
-                } else {
-                    Button(action: signInWithGitHub) {
-                        Text("Sign in with GitHub").font(.caption2)
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Authorize RunnerBar via GitHub OAuth and store token in Keychain")
-                }
-            }
-            .padding(.horizontal, RBSpacing.md).padding(.vertical, 8)
-        }
     }
 
     // MARK: - About
