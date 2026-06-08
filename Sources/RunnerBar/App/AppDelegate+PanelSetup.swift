@@ -111,13 +111,20 @@ extension AppDelegate: NSPopoverDelegate {
 
     // MARK: NSPopoverDelegate
 
-    /// Always allows AppKit to close the popover.
+    /// Always returns `true` — AppKit is never blocked from closing the popover here.
     ///
     /// All dismiss control is handled by the manual `outsideClickMonitor` and
     /// `workspaceObserver` in `openPanel()`. Those monitors guard against
     /// NSOpenPanel clicks via `hasActiveSheet` (the panel is attached as a sheet
     /// via `beginSheetModal`, so `popoverWindow.sheets` is non-empty while it
     /// is open). There is no need to block AppKit here.
+    ///
+    /// `isFilePickerActive` is intentionally NOT used here. Earlier attempts
+    /// (Attempts 4–6, see `docs/graveyard.md`) tried gating this method on a
+    /// boolean flag, but `beginSheetModal` makes that unnecessary: the sheet
+    /// attachment is structural truth visible via `popoverWindow.sheets`, which
+    /// `hasActiveSheet` reads directly. The flag approach was removed in favour
+    /// of that structural check.
     ///
     /// See the OUTSIDE-CLICK / APP-SWITCH HIDE comment block above for the full
     /// mechanism. See `docs/graveyard.md` for the history of approaches that
