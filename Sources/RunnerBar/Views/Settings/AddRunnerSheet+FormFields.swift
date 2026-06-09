@@ -323,21 +323,20 @@ extension AddRunnerSheet {
             return
         }
 
-        guard let data = try? Data(contentsOf: runnerFileURL) else {
-            existingError = "Could not read .runner file."
-            return
-        }
-
-        guard let json = try? JSONDecoder().decode(RunnerJSON.self, from: data) else {
+        // Delegate to RunnerModelParser so BOM stripping is applied consistently
+        // with the store-hydration path (the GitHub Actions runner agent writes
+        // BOM-prefixed JSON, which a bare JSONDecoder call would reject).
+        let folderName = url.lastPathComponent
+        guard let model = runnerModelFromIndex(name: folderName, installPath: url.path) else {
             existingError = "Could not parse .runner file. It may be malformed."
             return
         }
 
-        // Prefer the registered name from the .runner file (AgentName); fall back to
-        // the folder's last path component if the field is absent or empty.
-        let nameFromFile = json.runnerName.flatMap { $0.isEmpty ? nil : $0 }
-        detectedName = nameFromFile ?? url.lastPathComponent
-        detectedGitHubURL = json.gitHubUrl ?? ""
+        // Prefer the registered AgentName from the parsed model; fall back to
+        // the folder's last path component if absent or empty.
+        let nameFromFile = model.runnerName.isEmpty ? nil : model.runnerName
+        detectedName = nameFromFile ?? folderName
+        detectedGitHubURL = model.gitHubUrl ?? ""
         isDuplicate = checkDuplicate(runnerName: detectedName)
 
         log("AddRunnerSheet › pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")
