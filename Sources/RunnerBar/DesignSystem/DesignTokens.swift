@@ -205,7 +205,6 @@ enum RBFont {
 
 // MARK: - DesignTokens namespace shim
 
-// swiftlint:disable orphaned_doc_comment missing_docs
 /// Backwards-compatibility namespace that delegates to the primary `RBFont` and `RBSpacing` token types.
 ///
 /// - Note: **Deprecated shim** — prefer `RBFont`, `RBSpacing`, `RBRadius`, and the `Color`
