@@ -4,7 +4,7 @@ import RunnerBarCore
 import SwiftUI
 
 // MARK: - SettingsView sections extension
-// swiftlint:disable:next no_extension_access_modifier
+// swiftlint:disable no_extension_access_modifier
 extension SettingsView {
 
     // MARK: - Account
@@ -206,3 +206,4 @@ extension SettingsView {
         }
     }
 }
+// swiftlint:enable no_extension_access_modifier
