@@ -63,7 +63,7 @@ private actor RateLimitActor {
                 // CancellationError — a newer set(resetAt:) or clear() raced in.
                 return
             }
-            self.didFire(scheduledDelay: delay)
+            await self.didFire(scheduledDelay: delay)
         }
     }
 
