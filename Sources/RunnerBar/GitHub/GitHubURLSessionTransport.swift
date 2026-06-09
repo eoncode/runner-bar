@@ -20,7 +20,8 @@ import os
 ///   3. `ghIsRateLimited` / `ghRateLimitResetDate` expose the current values
 ///      as `async` computed properties backed by the actor.
 ///   4. `RunnerStore.applyFetchResult` copies both into its own `@MainActor`
-///      properties (`isRateLimited`, `rateLimitResetDate`).
+///      properties (`isRateLimited`, `rateLimitResetDate`) via a single atomic
+///      `snapshot()` call, eliminating the race window between two separate awaits.
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
@@ -73,6 +74,17 @@ private actor RateLimitActor {
         resetTask = nil
         isLimited = false
         resetDate = nil
+    }
+
+    /// Returns both `isLimited` and `resetDate` in a single actor hop.
+    ///
+    /// Use this instead of two separate `await` calls on `ghIsRateLimited` and
+    /// `ghRateLimitResetDate` to guarantee that the two values are consistent
+    /// with each other — a `clear()` or `set(resetAt:)` call arriving between
+    /// two separate awaits cannot produce a state where `isLimited == false`
+    /// but `resetDate != nil`, or vice-versa.
+    func snapshot() -> (isLimited: Bool, resetDate: Date?) {
+        (isLimited: isLimited, resetDate: resetDate)
     }
 
     // MARK: Private

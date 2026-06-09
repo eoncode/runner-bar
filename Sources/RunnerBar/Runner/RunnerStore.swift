@@ -42,7 +42,7 @@ final class RunnerStore {
     ///
     /// Set to `nil` when no rate-limit is active or when the reset time is
     /// unknown (e.g. CLI code path that sets `ghIsRateLimited` without a
-    /// header value).  Sourced from `ghRateLimitResetDate` in
+    /// header value).  Sourced from `RateLimitActor.snapshot()` in
     /// `applyFetchResult` and propagated via `RunnerViewModel` to the
     /// `rateLimitBanner` in `PanelMainView`.
     private(set) var rateLimitResetDate: Date?
@@ -273,6 +273,13 @@ final class RunnerStore {
     // MARK: - Apply result
 
     /// Commits a completed fetch cycle's results to the store and notifies observers.
+    ///
+    /// Rate-limit state is read via a single `rateLimitActor.snapshot()` call so that
+    /// `isRateLimited` and `rateLimitResetDate` are always consistent with each other.
+    /// Using two separate `await`s (`ghIsRateLimited` then `ghRateLimitResetDate`) would
+    /// open a race window where a `clear()` or `set(resetAt:)` arriving between the two
+    /// hops could leave the store in an incoherent state (e.g. `isRateLimited == false`
+    /// but `rateLimitResetDate != nil`).
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -286,8 +293,9 @@ final class RunnerStore {
         actionGroupCache = groupResult.newGroupCache
         prevLiveGroups = groupResult.newPrevLiveGroups
         seenGroupIDs = groupResult.newSeenGroupIDs
-        isRateLimited = await ghIsRateLimited
-        rateLimitResetDate = await ghRateLimitResetDate
+        let rateLimitSnapshot = await rateLimitActor.snapshot()
+        isRateLimited = rateLimitSnapshot.isLimited
+        rateLimitResetDate = rateLimitSnapshot.resetDate
         log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) runners=\(enrichedRunners.count) isRateLimited=\(isRateLimited) rateLimitResetDate=\(String(describing: rateLimitResetDate))")
         didUpdate.send()
     }
