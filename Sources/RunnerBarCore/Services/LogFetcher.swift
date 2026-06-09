@@ -78,6 +78,10 @@ public func fetchActionLogs(group: WorkflowActionGroup) async -> String? {
 /// `ProcessRunner.runAsync`, then enumerates the output directory for `.txt` files.
 /// The temporary directory is always removed on return via `defer`.
 ///
+/// The directory enumeration is materialised into an `[URL]` array *before* any
+/// `await`, because `FileManager.DirectoryEnumerator.makeIterator` is unavailable
+/// from async contexts (Swift concurrency restriction).
+///
 /// - Parameter zipData: Raw ZIP archive bytes as returned by the GitHub logs API.
 /// - Returns: An array of `(name, text)` tuples where `name` is the archive-relative
 ///   path without the `.txt` extension (e.g. `"1_Build"` for `1_Build.txt`) and
@@ -92,14 +96,18 @@ public func unzipLogs(_ zipData: Data) async -> [(name: String, text: String)] {
         try fileManager.createDirectory(at: tmp, withIntermediateDirectories: true)
         try zipData.write(to: zipFile)
     } catch { return [] }
-    let ok = await ProcessRunner.runAsync(
-        unzipBinaryPath,
+    let result = await ProcessRunner.runAsync(
+        executableURL: URL(fileURLWithPath: unzipBinaryPath),
         arguments: ["-q", zipFile.path, "-d", tmp.path]
     )
-    guard ok else { return [] }
+    guard result.exitCode == 0 else { return [] }
+    // Materialise the enumerator into a plain [URL] array before any suspension
+    // point — FileManager.DirectoryEnumerator.makeIterator is unavailable from
+    // async contexts (Swift concurrency restriction).
     guard let enumerator = fileManager.enumerator(at: tmp, includingPropertiesForKeys: nil) else { return [] }
+    let txtURLs = enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "txt" }
     var results: [(name: String, text: String)] = []
-    for case let url as URL in enumerator where url.pathExtension == "txt" {
+    for url in txtURLs {
         let relative = url.path.replacingOccurrences(of: tmp.path + "/", with: "")
         let name = URL(fileURLWithPath: relative).deletingPathExtension().path
         if let text = try? String(contentsOf: url, encoding: .utf8) {
