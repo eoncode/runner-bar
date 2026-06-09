@@ -32,11 +32,11 @@ struct SystemStatsView: View {
     private func statRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(DesignTokens.Fonts.monoLabel)
+                .font(RBFont.monoSmall)
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .font(DesignTokens.Fonts.mono)
+                .font(RBFont.mono)
         }
     }
 }

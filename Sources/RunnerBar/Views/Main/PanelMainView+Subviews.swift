@@ -15,7 +15,7 @@ struct SectionHeaderLabel: View {
         Text(title.uppercased())
             .font(RBFont.sectionCaption)
             .foregroundColor(.secondary)
-            .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+            .padding(.horizontal, RBSpacing.md)
             .padding(.top, 6)
             .padding(.bottom, 2)
     }
@@ -44,7 +44,7 @@ struct PanelHeaderView: View {
                 quitButton
             }
         }
-        .padding(.horizontal, DesignTokens.Spacing.rowHPad)
+        .padding(.horizontal, RBSpacing.md)
         .padding(.top, 10)
         .padding(.bottom, 8)
     }
@@ -155,7 +155,7 @@ struct PanelLocalRunnerRow: View {
         if active.count > Self.maxVisibleRunners {
             Text("+ \(active.count - Self.maxVisibleRunners) more…")
                 .font(.caption2).foregroundColor(.secondary)
-                .padding(.horizontal, DesignTokens.Spacing.rowHPad).padding(.vertical, 2)
+                .padding(.horizontal, RBSpacing.md).padding(.vertical, 2)
         }
         Divider()
     }
@@ -360,12 +360,12 @@ struct ActionRowView: View {
             DonutStatusView(status: rowStatus, progress: group.progressFraction ?? 0, size: 14)
             RunnerTypeIcon(isLocal: group.isLocalGroup ?? false)
             Text(group.label)
-                .font(DesignTokens.Fonts.mono)
+                .font(RBFont.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             Text(group.repoShortName)
-                .font(DesignTokens.Fonts.mono)
+                .font(RBFont.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -378,7 +378,7 @@ struct ActionRowView: View {
             // Branch — plain text, hidden when nil (#1194)
             if let branch = group.headBranch {
                 Text(branch)
-                    .font(DesignTokens.Fonts.mono)
+                    .font(RBFont.mono)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -399,7 +399,7 @@ struct ActionRowView: View {
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
-                .font(DesignTokens.Fonts.mono)
+                .font(RBFont.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -407,14 +407,14 @@ struct ActionRowView: View {
         }
         if !group.jobs.isEmpty {
             Text(group.jobProgress)
-                .font(DesignTokens.Fonts.mono)
+                .font(RBFont.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.elapsed)
-                .font(DesignTokens.Fonts.mono)
+                .font(RBFont.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
