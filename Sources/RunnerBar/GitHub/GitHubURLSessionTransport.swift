@@ -77,6 +77,8 @@ private actor RateLimitActor {
 
     // MARK: Private
 
+    /// Fires when the `Task.sleep` in `set(resetAt:)` completes without cancellation.
+    /// Clears all rate-limit state so subsequent API calls are allowed through.
     private func didFire(scheduledDelay: TimeInterval) {
         isLimited = false
         resetDate = nil
