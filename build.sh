@@ -13,7 +13,7 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR/$APP_NAME.app/Contents/MacOS"
 mkdir -p "$OUT_DIR/$APP_NAME.app/Contents/Resources"
 
-cp ".build/apple/Products/Release/$APP_NAME" \
+cp ".build/arm64-apple-macosx/release/$APP_NAME" \
    "$OUT_DIR/$APP_NAME.app/Contents/MacOS/"
 cp "Resources/Info.plist" \
    "$OUT_DIR/$APP_NAME.app/Contents/"
