@@ -45,19 +45,19 @@ struct SettingsView: View {
     // lifetime of this view's identity, so the subscription is stable.
     // store (RunnerViewModel) is injected by the caller and must stay @ObservedObject.
     /// App-wide preferences (notifications, update channel, etc.).
-    @StateObject fileprivate var settings = AppPreferencesStore.shared
+    @StateObject private var settings = AppPreferencesStore.shared
     /// Notification opt-in preferences per scope.
-    @StateObject fileprivate var notifications = NotificationPreferences.shared
+    @StateObject private var notifications = NotificationPreferences.shared
 
     // MARK: - Local UI state
     /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
-    @State fileprivate var launchAtLogin = LoginItem.isEnabled
+    @State private var launchAtLogin = LoginItem.isEnabled
     /// `true` when a valid OAuth token is stored in Keychain.
-    @State fileprivate var isOAuthAuthenticated = (Keychain.token != nil)
+    @State private var isOAuthAuthenticated = (Keychain.token != nil)
     /// `true` when a CLI token (GH_TOKEN / GITHUB_TOKEN) is present but no OAuth token.
-    @State fileprivate var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
+    @State private var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
     /// `true` while the OAuth sign-in flow is in progress.
-    @State fileprivate var isSigningIn = false
+    @State private var isSigningIn = false
     // FIXME: AnyCancellable stored in @State risks silent subscription drop if SwiftUI
     // recreates the view struct and reallocates @State storage. The correct pattern
     // (used by RunnerViewModel) is to hold cancellables as stored properties on a
@@ -65,17 +65,17 @@ struct SettingsView: View {
     /// Retains the sign-out Combine subscription.
     @State private var signOutCancellable: AnyCancellable?
     /// `true` while `LocalRunnersView` is displayed instead of the main settings scroll.
-    @State fileprivate var showLocalRunners = false
+    @State private var showLocalRunners = false
     /// `true` while `ScopesView` is displayed instead of the main settings scroll.
-    @State fileprivate var showScopes = false
+    @State private var showScopes = false
 
     // MARK: - Computed properties
     /// Short version string from `CFBundleShortVersionString`.
-    fileprivate var appVersion: String {
+    private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
     /// Build number from `CFBundleVersion`.
-    fileprivate var appBuild: String {
+    private var appBuild: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
@@ -198,17 +198,17 @@ struct SettingsView: View {
 
     // MARK: - Helpers
     /// Applies or removes the Login Item entry based on `enabled`.
-    fileprivate func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
+    private func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
     /// Initiates the OAuth sign-in flow via `OAuthService`.
-    fileprivate func signInWithGitHub() {
+    private func signInWithGitHub() {
         log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
         OAuthService.shared.signIn()
     }
 
     /// Signs out of GitHub and clears all stored tokens.
-    fileprivate func signOutOfGitHub() {
+    private func signOutOfGitHub() {
         log("SettingsView › signOutOfGitHub — calling OAuthService.shared.signOut()")
         OAuthService.shared.signOut()
     }
