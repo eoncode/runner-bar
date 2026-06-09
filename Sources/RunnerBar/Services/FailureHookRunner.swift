@@ -219,7 +219,7 @@ enum FailureHookRunner {
     /// - `$BRANCH`         — head branch of the triggering run
     /// - `$COMMIT_SHA`     — full 40-char SHA of the triggering commit
     /// - `$RUN_ID`         — GitHub Actions run ID of the first *failed* run
-    /// - `$WORKFLOW_NAME`  — display name of the workflow
+    /// - `$WORKFLOW_NAME`  — display name of the workflow (from `WorkflowRunRef.name`)
     /// - `$RUN_LINK`       — deep link to the first failed run's Actions page on GitHub
     /// - `$COMMIT_LINK`    — deep link to the commit diff on GitHub
     /// - `$BRANCH_LINK`    — deep link to the branch on GitHub (percent-encoded)
@@ -244,7 +244,9 @@ enum FailureHookRunner {
         })
         let failedRunID = failedRun.map { String($0.id) } ?? group.id
         let runLink = failedRun?.htmlUrl ?? "\(baseURL)/actions/runs/\(failedRunID)"
-        let workflowName = group.title
+        // $WORKFLOW_NAME comes from WorkflowRunRef.name (the workflow file/display name,
+        // e.g. "CI", "SonarQube"). group.title is the commit/PR message — not the same thing.
+        let workflowName = failedRun?.name ?? group.runs.first?.name ?? ""
         let commitLink = "\(baseURL)/commit/\(sha)"
         // Percent-encode the branch name so URLs remain valid for branches that
         // contain slashes, spaces, or other special characters (e.g. feature/my-thing).
@@ -253,7 +255,7 @@ enum FailureHookRunner {
         let repoLink = baseURL
         let logContent = buildLogContent(group: group, scope: scope, jobs: jobs)
         let escapedLog = singleQuoteEscape(logContent)
-        log("FailureHookRunner › resolveTokens — $LOCAL_PATH='\(localPath)' $BRANCH='\(branch)' $RUN_ID='\(failedRunID)' $COMMIT_SHA='\(sha)' logContentBytes=\(escapedLog.count)")
+        log("FailureHookRunner › resolveTokens — $LOCAL_PATH='\(localPath)' $BRANCH='\(branch)' $RUN_ID='\(failedRunID)' $WORKFLOW_NAME='\(workflowName)' $COMMIT_SHA='\(sha)' logContentBytes=\(escapedLog.count)")
         return command
             .replacingOccurrences(of: "$LOCAL_PATH", with: localPath)
             .replacingOccurrences(of: "$SCOPE", with: scope)
