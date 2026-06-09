@@ -118,6 +118,7 @@ func clearGhRateLimit() async {
 
 /// The exact `Date` at which the current rate-limit window expires.
 /// `nil` when no rate-limit is active or when the reset time is unknown.
+// periphery:ignore - async computed property; consumed via snapshot() but kept for direct callers
 var ghRateLimitResetDate: Date? {
     get async { await rateLimitActor.resetDate }
 }
