@@ -215,7 +215,7 @@ extension AppDelegate: NSPopoverDelegate {
         // so runner rows appear with CPU/MEM already set.
         log("AppDelegate › setupCombineSubscriptions — scheduling async startup sequence")
         Task { [weak self] in
-            guard let self else { return }
+            guard self != nil else { return }
             log("AppDelegate › startup — awaiting LocalRunnerStore.refreshAsync()")
             await LocalRunnerStore.shared.refreshAsync()
             log("AppDelegate › startup — refreshAsync() complete, starting RunnerStore poll loop")
