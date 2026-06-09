@@ -124,12 +124,6 @@ func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
     await rateLimitActor.snapshot()
 }
 
-/// The exact `Date` at which the current rate-limit window expires.
-/// `nil` when no rate-limit is active or when the reset time is unknown.
-// periphery:ignore - async computed property; consumed via snapshot() but kept for direct callers
-var ghRateLimitResetDate: Date? {
-    get async { await rateLimitActor.resetDate }
-}
 
 // MARK: - Request builder
 
@@ -550,8 +544,15 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
 private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) async -> String? {
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(type)"
     log("\(logPrefix) › POSTing \(endpoint)")
-    guard let outputData = await urlSessionPost(endpoint), !outputData.isEmpty else {
-        log("\(logPrefix) › no data for \(endpoint)")
+    // GitHub token endpoints always return a JSON body; a nil result means a network/auth
+    // failure (urlSessionPost already logged it). Empty data would indicate an unexpected
+    // 204 No Content, which token endpoints do not emit — treat as failure either way.
+    guard let outputData = await urlSessionPost(endpoint) else {
+        log("\(logPrefix) › request failed for \(endpoint)")
+        return nil
+    }
+    guard !outputData.isEmpty else {
+        log("\(logPrefix) › unexpected empty body for \(endpoint) (204?)")
         return nil
     }
     struct TokenResponse: Decodable { let token: String }

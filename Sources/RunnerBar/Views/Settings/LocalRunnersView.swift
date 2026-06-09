@@ -264,6 +264,9 @@ struct LocalRunnersView: View {
         runnerPendingRemoval = nil
         removeErrorMessage = nil
         LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
+        // TODO: Once RunnerLifecycleService.start/stop are promoted to async (Batch C),
+        // remove can be called directly without Task.detached — the detach is only needed
+        // here because the surrounding Task inherits @MainActor isolation from the view.
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 await RunnerLifecycleService.shared.remove(runner: runner)
@@ -325,21 +328,21 @@ struct LocalRunnersView: View {
                 if let installPath = runner.installPath {
                     original.load(installPath: installPath)
                 }
-                // Use a plain Task (not Task.detached) so the closure inherits the
-                // @MainActor isolation of LocalRunnersView. Task.detached would
-                // require `original` to cross an isolation boundary as a `sending`
-                // parameter, triggering a Swift 6 data-race diagnostic.
-                // commitRunnerEdit is already async, so there is no need to escape
-                // to a detached context here.
-                Task { @MainActor in
+                // Task.detached keeps the blocking file-I/O in commitRunnerEdit
+                // (patchRunnerJSONMulti, writeProxyFiles) off the main thread.
+                // RunnerEditDraft: Sendable so `original` crosses the isolation
+                // boundary without a Swift 6 data-race diagnostic.
+                Task.detached(priority: .userInitiated) {
                     let result = await commitRunnerEdit(runner: runner, draft: draft, original: original)
-                    isCommitting = false
-                    switch result {
-                    case .success:
-                        localRunnerStore.refresh()
-                        editingRunner = nil
-                    case .failure(let msgs):
-                        commitError = msgs.joined(separator: "\n")
+                    await MainActor.run {
+                        isCommitting = false
+                        switch result {
+                        case .success:
+                            localRunnerStore.refresh()
+                            editingRunner = nil
+                        case .failure(let msgs):
+                            commitError = msgs.joined(separator: "\n")
+                        }
                     }
                 }
             },
