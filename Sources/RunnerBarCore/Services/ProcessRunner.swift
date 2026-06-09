@@ -202,7 +202,7 @@ public enum ProcessRunner {
     ///
     /// ## ⚠️ Pipe-drain concurrency — same invariant as `run(_:)`
     /// stdout is drained via a dedicated serial `DispatchQueue` *concurrently* with
-    /// process execution, mirroring the `Box + drainQueue.sync` pattern in `run(_:)`.
+    /// process execution, mirroring the `Box + drainQueue.sync` pattern in `run(_:)`
     /// `readDataToEndOfFile()` blocks until the pipe's write end closes (i.e. the
     /// process exits), so all bytes are captured in a single call with one clear
     /// happens-before edge. `terminationHandler` joins the drain queue with
@@ -222,6 +222,14 @@ public enum ProcessRunner {
     ///    bytes have been written. The child may exit before or after the write
     ///    completes; either way `drainQueue.sync {}` in `terminationHandler` joins
     ///    stdout first.
+    ///
+    /// ⚠️ **SIGPIPE / crash risk for future callers:** `FileHandle.write(_:)` is
+    /// non-throwing. On macOS 10.15.4+, if the child process exits before consuming
+    /// all stdin, the OS delivers `SIGPIPE` to the writing thread, which **crashes**
+    /// the process rather than throwing an error. This is safe for callers like
+    /// `/bin/cat` that always consume their full input, but future callers whose
+    /// child may exit early should use a `writeabilityHandler`-based writer that
+    /// can detect and handle a broken pipe without crashing.
     ///
     /// This approach:
     /// - Does **not** block a cooperative thread pool worker (no synchronous write
@@ -292,8 +300,11 @@ public enum ProcessRunner {
         // child is already running and consuming the read end of inputPipe. This prevents
         // the pre-launch deadlock for payloads > kernel pipe buffer (~64 KB) that the
         // previous synchronous-write approach introduced. See doc comment above.
+        //
+        // UUID suffix: each runAsync call gets a uniquely labelled queue so that
+        // concurrent invocations are distinguishable in Instruments and lldb thread list.
         let stdinQueue: DispatchQueue? = (inputPipe != nil)
-            ? DispatchQueue(label: "ProcessRunner.stdin.async")
+            ? DispatchQueue(label: "ProcessRunner.stdin.async.\(UUID().uuidString)")
             : nil
 
         return await withTaskCancellationHandler {
