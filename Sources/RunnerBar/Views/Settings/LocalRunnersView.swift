@@ -264,9 +264,15 @@ struct LocalRunnersView: View {
         runnerPendingRemoval = nil
         removeErrorMessage = nil
         LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
-        // TODO: Once RunnerLifecycleService.start/stop are promoted to async (Batch C),
-        // remove can be called directly without Task.detached — the detach is only needed
-        // here because the surrounding Task inherits @MainActor isolation from the view.
+        // Task.detached is required here for two independent reasons:
+        //   1. The surrounding context inherits @MainActor isolation from the view; a plain
+        //      Task { } would run remove() on the main actor and block the UI.
+        //   2. RunnerLifecycleService.remove calls runScriptWithOutput, which uses a
+        //      synchronous Process + waitUntilExit. That blocking call must stay off the
+        //      cooperative thread pool regardless of actor isolation.
+        // TODO (Batch C): Once runScriptWithOutput is migrated to AsyncProcess /
+        // CheckedContinuation+DispatchQueue.global, reason 2 is resolved and Task.detached
+        // can be replaced with a plain Task { } (which resolves reason 1 automatically).
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 await RunnerLifecycleService.shared.remove(runner: runner)
