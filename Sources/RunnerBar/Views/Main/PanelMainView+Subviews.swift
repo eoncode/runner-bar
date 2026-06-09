@@ -3,8 +3,8 @@
 
 import RunnerBarCore
 import SwiftUI
+
 // MARK: - SectionHeaderLabel
-/// Uppercase small-caps label used as a section divider inside the panel.
 struct SectionHeaderLabel: View {
     let title: String
     var body: some View {
@@ -18,7 +18,6 @@ struct SectionHeaderLabel: View {
 }
 
 // MARK: - PanelHeaderView
-/// Top bar of the popover panel showing system stats and the settings/quit buttons.
 struct PanelHeaderView: View {
     @ObservedObject var statsVM: SystemStatsViewModel
     let onSelectSettings: () -> Void
@@ -42,24 +41,24 @@ struct PanelHeaderView: View {
     }
 
     @ViewBuilder private var settingsButton: some View {
-        Button(action: onSelectSettings, label: {
+        Button(action: onSelectSettings) {
             Image(systemName: "gearshape")
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
                 .frame(width: 28, height: 28)
-        })
+        }
         .buttonStyle(.plain)
         .help("Settings")
         .accessibilityLabel("Settings")
     }
 
     @ViewBuilder private var quitButton: some View {
-        Button(action: { NSApplication.shared.terminate(nil) }, label: {
+        Button(action: { NSApplication.shared.terminate(nil) }) {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.secondary)
                 .frame(width: 28, height: 28)
-        })
+        }
         .buttonStyle(.plain)
         .help("Quit RunnerBar")
         .accessibilityLabel("Quit RunnerBar")
@@ -77,16 +76,17 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - RunnerMetricsBadge
-/// Single grouped badge showing CPU and MEM for a runner inside one shared glass background.
+/// CPU + MEM badge for runner rows.
 ///
-/// Always rendered regardless of whether live metrics are available — shows 0% on
-/// cycle 1 to prevent layout jump when real values arrive on cycle 2.
+/// Always rendered (shows 0% until real metrics arrive) to prevent layout jump.
 ///
-/// macOS 26+: MUST be wrapped in its OWN `GlassEffectContainer` at the call site
-/// (separate from the card container). Sharing the card's container means the pill
-/// glass samples the card backdrop — near-zero contrast. Its own container gives
-/// a fresh dedicated CABackdropLayer sampling region, same pattern as StatusBadge
-/// in metaTrailing. Pre-26: falls back to `.ultraThinMaterial` capsule.
+/// Glass architecture — identical to StatusBadge in ActionRowView.metaTrailing:
+///   - Badge applies tint + .glassEffect(.regular, in: Capsule()) internally.
+///   - Call site wraps badge in a standalone GlassEffectContainer (NOT nested
+///     inside the card container) so it samples the real backdrop behind the panel.
+///
+/// ❌ Do NOT wrap the card itself in GlassEffectContainer — ActionRowView does not
+///    do this and neither should runnerCard. Card glass is applied via .background{}.
 private struct RunnerMetricsBadge: View {
     let cpu: Double
     let mem: Double
@@ -113,11 +113,7 @@ private struct RunnerMetricsBadge: View {
 }
 
 // MARK: - PanelLocalRunnerRow
-/// Renders a card for each runner passed in.
-///
-/// ❌ DO NOT add an isBusy filter here — isBusy is set by RunnerStatusEnricher
-/// on a separate background cycle and will always lag behind the RunnerStore
-/// fetch cycle, causing rows to be silently swallowed. (#948)
+/// ❌ DO NOT add an isBusy filter here — causes rows to be silently swallowed (#948).
 struct PanelLocalRunnerRow: View {
     private static let maxVisibleRunners = 3
     let runners: [RunnerModel]
@@ -134,20 +130,12 @@ struct PanelLocalRunnerRow: View {
         Divider()
     }
 
-    /// Runner card with CPU/MEM badge.
-    ///
-    /// macOS 26+: two nested GlassEffectContainers:
-    ///   1. Outer container — wraps the full card for `.glassCard()` backdrop sampling.
-    ///   2. Inner container — wraps only `RunnerMetricsBadge` so the pill gets its own
-    ///      fresh CABackdropLayer sampling region (same pattern as StatusBadge).
-    ///      Without the inner container the pill shares the card backdrop and looks flat.
+    /// Glass architecture mirrors ActionRowView exactly:
+    ///   - .glassCard() applied via .background{} directly — NO GlassEffectContainer around the card.
+    ///   - RunnerMetricsBadge gets its own standalone GlassEffectContainer, same as
+    ///     StatusBadge in ActionRowView.metaTrailing.
     private func runnerCard(_ runner: RunnerModel) -> some View {
-        let badge = RunnerMetricsBadge(
-            cpu: runner.metrics?.cpu ?? 0,
-            mem: runner.metrics?.mem ?? 0
-        )
-
-        let cardContent = HStack(spacing: 8) {
+        HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
             HStack(spacing: 4) {
                 Text(runner.runnerName)
@@ -163,33 +151,42 @@ struct PanelLocalRunnerRow: View {
             }
             .layoutPriority(1)
             Spacer()
-            // macOS 26+: own GlassEffectContainer for the pill — fresh sampling region.
-            // Pre-26: plain badge, no container needed.
-            if #available(macOS 26, *) {
-                GlassEffectContainer { badge }
-            } else {
-                badge
-            }
-        }
-        .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
-
-        return Group {
+            // Standalone GlassEffectContainer — same as StatusBadge in metaTrailing.
+            // NOT nested inside a card container so it samples the real backdrop.
             if #available(macOS 26, *) {
                 GlassEffectContainer {
-                    cardContent.glassCard(cornerRadius: RBRadius.card)
+                    RunnerMetricsBadge(
+                        cpu: runner.metrics?.cpu ?? 0,
+                        mem: runner.metrics?.mem ?? 0
+                    )
                 }
             } else {
-                cardContent.glassCard(cornerRadius: RBRadius.card)
+                RunnerMetricsBadge(
+                    cpu: runner.metrics?.cpu ?? 0,
+                    mem: runner.metrics?.mem ?? 0
+                )
             }
         }
-        .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xs + 2)
+        .frame(maxWidth: .infinity)
+        .background {
+            // Same as ActionRowView: .glassCard() in .background{}, no wrapping container.
+            if #available(macOS 26, *) {
+                Color.clear.glassCard(cornerRadius: RBRadius.card)
+            } else {
+                Color.clear.glassCard(cornerRadius: RBRadius.card)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xxs)
     }
 
     private func runnerSubtitle(_ runner: RunnerModel) -> String? {
         let arch = runner.platformArchitecture.map { normaliseArch($0) }
         let os = runner.platform.map { normalisePlatform($0) }
-        let parts = [arch, os].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return [arch, os].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
     }
     private func normaliseArch(_ raw: String) -> String {
         switch raw.uppercased() {
@@ -209,10 +206,8 @@ struct PanelLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
-/// Row representing one GitHub Actions workflow run.
-///
 /// ⚠️ Do NOT add GlassEffectContainer, .glassEffectID, .bouncy, or
-/// .glassEffectTransition to the row or rowContainer — they cause staggered/slow
+/// .glassEffectTransition to the row or rowContainer — causes staggered/slow
 /// expand animations (#957). The statusBadge GlassEffectContainer in metaTrailing
 /// is intentionally scoped to just the badge, not the row.
 struct ActionRowView: View {
@@ -337,9 +332,7 @@ struct ActionRowView: View {
         .padding(.vertical, 4)
     }
 
-    /// Trailing meta: time-ago · steps/total · elapsed(active only) · statusBadge.
-    ///
-    /// statusBadge is wrapped in its own GlassEffectContainer — scoped to the badge only.
+    /// statusBadge wrapped in its own standalone GlassEffectContainer — scoped to badge only.
     /// ⚠️ Do NOT expand this container to the row or rowContainer (#957).
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
@@ -391,7 +384,6 @@ private struct RowTapModifier: ViewModifier {
     let jobs: [ActiveJob]
     @Binding var expandState: Bool?
     let rowStatus: RBStatus
-
     func body(content: Content) -> some View {
         content.onTapGesture {
             guard !jobs.isEmpty else { return }
@@ -404,4 +396,9 @@ private struct RowTapModifier: ViewModifier {
             }
         }
     }
+}
+
+// MARK: - String+nilIfEmpty
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
