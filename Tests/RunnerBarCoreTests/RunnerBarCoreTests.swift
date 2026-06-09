@@ -896,7 +896,12 @@ final class ProcessRunnerRunAsyncStdinTests: XCTestCase {
 
     /// Verifies that runAsync correctly pipes stdin through to the child process
     /// for a small payload (well within the ~64 KB kernel pipe buffer).
+    ///
+    /// executionTimeAllowance: /bin/cat + tiny payload should complete in well
+    /// under a second on any CI runner; 5 s gives ample headroom while still
+    /// providing a fast failure signal if something hangs unexpectedly.
     func testRunAsyncStdinSmallPayloadRoundtrip() async {
+        executionTimeAllowance = 5
         let input = "hello stdin"
         let data = Data(input.utf8)
         let result = await ProcessRunner.runAsync(
@@ -914,7 +919,12 @@ final class ProcessRunnerRunAsyncStdinTests: XCTestCase {
     /// This is a regression test for the pre-launch synchronous write introduced in the
     /// first fix attempt for #1228, which would deadlock here because the child process
     /// had not yet launched and nothing was draining the read end of the pipe.
+    ///
+    /// executionTimeAllowance: 10 s is generous for /bin/cat + 1 MB on any CI runner,
+    /// but tight enough to give a fast failure signal if the fix regresses and this
+    /// test deadlocks (vs. XCTest's default 600 s / 10 min timeout).
     func testRunAsyncStdinLargePayloadRoundtrip() async {
+        executionTimeAllowance = 10
         let input = String(repeating: "x", count: 1_024 * 1_024) // 1 MB
         let data = Data(input.utf8)
         let result = await ProcessRunner.runAsync(

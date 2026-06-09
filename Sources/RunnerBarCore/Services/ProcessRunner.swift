@@ -217,10 +217,11 @@ public enum ProcessRunner {
     /// 1. `drainQueue.async { readDataToEndOfFile }` — drain starts, blocks until
     ///    the write end of stdout closes (i.e. the child exits).
     /// 2. `task.run()` — child process launches and begins consuming stdin.
-    /// 3. `stdinQueue.async { write + closeFile }` — stdin bytes are fed to the
-    ///    child concurrently as it runs. `closeFile()` signals EOF once all bytes
-    ///    have been written. The child may exit before or after the write completes;
-    ///    either way `drainQueue.sync {}` in `terminationHandler` joins stdout first.
+    /// 3. `stdinQueue.async { [inputPipe] write + closeFile }` — stdin bytes are fed
+    ///    to the child concurrently as it runs. `closeFile()` signals EOF once all
+    ///    bytes have been written. The child may exit before or after the write
+    ///    completes; either way `drainQueue.sync {}` in `terminationHandler` joins
+    ///    stdout first.
     ///
     /// This approach:
     /// - Does **not** block a cooperative thread pool worker (no synchronous write
@@ -348,12 +349,14 @@ public enum ProcessRunner {
                     try task.run()
                 } catch {
                     log("ProcessRunner › launch error: \(error) — \(executableURL.lastPathComponent) \(arguments.joined(separator: " "))")
-                    // Close the write end of the pipe so readDataToEndOfFile() in the
-                    // already-dispatched drainQueue.async block receives EOF and returns.
-                    // Without this, the drain closure blocks indefinitely (Process.deinit
-                    // skips pipe teardown when hasLaunched == false), leaking the GCD
-                    // worker thread for the lifetime of the app.
+                    // Close both pipe write-ends so that any already-dispatched drain
+                    // block receives EOF and returns cleanly. outPipe must be closed to
+                    // unblock the drainQueue.async readDataToEndOfFile() call above.
+                    // inputPipe is closed explicitly here (mirrors outPipe) even though
+                    // ARC would close it on dealloc — being explicit documents intent
+                    // and avoids leaving a half-open pipe handle until the next ARC cycle.
                     outPipe.fileHandleForWriting.closeFile()
+                    inputPipe?.fileHandleForWriting.closeFile()
                     continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
                     return
                 }
@@ -362,8 +365,12 @@ public enum ProcessRunner {
                 // will consume bytes from the read end concurrently. This is safe for
                 // arbitrarily large payloads: the child drains the pipe buffer as we fill
                 // it. closeFile() signals EOF to the child once all bytes are written.
+                //
+                // Explicit [inputPipe] capture: inputPipe is a Pipe reference retained
+                // by this closure until stdinQueue drains. The capture list makes the
+                // lifetime management visible rather than implicit.
                 if let stdinQueue, let inputPipe, let stdinData = stdin {
-                    stdinQueue.async {
+                    stdinQueue.async { [inputPipe] in
                         inputPipe.fileHandleForWriting.write(stdinData)
                         inputPipe.fileHandleForWriting.closeFile()
                     }
