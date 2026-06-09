@@ -225,6 +225,10 @@ extension AppDelegate: NSPopoverDelegate {
 
         // didMutate — scope changed; must restart the store entirely so it polls
         // the correct repos from the beginning.
+        // [weak self] is not needed here — this closure uses no instance members.
+        // RunnerStore.shared.start() is a static singleton call; log() is a free
+        // function. The capture is kept only for consistency with other sinks in
+        // this file, but self is intentionally unused after the guard.
         ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in

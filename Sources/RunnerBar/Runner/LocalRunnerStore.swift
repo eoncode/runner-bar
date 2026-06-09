@@ -6,8 +6,13 @@ import Foundation
 // MARK: - LocalRunnerStore
 
 /// Owns the list of locally-installed GitHub Actions runner agents.
-/// Hydrates from `installPath/.runner` JSON, marks live services via launchctl,
-/// then enriches with GitHub API data (status, busy, labels, group).
+/// Hydrates from `installPath/.runner` JSON via `RunnerModelParser`,
+/// marks live services via launchctl, then enriches with GitHub API data
+/// (status, busy, labels, group).
+///
+/// Index persistence is delegated to `LocalRunnerIndex`.
+/// JSON parsing is delegated to `runnerModelFromIndex(name:installPath:)` in `RunnerModelParser`.
+///
 /// A single refresh cycle runs at a time; `isScanning` reflects in-flight state
 /// to views and prevents concurrent refreshes.
 @MainActor
@@ -22,36 +27,34 @@ final class LocalRunnerStore: ObservableObject {
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     @Published private(set) var isScanning: Bool = false
 
-    // MARK: - Index persistence
-    /// The UserDefaults key used to persist the local runner name → install path index.
-    private static let indexKey = "localRunnerIndex"
-    /// Maps runnerName → installPath, persisted to UserDefaults.
-    private var runnerIndex: [String: String] = [:]
+    // MARK: - Index
+    /// Persistence layer for the runner name → install path mapping.
+    private let index = LocalRunnerIndex()
 
     // MARK: - Init
-    /// Initialises the store and loads the persisted runner index from UserDefaults.
-    /// NOTE: init() only populates runnerIndex (the name→path map).
-    /// runners stays [] until refresh() is called explicitly.
-    /// Callers MUST call refresh() after init to populate the runners array.
+    /// Initialises the store. Index is loaded inside `LocalRunnerIndex.init()`.
+    /// NOTE: `runners` stays `[]` until `refresh()` is called explicitly.
     private init() {
-        loadIndex()
-        log("LocalRunnerStore › init — runnerIndex.count=\(runnerIndex.count), runners=[] (call refresh() to hydrate)")
+        log("LocalRunnerStore › init — runnerIndex.count=\(index.runnerIndex.count), runners=[] (call refresh() to hydrate)")
     }
 
     // MARK: - Index helpers
 
     /// Adds or updates the index entry for `name`, mapping it to `installPath`, then persists.
     func register(name: String, installPath: String) {
-        log("LocalRunnerStore › register — '\(name)' at \(installPath) (was: \(String(describing: runnerIndex[name])))")
-        runnerIndex[name] = installPath
-        persistIndex()
+        index.register(name: name, installPath: installPath)
+    }
+
+    /// Removes `name` from the persisted index.
+    func unregister(name: String) {
+        index.unregister(name: name)
     }
 
     // MARK: - Convenience API (called by views)
 
     /// Returns `true` if `runnerName` has an entry in the persisted index.
     func isTracked(runnerName: String) -> Bool {
-        let tracked = runnerIndex[runnerName] != nil
+        let tracked = index.runnerIndex[runnerName] != nil
 #if DEBUG
         log("LocalRunnerStore › isTracked '\(runnerName)' → \(tracked)")
 #endif
@@ -107,26 +110,6 @@ final class LocalRunnerStore: ObservableObject {
         } else {
             log("LocalRunnerStore › optimisticallyRestore — '\(runner.runnerName)' already present, skipped append")
         }
-    }
-
-    /// Removes `name` from the persisted index.
-    func unregister(name: String) {
-        log("LocalRunnerStore › unregister '\(name)'")
-        runnerIndex.removeValue(forKey: name)
-        persistIndex()
-    }
-
-    /// Hydrates `runnerIndex` from `UserDefaults` at init time.
-    private func loadIndex() {
-        runnerIndex = UserDefaults.standard
-            .dictionary(forKey: Self.indexKey) as? [String: String] ?? [:]
-        log("LocalRunnerStore › loadIndex — \(runnerIndex.count) entry(ies): \(runnerIndex.keys.sorted())")
-    }
-
-    /// Writes the current `runnerIndex` to `UserDefaults`.
-    private func persistIndex() {
-        UserDefaults.standard.set(runnerIndex, forKey: Self.indexKey)
-        log("LocalRunnerStore › persistIndex — \(runnerIndex.count) entry(ies) written")
     }
 
     // MARK: - Metrics write-back
@@ -205,22 +188,22 @@ final class LocalRunnerStore: ObservableObject {
     /// IMPORTANT: This is the ONLY way `runners` gets populated.
     /// `init()` only loads `runnerIndex` (name→path). `runners` stays `[]` until this runs.
     private func performRefresh() async {
-        log("LocalRunnerStore › performRefresh() — isScanning=\(isScanning) runnerIndex.count=\(runnerIndex.count) runners.count=\(runners.count)")
+        log("LocalRunnerStore › performRefresh() — isScanning=\(isScanning) runnerIndex.count=\(index.runnerIndex.count) runners.count=\(runners.count)")
         guard !isScanning else {
             log("LocalRunnerStore › performRefresh() — already scanning, skipping (isScanning=true)")
             return
         }
         isScanning = true
-        let index = runnerIndex
-        log("LocalRunnerStore › performRefresh() — starting with index=\(index.keys.sorted())")
+        let currentIndex = index.runnerIndex
+        log("LocalRunnerStore › performRefresh() — starting with index=\(currentIndex.keys.sorted())")
 
         // 1. Hydrate from installPath/.runner JSON
-        var hydrated: [RunnerModel] = index.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
-        log("LocalRunnerStore › performRefresh() hydrated \(hydrated.count) runner(s) from disk (index had \(index.count) entries)")
-        if hydrated.count != index.count {
+        var hydrated: [RunnerModel] = currentIndex.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
+        log("LocalRunnerStore › performRefresh() hydrated \(hydrated.count) runner(s) from disk (index had \(currentIndex.count) entries)")
+        if hydrated.count != currentIndex.count {
             let hydratedNames = Set(hydrated.map { $0.runnerName })
-            let missing = index.keys.filter { !hydratedNames.contains($0) }
-            log("LocalRunnerStore › ⚠️ performRefresh() — \(index.count - hydrated.count) runner(s) failed to hydrate (missing .runner JSON): \(missing)")
+            let missing = currentIndex.keys.filter { !hydratedNames.contains($0) }
+            log("LocalRunnerStore › ⚠️ performRefresh() — \(currentIndex.count - hydrated.count) runner(s) failed to hydrate (missing .runner JSON): \(missing)")
         }
 
         // 2. Mark live services via launchctl.
@@ -255,14 +238,13 @@ final class LocalRunnerStore: ObservableObject {
     private func applyRefreshResults(_ enriched: [RunnerModel]) {
         log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
 
-        // Build three preservation maps from currently-held runners that are busy and have metrics.
         var metricsByApiId:   [Int: RunnerMetrics] = [:]
         var metricsByAgentId: [Int: RunnerMetrics] = [:]
         var metricsByName:    [String: RunnerMetrics] = [:]
         for runner in runners {
             guard runner.isBusy, let m = runner.metrics else { continue }
-            if let id = runner.apiId   { metricsByApiId[id]       = m }
-            if let id = runner.agentId { metricsByAgentId[id]     = m }
+            if let id = runner.apiId   { metricsByApiId[id]   = m }
+            if let id = runner.agentId { metricsByAgentId[id] = m }
             metricsByName[runner.runnerName] = m
         }
 #if DEBUG
@@ -292,7 +274,7 @@ final class LocalRunnerStore: ObservableObject {
                 return runner.copying(metrics: m)
             }
 #if DEBUG
-            log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)' (apiId=\(String(describing: runner.apiId)) agentId=\(String(describing: runner.agentId)))")
+            log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)'")
 #endif
             return runner
         }
@@ -325,70 +307,3 @@ final class LocalRunnerStore: ObservableObject {
     }
 }
 
-// MARK: - .runner JSON parser
-
-/// Reads `installPath/.runner` JSON and builds a `RunnerModel`.
-private func runnerModelFromIndex(name: String, installPath: String) -> RunnerModel? {
-    log("LocalRunnerStore › runnerModelFromIndex — parsing '\(name)' at \(installPath)")
-    let jsonURL = URL(fileURLWithPath: installPath).appendingPathComponent(".runner")
-    guard var data = try? Data(contentsOf: jsonURL) else {
-        log("LocalRunnerStore › ⚠️ runnerModelFromIndex — no .runner file at \(installPath), skipping '\(name)'")
-        return nil
-    }
-
-    // Strip UTF-8 BOM (0xEF 0xBB 0xBF) — runner agent writes BOM-prefixed JSON.
-    let bom: [UInt8] = [0xEF, 0xBB, 0xBF]
-    if data.prefix(3).elementsEqual(bom) {
-        data = data.dropFirst(3)
-        log("LocalRunnerStore › runnerModelFromIndex — stripped UTF-8 BOM from '\(name)'")
-    }
-
-    /// Decodable envelope for the `.runner` JSON file written by the GitHub Actions runner agent.
-    struct RunnerJSON: Decodable {
-        /// The GitHub server URL associated with this runner.
-        let gitHubUrl: String?
-        /// The numeric agent identifier assigned by the GitHub Actions service.
-        let agentId: Int?
-        /// The working folder used by jobs executed on this runner.
-        let workFolder: String?
-        /// The OS platform string reported by the runner agent.
-        let platform: String?
-        /// The CPU architecture string reported by the runner agent.
-        let platformArchitecture: String?
-        /// The version string of the runner agent binary.
-        let agentVersion: String?
-        /// Whether this runner is configured as ephemeral (single-job, then self-removes).
-        let ephemeral: Bool?
-        // CodingKeys maps Swift camelCase property names to the runner agent's
-        // PascalCase JSON keys. The exception is `gitHubUrl`, which the agent
-        // writes as-is (camelCase) — hence its raw value matches the property name.
-        enum CodingKeys: String, CodingKey {
-            case gitHubUrl            = "gitHubUrl"
-            case agentId              = "AgentId"
-            case workFolder           = "WorkFolder"
-            case platform             = "Platform"
-            case platformArchitecture = "PlatformArchitecture"
-            case agentVersion         = "AgentVersion"
-            case ephemeral            = "Ephemeral"
-        }
-    }
-
-    let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
-    if json == nil {
-        log("LocalRunnerStore › ⚠️ runnerModelFromIndex — JSON decode failed for '\(name)' at \(installPath). File may be malformed.")
-    } else {
-        log("LocalRunnerStore › runnerModelFromIndex — '\(name)' agentId=\(String(describing: json?.agentId)) gitHubUrl=\(String(describing: json?.gitHubUrl))")
-    }
-    return RunnerModel(
-        runnerName: name,
-        gitHubUrl: json?.gitHubUrl,
-        agentId: json?.agentId,
-        workFolder: json?.workFolder,
-        installPath: installPath,
-        isRunning: false,
-        platform: json?.platform,
-        platformArchitecture: json?.platformArchitecture,
-        agentVersion: json?.agentVersion,
-        isEphemeral: json?.ephemeral ?? false
-    )
-}

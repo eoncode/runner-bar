@@ -4,17 +4,6 @@
 import AppKit
 import SwiftUI
 
-// MARK: - RunnerJSON
-
-/// Minimal decodable shape for the `.runner` JSON written by `config.sh`.
-/// Only the two fields RunnerBar needs are decoded; all others are ignored.
-private struct RunnerJSON: Decodable {
-    /// The GitHub repository or organisation URL the runner is registered against.
-    let gitHubUrl: String?
-    /// The display name the runner registered with.
-    let runnerName: String?
-}
-
 /// Form field subviews and pre-existing folder actions for `AddRunnerSheet`.
 extension AddRunnerSheet {
 
@@ -334,18 +323,20 @@ extension AddRunnerSheet {
             return
         }
 
-        guard let data = try? Data(contentsOf: runnerFileURL) else {
-            existingError = "Could not read .runner file."
-            return
-        }
-
-        guard let json = try? JSONDecoder().decode(RunnerJSON.self, from: data) else {
+        // Delegate to RunnerModelParser so BOM stripping is applied consistently
+        // with the store-hydration path (the GitHub Actions runner agent writes
+        // BOM-prefixed JSON, which a bare JSONDecoder call would reject).
+        let folderName = url.lastPathComponent
+        guard let model = runnerModelFromIndex(name: folderName, installPath: url.path) else {
             existingError = "Could not parse .runner file. It may be malformed."
             return
         }
 
-        detectedName = json.runnerName ?? url.lastPathComponent
-        detectedGitHubURL = json.gitHubUrl ?? ""
+        // Prefer the registered AgentName from the parsed model; fall back to
+        // the folder's last path component if absent or empty.
+        let nameFromFile = model.runnerName.isEmpty ? nil : model.runnerName
+        detectedName = nameFromFile ?? folderName
+        detectedGitHubURL = model.gitHubUrl ?? ""
         isDuplicate = checkDuplicate(runnerName: detectedName)
 
         log("AddRunnerSheet › pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")
