@@ -32,6 +32,7 @@ struct SettingsView: View {
     // MARK: - Inputs
     /// Callback invoked when the user taps the back button.
     let onBack: () -> Void
+    // periphery:ignore - injected by caller for @ObservedObject subscription; read indirectly via passed closures
     /// The shared runner view-model; observed for remote runner list updates.
     @ObservedObject var store: RunnerViewModel
 

@@ -14,12 +14,13 @@ import SwiftUI
 /// Sheet for editing the shell command run by `FailureHookRunner` when a workflow fails.
 /// Provides a monospaced `TextEditor` and variable-insertion pill buttons.
 struct FailureHookCommandSheet: View {
-    /// The scope constant.
+    /// The scope (org/repo slug) whose failure-hook command is being edited.
     let scope: String
-    /// The onDismiss constant.
+    /// Called when the sheet should be dismissed, either after saving or on cancel.
     let onDismiss: () -> Void
 
-    /// The commandText property.
+    /// The current contents of the command text editor, pre-seeded from persisted storage
+    /// or `exampleCommand` when no command has been saved yet.
     @State private var commandText: String = ""
 
     // $FAILURE_LOG is pre-resolved by FailureHookRunner in Swift before the command
@@ -28,10 +29,12 @@ struct FailureHookCommandSheet: View {
     //
     // NOTE: This is the same constant as FailureHookRunner.defaultCommand.
     // If the user never saves, FailureHookRunner falls back to this value automatically.
-    /// The exampleCommand constant.
+    /// Default command shown when no saved command exists for the scope; mirrors
+    /// `FailureHookRunner.defaultCommand` so the editor is never blank on first open.
     private static let exampleCommand = FailureHookRunner.defaultCommand
 
-    /// Creates a new instance.
+    /// Initialises the sheet for `scope`, pre-populating the editor with the persisted
+    /// command or `exampleCommand` when nothing has been saved yet.
     init(scope: String, onDismiss: @escaping () -> Void) {
         self.scope = scope
         self.onDismiss = onDismiss
@@ -41,7 +44,8 @@ struct FailureHookCommandSheet: View {
         log("FailureHookCommandSheet › init — commandText seeded with '\(saved.isEmpty ? "exampleCommand" : "savedCommand")'")
     }
 
-    /// The variables constant.
+    /// Shell-variable tokens the user can insert into the command, e.g. `$SCOPE`, `$FAILURE_LOG`.
+    /// Rendered as pill buttons in `pillSection`; tapping a pill appends the token to `commandText`.
     private let variables: [String] = [
         "$SCOPE", "$LOCAL_PATH", "$BRANCH", "$RUN_ID", "$COMMIT_SHA",
         "$WORKFLOW_NAME", "$FAILURE_LOG",
@@ -63,7 +67,7 @@ struct FailureHookCommandSheet: View {
 
 // MARK: - Subviews
 
-/// View subcomponents: header, editor, pill bar, and footer.
+/// View subcomponents for `FailureHookCommandSheet`: header, monospaced editor, variable-pill bar, and footer actions.
 extension FailureHookCommandSheet {
     /// Header block: sheet title and usage description.
     var headerSection: some View {
@@ -154,7 +158,7 @@ extension FailureHookCommandSheet {
 
 // MARK: - Actions
 
-/// Action handlers: save, test, and variable insertion.
+/// Action handlers for `FailureHookCommandSheet`: persisting the command, running a test in Terminal, and inserting variable tokens.
 extension FailureHookCommandSheet {
     /// Persists `commandText` to `ScopePreferencesStore` and dismisses the sheet.
     private func save() {

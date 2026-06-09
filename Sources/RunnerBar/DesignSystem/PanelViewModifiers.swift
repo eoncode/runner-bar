@@ -138,7 +138,9 @@ struct StatusBadgeBackground: ViewModifier {
     /// The accent colour used for the tint and (pre-macOS-26) stroke border.
     let color: Color
 
-    /// Applies the status badge background: coloured glass capsule on macOS 26+, tinted stroke capsule on older OSes.
+    /// Applies the status badge background: coloured glass capsule on macOS 26+, tinted fill + hairline stroke on older OSes.
+    /// The pre-26 branch was intentionally upgraded from a bare stroke to a filled capsule (matching DiskPillBadge)
+    /// for visual consistency with the Liquid Glass design language rollout.
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {

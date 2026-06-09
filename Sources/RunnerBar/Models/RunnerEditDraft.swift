@@ -10,7 +10,7 @@ import RunnerBarCore
 /// until the user confirms (OK) or discards (Cancel) in `RunnerDetailPopover`.
 ///
 /// No persistence writes happen inside this type.
-struct RunnerEditDraft: Equatable {
+struct RunnerEditDraft: Equatable, Sendable {
 
     // MARK: Labels
     /// User-visible label string (comma-separated), pre-filtered to remove system labels.

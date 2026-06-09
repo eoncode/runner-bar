@@ -116,9 +116,6 @@ enum FailureHookRunner {
     }
 
     /// Fetches jobs (with steps) and raw log tail for all failed runs in the group.
-    /// - Note: `fetchJobLog` → `RunnerBarCore/Services/LogFetcher.swift`.
-    ///         `ghAPI` → `RunnerBarCore/GitHub/GitHubTransportShim.swift` (shim),
-    ///                   `RunnerBar/GitHub/GitHubURLSessionTransport.swift` (app target).
     private static func fetchFailedJobs(group: WorkflowActionGroup, scope: String) async -> [FailedJobResult] {
         var result: [FailedJobResult] = []
         var seenIDs = Set<Int>()

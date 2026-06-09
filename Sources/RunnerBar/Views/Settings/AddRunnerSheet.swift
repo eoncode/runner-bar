@@ -656,19 +656,13 @@ struct AddRunnerSheet: View {
     ///
     /// Consequences:
     /// - `FileManager` calls run synchronously on a pool thread (cheap, non-blocking — fine).
-    /// - `fetchRegistrationToken` is synchronous + `DispatchSemaphore`-based and is called from
-    ///   the pool, never from the main actor. The semaphore blocks a pool thread only.
-    ///   Blocking a cooperative pool thread is a known limitation tracked as issue #1077
-    ///   (migrate mutation helpers to async/await). It is acceptable here because runner
-    ///   registration is a rare, user-initiated, one-shot action — not a hot path.
-    ///   `urlSessionPost` contains `dispatchPrecondition(.notOnQueue(.main))` — this is the
-    ///   runtime canary: it would trap in every debug build if we were ever accidentally on
-    ///   `@MainActor`. It has never fired.
-    /// - All three `await` sites (`fetchRunnerDownloadURL`, `runSimpleProcess`,
-    ///   `runRegistrationCommand`) suspend the pool task, not the main actor.
-    ///
-    /// If `register()` is ever moved to a `@MainActor`-isolated context, `fetchRegistrationToken`
-    /// **must** be migrated to `async` first — or wrapped in `Task.detached { }.value`.
+    /// - `fetchRegistrationToken` is `async` — it suspends the cooperative task via
+    ///   `URLSession.data(for:)` and never blocks a thread. The old synchronous
+    ///   `DispatchSemaphore`-based version and its `dispatchPrecondition` guard have been
+    ///   removed along with the semaphore.
+    /// - All `await` sites (`fetchRunnerDownloadURL`, `runSimpleProcess`,
+    ///   `runRegistrationCommand`, `fetchRegistrationToken`) suspend the pool task,
+    ///   not the main actor.
     private func register() async {
         guard canRegister else { return }
         errorMessage = nil
@@ -735,12 +729,7 @@ struct AddRunnerSheet: View {
         }
 
         await setStep("Fetching registration token…")
-        // fetchRegistrationToken is synchronous (DispatchSemaphore inside urlSessionPost).
-        // Safe here because register() runs on the cooperative thread pool, not @MainActor —
-        // see the isolation note in the doc comment above. The semaphore blocks a pool thread
-        // for the network round-trip only. urlSessionPost's dispatchPrecondition(.notOnQueue(.main))
-        // will trap in debug builds if this ever accidentally moves to the main actor.
-        guard let token = fetchRegistrationToken(scope: scope) else {
+        guard let token = await fetchRegistrationToken(scope: scope) else {
             isRegistering = false
             if currentScopeType == .org {
                 errorMessage = "Not authorised to register org-level runners. Ensure your token has the 'manage_runners:org' scope, or sign in via the GitHub button in Settings."

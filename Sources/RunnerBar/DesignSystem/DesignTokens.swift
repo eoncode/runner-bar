@@ -204,7 +204,7 @@ enum RBFont {
 }
 
 // MARK: - DesignTokens namespace shim
-
+// periphery:ignore - deprecated shim with active call sites; remove after migrating SystemStatsView, PanelMainView+Subviews, InlineJobRowsView
 /// Backwards-compatibility namespace that delegates to the primary `RBFont` and `RBSpacing` token types.
 ///
 /// - Note: **Deprecated shim** — prefer `RBFont`, `RBSpacing`, `RBRadius`, and the `Color`

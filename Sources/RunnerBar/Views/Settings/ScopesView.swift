@@ -27,7 +27,7 @@ struct ScopesView: View {
 
     /// Controls presentation of `AddScopeSheet`.
     @State private var showAddScopeSheet = false
-    /// Non-nil while `ScopeEditSheet` is presented for this entry.
+    /// Non-nil while `ScopeEditSheet` is presented for this scope entry.
     @State private var selectedScopeEntry: ScopeEntry?
 
     // MARK: - Body

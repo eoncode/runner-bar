@@ -42,7 +42,7 @@ final class RunnerStore {
     ///
     /// Set to `nil` when no rate-limit is active or when the reset time is
     /// unknown (e.g. CLI code path that sets `ghIsRateLimited` without a
-    /// header value).  Sourced from `ghRateLimitResetDate` in
+    /// header value).  Sourced from `RateLimitActor.snapshot()` in
     /// `applyFetchResult` and propagated via `RunnerViewModel` to the
     /// `rateLimitBanner` in `PanelMainView`.
     private(set) var rateLimitResetDate: Date?
@@ -165,7 +165,10 @@ final class RunnerStore {
     /// duplicate the `GET /actions/runners` GitHub API call that `fetchAndEnrichRunners`
     /// already makes in the same cycle, doubling the API request rate on the hot path.
     func fetch() async {
-        ghIsRateLimited = false
+        // Reset rate-limit flag at the top of each cycle so that a previous 403
+        // does not permanently suppress fetches after the window has expired via the
+        // actor's internal reset task. The actor's `clear()` is idempotent.
+        await clearGhRateLimit()
 
         let scopesSnapshot = ScopeStore.shared.activeScopes
         log("RunnerStore › fetch ENTER — activeScopesSnapshot=\(scopesSnapshot)")
@@ -205,7 +208,7 @@ final class RunnerStore {
             jobCache: jobResult.newCache
         )
 
-        applyFetchResult(
+        await applyFetchResult(
             enrichedRunners: enrichedRunners,
             jobResult: jobResult,
             groupResult: groupResult
@@ -270,11 +273,22 @@ final class RunnerStore {
     // MARK: - Apply result
 
     /// Commits a completed fetch cycle's results to the store and notifies observers.
+    ///
+    /// Rate-limit state is read via a single `rateLimitActor.snapshot()` call so that
+    /// `isRateLimited` and `rateLimitResetDate` are always consistent with each other.
+    /// Using two separate `await`s (`ghIsRateLimited` then `ghRateLimitResetDate`) would
+    /// open a race window where a `clear()` or `set(resetAt:)` arriving between the two
+    /// hops could leave the store in an incoherent state (e.g. `isRateLimited == false`
+    /// but `rateLimitResetDate != nil`).
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
         groupResult: GroupPollResult
-    ) {
+    ) async {
+        // Snapshot rate-limit state before any mutation so all store writes are
+        // contiguous with no suspension in between — prevents a partial-update
+        // window where @MainActor readers see fresh runners against stale rate-limit state.
+        let rateLimitSnapshot = await ghRateLimitSnapshot()
         runners = enrichedRunners
         jobs = jobResult.display
         completedCache = jobResult.newCache
@@ -283,9 +297,9 @@ final class RunnerStore {
         actionGroupCache = groupResult.newGroupCache
         prevLiveGroups = groupResult.newPrevLiveGroups
         seenGroupIDs = groupResult.newSeenGroupIDs
-        isRateLimited = ghIsRateLimited
-        rateLimitResetDate = ghRateLimitResetDate
-        log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) runners=\(enrichedRunners.count) isRateLimited=\(ghIsRateLimited) rateLimitResetDate=\(String(describing: rateLimitResetDate))")
+        isRateLimited = rateLimitSnapshot.isLimited
+        rateLimitResetDate = rateLimitSnapshot.resetDate
+        log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) runners=\(enrichedRunners.count) isRateLimited=\(isRateLimited) rateLimitResetDate=\(String(describing: rateLimitResetDate))")
         didUpdate.send()
     }
 

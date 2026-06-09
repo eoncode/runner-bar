@@ -151,7 +151,7 @@ private let ansiRegex: NSRegularExpression? = try? NSRegularExpression(
 /// `urlSessionRaw` uses `application/vnd.github.v3.raw` and lets URLSession follow
 /// the GitHub 302→S3 redirect automatically, eliminating the need for a manual
 /// two-step redirect implementation.
-func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> String? {
+func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchStepLog › invalid scope: \(scopeString)")
         return nil
@@ -163,7 +163,7 @@ func fetchStepLog(jobID: Int, stepNumber: Int, scope scopeString: String) -> Str
     let endpoint = "\(scope.apiPrefix)/actions/jobs/\(jobID)/logs"
     log("fetchStepLog › fetching \(endpoint) step=\(stepNumber)")
 
-    guard let data = urlSessionRaw(endpoint) else {
+    guard let data = await urlSessionRaw(endpoint) else {
         log("fetchStepLog › urlSessionRaw returned nil for job \(jobID)")
         return nil
     }

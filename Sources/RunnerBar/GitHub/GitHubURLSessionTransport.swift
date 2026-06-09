@@ -1,131 +1,130 @@
 // GitHubURLSessionTransport.swift
 // RunnerBar
 
-// @preconcurrency suppresses Sendable warnings from pre-Swift-6 Foundation types
-// (URLRequest, URLResponse, Data) used in completion handler closures.
-@preconcurrency import Foundation
+import Foundation
 import os
 
-// MARK: - Rate limit flag
+// MARK: - RateLimitActor
 
-/// Combined rate-limit state held under a single lock.
+/// Actor-isolated rate-limit state.
 ///
-/// Both `isLimited` and `resetDate` are mutated together so that a reader
-/// can never observe `isLimited == true` with a stale / nil `resetDate`.
+/// Replaces the old `RateLimitState` struct + `OSAllocatedUnfairLock` + `DispatchWorkItem`
+/// pattern. The actor serialises all reads and writes; the reset timer uses a structured
+/// `Task` + `Task.sleep(for:)` instead of `DispatchQueue.global().asyncAfter`, so it is
+/// natively cancellable and requires no `@unchecked Sendable` escape hatch.
 ///
 /// Pipeline:
 ///   1. `urlSessionAPIAsync` / `urlSessionAPIPaginated` receive a 403/429.
-///   2. They write `isLimited = true` + `resetDate` under this lock and call
-///      `scheduleRateLimitReset(resetAt:)` to auto-clear after the window.
-///   3. `ghIsRateLimited` / `ghRateLimitResetDate` module vars expose the
-///      current values for consumption on any thread.
-///   4. `RunnerStore.applyFetchResult` copies both into its own
-///      `@MainActor` properties (`isRateLimited`, `rateLimitResetDate`).
+///   2. They call `rateLimitActor.set(resetAt:)` to arm the rate-limit flag and
+///      schedule an automatic clear after the window.
+///   3. `ghIsRateLimited` / `ghRateLimitResetDate` expose the current values
+///      as `async` computed properties backed by the actor.
+///   4. `RunnerStore.applyFetchResult` copies both into its own `@MainActor`
+///      properties (`isRateLimited`, `rateLimitResetDate`) via a single atomic
+///      `snapshot()` call, eliminating the race window between two separate awaits.
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
-///
-/// `@unchecked Sendable` because `DispatchWorkItem?` is not itself `Sendable`;
-/// all mutation is serialised through `rateLimitLock`.
-private struct RateLimitState: @unchecked Sendable {
+private actor RateLimitActor {
     /// Whether the GitHub API is currently rate-limiting this client.
-    var isLimited: Bool = false
+    private(set) var isLimited = false
     /// The moment at which the rate-limit window expires (mirrors X-RateLimit-Reset).
     /// `nil` when the reset time is unknown.
-    var resetDate: Date?
-    /// Pending work item that clears `isLimited` when it fires.
-    var resetItem: DispatchWorkItem?
-}
+    private(set) var resetDate: Date?
+    /// Structured task that clears `isLimited` when it fires.
+    private var resetTask: Task<Void, Never>?
 
-/// Lock that serialises all reads and writes to `RateLimitState`.
-private let rateLimitLock = OSAllocatedUnfairLock(initialState: RateLimitState())
-
-/// Thread-safe read/write access to the rate-limited flag.
-///
-/// The setter coordinates `isLimited` and `resetDate` within the same critical
-/// section via `scheduleRateLimitReset`, so readers never observe
-/// `isLimited == true` with `resetDate == nil`.
-var ghIsRateLimited: Bool {
-    get { rateLimitLock.withLock { $0.isLimited } }
-    set {
-        if newValue {
-            // No X-RateLimit-Reset header available at this call site;
-            // scheduleRateLimitReset falls back to a 60-minute window.
-            scheduleRateLimitReset(resetAt: nil)
+    /// Arms the rate-limit flag and schedules an automatic reset.
+    ///
+    /// - Parameter resetAt: Unix timestamp from the `X-RateLimit-Reset` response header.
+    ///   When non-nil the reset fires precisely at that time; otherwise falls back to
+    ///   60 minutes from now.
+    func set(resetAt: TimeInterval?) {
+        let delay: TimeInterval
+        let date: Date
+        if let ts = resetAt {
+            let secondsUntilReset = ts - Date().timeIntervalSince1970
+            delay = min(max(secondsUntilReset, 5), 7200)
+            date = Date(timeIntervalSince1970: ts)
         } else {
-            rateLimitLock.withLock {
-                $0.isLimited = false
-                $0.resetDate = nil
-                // cancel() is thread-safe and non-blocking; safe to call under the lock.
-                $0.resetItem?.cancel()
-                $0.resetItem = nil
+            delay = 3600
+            date = Date().addingTimeInterval(delay)
+        }
+        log("ghIsRateLimited › auto-reset scheduled in \(Int(delay))s (resetDate=\(date))")
+        // Cancel any existing timer before arming a new one so that multiple
+        // concurrent 403/429 responses never leave more than one pending reset in flight.
+        resetTask?.cancel()
+        isLimited = true
+        resetDate = date
+        resetTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                // CancellationError — a newer set(resetAt:) or clear() raced in.
+                return
             }
+            await self.didFire(scheduledDelay: delay)
         }
     }
+
+    /// Clears the rate-limit flag and cancels any pending reset task.
+    /// Unconditional — no early-return guard — so `resetDate` is always
+    /// cleared even if `isLimited` is somehow false, keeping the two
+    /// properties in a consistent state regardless of call order.
+    func clear() {
+        resetTask?.cancel()
+        resetTask = nil
+        isLimited = false
+        resetDate = nil
+    }
+
+    /// Returns both `isLimited` and `resetDate` in a single actor hop.
+    ///
+    /// Use this instead of two separate `await` calls on `ghIsRateLimited` and
+    /// `ghRateLimitResetDate` to guarantee that the two values are consistent
+    /// with each other — a `clear()` or `set(resetAt:)` call arriving between
+    /// two separate awaits cannot produce a state where `isLimited == false`
+    /// but `resetDate != nil`, or vice-versa.
+    func snapshot() -> (isLimited: Bool, resetDate: Date?) {
+        (isLimited: isLimited, resetDate: resetDate)
+    }
+
+    // MARK: Private
+
+    /// Fires when the `Task.sleep` in `set(resetAt:)` completes without cancellation.
+    /// Clears all rate-limit state so subsequent API calls are allowed through.
+    private func didFire(scheduledDelay: TimeInterval) {
+        isLimited = false
+        resetDate = nil
+        resetTask = nil
+        log("ghIsRateLimited › auto-reset fired after \(Int(scheduledDelay))s")
+    }
 }
 
-/// The exact `Date` at which the current rate-limit window expires.
+/// The module-wide rate-limit actor instance.
+private let rateLimitActor = RateLimitActor()
+
+// MARK: - Rate-limit accessors
+
+/// Whether the GitHub API is currently rate-limiting this client.
 ///
-/// `nil` when no rate-limit is active or when the reset time is unknown.
-var ghRateLimitResetDate: Date? {
-    rateLimitLock.withLock { $0.resetDate }
+/// Backed by `RateLimitActor`; must be `await`-ed from async contexts.
+var ghIsRateLimited: Bool {
+    get async { await rateLimitActor.isLimited }
 }
 
-/// Schedules an automatic reset of `ghIsRateLimited` to `false`.
-///
-/// Sets `isLimited = true` and `resetDate` together inside the lock before
-/// scheduling the work item, so the `isLimited == true` / `resetDate != nil`
-/// invariant is always satisfied when `handleRateLimitResponse` calls this.
-///
-/// Uses a cancel-and-replace `DispatchWorkItem` so that multiple concurrent
-/// 403/429 responses never leave more than one pending reset timer in flight.
-///
-/// - Parameter resetAt: Unix timestamp from the `X-RateLimit-Reset` response
-///   header. When non-nil the reset fires precisely at that time; otherwise
-///   falls back to 60 minutes from now.
-private func scheduleRateLimitReset(resetAt: TimeInterval?) {
-    let delay: TimeInterval
-    let resetDate: Date
-    if let ts = resetAt {
-        let secondsUntilReset = ts - Date().timeIntervalSince1970
-        delay = min(max(secondsUntilReset, 5), 7200)
-        resetDate = Date(timeIntervalSince1970: ts)
-    } else {
-        delay = 3600
-        resetDate = Date().addingTimeInterval(delay)
-    }
-    log("ghIsRateLimited › auto-reset scheduled in \(Int(delay))s (resetDate=\(resetDate))")
-
-    let item = DispatchWorkItem {
-        rateLimitLock.withLock {
-            $0.isLimited = false
-            $0.resetDate = nil
-            $0.resetItem = nil
-        }
-        log("ghIsRateLimited › auto-reset fired after \(Int(delay))s")
-    }
-    rateLimitLock.withLock {
-        $0.isLimited = true
-        $0.resetItem?.cancel()
-        $0.resetItem = item
-        $0.resetDate = resetDate
-    }
-    DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: item)
+/// Clears the rate-limit flag. Called at the start of each poll cycle in `RunnerStore.fetch()`.
+func clearGhRateLimit() async {
+    await rateLimitActor.clear()
 }
 
-// MARK: - URLSession transport
-//
-// All GitHub API calls use URLSession + Authorization: Bearer header.
-// The mutation helpers in this file (`urlSessionPost`, `urlSessionPut`,
-// `urlSessionDelete`, `urlSessionRaw`) are intentionally synchronous legacy
-// wrappers built on `URLSession.dataTask + DispatchSemaphore.wait()`.
-//
-// Safety contract:
-// - Never call them from `@MainActor` / the main queue.
-// - Never call them from an `async` function that is expected to suspend rather
-//   than block a cooperative pool thread.
-// - Safe call sites are synchronous background threads or non-main-actor pool tasks
-//   that explicitly accept a brief blocking section.
+/// Returns `isLimited` and `resetDate` in a single actor hop.
+///
+/// Prefer this over separate `await ghIsRateLimited` + `await ghRateLimitResetDate` calls
+/// to avoid the TOCTOU window between two hops.
+func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
+    await rateLimitActor.snapshot()
+}
 
 // MARK: - Request builder
 
@@ -174,18 +173,6 @@ private func resolveURL(_ endpoint: String) -> String {
         : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: slashCharacterSet))"
 }
 
-/// Clears the rate-limit flag and cancels any pending reset timer.
-/// Called after every successful (2xx) URLSession response.
-private func clearRateLimitIfNeeded() {
-    rateLimitLock.withLock {
-        guard $0.isLimited else { return }
-        $0.isLimited = false
-        $0.resetDate = nil
-        $0.resetItem?.cancel()
-        $0.resetItem = nil
-    }
-}
-
 /// Logs the response body (up to 400 chars) for non-2xx responses.
 private func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
     guard let data, !data.isEmpty else { return }
@@ -195,9 +182,6 @@ private func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 }
 
 /// Handles a 403/429 HTTP response, setting rate-limit state when appropriate.
-///
-/// Sets `isLimited = true` and `resetDate` atomically inside `scheduleRateLimitReset`
-/// so that `isLimited == true` with `resetDate == nil` is never observable.
 ///
 /// **Primary rate limits** (`429`, or `403` with `X-RateLimit-Remaining == 0`):
 /// detected via status code or the remaining-quota header.
@@ -211,7 +195,7 @@ private func handleRateLimitResponse(
     _ data: Data?,
     response: HTTPURLResponse,
     endpoint: String
-) {
+) async {
     let resetTS = response.value(forHTTPHeaderField: "X-RateLimit-Reset")
         .flatMap { TimeInterval($0) }
     let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
@@ -229,9 +213,79 @@ private func handleRateLimitResponse(
         } else {
             effectiveResetTS = resetTS
         }
-        scheduleRateLimitReset(resetAt: effectiveResetTS)
+        await rateLimitActor.set(resetAt: effectiveResetTS)
     } else {
         log("URLSessionTransport › 403 permission error (not rate limit) — \(endpoint)")
+    }
+}
+
+// MARK: - Shared execution core
+
+/// The result of a single URLSession round-trip through `urlSessionExecute`.
+private enum ExecuteResult {
+    /// 2xx response with optional body data (empty `Data()` for 204 No Content).
+    case success(Data, statusCode: Int)
+    /// Non-2xx response that is not a rate-limit; the request failed.
+    case httpError(Int)
+    /// 403 or 429 that triggered the rate-limit actor.
+    case rateLimited
+    /// Network-level error (timeout, no connectivity, etc.).
+    case networkError(Error)
+}
+
+/// Single shared implementation of the token-guard → URL-resolve → send → handle-response
+/// pipeline used by all public transport functions.
+///
+/// - Parameters:
+///   - endpoint: GitHub REST API endpoint (absolute URL or relative path).
+///   - timeout: URLSession timeout for the request.
+///   - configure: Closure that receives a base `URLRequest` and returns the
+///     fully-configured request to send (sets method, body, extra headers, etc.).
+///     Receives a `makeRequest`-style request by default; pass `useRawAccept: true`
+///     via the outer helper when a `v3.raw` Accept header is needed instead.
+///   - logTag: Short identifier used in log messages (e.g. `"urlSessionPost"`).
+///   - useRawAccept: When `true` the base request is built with
+///     `makeRawRequest` instead of `makeRequest`.
+private func urlSessionExecute(
+    _ endpoint: String,
+    timeout: TimeInterval,
+    logTag: String,
+    useRawAccept: Bool = false,
+    configure: (URLRequest) -> URLRequest = { $0 }
+) async -> ExecuteResult {
+    guard let token = githubToken() else {
+        log("\(logTag) › no token available")
+        return .networkError(URLError(.userAuthenticationRequired))
+    }
+    let urlString = resolveURL(endpoint)
+    guard let url = URL(string: urlString) else {
+        log("\(logTag) › invalid URL: \(urlString)")
+        return .networkError(URLError(.badURL))
+    }
+    let baseReq = useRawAccept
+        ? makeRawRequest(url: url, token: token, timeout: timeout)
+        : makeRequest(url: url, token: token, timeout: timeout)
+    let req = configure(baseReq)
+    do {
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            return .networkError(URLError(.badServerResponse))
+        }
+        if http.statusCode == 403 || http.statusCode == 429 {
+            await handleRateLimitResponse(
+                statusCode: http.statusCode, data, response: http, endpoint: urlString
+            )
+            return .rateLimited
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            logErrorBody(data, endpoint: urlString, status: http.statusCode)
+            return .httpError(http.statusCode)
+        }
+        await rateLimitActor.clear()
+        return .success(data, statusCode: http.statusCode)
+    } catch {
+        log("\(logTag) › \(urlString) network error: \(error.localizedDescription)")
+        return .networkError(error)
     }
 }
 
@@ -249,36 +303,13 @@ private func handleRateLimitResponse(
 ///   is never forwarded to S3. No custom redirect delegate is required.
 /// - Rate limiting: a 403 with `X-RateLimit-Remaining: 0` or a 429 sets
 ///   `ghIsRateLimited` via `handleRateLimitResponse`. A successful response
-///   clears it via `clearRateLimitIfNeeded()`. The flag is also reset at the
+///   clears it via `rateLimitActor.clear()`. The flag is also reset at the
 ///   start of each poll cycle in `RunnerStore.fetch()`.
 func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
-    guard let token = githubToken() else {
-        log("urlSessionAPIAsync › no token available")
-        return nil
-    }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionAPIAsync › invalid URL: \(urlString)")
-        return nil
-    }
-    let req = makeRequest(url: url, token: token, timeout: timeout)
-    do {
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse else { return nil }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return nil
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            logErrorBody(data, endpoint: urlString, status: http.statusCode)
-            return nil
-        }
-        clearRateLimitIfNeeded()
-        return data
-    } catch {
-        log("urlSessionAPIAsync › \(urlString) network error: \(error.localizedDescription)")
-        return nil
-    }
+    guard case .success(let data, _) = await urlSessionExecute(
+        endpoint, timeout: timeout, logTag: "urlSessionAPIAsync"
+    ) else { return nil }
+    return data
 }
 
 /// Fetches and concatenates all pages for a GitHub paginated endpoint using
@@ -316,7 +347,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
                 break
             }
             if http.statusCode == 403 || http.statusCode == 429 {
-                handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
+                await handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
                 break
             }
             guard (200..<300).contains(http.statusCode) else {
@@ -324,7 +355,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
                 break
             }
 
-            clearRateLimitIfNeeded()
+            await rateLimitActor.clear()
             if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
                 allItems.append(contentsOf: page)
             } else {
@@ -344,7 +375,8 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
         }
         return nil
     }
-    if ghIsRateLimited && !allItems.isEmpty {
+    let isRateLimited = await ghIsRateLimited
+    if isRateLimited && !allItems.isEmpty {
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
     guard !allItems.isEmpty else { return nil }
@@ -385,77 +417,11 @@ private func extractNextURL(from header: String?) -> String? {
 /// never forwarded to S3. S3 authenticates purely via the pre-signed query
 /// params already embedded in the redirect URL. No custom redirect delegate is
 /// required or appropriate here.
-func urlSessionRawAsync(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-    guard let token = githubToken() else {
-        log("urlSessionRawAsync › no token available"); return nil
-    }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionRawAsync › invalid URL: \(urlString)"); return nil
-    }
-    let req = makeRawRequest(url: url, token: token, timeout: timeout)
-    do {
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse else { return nil }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return nil
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            logErrorBody(data, endpoint: urlString, status: http.statusCode); return nil
-        }
-        clearRateLimitIfNeeded()
-        log("urlSessionRawAsync › \(endpoint) → \(data.count)b")
-        return data
-    } catch {
-        log("urlSessionRawAsync › \(urlString) network error: \(error.localizedDescription)")
-        return nil
-    }
-}
-
-// MARK: - Raw sync (mutation helpers — kept for non-async call sites)
-
-/// Fetches raw bytes from a GitHub API endpoint that 302-redirects to S3.
-///
-/// ⚠️ Legacy synchronous wrapper kept for non-async mutation call sites only.
-/// Prefer `urlSessionRawAsync` for all new async code.
-///
-/// ⚠️ Must be called from a background thread.
-func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
-    dispatchPrecondition(condition: .notOnQueue(.main))
-    guard let token = githubToken() else {
-        log("urlSessionRaw › no token available")
-        return nil
-    }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionRaw › invalid URL: \(urlString)")
-        return nil
-    }
-    let req = makeRawRequest(url: url, token: token, timeout: timeout)
-    let sem = DispatchSemaphore(value: 0)
-    let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
-    URLSession.shared.dataTask(with: req) { data, response, error in
-        defer { sem.signal() }
-        if let error {
-            log("urlSessionRaw › \(urlString) network error: \(error.localizedDescription)")
-            return
-        }
-        guard let http = response as? HTTPURLResponse else { return }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            logErrorBody(data, endpoint: urlString, status: http.statusCode)
-            return
-        }
-        clearRateLimitIfNeeded()
-        result.withLock { $0 = data }
-    }.resume()
-    sem.wait()
-    let data = result.withLock { $0 }
-    log("urlSessionRaw › \(endpoint) → \(data?.count ?? 0)b")
+func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+    guard case .success(let data, _) = await urlSessionExecute(
+        endpoint, timeout: timeout, logTag: "urlSessionRaw", useRawAccept: true
+    ) else { return nil }
+    log("urlSessionRaw › \(endpoint) → \(data.count)b")
     return data
 }
 
@@ -468,125 +434,48 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) -> Data? {
 /// - `Data()`   — 2xx response with no body (e.g. 204 No Content); treat as success.
 /// - `Data(…)`  — 2xx response with a body; decode as needed.
 @discardableResult
-func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) -> Data? {
-    dispatchPrecondition(condition: .notOnQueue(.main))
-    guard let token = githubToken() else {
-        log("urlSessionPost › no token available")
-        return nil
-    }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionPost › invalid URL: \(urlString)")
-        return nil
-    }
-    var req = makeRequest(url: url, token: token, timeout: timeout)
-    req.httpMethod = "POST"
-    if let body {
-        req.httpBody = body
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    }
-    let sem = DispatchSemaphore(value: 0)
-    let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
-    URLSession.shared.dataTask(with: req) { data, response, error in
-        defer { sem.signal() }
-        if let error {
-            log("urlSessionPost › \(urlString) network error: \(error.localizedDescription)")
-            return
+func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
+    let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPost") { req in
+        var r = req
+        r.httpMethod = "POST"
+        if let body {
+            r.httpBody = body
+            r.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        guard let http = response as? HTTPURLResponse else { return }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            logErrorBody(data, endpoint: urlString, status: http.statusCode)
-            return
-        }
-        clearRateLimitIfNeeded()
-        result.withLock { $0 = data ?? Data() }
-        log("urlSessionPost › \(endpoint) → \(http.statusCode)")
-    }.resume()
-    sem.wait()
-    return result.withLock { $0 }
+        return r
+    }
+    guard case .success(let data, let statusCode) = result else { return nil }
+    log("urlSessionPost › \(endpoint) → \(statusCode)")
+    return data
 }
 
 /// Sends a PUT to the given GitHub API endpoint with a JSON body. Returns the response body, or nil on failure.
-func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) -> Data? {
-    dispatchPrecondition(condition: .notOnQueue(.main))
-    guard let token = githubToken() else {
-        log("urlSessionPut › no token available")
-        return nil
+func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) async -> Data? {
+    let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPut") { req in
+        var r = req
+        r.httpMethod = "PUT"
+        r.httpBody = body
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return r
     }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionPut › invalid URL: \(urlString)")
-        return nil
-    }
-    var req = makeRequest(url: url, token: token, timeout: timeout)
-    req.httpMethod = "PUT"
-    req.httpBody = body
-    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    let sem = DispatchSemaphore(value: 0)
-    let result = OSAllocatedUnfairLock<Data?>(initialState: nil)
-    URLSession.shared.dataTask(with: req) { data, response, error in
-        defer { sem.signal() }
-        if let error {
-            log("urlSessionPut › \(urlString) network error: \(error.localizedDescription)")
-            return
-        }
-        guard let http = response as? HTTPURLResponse else { return }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            logErrorBody(data, endpoint: urlString, status: http.statusCode)
-            return
-        }
-        clearRateLimitIfNeeded()
-        result.withLock { $0 = data }
-        log("urlSessionPut › \(endpoint) → \(http.statusCode)")
-    }.resume()
-    sem.wait()
-    return result.withLock { $0 }
+    guard case .success(let data, let statusCode) = result else { return nil }
+    log("urlSessionPut › \(endpoint) → \(statusCode)")
+    return data
 }
 
 /// Sends a DELETE to the given GitHub API endpoint. Returns true on success (2xx).
 @discardableResult
-func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) -> Bool {
-    dispatchPrecondition(condition: .notOnQueue(.main))
-    guard let token = githubToken() else {
-        log("urlSessionDelete › no token available")
-        return false
+func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> Bool {
+    let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionDelete") { req in
+        var r = req
+        r.httpMethod = "DELETE"
+        return r
     }
-    let urlString = resolveURL(endpoint)
-    guard let url = URL(string: urlString) else {
-        log("urlSessionDelete › invalid URL: \(urlString)")
-        return false
+    if case .success = result {
+        log("urlSessionDelete › \(endpoint) → success")
+        return true
     }
-    var req = makeRequest(url: url, token: token, timeout: timeout)
-    req.httpMethod = "DELETE"
-    let sem = DispatchSemaphore(value: 0)
-    let success = OSAllocatedUnfairLock<Bool>(initialState: false)
-    URLSession.shared.dataTask(with: req) { data, response, error in
-        defer { sem.signal() }
-        if let error {
-            log("urlSessionDelete › \(urlString) network error: \(error.localizedDescription)")
-            return
-        }
-        guard let http = response as? HTTPURLResponse else { return }
-        if http.statusCode == 403 || http.statusCode == 429 {
-            handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-            return
-        }
-        let ok = (200..<300).contains(http.statusCode)
-        if !ok { logErrorBody(data, endpoint: urlString, status: http.statusCode) }
-        if ok { clearRateLimitIfNeeded() }
-        success.withLock { $0 = ok }
-        log("urlSessionDelete › \(endpoint) → \(http.statusCode)")
-    }.resume()
-    sem.wait()
-    return success.withLock { $0 }
+    return false
 }
 
 // MARK: - Public API entry points (GET)
@@ -607,21 +496,21 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Dat
 
 /// Directly deregisters a runner from GitHub via DELETE.
 @discardableResult
-func deleteRunnerByID(scope scopeString: String, runnerID: Int) -> Bool {
+func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
     guard let scope = Scope.parse(scopeString) else {
         log("deleteRunnerByID › invalid scope: \(scopeString)")
         return false
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)"
     log("deleteRunnerByID › DELETE \(endpoint) runnerID=\(runnerID)")
-    let success = urlSessionDelete(endpoint)
+    let success = await urlSessionDelete(endpoint)
     if !success { log("deleteRunnerByID › failed for runnerID=\(runnerID)") }
     return success
 }
 
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
 @discardableResult
-func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) -> [String]? {
+func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
         log("patchRunnerLabels › invalid scope: \(scopeString)")
         return nil
@@ -632,7 +521,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
         log("patchRunnerLabels › failed to serialise request body")
         return nil
     }
-    guard let outData = urlSessionPut(endpoint, body: bodyData) else {
+    guard let outData = await urlSessionPut(endpoint, body: bodyData) else {
         log("patchRunnerLabels › request failed for endpoint=\(endpoint)")
         return nil
     }
@@ -652,12 +541,19 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
 
 // MARK: - Runner token helpers
 
-    /// Requests a runner token of the given `type` (e.g. registration or removal) for `scope`.
-private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) -> String? {
+/// Requests a runner token of the given `type` (e.g. registration or removal) for `scope`.
+private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) async -> String? {
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(type)"
     log("\(logPrefix) › POSTing \(endpoint)")
-    guard let outputData = urlSessionPost(endpoint), !outputData.isEmpty else {
-        log("\(logPrefix) › no data for \(endpoint)")
+    // GitHub token endpoints always return a JSON body; a nil result means a network/auth
+    // failure (urlSessionPost already logged it). Empty data would indicate an unexpected
+    // 204 No Content, which token endpoints do not emit — treat as failure either way.
+    guard let outputData = await urlSessionPost(endpoint) else {
+        log("\(logPrefix) › request failed for \(endpoint)")
+        return nil
+    }
+    guard !outputData.isEmpty else {
+        log("\(logPrefix) › unexpected empty body for \(endpoint) (204?)")
         return nil
     }
     struct TokenResponse: Decodable { let token: String }
@@ -669,31 +565,31 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) -> 
 }
 
 /// Fetches a short-lived runner registration token for the given scope.
-func fetchRegistrationToken(scope scopeString: String) -> String? {
+func fetchRegistrationToken(scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRegistrationToken › invalid scope: \(scopeString)")
         return nil
     }
-    guard let token = fetchRunnerToken(type: "registration-token", scope: scope, logPrefix: "fetchRegistrationToken") else { return nil }
+    guard let token = await fetchRunnerToken(type: "registration-token", scope: scope, logPrefix: "fetchRegistrationToken") else { return nil }
     log("fetchRegistrationToken › got registration token")
     return token
 }
 
 /// Fetches a runner removal token for the given scope.
-func fetchRemovalToken(scope scopeString: String) -> String? {
+func fetchRemovalToken(scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRemovalToken › invalid scope: \(scopeString)")
         return nil
     }
-    guard let token = fetchRunnerToken(type: "remove-token", scope: scope, logPrefix: "fetchRemovalToken") else { return nil }
+    guard let token = await fetchRunnerToken(type: "remove-token", scope: scope, logPrefix: "fetchRemovalToken") else { return nil }
     log("fetchRemovalToken › got removal token")
     return token
 }
 
 /// Thin convenience wrapper over `urlSessionPost` for fire-and-forget mutation endpoints.
 @discardableResult
-func ghPost(_ endpoint: String) -> Bool {
-    let result = urlSessionPost(endpoint)
+func ghPost(_ endpoint: String) async -> Bool {
+    let result = await urlSessionPost(endpoint)
     let success = result != nil
     log("ghPost › \(endpoint) success=\(success)")
     return success
@@ -701,8 +597,8 @@ func ghPost(_ endpoint: String) -> Bool {
 
 /// Cancels a workflow run via the GitHub Actions API.
 @discardableResult
-func cancelRun(runID: Int, scope: String) -> Bool {
-    let result = ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
+func cancelRun(runID: Int, scope: String) async -> Bool {
+    let result = await ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
     log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
     return result
 }

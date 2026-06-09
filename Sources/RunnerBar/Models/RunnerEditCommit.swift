@@ -24,108 +24,95 @@ enum CommitResult {
 /// 2. Runner JSON — workFolder + disableUpdate in one read-modify-write.
 /// 3. Proxy files — `.proxy` and `.proxycredentials` only when changed.
 ///
-/// Runs on a background `userInitiated` queue. Always dispatches `completion`
-/// on the main queue via `DispatchQueue.main.async` (compatible with the surrounding
-/// GCD context — do not replace with `await MainActor.run` without migrating the
-/// entire function to async/await first).
+/// Must be called from a non-`@MainActor` async context (or wrapped in `Task.detached`)
+/// because the file-I/O helpers (`patchRunnerJSONMulti`, `writeProxyFiles`) are blocking.
+/// Returns the `CommitResult` directly; the caller is responsible for hopping back to
+/// `@MainActor` for any UI updates.
+/// - Warning: File I/O — always call from `Task.detached`, never from `@MainActor`.
 func commitRunnerEdit(
     runner: RunnerModel,
     draft: RunnerEditDraft,
-    original: RunnerEditDraft,
-    completion: @escaping @MainActor (CommitResult) -> Void
-) {
-    DispatchQueue.global(qos: .userInitiated).async {
-        var errors: [String] = []
+    original: RunnerEditDraft
+) async -> CommitResult {
+    var errors: [String] = []
 
-        // MARK: Step 1 — Labels (GitHub API)
-        let labelsChanged = draft.parsedLabels != original.parsedLabels
-        if labelsChanged {
-            if let agentId = runner.agentId,
-               let gitHubUrl = runner.gitHubUrl,
-               let scope = scopeFromHtmlUrl(gitHubUrl) {
-                log("commitRunnerEdit › patching labels runner=\(runner.runnerName) labels=\(draft.parsedLabels)")
-                let result = patchRunnerLabels(scope: scope, runnerID: agentId, labels: draft.parsedLabels)
-                if result == nil {
-                    log("commitRunnerEdit › labels API failed, aborting")
-                    let msg = "Failed to save labels via GitHub API"
-                    DispatchQueue.main.async { completion(.failure([msg])) }
-                    return // abort — do not touch local files
-                }
-                log("commitRunnerEdit › labels patched ok")
-            } else {
-                // agentId or gitHubUrl unavailable — cannot call the API.
-                // Non-fatal: append an error and continue with local file writes
-                // so workFolder/proxy changes are not silently discarded.
-                let msg = "Cannot save labels: missing agent ID or GitHub URL"
-                log("commitRunnerEdit › \(msg)")
-                errors.append(msg)
+    // MARK: Step 1 — Labels (GitHub API)
+    let labelsChanged = draft.parsedLabels != original.parsedLabels
+    if labelsChanged {
+        if let agentId = runner.agentId,
+           let gitHubUrl = runner.gitHubUrl,
+           let scope = scopeFromHtmlUrl(gitHubUrl) {
+            log("commitRunnerEdit › patching labels runner=\(runner.runnerName) labels=\(draft.parsedLabels)")
+            let result = await patchRunnerLabels(scope: scope, runnerID: agentId, labels: draft.parsedLabels)
+            if result == nil {
+                log("commitRunnerEdit › labels API failed, aborting")
+                return .failure(["Failed to save labels via GitHub API"])
             }
+            log("commitRunnerEdit › labels patched ok")
+        } else {
+            // agentId or gitHubUrl unavailable — cannot call the API.
+            // Non-fatal: append an error and continue with local file writes
+            // so workFolder/proxy changes are not silently discarded.
+            let msg = "Cannot save labels: missing agent ID or GitHub URL"
+            log("commitRunnerEdit › \(msg)")
+            errors.append(msg)
         }
-
-        // MARK: Step 2 — Runner JSON (workFolder + disableUpdate)
-        let workFolderChanged = draft.trimmedWorkFolder != original.trimmedWorkFolder
-        let autoUpdateChanged = draft.autoUpdate != original.autoUpdate
-        if workFolderChanged || autoUpdateChanged {
-            guard let installPath = runner.installPath else {
-                errors.append("Install path unknown — cannot write runner JSON")
-                finalize(errors, completion)
-                return
-            }
-            log("commitRunnerEdit › patching .runner JSON installPath=\(installPath)")
-            // patches uses [String: Any] to support mixed String + Bool values
-            // in a single JSON read-modify-write pass.
-            let jsonOk = patchRunnerJSONMulti(
-                installPath: installPath,
-                patches: [
-                    "workFolder": draft.trimmedWorkFolder,
-                    "disableUpdate": !draft.autoUpdate
-                ]
-            )
-            if !jsonOk {
-                errors.append("Failed to write runner configuration (.runner JSON)")
-                log("commitRunnerEdit › .runner JSON write failed")
-            } else {
-                log("commitRunnerEdit › .runner JSON updated ok")
-            }
-        }
-
-        // MARK: Step 3 — Proxy files
-        let proxyChanged = draft.proxyUrl != original.proxyUrl
-            || draft.proxyUser != original.proxyUser
-            || draft.proxyPassword != original.proxyPassword
-        if proxyChanged {
-            guard let installPath = runner.installPath else {
-                errors.append("Install path unknown — cannot write proxy files")
-                finalize(errors, completion)
-                return
-            }
-            log("commitRunnerEdit › writing proxy files installPath=\(installPath)")
-            let proxyOk = writeProxyFiles(
-                installPath: installPath,
-                url: draft.proxyUrl.trimmingCharacters(in: .whitespacesAndNewlines),
-                user: draft.proxyUser.trimmingCharacters(in: .whitespacesAndNewlines),
-                password: draft.proxyPassword.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            if !proxyOk {
-                errors.append("Failed to save proxy settings")
-                log("commitRunnerEdit › proxy write failed")
-            } else {
-                log("commitRunnerEdit › proxy files updated ok")
-            }
-        }
-
-        finalize(errors, completion)
     }
+
+    // MARK: Step 2 — Runner JSON (workFolder + disableUpdate)
+    let workFolderChanged = draft.trimmedWorkFolder != original.trimmedWorkFolder
+    let autoUpdateChanged = draft.autoUpdate != original.autoUpdate
+    if workFolderChanged || autoUpdateChanged {
+        guard let installPath = runner.installPath else {
+            errors.append("Install path unknown — cannot write runner JSON")
+            return errors.isEmpty ? .success : .failure(errors)
+        }
+        log("commitRunnerEdit › patching .runner JSON installPath=\(installPath)")
+        // patches uses [String: Any] to support mixed String + Bool values
+        // in a single JSON read-modify-write pass.
+        let jsonOk = patchRunnerJSONMulti(
+            installPath: installPath,
+            patches: [
+                "workFolder": draft.trimmedWorkFolder,
+                "disableUpdate": !draft.autoUpdate
+            ]
+        )
+        if !jsonOk {
+            errors.append("Failed to write runner configuration (.runner JSON)")
+            log("commitRunnerEdit › .runner JSON write failed")
+        } else {
+            log("commitRunnerEdit › .runner JSON updated ok")
+        }
+    }
+
+    // MARK: Step 3 — Proxy files
+    let proxyChanged = draft.proxyUrl != original.proxyUrl
+        || draft.proxyUser != original.proxyUser
+        || draft.proxyPassword != original.proxyPassword
+    if proxyChanged {
+        guard let installPath = runner.installPath else {
+            errors.append("Install path unknown — cannot write proxy files")
+            return errors.isEmpty ? .success : .failure(errors)
+        }
+        log("commitRunnerEdit › writing proxy files installPath=\(installPath)")
+        let proxyOk = writeProxyFiles(
+            installPath: installPath,
+            url: draft.proxyUrl.trimmingCharacters(in: .whitespacesAndNewlines),
+            user: draft.proxyUser.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: draft.proxyPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        if !proxyOk {
+            errors.append("Failed to save proxy settings")
+            log("commitRunnerEdit › proxy write failed")
+        } else {
+            log("commitRunnerEdit › proxy files updated ok")
+        }
+    }
+
+    return errors.isEmpty ? .success : .failure(errors)
 }
 
 // MARK: - Private helpers
-
-/// Dispatches the final `CommitResult` on the main queue.
-private func finalize(_ errors: [String], _ completion: @escaping @MainActor (CommitResult) -> Void) {
-    DispatchQueue.main.async {
-        completion(errors.isEmpty ? .success : .failure(errors))
-    }
-}
 
 /// Reads the `.runner` JSON at `installPath`, merges all `patches` in one pass, and writes back.
 /// `patches` accepts mixed `String` and `Bool` values via `Any` — this is intentional to allow

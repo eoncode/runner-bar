@@ -26,20 +26,17 @@ public typealias GHRawTransport = @Sendable (_ endpoint: String) async -> Data?
 
 // MARK: - Module-level state
 
-/// The active JSON transport closure.
-/// Serialises all reads and writes to the active transport closure.
+/// Serialises all reads and writes to the active JSON transport closure.
 private let transportLock = OSAllocatedUnfairLock<GHAPITransport>(initialState: { _ in nil })
 
-/// The active raw-bytes transport closure (log endpoints).
-/// Serialises all reads and writes to the active raw transport closure.
+/// Serialises all reads and writes to the active raw-bytes transport closure.
 private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialState: { _ in nil })
 
 // MARK: - Configuration
 
-/// Wire up the real (or mock) GitHub transports. Call once at launch before any fetch.
+/// Wire up the real (or mock) GitHub JSON transport. Call once at launch before any fetch.
 ///
-/// - Parameters:
-///   - transport: Async closure for JSON REST calls; returns `nil` on failure.
+/// - Parameter transport: Async closure for JSON REST calls; returns `nil` on failure.
 public func configureGHAPI(
     _ transport: @escaping GHAPITransport
 ) {
@@ -65,6 +62,7 @@ func ghAPI(_ endpoint: String) async -> Data? {
 }
 
 /// Calls the configured raw-bytes transport for the given endpoint.
+/// Used by `LogFetcher` to fetch log data without importing the app target.
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
 func ghRaw(_ endpoint: String) async -> Data? {

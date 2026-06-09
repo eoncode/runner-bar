@@ -212,10 +212,6 @@ struct LocalRunnersView: View {
     }
 
     // MARK: - Lifecycle actions
-    // TODO: #1077 — migrate to async/await once RunnerLifecycleService.start/stop are async.
-    // Current pattern (Task + Task.detached) matches LocalRunnerStore.refresh() as the
-    // intermediate step: background work is off-actor, main-actor mutations happen in the
-    // Task continuation which returns to @MainActor automatically. // NOSONAR
 
     /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
     @MainActor private func performResume(runner: RunnerModel) {
@@ -268,9 +264,18 @@ struct LocalRunnersView: View {
         runnerPendingRemoval = nil
         removeErrorMessage = nil
         LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
+        // Task.detached is required here for two independent reasons:
+        //   1. The surrounding context inherits @MainActor isolation from the view; a plain
+        //      Task { } would run remove() on the main actor and block the UI.
+        //   2. RunnerLifecycleService.remove calls runScriptWithOutput, which uses a
+        //      synchronous Process + waitUntilExit. That blocking call must stay off the
+        //      cooperative thread pool regardless of actor isolation.
+        // TODO (Batch C): Once runScriptWithOutput is migrated to AsyncProcess /
+        // CheckedContinuation+DispatchQueue.global, reason 2 is resolved and Task.detached
+        // can be replaced with a plain Task { } (which resolves reason 1 automatically).
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
-                RunnerLifecycleService.shared.remove(runner: runner)
+                await RunnerLifecycleService.shared.remove(runner: runner)
             }.value
             if !ok {
                 LocalRunnerStore.shared.optimisticallyRestore(runner)
@@ -329,14 +334,21 @@ struct LocalRunnersView: View {
                 if let installPath = runner.installPath {
                     original.load(installPath: installPath)
                 }
-                commitRunnerEdit(runner: runner, draft: draft, original: original) { @MainActor result in
-                    isCommitting = false
-                    switch result {
-                    case .success:
-                        localRunnerStore.refresh()
-                        editingRunner = nil
-                    case .failure(let msgs):
-                        commitError = msgs.joined(separator: "\n")
+                // Task.detached keeps the blocking file-I/O in commitRunnerEdit
+                // (patchRunnerJSONMulti, writeProxyFiles) off the main thread.
+                // RunnerEditDraft: Sendable so `original` crosses the isolation
+                // boundary without a Swift 6 data-race diagnostic.
+                Task.detached(priority: .userInitiated) {
+                    let result = await commitRunnerEdit(runner: runner, draft: draft, original: original)
+                    await MainActor.run {
+                        isCommitting = false
+                        switch result {
+                        case .success:
+                            localRunnerStore.refresh()
+                            editingRunner = nil
+                        case .failure(let msgs):
+                            commitError = msgs.joined(separator: "\n")
+                        }
                     }
                 }
             },

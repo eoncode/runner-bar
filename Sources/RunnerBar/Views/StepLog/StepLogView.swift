@@ -226,7 +226,7 @@ struct StepLogView: View {
             return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
         }()
         Task.detached(priority: .userInitiated) {
-            let text = fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
+            let text = await fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
             await MainActor.run {
                 logText = text ?? ""
                 isLoading = false

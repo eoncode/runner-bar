@@ -14,7 +14,7 @@ private let unzipBinaryPath = "/usr/bin/unzip" // NOSONAR — fixed OS path
 ///
 /// `/actions/jobs/{id}/logs` 302-redirects to a short-lived S3 URL; the transport follows it.
 /// Returns `nil` when `scope` is not in `owner/repo` form, the request fails,
-/// or the response body looks like a JSON error object (starts with `"{"`)
+/// or the response body looks like a JSON error object (starts with `"{"`).
 ///
 /// - Parameters:
 ///   - jobID: The GitHub Actions job ID.
@@ -32,9 +32,9 @@ public func fetchJobLog(jobID: Int, scope: String) async -> String? {
 
 /// Fetches and concatenates all job logs for every run in a group.
 ///
-/// Issues one async task per run in parallel via `withTaskGroup`.
-/// Each task retrieves a ZIP archive, extracts all `.txt` log files via `unzipLogs(_:)`,
-/// and collects the results. The final output is sorted by filename for stable ordering.
+/// Issues one async task per run inside a `TaskGroup`, each retrieving a ZIP
+/// archive and extracting all `.txt` log files via `unzipLogs(_:)`. Results are
+/// collected and sorted by filename for stable ordering when names are unique.
 ///
 /// - Parameter group: The `WorkflowActionGroup` whose runs should be fetched.
 /// - Returns: A single concatenated string with `=== <name> ===` section headers,
@@ -58,8 +58,8 @@ public func fetchActionLogs(group: WorkflowActionGroup) async -> String? {
             }
         }
         var collected: [(name: String, text: String)] = []
-        for await result in taskGroup {
-            collected.append(contentsOf: result)
+        for await batch in taskGroup {
+            collected.append(contentsOf: batch)
         }
         return collected
     }

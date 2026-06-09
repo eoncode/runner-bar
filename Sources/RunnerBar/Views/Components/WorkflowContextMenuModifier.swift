@@ -31,34 +31,37 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         let isLive      = group.groupStatus == .inProgress
 
         // Re-run failed
-        // FIXME: #1077 Task.detached wraps a blocking call — migrating ghPost to async/await will unblock the cooperative thread pool // NOSONAR
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
-                runIDs.forEach { ghPost("repos/\(scope)/actions/runs/\($0)/rerun-failed-jobs") }
+                await withTaskGroup(of: Void.self) { group in
+                    for id in runIDs { group.addTask { await ghPost("repos/\(scope)/actions/runs/\(id)/rerun-failed-jobs") } }
+                }
             }
         } label: { Label("Re-run Failed Jobs", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
 
         // Re-run all
-        // FIXME: #1077 Task.detached wraps a blocking call — migrating ghPost to async/await will unblock the cooperative thread pool // NOSONAR
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
-                runIDs.forEach { ghPost("repos/\(scope)/actions/runs/\($0)/rerun") }
+                await withTaskGroup(of: Void.self) { group in
+                    for id in runIDs { group.addTask { await ghPost("repos/\(scope)/actions/runs/\(id)/rerun") } }
+                }
             }
         } label: { Label("Re-run All Jobs", systemImage: "arrow.clockwise") }
         .disabled(!isConcluded)
 
         // Cancel
-        // FIXME: #1077 Task.detached wraps a blocking call — migrating cancelRun to async/await will unblock the cooperative thread pool // NOSONAR
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
-                runIDs.forEach { cancelRun(runID: $0, scope: scope) }
+                await withTaskGroup(of: Void.self) { tg in
+                    for id in runIDs { tg.addTask { await cancelRun(runID: id, scope: scope) } }
+                }
             }
         } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
@@ -106,21 +109,23 @@ private struct JobContextMenuModifier: ViewModifier {
         let isLive      = job.status == "in_progress"
 
         // Re-run job
-        // FIXME: #1077 Task.detached wraps a blocking call — migrating ghPost to async/await will unblock the cooperative thread pool // NOSONAR
         Button {
             let scope = group.repo
             let jobID = job.id
             Task.detached(priority: .userInitiated) {
-                ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
+                await ghPost("repos/\(scope)/actions/jobs/\(jobID)/rerun")
             }
         } label: { Label("Re-run Job", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
-        // FIXME: #1077 Task.detached wraps a blocking call — migrating cancelRun to async/await will unblock the cooperative thread pool // NOSONAR
+
+        // Cancel
         Button {
             let scope  = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
-                runIDs.forEach { cancelRun(runID: $0, scope: scope) }
+                await withTaskGroup(of: Void.self) { tg in
+                    for id in runIDs { tg.addTask { await cancelRun(runID: id, scope: scope) } }
+                }
             }
         } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
