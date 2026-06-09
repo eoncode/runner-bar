@@ -105,6 +105,12 @@ extension AddRunnerSheet {
                 .keyboardShortcut(.cancelAction)
                 .disabled(isRegistering)
             Button {
+                // Actor isolation note: `Task { await register() }` does NOT inherit
+                // @MainActor here. Swift's rule is that a Task inherits the *callee's*
+                // actor isolation — not the call site's. `register()` carries no actor
+                // annotation, so the Task runs on the cooperative thread pool regardless
+                // of the fact that this button action fires from SwiftUI's @MainActor
+                // body. See the full isolation rationale in register()'s doc comment.
                 Task { await register() }
             } label: {
                 if isRegistering {

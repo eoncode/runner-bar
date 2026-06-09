@@ -4,15 +4,21 @@ import AppKit
 import SwiftUI
 
 // MARK: - URI Constants
-/// Enumerates possible values for GitHubURIs.
+
+/// Centralised URI and path constants used by `AddRunnerSheet` and its extensions.
+///
+/// Intentionally `internal` (not `private`) because the cross-file extension split
+/// requires all extension files to access these constants. Do not promote to `public`
+/// and do not add constants unrelated to `AddRunnerSheet` here.
+// TODO: If AddRunnerSheet is ever consolidated back into a single file, restrict to `private`.
 enum GitHubURIs {
-    /// The base constant.
+    /// The base GitHub web URL.
     static let base            = "https://github.com/" // NOSONAR — centralised constant, not an inline hardcoded URI
-    /// The apiRunnerLatest constant.
+    /// The GitHub API endpoint for the latest Actions runner release.
     static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR — centralised constant, not an inline hardcoded URI
-    /// The launchAgentsDir constant.
+    /// Relative path to the user's LaunchAgents directory.
     static let launchAgentsDir = "Library/LaunchAgents"
-    /// The actionsRunnerDefaultDir constant.
+    /// Default runner install directory relative to the user's home folder.
     static let actionsRunnerDefaultDir = "actions-runner/my-runner"
     /// System path to the curl binary used when downloading the runner package.
     static let curlPath  = "/usr/bin/curl" // NOSONAR — fixed OS path
@@ -36,6 +42,13 @@ enum GitHubURIs {
 /// via FileManager, and registers the runner in `LocalRunnerStore`.
 ///
 /// Requires a GitHub token for "Add new" (OAuth sign-in, GH_TOKEN, or GITHUB_TOKEN).
+///
+/// ## Visibility note
+/// All `@State` properties and extension-facing helpers are `internal` (no modifier)
+/// rather than `private` because Swift does not allow `private` members of a primary
+/// type to be accessed from extensions defined in separate files. This is an accepted
+/// trade-off of the cross-file split; these members remain logically private to the
+/// `AddRunnerSheet` family of files.
 struct AddRunnerSheet: View {
     /// Controls whether the sheet is shown.
     @Binding var isPresented: Bool
@@ -261,6 +274,19 @@ struct AddRunnerSheet: View {
 
     // swiftlint:disable:next function_body_length cyclomatic_complexity
     /// Downloads, unpacks, configures a new runner, registers with `LocalRunnerStore`, and dismisses.
+    ///
+    /// ## Actor isolation — read before changing this function
+    /// `AddRunnerSheet` is a plain `struct … View` with **no** `@MainActor` annotation on the
+    /// type itself. Swift only synthesises `@MainActor` isolation for a SwiftUI `View` when the
+    /// conformance is on an explicitly `@MainActor`-annotated type — it does NOT do so for
+    /// unannotated structs. Only `body` and helpers explicitly marked `@MainActor` (e.g.
+    /// `setStep`) run on the main actor.
+    ///
+    /// `register()` carries **no** actor annotation. A `Task { await register() }` created from
+    /// a SwiftUI button action inherits the *caller's* actor isolation only if the callee is
+    /// itself actor-isolated. Because `register()` is unannotated, the Task runs on the
+    /// cooperative thread pool — **not** on `@MainActor`. This is the correct and intended
+    /// behaviour, not a bug.
     func register() async {
         guard canRegister else { return }
         errorMessage = nil

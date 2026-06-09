@@ -34,23 +34,15 @@ func fetchRunnerDownloadURL() async -> String? {
         log("fetchRunnerDownloadURL › network error: \(error.localizedDescription)")
         return nil
     }
-    // Minimal GitHub release asset payload.
     struct Asset: Decodable {
-        // The asset file name.
         let name: String
-        // The direct download URL for this asset.
         let browserDownloadUrl: String
-        // Maps snake_case API keys to camelCase Swift properties.
         enum CodingKeys: String, CodingKey {
-            // The name coding key.
             case name
-            // The browserDownloadUrl coding key.
             case browserDownloadUrl = "browser_download_url"
         }
     }
-    // Minimal GitHub release payload — only assets are needed.
     struct Release: Decodable {
-        // The list of release assets.
         let assets: [Asset]
     }
     guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
