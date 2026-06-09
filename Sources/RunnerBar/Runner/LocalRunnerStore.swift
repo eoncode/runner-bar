@@ -134,28 +134,28 @@ final class LocalRunnerStore: ObservableObject {
     /// Applies a CPU/memory snapshot to the matching `RunnerModel` in place.
     ///
     /// Match priority (fixes org-runner metrics #1209 / #1192):
-    ///   1. runner.apiId  == agentId  (GitHub REST API id — org runners use this)
-    ///   2. runner.agentId == agentId (local .runner JSON AgentId — repo runners use this)
-    ///   3. runner.runnerName == name (name-only last resort)
-    func applyMetrics(_ metrics: RunnerMetrics?, forAgentId agentId: Int?, name: String) {
+    ///   1. runner.apiId   == runnerId (GitHub REST API id — org runners use this)
+    ///   2. runner.agentId == runnerId (local .runner JSON AgentId — repo runners use this)
+    ///   3. runner.runnerName == name  (name-only last resort)
+    func applyMetrics(_ metrics: RunnerMetrics?, forRunnerId runnerId: Int?, name: String) {
 #if DEBUG
-        log("LocalRunnerStore › applyMetrics — called with agentId=\(String(describing: agentId)) name=\(name) metrics=\(String(describing: metrics))")
+        log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))")
         log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
 #endif
 
         guard let idx = runners.firstIndex(where: { runner in
             // Priority 1: match on GitHub REST API id (populated after first enrichment).
             // This is the key fix for org runners where apiId ≠ agentId.
-            if let aid = agentId, let rid = runner.apiId {
-                if rid == aid {
-                    log("LocalRunnerStore › applyMetrics — MATCH via apiId=\(rid) for '\(runner.runnerName)'")
+            if let rid = runnerId, let aid = runner.apiId {
+                if aid == rid {
+                    log("LocalRunnerStore › applyMetrics — MATCH via apiId=\(aid) for '\(runner.runnerName)'")
                     return true
                 }
             }
             // Priority 2: match on local .runner JSON AgentId (repo runners).
-            if let aid = agentId, let rid = runner.agentId {
-                if rid == aid {
-                    log("LocalRunnerStore › applyMetrics — MATCH via agentId=\(rid) for '\(runner.runnerName)'")
+            if let rid = runnerId, let aid = runner.agentId {
+                if aid == rid {
+                    log("LocalRunnerStore › applyMetrics — MATCH via agentId=\(aid) for '\(runner.runnerName)'")
                     return true
                 }
             }
@@ -166,7 +166,7 @@ final class LocalRunnerStore: ObservableObject {
             }
             return false
         }) else {
-            log("LocalRunnerStore › ⚠️ applyMetrics — NO MATCH for agentId=\(String(describing: agentId)) name=\(name). runners=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
+            log("LocalRunnerStore › ⚠️ applyMetrics — NO MATCH for runnerId=\(String(describing: runnerId)) name=\(name). runners=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
             return
         }
         log("LocalRunnerStore › applyMetrics — writing metrics=\(String(describing: metrics)) to '\(runners[idx].runnerName)'")
