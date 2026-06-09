@@ -135,6 +135,10 @@ struct SparklineMetricView: View {
 /// - `freePct < 15` -> `rbDanger` (disk nearly full)
 /// - `freePct < 40` -> `rbWarning` (disk getting full)
 /// - `freePct >= 40` -> `rbSuccess` (plenty of space)
+///
+/// macOS 26+: wrapped in a `GlassEffectContainer` at the call site (HeaderStatsBar)
+/// so it gets a dedicated CABackdropLayer sampling region. The `.glassEffect` here
+/// then refracts correctly without being glass-on-glass with no shared container.
 struct DiskPillBadge: View {
     /// Free disk space as a percentage (0-100).
     let freePct: Double
@@ -210,7 +214,12 @@ struct HeaderStatsBar: View {
                     )
                 }
                 if statsVM.stats.diskTotalGB > 0 {
-                    DiskPillBadge(freePct: statsVM.stats.diskFreePct)
+                    // GlassEffectContainer gives DiskPillBadge its own dedicated
+                    // CABackdropLayer sampling region so .glassEffect inside the
+                    // pill refracts correctly instead of glass-on-glass with no container.
+                    GlassEffectContainer {
+                        DiskPillBadge(freePct: statsVM.stats.diskFreePct)
+                    }
                 }
             }
             .fixedSize()

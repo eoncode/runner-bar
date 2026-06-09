@@ -8,6 +8,8 @@ RunnerBar is distributed as a pre-built `.app` bundle, zipped and hosted on GitH
 curl -fsSL https://eonist.github.io/runner-bar/install.sh | bash
 ```
 
+> **Architecture:** RunnerBar requires Apple Silicon (arm64). The build pipeline produces an arm64-only binary. Intel Macs are not supported.
+
 ---
 
 ## How GitHub Pages is set up
@@ -29,7 +31,7 @@ Files hosted on `gh-pages`:
 ```
 gh-pages/
 ├── install.sh          ← the curl | bash target
-├── RunnerBar.zip       ← pre-built universal .app bundle
+├── RunnerBar.zip       ← pre-built arm64 .app bundle
 └── version.txt         ← current version string, e.g. 0.1.0
 ```
 
@@ -37,7 +39,7 @@ gh-pages/
 
 ## Build pipeline (`build.sh`)
 
-Run on the developer machine (arm64 Mac with Swift CLT installed):
+Run on the developer machine (Apple Silicon Mac with Swift CLT installed):
 
 ```bash
 #!/usr/bin/env bash
@@ -47,16 +49,20 @@ APP_NAME="RunnerBar"
 VERSION="0.1.0"
 OUT_DIR="dist"
 
-# 1. Compile universal binary
-swift build -c release --arch arm64 --arch x86_64
+# 1. Compile arm64 binary
+swift build -c release --arch arm64
 
 # 2. Assemble .app bundle
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR/$APP_NAME.app/Contents/MacOS"
 mkdir -p "$OUT_DIR/$APP_NAME.app/Contents/Resources"
 
-cp ".build/apple/Products/Release/$APP_NAME" \
-   "$OUT_DIR/$APP_NAME.app/Contents/MacOS/"
+BUILD_PATH=".build/arm64-apple-macosx/release/$APP_NAME"
+if [ ! -f "$BUILD_PATH" ]; then
+  echo "✗ Binary not found at $BUILD_PATH — build may have failed or output path changed"
+  exit 1
+fi
+cp "$BUILD_PATH" "$OUT_DIR/$APP_NAME.app/Contents/MacOS/"
 cp Resources/Info.plist \
    "$OUT_DIR/$APP_NAME.app/Contents/"
 
@@ -142,7 +148,7 @@ echo "✓ RunnerBar installed"
 | URL | Contents |
 |-----|----------|
 | `https://eonist.github.io/runner-bar/install.sh` | Installer script |
-| `https://eonist.github.io/runner-bar/RunnerBar.zip` | Universal `.app` bundle |
+| `https://eonist.github.io/runner-bar/RunnerBar.zip` | arm64 `.app` bundle |
 | `https://eonist.github.io/runner-bar/version.txt` | Current version string |
 
 ---

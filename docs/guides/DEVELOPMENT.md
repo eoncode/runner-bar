@@ -5,7 +5,9 @@
 - No Xcode IDE — SwiftPM only
 - No `.xcodeproj`, no storyboards, no Interface Builder
 - Written with AI assistance, built and run in terminal
-- macOS 13+ target, universal binary (arm64 + x86_64)
+- macOS 13+ target, **arm64 only** (Apple Silicon required)
+
+> **Note:** `Sources/RunnerBar/main.swift` hard-errors at launch on non-arm64 hardware. Intel Macs are not supported.
 
 ---
 
@@ -42,7 +44,7 @@ runner-bar/
 ├── Package.swift                  # SwiftPM manifest — the only build config
 ├── project.yml                    # Project metadata / config
 ├── Sources/RunnerBar/
-│   ├── main.swift                 # NSApp bootstrap, lifecycle
+│   ├── main.swift                 # NSApp bootstrap, lifecycle (arm64 guard)
 │   ├── Exports.swift              # Public re-exports
 │   ├── App/                       # App-level setup and delegates
 │   ├── DesignSystem/              # Shared UI tokens, styles, components
@@ -60,7 +62,7 @@ runner-bar/
 ├── .github/                       # GitHub Actions workflows
 ├── .swiftlint.yml                 # SwiftLint configuration
 ├── .periphery.yml                 # Periphery (dead code) configuration
-├── build.sh                       # compile → .app bundle → ad-hoc sign → zip
+├── build.sh                       # compile (arm64) → .app bundle → ad-hoc sign → zip
 ├── deploy.sh                      # push dist/ to gh-pages branch
 ├── install.sh                     # curl | bash target (also lives on gh-pages)
 └── docs/
@@ -166,7 +168,7 @@ No lockfile conflicts, no Xcode project to regenerate.
 bash build.sh
 ```
 
-This produces `dist/RunnerBar.zip` — the distributable. See `docs/DEPLOYMENT.md` for how to publish it.
+Builds an arm64-only binary via `swift build -c release --arch arm64`, assembles the `.app` bundle, ad-hoc signs it, and zips to `dist/RunnerBar.zip`. See `docs/DEPLOYMENT.md` for how to publish it.
 
 ---
 
@@ -176,7 +178,7 @@ See `docs/AGENTS.md` for the system prompt context that tells agents:
 - This is a SwiftPM project, no Xcode
 - Build command is `swift build`
 - Run command is `swift run`
-- Target is macOS 13+
+- Target is macOS 13+, **arm64 only**
 - No Interface Builder, all UI is programmatic
 - Auth is via `gh auth token` shell-out
 - Source is organized into focused subdirectories under `Sources/RunnerBar/`

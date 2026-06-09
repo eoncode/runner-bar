@@ -3,13 +3,14 @@
 
 import RunnerBarCore
 import SwiftUI
+
 // MARK: - SectionHeaderLabel
 /// Uppercase small-caps label used as a section divider inside the panel.
-/// Displays a title string in the muted secondary style.
 struct SectionHeaderLabel: View {
-    /// The title text displayed in uppercase.
+    /// The raw title string; displayed uppercased.
     let title: String
-    /// Renders the uppercased title in secondary caption color with standard panel insets.
+
+    /// Renders the uppercased title with section-caption font and secondary colour.
     var body: some View {
         Text(title.uppercased())
             .font(RBFont.sectionCaption)
@@ -23,22 +24,17 @@ struct SectionHeaderLabel: View {
 // MARK: - PanelHeaderView
 /// Top bar of the popover panel showing system stats and the settings/quit buttons.
 struct PanelHeaderView: View {
-    /// The stats view model driving the header sparklines.
+    /// View model driving the CPU/MEM/disk stat pills.
     @ObservedObject var statsVM: SystemStatsViewModel
     /// Called when the user taps the settings gear button.
     let onSelectSettings: () -> Void
-    /// Renders the header bar: system stats, settings and quit buttons.
+
+    /// Renders the header HStack with stats bar and settings/quit buttons.
     var body: some View {
         HStack(spacing: 6) {
             HeaderStatsBar(statsVM: statsVM)
             Spacer()
-            // macOS 26+: wrap both toolbar buttons in a single shared GlassEffectContainer
-            // so they share a CABackdropLayer sampling region, enabling interactive glass
-            // (scaling-on-press, shimmer, bounce) and morphing between sibling buttons.
-            // Pre-26: falls back to .buttonStyle(.plain) as before.
             if #available(macOS 26, *) {
-                // Each button gets its own GlassEffectContainer so their backdrops
-                // stay independent (no bleed). HStack keeps them side-by-side.
                 HStack(spacing: 8) {
                     GlassEffectContainer { settingsButton.glassButton() }
                     GlassEffectContainer { quitButton.glassButton() }
@@ -53,27 +49,27 @@ struct PanelHeaderView: View {
         .padding(.bottom, 8)
     }
 
-    /// Settings gear button — shared between the macOS 26 glass path and pre-26 plain path.
+    /// Settings gear button — plain style, 28 pt hit area.
     @ViewBuilder private var settingsButton: some View {
-        Button(action: onSelectSettings, label: {
+        Button(action: onSelectSettings) {
             Image(systemName: "gearshape")
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
                 .frame(width: 28, height: 28)
-        })
+        }
         .buttonStyle(.plain)
         .help("Settings")
         .accessibilityLabel("Settings")
     }
 
-    /// Quit button — shared between the macOS 26 glass path and pre-26 plain path.
+    /// Quit button — plain style, 28 pt hit area.
     @ViewBuilder private var quitButton: some View {
-        Button(action: { NSApplication.shared.terminate(nil) }, label: {
+        Button(action: { NSApplication.shared.terminate(nil) }) {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.secondary)
                 .frame(width: 28, height: 28)
-        })
+        }
         .buttonStyle(.plain)
         .help("Quit RunnerBar")
         .accessibilityLabel("Quit RunnerBar")
@@ -81,12 +77,12 @@ struct PanelHeaderView: View {
 }
 
 // MARK: - RunnerTypeIcon
-/// Small SF Symbol icon indicating whether a runner is local (self-hosted)
-/// or a GitHub-hosted cloud runner.
+/// Small icon indicating whether a runner is local (desktop) or cloud-hosted.
 private struct RunnerTypeIcon: View {
-    /// Whether the runner is self-hosted (local) or GitHub-hosted (cloud).
+    /// `true` for a self-hosted local runner, `false` for a cloud runner.
     let isLocal: Bool
-    /// Renders a desktop or cloud SF Symbol in secondary color at 9 pt.
+
+    /// Renders the appropriate SF Symbol for the runner type.
     var body: some View {
         Image(systemName: isLocal ? "desktopcomputer" : "cloud")
             .font(.system(size: 9))
@@ -95,15 +91,24 @@ private struct RunnerTypeIcon: View {
 }
 
 // MARK: - RunnerMetricsBadge
-/// Single grouped badge showing CPU and MEM for a runner inside one
-/// shared glass background. Uses `.statPillBackground()` so macOS 26+
-/// gets native Liquid Glass and pre-26 falls back to ultraThinMaterial.
+/// CPU + MEM badge for runner rows.
+///
+/// Always rendered (shows 0% until real metrics arrive) to prevent layout jump.
+///
+/// Glass architecture — identical to StatusBadge in ActionRowView.metaTrailing:
+///   - Badge applies tint + .glassEffect(.regular, in: Capsule()) internally.
+///   - Call site wraps badge in a standalone GlassEffectContainer (NOT nested
+///     inside the card container) so it samples the real backdrop behind the panel.
+///
+/// ❌ Do NOT wrap the card itself in GlassEffectContainer — ActionRowView does not
+///    do this and neither should runnerCard. Card glass is applied via .background{}.
 private struct RunnerMetricsBadge: View {
-    /// CPU usage percentage (0–100).
+    /// CPU utilisation percentage (0–100).
     let cpu: Double
-    /// Memory usage percentage (0–100).
+    /// Memory utilisation percentage (0–100).
     let mem: Double
-    /// Renders CPU and MEM labels in a shared glass badge.
+
+    /// Renders CPU and MEM metric items inside a `statPillBackground` capsule.
     var body: some View {
         HStack(spacing: 8) {
             metricItem(label: "CPU", value: String(format: "%.0f%%", cpu))
@@ -113,7 +118,7 @@ private struct RunnerMetricsBadge: View {
         .padding(.vertical, 4)
         .statPillBackground()
     }
-    /// Renders a single label + value pair inside the badge.
+    /// Renders a single label–value pair for use inside the badge HStack.
     private func metricItem(label: String, value: String) -> some View {
         HStack(spacing: 3) {
             Text(label)
@@ -128,23 +133,23 @@ private struct RunnerMetricsBadge: View {
 }
 
 // MARK: - PanelLocalRunnerRow
-/// Renders a card for each runner passed in. Caller is responsible for
-/// pre-filtering to only the runners that are currently active — this
-/// view renders all entries it receives without internal re-filtering.
+/// Renders a card for each runner passed in.
 ///
 /// ❌ DO NOT add an isBusy filter here — isBusy is set by RunnerStatusEnricher
 /// on a separate background cycle and will always lag behind the RunnerStore
 /// fetch cycle, causing rows to be silently swallowed. (#948)
 struct PanelLocalRunnerRow: View {
-    /// Maximum number of runner cards shown inline before the overflow label.
+    /// Maximum number of runner cards shown before a “+ N more…” overflow label is appended.
     private static let maxVisibleRunners = 3
-    /// The list of runners to display.
+    /// The runners to display. Up to `maxVisibleRunners` are shown; a “+ N more…” label is appended when exceeded.
     let runners: [RunnerModel]
-    /// Renders the runner card list, or nothing if `runners` is empty.
+
+    /// Renders the runner list when non-empty, otherwise produces no view.
     var body: some View {
         if !runners.isEmpty { runnerList(runners) }
     }
-    /// Renders a vertical stack of runner cards, capped at `maxVisibleRunners` with an overflow label.
+
+    /// Renders up to `maxVisibleRunners` runner cards followed by a divider.
     @ViewBuilder private func runnerList(_ active: [RunnerModel]) -> some View {
         ForEach(active.prefix(Self.maxVisibleRunners)) { runner in runnerCard(runner) }
         if active.count > Self.maxVisibleRunners {
@@ -154,8 +159,11 @@ struct PanelLocalRunnerRow: View {
         }
         Divider()
     }
-    /// Compact card showing runner name with optional arch/platform inline,
-    /// and a grouped CPU/MEM badge on the trailing edge.
+
+    /// Glass architecture mirrors ActionRowView exactly:
+    ///   - .glassCard() applied via .background{} directly — NO GlassEffectContainer around the card.
+    ///   - RunnerMetricsBadge gets its own standalone GlassEffectContainer, same as
+    ///     StatusBadge in ActionRowView.metaTrailing.
     private func runnerCard(_ runner: RunnerModel) -> some View {
         HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
@@ -173,25 +181,43 @@ struct PanelLocalRunnerRow: View {
             }
             .layoutPriority(1)
             Spacer()
-            if let metrics = runner.metrics {
-                RunnerMetricsBadge(cpu: metrics.cpu, mem: metrics.mem)
+            // Standalone GlassEffectContainer — same as StatusBadge in metaTrailing.
+            // NOT nested inside a card container so it samples the real backdrop.
+            if #available(macOS 26, *) {
+                GlassEffectContainer {
+                    RunnerMetricsBadge(
+                        cpu: runner.metrics?.cpu ?? 0,
+                        mem: runner.metrics?.mem ?? 0
+                    )
+                }
+            } else {
+                RunnerMetricsBadge(
+                    cpu: runner.metrics?.cpu ?? 0,
+                    mem: runner.metrics?.mem ?? 0
+                )
             }
         }
-        .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
-        .glassCard(cornerRadius: RBRadius.card)
-        .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xs + 2)
+        .frame(maxWidth: .infinity)
+        .background {
+            // .glassCard() handles its own #available branch internally.
+            // No outer #available check needed here.
+            Color.clear.glassCard(cornerRadius: RBRadius.card)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+        .padding(.horizontal, RBSpacing.md)
+        .padding(.vertical, RBSpacing.xxs)
     }
-    /// Builds a normalised subtitle string from architecture and platform fields.
-    /// Returns nil when both are absent so the caller can hide the tokens entirely.
+
+    /// Returns a formatted subtitle combining architecture and OS platform, or `nil` if neither is available.
     private func runnerSubtitle(_ runner: RunnerModel) -> String? {
-        let rawArch = runner.platformArchitecture
-        let rawOS = runner.platform
-        let arch = rawArch.map { normaliseArch($0) }
-        let os = rawOS.map { normalisePlatform($0) }
-        let parts = [arch, os].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        let arch = runner.platformArchitecture.map { normaliseArch($0) }
+        let os = runner.platform.map { normalisePlatform($0) }
+        return [arch, os].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
     }
-    /// Normalises raw architecture strings. Maps "ARM64"→"arm64", "X64"→"x64", "X86"→"x86".
+
+    /// Normalises a raw architecture string to a canonical lowercase form.
     private func normaliseArch(_ raw: String) -> String {
         switch raw.uppercased() {
         case "ARM64": return "arm64"
@@ -200,7 +226,7 @@ struct PanelLocalRunnerRow: View {
         default:      return raw.lowercased()
         }
     }
-    /// Normalises raw platform strings. Maps "osx"/"darwin"→"macOS", "linux"→"Linux", "win"→"Windows".
+    /// Normalises a raw platform string to a human-readable OS name.
     private func normalisePlatform(_ raw: String) -> String {
         let lower = raw.lowercased()
         if lower.hasPrefix("osx") || lower.hasPrefix("darwin") { return "macOS" }
@@ -212,30 +238,27 @@ struct PanelLocalRunnerRow: View {
 
 // MARK: - ActionRowView
 /// Row representing one GitHub Actions workflow run.
-/// Tapping expands inline job rows; long-press opens the run URL in Safari.
-///
-/// macOS 26+: the card background uses `.glassCard()` inside the shared `rowContainer`
-/// background ZStack, identical structure to the pre-26 path. Animation is
-/// `.easeInOut(duration: 0.15)` on both paths — matching main branch exactly.
 ///
 /// ⚠️ Do NOT add GlassEffectContainer, .glassEffectID, .bouncy, or
-/// .glassEffectTransition — they cause staggered/slow expand animations (#957).
+/// .glassEffectTransition to the row or rowContainer — they cause staggered/slow
+/// expand animations (#957). The statusBadge GlassEffectContainer in metaTrailing
+/// is intentionally scoped to just the badge, not the row.
 struct ActionRowView: View {
     /// The workflow action group this row represents.
     let group: WorkflowActionGroup
-    /// Timer tick driving live elapsed-time refresh.
+    /// Poll tick counter used to force time-ago label refreshes.
     let tick: Int
-    /// Called when the user taps a step inside an expanded job row.
+    /// Called when the user taps a step inside the expanded inline job rows.
     let onStepTap: (ActiveJob, JobStep) -> Void
-    /// Tracks whether the inline job list is expanded (`true`), collapsed (`false`), or hidden (`nil`).
+    /// Drives the inline expand/collapse state: `nil` = collapsed, `false` = partially expanded, `true` = fully expanded.
     @State private var expandState: Bool?
-    /// The row status observed on the previous tick, used to detect transitions.
+    /// Tracks the previous row status to detect in-progress → done transitions.
     @State private var previousStatus: RBStatus?
-    /// Routes to the macOS 26+ glass path or the pre-26 legacy path.
+
+    /// Renders the row using the appropriate glass card background for the current OS.
     var body: some View {
         if #available(macOS 26, *) {
             rowContainer {
-                // macOS 26+: glassCard rendered as background element inside rowContainer's ZStack.
                 Color.clear.glassCard(cornerRadius: RBRadius.card)
                 statusAccentBar
             }
@@ -247,12 +270,8 @@ struct ActionRowView: View {
         }
     }
 
-    // MARK: Shared row container
-
-    /// Shared layout structure used by both the macOS 26+ and pre-26 paths.
-    /// Only the background layer differs between the two paths — all other
-    /// modifiers (clip, content shape, context menu, tap, padding, lifecycle)
-    /// are applied once here to eliminate duplication.
+    /// Wraps `rowContent` (and optionally `InlineJobRowsView`) in a card-shaped container
+    /// with the supplied glass background.
     @ViewBuilder
     private func rowContainer<Background: View>(@ViewBuilder background: () -> Background) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -266,9 +285,7 @@ struct ActionRowView: View {
         }
         .frame(maxWidth: .infinity)
         .background {
-            ZStack {
-                background()
-            }
+            ZStack { background() }
             .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         }
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
@@ -281,9 +298,7 @@ struct ActionRowView: View {
         .onChange(of: rowStatus) { _, newStatus in handleStatusChange(newStatus) }
     }
 
-    // MARK: Shared helpers
-
-    /// Left-edge status accent bar — 4 pt wide, clipped to the card shape.
+    /// Left-edge accent bar whose colour reflects the current row status.
     @ViewBuilder private var statusAccentBar: some View {
         Rectangle()
             .fill(rowStatus.color)
@@ -292,21 +307,19 @@ struct ActionRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Glass card background used by the pre-26 path.
-    /// Routes through `.glassCard()` — nothing outside `PanelViewModifiers` calls `.glassEffect()` directly.
+    /// Pre-macOS-26 glass card background used as the ZStack layer inside `rowContainer`.
     @ViewBuilder private var glassCardBackground: some View {
-        Color.clear
-            .glassCard(cornerRadius: RBRadius.card)
+        Color.clear.glassCard(cornerRadius: RBRadius.card)
     }
 
-    /// Sets the initial expand state based on the row's current status on first appearance.
+    /// Sets the initial expand state based on the row’s status at appear time.
     private func applyInitialExpandState() {
         let status = rowStatus
         previousStatus = status
         expandState = (status == .inProgress) ? false : nil
     }
 
-    /// Reacts to row status changes, auto-expanding on inProgress and collapsing on completion.
+    /// Animates expand state transitions when the row status changes.
     private func handleStatusChange(_ newStatus: RBStatus) {
         let animation: Animation = .easeInOut(duration: 0.15)
         if newStatus == .inProgress && expandState == nil {
@@ -318,7 +331,7 @@ struct ActionRowView: View {
         previousStatus = newStatus
     }
 
-    /// Resolves the effective display status for the row.
+    /// Derives the canonical `RBStatus` from the group’s status and conclusion.
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
@@ -346,19 +359,16 @@ struct ActionRowView: View {
         return HStack(spacing: 6) {
             DonutStatusView(status: rowStatus, progress: group.progressFraction ?? 0, size: 14)
             RunnerTypeIcon(isLocal: group.isLocalGroup ?? false)
-            // SHA (7-char or PR#)
             Text(group.label)
                 .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            // Repo name
             Text(group.repoShortName)
                 .font(DesignTokens.Fonts.mono)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            // Commit title
             Text(group.title)
                 .font(.system(size: 12))
                 .foregroundColor(group.isDimmed ? .secondary : .primary)
@@ -382,7 +392,10 @@ struct ActionRowView: View {
         .padding(.vertical, 4)
     }
 
-    /// Trailing meta: time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge.
+    /// Trailing meta: time-ago · steps/total · elapsed (active only) · statusBadge.
+    ///
+    /// statusBadge is wrapped in its own standalone GlassEffectContainer — scoped to badge only.
+    /// ⚠️ Do NOT expand this container to the row or rowContainer (#957).
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
@@ -399,7 +412,6 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        // Elapsed shown only while running or queued — snaps off on completion to avoid a frozen clock.
         if group.groupStatus == .inProgress || group.groupStatus == .queued {
             Text(group.elapsed)
                 .font(DesignTokens.Fonts.mono)
@@ -407,10 +419,14 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        statusBadge
+        if #available(macOS 26, *) {
+            GlassEffectContainer { statusBadge }
+        } else {
+            statusBadge
+        }
     }
 
-    /// Colored pill badge reflecting the current run status.
+    /// Badge view produced from the group’s current status and conclusion.
     @ViewBuilder private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
@@ -426,19 +442,16 @@ struct ActionRowView: View {
 }
 
 // MARK: - RowTapModifier
-/// Applies the expand-on-tap interaction to an action row card.
-/// Shared by both the macOS 26+ and pre-26 paths via `rowContainer` to
-/// eliminate duplicated `.onTapGesture` blocks.
 /// Animation is always `.easeInOut(duration: 0.15)` — do NOT add `.bouncy` (#957).
 private struct RowTapModifier: ViewModifier {
-    /// The jobs to inspect before allowing expansion.
+    /// The jobs for this row; tap is a no-op when empty.
     let jobs: [ActiveJob]
-    /// Binding to the parent row's expand state.
+    /// Drives the expand/collapse state of the parent row.
     @Binding var expandState: Bool?
-    /// Current display status of the row.
+    /// Current row status, used to decide the post-collapse state.
     let rowStatus: RBStatus
 
-    /// Applies the tap gesture with easeInOut animation.
+    /// Attaches the tap gesture that toggles expand state with a 0.15 s ease-in-out animation.
     func body(content: Content) -> some View {
         content.onTapGesture {
             guard !jobs.isEmpty else { return }
@@ -451,4 +464,11 @@ private struct RowTapModifier: ViewModifier {
             }
         }
     }
+}
+
+// MARK: - String+nilIfEmpty
+/// Convenience helpers used within this file.
+private extension String {
+    /// Returns `nil` when the string is empty, otherwise returns `self`.
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

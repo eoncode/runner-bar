@@ -35,6 +35,14 @@ import Foundation
 /// Using a typed struct instead of `[String: Any]` lets `withTaskGroup` cross
 /// concurrency boundaries safely — `Any` does not conform to `Sendable`.
 private struct APIRunnerPayload: Sendable {
+    /// The GitHub REST API numeric runner ID for this runner.
+    ///
+    /// This is the `id` field returned by `/repos/{owner}/{repo}/actions/runners`
+    /// and `/orgs/{org}/actions/runners`. It is stored on `RunnerModel.apiId` after
+    /// enrichment so that `RunnerStore.buildInstallPathMap` can build a `byApiId`
+    /// lookup map — enabling metrics resolution for org runners whose local
+    /// `.runner` JSON `AgentId` differs from this GitHub-assigned id.
+    let apiId: Int?
     /// The runner's display name as registered with GitHub.
     let name: String
     /// The runner's online/offline status string (e.g. `"online"`, `"offline"`).
@@ -52,6 +60,7 @@ private struct APIRunnerPayload: Sendable {
     init?(dict: [String: Any]) {
         guard let name = dict["name"] as? String else { return nil }
         self.name = name
+        self.apiId = dict["id"] as? Int
         self.status = dict["status"] as? String
         self.busy = dict["busy"] as? Bool ?? false
         self.runnerGroupName = dict["runner_group_name"] as? String
@@ -240,6 +249,7 @@ public struct RunnerStatusEnricher: Sendable {
             runnerName: runner.runnerName,
             gitHubUrl: runner.gitHubUrl,
             agentId: runner.agentId,
+            apiId: api.apiId,
             workFolder: runner.workFolder,
             installPath: runner.installPath,
             isRunning: runner.isRunning,

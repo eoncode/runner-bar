@@ -202,19 +202,26 @@ extension AppDelegate: NSPopoverDelegate {
             }
             .store(in: &cancellables)
 
-        // FIX (#1179): Seed localRunners BEFORE starting the poll loop.
-        // LocalRunnerStore.init() only calls loadIndex() which populates
-        // runnerIndex (name→path map) but leaves runners=[] until refresh()
-        // runs the disk-hydration + launchctl + GitHub-enrichment pipeline.
-        // Without this call, RunnerStore.buildInstallPathMap always receives
-        // localRunners=[] → installPathMap is always empty → busy runners
-        // never get their installPath → metrics are never fetched.
-        log("AppDelegate › setupCombineSubscriptions — triggering LocalRunnerStore.refresh() BEFORE starting poll loop")
-        LocalRunnerStore.shared.refresh()
-
-        // Start the polling loop. Guarded above — never runs during UI tests.
-        log("AppDelegate › setupCombineSubscriptions — starting RunnerStore poll loop")
-        RunnerStore.shared.start()
+        // FIX: Await LocalRunnerStore.refreshAsync() before starting the poll loop.
+        //
+        // refresh() (fire-and-forget) spawns a Task and returns immediately.
+        // start() fires fetch() on the very next runloop turn — before refresh()'s
+        // Task has a chance to run, because both are @MainActor and start() is called
+        // synchronously. Result: localRunners=[] on cycle 1, installPathMap empty,
+        // metrics missing on first runner appearance.
+        //
+        // refreshAsync() suspends until disk hydration + launchctl + GitHub enrichment
+        // completes, then start() fires. Cycle 1 always has a populated installPathMap
+        // so runner rows appear with CPU/MEM already set.
+        log("AppDelegate › setupCombineSubscriptions — scheduling async startup sequence")
+        Task { [weak self] in
+            guard let self else { return }
+            log("AppDelegate › startup — awaiting LocalRunnerStore.refreshAsync()")
+            await LocalRunnerStore.shared.refreshAsync()
+            log("AppDelegate › startup — refreshAsync() complete, starting RunnerStore poll loop")
+            RunnerStore.shared.start()
+            log("AppDelegate › startup — RunnerStore poll loop started")
+        }
 
         // didMutate — scope changed; must restart the store entirely so it polls
         // the correct repos from the beginning.

@@ -132,101 +132,168 @@ final class LocalRunnerStore: ObservableObject {
     // MARK: - Metrics write-back
 
     /// Applies a CPU/memory snapshot to the matching `RunnerModel` in place.
-    func applyMetrics(_ metrics: RunnerMetrics?, forAgentId agentId: Int?, name: String) {
+    ///
+    /// Match priority (fixes org-runner metrics #1209 / #1192):
+    ///   1. runner.apiId   == runnerId (GitHub REST API id — org runners use this)
+    ///   2. runner.agentId == runnerId (local .runner JSON AgentId — repo runners use this)
+    ///   3. runner.runnerName == name  (name-only last resort)
+    func applyMetrics(_ metrics: RunnerMetrics?, forRunnerId runnerId: Int?, name: String) {
 #if DEBUG
-        log("LocalRunnerStore › applyMetrics — agentId=\(String(describing: agentId)) name=\(name) metrics=\(String(describing: metrics))")
+        log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))")
+        log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
 #endif
+
         guard let idx = runners.firstIndex(where: { runner in
-            if let aid = agentId, let rid = runner.agentId { return aid == rid }
-            return runner.runnerName == name
+            // Priority 1: match on GitHub REST API id (populated after first enrichment).
+            // This is the key fix for org runners where apiId ≠ agentId.
+            if let rid = runnerId, let aid = runner.apiId {
+                if aid == rid {
+                    log("LocalRunnerStore › applyMetrics — MATCH via apiId=\(aid) for '\(runner.runnerName)'")
+                    return true
+                }
+            }
+            // Priority 2: match on local .runner JSON AgentId (repo runners).
+            if let rid = runnerId, let aid = runner.agentId {
+                if aid == rid {
+                    log("LocalRunnerStore › applyMetrics — MATCH via agentId=\(aid) for '\(runner.runnerName)'")
+                    return true
+                }
+            }
+            // Priority 3: name fallback.
+            if runner.runnerName == name {
+                log("LocalRunnerStore › applyMetrics — MATCH via name='\(name)' for '\(runner.runnerName)'")
+                return true
+            }
+            return false
         }) else {
-            log("LocalRunnerStore › ⚠️ applyMetrics — no matching runner for agentId=\(String(describing: agentId)) name=\(name) in runners.count=\(runners.count)")
+            log("LocalRunnerStore › ⚠️ applyMetrics — NO MATCH for runnerId=\(String(describing: runnerId)) name=\(name). runners=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
             return
         }
+        log("LocalRunnerStore › applyMetrics — writing metrics=\(String(describing: metrics)) to '\(runners[idx].runnerName)'")
         runners[idx] = runners[idx].copying(metrics: metrics)
     }
 
     // MARK: - Refresh
 
+    /// Fire-and-forget refresh. Spawns a Task and returns immediately.
+    ///
+    /// Use this from views and on-demand callers (e.g. SettingsView lifecycle actions)
+    /// that do not need to wait for completion.
+    ///
+    /// At app startup, prefer `refreshAsync()` so that `RunnerStore.start()` is only
+    /// called after `runners` is fully populated — ensuring cycle-1 `installPathMap`
+    /// is never empty and metrics appear on first runner appearance.
+    func refresh() {
+        log("LocalRunnerStore › refresh() — fire-and-forget wrapper")
+        Task { [weak self] in
+            await self?.performRefresh()
+        }
+    }
+
+    /// Awaitable refresh. Suspends until disk hydration + launchctl + GitHub enrichment
+    /// completes, then returns.
+    ///
+    /// Use ONLY at app startup in `AppDelegate+PanelSetup` so that `RunnerStore.start()`
+    /// is guaranteed to have a populated `runners` array before its first `fetch()` fires.
+    func refreshAsync() async {
+        await performRefresh()
+    }
+
+    /// Shared body for both `refresh()` and `refreshAsync()`.
     /// Hydrates runners from disk, marks live launchctl services, then enriches via GitHub API.
     ///
-    /// IMPORTANT: This is the ONLY way runners gets populated.
-    /// init() only loads runnerIndex (name→path). runners stays [] until refresh() runs.
-    /// Must be called:
-    ///   1. At app startup (AppDelegate+PanelSetup, BEFORE RunnerStore.start())
-    ///   2. On-demand from views that need a fresh scan (e.g. SettingsView lifecycle actions)
-    ///   3. From any view that needs a fresh scan (SettingsView, lifecycle actions)
-    func refresh() {
-        log("LocalRunnerStore › refresh() called — isScanning=\(isScanning) runnerIndex.count=\(runnerIndex.count) runners.count=\(runners.count)")
+    /// IMPORTANT: This is the ONLY way `runners` gets populated.
+    /// `init()` only loads `runnerIndex` (name→path). `runners` stays `[]` until this runs.
+    private func performRefresh() async {
+        log("LocalRunnerStore › performRefresh() — isScanning=\(isScanning) runnerIndex.count=\(runnerIndex.count) runners.count=\(runners.count)")
         guard !isScanning else {
-            log("LocalRunnerStore › refresh() — already scanning, skipping (isScanning=true)")
+            log("LocalRunnerStore › performRefresh() — already scanning, skipping (isScanning=true)")
             return
         }
         isScanning = true
         let index = runnerIndex
-        log("LocalRunnerStore › refresh() — starting Task with index=\(index.keys.sorted())")
-        Task { [weak self] in
-            guard let self else { return }
+        log("LocalRunnerStore › performRefresh() — starting with index=\(index.keys.sorted())")
 
-            // 1. Hydrate from installPath/.runner JSON
-            var hydrated: [RunnerModel] = index.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
-            log("LocalRunnerStore › refresh() hydrated \(hydrated.count) runner(s) from disk (index had \(index.count) entries)")
-            if hydrated.count != index.count {
-                let hydratedNames = Set(hydrated.map { $0.runnerName })
-                let missing = index.keys.filter { !hydratedNames.contains($0) }
-                log("LocalRunnerStore › ⚠️ refresh() — \(index.count - hydrated.count) runner(s) failed to hydrate (missing .runner JSON): \(missing)")
-            }
-
-            // 2. Mark live services via launchctl.
-            let liveLabels = await self.scanLiveServices()
-            log("LocalRunnerStore › refresh() — launchctl liveLabels.count=\(liveLabels.count): \(liveLabels)")
-            let isLive: (RunnerModel) -> Bool = { runner in
-                liveLabels.contains { $0.contains(runner.runnerName) }
-            }
-            hydrated = hydrated.map { runner in
-                let live = isLive(runner)
-#if DEBUG
-                log("LocalRunnerStore › refresh() — '\(runner.runnerName)' isRunning=\(live)")
-#endif
-                return runner.copying(isRunning: live)
-            }
-
-            // 3. Enrich via GitHub API (concurrent scope fetches)
-            log("LocalRunnerStore › refresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
-            let enriched = await RunnerStatusEnricher.shared.enrich(runners: hydrated)
-            log("LocalRunnerStore › refresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
-
-            self.applyRefreshResults(enriched)
+        // 1. Hydrate from installPath/.runner JSON
+        var hydrated: [RunnerModel] = index.compactMap { runnerModelFromIndex(name: $0.key, installPath: $0.value) }
+        log("LocalRunnerStore › performRefresh() hydrated \(hydrated.count) runner(s) from disk (index had \(index.count) entries)")
+        if hydrated.count != index.count {
+            let hydratedNames = Set(hydrated.map { $0.runnerName })
+            let missing = index.keys.filter { !hydratedNames.contains($0) }
+            log("LocalRunnerStore › ⚠️ performRefresh() — \(index.count - hydrated.count) runner(s) failed to hydrate (missing .runner JSON): \(missing)")
         }
+
+        // 2. Mark live services via launchctl.
+        let liveLabels = await scanLiveServices()
+        log("LocalRunnerStore › performRefresh() — launchctl liveLabels.count=\(liveLabels.count): \(liveLabels)")
+        hydrated = hydrated.map { runner in
+            let live = liveLabels.contains { $0.contains(runner.runnerName) }
+#if DEBUG
+            log("LocalRunnerStore › performRefresh() — '\(runner.runnerName)' isRunning=\(live)")
+#endif
+            return runner.copying(isRunning: live)
+        }
+
+        // 3. Enrich via GitHub API (concurrent scope fetches)
+        log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
+        let enriched = await RunnerStatusEnricher.shared.enrich(runners: hydrated)
+        log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
+#if DEBUG
+        log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
+#endif
+
+        applyRefreshResults(enriched)
     }
 
     /// Applies enriched runner data back on the main actor and clears the scanning flag.
+    ///
+    /// Metrics preservation priority (fixes org-runner metrics #1209 / #1192):
+    ///   1. runner.apiId  match (org runners: GitHub REST API id ≠ local agentId)
+    ///   2. runner.agentId match (repo runners)
+    ///   3. runner.runnerName match (last resort)
     @MainActor
     private func applyRefreshResults(_ enriched: [RunnerModel]) {
-        log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), preserving metrics from current runners.count=\(runners.count)")
+        log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
+
+        // Build three preservation maps from currently-held runners that are busy and have metrics.
+        var metricsByApiId:   [Int: RunnerMetrics] = [:]
         var metricsByAgentId: [Int: RunnerMetrics] = [:]
-        var metricsByName: [String: RunnerMetrics] = [:]
+        var metricsByName:    [String: RunnerMetrics] = [:]
         for runner in runners {
             guard runner.isBusy, let m = runner.metrics else { continue }
-            if let aid = runner.agentId { metricsByAgentId[aid] = m }
+            if let id = runner.apiId   { metricsByApiId[id]       = m }
+            if let id = runner.agentId { metricsByAgentId[id]     = m }
             metricsByName[runner.runnerName] = m
         }
 #if DEBUG
-        log("LocalRunnerStore › applyRefreshResults — preserved metrics: byAgentId.count=\(metricsByAgentId.count) byName.count=\(metricsByName.count)")
+        log("LocalRunnerStore › applyRefreshResults — preserved metrics: byApiId=\(metricsByApiId.keys.sorted()) byAgentId=\(metricsByAgentId.keys.sorted()) byName=\(metricsByName.keys.sorted())")
 #endif
+
         let preserved: [RunnerModel] = enriched.map { runner in
-            if let aid = runner.agentId, let m = metricsByAgentId[aid] {
+            // Priority 1: apiId match — the critical path for org runners.
+            if let id = runner.apiId, let m = metricsByApiId[id] {
 #if DEBUG
-                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(aid)")
+                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)")
 #endif
                 return runner.copying(metrics: m)
             }
+            // Priority 2: agentId match — repo runners.
+            if let id = runner.agentId, let m = metricsByAgentId[id] {
+#if DEBUG
+                log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)")
+#endif
+                return runner.copying(metrics: m)
+            }
+            // Priority 3: name match — last resort.
             if let m = metricsByName[runner.runnerName] {
 #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name")
 #endif
                 return runner.copying(metrics: m)
             }
+#if DEBUG
+            log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)' (apiId=\(String(describing: runner.apiId)) agentId=\(String(describing: runner.agentId)))")
+#endif
             return runner
         }
         runners = preserved.sorted { $0.runnerName < $1.runnerName }

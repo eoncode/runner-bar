@@ -35,13 +35,8 @@ struct GlassCard: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            // glassEffect does not render a stroke automatically — add it as an
-            // overlay so the card has the same subtle border in both OS paths.
             content
-                .glassEffect(
-                    .regular,
-                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                )
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
@@ -54,10 +49,7 @@ struct GlassCard: ViewModifier {
     /// Returns the pre-macOS-26 material + stroke fallback for the given content.
     private func materialFallback(content: Content) -> some View {
         content
-            .background(
-                .ultraThinMaterial,
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
@@ -73,9 +65,7 @@ struct GlassSection: ViewModifier {
     var cornerRadius: CGFloat
 
     /// Creates a `GlassSection` modifier with the given corner radius.
-    init(cornerRadius: CGFloat = RBRadius.card) {
-        self.cornerRadius = cornerRadius
-    }
+    init(cornerRadius: CGFloat = RBRadius.card) { self.cornerRadius = cornerRadius }
 
     /// Applies a prominent glass section effect to the given content view.
     func body(content: Content) -> some View {
@@ -99,38 +89,42 @@ struct GlassButton: ViewModifier {
     var cornerRadius: CGFloat
 
     /// Creates a `GlassButton` modifier with the given corner radius.
-    init(cornerRadius: CGFloat = RBRadius.small) {
-        self.cornerRadius = cornerRadius
-    }
+    init(cornerRadius: CGFloat = RBRadius.small) { self.cornerRadius = cornerRadius }
 
     /// Applies the interactive glass button effect to the given content view.
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            content
-                .glassEffect(
-                    .regular.interactive(),
-                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                )
+            content.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         } else {
-            // pre-macOS-26: no interactive glass button style available — passes through unstyled intentionally.
             content
         }
     }
 }
 
 // MARK: - StatPillBackground
-/// Background modifier for `StatPill` capsule pills.
-/// macOS 26+: native `.glassEffect(.regular, in: Capsule())`.
+/// Background modifier for `StatPill` and `RunnerMetricsBadge` capsule pills.
+///
+/// macOS 26+: identical architecture to `DiskPillBadge`:
+///   `Color.white.opacity(0.15)` tint — bleeds through the glass refractive
+///   layer and defines the pill edge visually, exactly as coloured pills do.
+///   `Color.primary` was wrong — it resolves to near-black in dark mode,
+///   making the tint invisible and leaving the glass nothing to refract.
+///
+/// The call site MUST wrap `RunnerMetricsBadge` in its OWN `GlassEffectContainer`
+/// (separate from the card container) — same pattern as `DiskPillBadge` in
+/// `HeaderStatsBar` and `StatusBadge` in `metaTrailing`.
+///
 /// macOS < 26: `.ultraThinMaterial` in a `Capsule()` (unchanged).
 ///
-/// ❌ Do NOT use `GlassCard` for StatPill — it is a capsule-shaped inline pill,
-/// not a card container.
+/// ❌ Do NOT revert tint to `Color.primary` — it is near-black in dark mode.
 struct StatPillBackground: ViewModifier {
-    /// Applies a glass capsule background (macOS 26+) or ultra-thin material capsule (pre-26).
+    /// Applies the stat pill background: glass capsule on macOS 26+, `.ultraThinMaterial` capsule on older OSes.
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            content.glassEffect(.regular, in: Capsule())
+            content
+                .background(Color.white.opacity(0.15), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
         } else {
             content.background(.ultraThinMaterial, in: Capsule())
         }
@@ -138,39 +132,33 @@ struct StatPillBackground: ViewModifier {
 }
 
 // MARK: - StatusBadgeBackground
-/// Background modifier for `StatusBadge` capsule badges.
-/// macOS 26+: colour tint layer + stroke overlay on a `Capsule()` shape.
-/// macOS < 26: `Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)` (unchanged).
-/// Note: intentionally does NOT use `.glassEffect` — the tinted capsule design
-/// is distinct from the glass card pattern used in `GlassCard` and `StatPillBackground`.
+/// colour tint + glass — identical pattern to DiskPillBadge.
+/// Call site MUST wrap in GlassEffectContainer.
 struct StatusBadgeBackground: ViewModifier {
-    /// The status color used to tint the badge.
+    /// The accent colour used for the tint and (pre-macOS-26) stroke border.
     let color: Color
 
-    /// Applies a tinted capsule background (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies the status badge background: coloured glass capsule on macOS 26+, tinted stroke capsule on older OSes.
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
+                .background(color.opacity(0.15), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
                 .background(color.opacity(0.25), in: Capsule())
                 .overlay(Capsule().strokeBorder(color.opacity(0.55), lineWidth: 0.5))
-        } else {
-            content.background(
-                Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)
-            )
         }
     }
 }
 
 // MARK: - BranchTagPillBackground
 /// Background modifier for `BranchTagPill` capsule pills.
-/// macOS 26+: accent tint layer + `.glassEffect(.regular, in: Capsule())`.
-/// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
-/// Note: the tint is applied *before* the glass effect so the accent colour tints
-/// the frosted glass layer. This is distinct from `StatPillBackground` (glass only)
-/// and `StatusBadgeBackground` (tint + stroke, no glass).
+/// macOS 26+: accent colour tint + `.glassEffect(.regular, in: Capsule())`.
+/// macOS < 26: accent colour stroke border.
 struct BranchTagPillBackground: ViewModifier {
-    /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies the branch tag pill background: accent glass capsule on macOS 26+, accent stroke capsule on older OSes.
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
@@ -178,27 +166,24 @@ struct BranchTagPillBackground: ViewModifier {
                 .background(Color.rbAccent.opacity(0.15), in: Capsule())
                 .glassEffect(.regular, in: Capsule())
         } else {
-            content.background(
-                Capsule().strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1)
-            )
+            content.background(Capsule().strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1))
         }
     }
 }
 
 // MARK: - CardRowModifier
-/// Surface-fill modifier for card rows in scrollable list content.
-/// Fills the row background with `rbSurface` or `rbSurfaceElevated` depending
-/// on the `elevated` flag.
+/// Surface-fill modifier for card rows inside a scrollable list.
+/// Uses `Color.rbSurfaceElevated` when `elevated` is true, otherwise `Color.rbSurface`.
 ///
 /// ❌ NEVER apply `.glassEffect` here.
 /// Apple HIG: glass effects must not be applied to scrollable list content —
 /// they break CABackdropLayer sampling and cause visual artefacts during scroll.
 /// If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 struct CardRowModifier: ViewModifier {
-    /// When `true`, uses `rbSurfaceElevated`; otherwise uses `rbSurface`.
+    /// When `true`, uses the elevated surface colour token instead of the base surface.
     var elevated: Bool = false
 
-    /// Fills the row background with the appropriate surface color.
+    /// Applies the card row background to the given content view.
     func body(content: Content) -> some View {
         content.background(
             RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous)
@@ -208,121 +193,87 @@ struct CardRowModifier: ViewModifier {
 }
 
 // MARK: - View extensions
-/// Convenience modifiers for applying glass and surface effects to any `View`.
+/// Convenience modifiers for applying design-system glass effects and backgrounds.
 extension View {
-    /// Applies the `GlassCard` modifier (non-interactive glass on macOS 26+, material fallback pre-26).
-    /// ❌ Do NOT add `.interactive()` to GlassCard — use GlassButton for tappable controls.
-    func glassCard(cornerRadius: CGFloat = RBRadius.card) -> some View {
-        modifier(GlassCard(cornerRadius: cornerRadius))
-    }
+    /// Applies the `GlassCard` modifier with the given corner radius.
+    func glassCard(cornerRadius: CGFloat = RBRadius.card) -> some View { modifier(GlassCard(cornerRadius: cornerRadius)) }
 
-    /// Applies the `GlassSection` modifier (prominent glass for section containers).
-    func glassSection(cornerRadius: CGFloat = RBRadius.card) -> some View {
-        modifier(GlassSection(cornerRadius: cornerRadius))
-    }
+    /// Applies the `GlassSection` modifier with the given corner radius.
+    func glassSection(cornerRadius: CGFloat = RBRadius.card) -> some View { modifier(GlassSection(cornerRadius: cornerRadius)) }
 
-    /// Applies the `GlassButton` modifier (interactive glass for tappable buttons).
-    /// ⚠️ Wrap multiple sibling `.glassButton()` calls in a shared `GlassEffectContainer`
-    /// at the call site to enable correct CABackdropLayer sampling and morphing.
-    func glassButton(cornerRadius: CGFloat = RBRadius.small) -> some View {
-        modifier(GlassButton(cornerRadius: cornerRadius))
-    }
+    /// Applies the `GlassButton` modifier with the given corner radius.
+    func glassButton(cornerRadius: CGFloat = RBRadius.small) -> some View { modifier(GlassButton(cornerRadius: cornerRadius)) }
 
-    /// Applies the `StatPillBackground` modifier (glass capsule on macOS 26+, material pre-26).
-    func statPillBackground() -> some View {
-        modifier(StatPillBackground())
-    }
+    /// Applies the `StatPillBackground` modifier.
+    /// ⚠️ Call site MUST wrap RunnerMetricsBadge in its OWN GlassEffectContainer on macOS 26+.
+    func statPillBackground() -> some View { modifier(StatPillBackground()) }
 
-    /// Applies the `StatusBadgeBackground` modifier (compositor-tinted glass capsule on macOS 26+).
-    func statusBadgeBackground(color: Color) -> some View {
-        modifier(StatusBadgeBackground(color: color))
-    }
+    /// Applies the `StatusBadgeBackground` modifier with the given colour.
+    /// ⚠️ Call site MUST wrap badge in a GlassEffectContainer on macOS 26+.
+    func statusBadgeBackground(color: Color) -> some View { modifier(StatusBadgeBackground(color: color)) }
 
-    /// Applies the `BranchTagPillBackground` modifier (compositor-tinted glass capsule on macOS 26+).
-    func branchTagPillBackground() -> some View {
-        modifier(BranchTagPillBackground())
-    }
+    /// Applies the `BranchTagPillBackground` modifier.
+    func branchTagPillBackground() -> some View { modifier(BranchTagPillBackground()) }
 
-    /// Applies the `CardRowModifier` surface fill.
-    /// - Parameter elevated: Use `rbSurfaceElevated` when `true`, `rbSurface` when `false`.
-    ///
-    /// ❌ NEVER add `.glassEffect` to this modifier — glass must not be applied to
-    /// scrollable list content (Apple HIG).
-    func cardRow(elevated: Bool = false) -> some View {
-        modifier(CardRowModifier(elevated: elevated))
-    }
+    /// Applies the `CardRowModifier`.
+    /// ❌ NEVER add `.glassEffect` to this modifier.
+    func cardRow(elevated: Bool = false) -> some View { modifier(CardRowModifier(elevated: elevated)) }
 }
 
 // MARK: - StatPill
 /// Compact pill showing a label + value (e.g. "CPU 3.2%").
-/// Used in PanelLocalRunnerRow to surface per-runner CPU / MEM metrics.
-/// ❌ Do NOT convert to GlassCard — this is a capsule-shaped inline pill,
-/// not a card container. Background is provided by `StatPillBackground`.
+/// ❌ Do NOT convert to GlassCard — capsule-shaped pill, not a card container.
 struct StatPill: View {
-    /// The metric label displayed before the value (e.g. "CPU").
+    /// Short label displayed to the left of the value (e.g. "CPU", "MEM").
     let label: String
-    /// The formatted metric value (e.g. "3.6%").
+    /// Formatted value string displayed to the right of the label (e.g. "3.2%").
     let value: String
 
-    /// The pill content: label + value in a glass capsule.
+    /// Renders the label–value pair inside a `statPillBackground` capsule.
     var body: some View {
         HStack(spacing: 3) {
-            Text(label)
-                .font(RBFont.statLabel)
-                .foregroundColor(.secondary)
-            Text(value)
-                .font(RBFont.statValue)
-                .foregroundColor(.primary)
-                .monospacedDigit()
+            Text(label).font(RBFont.statLabel).foregroundColor(.secondary)
+            Text(value).font(RBFont.statValue).foregroundColor(.primary).monospacedDigit()
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.horizontal, 6).padding(.vertical, 3)
         .statPillBackground()
     }
 }
 
 // MARK: - StatusBadge
 /// Capsule badge for action-row trailing area.
-/// Renders a colour-matched background/border and label for a given `RBStatus`.
+/// ⚠️ Must be wrapped in a `GlassEffectContainer` at the call site for correct glass rendering.
 struct StatusBadge: View {
-    /// The workflow status used to determine badge color and appearance.
+    /// The status whose colour is applied to the badge text and background tint.
     let status: RBStatus
-    /// The short label text displayed inside the badge.
+    /// Short uppercased label displayed inside the badge (e.g. "IN PROGRESS").
     let text: String
 
-    /// The badge content: a tinted capsule label matching the status color.
+    /// Renders the status text inside a `statusBadgeBackground` capsule.
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .semibold))
             .foregroundColor(status.color)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 5).padding(.vertical, 2)
             .statusBadgeBackground(color: status.color)
     }
 }
 
 // MARK: - BranchTagPill
 /// Inline pill displaying a git branch or tag name.
-/// Uses an accent-tinted glass capsule on macOS 26+, stroke capsule pre-26.
-struct BranchTagPill: View { // periphery:ignore — used dynamically inside ActionRowView.rowContent; Periphery cannot trace the call site
-    /// The branch or tag name displayed inside the pill.
+struct BranchTagPill: View { // periphery:ignore — used dynamically inside ActionRowView.rowContent
+    /// The branch or tag name to display.
     let name: String
 
-    /// The pill content: a branch icon + name in an accent-tinted capsule.
+    /// Renders the branch icon and truncated name inside a `branchTagPillBackground` capsule.
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 8, weight: .medium))
-            Text(name)
-                .font(.system(size: 10, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            Image(systemName: "arrow.triangle.branch").font(.system(size: 8, weight: .medium))
+            Text(name).font(.system(size: 10, weight: .medium)).lineLimit(1).truncationMode(.middle)
         }
         .foregroundColor(Color.rbAccent)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 6).padding(.vertical, 2)
         .branchTagPillBackground()
     }
 }
@@ -331,72 +282,36 @@ struct BranchTagPill: View { // periphery:ignore — used dynamically inside Act
 #if DEBUG
 #Preview("GlassCard") {
     VStack(spacing: 12) {
-        Text("Glass Card")
-            .padding()
-            .glassCard()
-        Text("Glass Card r=10")
-            .padding()
-            .glassCard(cornerRadius: 10)
-    }
-    .padding()
+        Text("Glass Card").padding().glassCard()
+        Text("Glass Card r=10").padding().glassCard(cornerRadius: 10)
+    }.padding()
 }
-
-#Preview("GlassSection") {
-    Text("Section Header")
-        .padding()
-        .glassSection()
-        .padding()
-}
-
+#Preview("GlassSection") { Text("Section Header").padding().glassSection().padding() }
 #Preview("GlassButton") {
-    // ⚠️ Multiple sibling GlassButtons must share a GlassEffectContainer at the call site.
-    // Single-button preview shown here without container — correct for isolated use.
-    Button(action: { /* preview stub */ }) {
-        Text("Re-run")
-            .font(.caption)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-    }
-    .buttonStyle(.plain)
-    .glassButton()
-    .padding()
+    Button(action: {}) { Text("Re-run").font(.caption).padding(.horizontal, 8).padding(.vertical, 4) }
+        .buttonStyle(.plain).glassButton().padding()
 }
-
 #Preview("StatPill") {
-    HStack(spacing: 8) {
-        StatPill(label: "CPU", value: "3.6%")
-        StatPill(label: "MEM", value: "0.2%")
-    }
-    .padding()
+    HStack(spacing: 8) { StatPill(label: "CPU", value: "3.6%"); StatPill(label: "MEM", value: "0.2%") }.padding()
 }
-
 #Preview("StatusBadge") {
     VStack(spacing: 8) {
         StatusBadge(status: .inProgress, text: "IN PROGRESS")
         StatusBadge(status: .success, text: "SUCCESS")
         StatusBadge(status: .failed, text: "FAILED")
         StatusBadge(status: .queued, text: "QUEUED")
-    }
-    .padding()
+    }.padding()
 }
-
 #Preview("BranchTagPill") {
     VStack(spacing: 8) {
         BranchTagPill(name: "feat/redesign-phases-1-5")
         BranchTagPill(name: "main")
-    }
-    .padding()
+    }.padding()
 }
-
 #Preview("CardRowModifier") {
     VStack(spacing: 8) {
-        Text("Standard row")
-            .padding()
-            .cardRow()
-        Text("Elevated row")
-            .padding()
-            .cardRow(elevated: true)
-    }
-    .padding()
+        Text("Standard row").padding().cardRow()
+        Text("Elevated row").padding().cardRow(elevated: true)
+    }.padding()
 }
 #endif

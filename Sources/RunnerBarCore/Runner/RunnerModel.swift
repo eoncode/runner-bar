@@ -36,7 +36,23 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     /// Use `copying(gitHubUrl:)` to produce an updated value.
     public let gitHubUrl: String?
     /// GitHub's internal numeric agent ID for this runner.
+    ///
+    /// Read from the `.runner` JSON `AgentId` field during local discovery.
+    /// For **org-scoped runners** this value can differ from the numeric `id`
+    /// that the GitHub REST API returns for the same runner — use `apiId` for
+    /// the API-side integer and `agentId` for the locally-stored one.
     public let agentId: Int?
+    /// The GitHub REST API numeric runner ID, as returned by the
+    /// `/repos/{owner}/{repo}/actions/runners` or `/orgs/{org}/actions/runners`
+    /// endpoints.
+    ///
+    /// Populated by `RunnerStatusEnricher.applyEnrichment` after the first
+    /// enrichment cycle. `nil` until enrichment has run at least once.
+    ///
+    /// Used by `RunnerStore.buildInstallPathMap` to build the `byApiId` lookup
+    /// map so that metrics can be matched for org runners whose local `agentId`
+    /// does not match the GitHub API id.
+    public let apiId: Int?
     /// Absolute path to the runner's `_work` folder on disk.
     public let workFolder: String?
     /// Labels registered for this runner (e.g. `["self-hosted", "macOS", "arm64"]`).
@@ -83,14 +99,15 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     // MARK: - Init
 
     // swiftlint:disable:next function_parameter_count
-    // NOSONAR — 17 parameters faithfully model the GitHub API runner payload; splitting would break all call sites.
+    // NOSONAR — 18 parameters faithfully model the GitHub API runner payload; splitting would break all call sites.
     /// Creates a new `RunnerModel` instance.
     ///
     /// - Parameters:
     ///   - id: Stable dedup key. Defaults to `runnerName` when omitted.
     ///   - runnerName: Human-readable runner name.
     ///   - gitHubUrl: GitHub scope URL (repo or org). May be patched post-init.
-    ///   - agentId: GitHub internal numeric agent ID.
+    ///   - agentId: GitHub internal numeric agent ID (from `.runner` JSON).
+    ///   - apiId: GitHub REST API numeric runner ID (from enrichment). `nil` until enriched.
     ///   - workFolder: Absolute path to the runner `_work` folder.
     ///   - installPath: Absolute path to the runner installation directory.
     ///   - isRunning: Whether the runner agent process is currently running.
@@ -109,6 +126,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
         runnerName: String,
         gitHubUrl: String?,
         agentId: Int?,
+        apiId: Int? = nil,
         workFolder: String?,
         installPath: String?,
         isRunning: Bool,
@@ -127,6 +145,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
         self.runnerName = runnerName
         self.gitHubUrl = gitHubUrl
         self.agentId = agentId
+        self.apiId = apiId
         self.workFolder = workFolder
         self.installPath = installPath
         self.isRunning = isRunning
@@ -236,6 +255,10 @@ extension RunnerModel {
     /// Uses `Optional<Optional<T>>` (double-optional) for nullable fields so callers
     /// can distinguish "set to nil" (`.some(nil)`) from "leave unchanged" (`.none`).
     ///
+    /// `apiId` is intentionally not a parameter — it is set once by
+    /// `RunnerStatusEnricher.applyEnrichment` via `init` and must not be
+    /// overwritten by any other code path. It is always forwarded as-is.
+    ///
     /// Example:
     /// ```swift
     /// runners[idx] = runners[idx].copying(isRunning: true)
@@ -256,6 +279,7 @@ extension RunnerModel {
             runnerName: runnerName,
             gitHubUrl: gitHubUrl ?? self.gitHubUrl,
             agentId: agentId,
+            apiId: apiId,
             workFolder: workFolder,
             installPath: installPath,
             isRunning: isRunning ?? self.isRunning,
