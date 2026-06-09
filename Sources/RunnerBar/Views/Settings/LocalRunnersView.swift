@@ -212,10 +212,6 @@ struct LocalRunnersView: View {
     }
 
     // MARK: - Lifecycle actions
-    // TODO: #1077 — migrate to async/await once RunnerLifecycleService.start/stop are async.
-    // Current pattern (Task + Task.detached) matches LocalRunnerStore.refresh() as the
-    // intermediate step: background work is off-actor, main-actor mutations happen in the
-    // Task continuation which returns to @MainActor automatically. // NOSONAR
 
     /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
     @MainActor private func performResume(runner: RunnerModel) {
@@ -270,7 +266,7 @@ struct LocalRunnersView: View {
         LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
-                RunnerLifecycleService.shared.remove(runner: runner)
+                await RunnerLifecycleService.shared.remove(runner: runner)
             }.value
             if !ok {
                 LocalRunnerStore.shared.optimisticallyRestore(runner)

@@ -146,7 +146,7 @@ struct RunnerLifecycleService {
     ///   when deregistration succeeds (`removeOk == true`). If both `config.sh` and the API
     ///   fallback fail, no local files are deleted so the user can retry.
     @discardableResult
-    func remove(runner: RunnerModel) -> Bool {
+    func remove(runner: RunnerModel) async -> Bool {
         let ip = runner.installPath ?? "nil"
         let gh = runner.gitHubUrl ?? "nil"
         logStep("REMOVE", "called runner=\(runner.runnerName) installPath=\(ip) gitHubUrl=\(gh)")
@@ -169,7 +169,7 @@ struct RunnerLifecycleService {
         let scopeString = scopeFromGitHubUrl(gitHubUrl)
 
         logStep("REMOVE", "step2: fetching removal token for scope=\(scopeString)")
-        guard let token = fetchRemovalToken(scope: scopeString) else {
+        guard let token = await fetchRemovalToken(scope: scopeString) else {
             logStep("REMOVE", "abort — fetchRemovalToken returned nil for scope=\(scopeString)")
             return false
         }
@@ -189,7 +189,7 @@ struct RunnerLifecycleService {
             logStep("REMOVE", "step3b: config.sh failed isCorrupt=\(isCorrupt) — trying API DELETE fallback")
             if let agentId = runner.agentId {
                 logStep("REMOVE", "step3b: calling deleteRunnerByID scope=\(scopeString) agentId=\(agentId)")
-                let apiOk = deleteRunnerByID(scope: scopeString, runnerID: agentId)
+                let apiOk = await deleteRunnerByID(scope: scopeString, runnerID: agentId)
                 logStep("REMOVE", "step3b: deleteRunnerByID result=\(apiOk)")
                 removeOk = apiOk
             } else {
