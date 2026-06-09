@@ -232,6 +232,7 @@ struct PanelLocalRunnerRow: View {
         default:      return raw.lowercased()
         }
     }
+    /// Normalises a raw platform string to a human-readable OS name.
     private func normalisePlatform(_ raw: String) -> String {
         let lower = raw.lowercased()
         if lower.hasPrefix("osx") || lower.hasPrefix("darwin") { return "macOS" }
@@ -242,16 +243,25 @@ struct PanelLocalRunnerRow: View {
 }
 
 // MARK: - ActionRowView
+/// Row representing one GitHub Actions workflow run.
+///
 /// ⚠️ Do NOT add GlassEffectContainer, .glassEffectID, .bouncy, or
-/// .glassEffectTransition to the row or rowContainer — causes staggered/slow
+/// .glassEffectTransition to the row or rowContainer — they cause staggered/slow
 /// expand animations (#957). The statusBadge GlassEffectContainer in metaTrailing
 /// is intentionally scoped to just the badge, not the row.
 struct ActionRowView: View {
+    /// The workflow action group this row represents.
     let group: WorkflowActionGroup
+    /// Poll tick counter used to force time-ago label refreshes.
     let tick: Int
+    /// Called when the user taps a step inside the expanded inline job rows.
     let onStepTap: (ActiveJob, JobStep) -> Void
+    /// Drives the inline expand/collapse state: `nil` = collapsed, `false` = partially expanded, `true` = fully expanded.
     @State private var expandState: Bool?
+    /// Tracks the previous row status to detect in-progress → done transitions.
     @State private var previousStatus: RBStatus?
+
+    /// Renders the row using the appropriate glass card background for the current OS.
     var body: some View {
         if #available(macOS 26, *) {
             rowContainer {
@@ -266,6 +276,8 @@ struct ActionRowView: View {
         }
     }
 
+    /// Wraps `rowContent` (and optionally `InlineJobRowsView`) in a card-shaped container
+    /// with the supplied glass background.
     @ViewBuilder
     private func rowContainer<Background: View>(@ViewBuilder background: () -> Background) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -292,6 +304,7 @@ struct ActionRowView: View {
         .onChange(of: rowStatus) { _, newStatus in handleStatusChange(newStatus) }
     }
 
+    /// Left-edge accent bar whose colour reflects the current row status.
     @ViewBuilder private var statusAccentBar: some View {
         Rectangle()
             .fill(rowStatus.color)
@@ -300,16 +313,19 @@ struct ActionRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Pre-macOS-26 glass card background used as the ZStack layer inside `rowContainer`.
     @ViewBuilder private var glassCardBackground: some View {
         Color.clear.glassCard(cornerRadius: RBRadius.card)
     }
 
+    /// Sets the initial expand state based on the row’s status at appear time.
     private func applyInitialExpandState() {
         let status = rowStatus
         previousStatus = status
         expandState = (status == .inProgress) ? false : nil
     }
 
+    /// Animates expand state transitions when the row status changes.
     private func handleStatusChange(_ newStatus: RBStatus) {
         let animation: Animation = .easeInOut(duration: 0.15)
         if newStatus == .inProgress && expandState == nil {
@@ -321,6 +337,7 @@ struct ActionRowView: View {
         previousStatus = newStatus
     }
 
+    /// Derives the canonical `RBStatus` from the group’s status and conclusion.
     private var rowStatus: RBStatus {
         switch group.groupStatus {
         case .inProgress: return .inProgress
@@ -334,6 +351,7 @@ struct ActionRowView: View {
         }
     }
 
+    /// HStack containing the donut, runner type icon, labels, branch pill, and trailing meta.
     private var rowContent: some View {
         let tickSnapshot = tick
         return HStack(spacing: 6) {
