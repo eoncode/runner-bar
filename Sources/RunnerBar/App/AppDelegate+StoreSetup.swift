@@ -3,6 +3,7 @@
 
 import AppKit
 
+/// AppDelegate extension wiring app-lifecycle callbacks to store and service setup.
 extension AppDelegate {
 
     // MARK: - App lifecycle

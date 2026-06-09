@@ -4,6 +4,7 @@
 import Combine
 import Foundation
 
+/// AppDelegate extension managing the OAuth sign-out subscription and poll-loop coordination.
 extension AppDelegate {
 
     // MARK: - Sign-out subscription

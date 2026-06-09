@@ -3,6 +3,7 @@
 
 import AppKit
 
+/// AppDelegate extension handling OS-delivered URL notifications (OAuth callback).
 extension AppDelegate {
 
     // MARK: - OAuth URL callback
