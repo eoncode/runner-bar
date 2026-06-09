@@ -293,7 +293,7 @@ final class RunnerStore {
         actionGroupCache = groupResult.newGroupCache
         prevLiveGroups = groupResult.newPrevLiveGroups
         seenGroupIDs = groupResult.newSeenGroupIDs
-        let rateLimitSnapshot = await rateLimitActor.snapshot()
+        let rateLimitSnapshot = await ghRateLimitSnapshot()
         isRateLimited = rateLimitSnapshot.isLimited
         rateLimitResetDate = rateLimitSnapshot.resetDate
         log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) runners=\(enrichedRunners.count) isRateLimited=\(isRateLimited) rateLimitResetDate=\(String(describing: rateLimitResetDate))")
