@@ -32,8 +32,8 @@ struct SettingsView: View {
     // MARK: - Inputs
     /// Callback invoked when the user taps the back button.
     let onBack: () -> Void
-    /// The shared runner view-model; observed for remote runner list updates.
     // swiftlint:disable orphaned_doc_comment missing_docs
+    /// The shared runner view-model; observed for remote runner list updates.
     // periphery:ignore - injected by caller for @ObservedObject subscription; read indirectly via passed closures
     @ObservedObject var store: RunnerViewModel // swiftlint:enable orphaned_doc_comment missing_docs
 
