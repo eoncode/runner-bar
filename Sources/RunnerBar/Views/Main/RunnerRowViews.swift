@@ -6,7 +6,8 @@ import SwiftUI
 
 // MARK: - RunnerTypeIcon
 /// Small icon indicating whether a runner is local (desktop) or cloud-hosted.
-private struct RunnerTypeIcon: View {
+/// `internal` (not private) — also used by ActionRowView.swift.
+struct RunnerTypeIcon: View {
     /// `true` for a self-hosted local runner, `false` for a cloud runner.
     let isLocal: Bool
 
