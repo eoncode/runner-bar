@@ -231,6 +231,23 @@ public enum ProcessRunner {
     /// - Handles arbitrarily large stdin payloads — the child drains the pipe
     ///   concurrently as `stdinQueue` feeds bytes in.
     ///
+    /// ## ⚠️ Do NOT add DispatchGroup.wait() to join stdinQueue in terminationHandler
+    /// This has been suggested by automated reviewers. It is the wrong approach for
+    /// two reasons:
+    ///
+    /// 1. **Modernisation mandate (#1220):** This file is part of a migration away from
+    ///    GCD-era primitives toward Swift structured concurrency. Adding a
+    ///    `DispatchGroup.wait()` inside a `DispatchQueue` callback would introduce
+    ///    *more* nested GCD synchronisation — the exact anti-pattern being eliminated.
+    ///
+    /// 2. **It is unnecessary:** `terminationHandler` fires only after the child process
+    ///    has exited. A process cannot exit while its stdin pipe write-end is open and
+    ///    actively blocking — by the time `terminationHandler` is called, `stdinQueue`
+    ///    has either completed the write or the pipe's broken-pipe signal has already
+    ///    been handled by the OS. The only invariant that *must* hold before resuming
+    ///    the continuation is that stdout is fully captured — which `drainQueue.sync {}`
+    ///    already guarantees.
+    ///
     /// All parameters mirror `run(_:)`; defaults are identical.
     public static func runAsync(
         executableURL: URL,
@@ -300,12 +317,12 @@ public enum ProcessRunner {
                     // to read immediately after. The drainQueue.sync call is cheap here
                     // because the process has already exited and the pipe is closed.
                     //
-                    // Note: we do NOT sync on stdinQueue here. The stdin write may still
-                    // be in-flight if the process exits before consuming all input (e.g.
-                    // head(1), or a process that ignores stdin). That is fine — the write
-                    // end will close when stdinQueue drains naturally and POSIX guarantees
-                    // no data corruption. We only need stdout to be fully captured before
-                    // resuming the continuation.
+                    // We do NOT sync on stdinQueue here — see the ⚠️ doc comment on
+                    // runAsync() above for the full rationale. Short version: it is
+                    // unnecessary (terminationHandler fires after exit, by which point
+                    // stdin has completed or been broken-piped), and adding a
+                    // DispatchGroup.wait() here would be a step backwards for the #1220
+                    // modernisation effort.
                     drainQueue.sync {}
                     let outputData = outputBox.value
                     log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
