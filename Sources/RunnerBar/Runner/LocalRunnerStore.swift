@@ -238,7 +238,9 @@ final class LocalRunnerStore: ObservableObject {
         log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
         let enriched = await RunnerStatusEnricher.shared.enrich(runners: hydrated)
         log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
+#if DEBUG
         log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
+#endif
 
         applyRefreshResults(enriched)
     }
@@ -263,25 +265,35 @@ final class LocalRunnerStore: ObservableObject {
             if let id = runner.agentId { metricsByAgentId[id]     = m }
             metricsByName[runner.runnerName] = m
         }
+#if DEBUG
         log("LocalRunnerStore › applyRefreshResults — preserved metrics: byApiId=\(metricsByApiId.keys.sorted()) byAgentId=\(metricsByAgentId.keys.sorted()) byName=\(metricsByName.keys.sorted())")
+#endif
 
         let preserved: [RunnerModel] = enriched.map { runner in
             // Priority 1: apiId match — the critical path for org runners.
             if let id = runner.apiId, let m = metricsByApiId[id] {
+#if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)")
+#endif
                 return runner.copying(metrics: m)
             }
             // Priority 2: agentId match — repo runners.
             if let id = runner.agentId, let m = metricsByAgentId[id] {
+#if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)")
+#endif
                 return runner.copying(metrics: m)
             }
             // Priority 3: name match — last resort.
             if let m = metricsByName[runner.runnerName] {
+#if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name")
+#endif
                 return runner.copying(metrics: m)
             }
+#if DEBUG
             log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)' (apiId=\(String(describing: runner.apiId)) agentId=\(String(describing: runner.agentId)))")
+#endif
             return runner
         }
         runners = preserved.sorted { $0.runnerName < $1.runnerName }
