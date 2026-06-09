@@ -300,7 +300,7 @@ final class RunnerDisplayStatusTests: XCTestCase {
     /// Verifies that a busy status (from API) is treated same as online for display.
     func testBusyStatusShowsActiveWithMetrics() {
         let m = RunnerMetrics(cpu: 80.0, mem: 50.0)
-        XCTAssertEqual(makeRunner(status: .busy, busy: true, metrics: m).displayStatus, "active (CPU: 80.0% MEM: 80.0%)")
+        XCTAssertEqual(makeRunner(status: .busy, busy: true, metrics: m).displayStatus, "active (CPU: 80.0% MEM: 50.0%)")
     }
 }
 
