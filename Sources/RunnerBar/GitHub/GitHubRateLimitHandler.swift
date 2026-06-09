@@ -16,8 +16,8 @@ import Foundation
 ///   1. `urlSessionAPIAsync` / `urlSessionAPIPaginated` receive a 403/429.
 ///   2. They call `rateLimitActor.set(resetAt:)` to arm the rate-limit flag and
 ///      schedule an automatic clear after the window.
-///   3. `ghIsRateLimited` / `ghRateLimitResetDate` expose the current values
-///      as `async` computed properties backed by the actor.
+///   3. `ghIsRateLimited` (Bool) and `ghRateLimitSnapshot()` (isLimited + resetDate)
+///      expose the current values as `async` accessors backed by the actor.
 ///   4. `RunnerStore.applyFetchResult` copies both into its own `@MainActor`
 ///      properties (`isRateLimited`, `rateLimitResetDate`) via a single atomic
 ///      `snapshot()` call, eliminating the race window between two separate awaits.
@@ -107,7 +107,7 @@ func clearGhRateLimit() async {
 }
 
 /// Returns `isLimited` and `resetDate` in a single actor hop.
-/// Prefer this over separate `await ghIsRateLimited` + `await ghRateLimitResetDate` calls
+/// Prefer this over a separate `await ghIsRateLimited` read plus a reset-date lookup
 /// to avoid the TOCTOU window between two hops.
 func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
     await rateLimitActor.snapshot()

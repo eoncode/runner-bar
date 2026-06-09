@@ -276,7 +276,7 @@ final class RunnerStore {
     ///
     /// Rate-limit state is read via a single `rateLimitActor.snapshot()` call so that
     /// `isRateLimited` and `rateLimitResetDate` are always consistent with each other.
-    /// Using two separate `await`s (`ghIsRateLimited` then `ghRateLimitResetDate`) would
+    /// Using two separate `await`s (`ghIsRateLimited` then a separate reset-date read) would
     /// open a race window where a `clear()` or `set(resetAt:)` arriving between the two
     /// hops could leave the store in an incoherent state (e.g. `isRateLimited == false`
     /// but `rateLimitResetDate != nil`).
