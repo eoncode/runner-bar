@@ -25,7 +25,7 @@ import os
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
-actor RateLimitActor {
+private actor RateLimitActor {
     /// Whether the GitHub API is currently rate-limiting this client.
     private(set) var isLimited = false
     /// The moment at which the rate-limit window expires (mirrors X-RateLimit-Reset).
@@ -100,7 +100,7 @@ actor RateLimitActor {
 }
 
 /// The module-wide rate-limit actor instance.
-let rateLimitActor = RateLimitActor()
+private let rateLimitActor = RateLimitActor()
 
 // MARK: - Rate-limit accessors
 
@@ -221,7 +221,7 @@ private func handleRateLimitResponse(
 /// The result of a single URLSession round-trip through `urlSessionExecute`.
 private enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
-    case success(Data)
+    case success(Data, statusCode: Int)
     /// Non-2xx response that is not a rate-limit; the request failed.
     case httpError(Int)
     /// 403 or 429 that triggered the rate-limit actor.
@@ -279,7 +279,7 @@ private func urlSessionExecute(
             return .httpError(http.statusCode)
         }
         await rateLimitActor.clear()
-        return .success(data)
+        return .success(data, statusCode: http.statusCode)
     } catch {
         log("\(logTag) › \(urlString) network error: \(error.localizedDescription)")
         return .networkError(error)
@@ -303,7 +303,7 @@ private func urlSessionExecute(
 ///   clears it via `rateLimitActor.clear()`. The flag is also reset at the
 ///   start of each poll cycle in `RunnerStore.fetch()`.
 func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
-    guard case .success(let data) = await urlSessionExecute(
+    guard case .success(let data, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionAPIAsync"
     ) else { return nil }
     return data
@@ -415,7 +415,7 @@ private func extractNextURL(from header: String?) -> String? {
 /// params already embedded in the redirect URL. No custom redirect delegate is
 /// required or appropriate here.
 func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-    guard case .success(let data) = await urlSessionExecute(
+    guard case .success(let data, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionRaw", useRawAccept: true
     ) else { return nil }
     log("urlSessionRaw › \(endpoint) → \(data.count)b")
@@ -441,8 +441,8 @@ func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval
         }
         return r
     }
-    guard case .success(let data) = result else { return nil }
-    log("urlSessionPost › \(endpoint) → success")
+    guard case .success(let data, let statusCode) = result else { return nil }
+    log("urlSessionPost › \(endpoint) → \(statusCode)")
     return data
 }
 
@@ -455,8 +455,8 @@ func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) a
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return r
     }
-    guard case .success(let data) = result else { return nil }
-    log("urlSessionPut › \(endpoint) → success")
+    guard case .success(let data, let statusCode) = result else { return nil }
+    log("urlSessionPut › \(endpoint) → \(statusCode)")
     return data
 }
 
