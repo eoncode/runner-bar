@@ -138,8 +138,10 @@ final class LocalRunnerStore: ObservableObject {
     ///   2. runner.agentId == agentId (local .runner JSON AgentId — repo runners use this)
     ///   3. runner.runnerName == name (name-only last resort)
     func applyMetrics(_ metrics: RunnerMetrics?, forAgentId agentId: Int?, name: String) {
+#if DEBUG
         log("LocalRunnerStore › applyMetrics — called with agentId=\(String(describing: agentId)) name=\(name) metrics=\(String(describing: metrics))")
         log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
+#endif
 
         guard let idx = runners.firstIndex(where: { runner in
             // Priority 1: match on GitHub REST API id (populated after first enrichment).
