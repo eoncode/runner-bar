@@ -64,6 +64,7 @@ actor RateLimitActor {
     }
 
     /// Clears the rate-limit flag and cancels any pending reset task.
+    /// Unconditional — resets both `isLimited` and `resetDate` to keep them consistent.
     func clear() {
         resetTask?.cancel()
         resetTask = nil
@@ -71,13 +72,14 @@ actor RateLimitActor {
         resetDate = nil
     }
 
-    /// Returns both `isLimited` and `resetDate` in a single actor hop.
+    /// Returns both `isLimited` and `resetDate` in a single actor hop, guaranteeing consistency.
     func snapshot() -> (isLimited: Bool, resetDate: Date?) {
         (isLimited: isLimited, resetDate: resetDate)
     }
 
     // MARK: Private
 
+    /// Fires when the `Task.sleep` in `set(resetAt:)` completes without cancellation.
     private func didFire(scheduledDelay: TimeInterval) {
         isLimited = false
         resetDate = nil

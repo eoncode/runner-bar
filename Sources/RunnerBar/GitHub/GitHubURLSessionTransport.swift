@@ -73,6 +73,8 @@ func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async ->
 }
 
 /// Fetches and concatenates all pages for a GitHub paginated endpoint.
+/// Follows `Link: <url>; rel="next"` until all pages are consumed or an error stops pagination.
+/// Returns `nil` on auth failure; returns partial results if pagination is stopped by a rate limit.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [[String: Any]] = []
@@ -143,7 +145,8 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data
 
 // MARK: - POST / DELETE / PUT (mutation)
 
-/// Sends a POST to the given GitHub API endpoint. Returns the response body, or nil on failure.
+/// Sends a POST to the given GitHub API endpoint.
+/// - Returns: Response body on 2xx (`Data()` for 204 No Content), `nil` on failure.
 @discardableResult
 func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPost") { req in
@@ -161,6 +164,7 @@ func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval
 }
 
 /// Sends a PUT to the given GitHub API endpoint with a JSON body.
+/// - Returns: Response body on 2xx, `nil` on failure.
 func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) async -> Data? {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPut") { req in
         var r = req
@@ -174,7 +178,8 @@ func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) a
     return data
 }
 
-/// Sends a DELETE to the given GitHub API endpoint. Returns true on success (2xx).
+/// Sends a DELETE to the given GitHub API endpoint.
+/// - Returns: `true` on 2xx, `false` on any failure.
 @discardableResult
 func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> Bool {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionDelete") { req in
@@ -192,11 +197,13 @@ func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> B
 // MARK: - Public API entry points (GET)
 
 /// Calls the GitHub REST API for a single page via URLSession.
+/// Returns `nil` when no token is available or the request fails.
 func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
 }
 
 /// Calls the GitHub REST API for all pages via URLSession.
+/// Returns `nil` when no token is available or the request fails.
 func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     await urlSessionAPIPaginated(endpoint, timeout: timeout)
 }
@@ -204,6 +211,7 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Dat
 // MARK: - Runner mutation helpers
 
 /// Directly deregisters a runner from GitHub via DELETE.
+/// - Returns: `true` on success, `false` if the scope is invalid or the request fails.
 @discardableResult
 func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
     guard let scope = Scope.parse(scopeString) else {
@@ -218,6 +226,7 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
 }
 
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
+/// - Returns: The updated label names on success, `nil` on any failure.
 @discardableResult
 func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
@@ -234,8 +243,14 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
         log("patchRunnerLabels › request failed for endpoint=\(endpoint)")
         return nil
     }
+    /// Decodable shape returned by the GitHub runner labels PUT endpoint.
     struct LabelsResponse: Decodable {
-        struct Label: Decodable { let name: String }
+        /// A single label entry returned by the labels endpoint.
+        struct Label: Decodable {
+            /// The label name string.
+            let name: String
+        }
+        /// The full list of labels now assigned to the runner.
         let labels: [Label]
     }
     guard let resp = try? JSONDecoder().decode(LabelsResponse.self, from: outData) else {
@@ -251,6 +266,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
 // MARK: - Runner token helpers
 
 /// Requests a runner token of the given `type` (registration or removal) for `scope`.
+/// Shared implementation used by `fetchRegistrationToken` and `fetchRemovalToken`.
 private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) async -> String? {
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(type)"
     log("\(logPrefix) › POSTing \(endpoint)")
@@ -262,7 +278,11 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) asy
         log("\(logPrefix) › unexpected empty body for \(endpoint) (204?)")
         return nil
     }
-    struct TokenResponse: Decodable { let token: String }
+    /// Decodable shape for GitHub runner token endpoints.
+    struct TokenResponse: Decodable {
+        /// The short-lived token string returned by GitHub.
+        let token: String
+    }
     guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
         log("\(logPrefix) › decode failed (\(outputData.count)b)")
         return nil
@@ -271,23 +291,29 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) asy
 }
 
 /// Fetches a short-lived runner registration token for the given scope.
+/// - Returns: The registration token string, or `nil` on failure.
 func fetchRegistrationToken(scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRegistrationToken › invalid scope: \(scopeString)")
         return nil
     }
-    guard let token = await fetchRunnerToken(type: "registration-token", scope: scope, logPrefix: "fetchRegistrationToken") else { return nil }
+    guard let token = await fetchRunnerToken(
+        type: "registration-token", scope: scope, logPrefix: "fetchRegistrationToken"
+    ) else { return nil }
     log("fetchRegistrationToken › got registration token")
     return token
 }
 
 /// Fetches a runner removal token for the given scope.
+/// - Returns: The removal token string, or `nil` on failure.
 func fetchRemovalToken(scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRemovalToken › invalid scope: \(scopeString)")
         return nil
     }
-    guard let token = await fetchRunnerToken(type: "remove-token", scope: scope, logPrefix: "fetchRemovalToken") else { return nil }
+    guard let token = await fetchRunnerToken(
+        type: "remove-token", scope: scope, logPrefix: "fetchRemovalToken"
+    ) else { return nil }
     log("fetchRemovalToken › got removal token")
     return token
 }
@@ -295,6 +321,7 @@ func fetchRemovalToken(scope scopeString: String) async -> String? {
 // MARK: - Convenience wrappers
 
 /// Thin convenience wrapper over `urlSessionPost` for fire-and-forget mutation endpoints.
+/// - Returns: `true` if the POST returned a non-nil result (2xx), `false` otherwise.
 @discardableResult
 func ghPost(_ endpoint: String) async -> Bool {
     let result = await urlSessionPost(endpoint)
@@ -304,6 +331,7 @@ func ghPost(_ endpoint: String) async -> Bool {
 }
 
 /// Cancels a workflow run via the GitHub Actions API.
+/// - Returns: `true` if the cancellation request succeeded.
 @discardableResult
 func cancelRun(runID: Int, scope: String) async -> Bool {
     let result = await ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
