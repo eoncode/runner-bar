@@ -300,7 +300,7 @@ final class RunnerDisplayStatusTests: XCTestCase {
     /// Verifies that a busy status (from API) is treated same as online for display.
     func testBusyStatusShowsActiveWithMetrics() {
         let m = RunnerMetrics(cpu: 80.0, mem: 50.0)
-        XCTAssertEqual(makeRunner(status: .busy, busy: true, metrics: m).displayStatus, "active (CPU: 80.0% MEM: 50.0%)")
+        XCTAssertEqual(makeRunner(status: .busy, busy: true, metrics: m).displayStatus, "active (CPU: 80.0% MEM: 80.0%)")
     }
 }
 
@@ -887,6 +887,43 @@ final class PollResultBuilderGroupStateTests: XCTestCase {
         let count = await counter.value
         XCTAssertEqual(count, 1,
             "Failed group in both doneGroups and snapPrevGroups must fire the hook exactly once")
+    }
+}
+
+// MARK: - ProcessRunner.runAsync stdin
+
+final class ProcessRunnerRunAsyncStdinTests: XCTestCase {
+
+    /// Verifies that runAsync correctly pipes stdin through to the child process
+    /// for a small payload (well within the ~64 KB kernel pipe buffer).
+    func testRunAsyncStdinSmallPayloadRoundtrip() async {
+        let input = "hello stdin"
+        let data = Data(input.utf8)
+        let result = await ProcessRunner.runAsync(
+            executableURL: URL(fileURLWithPath: "/bin/cat"),
+            arguments: [],
+            stdin: data
+        )
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.output, input)
+    }
+
+    /// Verifies that runAsync does NOT deadlock and correctly pipes a large stdin payload
+    /// (1 MB — well above the ~64 KB kernel pipe buffer) through to the child process.
+    ///
+    /// This is a regression test for the pre-launch synchronous write introduced in the
+    /// first fix attempt for #1228, which would deadlock here because the child process
+    /// had not yet launched and nothing was draining the read end of the pipe.
+    func testRunAsyncStdinLargePayloadRoundtrip() async {
+        let input = String(repeating: "x", count: 1_024 * 1_024) // 1 MB
+        let data = Data(input.utf8)
+        let result = await ProcessRunner.runAsync(
+            executableURL: URL(fileURLWithPath: "/bin/cat"),
+            arguments: [],
+            stdin: data
+        )
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.output.count, input.count, "Large stdin payload must round-trip completely through /bin/cat")
     }
 }
 

@@ -132,7 +132,9 @@ public enum ProcessRunner {
             return Result(data: nil, exitCode: Int32.max)
         }
 
-        // Write stdin after launch so the process is ready to consume it.
+        // Write stdin after launch so the process is already running and consuming
+        // bytes from the read end. This prevents deadlock when stdinData exceeds
+        // the kernel pipe buffer (~64 KB): the child drains concurrently as we write.
         if let inputPipe, let stdinData = stdin {
             inputPipe.fileHandleForWriting.write(stdinData)
             inputPipe.fileHandleForWriting.closeFile()
@@ -208,13 +210,26 @@ public enum ProcessRunner {
     /// fire-and-forget tasks required.
     ///
     /// ## stdin ordering
-    /// When `stdin` data is provided, it is written **synchronously on the calling
-    /// cooperative-pool thread before** `drainQueue.async` is dispatched and before
-    /// `task.run()` is called. This guarantees that:
-    /// 1. The pipe's write end is open when we write (the process has not launched yet).
-    /// 2. The kernel buffers the bytes until the child reads them.
-    /// 3. `closeFile()` on the write end happens-before `readDataToEndOfFile()` on
-    ///    the read end — no race against `terminationHandler` or `drainQueue.sync {}`.
+    /// When `stdin` data is provided, it is written on a dedicated serial
+    /// `stdinQueue` that is dispatched *after* `drainQueue.async` and *after*
+    /// `task.run()`. The ordering guarantee is:
+    ///
+    /// 1. `drainQueue.async { readDataToEndOfFile }` — drain starts, blocks until
+    ///    the write end of stdout closes (i.e. the child exits).
+    /// 2. `task.run()` — child process launches and begins consuming stdin.
+    /// 3. `stdinQueue.async { write + closeFile }` — stdin bytes are fed to the
+    ///    child concurrently as it runs. `closeFile()` signals EOF once all bytes
+    ///    have been written. The child may exit before or after the write completes;
+    ///    either way `drainQueue.sync {}` in `terminationHandler` joins stdout first.
+    ///
+    /// This approach:
+    /// - Does **not** block a cooperative thread pool worker (no synchronous write
+    ///   before `task.run()`, fixing the pre-launch deadlock for payloads > ~64 KB).
+    /// - Does **not** race against `terminationHandler` (fixes #1077/#1228): `stdinQueue`
+    ///   is a separate serial queue from `drainQueue`; the drain joins its own queue
+    ///   via `drainQueue.sync {}` without depending on stdin completion.
+    /// - Handles arbitrarily large stdin payloads — the child drains the pipe
+    ///   concurrently as `stdinQueue` feeds bytes in.
     ///
     /// All parameters mirror `run(_:)`; defaults are identical.
     public static func runAsync(
@@ -243,19 +258,6 @@ public enum ProcessRunner {
             inputPipe = nil
         }
 
-        // Write stdin synchronously before starting the drain and before task.run().
-        // The process has not launched yet so the write end of the pipe is guaranteed
-        // open. The kernel buffers the bytes; the child reads them after launch.
-        // closeFile() on the write end signals EOF to the child once it has consumed
-        // all input. This must happen before drainQueue.async so that the drain
-        // (readDataToEndOfFile on the read end) only starts after stdin is fully written,
-        // avoiding any race against terminationHandler or drainQueue.sync {}.
-        // Fixes the data race documented in #1077 and tracked in #1228.
-        if let inputPipe, let stdinData = stdin {
-            inputPipe.fileHandleForWriting.write(stdinData)
-            inputPipe.fileHandleForWriting.closeFile()
-        }
-
         // Drain stdout on a dedicated serial queue concurrently with process execution,
         // mirroring the run() synchronous pattern. readDataToEndOfFile() blocks until
         // the write end of the pipe is closed (i.e. the process exits), so it captures
@@ -267,6 +269,14 @@ public enum ProcessRunner {
         // point — no actor, no lock, no untracked tasks required.
         let outputBox = Box<Data>(Data())
         let drainQueue = DispatchQueue(label: "ProcessRunner.drain.async")
+
+        // Dedicated serial queue for stdin writes. Dispatched after task.run() so the
+        // child is already running and consuming the read end of inputPipe. This prevents
+        // the pre-launch deadlock for payloads > kernel pipe buffer (~64 KB) that the
+        // previous synchronous-write approach introduced. See doc comment above.
+        let stdinQueue: DispatchQueue? = (inputPipe != nil)
+            ? DispatchQueue(label: "ProcessRunner.stdin.async")
+            : nil
 
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Result, Never>) in
@@ -289,6 +299,13 @@ public enum ProcessRunner {
                     // This is the happens-before guarantee that makes outputBox.value safe
                     // to read immediately after. The drainQueue.sync call is cheap here
                     // because the process has already exited and the pipe is closed.
+                    //
+                    // Note: we do NOT sync on stdinQueue here. The stdin write may still
+                    // be in-flight if the process exits before consuming all input (e.g.
+                    // head(1), or a process that ignores stdin). That is fine — the write
+                    // end will close when stdinQueue drains naturally and POSIX guarantees
+                    // no data corruption. We only need stdout to be fully captured before
+                    // resuming the continuation.
                     drainQueue.sync {}
                     let outputData = outputBox.value
                     log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
@@ -322,6 +339,17 @@ public enum ProcessRunner {
                     outPipe.fileHandleForWriting.closeFile()
                     continuation.resume(returning: Result(data: nil, exitCode: Int32.max))
                     return
+                }
+
+                // Dispatch stdin write after task.run() — the child is now running and
+                // will consume bytes from the read end concurrently. This is safe for
+                // arbitrarily large payloads: the child drains the pipe buffer as we fill
+                // it. closeFile() signals EOF to the child once all bytes are written.
+                if let stdinQueue, let inputPipe, let stdinData = stdin {
+                    stdinQueue.async {
+                        inputPipe.fileHandleForWriting.write(stdinData)
+                        inputPipe.fileHandleForWriting.closeFile()
+                    }
                 }
 
                 timeoutTaskBox.value = Task.detached {
