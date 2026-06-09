@@ -53,7 +53,7 @@ public func fetchActionLogs(group: WorkflowActionGroup) async -> String? {
                 guard let data = await ghRaw("repos/\(scope)/actions/runs/\(runID)/logs") else {
                     return []
                 }
-                return unzipLogs(data)
+                return await unzipLogs(data)
             }
         }
         var collected: [(name: String, text: String)] = []
