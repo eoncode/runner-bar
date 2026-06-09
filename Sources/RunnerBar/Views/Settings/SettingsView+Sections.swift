@@ -9,7 +9,7 @@ extension SettingsView {
 
     // MARK: - Account
     /// GitHub sign-in / sign-out controls and authentication status.
-    var accountSection: some View {
+    fileprivate var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
@@ -74,7 +74,7 @@ extension SettingsView {
 
     // MARK: - Management
     /// "Management" section: header label + nav rows for local runners and scopes.
-    var managementSection: some View {
+    fileprivate var managementSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Management").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
@@ -85,7 +85,7 @@ extension SettingsView {
     }
 
     /// Navigation row that drills into `LocalRunnersView`.
-    var manageLocalRunnersRow: some View {
+    fileprivate var manageLocalRunnersRow: some View {
         Button {
             showLocalRunners = true
         } label: {
@@ -108,7 +108,7 @@ extension SettingsView {
     }
 
     /// Navigation row that drills into `ScopesView`.
-    var manageScopesRow: some View {
+    fileprivate var manageScopesRow: some View {
         Button {
             showScopes = true
         } label: {
@@ -132,7 +132,7 @@ extension SettingsView {
 
     // MARK: - General
     /// General section: polling interval, notification toggles, launch-at-login, and popover arrow.
-    var generalSection: some View {
+    fileprivate var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
@@ -178,7 +178,7 @@ extension SettingsView {
     ///
     /// Extracted as its own computed var so it is a first-class child of
     /// `generalSection`'s VStack, identical in structure to every other row.
-    var popoverArrowRow: some View {
+    fileprivate var popoverArrowRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Show popover arrow").font(.system(size: 12))
@@ -194,7 +194,7 @@ extension SettingsView {
 
     // MARK: - About
     /// App version, build number, and links to changelog / support.
-    var aboutSection: some View {
+    fileprivate var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("About").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
