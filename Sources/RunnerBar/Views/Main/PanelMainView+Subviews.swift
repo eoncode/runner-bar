@@ -98,6 +98,10 @@ private struct RunnerTypeIcon: View {
 /// Single grouped badge showing CPU and MEM for a runner inside one
 /// shared glass background.
 ///
+/// Always rendered regardless of whether live metrics are available.
+/// Shows 0% on the first poll cycle (before apiId is populated for org runners)
+/// instead of hiding entirely, which prevents a layout jump on cycle 2.
+///
 /// macOS 26+: `.statPillBackground()` calls `.glassEffect(.regular, in: Capsule())`.
 /// This pill must be rendered inside a `GlassEffectContainer` at the card level
 /// (see `runnerCard`) so it shares a CABackdropLayer sampling region with the
@@ -164,6 +168,10 @@ struct PanelLocalRunnerRow: View {
     /// Compact card showing runner name with optional arch/platform inline,
     /// and a grouped CPU/MEM badge on the trailing edge.
     ///
+    /// RunnerMetricsBadge is always rendered (never gated on metrics != nil).
+    /// When metrics are absent on cycle 1, cpu/mem default to 0.0 so the badge
+    /// is stable in layout and updates in-place when real values arrive.
+    ///
     /// macOS 26+: the entire HStack is wrapped in a `GlassEffectContainer` so the
     /// card's `.glassCard()` background and the `RunnerMetricsBadge` pill's
     /// `.glassEffect()` share a single CABackdropLayer sampling region. Without
@@ -186,9 +194,11 @@ struct PanelLocalRunnerRow: View {
             }
             .layoutPriority(1)
             Spacer()
-            if let metrics = runner.metrics {
-                RunnerMetricsBadge(cpu: metrics.cpu, mem: metrics.mem)
-            }
+            // Always shown — defaults to 0% when metrics not yet available (cycle 1).
+            RunnerMetricsBadge(
+                cpu: runner.metrics?.cpu ?? 0,
+                mem: runner.metrics?.mem ?? 0
+            )
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
 

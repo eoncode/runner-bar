@@ -123,8 +123,9 @@ struct GlassButton: ViewModifier {
 ///
 /// macOS 26+: neutral white/gray tint (`Color.primary.opacity(0.08)`) anchors the
 /// pill visually against the card background, then `.glassEffect(.regular, in: Capsule())`
-/// adds the frosted glass layer on top. Matches the `DiskPillBadge` / `StatusBadge`
-/// tint+glass pattern but is colour-neutral (no semantic tint colour).
+/// adds the frosted glass layer on top, and a hairline white stroke overlay matches
+/// the visual weight of `DiskPillBadge` and `StatusBadge`.
+/// Matches the `DiskPillBadge` / `StatusBadge` tint+glass pattern but colour-neutral.
 ///
 /// The call site (runnerCard) MUST wrap the card content in a `GlassEffectContainer`
 /// so this pill and the card's `.glassCard()` share a single CABackdropLayer sampling
@@ -144,6 +145,7 @@ struct StatPillBackground: ViewModifier {
             content
                 .background(Color.primary.opacity(0.08), in: Capsule())
                 .glassEffect(.regular, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
         } else {
             content.background(.ultraThinMaterial, in: Capsule())
         }
