@@ -24,7 +24,9 @@ extension RunnerStore {
     }
 
     /// Builds four lookup maps from the local runner list.
-    private func buildInstallPathMap(
+    /// Internal rather than private: called from `fetch()` in `RunnerStore.swift`;
+    /// Swift `private` does not cross file boundaries.
+    func buildInstallPathMap(
         scopes: [String],
         localRunners: [RunnerModel]
     ) -> InstallPathMap {
