@@ -51,6 +51,7 @@ public func fetchActionLogs(group: WorkflowActionGroup) async -> String? {
         for runID in runIDs {
             taskGroup.addTask {
                 guard let data = await ghRaw("repos/\(scope)/actions/runs/\(runID)/logs") else {
+                    log("fetchActionLogs › run \(runID) — ghRaw returned nil, skipping")
                     return []
                 }
                 return await unzipLogs(data)
