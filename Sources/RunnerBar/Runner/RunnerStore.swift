@@ -7,7 +7,6 @@ import RunnerBarCore
 
 // MARK: - RunnerStore
 
-// swiftlint:disable:next type_body_length
 /// Manages RunnerStore state and behaviour.
 @MainActor
 final class RunnerStore {
@@ -33,7 +32,7 @@ final class RunnerStore {
     ///
     /// Kept separate from `actionGroupCache` so that cache eviction (capped at
     /// `groupCacheLimit = 30`) does not re-arm the hook for old completed groups
-    /// that are still present in GitHub's last-100-completed feed.
+    /// that are still present in GitHub’s last-100-completed feed.
     private var seenGroupIDs: Set<String> = []
 
     /// Whether the GitHub API is currently rate-limiting this client.
@@ -48,14 +47,14 @@ final class RunnerStore {
     private(set) var rateLimitResetDate: Date?
 
     /// Active structured poll task. Cancelled and replaced on every `start()` call.
-    private var pollTask: Task<Void, Never>?
+    var pollTask: Task<Void, Never>?
 
     /// Combine subscription that restarts the poll loop when `pollingInterval` changes.
-    private var intervalCancellable: AnyCancellable?
+    var intervalCancellable: AnyCancellable?
     /// Combine subscription that restarts the poll loop when active scopes change.
-    private var scopeCancellable: AnyCancellable?
+    var scopeCancellable: AnyCancellable?
 
-    /// Emits whenever a fetch cycle completes and the store's state has been updated.
+    /// Emits whenever a fetch cycle completes and the store’s state has been updated.
     let didUpdate = PassthroughSubject<Void, Never>()
 
     /// The aggregate online/offline status across all runners.
@@ -93,67 +92,6 @@ final class RunnerStore {
         pollTask?.cancel()
     }
 
-    // MARK: - Poll loop
-
-    /// Starts (or restarts) the structured async poll loop.
-    ///
-    /// Cancels any existing poll task, then launches a new one that:
-    ///   1. Fires an immediate fetch.
-    ///   2. Waits for a dynamic interval (rate-limit / active-work aware).
-    ///   3. Repeats until cancelled.
-    ///
-    /// Safe to call multiple times — the previous task is always cancelled first.
-    func start() {
-        let scopes = ScopeStore.shared.activeScopes
-        log("RunnerStore › start — activeScopes=\(scopes)")
-        if scopes.isEmpty {
-            log("RunnerStore › ⚠️ start called but activeScopes is EMPTY — actions will not load")
-        }
-        let localCount = LocalRunnerStore.shared.runners.count
-        log("RunnerStore › start — LocalRunnerStore.shared.runners.count=\(localCount) at start() time")
-        if localCount == 0 {
-            log("RunnerStore › ⚠️ start — localRunners=0 at start time; installPathMap will be empty on first fetch. refresh() should have been called before start().")
-        }
-        pollTask?.cancel()
-        log("RunnerStore › start — previous pollTask cancelled, launching new task")
-        pollTask = Task { [weak self] in
-            guard let self else { return }
-            await self.fetch()
-            while !Task.isCancelled {
-                let interval = self.nextPollInterval()
-                log("RunnerStore › poll loop — next fetch in \(Int(interval))s")
-                do {
-                    try await Task.sleep(for: .seconds(interval))
-                } catch is CancellationError {
-                    log("RunnerStore › poll loop — CancellationError, exiting cleanly")
-                    break
-                } catch {
-                    log("RunnerStore › poll loop — unexpected error \(error), exiting")
-                    break
-                }
-                guard !Task.isCancelled else {
-                    log("RunnerStore › poll loop — cancelled after sleep, exiting")
-                    break
-                }
-                await self.fetch()
-            }
-            log("RunnerStore › poll loop — exited (cancelled)")
-        }
-    }
-
-    /// Returns the next poll interval in seconds, based on current store state.
-    private func nextPollInterval() -> TimeInterval {
-        let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
-        let hasActiveActions = actions.contains {
-            $0.groupStatus == .inProgress || $0.groupStatus == .queued
-        }
-        let hasActive = hasActiveJobs || hasActiveActions
-        let baseIdle = max(10, AppPreferencesStore.shared.pollingInterval)
-        let interval: TimeInterval = (isRateLimited || !hasActive) ? TimeInterval(baseIdle) : 10
-        log("RunnerStore › nextPollInterval — \(Int(interval))s hasActive=\(hasActive) rateLimited=\(isRateLimited) baseIdle=\(baseIdle)")
-        return interval
-    }
-
     // MARK: - Fetch
 
     /// Performs one complete poll cycle: fetches runners, jobs, and action groups,
@@ -167,7 +105,7 @@ final class RunnerStore {
     func fetch() async {
         // Reset rate-limit flag at the top of each cycle so that a previous 403
         // does not permanently suppress fetches after the window has expired via the
-        // actor's internal reset task. The actor's `clear()` is idempotent.
+        // actor’s internal reset task. The actor’s `clear()` is idempotent.
         await clearGhRateLimit()
 
         let scopesSnapshot = ScopeStore.shared.activeScopes
@@ -215,64 +153,9 @@ final class RunnerStore {
         )
     }
 
-    // MARK: - InstallPathMap
-
-    /// Lookup maps built from the local runner list, used by `fetchAndEnrichRunners`.
-    struct InstallPathMap {
-        /// "scope/runnerName" → installPath  (exact scope-prefixed match)
-        let byFullKey: [String: String]
-        /// "runnerName" → installPath  (name-only fallback)
-        let byName: [String: String]
-        /// agentId (Int) → installPath  (local `.runner` JSON AgentId, scope-agnostic)
-        let byId: [Int: String]
-        /// apiId (Int) → installPath  (GitHub REST API runner id from last enrichment cycle)
-        ///
-        /// For org runners the GitHub API assigns an `id` that differs from the local
-        /// `.runner` JSON `AgentId`. This map is keyed on the API id so that metrics
-        /// can be resolved for org runners even when `byId` misses.
-        let byApiId: [Int: String]
-    }
-
-    /// Builds four lookup maps from the local runner list.
-    private func buildInstallPathMap(
-        scopes: [String],
-        localRunners: [RunnerModel]
-    ) -> InstallPathMap {
-        var byFullKey: [String: String] = [:]
-        var byName: [String: String] = [:]
-        var byId: [Int: String] = [:]
-        var byApiId: [Int: String] = [:]
-        for localRunner in localRunners {
-            guard let path = localRunner.installPath else {
-                log("RunnerStore › buildInstallPathMap — SKIP \(localRunner.runnerName): installPath is nil")
-                continue
-            }
-            byName[localRunner.runnerName] = path
-            if let agentId = localRunner.agentId {
-                byId[agentId] = path
-            } else {
-                log("RunnerStore › buildInstallPathMap — \(localRunner.runnerName): agentId is nil (will rely on apiId/fullKey/name fallback)")
-            }
-            if let apiId = localRunner.apiId {
-                byApiId[apiId] = path
-            }
-            for scope in scopes {
-                byFullKey["\(scope)/\(localRunner.runnerName)"] = path
-            }
-        }
-        log("RunnerStore › buildInstallPathMap — localRunners=\(localRunners.count) scopes=\(scopes) → fullKeys=\(byFullKey.keys.sorted()) nameKeys=\(byName.keys.sorted()) idKeys=\(byId.keys.sorted()) apiIdKeys=\(byApiId.keys.sorted())")
-        if byFullKey.isEmpty && !localRunners.isEmpty {
-            log("RunnerStore › ⚠️ buildInstallPathMap — fullKey map is EMPTY despite localRunners=\(localRunners.count). Scopes=\(scopes). Check scope string format alignment with localRunner names.")
-        }
-        if localRunners.isEmpty {
-            log("RunnerStore › ⚠️ buildInstallPathMap — localRunners is EMPTY. All maps are empty. Busy runners will have no installPath this cycle.")
-        }
-        return InstallPathMap(byFullKey: byFullKey, byName: byName, byId: byId, byApiId: byApiId)
-    }
-
     // MARK: - Apply result
 
-    /// Commits a completed fetch cycle's results to the store and notifies observers.
+    /// Commits a completed fetch cycle’s results to the store and notifies observers.
     ///
     /// Rate-limit state is read via a single `rateLimitActor.snapshot()` call so that
     /// `isRateLimited` and `rateLimitResetDate` are always consistent with each other.
