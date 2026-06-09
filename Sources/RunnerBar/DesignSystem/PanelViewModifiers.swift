@@ -118,6 +118,7 @@ struct GlassButton: ViewModifier {
 ///
 /// ❌ Do NOT revert tint to `Color.primary` — it is near-black in dark mode.
 struct StatPillBackground: ViewModifier {
+    /// Applies the stat pill background: glass capsule on macOS 26+, `.ultraThinMaterial` capsule on older OSes.
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
@@ -134,7 +135,10 @@ struct StatPillBackground: ViewModifier {
 /// colour tint + glass — identical pattern to DiskPillBadge.
 /// Call site MUST wrap in GlassEffectContainer.
 struct StatusBadgeBackground: ViewModifier {
+    /// The accent colour used for the tint and (pre-macOS-26) stroke border.
     let color: Color
+
+    /// Applies the status badge background: coloured glass capsule on macOS 26+, tinted stroke capsule on older OSes.
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
