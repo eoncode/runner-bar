@@ -23,7 +23,7 @@ import SwiftUI
 // ║ ❌ NEVER omit idealWidth: 480 from the root frame                         ║
 // ║ ❌ NEVER add .frame(height:) here                                         ║
 // ║ ❌ NEVER add .fixedSize() here                                            ║
-// ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap         ║
+// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap         ║
 // ║   Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
 // ║   reports the full log text height as preferredContentSize.height on      ║
 // ║   navigate → panel grows off-screen. (ref #370)                           ║
