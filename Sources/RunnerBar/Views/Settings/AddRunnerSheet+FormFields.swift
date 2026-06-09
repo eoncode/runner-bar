@@ -4,6 +4,7 @@
 import AppKit
 import SwiftUI
 
+// swiftlint:disable:next missing_docs
 extension AddRunnerSheet {
 
     // MARK: - Add New Form Body
