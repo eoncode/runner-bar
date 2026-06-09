@@ -4,33 +4,29 @@
 import Foundation
 
 // MARK: - URL helpers
-// Note: resolveURL is intentionally internal. It is called from GitHubURLSessionTransport
-// and GitHubResponseDecoder across file boundaries, so fileprivate is not an option.
-// It has no meaningful side-effects and no security implications, so module-internal
-// visibility is the narrowest access level that satisfies the split.
-
-/// Module-level constant reused by `resolveURL` to avoid allocating a new
-/// `CharacterSet` on every API call and pagination iteration.
-private let slashCharacterSet = CharacterSet(charactersIn: "/")
 
 /// Resolves an endpoint string to a full GitHub API URL string.
 /// Absolute URLs (starting with "http") are returned unchanged;
 /// relative paths are prefixed with `GitHubConstants.apiBase`.
+///
+/// Intentionally internal: called from `GitHubURLSessionTransport` and
+/// `GitHubResponseDecoder` across file boundaries introduced by the
+/// transport split. `fileprivate` is not an option across files; internal
+/// is the narrowest visibility that satisfies the requirement.
 func resolveURL(_ endpoint: String) -> String {
-    endpoint.hasPrefix("http")
+    /// Module-level constant reused to avoid allocating a new `CharacterSet`
+    /// on every API call and pagination iteration.
+    let slashCharacterSet = CharacterSet(charactersIn: "/")
+    return endpoint.hasPrefix("http")
         ? endpoint
         : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: slashCharacterSet))"
 }
 
 // MARK: - Request factories
-// Note: makeRequest and makeRawRequest are intentionally internal for the same reason
-// as resolveURL — they are called from GitHubURLSessionTransport which lives in a
-// separate file after the split. makeBaseRequest remains private as it is only ever
-// called by the two functions directly below it in this file.
 
 /// Builds a `URLRequest` with the headers common to all GitHub API requests:
 /// `Authorization: Bearer`, `X-GitHub-Api-Version`.
-/// Only called by `makeRequest(_:)` and `makeRawRequest(_:)`.
+/// Only called by `makeRequest` and `makeRawRequest` in this file.
 private func makeBaseRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
     var req = URLRequest(url: url, timeoutInterval: timeout)
     req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -39,6 +35,9 @@ private func makeBaseRequest(url: URL, token: String, timeout: TimeInterval) -> 
 }
 
 /// Builds a pre-configured `URLRequest` with the standard `application/vnd.github+json` Accept header.
+///
+/// Intentionally internal: called from `GitHubURLSessionTransport` across the file
+/// boundary introduced by the transport split. `makeBaseRequest` remains private.
 func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
     var req = makeBaseRequest(url: url, token: token, timeout: timeout)
     req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -47,6 +46,9 @@ func makeRequest(url: URL, token: String, timeout: TimeInterval) -> URLRequest {
 
 /// Builds a `URLRequest` with the `application/vnd.github.v3.raw` Accept header.
 /// Used for log endpoints that 302-redirect to raw S3 content.
+///
+/// Intentionally internal: called from `GitHubURLSessionTransport` across the file
+/// boundary introduced by the transport split.
 ///
 /// # S3 redirect safety
 /// The `Authorization: Bearer` header is sent only to api.github.com.

@@ -4,11 +4,11 @@
 import Foundation
 
 // MARK: - Error logging
-// Note: logErrorBody and extractNextURL are intentionally internal. Both are called
-// from GitHubURLSessionTransport across the file boundary introduced by this split.
-// The visibility is the minimum required; neither function has side-effects beyond logging.
 
 /// Logs the response body (up to 400 chars) for non-2xx responses.
+///
+/// Intentionally internal: called from `GitHubURLSessionTransport` across the
+/// file boundary introduced by the transport split. No side-effects beyond logging.
 func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
     guard let data, !data.isEmpty else { return }
     let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
@@ -59,6 +59,8 @@ func handleRateLimitResponse(
 // MARK: - Pagination
 
 /// Parses the `Link` header from a GitHub paginated response and returns the `next` URL, if any.
+///
+/// Intentionally internal: called from `GitHubURLSessionTransport` across the file boundary.
 func extractNextURL(from header: String?) -> String? {
     guard let header else { return nil }
     for part in header.components(separatedBy: ",") {

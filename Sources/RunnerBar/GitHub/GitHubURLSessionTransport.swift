@@ -78,12 +78,12 @@ private func urlSessionExecute(
 }
 
 // MARK: - Async GET (primary transport)
-// Note: urlSessionAPIAsync, urlSessionAPIPaginated, urlSessionRaw are intentionally
-// internal (no access modifier). They are the stable call sites for the rest of the module
-// and must be visible to RunnerStore and other consumers across files. The underlying
-// urlSessionExecute helper above remains private to this file.
 
 /// Fetches a single GitHub API page using `URLSession.data(for:)` async/await.
+///
+/// Intentionally internal: this is a stable call site consumed by `RunnerStore` and other
+/// module-level consumers across files. The underlying `urlSessionExecute` remains private
+/// to this file.
 func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     guard case .success(let data, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionAPIAsync"
@@ -155,6 +155,11 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
 // MARK: - Raw async (log endpoints)
 
 /// Fetches raw bytes from a GitHub API endpoint that 302-redirects to S3.
+///
+/// - Note: This function uses `makeRawRequest` which sets `Accept: application/vnd.github.v3.raw`.
+///   Apple’s URLSession strips the `Authorization` header before following cross-origin
+///   redirects (RFC 7235), so the Bearer token is never forwarded to S3.
+///   See `makeRawRequest` in `GitHubRequestBuilder.swift` for full details.
 func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     guard case .success(let data, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionRaw", useRawAccept: true
@@ -164,11 +169,11 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data
 }
 
 // MARK: - POST / DELETE / PUT (mutation)
-// Note: urlSessionPost, urlSessionPut, urlSessionDelete are intentionally internal.
-// They back the public-facing ghPost/ghAPIPaginated helpers and the runner mutation
-// functions below, all of which are called from outside this file.
 
 /// Sends a POST to the given GitHub API endpoint.
+///
+/// Intentionally internal: backs `ghPost` and the runner mutation helpers below,
+/// all of which are called from outside this file.
 /// - Returns: Response body on 2xx (`Data()` for 204 No Content), `nil` on failure.
 @discardableResult
 func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
