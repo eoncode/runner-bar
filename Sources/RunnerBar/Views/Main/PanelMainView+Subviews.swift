@@ -245,7 +245,9 @@ struct PanelLocalRunnerRow: View {
 /// `.easeInOut(duration: 0.15)` on both paths — matching main branch exactly.
 ///
 /// ⚠️ Do NOT add GlassEffectContainer, .glassEffectID, .bouncy, or
-/// .glassEffectTransition — they cause staggered/slow expand animations (#957).
+/// .glassEffectTransition to the row or rowContainer — they cause staggered/slow
+/// expand animations (#957). The statusBadge GlassEffectContainer in metaTrailing
+/// is intentionally scoped to just the badge, not the row.
 struct ActionRowView: View {
     /// The workflow action group this row represents.
     let group: WorkflowActionGroup
@@ -406,6 +408,11 @@ struct ActionRowView: View {
     }
 
     /// Trailing meta: time-ago · steps/total · elapsed(mm:ss, active only) · statusBadge.
+    ///
+    /// The statusBadge is wrapped in its own GlassEffectContainer so its
+    /// .glassEffect has a dedicated CABackdropLayer sampling region.
+    /// This container is intentionally scoped to just the badge — do NOT
+    /// expand it to cover the full row or rowContainer (#957).
     @ViewBuilder private func metaTrailing(tick tickSnapshot: Int) -> some View {
         if let start = group.firstJobStartedAt {
             Text(RelativeTimeFormatter.string(from: start))
@@ -430,7 +437,14 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        statusBadge
+        // GlassEffectContainer scoped to the badge only — gives .glassEffect inside
+        // StatusBadge a dedicated CABackdropLayer sampling region.
+        // ⚠️ Do NOT expand this container to the row or rowContainer (#957).
+        if #available(macOS 26, *) {
+            GlassEffectContainer { statusBadge }
+        } else {
+            statusBadge
+        }
     }
 
     /// Colored pill badge reflecting the current run status.

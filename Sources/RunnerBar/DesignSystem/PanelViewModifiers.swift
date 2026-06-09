@@ -148,25 +148,31 @@ struct StatPillBackground: ViewModifier {
 
 // MARK: - StatusBadgeBackground
 /// Background modifier for `StatusBadge` capsule badges.
-/// macOS 26+: colour tint layer + stroke overlay on a `Capsule()` shape.
-/// macOS < 26: `Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)` (unchanged).
-/// Note: intentionally does NOT use `.glassEffect` — the tinted capsule design
-/// is distinct from the glass card pattern used in `GlassCard` and `StatPillBackground`.
+///
+/// Matches the `DiskPillBadge` pattern exactly:
+/// - colour tint layer: `color.opacity(0.15)` in a `Capsule()`
+/// - `.glassEffect(.regular, in: Capsule())` on top
+///
+/// The call site (ActionRowView.metaTrailing) MUST wrap `statusBadge` in a
+/// `GlassEffectContainer` so the glass has a dedicated CABackdropLayer sampling
+/// region and refracts correctly instead of washing out.
+///
+/// macOS < 26: tint fill + stroke border (unchanged).
 struct StatusBadgeBackground: ViewModifier {
     /// The status color used to tint the badge.
     let color: Color
 
-    /// Applies a tinted capsule background (macOS 26+) or stroke capsule border (pre-26).
+    /// Applies a tinted glass capsule background (macOS 26+) or tint+stroke capsule (pre-26).
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content
+                .background(color.opacity(0.15), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            content
                 .background(color.opacity(0.25), in: Capsule())
                 .overlay(Capsule().strokeBorder(color.opacity(0.55), lineWidth: 0.5))
-        } else {
-            content.background(
-                Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1)
-            )
         }
     }
 }
@@ -177,7 +183,7 @@ struct StatusBadgeBackground: ViewModifier {
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
 /// Note: the tint is applied *before* the glass effect so the accent colour tints
 /// the frosted glass layer. This is distinct from `StatPillBackground` (glass only)
-/// and `StatusBadgeBackground` (tint + stroke, no glass).
+/// and `StatusBadgeBackground` (tint + glass).
 struct BranchTagPillBackground: ViewModifier {
     /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     @ViewBuilder
@@ -244,12 +250,14 @@ extension View {
         modifier(StatPillBackground())
     }
 
-    /// Applies the `StatusBadgeBackground` modifier (compositor-tinted glass capsule on macOS 26+).
+    /// Applies the `StatusBadgeBackground` modifier (tinted glass capsule on macOS 26+).
+    /// ⚠️ The call site MUST wrap the badge in a `GlassEffectContainer` so .glassEffect
+    /// has a dedicated CABackdropLayer sampling region.
     func statusBadgeBackground(color: Color) -> some View {
         modifier(StatusBadgeBackground(color: color))
     }
 
-    /// Applies the `BranchTagPillBackground` modifier (compositor-tinted glass capsule on macOS 26+).
+    /// Applies the `BranchTagPillBackground` modifier (tinted glass capsule on macOS 26+).
     func branchTagPillBackground() -> some View {
         modifier(BranchTagPillBackground())
     }
@@ -294,14 +302,18 @@ struct StatPill: View {
 
 // MARK: - StatusBadge
 /// Capsule badge for action-row trailing area.
-/// Renders a colour-matched background/border and label for a given `RBStatus`.
+/// Renders a colour-matched tinted glass background for a given `RBStatus`.
+/// Matches the `DiskPillBadge` visual pattern: tint + glass.
+///
+/// ⚠️ Must be wrapped in a `GlassEffectContainer` at the call site
+/// (ActionRowView.metaTrailing) for correct glass rendering.
 struct StatusBadge: View {
     /// The workflow status used to determine badge color and appearance.
     let status: RBStatus
     /// The short label text displayed inside the badge.
     let text: String
 
-    /// The badge content: a tinted capsule label matching the status color.
+    /// The badge content: a tinted glass capsule label matching the status color.
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .semibold))
