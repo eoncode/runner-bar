@@ -4,6 +4,15 @@
 import AppKit
 import SwiftUI
 
+// MARK: - RunnerJSON
+
+/// Minimal decodable shape for the `.runner` JSON written by `config.sh`.
+/// Only the two fields RunnerBar needs are decoded; all others are ignored.
+private struct RunnerJSON: Decodable {
+    let gitHubUrl: String?
+    let runnerName: String?
+}
+
 // swiftlint:disable:next missing_docs
 extension AddRunnerSheet {
 
@@ -36,6 +45,9 @@ extension AddRunnerSheet {
                     onDismiss: { showRepoSelector = false },
                     onSelect: { item in
                         selectedRepo = item
+                        // No dismiss here -- RepoSelectorSheet.itemRow calls onDismiss
+                        // after onSelect. Adding showRepoSelector = false here would
+                        // cause a double-dismiss and a SwiftUI sheet lifecycle warning.
                     }
                 )
             }
@@ -52,6 +64,9 @@ extension AddRunnerSheet {
                     onDismiss: { showOrgSelector = false },
                     onSelect: { item in
                         selectedOrg = item
+                        // No dismiss here -- RepoSelectorSheet.itemRow calls onDismiss
+                        // after onSelect. Adding showOrgSelector = false here would
+                        // cause a double-dismiss and a SwiftUI sheet lifecycle warning.
                     }
                 )
             }
@@ -320,11 +335,6 @@ extension AddRunnerSheet {
         guard let data = try? Data(contentsOf: runnerFileURL) else {
             existingError = "Could not read .runner file."
             return
-        }
-
-        struct RunnerJSON: Decodable {
-            let gitHubUrl: String?
-            let runnerName: String?
         }
 
         guard let json = try? JSONDecoder().decode(RunnerJSON.self, from: data) else {

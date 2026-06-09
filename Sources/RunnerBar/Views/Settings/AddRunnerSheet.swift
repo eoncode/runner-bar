@@ -72,6 +72,13 @@ struct AddRunnerSheet: View {
     /// Whether the user is adding a new runner or importing a pre-existing one.
     @State var addMode: AddMode = .addNew
 
+    // MARK: - Internal state (extension-accessible)
+    // These properties have no explicit access modifier (i.e. they are `internal`)
+    // rather than `private` so that extensions defined in sibling files
+    // (+FormFields, +Validation, +TokenSection) can read and mutate them.
+    // They are logically private to the AddRunnerSheet file family and must
+    // not be accessed from outside it.
+
     // MARK: Scope state (Add new only)
 
     /// Determines whether the runner is registered at repo or organisation scope.
@@ -214,6 +221,12 @@ struct AddRunnerSheet: View {
     ///
     /// The plist label is derived as `actions.runner.<owner>.<repo>.<runnerName>` and written
     /// atomically. Used by both the "Add new" and "Add pre-existing" flows.
+    ///
+    /// - Note: `ProgramArguments` is intentionally omitted. The runner is started by
+    ///   `launchctl` invoking `./run.sh` from the `WorkingDirectory`; RunnerBar only
+    ///   needs `Label` + `WorkingDirectory` to identify and manage the agent. A full
+    ///   `ProgramArguments` array would be added if RunnerBar ever needs to bootstrap
+    ///   the runner itself rather than relying on the existing `run.sh` mechanism.
     nonisolated func writeLaunchAgentPlist(scope: String, runnerName: String, workingDirectory: String) {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
