@@ -9,7 +9,7 @@ extension SettingsView {
 
     // MARK: - Account
     /// GitHub sign-in / sign-out controls and authentication status.
-    fileprivate var accountSection: some View {
+    var accountSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Account").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
@@ -74,7 +74,7 @@ extension SettingsView {
 
     // MARK: - Management
     /// "Management" section: header label + nav rows for local runners and scopes.
-    fileprivate var managementSection: some View {
+    var managementSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Management").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
@@ -85,7 +85,7 @@ extension SettingsView {
     }
 
     /// Navigation row that drills into `LocalRunnersView`.
-    fileprivate var manageLocalRunnersRow: some View {
+    var manageLocalRunnersRow: some View {
         Button {
             showLocalRunners = true
         } label: {
@@ -108,7 +108,7 @@ extension SettingsView {
     }
 
     /// Navigation row that drills into `ScopesView`.
-    fileprivate var manageScopesRow: some View {
+    var manageScopesRow: some View {
         Button {
             showScopes = true
         } label: {
@@ -132,7 +132,7 @@ extension SettingsView {
 
     // MARK: - General
     /// General section: polling interval, notification toggles, launch-at-login, and popover arrow.
-    fileprivate var generalSection: some View {
+    var generalSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
@@ -194,7 +194,7 @@ extension SettingsView {
 
     // MARK: - About
     /// App version, build number, and links to changelog / support.
-    fileprivate var aboutSection: some View {
+    var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("About").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
