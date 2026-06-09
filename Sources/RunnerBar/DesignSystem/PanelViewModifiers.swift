@@ -121,12 +121,14 @@ struct GlassButton: ViewModifier {
 // MARK: - StatPillBackground
 /// Background modifier for `StatPill` and `RunnerMetricsBadge` capsule pills.
 ///
-/// macOS 26+: `.glassEffect(.regular, in: Capsule())`.
+/// macOS 26+: neutral white/gray tint (`Color.primary.opacity(0.08)`) anchors the
+/// pill visually against the card background, then `.glassEffect(.regular, in: Capsule())`
+/// adds the frosted glass layer on top. Matches the `DiskPillBadge` / `StatusBadge`
+/// tint+glass pattern but is colour-neutral (no semantic tint colour).
+///
 /// The call site (runnerCard) MUST wrap the card content in a `GlassEffectContainer`
-/// on macOS 26+ so this pill and the card's `.glassCard()` share a single
-/// CABackdropLayer sampling region. Without the container, glass-on-glass renders
-/// with near-zero contrast and the pill is invisible. See runnerCard() in
-/// PanelMainView+Subviews.swift for the correct usage pattern.
+/// so this pill and the card's `.glassCard()` share a single CABackdropLayer sampling
+/// region. Without the container, glass-on-glass renders with near-zero contrast.
 ///
 /// macOS < 26: `.ultraThinMaterial` in a `Capsule()` (unchanged).
 ///
@@ -135,11 +137,13 @@ struct GlassButton: ViewModifier {
 /// ❌ Do NOT add a stroke/fill hack here to compensate for missing container —
 /// fix the call site instead.
 struct StatPillBackground: ViewModifier {
-    /// Applies a glass capsule background (macOS 26+) or ultra-thin material capsule (pre-26).
+    /// Applies a neutral-tinted glass capsule background (macOS 26+) or ultra-thin material capsule (pre-26).
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            content.glassEffect(.regular, in: Capsule())
+            content
+                .background(Color.primary.opacity(0.08), in: Capsule())
+                .glassEffect(.regular, in: Capsule())
         } else {
             content.background(.ultraThinMaterial, in: Capsule())
         }
@@ -182,8 +186,8 @@ struct StatusBadgeBackground: ViewModifier {
 /// macOS 26+: accent tint layer + `.glassEffect(.regular, in: Capsule())`.
 /// macOS < 26: `Capsule().strokeBorder(rbAccent.opacity(0.4), lineWidth: 1)` (unchanged).
 /// Note: the tint is applied *before* the glass effect so the accent colour tints
-/// the frosted glass layer. This is distinct from `StatPillBackground` (glass only)
-/// and `StatusBadgeBackground` (tint + glass).
+/// the frosted glass layer. This is distinct from `StatPillBackground` (neutral tint + glass)
+/// and `StatusBadgeBackground` (status tint + glass).
 struct BranchTagPillBackground: ViewModifier {
     /// Applies a tinted glass capsule background (macOS 26+) or stroke capsule border (pre-26).
     @ViewBuilder
@@ -243,7 +247,7 @@ extension View {
         modifier(GlassButton(cornerRadius: cornerRadius))
     }
 
-    /// Applies the `StatPillBackground` modifier (glass capsule on macOS 26+, material pre-26).
+    /// Applies the `StatPillBackground` modifier (neutral tinted glass capsule on macOS 26+, material pre-26).
     /// ⚠️ The call site MUST wrap card content in a `GlassEffectContainer` on macOS 26+
     /// so the pill and card glass share a CABackdropLayer sampling region.
     func statPillBackground() -> some View {
