@@ -310,7 +310,7 @@ final class RunnerStore {
 
         log("RunnerStore › fetchAndEnrichRunners — total runners across all scopes: \(runnersWithScope.count)")
 #if DEBUG
-        log("RunnerStore › fetchAndEnrichRunners — installPathMap.byFullKey=\(installPathMap.byFullKey.keys.sorted()) byName=\(installPathMap.byName.keys.sorted()) byId=\(installPathMap.byId.keys.sorted()) byApiId=\(installPathMap.byApiId.keys.sorted())")
+        log("RunnerStore › fetchAndEnrichRunners — installPathMap.byFullKey=\(installPathMap.byFullKey.keys.sorted()) byName=\(installPathMap.byName.keys.sorted()) byAgentId=\(installPathMap.byAgentId.keys.sorted()) byApiId=\(installPathMap.byApiId.keys.sorted())")
 #endif
 
         var indexed: [(scope: String, runner: Runner)] = runnersWithScope
@@ -326,18 +326,19 @@ final class RunnerStore {
                 guard runner.busy else { continue }
                 let fullKey = "\(scope)/\(runner.name)"
                 // Resolution order:
-                // 1. byApiId  — GitHub REST API id (populated after first enrichment cycle);
-                //               fixes org runners whose agentId ≠ API id.
-                // 2. byId     — local .runner JSON AgentId; works for repo runners.
-                // 3. byFullKey — scope/name string match.
-                // 4. byName   — name-only last resort.
-                let resolvedByApiId = installPathMap.byApiId[runner.id]
-                let resolvedById    = installPathMap.byId[runner.id]
-                let resolvedByFull  = installPathMap.byFullKey[fullKey]
-                let resolvedByName  = installPathMap.byName[runner.name]
-                let installPath     = resolvedByApiId ?? resolvedById ?? resolvedByFull ?? resolvedByName
+                // 1. byApiId    — GitHub REST API id (populated after first enrichment cycle);
+                //                 fixes org runners whose agentId ≠ API id.
+                // 2. byAgentId  — local .runner JSON AgentId; works for repo runners
+                //                 when agentId == API id.
+                // 3. byFullKey  — scope/name string match.
+                // 4. byName     — name-only last resort.
+                let resolvedByApiId   = installPathMap.byApiId[runner.id]
+                let resolvedByAgentId = installPathMap.byAgentId[runner.id]
+                let resolvedByFull    = installPathMap.byFullKey[fullKey]
+                let resolvedByName    = installPathMap.byName[runner.name]
+                let installPath       = resolvedByApiId ?? resolvedByAgentId ?? resolvedByFull ?? resolvedByName
 #if DEBUG
-                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) id=\(runner.id) busy=true; fullKey=\(fullKey); byApiId=\(String(describing: resolvedByApiId)) byId=\(String(describing: resolvedById)) byFullKey=\(String(describing: resolvedByFull)) byName=\(String(describing: resolvedByName)) → resolved=\(String(describing: installPath))")
+                log("RunnerStore › fetchAndEnrichRunners — \(runner.name) id=\(runner.id) busy=true; fullKey=\(fullKey); byApiId=\(String(describing: resolvedByApiId)) byAgentId=\(String(describing: resolvedByAgentId)) byFullKey=\(String(describing: resolvedByFull)) byName=\(String(describing: resolvedByName)) → resolved=\(String(describing: installPath))")
 #endif
                 guard let installPath else {
                     log("RunnerStore › ⚠️ fetchAndEnrichRunners — \(runner.name) busy but NO installPath resolved. id=\(runner.id) fullKey=\(fullKey). localRunners may be empty or scope/name mismatch.")
@@ -366,7 +367,7 @@ final class RunnerStore {
         for (_, runner) in indexed
             where runner.busy
                && (installPathMap.byApiId[runner.id] != nil
-                   || installPathMap.byId[runner.id] != nil
+                   || installPathMap.byAgentId[runner.id] != nil
                    || installPathMap.byName[runner.name] != nil) {
 #if DEBUG
             log("RunnerStore › fetchAndEnrichRunners — applyMetrics to LocalRunnerStore: \(runner.name) id=\(runner.id) busy=\(runner.busy) metrics=\(String(describing: runner.metrics))")

@@ -1,5 +1,6 @@
 // RunnerStore+PollLoop.swift
 // RunnerBar
+import Foundation
 
 // MARK: - Poll loop (see RunnerStore.swift)
 //
