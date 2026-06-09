@@ -102,4 +102,7 @@ final class PanelVisibilityState: ObservableObject {
     /// Set by AppDelegate before show(). Calls panel.setFrame().
     /// ❌ NEVER call more than once per open.
     var onHeightReady: ((CGFloat) -> Void)?
+
+    /// Creates a new `PanelVisibilityState` with all flags in their initial off state.
+    init() {}
 }

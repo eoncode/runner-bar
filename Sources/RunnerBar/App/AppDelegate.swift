@@ -146,6 +146,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
+    /// Creates a new `AppDelegate` instance. Called once by the application entry-point.
+    override init() {
+        super.init()
+    }
+
     // MARK: - Sheet guard
 
     /// Returns true when a SwiftUI sheet is currently presented over the popover.
@@ -362,22 +367,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelIsOpen = true
         panelVisibilityState.isOpen = true
         if !restorePopoverWindowsPreservingSheetsIfNeeded() {
-            // Apply arrow visibility preference (#1184).
-            // shouldHideAnchor is a private KVC key — not App Store safe, but
-            // RunnerBar is not App Store distributed so this is acceptable.
-            // ⚠️ Must be set immediately before show() — the value is latched at show() time.
-            // ⚠️ Guarded by responds(to:) so the app degrades silently (arrow stays
-            //    visible) rather than crashing if Apple removes the key on a future macOS.
             let hideArrow = !AppPreferencesStore.shared.showPopoverArrow
             if popover.responds(to: NSSelectorFromString("setShouldHideAnchor:")) {
                 popover.setValue(hideArrow, forKey: "shouldHideAnchor")
             }
-            // Re-assert behavior and delegate immediately before show().
-            // NSPopover latches these values at show() time — setting them
-            // only at setupPanel() is not sufficient; AppKit can reset them
-            // between calls. Without this, behavior silently falls back to
-            // .transient and our outsideClickMonitor / popoverShouldClose
-            // code never runs.
             popover.behavior = .applicationDefined
             popover.delegate = self
             log("AppDelegate › openPanel — PRE-SHOW behavior=\(popover.behavior.rawValue) delegate=\(String(describing: popover.delegate))")
@@ -386,11 +379,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         makePopoverWindowKeyIfPossible()
         resizeAndRepositionPanel()
-        // Only navigate if we have a saved state AND the current rootView is
-        // NOT already showing that view (i.e. we came from closePanel/mainView reset,
-        // not from hidePanel which preserves rootView).
-        // Simpler approach: only navigate when savedNavState is set AND
-        // hasActiveSheet is false (if sheet is open, rootView is correct already).
         if let saved = savedNavState, !hasActiveSheet, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
@@ -398,8 +386,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !self.preservedSheetWindowHide else { return }
             self.panelSheetState.restoreTransientHideStateIfNeeded()
         }
-        // Install outside-click monitor. Fires on every left/right click outside
-        // the popover. tearDownOpenState() removes the monitor on every close path.
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
@@ -408,72 +394,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ).origin ?? NSEvent.mouseLocation
             log("AppDelegate › outsideClickMonitor — FIRED type=\(event.type.rawValue) screenLoc=\(screenLoc)")
             Task { @MainActor [weak self] in
-                guard let self else {
-                    log("AppDelegate › outsideClickMonitor — self is nil, skipping")
-                    return
-                }
-                log("AppDelegate › outsideClickMonitor — panelIsOpen=\(self.panelIsOpen)")
-                guard self.panelIsOpen else {
-                    log("AppDelegate › outsideClickMonitor — guard exit: panel not open")
-                    return
-                }
-                guard !self.hasActiveSheet else {
-                    log("AppDelegate › outsideClickMonitor — guard exit: hasActiveSheet=true, skipping hidePanel")
-                    return
-                }
-                guard let popoverWindow = self.popover?.contentViewController?.view.window else {
-                    log("AppDelegate › outsideClickMonitor — WARNING: popoverWindow is nil, skipping hidePanel")
-                    return
-                }
-                log("AppDelegate › outsideClickMonitor — popoverFrame=\(popoverWindow.frame) screenLoc=\(screenLoc) contains=\(popoverWindow.frame.contains(screenLoc))")
-                if popoverWindow.frame.contains(screenLoc) {
-                    log("AppDelegate › outsideClickMonitor — click inside popover window, ignoring")
-                    return
-                }
-                log("AppDelegate › outsideClickMonitor — calling hidePanel() screenLoc=\(screenLoc)")
+                guard let self else { return }
+                guard self.panelIsOpen else { return }
+                guard !self.hasActiveSheet else { return }
+                guard let popoverWindow = self.popover?.contentViewController?.view.window else { return }
+                if popoverWindow.frame.contains(screenLoc) { return }
                 self.hidePanel()
             }
         }
         log("AppDelegate › openPanel — outsideClickMonitor installed: \(String(describing: outsideClickMonitor))")
-        // Install app-switch observer. Fires when any app becomes frontmost,
-        // including RunnerBar itself.
-        //
-        // IMPORTANT — self-activation guard is intentional:
-        // `guard activatedApp != NSRunningApplication.current` prevents the
-        // popover from self-dismissing when RunnerBar regains focus after an
-        // NSOpenPanel picker closes (the picker re-activates its parent app,
-        // which would otherwise trigger hidePanel on the way back in).
-        // Do NOT remove this guard.
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
-                log("AppDelegate › workspaceObserver — FIRED but activatedApp is nil, skipping")
-                return
-            }
+            guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             let appName = activatedApp.localizedName ?? "unknown"
             log("AppDelegate › workspaceObserver — FIRED activated=\(appName)")
-            guard activatedApp != NSRunningApplication.current else {
-                log("AppDelegate › workspaceObserver — guard exit: RunnerBar self-activated, skipping hidePanel")
-                return
-            }
+            guard activatedApp != NSRunningApplication.current else { return }
             Task { @MainActor [weak self] in
-                guard let self else {
-                    log("AppDelegate › workspaceObserver — self is nil, skipping")
-                    return
-                }
-                log("AppDelegate › workspaceObserver — panelIsOpen=\(self.panelIsOpen)")
-                guard self.panelIsOpen else {
-                    log("AppDelegate › workspaceObserver — guard exit: panel not open")
-                    return
-                }
-                guard !self.hasActiveSheet else {
-                    log("AppDelegate › workspaceObserver — guard exit: hasActiveSheet=true, skipping hidePanel")
-                    return
-                }
-                log("AppDelegate › workspaceObserver — calling hidePanel() because activated=\(appName) panelIsOpen=\(self.panelIsOpen)")
+                guard let self else { return }
+                guard self.panelIsOpen else { return }
+                guard !self.hasActiveSheet else { return }
                 self.hidePanel()
             }
         }
