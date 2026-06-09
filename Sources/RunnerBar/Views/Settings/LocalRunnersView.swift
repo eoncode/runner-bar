@@ -325,10 +325,14 @@ struct LocalRunnersView: View {
                 if let installPath = runner.installPath {
                     original.load(installPath: installPath)
                 }
-                Task {
-                    let result = await Task.detached(priority: .userInitiated) {
-                        await commitRunnerEdit(runner: runner, draft: draft, original: original)
-                    }.value
+                // Use a plain Task (not Task.detached) so the closure inherits the
+                // @MainActor isolation of LocalRunnersView. Task.detached would
+                // require `original` to cross an isolation boundary as a `sending`
+                // parameter, triggering a Swift 6 data-race diagnostic.
+                // commitRunnerEdit is already async, so there is no need to escape
+                // to a detached context here.
+                Task { @MainActor in
+                    let result = await commitRunnerEdit(runner: runner, draft: draft, original: original)
                     isCommitting = false
                     switch result {
                     case .success:
