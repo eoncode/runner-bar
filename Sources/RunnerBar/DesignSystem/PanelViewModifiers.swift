@@ -121,42 +121,27 @@ struct GlassButton: ViewModifier {
 // MARK: - StatPillBackground
 /// Background modifier for `StatPill` and `RunnerMetricsBadge` capsule pills.
 ///
-/// macOS 26+: `.glassEffect(.regular, in: Capsule())` + a white stroke border
-/// (opacity 0.18) + a very subtle white fill (opacity 0.06).
+/// macOS 26+: `.glassEffect(.regular, in: Capsule())`.
+/// The call site (runnerCard) MUST wrap the card content in a `GlassEffectContainer`
+/// on macOS 26+ so this pill and the card's `.glassCard()` share a single
+/// CABackdropLayer sampling region. Without the container, glass-on-glass renders
+/// with near-zero contrast and the pill is invisible. See runnerCard() in
+/// PanelMainView+Subviews.swift for the correct usage pattern.
 ///
-/// The stroke + fill are necessary because the pill sits inside a `.glassCard()`
-/// container. Glass cannot sample other glass — without an explicit border the
-/// capsule is invisible/washed-out against the card background. The stroke gives
-/// the pill a crisp raised edge; the fill adds the faintest inner glow so it reads
-/// as a distinct surface without any colour tint.
-///
-/// macOS < 26: `.ultraThinMaterial` in a `Capsule()` + matching stroke (unchanged).
+/// macOS < 26: `.ultraThinMaterial` in a `Capsule()` (unchanged).
 ///
 /// ❌ Do NOT use `GlassCard` for StatPill — it is a capsule-shaped inline pill,
 /// not a card container.
+/// ❌ Do NOT add a stroke/fill hack here to compensate for missing container —
+/// fix the call site instead.
 struct StatPillBackground: ViewModifier {
-    /// Stroke opacity for the capsule border. Default 0.18.
-    var strokeOpacity: Double
-    /// Fill opacity for the subtle inner glow. Default 0.06.
-    var fillOpacity: Double
-
-    init(strokeOpacity: Double = 0.18, fillOpacity: Double = 0.06) {
-        self.strokeOpacity = strokeOpacity
-        self.fillOpacity = fillOpacity
-    }
-
     /// Applies a glass capsule background (macOS 26+) or ultra-thin material capsule (pre-26).
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
-            content
-                .background(Color.white.opacity(fillOpacity), in: Capsule())
-                .glassEffect(.regular, in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5))
+            content.glassEffect(.regular, in: Capsule())
         } else {
-            content
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5))
+            content.background(.ultraThinMaterial, in: Capsule())
         }
     }
 }
@@ -253,8 +238,8 @@ extension View {
     }
 
     /// Applies the `StatPillBackground` modifier (glass capsule on macOS 26+, material pre-26).
-    /// The pill renders a white stroke border + subtle fill so it remains visible
-    /// when layered inside a `.glassCard()` container (glass-on-glass fix).
+    /// ⚠️ The call site MUST wrap card content in a `GlassEffectContainer` on macOS 26+
+    /// so the pill and card glass share a CABackdropLayer sampling region.
     func statPillBackground() -> some View {
         modifier(StatPillBackground())
     }

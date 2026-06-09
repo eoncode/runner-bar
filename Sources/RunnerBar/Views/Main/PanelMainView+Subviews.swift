@@ -96,8 +96,15 @@ private struct RunnerTypeIcon: View {
 
 // MARK: - RunnerMetricsBadge
 /// Single grouped badge showing CPU and MEM for a runner inside one
-/// shared glass background. Uses `.statPillBackground()` so macOS 26+
-/// gets native Liquid Glass and pre-26 falls back to ultraThinMaterial.
+/// shared glass background.
+///
+/// macOS 26+: `.statPillBackground()` calls `.glassEffect(.regular, in: Capsule())`.
+/// This pill must be rendered inside a `GlassEffectContainer` at the card level
+/// (see `runnerCard`) so it shares a CABackdropLayer sampling region with the
+/// card's `.glassCard()` background — glass cannot sample other glass without a
+/// shared container.
+///
+/// Pre-26: falls back to `.ultraThinMaterial` capsule via `statPillBackground()`.
 private struct RunnerMetricsBadge: View {
     /// CPU usage percentage (0–100).
     let cpu: Double
@@ -156,8 +163,14 @@ struct PanelLocalRunnerRow: View {
     }
     /// Compact card showing runner name with optional arch/platform inline,
     /// and a grouped CPU/MEM badge on the trailing edge.
+    ///
+    /// macOS 26+: the entire HStack is wrapped in a `GlassEffectContainer` so the
+    /// card's `.glassCard()` background and the `RunnerMetricsBadge` pill's
+    /// `.glassEffect()` share a single CABackdropLayer sampling region. Without
+    /// the container, glass-on-glass produces near-zero contrast and the pill is
+    /// invisible. Pre-26: plain HStack as before, no container needed.
     private func runnerCard(_ runner: RunnerModel) -> some View {
-        HStack(spacing: 8) {
+        let cardContent = HStack(spacing: 8) {
             Circle().fill(Color.rbWarning).frame(width: 7, height: 7)
             HStack(spacing: 4) {
                 Text(runner.runnerName)
@@ -178,7 +191,20 @@ struct PanelLocalRunnerRow: View {
             }
         }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xs + 2)
-        .glassCard(cornerRadius: RBRadius.card)
+
+        return Group {
+            if #available(macOS 26, *) {
+                // GlassEffectContainer gives the card glass and the metrics pill glass
+                // a shared sampling region — required for correct glass-on-glass rendering.
+                GlassEffectContainer {
+                    cardContent
+                        .glassCard(cornerRadius: RBRadius.card)
+                }
+            } else {
+                cardContent
+                    .glassCard(cornerRadius: RBRadius.card)
+            }
+        }
         .padding(.horizontal, RBSpacing.md).padding(.vertical, RBSpacing.xxs)
     }
     /// Builds a normalised subtitle string from architecture and platform fields.
