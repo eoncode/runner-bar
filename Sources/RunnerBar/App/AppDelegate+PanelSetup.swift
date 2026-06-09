@@ -228,8 +228,9 @@ extension AppDelegate: NSPopoverDelegate {
         ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
-                guard self != nil else { return }
+                guard let self else { return }
                 log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore")
+                _ = self
                 RunnerStore.shared.start()
             }
             .store(in: &cancellables)
