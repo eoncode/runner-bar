@@ -10,5 +10,6 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
+    continue-on-error: true # external service; 403s must not block PRs
     steps:
       - uses: octopusreview/action@3d87bfd1e986e9bc019bd7c88f0302cd6918fdce # v1
