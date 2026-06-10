@@ -70,8 +70,11 @@ struct ScopeEditSheet: View {
         self._isPresented = isPresented
         _hookEnabled = State(initialValue: ScopePreferencesStore.failureHookEnabled(for: scopeEntry.scope))
         _hookBranch = State(initialValue: ScopePreferencesStore.failureHookBranch(for: scopeEntry.scope))
-        let savedHookCommand = ScopePreferencesStore.failureHookCommand(for: scopeEntry.scope) ?? ""
-        _hookCommand = State(initialValue: savedHookCommand.isEmpty ? FailureHookRunner.defaultCommand : savedHookCommand)
+        // Seed with the persisted value or empty string — never the default command.
+        // FailureHookRunner falls back to its own default at runtime when the stored
+        // value is nil, so seeding with the default here would silently persist it
+        // on the first Save even when the user never opened FailureHookCommandSheet.
+        _hookCommand = State(initialValue: ScopePreferencesStore.failureHookCommand(for: scopeEntry.scope) ?? "")
         _localRepoPath = State(initialValue: ScopePreferencesStore.localRepoPath(for: scopeEntry.scope) ?? "")
     }
 
