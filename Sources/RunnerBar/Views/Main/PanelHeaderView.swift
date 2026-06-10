@@ -17,14 +17,9 @@ struct PanelHeaderView: View {
         HStack(spacing: 6) {
             HeaderStatsBar(statsVM: statsVM)
             Spacer()
-            if #available(macOS 26, *) {
-                HStack(spacing: 8) {
-                    GlassEffectContainer { settingsButton.glassButton() }
-                    GlassEffectContainer { quitButton.glassButton() }
-                }
-            } else {
-                settingsButton
-                quitButton
+            HStack(spacing: 8) {
+                GlassEffectContainer { settingsButton.glassButton() }
+                GlassEffectContainer { quitButton.glassButton() }
             }
         }
         .padding(.horizontal, RBSpacing.md)

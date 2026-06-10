@@ -45,39 +45,24 @@ struct SystemStatsView: View {
 
 /// A stable glass wrapper for live-updating chip content (CPU, MEM, DISK chips only).
 ///
-/// macOS 26+: uses `GlassEffectContainer { content.glassButton() }` -- identical
+/// Uses `GlassEffectContainer { content.glassButton() }` — identical
 /// to the settings/quit toolbar button pattern in `PanelHeaderView`.
-/// Pre-26: plain `.background` with a faint fill + stroke.
 ///
-/// Corner radius: `RBRadius.small` (6 pt) -- matches toolbar button rounding.
+/// Corner radius: `RBRadius.small` (6 pt) — matches toolbar button rounding.
 ///
-/// Do NOT apply to DiskPillBadge (the "22% free" pill) -- that has its own styling.
-/// Do NOT add fill, tint, or stroke on macOS 26+ -- the glass handles all rendering.
+/// Do NOT apply to DiskPillBadge (the "22% free" pill) — that has its own styling.
+/// Do NOT add fill, tint, or stroke — the glass handles all rendering.
 struct GlassBadgeContainer<Content: View>: View {
     /// The live-updating chip content rendered in the foreground.
     @ViewBuilder let content: () -> Content
 
-    /// Renders glass on macOS 26+, plain background on earlier versions.
+    /// Renders the glass chip container.
     var body: some View {
-        if #available(macOS 26, *) {
-            GlassEffectContainer {
-                content()
-                    .padding(.horizontal, RBSpacing.sm)
-                    .padding(.vertical, RBSpacing.xs)
-                    .glassButton(cornerRadius: RBRadius.small)
-            }
-        } else {
+        GlassEffectContainer {
             content()
                 .padding(.horizontal, RBSpacing.sm)
                 .padding(.vertical, RBSpacing.xs)
-                .background(
-                    RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                        .fill(Color.primary.opacity(0.06))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: RBRadius.small, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-                        )
-                )
+                .glassButton(cornerRadius: RBRadius.small)
         }
     }
 }
@@ -88,7 +73,7 @@ struct GlassBadgeContainer<Content: View>: View {
 ///
 /// Layout: CPU [sparkline] 41.1% MEM [sparkline] 6.4/16.0GB
 ///
-/// Do NOT restore the VStack layout -- it makes the header ~70pt tall.
+/// Do NOT restore the VStack layout — it makes the header ~70pt tall.
 struct SparklineMetricView: View {
     /// The short uppercase label displayed to the left of the sparkline (e.g. "CPU", "MEM").
     let label: String
@@ -136,7 +121,7 @@ struct SparklineMetricView: View {
 /// - `freePct < 40` -> `rbWarning` (disk getting full)
 /// - `freePct >= 40` -> `rbSuccess` (plenty of space)
 ///
-/// macOS 26+: wrapped in a `GlassEffectContainer` at the call site (HeaderStatsBar)
+/// macOS 26: wrapped in a `GlassEffectContainer` at the call site (HeaderStatsBar)
 /// so it gets a dedicated CABackdropLayer sampling region. The `.glassEffect` here
 /// then refracts correctly without being glass-on-glass with no shared container.
 struct DiskPillBadge: View {
@@ -169,7 +154,7 @@ struct DiskPillBadge: View {
 /// Compact single-row stats bar: CPU | MEM | DISK inline chips for the panel header.
 ///
 /// Accepts an existing `SystemStatsViewModel` so it shares the sampler
-/// already running in `PanelMainView` -- no second timer is created.
+/// already running in `PanelMainView` — no second timer is created.
 struct HeaderStatsBar: View {
     /// The view model supplying live CPU, memory, and disk stats.
     @ObservedObject var statsVM: SystemStatsViewModel
@@ -214,9 +199,6 @@ struct HeaderStatsBar: View {
                     )
                 }
                 if statsVM.stats.diskTotalGB > 0 {
-                    // GlassEffectContainer gives DiskPillBadge its own dedicated
-                    // CABackdropLayer sampling region so .glassEffect inside the
-                    // pill refracts correctly instead of glass-on-glass with no container.
                     GlassEffectContainer {
                         DiskPillBadge(freePct: statsVM.stats.diskFreePct)
                     }
