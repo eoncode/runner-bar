@@ -22,6 +22,16 @@ import SwiftUI
 /// itself intrinsically, which gives the sheet the correct independent height.
 /// ❌ NEVER wrap the content VStack in a ScrollView here.
 ///
+/// ## Why no fixedSize on the content VStack
+/// `.fixedSize(horizontal: false, vertical: true)` is intentionally absent from the
+/// content VStack. The sheet window has no maximum-height constraint that could clip
+/// the content — it simply grows to fit whatever height SwiftUI reports — so
+/// `fixedSize` would add no protection. Worse, it would suppress flexible layout in
+/// any `Text` children (including the `commitError` label in `footerBar`), breaking
+/// word-wrap for long error strings. The `commitError` Text already carries its own
+/// `.fixedSize(horizontal: false, vertical: true)` so it can grow vertically without
+/// affecting sibling views.
+///
 /// Replaces `RunnerDetailView` as part of #1001 (issue #988 fix).
 struct RunnerDetailSheet: View {
 
@@ -80,7 +90,11 @@ struct RunnerDetailSheet: View {
 
     // MARK: - Body
 
-    /// Root sheet layout: header, form content (no ScrollView — see type comment), and action bar.
+    /// Root sheet layout: header, form content, and action bar.
+    ///
+    /// No ScrollView (see type comment) and no fixedSize on the content VStack
+    /// (see "Why no fixedSize" in type comment). The sheet window sizes freely
+    /// to the intrinsic height of this VStack via `preferredContentSize`.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             sheetHeader
@@ -119,6 +133,8 @@ struct RunnerDetailSheet: View {
 
     /// Cancel / OK action bar at the bottom of the sheet.
     /// Shows `commitError` in red above the buttons when non-nil.
+    /// The error Text carries `.fixedSize(horizontal: false, vertical: true)` so it
+    /// word-wraps correctly without needing fixedSize on the parent VStack.
     private var footerBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let error = commitError {
