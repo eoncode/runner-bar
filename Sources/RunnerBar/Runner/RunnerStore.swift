@@ -68,7 +68,7 @@ private final class ScopesObserver {
 /// - `AppPreferencesStore` and `ScopeStore` are `@MainActor`; any read of their
 ///   properties must happen inside `await MainActor.run { }` or a `Task { @MainActor in }`.
 /// - After every fetch cycle, results are pushed to the injected `RunnerViewModel` on the
-///   main actor via `await MainActor.run { }`. SwiftUI’s `@Observable` machinery
+///   main actor via `await MainActor.run { }`. SwiftUI's `@Observable` machinery
 ///   picks up the mutation automatically — no Combine `PassthroughSubject` needed.
 /// - `LocalRunnerStore` is an `actor`; its state is read via the main-actor snapshot
 ///   pushed to `RunnerViewModel`, not by crossing the actor boundary synchronously.
@@ -97,7 +97,7 @@ actor RunnerStore {
     /// IDs of action groups whose failure hook has already fired.
     ///
     /// Kept separate from `actionGroupCache` so that cache eviction does not re-arm
-    /// the hook for old completed groups still present in GitHub’s last-completed feed.
+    /// the hook for old completed groups still present in GitHub's last-completed feed.
     private var seenGroupIDs: Set<String> = []
 
     /// Whether the GitHub API is currently rate-limiting this client.
@@ -105,7 +105,8 @@ actor RunnerStore {
     /// The exact moment the current rate-limit window expires, or `nil` when no
     /// rate-limit is active or the reset time is unknown.
     /// Assigned in `applyFetchResult` and mirrored to `RunnerViewModel`; consumed externally via the view model.
-    private(set) var rateLimitResetDate: Date? // periphery:ignore
+    // periphery:ignore
+    private(set) var rateLimitResetDate: Date?
 
     /// Active structured poll task. Cancelled and replaced on every `start()` call.
     private var pollTask: Task<Void, Never>?
@@ -127,8 +128,9 @@ actor RunnerStore {
     // MARK: - Aggregate status
 
     /// The combined health status across all runners, derived from the current `runners` array.
-    /// Read by external consumers (e.g. `AppDelegate`) outside this file’s analysis scope.
-    var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) } // periphery:ignore
+    /// Read by external consumers (e.g. `AppDelegate`) outside this file's analysis scope.
+    // periphery:ignore
+    var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) }
 
     // MARK: - Init
 
@@ -187,7 +189,7 @@ actor RunnerStore {
 
     /// Starts (or restarts) the `activeScopes` observation loop.
     ///
-    /// Same approach as `_startObservingPreferences` — see that method’s
+    /// Same approach as `_startObservingPreferences` — see that method's
     /// doc-comment for the full rationale.
     private func _startObservingScopes() {
         scopeObservationTask?.cancel()
@@ -210,17 +212,12 @@ actor RunnerStore {
     /// Starts (or restarts) the structured async poll loop.
     ///
     /// Safe to call multiple times — the previous task is always cancelled first.
-    ///
-    /// `async` because it reads `@MainActor`-isolated properties via `await MainActor.run { }`.
-    /// All callers already wrap this in `Task { await ... }` or `await self?.start()`.
     func start() async {
         let scopes = await MainActor.run { ScopeStore.shared.activeScopes }
         log("RunnerStore › start — activeScopes=\(scopes)")
         if scopes.isEmpty {
             log("RunnerStore › ⚠️ start called but activeScopes is EMPTY — actions will not load")
         }
-        // Read the already-pushed snapshot from viewModel (main-actor) rather than crossing
-        // into the LocalRunnerStore actor from here.
         let localCount = await MainActor.run { viewModel.localRunners.count }
         log("RunnerStore › start — localRunners.count=\(localCount) at start() time")
         if localCount == 0 {
@@ -253,12 +250,6 @@ actor RunnerStore {
         }
     }
 
-    /// Computes the delay before the next poll: 10 s while jobs/actions are active,
-    /// otherwise the user’s configured idle interval (clamped to ≥ 10 s). Also widened
-    /// to the idle interval while rate-limited.
-    ///
-    /// `async` because it reads `AppPreferencesStore.pollingInterval` which is
-    /// `@MainActor`-isolated; uses `await MainActor.run { }` consistently with `fetch()`.
     private func nextPollInterval() async -> TimeInterval {
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
         let hasActiveActions = actions.contains {
@@ -273,9 +264,6 @@ actor RunnerStore {
 
     // MARK: - Fetch
 
-    /// Performs one full poll cycle: snapshots active scopes and local runners,
-    /// fetches and enriches runners/jobs/action groups, then applies the result
-    /// to actor state and pushes it to `RunnerViewModel`.
     func fetch() async {
         await clearGhRateLimit()
 
@@ -326,8 +314,6 @@ actor RunnerStore {
 
     // MARK: - Apply result
 
-    /// Merges a completed fetch into actor state (runners, jobs, action groups, rate-limit)
-    /// and pushes the resulting snapshot to `RunnerViewModel` on the main actor.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -361,9 +347,6 @@ actor RunnerStore {
 
     // MARK: - fetchAndEnrichRunners
 
-    /// Fetches runners for the given scopes, resolves install paths, and enriches each
-    /// runner with live metrics. Writes busy-runner metrics back to `LocalRunnerStore`
-    /// and returns the enriched runner list.
     func fetchAndEnrichRunners(
         scopes: [String],
         localRunners: [RunnerModel],
@@ -445,8 +428,6 @@ actor RunnerStore {
             }
         }
 
-        // Write metrics back to LocalRunnerStore for the runner row badge.
-        // Only busy runners with a resolved installPath to avoid spurious warnings.
         let metricsUpdates = indexed.filter {
             $0.runner.busy
             && (installPathMap.byApiId[$0.runner.id] != nil
