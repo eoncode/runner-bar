@@ -31,9 +31,10 @@ extension AppDelegate {
     /// ❌ NEVER re-wrap those views from here —
     ///    nesting causes multiple overlapping dim overlays → gray/black flash.
     func mainView() -> AnyView {
+        // localRunnerStore is intentionally omitted: PanelMainView declares it with a
+        // default value of `.shared` and does not expose it as an init parameter.
         let inner = PanelMainView(
             store: observable,
-            localRunnerStore: localRunnerStore,
             onStepTap: { [weak self] job, step in
                 guard let self else { return }
                 self.savedNavState = .stepLog(job: job, step: step)
