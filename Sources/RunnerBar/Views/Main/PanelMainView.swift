@@ -32,7 +32,7 @@ struct PanelMainView: View {
     /// Panel open/close and transient-hide state from the environment.
     @Environment(PanelVisibilityState.self) private var panelVisibilityState: PanelVisibilityState
     /// View model for CPU/memory stats displayed in the header.
-    @StateObject private var systemStats = SystemStatsViewModel()
+    @State private var systemStats = SystemStatsViewModel()
     /// Number of workflow rows currently shown in the actions section.
     @State private var visibleCount: Int = 10
     /// Increments every second to drive relative-time label refreshes without re-polling.

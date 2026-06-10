@@ -9,7 +9,7 @@ import SwiftUI
 /// Full-page system stats view shown in the settings panel.
 struct SystemStatsView: View {
     /// The view model providing live CPU, memory, and disk stats.
-    @StateObject private var viewModel = SystemStatsViewModel()
+    @State private var viewModel = SystemStatsViewModel()
     /// Renders a vertical list of labelled stat rows.
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -172,7 +172,7 @@ struct DiskPillBadge: View {
 /// already running in `PanelMainView` -- no second timer is created.
 struct HeaderStatsBar: View {
     /// The view model supplying live CPU, memory, and disk stats.
-    @ObservedObject var statsVM: SystemStatsViewModel
+    var statsVM: SystemStatsViewModel
 
     /// Renders CPU, MEM, and DISK chips separated by thin dividers.
     var body: some View {
