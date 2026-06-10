@@ -46,6 +46,7 @@ actor RunnerStore {
     private(set) var isRateLimited = false
     /// The exact moment the current rate-limit window expires, or `nil` when no
     /// rate-limit is active or the reset time is unknown.
+    // periphery:ignore - assigned in applyFetchResult and mirrored to RunnerViewModel; consumed externally via the view model
     private(set) var rateLimitResetDate: Date?
 
     /// Active structured poll task. Cancelled and replaced on every `start()` call.
@@ -64,6 +65,7 @@ actor RunnerStore {
     // MARK: - Aggregate status
 
     /// The combined health status across all runners, derived from the current `runners` array.
+    // periphery:ignore - read by external consumers (e.g. AppDelegate) outside this file's analysis scope
     var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) }
 
     // MARK: - Init
