@@ -25,7 +25,7 @@ import Foundation
 // 6. Token is saved to Keychain (which also invalidates the token cache).
 //    onCompletion is called on the main thread with the actual save result.
 //
-// Client credentials are in Secrets.swift — see that file for why they are
+// Client credentials are in OAuthSecrets.swift — see that file for why they are
 // intentionally committed (open-source native app industry standard).
 
 /// Manages OAuthService state and behaviour.
@@ -95,7 +95,7 @@ final class OAuthService {
             return
         }
         comps.queryItems = [
-            URLQueryItem(name: "client_id", value: Secrets.clientID),
+            URLQueryItem(name: "client_id", value: OAuthSecrets.clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "scope", value: scopes),
             URLQueryItem(name: "state", value: state)
@@ -178,8 +178,8 @@ final class OAuthService {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "client_id": Secrets.clientID,
-            "client_secret": Secrets.clientSecret,
+            "client_id": OAuthSecrets.clientID,
+            "client_secret": OAuthSecrets.clientSecret,
             "code": code
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),

@@ -1,4 +1,4 @@
-// Secrets.swift
+// OAuthSecrets.swift
 // RunnerBar
 // MARK: - OAuth App Credentials
 //
@@ -38,7 +38,7 @@
 
 /// OAuth app credentials bundled with the native binary.
 /// See the block comment above for why committing these is safe and intentional.
-enum Secrets {
+enum OAuthSecrets {
     /// Public client identifier for the registered GitHub OAuth app.
     static let clientID = "Ov23linOj2gogHg7LdFd"
     /// Client secret bundled with the native app as documented above.
