@@ -12,7 +12,7 @@ import RunnerBarCore
 /// - The actor runs on its own executor (background thread).
 /// - `AppPreferencesStore` and `ScopeStore` are `@MainActor`; any read of their
 ///   properties must happen inside `await MainActor.run { }` or a `Task { @MainActor in }`.
-/// - After every fetch cycle, results are pushed to `RunnerViewModel.shared` on the
+/// - After every fetch cycle, results are pushed to the injected `RunnerViewModel` on the
 ///   main actor via `await MainActor.run { }`. SwiftUI's `@Observable` machinery
 ///   picks up the mutation automatically — no Combine `PassthroughSubject` needed.
 /// - `LocalRunnerStore` is `@MainActor`; reads are wrapped in `await MainActor.run { }`.

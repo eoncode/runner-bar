@@ -342,8 +342,7 @@ struct AddRunnerSheet: View {
         let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
 
         if !FileManager.default.fileExists(atPath: configPath) {
-            // TODO: setStep() is synchronous — remove spurious `await` from all setStep() calls in this function
-            await setStep("Downloading runner package…")
+            setStep("Downloading runner package…")
             guard let downloadURL = await fetchRunnerDownloadURL() else {
                 isRegistering = false
                 errorMessage  = "Could not determine runner download URL. Check your internet connection."
@@ -360,7 +359,7 @@ struct AddRunnerSheet: View {
                 errorMessage = "Download failed."
                 return
             }
-            await setStep("Unpacking runner package…")
+            setStep("Unpacking runner package…")
             let tarResult = await runSimpleProcess(GitHubURIs.tarPath, args: ["xzf", tarPath, "-C", dir])
             try? FileManager.default.removeItem(atPath: tarPath)
             guard tarResult == 0 else {
@@ -370,7 +369,7 @@ struct AddRunnerSheet: View {
             }
         }
 
-        await setStep("Fetching registration token…")
+        setStep("Fetching registration token…")
         guard let token = await fetchRegistrationToken(scope: scope) else {
             isRegistering = false
             if currentScopeType == .org {
@@ -381,7 +380,7 @@ struct AddRunnerSheet: View {
             return
         }
 
-        await setStep("Configuring runner…")
+        setStep("Configuring runner…")
         let ghURL      = "\(GitHubURIs.base)\(scope)"
         let configExit = await runRegistrationCommand(
             dir: dir, ghURL: ghURL, token: token, name: name, labels: labels
@@ -392,7 +391,7 @@ struct AddRunnerSheet: View {
             return
         }
 
-        await setStep("Registering service…")
+        setStep("Registering service…")
         writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
         localRunnerStore.add(runnerName: name, installPath: dir)
         isRegistering    = false

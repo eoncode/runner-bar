@@ -18,8 +18,10 @@ import Observation
 @MainActor
 @Observable
 final class LocalRunnerStore {
-    // MARK: - Shared singleton
-    /// The app-wide singleton. Always accessed on the main actor.
+    // MARK: - Shared instance
+    /// The app-wide shared instance. Always accessed on the main actor.
+    /// Injected into views and stores via their `localRunnerStore` properties —
+    /// views hold it as `@State`, stores receive it via `init(viewModel:localRunnerStore:)`.
     static let shared = LocalRunnerStore()
 
     // MARK: - Observable state
