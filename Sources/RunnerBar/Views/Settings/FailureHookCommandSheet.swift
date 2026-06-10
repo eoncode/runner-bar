@@ -22,16 +22,6 @@ struct FailureHookCommandSheet: View {
     /// Draft command text owned by the parent `ScopeEditSheet` so Cancel there can discard it.
     @Binding var commandText: String
 
-    // $FAILURE_LOG is pre-resolved by FailureHookRunner in Swift before the command
-    // reaches the shell — log content is single-quote-escaped so special characters
-    // never break shell parsing. Wrap it in single quotes in your command.
-    //
-    // NOTE: This is the same constant as FailureHookRunner.defaultCommand.
-    // If the user never saves, FailureHookRunner falls back to this value automatically.
-    /// Default command shown when no saved command exists for the scope; mirrors
-    /// `FailureHookRunner.defaultCommand` so the editor is never blank on first open.
-    private static let exampleCommand = FailureHookRunner.defaultCommand
-
     /// Initialises the sheet for `scope`.
     init(scope: String, commandText: Binding<String>, onDismiss: @escaping () -> Void) {
         self.scope = scope
