@@ -20,6 +20,19 @@ import SwiftUI
 /// - Both rotation angles are reset to 0 before re-arming to avoid a SwiftUI
 ///   no-op when the status re-enters the same state (target already == 360).
 ///
+/// ### Re-arm strategy — why no bool flag guard
+/// An alternative pattern would track animation liveness with a `@State Bool`
+/// (e.g. `queuedAnimationActive`) and skip the reset when the animation is already
+/// running, to prevent a visible snap-to-zero on rapid re-entry. We intentionally
+/// do NOT use that pattern here. A `.queued → inProgress → queued` round-trip
+/// requires at minimum one full GitHub API poll cycle (several seconds) — by which
+/// point the `repeatForever` ring has completed many revolutions and `queuedRotation`
+/// has already wrapped back to its internal start position. The snap is therefore a
+/// zero-degree correction in practice, not a visible jump. The bool-flag adds two
+/// extra `@State` properties, two extra reset paths in `onChange`, and extra
+/// Periphery tracking surface for no perceptible visual benefit in this polling-driven
+/// context.
+///
 /// Do NOT remove the repeatForever animations -- they are liveness indicators.
 /// Do NOT start rotation for states that do not own the animation -- wastes CPU/GPU.
 struct DonutStatusView: View {
