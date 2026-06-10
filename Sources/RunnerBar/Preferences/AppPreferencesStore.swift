@@ -1,5 +1,6 @@
 // AppPreferencesStore.swift
 // RunnerBar
+// Combine retained for PassthroughSubject bridge — see didChangePollingInterval.
 import Combine
 import Foundation
 import Observation
