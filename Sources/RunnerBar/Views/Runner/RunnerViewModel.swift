@@ -15,6 +15,12 @@ import Observation
 @MainActor
 @Observable
 final class RunnerViewModel {
+    /// The app-wide singleton. `RunnerStore` writes into this instance.
+    ///
+    /// `nonisolated(unsafe)` lets `RunnerStore.init` (a nonisolated actor context)
+    /// capture this reference without an `await`. The instance itself is `@MainActor`
+    /// and all mutations go through `await MainActor.run { }` in `RunnerStore`.
+    nonisolated(unsafe) static let shared = RunnerViewModel()
 
     // MARK: - Observable state
     /// GitHub API-backed runners for the authenticated user's repos and orgs.
@@ -60,15 +66,19 @@ final class RunnerViewModel {
     /// isScanning only prevents concurrent cycles — not sequential ones.
     /// Callers that need a fresh scan (SettingsView, PanelMainView, lifecycle actions)
     /// call LocalRunnerStore.shared.refresh() directly at their own call sites.
+    /// Refreshes `localRunners` from `LocalRunnerStore`.
+    ///
+    /// `runners`, `jobs`, `actions`, `isRateLimited`, and `rateLimitResetDate` are now
+    /// **pushed** directly by `RunnerStore.applyFetchResult` via `MainActor.run { }`
+    /// after every poll cycle — they must not be pulled here. Pulling stale values
+    /// from the actor would require an `await` (breaking the synchronous SwiftUI path)
+    /// and would in any case race against the push that already happened.
+    ///
+    /// Callers that previously relied on `reload()` to seed RunnerStore state on first
+    /// panel open no longer need to do so — `RunnerStore` pushes on every completed cycle.
     func reload() {
         let localStore = localRunnerStore ?? LocalRunnerStore.shared
-        let store = RunnerStore.shared
-        log("RunnerViewModel › reload — actions=\(store.actions.count) jobs=\(store.jobs.count) runners=\(store.runners.count) localRunners=\(localStore.runners.count)")
-        runners = store.runners
-        jobs = store.jobs
-        actions = store.actions
+        log("RunnerViewModel › reload — localRunners=\(localStore.runners.count)")
         localRunners = localStore.runners
-        isRateLimited = store.isRateLimited
-        rateLimitResetDate = store.rateLimitResetDate
     }
 }

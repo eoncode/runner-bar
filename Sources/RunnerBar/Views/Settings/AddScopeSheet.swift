@@ -261,7 +261,7 @@ struct AddScopeSheet: View {
         let scope = effectiveScope
         guard !scope.isEmpty else { return }
         ScopeStore.shared.add(scope)
-        RunnerStore.shared.start()
+        Task { await RunnerStore.shared.start() }
         log("AddScopeSheet \u{203a} added scope: \(scope)")
         isPresented = false
     }

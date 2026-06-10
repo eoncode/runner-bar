@@ -191,16 +191,12 @@ extension AppDelegate: NSPopoverDelegate {
             return
         }
 
-        // didUpdate — API poll cycle complete; refresh icon and view-model.
-        RunnerStore.shared.didUpdate
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                guard let self else { return }
-                log("AppDelegate › didUpdate fired — panelIsOpen=\(self.panelIsOpen) actions=\(RunnerStore.shared.actions.count) jobs=\(RunnerStore.shared.jobs.count)")
-                self.updateStatusIcon()
-                self.observable.reload()
-            }
-            .store(in: &cancellables)
+        // NOTE: The `RunnerStore.didUpdate` Combine sink has been removed.
+        // `RunnerStore` is now a Swift actor that pushes state directly to
+        // `RunnerViewModel.shared` via `await MainActor.run { }` at the end
+        // of every fetch cycle, and calls `AppDelegate.updateStatusIcon()` inside
+        // that same `MainActor.run` block — so icon refresh is still driven once
+        // per completed fetch cycle without any Combine subscription.
 
         // FIX: Await LocalRunnerStore.refreshAsync() before starting the poll loop.
         //
@@ -219,22 +215,22 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — awaiting LocalRunnerStore.refreshAsync()")
             await LocalRunnerStore.shared.refreshAsync()
             log("AppDelegate › startup — refreshAsync() complete, starting RunnerStore poll loop")
-            RunnerStore.shared.start()
+            await RunnerStore.shared.start()
             log("AppDelegate › startup — RunnerStore poll loop started")
         }
 
         // didMutate — scope changed; must restart the store entirely so it polls
         // the correct repos from the beginning.
-        // [weak self] is not needed here — this closure uses no instance members.
-        // RunnerStore.shared.start() is a static singleton call; log() is a free
-        // function. The capture is kept only for consistency with other sinks in
-        // this file, but self is intentionally unused after the guard.
+        // RunnerStore already observes ScopeStore.activeScopes internally via
+        // makeObservationStream, so this sink is retained only for the log line
+        // and as a belt-and-suspenders guard for call sites that do not go through
+        // the actor's internal observer (e.g. direct ScopeStore mutations in tests).
         ScopeStore.shared.didMutate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 guard self != nil else { return }
-                log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore")
-                RunnerStore.shared.start()
+                log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore (belt-and-suspenders)")
+                Task { await RunnerStore.shared.start() }
             }
             .store(in: &cancellables)
 

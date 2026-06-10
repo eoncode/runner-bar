@@ -26,6 +26,21 @@ public enum AggregateStatus {
         }
     }
 
+    /// Derives the aggregate status from a fleet of runners.
+    ///
+    /// - Parameter runners: The current runner list from the GitHub API.
+    public init(runners: [Runner]) {
+        guard !runners.isEmpty else { self = .allOffline; return }
+        let onlineCount = runners.filter { $0.status == .online || $0.status == .busy }.count
+        if onlineCount == runners.count {
+            self = .allOnline
+        } else if onlineCount == 0 {
+            self = .allOffline
+        } else {
+            self = .someOffline
+        }
+    }
+
     /// SF Symbol name used for the status-bar icon.
     public var symbolName: String {
         switch self {

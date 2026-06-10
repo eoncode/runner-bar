@@ -36,7 +36,12 @@ extension AppDelegate {
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE.
     func updateStatusIcon() {
-        statusItem?.button?.image = menuBarImage(for: RunnerStore.shared.aggregateStatus)
+        // `RunnerStore` is now an actor; reads of its state require `await`.
+        // `aggregateStatus` is derived from `observable.runners` which `RunnerStore`
+        // pushes to `RunnerViewModel.shared` via `MainActor.run` after every fetch cycle,
+        // so we derive it here on the main actor from the already-pushed snapshot.
+        let status = AggregateStatus(runners: observable.runners)
+        statusItem?.button?.image = menuBarImage(for: status)
     }
 
     // MARK: Image helper

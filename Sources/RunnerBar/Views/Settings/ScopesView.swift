@@ -159,7 +159,7 @@ struct ScopesView: View {
                     .foregroundColor(entry.isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
-                    set: { ScopeStore.shared.setEnabled(entry.id, $0); RunnerStore.shared.start() }
+                    set: { ScopeStore.shared.setEnabled(entry.id, $0); Task { await RunnerStore.shared.start() } }
                 ))
                 .toggleStyle(.switch)
                 .tint(Color.rbSuccess)
@@ -173,7 +173,7 @@ struct ScopesView: View {
                 Button {
                     ScopePreferencesStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
-                    RunnerStore.shared.start()
+                    Task { await RunnerStore.shared.start() }
                 } label: {
                     Image(systemName: "minus.circle")
                         .font(.caption2)

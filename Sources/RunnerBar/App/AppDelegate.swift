@@ -103,7 +103,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// swapped on navigation; the controller itself is never recreated.
     var hostingController: NSHostingController<AnyView>?
     /// The shared observable view-model passed into every SwiftUI view via the environment.
-    let observable = RunnerViewModel()
+    /// `RunnerStore` pushes updates into this singleton after every poll cycle.
+    let observable = RunnerViewModel.shared
     /// The last nav destination the user was on before the popover was closed or hidden.
     /// Restored by `openPanel()` so the user lands back where they left off.
     var savedNavState: NavState?
