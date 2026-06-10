@@ -118,14 +118,12 @@ actor RunnerStore {
             // withObservationTracking must run on @MainActor because
             // AppPreferencesStore is @MainActor.
             let stream: AsyncStream<Int> = AsyncStream { continuation in
-                // observe is a @MainActor @Sendable closure so that:
-                //   (a) the withObservationTracking apply block can access
-                //       @MainActor-isolated AppPreferencesStore.shared, and
-                //   (b) it can be captured inside the @Sendable Task closure
-                //       in onChange without a SendableClosureCaptures error.
-                // The var is initialised to a no-op and then immediately
-                // replaced before the first call so the self-reference is valid.
-                var observe: @MainActor @Sendable () -> Void = {}
+                // `observe` is a @MainActor @Sendable closure variable so that
+                // the recursive capture inside the @Sendable onChange Task is
+                // valid under Swift 6 strict concurrency checking.
+                // A nested `func observe()` would have type `() -> ()` which is
+                // not Sendable, causing a compile error at the capture site.
+                var observe: (@MainActor @Sendable () -> Void)!
                 observe = { @MainActor @Sendable in
                     withObservationTracking {
                         _ = AppPreferencesStore.shared.pollingInterval
@@ -158,9 +156,9 @@ actor RunnerStore {
         scopeObservationTask?.cancel()
         scopeObservationTask = Task { [weak self] in
             let stream: AsyncStream<[String]> = AsyncStream { continuation in
-                // See _startObservingPreferences for the full rationale on
-                // @MainActor @Sendable closure var pattern.
-                var observe: @MainActor @Sendable () -> Void = {}
+                // `observe` is a @MainActor @Sendable closure variable — see
+                // _startObservingPreferences for the full rationale.
+                var observe: (@MainActor @Sendable () -> Void)!
                 observe = { @MainActor @Sendable in
                     withObservationTracking {
                         _ = ScopeStore.shared.activeScopes
