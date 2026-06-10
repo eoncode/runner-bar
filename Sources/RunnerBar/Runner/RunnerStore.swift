@@ -3,6 +3,48 @@
 import Foundation
 import RunnerBarCore
 
+// MARK: - Observation helpers
+
+/// @MainActor class box that drives a self-re-registering
+/// `withObservationTracking` loop for `AppPreferencesStore.pollingInterval`.
+///
+/// Using a @MainActor class (rather than a recursive closure or local func)
+/// is the correct Swift 6 idiom: the class is implicitly Sendable because all
+/// of its mutable state is protected by the main-actor isolation, so an
+/// instance can be freely captured inside @Sendable / @MainActor closures
+/// without triggering SendableClosureCaptures or SendingRisksDataRace.
+@MainActor
+private final class PollingIntervalObserver {
+    func start(continuation: AsyncStream<Int>.Continuation) {
+        withObservationTracking {
+            _ = AppPreferencesStore.shared.pollingInterval
+        } onChange: { [self] in
+            Task { @MainActor [self] in
+                continuation.yield(AppPreferencesStore.shared.pollingInterval)
+                self.start(continuation: continuation)
+            }
+        }
+    }
+}
+
+/// @MainActor class box that drives a self-re-registering
+/// `withObservationTracking` loop for `ScopeStore.activeScopes`.
+///
+/// See `PollingIntervalObserver` for the rationale.
+@MainActor
+private final class ActiveScopesObserver {
+    func start(continuation: AsyncStream<[String]>.Continuation) {
+        withObservationTracking {
+            _ = ScopeStore.shared.activeScopes
+        } onChange: { [self] in
+            Task { @MainActor [self] in
+                continuation.yield(ScopeStore.shared.activeScopes)
+                self.start(continuation: continuation)
+            }
+        }
+    }
+}
+
 // MARK: - RunnerStore
 
 /// Swift 6 actor that owns the GitHub poll loop and all derived runner/job/action state.
@@ -104,43 +146,19 @@ actor RunnerStore {
         scopeObservationTask?.cancel()
     }
 
-    // MARK: - Observation helpers
+    // MARK: - Observation helpers (actor-isolated entry points)
 
     /// Starts (or restarts) the `pollingInterval` observation loop.
     ///
-    /// Private: the underscore-prefix signals "do not call externally", and `private`
-    /// enforces it at the compiler level. Swift `private` is file-scoped, so the
-    /// `Task { await self?._startObservingPreferences() }` call in `init` — which is
-    /// in the same file — resolves correctly without requiring `internal` visibility.
-    /// Making this `internal` would allow any file in the module to start a duplicate
-    /// observation loop, causing the poll loop to restart twice per change.
-    private func _startObservingPreferences() {
+    /// Builds an `AsyncStream<Int>` primed by a `PollingIntervalObserver` instance.
+    /// The observer is a `@MainActor` class, so it is implicitly `Sendable` and can be
+    /// captured inside `@Sendable` closures without a data-race warning.
+    func _startObservingPreferences() {
         intervalObservationTask?.cancel()
         intervalObservationTask = Task { [weak self] in
-            // Build an AsyncStream that fires on every pollingInterval change.
-            // withObservationTracking must run on @MainActor because
-            // AppPreferencesStore is @MainActor.
             let stream: AsyncStream<Int> = AsyncStream { continuation in
-                // `observe` is a @MainActor @Sendable closure variable so that
-                // the recursive capture inside the @Sendable onChange Task is
-                // valid under Swift 6 strict concurrency checking.
-                // A nested `func observe()` would have type `() -> ()` which is
-                // not Sendable, causing a compile error at the capture site.
-                var observe: (@MainActor @Sendable () -> Void)!
-                observe = { @MainActor @Sendable in
-                    withObservationTracking {
-                        _ = AppPreferencesStore.shared.pollingInterval
-                    } onChange: {
-                        // onChange fires on an arbitrary thread; hop back to
-                        // @MainActor before yielding and re-registering.
-                        Task { @MainActor in
-                            continuation.yield(AppPreferencesStore.shared.pollingInterval)
-                            observe()
-                        }
-                    }
-                }
-                // Prime the observation on the main thread.
-                Task { @MainActor in observe() }
+                let observer = PollingIntervalObserver()
+                Task { @MainActor in observer.start(continuation: continuation) }
             }
             for await newInterval in stream {
                 guard !Task.isCancelled else { return }
@@ -152,26 +170,14 @@ actor RunnerStore {
 
     /// Starts (or restarts) the `activeScopes` observation loop.
     ///
-    /// Private for the same reason as `_startObservingPreferences` — see that
-    /// method's doc-comment for the full rationale.
-    private func _startObservingScopes() {
+    /// Builds an `AsyncStream<[String]>` primed by an `ActiveScopesObserver` instance.
+    /// See `_startObservingPreferences` for the full rationale.
+    func _startObservingScopes() {
         scopeObservationTask?.cancel()
         scopeObservationTask = Task { [weak self] in
             let stream: AsyncStream<[String]> = AsyncStream { continuation in
-                // `observe` is a @MainActor @Sendable closure variable — see
-                // _startObservingPreferences for the full rationale.
-                var observe: (@MainActor @Sendable () -> Void)!
-                observe = { @MainActor @Sendable in
-                    withObservationTracking {
-                        _ = ScopeStore.shared.activeScopes
-                    } onChange: {
-                        Task { @MainActor in
-                            continuation.yield(ScopeStore.shared.activeScopes)
-                            observe()
-                        }
-                    }
-                }
-                Task { @MainActor in observe() }
+                let observer = ActiveScopesObserver()
+                Task { @MainActor in observer.start(continuation: continuation) }
             }
             for await _ in stream {
                 guard !Task.isCancelled else { return }
@@ -186,17 +192,12 @@ actor RunnerStore {
     /// Starts (or restarts) the structured async poll loop.
     ///
     /// Safe to call multiple times — the previous task is always cancelled first.
-    ///
-    /// `async` because it reads `@MainActor`-isolated properties via `await MainActor.run { }`.
-    /// All callers already wrap this in `Task { await ... }` or `await self?.start()`.
     func start() async {
         let scopes = await MainActor.run { ScopeStore.shared.activeScopes }
         log("RunnerStore › start — activeScopes=\(scopes)")
         if scopes.isEmpty {
             log("RunnerStore › ⚠️ start called but activeScopes is EMPTY — actions will not load")
         }
-        // Read the already-pushed snapshot from viewModel (main-actor) rather than crossing
-        // into the LocalRunnerStore actor from here.
         let localCount = await MainActor.run { viewModel.localRunners.count }
         log("RunnerStore › start — localRunners.count=\(localCount) at start() time")
         if localCount == 0 {
@@ -230,11 +231,7 @@ actor RunnerStore {
     }
 
     /// Computes the delay before the next poll: 10 s while jobs/actions are active,
-    /// otherwise the user's configured idle interval (clamped to ≥ 10 s). Also widened
-    /// to the idle interval while rate-limited.
-    ///
-    /// `async` because it reads `AppPreferencesStore.pollingInterval` which is
-    /// `@MainActor`-isolated; uses `await MainActor.run { }` consistently with `fetch()`.
+    /// otherwise the user's configured idle interval (clamped to ≥ 10 s).
     private func nextPollInterval() async -> TimeInterval {
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
         let hasActiveActions = actions.contains {
@@ -249,9 +246,6 @@ actor RunnerStore {
 
     // MARK: - Fetch
 
-    /// Performs one full poll cycle: snapshots active scopes and local runners,
-    /// fetches and enriches runners/jobs/action groups, then applies the result
-    /// to actor state and pushes it to `RunnerViewModel`.
     func fetch() async {
         await clearGhRateLimit()
 
@@ -302,8 +296,6 @@ actor RunnerStore {
 
     // MARK: - Apply result
 
-    /// Merges a completed fetch into actor state (runners, jobs, action groups, rate-limit)
-    /// and pushes the resulting snapshot to `RunnerViewModel` on the main actor.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -337,9 +329,6 @@ actor RunnerStore {
 
     // MARK: - fetchAndEnrichRunners
 
-    /// Fetches runners for the given scopes, resolves install paths, and enriches each
-    /// runner with live metrics. Writes busy-runner metrics back to `LocalRunnerStore`
-    /// and returns the enriched runner list.
     func fetchAndEnrichRunners(
         scopes: [String],
         localRunners: [RunnerModel],
@@ -421,8 +410,6 @@ actor RunnerStore {
             }
         }
 
-        // Write metrics back to LocalRunnerStore for the runner row badge.
-        // Only busy runners with a resolved installPath to avoid spurious warnings.
         let metricsUpdates = indexed.filter {
             $0.runner.busy
             && (installPathMap.byApiId[$0.runner.id] != nil
@@ -430,8 +417,6 @@ actor RunnerStore {
                 || installPathMap.byName[$0.runner.name] != nil)
         }
         if !metricsUpdates.isEmpty {
-            // applyMetrics is isolated to the LocalRunnerStore actor; await each call
-            // directly. It pushes the resulting snapshot to the main actor itself.
             for (_, runner) in metricsUpdates {
 #if DEBUG
                 log("RunnerStore › fetchAndEnrichRunners — applyMetrics to LocalRunnerStore: \(runner.name) id=\(runner.id) busy=\(runner.busy) metrics=\(String(describing: runner.metrics))")
