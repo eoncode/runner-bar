@@ -220,7 +220,7 @@ struct LocalRunnersView: View {
     /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
     @MainActor private func performResume(runner: RunnerModel) {
         log("LocalRunnersView > performResume called runner=\(runner.runnerName)")
-        LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
+        localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: true)
         Task {
             let result = await Task.detached(priority: .userInitiated) {
                 RunnerLifecycleService.shared.start(runner: runner)
@@ -228,22 +228,22 @@ struct LocalRunnersView: View {
             switch result {
             case .success: break
             case .corruptInstall:
-                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
-                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} corrupt install")
+                localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                localRunnerStore.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} corrupt install")
             case .failed(let msg):
-                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+                localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
                 let short = msg.components(separatedBy: "\n")
                     .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
-                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} \(short)")
+                localRunnerStore.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} \(short)")
             }
-            LocalRunnerStore.shared.refresh()
+            localRunnerStore.refresh()
         }
     }
 
     /// Optimistically marks the runner as stopped then delegates to `RunnerLifecycleService`.
     @MainActor private func performStop(runner: RunnerModel) {
         log("LocalRunnersView > performStop called runner=\(runner.runnerName)")
-        LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: false)
+        localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
         Task {
             let result = await Task.detached(priority: .userInitiated) {
                 RunnerLifecycleService.shared.stop(runner: runner)
@@ -251,14 +251,14 @@ struct LocalRunnersView: View {
             switch result {
             case .success: break
             case .corruptInstall:
-                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} corrupt install")
+                localRunnerStore.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} corrupt install")
             case .failed(let msg):
-                LocalRunnerStore.shared.optimisticallySetRunning(runner.runnerName, isRunning: true)
+                localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: true)
                 let short = msg.components(separatedBy: "\n")
                     .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? msg
-                LocalRunnerStore.shared.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} \(short)")
+                localRunnerStore.setLifecycleWarning(runner.runnerName, warning: "\u{26A0} \(short)")
             }
-            LocalRunnerStore.shared.refresh()
+            localRunnerStore.refresh()
         }
     }
 
@@ -267,7 +267,7 @@ struct LocalRunnersView: View {
         guard let runner = runnerPendingRemoval else { return }
         runnerPendingRemoval = nil
         removeErrorMessage = nil
-        LocalRunnerStore.shared.optimisticallyRemove(runner.runnerName)
+        localRunnerStore.optimisticallyRemove(runner.runnerName)
         // Task.detached is required here for two independent reasons:
         //   1. The surrounding context inherits @MainActor isolation from the view; a plain
         //      Task { } would run remove() on the main actor and block the UI.
@@ -282,10 +282,10 @@ struct LocalRunnersView: View {
                 await RunnerLifecycleService.shared.remove(runner: runner)
             }.value
             if !ok {
-                LocalRunnerStore.shared.optimisticallyRestore(runner)
+                localRunnerStore.optimisticallyRestore(runner)
                 removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
             }
-            LocalRunnerStore.shared.refresh()
+            localRunnerStore.refresh()
         }
     }
 
@@ -303,7 +303,11 @@ struct LocalRunnersView: View {
 
     /// Returns the configured `AddRunnerSheet` for use as a `.sheet` content closure.
     private func addRunnerSheet() -> some View {
-        AddRunnerSheet(isPresented: $showAddRunnerSheet) { localRunnerStore.refresh() }
+        AddRunnerSheet(
+            isPresented: $showAddRunnerSheet,
+            onComplete: { localRunnerStore.refresh() },
+            localRunnerStore: localRunnerStore
+        )
     }
 
     /// Pre-configured `RemovalAlertModifier` wired to `runnerPendingRemoval`.

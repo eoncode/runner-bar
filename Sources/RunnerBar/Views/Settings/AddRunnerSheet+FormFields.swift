@@ -364,7 +364,7 @@ extension AddRunnerSheet {
             runnerName: detectedName,
             workingDirectory: existingDir
         )
-        LocalRunnerStore.shared.add(runnerName: detectedName, installPath: existingDir)
+        localRunnerStore.add(runnerName: detectedName, installPath: existingDir)
 
         isPresented = false
         onComplete()

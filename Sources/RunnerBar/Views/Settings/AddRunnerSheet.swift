@@ -56,6 +56,8 @@ struct AddRunnerSheet: View {
     @Binding var isPresented: Bool
     /// Called when registration or import completes successfully.
     let onComplete: () -> Void
+    /// Injected local runner store — avoids direct `.shared` references inside the sheet.
+    var localRunnerStore: LocalRunnerStore = .shared
 
     // MARK: - Add Mode
 
@@ -392,7 +394,7 @@ struct AddRunnerSheet: View {
 
         await setStep("Registering service…")
         writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
-        LocalRunnerStore.shared.add(runnerName: name, installPath: dir)
+        localRunnerStore.add(runnerName: name, installPath: dir)
         isRegistering    = false
         registrationStep = ""
         isPresented      = false

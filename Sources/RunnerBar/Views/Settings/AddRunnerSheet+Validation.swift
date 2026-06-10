@@ -51,6 +51,6 @@ extension AddRunnerSheet {
 
     /// Returns `true` when the given runner name is already tracked in `LocalRunnerStore`.
     func checkDuplicate(runnerName: String) -> Bool {
-        LocalRunnerStore.shared.isTracked(runnerName: runnerName)
+        localRunnerStore.isTracked(runnerName: runnerName)
     }
 }

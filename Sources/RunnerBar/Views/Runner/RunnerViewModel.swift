@@ -36,16 +36,14 @@ final class RunnerViewModel {
     /// When the current rate-limit window resets, if known.
     var rateLimitResetDate: Date?
 
-    // MARK: - Dependency injection (for tests)
-    /// Override to inject a test double instead of `LocalRunnerStore.shared`.
-    /// `nil` in production — `reload()` falls back to `LocalRunnerStore.shared` when this is `nil`.
-    /// Tests **must** set this to avoid leaking into the shared production store.
+    // MARK: - Dependency injection
+    /// The local runner store used by `reload()`. Defaults to the app-wide `LocalRunnerStore.shared`
+    /// in production; tests override this to inject a double without touching the shared store.
     /// - Note: Because the class is `@MainActor`, this property must be set from a `@MainActor`
     ///   context in tests (e.g. `@MainActor func testFoo()` or `await MainActor.run { ... }`).
-    /// - Note: `RunnerStore` now has a full DI init (`init(viewModel:localRunnerStore:)`) —
-    ///   tests that need to stub GitHub API state should construct a `RunnerStore` with
-    ///   injected doubles rather than relying on a singleton.
-    var localRunnerStore: LocalRunnerStore?
+    /// - Note: `RunnerStore` accepts a `localRunnerStore` parameter in its DI init — tests that
+    ///   need to stub GitHub API state should construct a `RunnerStore` with injected doubles.
+    var localRunnerStore: LocalRunnerStore = .shared
 
     // MARK: - Reload
 
@@ -55,16 +53,9 @@ final class RunnerViewModel {
     /// `RunnerStore` and `LocalRunnerStore` push state directly via `await MainActor.run { }`
     /// after each cycle — no Combine sinks are required.
     ///
-    /// IMPORTANT: Do NOT call localStore.refresh() here. reload() is a read-only bridge.
-    /// Calling refresh() from here creates an infinite loop:
-    ///   LocalRunnerStore.$runners publishes
-    ///   → reload() is called (via AppDelegate+PanelSetup sink)
-    ///   → refresh() runs and completes
-    ///   → sets runners, publishes $runners again
-    ///   → reload() is called again, forever.
-    /// isScanning only prevents concurrent cycles — not sequential ones.
+    /// IMPORTANT: Do NOT call `localRunnerStore.refresh()` here. `reload()` is a read-only bridge.
     /// Callers that need a fresh scan (SettingsView, PanelMainView, lifecycle actions)
-    /// call LocalRunnerStore.shared.refresh() directly at their own call sites.
+    /// call `localRunnerStore.refresh()` directly at their own call sites.
     /// Refreshes `localRunners` from `LocalRunnerStore`.
     ///
     /// `runners`, `jobs`, `actions`, `isRateLimited`, and `rateLimitResetDate` are now
@@ -76,8 +67,7 @@ final class RunnerViewModel {
     /// Callers that previously relied on `reload()` to seed RunnerStore state on first
     /// panel open no longer need to do so — `RunnerStore` pushes on every completed cycle.
     func reload() {
-        let localStore = localRunnerStore ?? LocalRunnerStore.shared
-        log("RunnerViewModel › reload — localRunners=\(localStore.runners.count)")
-        localRunners = localStore.runners
+        log("RunnerViewModel › reload — localRunners=\(localRunnerStore.runners.count)")
+        localRunners = localRunnerStore.runners
     }
 }

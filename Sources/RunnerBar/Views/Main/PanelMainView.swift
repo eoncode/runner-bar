@@ -32,6 +32,8 @@ struct PanelMainView: View {
     let onStepTap: (ActiveJob, JobStep) -> Void
     /// Called when the user taps the settings gear button.
     let onSelectSettings: () -> Void
+    /// Injected local runner store — used to trigger refresh on appear.
+    var localRunnerStore: LocalRunnerStore = .shared
     /// Panel open/close and transient-hide state from the environment.
     @Environment(PanelVisibilityState.self) private var panelVisibilityState: PanelVisibilityState
     /// View model for CPU/memory stats displayed in the header.
@@ -92,7 +94,7 @@ struct PanelMainView: View {
             }
             Color.clear.frame(width: 0, height: 0)
                 .onAppear {
-                    LocalRunnerStore.shared.refresh()
+                    localRunnerStore.refresh()
                 }
             actionsSectionScrollable
         }
