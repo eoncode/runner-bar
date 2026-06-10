@@ -19,14 +19,22 @@ struct FailureHookCommandSheet: View {
     /// Called when the sheet should be dismissed, either after saving or on cancel.
     let onDismiss: () -> Void
 
-    /// Draft command text owned by the parent `ScopeEditSheet` so Cancel there can discard it.
+    /// The parent draft value. Only written on Save — never mutated directly by the editor.
     @Binding var commandText: String
+    /// Local working copy of the command text. Bound to the TextEditor so every
+    /// keystroke stays inside this sheet. Committed to `commandText` only when
+    /// the user taps Save; Cancel discards it, leaving the parent draft unchanged.
+    @State private var draft: String
 
-    /// Initialises the sheet for `scope`.
+    /// Initialises the sheet for `scope`, seeding the local editor from `commandText`.
     init(scope: String, commandText: Binding<String>, onDismiss: @escaping () -> Void) {
         self.scope = scope
         self._commandText = commandText
         self.onDismiss = onDismiss
+        // Show the default command as a starting point when nothing has been saved yet,
+        // but never write it back unless the user explicitly taps Save.
+        let initial = commandText.wrappedValue
+        _draft = State(initialValue: initial.isEmpty ? FailureHookRunner.defaultCommand : initial)
     }
 
     /// Shell-variable tokens the user can insert into the command, e.g. `$SCOPE`, `$FAILURE_LOG`.
@@ -69,9 +77,9 @@ extension FailureHookCommandSheet {
         .padding(.bottom, 10)
     }
 
-    /// Monospaced `TextEditor` bound to `commandText`.
+    /// Monospaced `TextEditor` bound to the local `draft` copy.
     var editorSection: some View {
-        TextEditor(text: $commandText)
+        TextEditor(text: $draft)
             .font(.system(size: 11, design: .monospaced))
             .scrollContentBackground(.hidden)
             .background(Color.rbSurface)
@@ -117,7 +125,7 @@ extension FailureHookCommandSheet {
                 .foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, 12).padding(.vertical, 5)
                 .glassCard(cornerRadius: 6)
-            if !commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button(action: { testCommand() }) {
                     Label("Test", systemImage: "play.fill")
                         .font(.system(size: 12))
@@ -145,10 +153,10 @@ extension FailureHookCommandSheet {
 
 /// Action handlers for `FailureHookCommandSheet`: persisting the command, running a test in Terminal, and inserting variable tokens.
 extension FailureHookCommandSheet {
-    /// Closes the sheet; persistence is owned by `ScopeEditSheet.confirmSave()`.
+    /// Commits `draft` to the parent binding and dismisses. Persistence is owned by `ScopeEditSheet.confirmSave()`.
     private func save() {
-        log("FailureHookCommandSheet › save — scope=\(scope) commandText='\(commandText.prefix(200))'")
-        log("FailureHookCommandSheet › save — staged in parent draft, dismissing")
+        log("FailureHookCommandSheet › save — scope=\(scope) draft='\(draft.prefix(200))'")
+        commandText = draft
         onDismiss()
     }
 
@@ -158,7 +166,7 @@ extension FailureHookCommandSheet {
     /// literally in the terminal window during a test run.
     private func testCommand() {
         let localPath = ScopePreferencesStore.localRepoPath(for: scope) ?? ""
-        let resolved = commandText
+        let resolved = draft
             .replacingOccurrences(of: "$LOCAL_PATH", with: localPath)
             .replacingOccurrences(of: "$SCOPE", with: scope)
         log("FailureHookCommandSheet › testCommand — scope=\(scope) localPath='\(localPath)' resolved='\(resolved.prefix(200))'")
@@ -169,10 +177,10 @@ extension FailureHookCommandSheet {
     /// NOTE: `TextEditor` exposes no public cursor-position API on macOS, so the
     /// token is always appended rather than inserted at the caret.
     private func insertVariable(_ variable: String) {
-        if commandText.isEmpty {
-            commandText = variable
+        if draft.isEmpty {
+            draft = variable
         } else {
-            commandText += " " + variable
+            draft += " " + variable
         }
     }
 }
