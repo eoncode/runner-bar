@@ -80,7 +80,8 @@ actor RunnerStore {
 
     // MARK: - Observation helpers (actor-isolated entry points)
 
-    /// Called from `Task` in init; safe because it's actor-isolated.
+    // internal (not private): called from `Task { await self?... }` in init,
+    // which requires at least internal visibility to resolve the method reference.
     func _startObservingPreferences() {
         intervalObservationTask?.cancel()
         intervalObservationTask = Task { [weak self] in
@@ -90,14 +91,15 @@ actor RunnerStore {
             let stream: AsyncStream<Int> = AsyncStream { continuation in
                 @Sendable func observe() {
                     // Each call to withObservationTracking registers one onChange.
-                    // We re-register inside onChange to get subsequent changes.
-                    MainActor.assumeIsolated {
-                        withObservationTracking {
-                            _ = AppPreferencesStore.shared.pollingInterval
-                        } onChange: {
-                            Task { @MainActor in
-                                continuation.yield(AppPreferencesStore.shared.pollingInterval)
-                            }
+                    // We re-register inside the same @MainActor Task as the yield
+                    // so that `assumeIsolated` inside observe() is always safe.
+                    // observe() must NOT be called bare outside the Task — onChange
+                    // fires on an unspecified thread and assumeIsolated would trap.
+                    withObservationTracking {
+                        _ = AppPreferencesStore.shared.pollingInterval
+                    } onChange: {
+                        Task { @MainActor in
+                            continuation.yield(AppPreferencesStore.shared.pollingInterval)
                             observe()
                         }
                     }
@@ -105,6 +107,7 @@ actor RunnerStore {
                 // Prime the observation on the main thread.
                 Task { @MainActor in observe() }
             }
+            // Skip the initial value emitted at observation setup — only react to changes.
             var isFirst = true
             for await newInterval in stream {
                 if isFirst { isFirst = false; continue }
@@ -115,25 +118,27 @@ actor RunnerStore {
         }
     }
 
-    /// Called from `Task` in init; safe because it's actor-isolated.
+    // internal (not private): called from `Task { await self?... }` in init,
+    // which requires at least internal visibility to resolve the method reference.
     func _startObservingScopes() {
         scopeObservationTask?.cancel()
         scopeObservationTask = Task { [weak self] in
             let stream: AsyncStream<[String]> = AsyncStream { continuation in
                 @Sendable func observe() {
-                    MainActor.assumeIsolated {
-                        withObservationTracking {
-                            _ = ScopeStore.shared.activeScopes
-                        } onChange: {
-                            Task { @MainActor in
-                                continuation.yield(ScopeStore.shared.activeScopes)
-                            }
+                    // Re-register inside the same @MainActor Task as the yield.
+                    // See _startObservingPreferences for the full rationale.
+                    withObservationTracking {
+                        _ = ScopeStore.shared.activeScopes
+                    } onChange: {
+                        Task { @MainActor in
+                            continuation.yield(ScopeStore.shared.activeScopes)
                             observe()
                         }
                     }
                 }
                 Task { @MainActor in observe() }
             }
+            // Skip the initial value emitted at observation setup — only react to changes.
             var isFirst = true
             for await _ in stream {
                 if isFirst { isFirst = false; continue }
@@ -149,15 +154,18 @@ actor RunnerStore {
     /// Starts (or restarts) the structured async poll loop.
     ///
     /// Safe to call multiple times — the previous task is always cancelled first.
-    func start() {
-        let scopes = MainActor.assumeIsolated { ScopeStore.shared.activeScopes }
+    ///
+    /// `async` because it reads `@MainActor`-isolated properties via `await MainActor.run { }`.
+    /// All callers already wrap this in `Task { await ... }` or `await self?.start()`.
+    func start() async {
+        let scopes = await MainActor.run { ScopeStore.shared.activeScopes }
         log("RunnerStore › start — activeScopes=\(scopes)")
         if scopes.isEmpty {
             log("RunnerStore › ⚠️ start called but activeScopes is EMPTY — actions will not load")
         }
         // Read the already-pushed snapshot from viewModel (main-actor) rather than crossing
         // into the LocalRunnerStore actor from here.
-        let localCount = MainActor.assumeIsolated { viewModel.localRunners.count }
+        let localCount = await MainActor.run { viewModel.localRunners.count }
         log("RunnerStore › start — localRunners.count=\(localCount) at start() time")
         if localCount == 0 {
             log("RunnerStore › ⚠️ start — localRunners=0 at start time; installPathMap will be empty on first fetch.")
@@ -192,13 +200,16 @@ actor RunnerStore {
     /// Computes the delay before the next poll: 10 s while jobs/actions are active,
     /// otherwise the user's configured idle interval (clamped to ≥ 10 s). Also widened
     /// to the idle interval while rate-limited.
-    private func nextPollInterval() -> TimeInterval {
+    ///
+    /// `async` because it reads `AppPreferencesStore.pollingInterval` which is
+    /// `@MainActor`-isolated; uses `await MainActor.run { }` consistently with `fetch()`.
+    private func nextPollInterval() async -> TimeInterval {
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
         let hasActiveActions = actions.contains {
             $0.groupStatus == .inProgress || $0.groupStatus == .queued
         }
         let hasActive = hasActiveJobs || hasActiveActions
-        let baseIdle = max(10, MainActor.assumeIsolated { AppPreferencesStore.shared.pollingInterval })
+        let baseIdle = max(10, await MainActor.run { AppPreferencesStore.shared.pollingInterval })
         let interval: TimeInterval = (isRateLimited || !hasActive) ? TimeInterval(baseIdle) : 10
         log("RunnerStore › nextPollInterval — \(Int(interval))s hasActive=\(hasActive) rateLimited=\(isRateLimited) baseIdle=\(baseIdle)")
         return interval
