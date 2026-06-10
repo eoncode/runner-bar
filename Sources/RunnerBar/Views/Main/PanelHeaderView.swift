@@ -7,7 +7,7 @@ import SwiftUI
 /// Top bar of the popover panel showing system stats and the settings/quit buttons.
 struct PanelHeaderView: View {
     /// View model driving the CPU/MEM/disk stat pills.
-    @ObservedObject var statsVM: SystemStatsViewModel
+    var statsVM: SystemStatsViewModel
     /// Called when the user taps the settings gear button.
     let onSelectSettings: () -> Void
 
