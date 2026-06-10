@@ -32,15 +32,15 @@ struct SettingsView: View {
     // MARK: - Inputs
     /// Callback invoked when the user taps the back button.
     let onBack: () -> Void
-    // periphery:ignore - injected by caller for @ObservedObject subscription; read indirectly via passed closures
+    // periphery:ignore - injected by caller; read indirectly via passed closures
     /// The shared runner view-model; observed for remote runner list updates.
-    @ObservedObject var store: RunnerViewModel
+    var store: RunnerViewModel
 
     // MARK: - Observed stores
-    // These singleton preference stores are now `@Observable` types. The view keeps
+    // These singleton preference stores are `@Observable` types. The view keeps
     // stable references to the shared instances with `@State`, while SwiftUI tracks
     // field reads from the Observation system.
-    // store (RunnerViewModel) is injected by the caller and must stay @ObservedObject.
+    // store (RunnerViewModel) is also @Observable and is injected as a plain stored property.
     //
     // NOTE: These properties (and the @State vars below) are `internal` rather than
     // `private` so that SettingsView+Sections.swift can access them from a separate-file

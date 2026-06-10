@@ -24,7 +24,7 @@ import SwiftUI
 /// Root panel view rendered inside the NSPopover.
 struct PanelMainView: View {
     /// The view model driving runner and workflow data.
-    @ObservedObject var store: RunnerViewModel
+    var store: RunnerViewModel
     /// Called when user taps a step row.
     let onStepTap: (ActiveJob, JobStep) -> Void
     /// Called when the user taps the settings gear button.
@@ -46,7 +46,7 @@ struct PanelMainView: View {
         onStepTap: @escaping (ActiveJob, JobStep) -> Void,
         onSelectSettings: @escaping () -> Void
     ) {
-        _store = ObservedObject(wrappedValue: store)
+        self.store = store
         self.onStepTap = onStepTap
         self.onSelectSettings = onSelectSettings
     }

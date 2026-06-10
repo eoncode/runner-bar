@@ -1,33 +1,34 @@
 // RunnerViewModel.swift
 // RunnerBar
-import Combine
 import Foundation
+import Observation
 
 // MARK: - RunnerViewModel
 
-/// Bridges `RunnerStore` and `LocalRunnerStore` into `@Published` properties consumed by SwiftUI views.
+/// Bridges `RunnerStore` and `LocalRunnerStore` into observable properties consumed by SwiftUI views.
 ///
 /// `reload()` is triggered by Combine sinks in `AppDelegate+PanelSetup` — one on
 /// `RunnerStore.didUpdate` and one on `LocalRunnerStore.$runners` — so the view model
 /// stays in sync whenever either store publishes new data.
-/// The entire class is `@MainActor` because all `@Published` mutations and reads must happen
+/// The entire class is `@MainActor` because all property mutations and reads must happen
 /// on the main thread to satisfy SwiftUI's rendering requirements.
 @MainActor
-final class RunnerViewModel: ObservableObject {
+@Observable
+final class RunnerViewModel {
 
-    // MARK: - Published state
+    // MARK: - Observable state
     /// GitHub API-backed runners for the authenticated user's repos and orgs.
-    @Published var runners: [Runner] = []
+    var runners: [Runner] = []
     /// Active jobs across all monitored workflow runs.
-    @Published var jobs: [ActiveJob] = []
+    var jobs: [ActiveJob] = []
     /// Grouped workflow actions surfaced in the panel popover.
-    @Published var actions: [WorkflowActionGroup] = []
+    var actions: [WorkflowActionGroup] = []
     /// Locally-installed runner agents discovered on this Mac.
-    @Published var localRunners: [RunnerModel] = []
+    var localRunners: [RunnerModel] = []
     /// Whether the GitHub API is currently rate-limited.
-    @Published var isRateLimited: Bool = false
+    var isRateLimited: Bool = false
     /// When the current rate-limit window resets, if known.
-    @Published var rateLimitResetDate: Date?
+    var rateLimitResetDate: Date?
 
     // MARK: - Dependency injection (for tests)
     /// Override to inject a test double instead of `LocalRunnerStore.shared`.
