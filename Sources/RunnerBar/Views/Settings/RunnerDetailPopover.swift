@@ -9,15 +9,18 @@ import SwiftUI
 /// Sheet view for editing a single self-hosted runner.
 ///
 /// All editable fields are buffered in a `RunnerEditDraft` value; no
-/// persistence occurs here.  The parent is responsible for committing
+/// persistence occurs here. The parent is responsible for committing
 /// or discarding via the `onCommit` / `onCancel` callbacks.
 ///
 /// Presented via `.sheet(item:)` from `LocalRunnersView` (#1262).
-/// The fixed `maxHeight: 520` on the ScrollView is intentional — it gives
-/// SwiftUI a concrete ceiling so `preferredContentSize` is computed from the
-/// view's own content rather than inherited from the parent panel window height.
-/// ❌ NEVER replace `maxHeight: 520` with `maxHeight: .infinity` here.
-/// Doing so causes the sheet to mirror the panel height instead of sizing itself.
+///
+/// ## Why no ScrollView
+/// The content is a fixed set of rows (Info + Config) that never needs to scroll.
+/// A ScrollView prevents SwiftUI from computing a real `preferredContentSize` for
+/// the sheet window — it reports the container height (i.e. the parent panel height)
+/// instead of the content height. Removing the ScrollView lets the root VStack size
+/// itself intrinsically, which gives the sheet the correct independent height.
+/// ❌ NEVER wrap the content VStack in a ScrollView here.
 ///
 /// Replaces `RunnerDetailView` as part of #1001 (issue #988 fix).
 struct RunnerDetailPopover: View {
@@ -77,22 +80,16 @@ struct RunnerDetailPopover: View {
 
     // MARK: - Body
 
-    /// Root sheet layout: header, scrollable form fields, and action bar.
-    ///
-    /// `maxHeight: 520` on the ScrollView is load-bearing — see type-level comment.
-    /// ❌ NEVER change to `maxHeight: .infinity`.
+    /// Root sheet layout: header, form content (no ScrollView — see type comment), and action bar.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             popoverHeader
             Divider()
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
-                    infoSection
-                    configSection
-                }
-                .padding(.bottom, 16)
+            VStack(alignment: .leading, spacing: 0) {
+                infoSection
+                configSection
             }
-            .frame(maxHeight: 520)
+            .padding(.bottom, 16)
             Divider()
             footerBar
         }
@@ -102,7 +99,7 @@ struct RunnerDetailPopover: View {
 
     // MARK: - Header
 
-    /// Sheet header showing runner status dot and name (no back button).
+    /// Sheet header showing runner status dot and name.
     private var popoverHeader: some View {
         HStack(spacing: 6) {
             Circle()
@@ -121,8 +118,7 @@ struct RunnerDetailPopover: View {
     // MARK: - Footer
 
     /// Cancel / OK action bar at the bottom of the sheet.
-    /// Shows `commitError` in red above the buttons when non-nil so the user
-    /// knows why OK did not close the sheet.
+    /// Shows `commitError` in red above the buttons when non-nil.
     private var footerBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let error = commitError {
