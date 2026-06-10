@@ -33,6 +33,7 @@ extension AppDelegate {
     func mainView() -> AnyView {
         let inner = PanelMainView(
             store: observable,
+            localRunnerStore: localRunnerStore,
             onStepTap: { [weak self] job, step in
                 guard let self else { return }
                 self.savedNavState = .stepLog(job: job, step: step)

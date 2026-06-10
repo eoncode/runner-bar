@@ -253,7 +253,7 @@ actor LocalRunnerStore {
         log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
 #endif
 
-        applyRefreshResults(enriched)
+        await applyRefreshResults(enriched)
     }
 
     /// Applies enriched runner data, preserves in-flight metrics, pushes to viewModel.
@@ -262,7 +262,11 @@ actor LocalRunnerStore {
     ///   1. runner.apiId  match (org runners: GitHub REST API id ≠ local agentId)
     ///   2. runner.agentId match (repo runners)
     ///   3. runner.runnerName match (last resort)
-    private func applyRefreshResults(_ enriched: [RunnerModel]) {
+    ///
+    /// `isLocalScanning` is reset to `false` via `await MainActor.run { }` directly
+    /// (not via a fire-and-forget Task) so that a concurrent scan cannot set it back
+    /// to `true` between `isScanning = false` and the main-actor push.
+    private func applyRefreshResults(_ enriched: [RunnerModel]) async {
         log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
 
         var metricsByApiId:   [Int: RunnerMetrics] = [:]
@@ -305,11 +309,13 @@ actor LocalRunnerStore {
         runners = preserved.sorted { $0.runnerName < $1.runnerName }
         isScanning = false
         log("LocalRunnerStore › applyRefreshResults — DONE. runners.count=\(runners.count) isScanning=false")
+        // Await directly — not fire-and-forget — so isLocalScanning cannot be
+        // reset to false by a stale Task after a second scan has already started.
         let snapshot = runners
-        Task { await MainActor.run { [viewModel] in
+        await MainActor.run { [viewModel] in
             viewModel.localRunners = snapshot
             viewModel.isLocalScanning = false
-        } }
+        }
     }
 
     // MARK: - Push helpers

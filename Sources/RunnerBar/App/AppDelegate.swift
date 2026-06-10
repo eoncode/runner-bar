@@ -107,7 +107,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let observable = RunnerViewModel()
     /// Owned `LocalRunnerStore` actor — injected with `observable` so all state
     /// pushes land in the view model that SwiftUI actually observes.
-    let localRunnerStore: LocalRunnerStore = .shared
+    ///
+    /// `lazy var` is required: `LocalRunnerStore.shared` is only valid after
+    /// `LocalRunnerStore.configure(viewModel:)` is called in
+    /// `applicationDidFinishLaunching`. A `let` default would be evaluated
+    /// eagerly during `AppDelegate.init()` — before `configure()` runs —
+    /// triggering the `fatalError` guard inside `LocalRunnerStore.shared`.
+    lazy var localRunnerStore: LocalRunnerStore = .shared
     /// Owned `RunnerStore` actor — injected with `observable`, `localRunnerStore`, and an
     /// `onStatusUpdate` closure so the actor body never touches `NSApp.delegate` directly
     /// (Swift 6 / PR #1303 Principle #4: no singleton access inside actor bodies).
