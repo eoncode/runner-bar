@@ -21,8 +21,17 @@ import SwiftUI
 //       All edits are staged locally; ScopePreferencesStore is only written on Save.
 //       NSOpenPanel runs without closing the panel — the NSPanel is non-activating
 //       so it does not obscure the picker.
+// #1263: Removed ScrollView so sheet height is intrinsic (same fix as #1262).
 /// Modal sheet for editing settings of a single scope (org or repo).
-/// Presented when the user taps a scope row in `SettingsView`.
+/// Presented when the user taps a scope row in `ScopesView`.
+///
+/// ## Why no ScrollView
+/// The content is a fixed set of sections (Info, Monitoring, optionally Failure Hook)
+/// that never needs to scroll. A ScrollView prevents SwiftUI from computing a real
+/// `preferredContentSize` for the sheet window — it reports the container height
+/// (the NSPopover panel size) instead of the content height. Removing it lets the
+/// root VStack size itself intrinsically, giving the sheet the correct independent height.
+/// ❌ NEVER wrap the content VStack in a ScrollView here.
 struct ScopeEditSheet: View {
     /// The scope entry being inspected. Treated as a snapshot; live state is
     /// re-read from `ScopeStore` via `liveEntry`.
@@ -81,20 +90,20 @@ struct ScopeEditSheet: View {
     /// The GitHub web URL for this scope, used to render the "Open on GitHub" link.
     private var gitHURL: URL? { URL(string: "https://github.com/\(scope)") }
 
-    /// Root layout: header, divider, scrollable content, and footer action bar.
+    /// Root layout: header, divider, content sections, divider, and footer action bar.
+    ///
+    /// No ScrollView — see type comment for why. The sheet window sizes freely
+    /// to the intrinsic height of this VStack via `preferredContentSize`.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             sheetHeader
             Divider()
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
-                    infoSection
-                    monitoringSection
-                    if isRepo { failureHookSection }
-                }
-                .padding(.bottom, 16)
+            VStack(alignment: .leading, spacing: 0) {
+                infoSection
+                monitoringSection
+                if isRepo { failureHookSection }
             }
-            .frame(maxHeight: .infinity)
+            .padding(.bottom, 16)
             Divider()
             buttonFooter
         }
@@ -167,7 +176,7 @@ extension ScopeEditSheet {
 }
 
 // MARK: - Sections
-/// Content section views: scope info, work folder, proxy, and failure-hook configuration.
+/// Content section views: scope info, monitoring status, and failure-hook configuration.
 extension ScopeEditSheet {
     /// Card section displaying read-only scope metadata: raw scope string,
     /// type (repo vs org), and a link to open the scope on GitHub.
