@@ -42,19 +42,18 @@ final class RunnerViewModel {
     /// Tests **must** set this to avoid leaking into the shared production store.
     /// - Note: Because the class is `@MainActor`, this property must be set from a `@MainActor`
     ///   context in tests (e.g. `@MainActor func testFoo()` or `await MainActor.run { ... }`).
-    /// - Note: `RunnerStore` has no equivalent DI seam — `reload()` always reads `RunnerStore.shared`
-    ///   directly. Tests that need to stub GitHub API state must use the real singleton or a
-    ///   separate integration-test approach.
+    /// - Note: `RunnerStore` now has a full DI init (`init(viewModel:localRunnerStore:)`) —
+    ///   tests that need to stub GitHub API state should construct a `RunnerStore` with
+    ///   injected doubles rather than relying on a singleton.
     var localRunnerStore: LocalRunnerStore?
 
     // MARK: - Reload
 
     /// Copies the latest state from `RunnerStore` and `LocalRunnerStore` into the published properties.
     ///
-    /// Called by Combine sinks in `AppDelegate+PanelSetup` — one on `RunnerStore.didUpdate`
-    /// and one on `LocalRunnerStore.$runners`. Also called eagerly in `AppDelegate.openPanel()`
-    /// to seed state on first panel open, since the Combine sinks only fire on store changes,
-    /// not on initial subscription.
+    /// Called eagerly in `AppDelegate.openPanel()` to seed state on first panel open.
+    /// `RunnerStore` and `LocalRunnerStore` push state directly via `await MainActor.run { }`
+    /// after each cycle — no Combine sinks are required.
     ///
     /// IMPORTANT: Do NOT call localStore.refresh() here. reload() is a read-only bridge.
     /// Calling refresh() from here creates an infinite loop:

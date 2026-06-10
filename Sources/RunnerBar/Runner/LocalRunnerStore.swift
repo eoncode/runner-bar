@@ -1,7 +1,7 @@
 // LocalRunnerStore.swift
 // RunnerBar
-import Combine
 import Foundation
+import Observation
 
 // MARK: - LocalRunnerStore
 
@@ -16,16 +16,17 @@ import Foundation
 /// A single refresh cycle runs at a time; `isScanning` reflects in-flight state
 /// to views and prevents concurrent refreshes.
 @MainActor
-final class LocalRunnerStore: ObservableObject {
+@Observable
+final class LocalRunnerStore {
     // MARK: - Shared singleton
     /// The app-wide singleton. Always accessed on the main actor.
     static let shared = LocalRunnerStore()
 
-    // MARK: - Published state
+    // MARK: - Observable state
     /// The current list of locally-installed runners, sorted by name.
-    @Published private(set) var runners: [RunnerModel] = []
+    private(set) var runners: [RunnerModel] = []
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
-    @Published private(set) var isScanning: Bool = false
+    private(set) var isScanning: Bool = false
 
     // MARK: - Index
     /// Persistence layer for the runner name → install path mapping.

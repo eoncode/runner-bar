@@ -23,7 +23,7 @@ struct LocalRunnersView: View {
     // MARK: - Observed stores
 
     /// Index of locally-installed self-hosted runners.
-    @StateObject private var localRunnerStore = LocalRunnerStore.shared
+    @State private var localRunnerStore = LocalRunnerStore.shared
 
     // MARK: - Local UI state
 

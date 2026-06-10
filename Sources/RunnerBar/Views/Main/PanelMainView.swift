@@ -92,7 +92,7 @@ struct PanelMainView: View {
             }
             Color.clear.frame(width: 0, height: 0)
                 .onAppear {
-                    Task { await MainActor.run { LocalRunnerStore.shared.refresh() } }
+                    LocalRunnerStore.shared.refresh()
                 }
             actionsSectionScrollable
         }
