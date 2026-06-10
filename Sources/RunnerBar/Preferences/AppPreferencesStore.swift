@@ -1,7 +1,5 @@
 // AppPreferencesStore.swift
 // RunnerBar
-// Combine retained for PassthroughSubject bridge — see didChangePollingInterval.
-import Combine
 import Foundation
 import Observation
 
@@ -27,14 +25,6 @@ final class AppPreferencesStore {
     /// Valid range for the polling interval in seconds. Minimum 10 s, maximum 300 s.
     static let pollingRange: ClosedRange<Int> = 10 ... 300
 
-    // periphery:ignore
-    /// Emits the new clamped `pollingInterval` value after every confirmed change.
-    /// `RunnerStore` subscribes to restart its poll loop when the interval changes.
-    /// Uses a subject rather than `@Published` because `AppPreferencesStore` is now
-    /// `@Observable` (no `objectWillChange` publisher available).
-    @ObservationIgnored
-    let didChangePollingInterval = PassthroughSubject<Int, Never>()
-
     /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
     ///
     /// Setting this property out-of-range triggers a second `didSet` call with
@@ -53,7 +43,6 @@ final class AppPreferencesStore {
                 return
             }
             UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
-            didChangePollingInterval.send(pollingInterval)
         }
     }
 
