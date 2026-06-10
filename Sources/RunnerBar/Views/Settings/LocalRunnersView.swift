@@ -33,11 +33,11 @@ struct LocalRunnersView: View {
     @State private var runnerPendingRemoval: RunnerModel?
     /// Controls presentation of `AddRunnerSheet`.
     @State private var showAddRunnerSheet = false
-    /// The runner currently being edited in `RunnerDetailPopover`. `nil` = popover dismissed.
+    /// The runner currently being edited in `RunnerDetailSheet`. `nil` = sheet dismissed.
     @State private var editingRunner: RunnerModel?
     /// `true` while `commitRunnerEdit` is in-flight.
     @State private var isCommitting = false
-    /// Non-nil when the last commit attempt produced errors; forwarded into `RunnerDetailPopover`.
+    /// Non-nil when the last commit attempt produced errors; forwarded into `RunnerDetailSheet`.
     @State private var commitError: String?
     /// Non-nil when the last removal attempt failed; shown as an inline error label.
     @State private var removeErrorMessage: String?
@@ -68,7 +68,11 @@ struct LocalRunnersView: View {
         .onChange(of: localRunnerStore.isScanning) { _, newVal in if !newVal { hasLoadedOnce = true } }
         .sheet(isPresented: $showAddRunnerSheet, content: addRunnerSheet)
         .modifier(removalAlertModifier)
-        .popover(item: $editingRunner) { runner in runnerEditingPopover(runner: runner) }
+        // #1262: Use .sheet(item:) instead of .popover(item:) so AppKit attaches
+        // RunnerDetailSheet as a child sheet of NSPopoverWindowFrame directly.
+        // SwiftUI's .popover is constrained by the parent view bounds; .sheet escapes
+        // that constraint and is automatically guarded by hasActiveSheet in AppDelegate.
+        .sheet(item: $editingRunner) { runner in runnerEditingSheet(runner: runner) }
     }
 
     // MARK: - Header
@@ -157,7 +161,7 @@ struct LocalRunnersView: View {
 
     // MARK: - Runner rows
 
-    /// Full row view for a single local runner, including the detail popover trigger.
+    /// Full row view for a single local runner, including the detail sheet trigger.
     private func localRunnerRow(_ runner: RunnerModel) -> some View {
         Button {
             commitError = nil
@@ -316,10 +320,13 @@ struct LocalRunnersView: View {
         )
     }
 
-    /// Builds the `RunnerDetailPopover` with commit/cancel wiring.
+    /// Builds the `RunnerDetailSheet` with commit/cancel wiring.
+    ///
+    /// Presented via `.sheet(item:)` so AppKit attaches the view as a child sheet
+    /// of `NSPopoverWindowFrame` — unconstrained by the SwiftUI view hierarchy bounds.
     @ViewBuilder
-    private func runnerEditingPopover(runner: RunnerModel) -> some View {
-        RunnerDetailPopover(
+    private func runnerEditingSheet(runner: RunnerModel) -> some View {
+        RunnerDetailSheet(
             runner: runner,
             commitError: commitError,
             onCommit: { draft in

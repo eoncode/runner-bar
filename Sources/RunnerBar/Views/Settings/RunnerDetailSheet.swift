@@ -1,30 +1,50 @@
-// RunnerDetailPopover.swift
+// RunnerDetailSheet.swift
 // RunnerBar
 import AppKit
 import RunnerBarCore
 import SwiftUI
 
-// MARK: - RunnerDetailPopover
+// MARK: - RunnerDetailSheet
 
-/// Popover view for editing a single self-hosted runner.
+/// Sheet view for editing a single self-hosted runner.
 ///
 /// All editable fields are buffered in a `RunnerEditDraft` value; no
-/// persistence occurs here.  The parent is responsible for committing
+/// persistence occurs here. The parent is responsible for committing
 /// or discarding via the `onCommit` / `onCancel` callbacks.
 ///
+/// Presented via `.sheet(item:)` from `LocalRunnersView` (#1262).
+///
+/// ## Why no ScrollView
+/// The content is a fixed set of rows (Info + Config) that never needs to scroll.
+/// A ScrollView prevents SwiftUI from computing a real `preferredContentSize` for
+/// the sheet window — it reports the container height (i.e. the parent panel height)
+/// instead of the content height. Removing the ScrollView lets the root VStack size
+/// itself intrinsically, which gives the sheet the correct independent height.
+/// ❌ NEVER wrap the content VStack in a ScrollView here.
+///
+/// ## Why no fixedSize on the content VStack
+/// `.fixedSize(horizontal: false, vertical: true)` is intentionally absent from the
+/// content VStack. The sheet window has no maximum-height constraint that could clip
+/// the content — it simply grows to fit whatever height SwiftUI reports — so
+/// `fixedSize` would add no protection. Worse, it would suppress flexible layout in
+/// any `Text` children (including the `commitError` label in `footerBar`), breaking
+/// word-wrap for long error strings. The `commitError` Text already carries its own
+/// `.fixedSize(horizontal: false, vertical: true)` so it can grow vertically without
+/// affecting sibling views.
+///
 /// Replaces `RunnerDetailView` as part of #1001 (issue #988 fix).
-struct RunnerDetailPopover: View {
+struct RunnerDetailSheet: View {
 
     // MARK: - Inputs
 
     /// The runner being edited (read-only identity + info fields).
     let runner: RunnerModel
-    /// Error message from the last commit attempt, forwarded by the parent (`SettingsView`).
+    /// Error message from the last commit attempt, forwarded by the parent (`LocalRunnersView`).
     /// `nil` while no error is active. Displayed in the footer so the user knows why OK did not close.
     let commitError: String?
     /// Called when the user taps OK. The caller runs the commit flow (Phase 3).
     let onCommit: (RunnerEditDraft) -> Void
-    /// Called when the user taps Cancel or the popover is dismissed externally.
+    /// Called when the user taps Cancel or the sheet is dismissed externally.
     let onCancel: () -> Void
 
     // MARK: - Draft state
@@ -46,7 +66,7 @@ struct RunnerDetailPopover: View {
 
     // MARK: - Init
 
-    /// Creates the popover, seeding the draft and info fields from `runner`.
+    /// Creates the sheet, seeding the draft and info fields from `runner`.
     init(
         runner: RunnerModel,
         commitError: String? = nil,
@@ -70,19 +90,20 @@ struct RunnerDetailPopover: View {
 
     // MARK: - Body
 
-    /// Root popover layout: header, form fields, and action bar.
+    /// Root sheet layout: header, form content, and action bar.
+    ///
+    /// No ScrollView (see type comment) and no fixedSize on the content VStack
+    /// (see "Why no fixedSize" in type comment). The sheet window sizes freely
+    /// to the intrinsic height of this VStack via `preferredContentSize`.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            popoverHeader
+            sheetHeader
             Divider()
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
-                    infoSection
-                    configSection
-                }
-                .padding(.bottom, 16)
+            VStack(alignment: .leading, spacing: 0) {
+                infoSection
+                configSection
             }
-            .frame(maxHeight: .infinity)
+            .padding(.bottom, 16)
             Divider()
             footerBar
         }
@@ -92,8 +113,8 @@ struct RunnerDetailPopover: View {
 
     // MARK: - Header
 
-    /// Popover header showing runner status dot and name (no back button).
-    private var popoverHeader: some View {
+    /// Sheet header showing runner status dot and name.
+    private var sheetHeader: some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(dotColor(for: runner))
@@ -110,9 +131,10 @@ struct RunnerDetailPopover: View {
 
     // MARK: - Footer
 
-    /// Cancel / OK action bar at the bottom of the popover.
-    /// Shows `commitError` in red above the buttons when non-nil so the user
-    /// knows why OK did not close the popover.
+    /// Cancel / OK action bar at the bottom of the sheet.
+    /// Shows `commitError` in red above the buttons when non-nil.
+    /// The error Text carries `.fixedSize(horizontal: false, vertical: true)` so it
+    /// word-wraps correctly without needing fixedSize on the parent VStack.
     private var footerBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let error = commitError {
@@ -254,7 +276,7 @@ struct RunnerDetailPopover: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Sub-view helpers (mirrored from RunnerDetailView)
+    // MARK: - Sub-view helpers
 
     /// Styled section title used above each settings card.
     private func sectionHeader(_ title: String) -> some View {
@@ -294,7 +316,7 @@ struct RunnerDetailPopover: View {
     }
 
     /// Status indicator colour from runner model.
-    /// Matches the 4-state logic in `SettingsView.localRunnerDotColor(for:)`.
+    /// Matches the 4-state logic in `LocalRunnersView.localRunnerDotColor(for:)`.
     private func dotColor(for runnerModel: RunnerModel) -> Color {
         switch runnerModel.statusColor {
         case .running: return Color.rbSuccess
@@ -336,7 +358,7 @@ struct RunnerDetailPopover: View {
 }
 
 /// Copies `text` to the system pasteboard.
-/// File-local helper invoked by copy-to-clipboard buttons inside `RunnerDetailPopover`.
+/// File-local helper invoked by copy-to-clipboard buttons inside `RunnerDetailSheet`.
 @MainActor
 private func copyToPasteboard(text: String) {
     NSPasteboard.general.clearContents()
