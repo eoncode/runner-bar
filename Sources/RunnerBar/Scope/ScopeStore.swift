@@ -1,6 +1,5 @@
 // ScopeStore.swift
 // RunnerBar
-import Combine
 import Foundation
 import Observation
 
@@ -11,7 +10,8 @@ import Observation
 /// Migration: if the legacy `"scopes"` key (plain `[String]`) is present on first
 /// launch it is converted to `[ScopeEntry]` (all enabled) and the old key is deleted.
 ///
-/// Subscribe to `didMutate` to be notified after any structural change (add / remove / enable toggle).
+/// Mutations update the `@Observable` `entries` array; `RunnerStore` observes
+/// `activeScopes` via `withObservationTracking`/`AsyncStream` (no Combine bridge).
 @MainActor
 @Observable
 final class ScopeStore {
@@ -22,11 +22,6 @@ final class ScopeStore {
     private let entriesKey = "scopeEntries"
     /// `UserDefaults` key for the legacy plain `[String]` scopes array, kept for migration only.
     private let legacyKey = "scopes"
-
-    /// Emits after every structural mutation (add / remove). Callers subscribe and
-    /// store the resulting `AnyCancellable`. Using a subject instead of a plain
-    /// optional closure avoids any risk of a retain cycle at the call site.
-    let didMutate = PassthroughSubject<Void, Never>()
 
     /// All scope entries, persisted as JSON in `UserDefaults`.
     /// `private(set)` — mutate only through the designated methods on this type
@@ -101,7 +96,6 @@ final class ScopeStore {
         entries.append(ScopeEntry(scope: trimmed))
         persist()
         log("ScopeStore › added scope: \(trimmed)")
-        didMutate.send()
     }
 
     /// Removes the entry with the given ID. No-ops if not found.
@@ -110,20 +104,17 @@ final class ScopeStore {
         entries.removeAll(where: { $0.id == id })
         persist()
         log("ScopeStore › removed scope id: \(id)")
-        didMutate.send()
     }
 
-    /// Toggles the `isEnabled` flag for the entry with the given ID,
-    /// persists the change to `UserDefaults`, and sends `didMutate` so
-    /// `RunnerStore` restarts its poll loop when the active scope set changes.
-    /// Mutating a nested value-type field (`entries[idx].isEnabled`) does not
-    /// automatically trigger `didMutate` the way add/remove events do,
-    /// so the send is explicit.
+    /// Toggles the `isEnabled` flag for the entry with the given ID and persists
+    /// the change. `RunnerStore` observes `activeScopes` via `withObservationTracking`,
+    /// so reassigning the `@Observable` `entries` array is enough to trigger a poll restart.
+    /// The element is replaced (not mutated in place) so the Observation system
+    /// reliably registers the change to the nested value-type field.
     func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[idx].isEnabled = enabled
         persist()
         log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(enabled)")
-        didMutate.send()
     }
 }

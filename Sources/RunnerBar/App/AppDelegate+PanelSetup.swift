@@ -212,21 +212,10 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — runnerStore poll loop started")
         }
 
-        // didMutate — scope changed; must restart the store entirely so it polls
-        // the correct repos from the beginning.
-        // RunnerStore already observes ScopeStore.activeScopes internally via
-        // makeObservationStream, so this sink is retained only for the log line
-        // and as a belt-and-suspenders guard for call sites that do not go through
-        // the actor's internal observer (e.g. direct ScopeStore mutations in tests).
-        ScopeStore.shared.didMutate
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                guard self != nil else { return }
-                log("AppDelegate › ScopeStore.didMutate — restarting RunnerStore (belt-and-suspenders)")
-                Task { [weak self] in await self?.runnerStore.start() }
-            }
-            .store(in: &cancellables)
-
+        // Scope changes (add / remove / enable toggle) restart RunnerStore so it polls
+        // the correct repos from the beginning. RunnerStore observes
+        // ScopeStore.activeScopes internally via withObservationTracking/AsyncStream,
+        // so no Combine sink is needed here — the actor's own observer handles it.
         log("AppDelegate › setupCombineSubscriptions — complete")
     }
 }
