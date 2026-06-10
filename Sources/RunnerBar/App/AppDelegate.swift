@@ -365,8 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⚠️ show() is called ONCE per open. Resize is done via contentSize only.
     func openPanel() {
         guard let button = statusItem?.button, let popover else { return }
-        log("AppDelegate › openPanel — seeding observable")
-        observable.reload()
+        log("AppDelegate › openPanel — LocalRunnerStore pushes state on every cycle, no seed needed")
         panelIsOpen = true
         panelVisibilityState.isOpen = true
         if !restorePopoverWindowsPreservingSheetsIfNeeded() {

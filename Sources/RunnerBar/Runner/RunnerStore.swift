@@ -135,8 +135,10 @@ actor RunnerStore {
         if scopes.isEmpty {
             log("RunnerStore › ⚠️ start called but activeScopes is EMPTY — actions will not load")
         }
-        let localCount = MainActor.assumeIsolated { localRunnerStore.runners.count }
-        log("RunnerStore › start — localRunnerStore.runners.count=\(localCount) at start() time")
+        // Read the already-pushed snapshot from viewModel (main-actor) rather than crossing
+        // into the LocalRunnerStore actor from here.
+        let localCount = MainActor.assumeIsolated { viewModel.localRunners.count }
+        log("RunnerStore › start — localRunners.count=\(localCount) at start() time")
         if localCount == 0 {
             log("RunnerStore › ⚠️ start — localRunners=0 at start time; installPathMap will be empty on first fetch.")
         }
@@ -195,7 +197,7 @@ actor RunnerStore {
         let snapPrevGroups   = prevLiveGroups
         let snapGroupCache   = actionGroupCache
         let snapSeenGroupIDs = seenGroupIDs
-        let localRunners     = await MainActor.run { localRunnerStore.runners }
+        let localRunners     = await MainActor.run { viewModel.localRunners }
         log("RunnerStore › fetch — localRunners.count=\(localRunners.count) (used for installPathMap)")
         if localRunners.isEmpty {
             log("RunnerStore › ⚠️ fetch — localRunners is EMPTY; installPathMap will be empty")
@@ -359,17 +361,17 @@ actor RunnerStore {
                 || installPathMap.byName[$0.runner.name] != nil)
         }
         if !metricsUpdates.isEmpty {
-            await MainActor.run {
-                for (_, runner) in metricsUpdates {
+            // applyMetrics is isolated to the LocalRunnerStore actor; await each call
+            // directly. It pushes the resulting snapshot to the main actor itself.
+            for (_, runner) in metricsUpdates {
 #if DEBUG
-                    log("RunnerStore › fetchAndEnrichRunners — applyMetrics to LocalRunnerStore: \(runner.name) id=\(runner.id) busy=\(runner.busy) metrics=\(String(describing: runner.metrics))")
+                log("RunnerStore › fetchAndEnrichRunners — applyMetrics to LocalRunnerStore: \(runner.name) id=\(runner.id) busy=\(runner.busy) metrics=\(String(describing: runner.metrics))")
 #endif
-                    localRunnerStore.applyMetrics(
-                        runner.metrics,
-                        forRunnerId: runner.id,
-                        name: runner.name
-                    )
-                }
+                await localRunnerStore.applyMetrics(
+                    runner.metrics,
+                    forRunnerId: runner.id,
+                    name: runner.name
+                )
             }
         }
 

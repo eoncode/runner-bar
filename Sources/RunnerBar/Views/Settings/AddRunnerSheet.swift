@@ -58,6 +58,9 @@ struct AddRunnerSheet: View {
     let onComplete: () -> Void
     /// Injected local runner store — avoids direct `.shared` references inside the sheet.
     var localRunnerStore: LocalRunnerStore = .shared
+    /// View model used for synchronous duplicate checks against `localRunners` already
+    /// pushed to the UI layer — avoids crossing the actor boundary in computed properties.
+    var store: RunnerViewModel = .shared
 
     // MARK: - Add Mode
 
@@ -393,7 +396,9 @@ struct AddRunnerSheet: View {
 
         setStep("Registering service…")
         writeLaunchAgentPlist(scope: scope, runnerName: name, workingDirectory: dir)
-        localRunnerStore.add(runnerName: name, installPath: dir)
+        Task {
+            await localRunnerStore.add(runnerName: name, installPath: dir)
+        }
         isRegistering    = false
         registrationStep = ""
         isPresented      = false

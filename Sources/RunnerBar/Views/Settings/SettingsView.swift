@@ -97,7 +97,8 @@ struct SettingsView: View {
             if showLocalRunners {
                 LocalRunnersView(
                     onBack: { showLocalRunners = false },
-                    isAuthenticated: isOAuthAuthenticated || isCLIAuthenticated
+                    isAuthenticated: isOAuthAuthenticated || isCLIAuthenticated,
+                    store: store
                 )
             } else if showScopes {
                 ScopesView(onBack: { showScopes = false }, onRestartPolling: onRestartPolling)

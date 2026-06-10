@@ -1,43 +1,46 @@
 // LocalRunnerStore.swift
 // RunnerBar
 import Foundation
-import Observation
 
 // MARK: - LocalRunnerStore
 
-/// Owns the list of locally-installed GitHub Actions runner agents.
+/// Swift 6 actor that owns the list of locally-installed GitHub Actions runner agents.
 /// Hydrates from `installPath/.runner` JSON via `RunnerModelParser`,
 /// marks live services via launchctl, then enriches with GitHub API data
 /// (status, busy, labels, group).
 ///
-/// Index persistence is delegated to `LocalRunnerIndex`.
-/// JSON parsing is delegated to `runnerModelFromIndex(name:installPath:)` in `RunnerModelParser`.
-///
-/// A single refresh cycle runs at a time; `isScanning` reflects in-flight state
-/// to views and prevents concurrent refreshes.
-@MainActor
-@Observable
-final class LocalRunnerStore {
+/// **Concurrency model**
+/// - The actor runs on its own executor (background thread).
+/// - After every refresh cycle, results are pushed to the injected `RunnerViewModel`
+///   on the main actor via `await MainActor.run { }`. SwiftUI's `@Observable` machinery
+///   picks up the mutation automatically.
+/// - `isLocalScanning` is also pushed to `RunnerViewModel` so views can observe it
+///   without holding a direct reference to the actor.
+/// - Index persistence is delegated to `LocalRunnerIndex`.
+/// - JSON parsing is delegated to `runnerModelFromIndex(name:installPath:)` in `RunnerModelParser`.
+actor LocalRunnerStore {
     // MARK: - Shared instance
-    /// The app-wide shared instance. Always accessed on the main actor.
-    /// Injected into views and stores via their `localRunnerStore` properties —
-    /// views hold it as `@State`, stores receive it via `init(viewModel:localRunnerStore:)`.
-    static let shared = LocalRunnerStore()
+    /// The app-wide shared instance.
+    /// Injected into views and stores via their `localRunnerStore` properties.
+    /// Created lazily; `RunnerViewModel.shared` is passed at first access via `AppDelegate`.
+    @MainActor static let shared = LocalRunnerStore(viewModel: RunnerViewModel.shared)
 
-    // MARK: - Observable state
+    // MARK: - Internal actor state
     /// The current list of locally-installed runners, sorted by name.
-    private(set) var runners: [RunnerModel] = []
+    private var runners: [RunnerModel] = []
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
-    private(set) var isScanning: Bool = false
+    private var isScanning: Bool = false
 
-    // MARK: - Index
+    // MARK: - Injected dependencies
+    /// The view model this actor pushes UI state into.
+    private let viewModel: RunnerViewModel
     /// Persistence layer for the runner name → install path mapping.
     private let index = LocalRunnerIndex()
 
     // MARK: - Init
-    /// Initialises the store. Index is loaded inside `LocalRunnerIndex.init()`.
-    /// NOTE: `runners` stays `[]` until `refresh()` is called explicitly.
-    private init() {
+    /// Designated init for dependency injection.
+    init(viewModel: RunnerViewModel) {
+        self.viewModel = viewModel
         log("LocalRunnerStore › init — runnerIndex.count=\(index.runnerIndex.count), runners=[] (call refresh() to hydrate)")
     }
 
@@ -53,16 +56,7 @@ final class LocalRunnerStore {
         index.unregister(name: name)
     }
 
-    // MARK: - Convenience API (called by views)
-
-    /// Returns `true` if `runnerName` has an entry in the persisted index.
-    func isTracked(runnerName: String) -> Bool {
-        let tracked = index.runnerIndex[runnerName] != nil
-#if DEBUG
-        log("LocalRunnerStore › isTracked '\(runnerName)' → \(tracked)")
-#endif
-        return tracked
-    }
+    // MARK: - Convenience API (called by views via Task { await ... })
 
     /// Registers a new runner by name and install path.
     func add(runnerName: String, installPath: String) {
@@ -70,7 +64,7 @@ final class LocalRunnerStore {
         register(name: runnerName, installPath: installPath)
     }
 
-    /// Immediately reflects a start/stop action in the UI before the next refresh cycle.
+    /// Immediately reflects a start/stop action before the next refresh cycle.
     func optimisticallySetRunning(_ runnerName: String, isRunning: Bool) {
         log("LocalRunnerStore › optimisticallySetRunning '\(runnerName)' isRunning=\(isRunning)")
         guard let idx = runners.firstIndex(where: { $0.runnerName == runnerName }) else {
@@ -78,6 +72,7 @@ final class LocalRunnerStore {
             return
         }
         runners[idx] = runners[idx].copying(isRunning: isRunning)
+        pushRunners()
     }
 
     /// Sets or clears the lifecycle warning badge for a runner.
@@ -88,6 +83,7 @@ final class LocalRunnerStore {
             return
         }
         runners[idx] = runners[idx].copying(lifecycleWarning: warning)
+        pushRunners()
     }
 
     /// Immediately removes `runnerName` from the index and display list without waiting for a refresh.
@@ -97,6 +93,7 @@ final class LocalRunnerStore {
         let beforeCount = runners.count
         runners.removeAll { $0.runnerName == runnerName }
         log("LocalRunnerStore › optimisticallyRemove '\(runnerName)' — runners \(beforeCount)→\(runners.count)")
+        pushRunners()
     }
 
     /// Rolls back an `optimisticallyRemove` by re-registering the runner and restoring it.
@@ -113,6 +110,7 @@ final class LocalRunnerStore {
         } else {
             log("LocalRunnerStore › optimisticallyRestore — '\(runner.runnerName)' already present, skipped append")
         }
+        pushRunners()
     }
 
     // MARK: - Metrics write-back
@@ -130,22 +128,18 @@ final class LocalRunnerStore {
 #endif
 
         guard let idx = runners.firstIndex(where: { runner in
-            // Priority 1: match on GitHub REST API id (populated after first enrichment).
-            // This is the key fix for org runners where apiId ≠ agentId.
             if let rid = runnerId, let aid = runner.apiId {
                 if aid == rid {
                     log("LocalRunnerStore › applyMetrics — MATCH via apiId=\(aid) for '\(runner.runnerName)'")
                     return true
                 }
             }
-            // Priority 2: match on local .runner JSON AgentId (repo runners).
             if let rid = runnerId, let aid = runner.agentId {
                 if aid == rid {
                     log("LocalRunnerStore › applyMetrics — MATCH via agentId=\(aid) for '\(runner.runnerName)'")
                     return true
                 }
             }
-            // Priority 3: name fallback.
             if runner.runnerName == name {
                 log("LocalRunnerStore › applyMetrics — MATCH via name='\(name)' for '\(runner.runnerName)'")
                 return true
@@ -157,6 +151,7 @@ final class LocalRunnerStore {
         }
         log("LocalRunnerStore › applyMetrics — writing metrics=\(String(describing: metrics)) to '\(runners[idx].runnerName)'")
         runners[idx] = runners[idx].copying(metrics: metrics)
+        pushRunners()
     }
 
     // MARK: - Refresh
@@ -197,6 +192,7 @@ final class LocalRunnerStore {
             return
         }
         isScanning = true
+        await MainActor.run { [viewModel] in viewModel.isLocalScanning = true }
         let currentIndex = index.runnerIndex
         log("LocalRunnerStore › performRefresh() — starting with index=\(currentIndex.keys.sorted())")
 
@@ -231,13 +227,12 @@ final class LocalRunnerStore {
         applyRefreshResults(enriched)
     }
 
-    /// Applies enriched runner data back on the main actor and clears the scanning flag.
+    /// Applies enriched runner data, preserves in-flight metrics, pushes to viewModel.
     ///
     /// Metrics preservation priority (fixes org-runner metrics #1209 / #1192):
     ///   1. runner.apiId  match (org runners: GitHub REST API id ≠ local agentId)
     ///   2. runner.agentId match (repo runners)
     ///   3. runner.runnerName match (last resort)
-    @MainActor
     private func applyRefreshResults(_ enriched: [RunnerModel]) {
         log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
 
@@ -255,21 +250,18 @@ final class LocalRunnerStore {
 #endif
 
         let preserved: [RunnerModel] = enriched.map { runner in
-            // Priority 1: apiId match — the critical path for org runners.
             if let id = runner.apiId, let m = metricsByApiId[id] {
 #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)")
 #endif
                 return runner.copying(metrics: m)
             }
-            // Priority 2: agentId match — repo runners.
             if let id = runner.agentId, let m = metricsByAgentId[id] {
 #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)")
 #endif
                 return runner.copying(metrics: m)
             }
-            // Priority 3: name match — last resort.
             if let m = metricsByName[runner.runnerName] {
 #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name")
@@ -284,15 +276,29 @@ final class LocalRunnerStore {
         runners = preserved.sorted { $0.runnerName < $1.runnerName }
         isScanning = false
         log("LocalRunnerStore › applyRefreshResults — DONE. runners.count=\(runners.count) isScanning=false")
+        let snapshot = runners
+        Task { await MainActor.run { [viewModel] in
+            viewModel.localRunners = snapshot
+            viewModel.isLocalScanning = false
+        } }
+    }
+
+    // MARK: - Push helpers
+
+    /// Pushes the current `runners` snapshot to `viewModel.localRunners` on the main actor.
+    /// Called after every optimistic mutation so views update immediately.
+    private func pushRunners() {
+        let snapshot = runners
+        Task { await MainActor.run { [viewModel] in viewModel.localRunners = snapshot } }
     }
 
     // MARK: - launchctl scan
 
     /// Path to the `launchctl` binary used to enumerate live runner services.
-    nonisolated private static let launchctlURL = URL(fileURLWithPath: "/bin/launchctl") // NOSONAR
+    private static let launchctlURL = URL(fileURLWithPath: "/bin/launchctl") // NOSONAR
 
     /// Runs `launchctl list` and returns lines containing `actions.runner`.
-    private nonisolated func scanLiveServices() async -> [String] {
+    private func scanLiveServices() async -> [String] {
         log("LocalRunnerStore › scanLiveServices — running launchctl list")
         let result = await ProcessRunner.runAsync(
             executableURL: Self.launchctlURL,
