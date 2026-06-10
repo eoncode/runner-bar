@@ -17,9 +17,14 @@ struct PanelHeaderView: View {
         HStack(spacing: 6) {
             HeaderStatsBar(statsVM: statsVM)
             Spacer()
-            HStack(spacing: 8) {
-                GlassEffectContainer { settingsButton.glassButton() }
-                GlassEffectContainer { quitButton.glassButton() }
+            // Single shared GlassEffectContainer — sibling GlassButton instances MUST
+            // share one container so they use a single CABackdropLayer sampling region,
+            // enabling morphing and avoiding redundant GPU compositing passes.
+            GlassEffectContainer {
+                HStack(spacing: 8) {
+                    settingsButton.glassButton()
+                    quitButton.glassButton()
+                }
             }
         }
         .padding(.horizontal, RBSpacing.md)
