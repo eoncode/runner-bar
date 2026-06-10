@@ -340,6 +340,7 @@ struct AddRunnerSheet: View {
         let configPath = URL(fileURLWithPath: dir).appendingPathComponent("config.sh").path
 
         if !FileManager.default.fileExists(atPath: configPath) {
+            // TODO: setStep() is synchronous — remove spurious `await` from all setStep() calls in this function
             await setStep("Downloading runner package…")
             guard let downloadURL = await fetchRunnerDownloadURL() else {
                 isRegistering = false
