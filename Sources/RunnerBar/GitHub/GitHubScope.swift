@@ -1,4 +1,4 @@
-// Scope.swift
+// GitHubScope.swift
 // RunnerBar
 import Foundation
 

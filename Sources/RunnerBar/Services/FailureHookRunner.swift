@@ -11,7 +11,7 @@ import RunnerBarCore
 /// fetches failed job/step details on a background thread before building `$FAILURE_LOG` (see #552),
 /// and applies an optional branch filter before firing (see #560).
 ///
-/// Called indirectly from `RunnerStore.buildGroupState` (see `RunnerPollState.swift`)
+/// Called indirectly from `RunnerStore.buildGroupState` (see `RunnerStore+PollBridge.swift`)
 /// via `PollResultBuilder.buildGroupState`'s `fireFailureHook` closure parameter.
 /// Resolves all `$TOKEN` variables via `resolveTokens(_:group:scope:jobs:)` then opens
 /// Terminal.app via `TerminalLauncher` (AppleScript `do script`) so the command runs visibly.

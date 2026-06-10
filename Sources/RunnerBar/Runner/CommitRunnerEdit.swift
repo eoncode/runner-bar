@@ -1,4 +1,4 @@
-// RunnerEditCommit.swift
+// CommitRunnerEdit.swift
 // RunnerBar
 import Foundation
 import RunnerBarCore

@@ -1,4 +1,4 @@
-// RunnerPollState.swift
+// RunnerStore+PollBridge.swift
 // RunnerBar
 import Foundation
 import os

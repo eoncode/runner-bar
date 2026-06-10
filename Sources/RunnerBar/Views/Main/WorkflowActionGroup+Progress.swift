@@ -1,4 +1,4 @@
-// WorkflowProgressExtensions.swift
+// WorkflowActionGroup+Progress.swift
 // RunnerBar
 // Extracted from PanelProgressViews.swift during dead-code cleanup (removed PieProgressDot).
 import Foundation

@@ -1,4 +1,4 @@
-// ScopeDetailView.swift
+// ScopeEditSheet.swift
 // RunnerBar
 import RunnerBarCore
 import SwiftUI
@@ -50,6 +50,8 @@ struct ScopeEditSheet: View {
     @State private var hookEnabled: Bool
     /// Draft: selected branch filter. Written to store only on Save.
     @State private var hookBranch: String?
+    /// Draft: failure-hook command. Written to store only on Save.
+    @State private var hookCommand: String
     /// Draft: local repo path. Written to store only on Save.
     @State private var localRepoPath: String
     /// Tracks whether the inline path text field is in edit mode.
@@ -68,6 +70,11 @@ struct ScopeEditSheet: View {
         self._isPresented = isPresented
         _hookEnabled = State(initialValue: ScopePreferencesStore.failureHookEnabled(for: scopeEntry.scope))
         _hookBranch = State(initialValue: ScopePreferencesStore.failureHookBranch(for: scopeEntry.scope))
+        // Seed with the persisted value or empty string — never the default command.
+        // FailureHookRunner falls back to its own default at runtime when the stored
+        // value is nil, so seeding with the default here would silently persist it
+        // on the first Save even when the user never opened FailureHookCommandSheet.
+        _hookCommand = State(initialValue: ScopePreferencesStore.failureHookCommand(for: scopeEntry.scope) ?? "")
         _localRepoPath = State(initialValue: ScopePreferencesStore.localRepoPath(for: scopeEntry.scope) ?? "")
     }
 
@@ -84,9 +91,6 @@ struct ScopeEditSheet: View {
     /// `true` when the scope string contains a slash, indicating a repository
     /// scope rather than an organisation scope.
     private var isRepo: Bool { scope.contains("/") }
-    /// The persisted failure-hook terminal command for this scope, if set.
-    /// Command is edited via FailureHookCommandSheet which has its own save flow.
-    private var hookCommand: String? { ScopePreferencesStore.failureHookCommand(for: scope) }
     /// The GitHub web URL for this scope, used to render the "Open on GitHub" link.
     private var gitHURL: URL? { URL(string: "https://github.com/\(scope)") }
 
@@ -115,7 +119,7 @@ struct ScopeEditSheet: View {
             if hostWindow == nil, let w { hostWindow = w }
         })
         .sheet(isPresented: $showHookSheet) {
-            FailureHookCommandSheet(scope: scope) { showHookSheet = false }
+            FailureHookCommandSheet(scope: scope, localRepoPath: localRepoPath, commandText: $hookCommand) { showHookSheet = false }
         }
         .sheet(isPresented: $showBranchSheet) {
             BranchSelectorSheet(
@@ -394,8 +398,8 @@ extension ScopeEditSheet {
                     .foregroundColor(Color.rbTextSecondary)
                     .frame(width: 100, alignment: .leading)
                     .fixedSize()
-                if let cmd = hookCommand, !cmd.isEmpty {
-                    Text(cmd)
+                if !hookCommand.isEmpty {
+                    Text(hookCommand)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(Color.rbTextPrimary)
                         .lineLimit(2)
@@ -446,6 +450,8 @@ extension ScopeEditSheet {
     @MainActor func confirmSave() {
         ScopePreferencesStore.setFailureHookEnabled(hookEnabled, for: scope)
         ScopePreferencesStore.setFailureHookBranch(hookBranch, for: scope)
+        let command = hookCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        ScopePreferencesStore.setFailureHookCommand(command.isEmpty ? nil : command, for: scope)
         let path = localRepoPath.isEmpty ? nil : localRepoPath
         ScopePreferencesStore.setLocalRepoPath(path, for: scope)
         isPresented = false
@@ -489,7 +495,14 @@ extension ScopeEditSheet {
             if response == .OK, let url = picker.url {
                 let home = FileManager.default.homeDirectoryForCurrentUser.path
                 let abs = url.path
-                let tilde = abs.hasPrefix(home) ? "~/" + abs.dropFirst(home.count + 1) : abs
+                let tilde: String
+                if abs == home {
+                    tilde = "~/"
+                } else if abs.hasPrefix(home + "/") {
+                    tilde = "~/" + abs.dropFirst(home.count + 1)
+                } else {
+                    tilde = abs
+                }
                 log("[PICKER] openFolderPicker — user picked path=\(tilde)")
                 localRepoPath = tilde
             } else {

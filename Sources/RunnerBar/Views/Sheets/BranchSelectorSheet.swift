@@ -5,7 +5,7 @@ import SwiftUI
 // MARK: - BranchSelectorSheet
 // #560: Sheet for selecting a branch to filter the failure hook on.
 //
-// Presented from ScopeDetailView when the user taps the Branch row in the
+// Presented from ScopeEditSheet when the user taps the Branch row in the
 // Failure Hook section. Fetches branches from the GitHub API on a background
 // thread and shows them in a searchable list.
 //

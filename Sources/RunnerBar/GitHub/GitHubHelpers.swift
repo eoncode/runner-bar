@@ -1,4 +1,4 @@
-// GitHub.swift
+// GitHubHelpers.swift
 // RunnerBar
 import Foundation
 import os
@@ -190,15 +190,18 @@ private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
     let lines = cleaned.components(separatedBy: "\n")
     var sections: [String] = []
     var current: [String] = []
+    var seenGroup = false
     for line in lines {
         if line.contains("##[group]") {
-            if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
+            if seenGroup, !current.isEmpty { sections.append(current.joined(separator: "\n")) }
+            seenGroup = true
             current = [line]
-        } else {
+        } else if seenGroup {
             current.append(line)
         }
+        // lines before the first ##[group] marker are preamble and intentionally skipped
     }
-    if !current.isEmpty { sections.append(current.joined(separator: "\n")) }
+    if seenGroup, !current.isEmpty { sections.append(current.joined(separator: "\n")) }
     log("parseStepLog › parsed \(sections.count) section(s) from log")
     if sections.isEmpty {
         log("parseStepLog › no group markers, returning full raw log")
