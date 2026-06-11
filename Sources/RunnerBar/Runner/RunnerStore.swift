@@ -289,6 +289,7 @@ actor RunnerStore {
     /// this, `[weak self]` in `onChange` would find `self == nil` on the first change
     /// and silently stop all future polling-interval updates.
     private func _startObservingPreferences() {
+        let injectedStore = preferencesStore
         intervalObservationTask?.cancel()
         let injectedStore = preferencesStore
         intervalObservationTask = Task { [weak self] in
@@ -320,6 +321,7 @@ actor RunnerStore {
     /// doc-comment for the full rationale, including why the observer must be
     /// retained in the Task's async scope beyond the `MainActor.run` closure.
     private func _startObservingScopes() {
+        let injectedStore = scopeStore
         scopeObservationTask?.cancel()
         let injectedStore = scopeStore
         scopeObservationTask = Task { [weak self] in
@@ -576,8 +578,6 @@ actor RunnerStore {
             }
         }
 
-        // Write metrics back to LocalRunnerStore for the runner row badge.
-        // Only busy runners with a resolved installPath to avoid spurious warnings.
         let metricsUpdates = indexed.filter {
             $0.runner.busy
             && (installPathMap.byApiId[$0.runner.id] != nil
