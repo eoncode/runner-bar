@@ -260,8 +260,8 @@ actor RunnerStore {
         self.preferencesStore = preferencesStore
         self.scopeStore = scopeStore
         self.onStatusUpdate = onStatusUpdate
-        intervalObservationTask = Task { await self._startObservingPreferences() }
-        scopeObservationTask    = Task { await self._startObservingScopes() }
+        Task { await self._startObservingPreferences() }
+        Task { await self._startObservingScopes() }
     }
 
     // MARK: - Deinit
@@ -288,11 +288,8 @@ actor RunnerStore {
     /// async scope so it stays alive for the full lifetime of the stream — without
     /// this, `[weak self]` in `onChange` would find `self == nil` on the first change
     /// and silently stop all future polling-interval updates.
-    ///
-    /// - Note: `intervalObservationTask` is assigned by the caller (`init` or a
-    ///   restart path) rather than here, so `deinit` always holds a real `Task`
-    ///   reference from the moment the actor is fully initialised.
-    private func _startObservingPreferences() async {
+    private func _startObservingPreferences() {
+        intervalObservationTask?.cancel()
         let injectedStore = preferencesStore
         intervalObservationTask?.cancel()
         let injectedStore = preferencesStore
@@ -314,15 +311,6 @@ actor RunnerStore {
             }
             _ = observer // retain until stream ends — do not remove
         }
-        for await newInterval in stream {
-            guard !Task.isCancelled else { break }
-            log("RunnerStore › pollingInterval changed to \(newInterval) — restarting poll loop")
-            intervalObservationTask?.cancel()
-            intervalObservationTask = Task { await self._startObservingPreferences() }
-            await start()
-            break // new task owns the stream from here
-        }
-        _ = observer // retain until stream ends — do not remove
     }
 
     /// Starts (or restarts) the `activeScopes` observation loop.
@@ -335,11 +323,8 @@ actor RunnerStore {
     /// Same approach as `_startObservingPreferences` — see that method's
     /// doc-comment for the full rationale, including why the observer must be
     /// retained in the Task’s async scope beyond the `MainActor.run` closure.
-    ///
-    /// - Note: `scopeObservationTask` is assigned by the caller (`init` or a
-    ///   restart path) rather than here, so `deinit` always holds a real `Task`
-    ///   reference from the moment the actor is fully initialised.
-    private func _startObservingScopes() async {
+    private func _startObservingScopes() {
+        scopeObservationTask?.cancel()
         let injectedStore = scopeStore
         scopeObservationTask?.cancel()
         let injectedStore = scopeStore
@@ -361,15 +346,6 @@ actor RunnerStore {
             }
             _ = observer // retain until stream ends — do not remove
         }
-        for await _ in stream {
-            guard !Task.isCancelled else { break }
-            log("RunnerStore › ScopeStore.activeScopes changed — restarting fetch")
-            scopeObservationTask?.cancel()
-            scopeObservationTask = Task { await self._startObservingScopes() }
-            await start()
-            break // new task owns the stream from here
-        }
-        _ = observer // retain until stream ends — do not remove
     }
 
     // MARK: - Poll loop
