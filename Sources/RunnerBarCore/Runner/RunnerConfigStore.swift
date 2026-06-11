@@ -113,11 +113,12 @@ public actor RunnerConfigStore {
             log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
         }
 
-        // Guard against overwriting the agent's value with an empty string — e.g. if
-        // `load(at:)` failed and `workFolder` defaulted to `""`.
-        if !config.workFolder.isEmpty {
-            raw[RunnerConfig.CodingKeys.workFolder.rawValue] = config.workFolder
-        }
+        // Always write workFolder so the user can clear a custom path back to the
+        // agent default. An empty string is normalised to "_work" here — identical
+        // to the value the agent writes on a fresh registration — so a load-failure
+        // zero value and an intentional clear are both safe to round-trip.
+        let workFolderValue = config.workFolder.isEmpty ? "_work" : config.workFolder
+        raw[RunnerConfig.CodingKeys.workFolder.rawValue] = workFolderValue
         // Only write disableUpdate when it is explicitly set; omit the key when nil
         // to match the agent's own convention (key absent == false).
         if let disableUpdate = config.disableUpdate {
