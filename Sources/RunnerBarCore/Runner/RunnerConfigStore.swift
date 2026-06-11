@@ -35,7 +35,7 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// `withCheckedContinuation` / `withCheckedThrowingContinuation` so the actor's
 /// cooperative thread is never blocked by synchronous file I/O — consistent with
 /// the pattern used in `RunnerProxyStore`.
-public actor RunnerConfigStore {
+public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Shared instance
 
