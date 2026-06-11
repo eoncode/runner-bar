@@ -73,18 +73,14 @@ extension ScopeStore: ScopeStoreProtocol {}
 /// is required and no value crosses an isolation boundary.
 @MainActor
 private final class PreferencesObserver {
-    /// The continuation used to push new `pollingInterval` values into the `AsyncStream`.
     private let continuation: AsyncStream<Int>.Continuation
-    /// The injected preferences store — avoids singleton access inside the observer.
     private let store: any AppPreferencesStoreProtocol
 
-    /// Creates a new observer that writes changes into `continuation`.
     init(continuation: AsyncStream<Int>.Continuation, store: any AppPreferencesStoreProtocol) {
         self.continuation = continuation
         self.store = store
     }
 
-    /// Registers a single `withObservationTracking` pass and re-registers itself on change.
     func start() {
         func observe() {
             withObservationTracking {
@@ -105,18 +101,14 @@ private final class PreferencesObserver {
 /// entirely on the `@MainActor`. Same isolation rationale as `PreferencesObserver`.
 @MainActor
 private final class ScopesObserver {
-    /// The continuation used to push new `activeScopes` values into the `AsyncStream`.
     private let continuation: AsyncStream<[String]>.Continuation
-    /// The injected scope store — avoids singleton access inside the observer.
     private let store: any ScopeStoreProtocol
 
-    /// Creates a new observer that writes changes into `continuation`.
     init(continuation: AsyncStream<[String]>.Continuation, store: any ScopeStoreProtocol) {
         self.continuation = continuation
         self.store = store
     }
 
-    /// Registers a single `withObservationTracking` pass and re-registers itself on change.
     func start() {
         func observe() {
             withObservationTracking {
@@ -153,36 +145,20 @@ actor RunnerStore {
 
     // MARK: - State
 
-    /// Runners currently shown in the panel.
     private(set) var runners: [Runner] = []
-    /// Jobs currently shown in the panel, including dimmed completed entries.
     private(set) var jobs: [ActiveJob] = []
-    /// Workflow action groups currently shown in the panel.
     private(set) var actions: [WorkflowActionGroup] = []
 
-    /// Live-job snapshot from the previous poll, used to detect vanished jobs.
     private var prevLiveJobs: [Int: ActiveJob] = [:]
-    /// Completed-job cache keyed by job ID; capped at `PollResultBuilder.jobCacheLimit`.
     private var completedCache: [Int: ActiveJob] = [:]
-    /// Live-group snapshot from the previous poll, used to detect vanished groups.
     private var prevLiveGroups: [String: WorkflowActionGroup] = [:]
-    /// Group cache keyed by group ID; capped at `PollResultBuilder.groupCacheLimit`.
     private var actionGroupCache: [String: WorkflowActionGroup] = [:]
-    /// IDs of action groups whose failure hook has already fired.
-    ///
-    /// Kept separate from `actionGroupCache` so that cache eviction does not re-arm
-    /// the hook for old completed groups still present in GitHub's last-completed feed.
     private var seenGroupIDs: Set<String> = []
 
-    /// Whether the GitHub API is currently rate-limiting this client.
     private(set) var isRateLimited = false
-    /// The exact moment the current rate-limit window expires, or `nil` when no
-    /// rate-limit is active or the reset time is unknown.
-    /// Assigned in `applyFetchResult` and mirrored to `RunnerViewModel`;
-    /// consumed externally via the view model. periphery:ignore
+    /// periphery:ignore
     private(set) var rateLimitResetDate: Date?
 
-    /// Active structured poll task. Cancelled and replaced on every `start()` call.
     private var pollTask: Task<Void, Never>?
     /// Observation task that restarts the poll loop when `pollingInterval` changes.
     /// The `Task` handle is assigned synchronously in `_startObservingPreferences` —
@@ -197,10 +173,7 @@ actor RunnerStore {
     /// deallocated immediately after `init`.
     private var scopeObservationTask: Task<Void, Never>?
 
-    /// The view model this store pushes updates into.
     private let viewModel: RunnerViewModel
-    /// Injected reference to the local runner store — avoids singleton cross-references
-    /// inside the actor body (Swift 6 / PR #1303 requirement).
     private let localRunnerStore: LocalRunnerStore
     /// Injected preferences store. Provides `pollingInterval`.
     /// Pass `AppPreferencesStore.shared` in production; inject a test double in unit tests.
@@ -208,15 +181,10 @@ actor RunnerStore {
     /// Injected scope store. Provides `activeScopes`.
     /// Pass `ScopeStore.shared` in production; inject a test double in unit tests.
     private let scopeStore: any ScopeStoreProtocol
-    /// Called on the main actor at the end of every fetch cycle to refresh the status-bar
-    /// icon. Injected at init to avoid accessing `NSApp.delegate` from inside the actor
-    /// body (PR Principle #4: no singleton access inside actor bodies).
     private let onStatusUpdate: @MainActor @Sendable () -> Void
 
     // MARK: - Aggregate status
 
-    /// The combined health status across all runners, derived from the current `runners` array.
-    /// Read by external consumers (e.g. `AppDelegate`) outside this file's analysis scope.
     /// periphery:ignore
     var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) }
 
@@ -306,7 +274,7 @@ actor RunnerStore {
                 await self?.start()
                 break
             }
-            _ = observer // retain until stream ends — do not remove
+            _ = observer
         }
     }
 
@@ -338,17 +306,12 @@ actor RunnerStore {
                 await self?.start()
                 break
             }
-            _ = observer // retain until stream ends — do not remove
+            _ = observer
         }
     }
 
     // MARK: - Poll loop
 
-    /// Starts (or restarts) the structured async poll loop.
-    ///
-    /// Safe to call multiple times — the previous task is always cancelled first.
-    /// `async` because it reads `@MainActor`-isolated properties via `await MainActor.run { }`.
-    /// All callers already wrap this in `Task { await ... }` or `await self?.start()`.
     func start() async {
         let scopes = await MainActor.run { scopeStore.activeScopes }
         log("RunnerStore › start — activeScopes=\(scopes)")
@@ -387,12 +350,6 @@ actor RunnerStore {
         }
     }
 
-    /// Computes the delay before the next poll: 10 s while jobs/actions are active,
-    /// otherwise the user's configured idle interval (clamped to ≥ 10 s). Also widened
-    /// to the idle interval while rate-limited.
-    ///
-    /// `async` because it reads `preferencesStore.pollingInterval` which is
-    /// `@MainActor`-isolated; uses `await MainActor.run { }` consistently with `fetch()`.
     private func nextPollInterval() async -> TimeInterval {
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
         let hasActiveActions = actions.contains {
@@ -407,9 +364,6 @@ actor RunnerStore {
 
     // MARK: - Fetch
 
-    /// Performs one full poll cycle: snapshots active scopes and local runners,
-    /// fetches and enriches runners/jobs/action groups, then applies the result
-    /// to actor state and pushes it to `RunnerViewModel`.
     func fetch() async {
         await clearGhRateLimit()
 
@@ -460,8 +414,6 @@ actor RunnerStore {
 
     // MARK: - Apply result
 
-    /// Merges a completed fetch into actor state (runners, jobs, action groups, rate-limit)
-    /// and pushes the resulting snapshot to `RunnerViewModel` on the main actor.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -494,9 +446,6 @@ actor RunnerStore {
 
     // MARK: - fetchAndEnrichRunners
 
-    /// Fetches runners for the given scopes, resolves install paths, and enriches each
-    /// runner with live metrics. Writes busy-runner metrics back to `LocalRunnerStore`
-    /// and returns the enriched runner list.
     func fetchAndEnrichRunners(
         scopes: [String],
         localRunners: [RunnerModel],
