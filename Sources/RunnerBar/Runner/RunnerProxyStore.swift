@@ -1,38 +1,7 @@
 // RunnerProxyStore.swift
 // RunnerBar
 import Foundation
-
-// MARK: - RunnerProxyConfig
-
-/// Typed value representing the proxy configuration stored in `.proxy`
-/// and `.proxycredentials` files in a runner's install directory.
-///
-/// - `url`      — written to `.proxy` as a single line followed by `\n`.
-/// - `user`     — first line of `.proxycredentials`.
-/// - `password` — second line of `.proxycredentials`.
-///
-/// All fields are empty strings when no proxy is configured (the normal case).
-/// Part of Phase 4 of the Swift 6.2 data model modernisation (#1287, #1299).
-struct RunnerProxyConfig: Sendable, Equatable {
-    /// Raw proxy URL written to `.proxy` as a single line followed by `\n`.
-    /// Empty string means no proxy is configured.
-    var url: String
-    /// Proxy username, written as line 1 of `.proxycredentials`.
-    var user: String
-    /// Proxy password, written as line 2 of `.proxycredentials`.
-    var password: String
-
-    /// Creates a new `RunnerProxyConfig`.
-    /// All parameters default to empty string, representing no proxy.
-    init(url: String = "", user: String = "", password: String = "") {
-        self.url = url
-        self.user = user
-        self.password = password
-    }
-
-    /// `true` when no proxy fields are set — no files need to exist on disk.
-    var isEmpty: Bool { url.isEmpty && user.isEmpty && password.isEmpty }
-}
+import RunnerBarCore
 
 // MARK: - RunnerProxyStoreError
 
@@ -55,6 +24,9 @@ enum RunnerProxyStoreError: LocalizedError {
 
 /// Actor that owns all disk read/write for runner proxy configuration files.
 ///
+/// Conforms to `RunnerProxyStoreProtocol` so it can be replaced with a test double
+/// when injected into `SaveRunnerEditsUseCase`.
+///
 /// Replaces the `loadProxy` private helper in `RunnerEditDraft` and the
 /// `writeProxyFiles` / `removeIfPresent` free functions in `CommitRunnerEdit`.
 ///
@@ -66,7 +38,7 @@ enum RunnerProxyStoreError: LocalizedError {
 /// - `.proxycredentials` — `user + "\n" + password + "\n"`.
 ///
 /// - Note: Part of Phase 4 of the Swift 6.2 data model modernisation (#1287, #1299).
-actor RunnerProxyStore {
+actor RunnerProxyStore: RunnerProxyStoreProtocol {
 
     // MARK: Shared instance
 
@@ -136,10 +108,10 @@ actor RunnerProxyStore {
     /// - `.proxy` is written as `url + "\n"`, or removed when `config.url` is empty.
     /// - `.proxycredentials` is written as `user + "\n" + password + "\n"`,
     ///   or removed when both `config.user` and `config.password` are empty.
-    /// - Note: All three fields are trimmed of leading/trailing whitespace before
-    ///   writing. This is intentional and matches `load(at:)`'s read behaviour,
-    ///   ensuring a round-trip through load → save is idempotent. Callers should
-    ///   not rely on preserving surrounding whitespace in proxy credentials.
+    /// - All three fields are trimmed of leading/trailing whitespace before
+    ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
+    ///   load → save round-trip is idempotent. Callers must not rely on
+    ///   preserving surrounding whitespace in proxy credentials.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
         let base     = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
@@ -181,16 +153,22 @@ actor RunnerProxyStore {
 
     // MARK: - Private helpers
 
-    /// Parses the content of a `.proxycredentials` file into `(user, password)`.
-    /// Lines are trimmed of newline characters only.
+    /// Parses the raw credential file content into `user` and `password` components.
+    ///
+    /// Expects the first line to be the username and the second line (if present)
+    /// to be the password. Missing lines yield empty strings.
+    ///
+    /// Trims `.whitespacesAndNewlines` (not just `.newlines`) so that files written
+    /// with `\r\n` line endings (e.g. by Windows-based credential tools) do not leave
+    /// a trailing `\r` on each component — which would silently break proxy authentication.
     private static func parseCredentialLines(_ content: String) -> (user: String, password: String) {
         let lines      = content.components(separatedBy: "\n")
-        let user       = lines.first.map { $0.trimmingCharacters(in: .newlines) } ?? ""
-        let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .newlines) : ""
+        let user       = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
         return (user, credential)
     }
 
-    /// Writes `url + "\n"` to `destination`, or removes the file when `url` is empty.
+    /// Writes the proxy URL to `destination` as `url + "\n"`, or removes the file if `url` is empty.
     private static func writeProxyURL(_ url: String, to destination: URL) throws {
         if url.isEmpty {
             try removeIfPresent(at: destination)
@@ -199,7 +177,7 @@ actor RunnerProxyStore {
         }
     }
 
-    /// Writes `user + "\n" + secret + "\n"` to `destination`,
+    /// Writes the proxy credentials to `destination` as `user + "\n" + secret + "\n"`,
     /// or removes the file when both values are empty.
     private static func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
         if user.isEmpty && secret.isEmpty {
@@ -209,7 +187,7 @@ actor RunnerProxyStore {
         }
     }
 
-    /// Removes the file at `url` if it exists, silently ignoring `NSFileNoSuchFileError`.
+    /// Removes the file at `url` if it exists; silently ignores `NSFileNoSuchFileError`.
     /// Any other error is re-thrown so callers can distinguish a missing file
     /// (harmless) from a genuine I/O failure (permissions, locked volume, etc.).
     private static func removeIfPresent(at url: URL) throws {

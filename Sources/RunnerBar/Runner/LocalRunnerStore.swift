@@ -48,7 +48,7 @@ actor LocalRunnerStore {
     ///
     /// Must be called **once**, on the main actor, before any view is mounted or any
     /// `refresh()` call is made. Safe to call multiple times in tests (each call
-    /// replaces the previous instance).
+    /// replaces the previous instance and shuts it down).
     ///
     /// ⚠️ **Test suites that call this method must be marked `@Suite(.serialized)`.**
     /// `_shared` is `@MainActor`; two test cases calling `configure(viewModel:)`
@@ -56,6 +56,18 @@ actor LocalRunnerStore {
     /// access to `_shared`, so any off-actor write is a compile-time error.
     @MainActor
     static func configure(viewModel: RunnerViewModel) {
+        // Shut down the previous instance before replacing it so its in-flight
+        // Tasks are cancelled and cannot deliver stale snapshots into the new viewModel.
+        //
+        // `shutdown()` is isolated to the LocalRunnerStore actor (a different actor from
+        // @MainActor), so it cannot be called synchronously here in Swift 6. A detached
+        // Task is safe: shutdown() only cancels refreshTask, which is fire-and-forget by
+        // design. The new _shared assignment below happens on the main actor immediately,
+        // so any snapshot the old actor pushes after this point targets the old viewModel
+        // reference it already holds — it cannot corrupt the new instance.
+        if let previous = _shared {
+            Task { await previous.shutdown() }
+        }
         _shared = LocalRunnerStore(viewModel: viewModel)
         log("LocalRunnerStore › configure — shared instance created, wired to viewModel=\(ObjectIdentifier(viewModel))")
     }
@@ -65,6 +77,8 @@ actor LocalRunnerStore {
     private var runners: [RunnerModel] = []
     /// `true` while a refresh cycle is in flight; prevents concurrent refreshes.
     private var isScanning: Bool = false
+    /// Task driving the fire-and-forget refresh loop; cancelled by `shutdown()`.
+    private var refreshTask: Task<Void, Never>?
 
     // MARK: - Injected dependencies
     /// The view model this actor pushes UI state into.
@@ -77,6 +91,19 @@ actor LocalRunnerStore {
     init(viewModel: RunnerViewModel) {
         self.viewModel = viewModel
         log("LocalRunnerStore › init — runnerIndex.count=\(index.runnerIndex.count), runners=[] (call refresh() to hydrate)")
+    }
+
+    // MARK: - Shutdown
+
+    /// Cancels all in-flight Tasks owned by this instance.
+    ///
+    /// Called by `configure(viewModel:)` before replacing `_shared` so that the
+    /// previous actor's background work does not push stale snapshots into the
+    /// incoming `viewModel`.
+    func shutdown() {
+        refreshTask?.cancel()
+        refreshTask = nil
+        log("LocalRunnerStore › shutdown — refreshTask cancelled")
     }
 
     // MARK: - Index helpers
@@ -197,7 +224,7 @@ actor LocalRunnerStore {
     /// is never empty and metrics appear on first runner appearance.
     func refresh() {
         log("LocalRunnerStore › refresh() — fire-and-forget wrapper")
-        Task { [weak self] in
+        refreshTask = Task { [weak self] in
             await self?.performRefresh()
         }
     }

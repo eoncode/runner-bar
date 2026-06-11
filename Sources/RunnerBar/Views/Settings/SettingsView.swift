@@ -28,6 +28,9 @@ import SwiftUI
 
 /// Root settings view. Navigation rows lead to `LocalRunnersView` and `ScopesView`.
 /// See HEIGHT/WIDTH CONTRACT comments above before making layout changes.
+///
+/// No `onRestartPolling` callback is needed — all `ScopeStore` mutations are
+/// observed by `RunnerStore`'s `withObservationTracking` loop automatically.
 struct SettingsView: View {
     // MARK: - Inputs
     /// Callback invoked when the user taps the back button.
@@ -35,11 +38,8 @@ struct SettingsView: View {
     // periphery:ignore - injected by caller; read indirectly via passed closures
     /// The shared runner view-model; observed for remote runner list updates.
     var store: RunnerViewModel
-    /// Called when a scope change requires the poll loop to restart.
-    /// Forwarded to `ScopesView` and `AddScopeSheet` so neither view references `RunnerStore`.
-    var onRestartPolling: () -> Void = {}
     /// The local runner actor forwarded into `LocalRunnersView`.
-    /// Defaults to `LocalRunnerStore.shared` so call sites that don’t own the actor still compile.
+    /// Defaults to `LocalRunnerStore.shared` so call sites that don't own the actor still compile.
     var localRunnerStore: LocalRunnerStore = .shared
 
     // MARK: - Observed stores
@@ -105,7 +105,7 @@ struct SettingsView: View {
                     localRunnerStore: localRunnerStore
                 )
             } else if showScopes {
-                ScopesView(onBack: { showScopes = false }, onRestartPolling: onRestartPolling)
+                ScopesView(onBack: { showScopes = false })
             } else {
                 settingsBody
             }

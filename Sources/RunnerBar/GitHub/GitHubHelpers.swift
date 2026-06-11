@@ -6,16 +6,10 @@ import RunnerBarCore
 
 // MARK: - URL helpers
 
-/// Extracts the `owner/repo` scope string from a GitHub HTML URL.
-/// Returns `nil` if the URL is malformed or has fewer than 3 path components.
-func scopeFromHtmlUrl(_ urlString: String?) -> String? {
-    guard let urlString,
-          let url = URL(string: urlString),
-          url.pathComponents.count >= 3
-    else { return nil }
-    let components = url.pathComponents
-    return "\(components[1])/\(components[2])"
-}
+// `scopeFromHtmlUrl` is defined in RunnerBarCore/Utilities/GitHubURLHelpers.swift
+// and re-exported here via `RunnerBarCore` import. The previous app-target copy
+// has been removed to eliminate the divergence between repo-scoped and org-scoped
+// URL handling. Use `scopeFromHtmlUrl(_:)` from RunnerBarCore directly.
 
 // MARK: - Fetch all jobs from active runs
 

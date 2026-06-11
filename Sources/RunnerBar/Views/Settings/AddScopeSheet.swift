@@ -22,7 +22,9 @@ private enum ScopeType: String, CaseIterable, Identifiable {
 /// a searchable `RepoSelectorSheet` when authenticated (populated from the
 /// GitHub API) with a plain `TextField` fallback, and Cancel / Add buttons.
 ///
-/// On confirmation calls `ScopeStore.shared.add(_:)` then invokes `onRestartPolling`.
+/// On confirmation calls `ScopeStore.shared.add(_:)`. No `onRestartPolling`
+/// callback is needed — `ScopeStore` mutation is observed by `RunnerStore`'s
+/// `withObservationTracking` loop, which triggers restart automatically.
 ///
 /// ## Why `.sheet` is on the root VStack, not the picker Button
 /// `RepoSelectorSheet` is presented via `.sheet(isPresented: $showScopeSelector)`.
@@ -30,7 +32,7 @@ private enum ScopeType: String, CaseIterable, Identifiable {
 /// sheet presentation to the parent view bounds — i.e. the NSPopover panel size —
 /// instead of escaping to the window level. Lifting it to the root `VStack` causes
 /// AppKit to attach the sheet to `NSPopoverWindowFrame` directly, matching the
-/// behaviour of `AddRunnerSheet` and `AddScopeSheet`’s own outer presentation.
+/// behaviour of `AddRunnerSheet` and `AddScopeSheet`'s own outer presentation.
 /// ❌ NEVER move `.sheet(isPresented: $showScopeSelector)` back onto the Button.
 ///
 /// ## Why no ScrollView in body
@@ -43,9 +45,6 @@ private enum ScopeType: String, CaseIterable, Identifiable {
 struct AddScopeSheet: View {
     /// Controls whether the sheet is shown.
     @Binding var isPresented: Bool
-    /// Called after a scope is added so the poll loop can restart.
-    /// Injected by the caller; avoids a direct `RunnerStore` reference in the view.
-    var onRestartPolling: () -> Void = {}
 
     /// Whether the scope is org-level or repo-level.
     @State private var scopeType: ScopeType = .org
@@ -259,13 +258,13 @@ struct AddScopeSheet: View {
         }
     }
 
-    /// Persists `effectiveScope` to `ScopeStore`, triggers `onAdd`, and dismisses the sheet.
+    /// Persists `effectiveScope` to `ScopeStore` and dismisses the sheet.
+    /// Restart polling is driven automatically by `RunnerStore`'s
+    /// `withObservationTracking` loop observing `ScopeStore` mutations.
     @MainActor private func confirmAdd() {
         let scope = effectiveScope
         guard !scope.isEmpty else { return }
         ScopeStore.shared.add(scope)
-        // onRestartPolling() omitted: ScopeStore mutation is observed by RunnerStore's
-        // withObservationTracking loop, which triggers restart automatically.
         log("AddScopeSheet \u{203a} added scope: \(scope)")
         isPresented = false
     }

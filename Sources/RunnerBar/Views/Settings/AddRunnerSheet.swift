@@ -60,7 +60,10 @@ struct AddRunnerSheet: View {
     var localRunnerStore: LocalRunnerStore = .shared
     /// View model used for synchronous duplicate checks against `localRunners` already
     /// pushed to the UI layer — avoids crossing the actor boundary in computed properties.
-    var store: RunnerViewModel = .shared
+    ///
+    /// No default is provided: every call site must pass an explicit `store:` argument.
+    /// (Previously defaulted to `RunnerViewModel.shared`, which is a `fatalError` trap.)
+    var store: RunnerViewModel
 
     // MARK: - Add Mode
 

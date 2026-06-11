@@ -55,6 +55,10 @@ extension AppDelegate {
     /// launched from SettingsView and the dim overlay is required.
     /// ❌ NEVER wrap StepLogView in PanelContainerView — StepLogView has no sheets;
     ///    a double-wrap here causes the gray/black flash regression.
+    ///
+    /// No `onRestartPolling` is passed — ScopeStore mutations are observed by
+    /// `RunnerStore._startObservingScopes` via `withObservationTracking`, which
+    /// restarts the poll task automatically without an explicit callback.
     func settingsView() -> AnyView {
         let inner = SettingsView(
             onBack: { [weak self] in
@@ -62,10 +66,7 @@ extension AppDelegate {
                 self?.panelSheetState.clearRunnerSheet()
                 self?.navigate(to: self?.mainView() ?? AnyView(EmptyView()))
             },
-            store: observable,
-            onRestartPolling: { [weak self] in
-                Task { await self?.runnerStore.start() }
-            }
+            store: observable
         )
         // PanelContainerView needed here too: sheets are presented from SettingsView.
         return wrapEnv(PanelContainerView(content: inner))

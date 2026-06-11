@@ -10,6 +10,10 @@ import SwiftUI
 /// Owns all scope-specific state and sheet presentation that previously lived in `SettingsView`.
 /// Presented by `SettingsView` via a `showScopes` flag using the same back-callback
 /// pattern established by the rest of the panel navigation model.
+///
+/// No `onRestartPolling` callback is needed — all `ScopeStore` mutations
+/// (add, remove, enable/disable) are observed by `RunnerStore`'s
+/// `withObservationTracking` loop, which restarts the poll task automatically.
 @MainActor
 struct ScopesView: View {
 
@@ -17,10 +21,6 @@ struct ScopesView: View {
 
     /// Callback invoked when the user taps the back button.
     let onBack: () -> Void
-    /// Called whenever a scope change requires the poll loop to restart.
-    /// Injected by the caller (AppDelegate / navigation layer) so this view
-    /// holds no reference to `RunnerStore` directly.
-    var onRestartPolling: () -> Void = {}
 
     // MARK: - Observed stores
 
@@ -49,10 +49,7 @@ struct ScopesView: View {
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
         .sheet(isPresented: $showAddScopeSheet) {
-            AddScopeSheet(
-                isPresented: $showAddScopeSheet,
-                onRestartPolling: onRestartPolling
-            )
+            AddScopeSheet(isPresented: $showAddScopeSheet)
         }
         .sheet(item: $selectedScopeEntry) { entry in
             // #992: ScopeEditSheet replaces the old nav drill-down.
@@ -168,10 +165,8 @@ struct ScopesView: View {
                     .foregroundColor(entry.isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
-                    // onRestartPolling intentionally omitted: scope enable/disable is
-                    // observed internally by RunnerStore._startObservingScopes via
-                    // withObservationTracking. Calling onRestartPolling here would trigger
-                    // a second cancel+restart of the poll task on every toggle.
+                    // ScopeStore enable/disable is observed by RunnerStore._startObservingScopes
+                    // via withObservationTracking — no explicit restart needed here.
                     set: { ScopeStore.shared.setEnabled(entry.id, $0) }
                 ))
                 .toggleStyle(.switch)
@@ -186,10 +181,8 @@ struct ScopesView: View {
                 Button {
                     ScopePreferencesStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
-                    // onRestartPolling() intentionally omitted: ScopeStore.remove mutates
-                    // activeScopes, which fires withObservationTracking in
-                    // _startObservingScopes and restarts the poll loop automatically.
-                    // An explicit call here would cause a redundant double cancel+restart.
+                    // ScopeStore.remove mutates activeScopes, firing withObservationTracking
+                    // in _startObservingScopes and restarting the poll loop automatically.
                 } label: {
                     Image(systemName: "minus.circle")
                         .font(.caption2)

@@ -39,7 +39,7 @@ struct LocalRunnersView: View {
     @State private var showAddRunnerSheet = false
     /// The runner currently being edited in `RunnerDetailSheet`. `nil` = sheet dismissed.
     @State private var editingRunner: RunnerModel?
-    /// `true` while `commitRunnerEdit` is in-flight.
+    /// `true` while a save is in-flight.
     @State private var isCommitting = false
     /// Non-nil when the last commit attempt produced errors; forwarded into `RunnerDetailSheet`.
     @State private var commitError: String?
@@ -355,7 +355,7 @@ struct LocalRunnersView: View {
                 guard !isCommitting else { return }
                 isCommitting = true
                 commitError = nil
-                // Build original from disk so the dirty-check in commitRunnerEdit
+                // Build original from disk so the dirty-check in SaveRunnerEditsUseCase
                 // compares against actual persisted values, not model defaults.
                 // (#1001 fix: was RunnerEditDraft(runner: runner) which left
                 // autoUpdate=true and proxy fields empty regardless of disk state.)
@@ -364,7 +364,12 @@ struct LocalRunnersView: View {
                     if let installPath = runner.installPath {
                         await original.load(installPath: installPath)
                     }
-                    let result = await commitRunnerEdit(runner: runner, draft: draft, original: original)
+                    let useCase = SaveRunnerEditsUseCase(
+                        configStore: RunnerConfigStore.shared,
+                        proxyStore: RunnerProxyStore.shared,
+                        labelsService: DefaultRunnerLabelsService()
+                    )
+                    let result = await useCase.execute(runner: runner, draft: draft, original: original)
                     await MainActor.run {
                         isCommitting = false
                         switch result {
