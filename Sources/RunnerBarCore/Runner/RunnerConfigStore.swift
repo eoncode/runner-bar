@@ -108,11 +108,13 @@ public actor RunnerConfigStore {
         } else {
             raw.removeValue(forKey: RunnerConfig.CodingKeys.disableUpdate.rawValue)
         }
-        raw[RunnerConfig.CodingKeys.platform.rawValue] = config.platform
-        raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = config.platformArchitecture
-        raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = config.agentVersion
-        raw[RunnerConfig.CodingKeys.ephemeral.rawValue] = config.ephemeral
-        raw[RunnerConfig.CodingKeys.agentId.rawValue] = config.agentId
+        // Write optional fields only when non-nil to avoid injecting "key": null
+        // into the agent-managed file (JSONSerialization encodes Swift nil as NSNull).
+        if let v = config.platform             { raw[RunnerConfig.CodingKeys.platform.rawValue] = v }
+        if let v = config.platformArchitecture { raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = v }
+        if let v = config.agentVersion         { raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = v }
+        if let v = config.ephemeral            { raw[RunnerConfig.CodingKeys.ephemeral.rawValue] = v }
+        if let v = config.agentId             { raw[RunnerConfig.CodingKeys.agentId.rawValue] = v }
 
         do {
             let data = try JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .sortedKeys])
