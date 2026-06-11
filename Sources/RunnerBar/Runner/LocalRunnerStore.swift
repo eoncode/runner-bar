@@ -85,11 +85,26 @@ actor LocalRunnerStore {
     private let viewModel: RunnerViewModel
     /// Persistence layer for the runner name → install path mapping.
     private let index = LocalRunnerIndex()
+    /// Enricher that applies GitHub API data (status, busy, labels, group) to
+    /// locally-discovered runners. Injected at init so unit tests can supply a stub
+    /// without going through the live singleton (Phase 6b, #1326).
+    private let enricher: any RunnerStatusEnricherProtocol
 
     // MARK: - Init
+
     /// Designated init for dependency injection.
-    init(viewModel: RunnerViewModel) {
+    ///
+    /// - Parameters:
+    ///   - viewModel: The view model this actor pushes UI state into.
+    ///   - enricher: Provides GitHub API enrichment for locally-discovered runners.
+    ///     Pass `RunnerStatusEnricher.shared` in production; inject a test double in
+    ///     unit tests.
+    init(
+        viewModel: RunnerViewModel,
+        enricher: any RunnerStatusEnricherProtocol = RunnerStatusEnricher.shared
+    ) {
         self.viewModel = viewModel
+        self.enricher = enricher
         log("LocalRunnerStore › init — runnerIndex.count=\(index.runnerIndex.count), runners=[] (call refresh() to hydrate)")
     }
 
@@ -274,9 +289,11 @@ actor LocalRunnerStore {
             return runner.copying(isRunning: live)
         }
 
-        // 3. Enrich via GitHub API (concurrent scope fetches)
+        // 3. Enrich via GitHub API (concurrent scope fetches).
+        // Uses the injected enricher — pass RunnerStatusEnricher.shared in production,
+        // or a StubEnricher in unit tests (Phase 6b, #1326).
         log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
-        let enriched = await RunnerStatusEnricher.shared.enrich(runners: hydrated)
+        let enriched = await enricher.enrich(runners: hydrated)
         log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
 #if DEBUG
         log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
