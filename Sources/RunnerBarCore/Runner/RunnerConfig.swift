@@ -7,32 +7,54 @@
 /// written to each runner's install directory by the GitHub Actions runner agent.
 ///
 /// Replaces the previous `[String: Any]` / `JSONSerialization` pattern used in
-/// `RunnerEditDraft`, `RunnerEditCommit`, and `RunnerModel`. All read/write access
-/// goes through `RunnerConfigStore` — do **not** call `JSONSerialization` directly.
+/// `RunnerEditDraft`, `CommitRunnerEdit`, and ad-hoc display-field reads.
+/// All read/write access goes through `RunnerConfigStore` or `JSONDecoder`-based
+/// typed wrappers — do **not** call `JSONSerialization` directly for runner config.
 ///
 /// - Note: Part of Phase 3 of the Swift 6.2 data model modernisation (#1287, #1298).
-struct RunnerConfig: Codable, Sendable {
+public struct RunnerConfig: Codable, Sendable {
 
     // MARK: - Properties
 
     /// Absolute path to the runner's work folder.
-    var workFolder: String
+    public var workFolder: String
 
     /// Whether automatic self-update is disabled for this runner.
-    var disableUpdate: Bool
+    public var disableUpdate: Bool
 
     /// Platform identifier (e.g. `"linux"`, `"osx"`).
-    var platform: String?
+    public var platform: String?
 
     /// CPU architecture (e.g. `"x64"`, `"arm64"`).
-    var platformArchitecture: String?
+    public var platformArchitecture: String?
 
     /// Version string of the installed runner agent.
-    var agentVersion: String?
+    public var agentVersion: String?
 
     /// Whether the runner is configured in ephemeral (single-job) mode.
-    var ephemeral: Bool?
+    public var ephemeral: Bool?
 
     /// Numeric agent ID assigned by GitHub.
-    var agentId: Int?
+    public var agentId: Int?
+
+    // MARK: - Init
+
+    /// Creates a `RunnerConfig` with the given values.
+    public init(
+        workFolder: String,
+        disableUpdate: Bool,
+        platform: String? = nil,
+        platformArchitecture: String? = nil,
+        agentVersion: String? = nil,
+        ephemeral: Bool? = nil,
+        agentId: Int? = nil
+    ) {
+        self.workFolder = workFolder
+        self.disableUpdate = disableUpdate
+        self.platform = platform
+        self.platformArchitecture = platformArchitecture
+        self.agentVersion = agentVersion
+        self.ephemeral = ephemeral
+        self.agentId = agentId
+    }
 }

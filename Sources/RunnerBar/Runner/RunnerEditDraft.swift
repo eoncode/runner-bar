@@ -57,8 +57,8 @@ struct RunnerEditDraft: Equatable, Sendable {
     /// and overwrites the corresponding draft fields.
     ///
     /// Designed to be called once from `onAppear` in the popover view.
-    mutating func load(installPath: String) {
-        loadRunnerJSON(installPath: installPath)
+    mutating func load(installPath: String) async {
+        await loadRunnerConfig(installPath: installPath)
         loadProxy(installPath: installPath)
     }
 
@@ -80,22 +80,17 @@ struct RunnerEditDraft: Equatable, Sendable {
 
     // MARK: - Private disk helpers
 
-    /// Reads and parses the `.runner` JSON at `installPath`, applies `autoUpdate` and
-    /// `workFolder` to the draft, and returns the raw dictionary for callers that need
-    /// additional fields (e.g. `platform`, `agentVersion`) without a second file read.
-    /// The return value may be discarded if only the draft side-effects are needed.
-    @discardableResult
-    mutating func loadRunnerJSON(installPath: String) -> [String: Any]? {
-        let url = URL(fileURLWithPath: installPath).appendingPathComponent(".runner")
-        guard let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        let disableUpdate = json["disableUpdate"] as? Bool ?? false
-        autoUpdate = !disableUpdate
-        if let wf = json["workFolder"] as? String, !wf.isEmpty {
-            workFolder = wf
+    /// Loads the `.runner` file via `RunnerConfigStore` and applies its values to the draft.
+    private mutating func loadRunnerConfig(installPath: String) async {
+        do {
+            let config = try await RunnerConfigStore.shared.load(at: installPath)
+            autoUpdate = !config.disableUpdate
+            if !config.workFolder.isEmpty {
+                workFolder = config.workFolder
+            }
+        } catch {
+            log("RunnerEditDraft › loadRunnerConfig failed at \(installPath): \(error)")
         }
-        return json
     }
 
     /// Reads `.proxy` and `.proxycredentials` at `installPath` and applies values to the draft.

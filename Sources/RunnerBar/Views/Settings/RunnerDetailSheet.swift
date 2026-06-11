@@ -108,7 +108,7 @@ struct RunnerDetailSheet: View {
             footerBar
         }
         .frame(width: 440)
-        .onAppear(perform: loadDisplayFields)
+        .task { await loadDisplayFields() }
     }
 
     // MARK: - Header
@@ -328,31 +328,34 @@ struct RunnerDetailSheet: View {
 
     // MARK: - On Appear
 
-    /// Seeds `displayOsArch` and `displayVersion` from the `.runner` JSON,
+    /// Seeds `displayOsArch` and `displayVersion` from the typed runner config,
     /// and loads disk values into the draft (auto-update, proxy).
-    /// TODO: #1077 — `draft.load(installPath:)` reads `.runner` JSON synchronously on
-    /// `@MainActor`. Migrate to async once the load path is async-capable. // NOSONAR
-    private func loadDisplayFields() {
+    @MainActor
+    private func loadDisplayFields() async {
         guard let installPath = runner.installPath else { return }
 
-        // Load disk values into draft
-        draft.load(installPath: installPath)
-        // Snapshot original after disk load so dirty-check is accurate
+        var updatedDraft = draft
+        await updatedDraft.load(installPath: installPath)
+        draft = updatedDraft
         originalDraft = draft
 
-        // Override info fields from JSON if model values were empty
-        let runnerJSONPath = installPath + "/.runner" // NOSONAR — dynamic path built from user-supplied installPath, not a hardcoded URI
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: runnerJSONPath)),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
+        guard let config = try? await RunnerConfigStore.shared.load(at: installPath) else {
+            return
+        }
 
         if displayOsArch.isEmpty {
-            let combined = [json["platform"] as? String, json["platformArchitecture"] as? String]
-                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
-            if !combined.isEmpty { displayOsArch = combined }
+            let combined = [config.platform, config.platformArchitecture]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " / ")
+            if !combined.isEmpty {
+                displayOsArch = combined
+            }
         }
-        if displayVersion.isEmpty, let v = json["agentVersion"] as? String, !v.isEmpty {
-            displayVersion = v
+        if displayVersion.isEmpty,
+           let version = config.agentVersion,
+           !version.isEmpty {
+            displayVersion = version
         }
     }
 }
