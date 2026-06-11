@@ -91,8 +91,6 @@ final class OAuthService {
     /// Continuation for `didSignOut` — fire via `signOutContinuation?.yield(())`.
     private var signOutContinuation: AsyncStream<Void>.Continuation?
 
-
-
     // MARK: Sign In
 
     /// Opens the GitHub OAuth authorization page in the default browser to begin sign-in.
