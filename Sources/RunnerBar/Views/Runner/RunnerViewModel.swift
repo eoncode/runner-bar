@@ -13,13 +13,12 @@ import Observation
 @MainActor
 @Observable
 final class RunnerViewModel {
-    // periphery:ignore — intentional fatalError trap; zero callers is the correct state
     /// ❌ Do not use. The single live instance is owned by `AppDelegate` as `observable`.
     ///
     /// `RunnerStore` and `LocalRunnerStore` push state into `AppDelegate.observable` only;
     /// this accessor is never updated and will silently return stale/empty data.
     /// Inject `RunnerViewModel` explicitly via the environment or constructor instead.
-    @MainActor static var shared: RunnerViewModel {
+    @MainActor static var shared: RunnerViewModel { // periphery:ignore
         fatalError(
             "RunnerViewModel.shared must not be used. "
             + "The live instance is AppDelegate.observable — inject it via the environment "
