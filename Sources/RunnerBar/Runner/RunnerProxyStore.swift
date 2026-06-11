@@ -130,8 +130,8 @@ actor RunnerProxyStore {
     ///   ensuring a round-trip through load → save is idempotent. Callers should
     ///   not rely on preserving surrounding whitespace in proxy credentials.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
-        // Fast path: nothing to write or remove when all fields are empty.
-        // This also avoids spawning a background task for zero-config runners.
+        // Fast path: zero-config runners have no proxy files to write or remove.
+        // `isEmpty` checks all three fields; this is not an incomplete implementation.
         guard !config.isEmpty else { return }
 
         let base     = URL(fileURLWithPath: installPath)
@@ -139,40 +139,19 @@ actor RunnerProxyStore {
         let credURL  = base.appendingPathComponent(".proxycredentials")
 
         // Trim defensively here so no call site can accidentally write whitespace to disk.
-        let url      = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        let user     = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
-        let password = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url            = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user           = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
+        let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
             DispatchQueue.global(qos: .utility).async {
                 var messages: [String] = []
 
-                // .proxy
-                do {
-                    if url.isEmpty {
-                        try Self.removeIfPresent(at: proxyURL)
-                    } else {
-                        try (url + "\n").write(to: proxyURL, atomically: true, encoding: .utf8)
-                    }
-                } catch {
-                    let msg = ".proxy write error: \(error)"
-                    log("RunnerProxyStore › \(msg)")
-                    messages.append(msg)
-                }
+                do    { try Self.writeProxyURL(url, to: proxyURL) }
+                catch { let m = ".proxy write error: \(error)"; log("RunnerProxyStore › \(m)"); messages.append(m) }
 
-                // .proxycredentials
-                do {
-                    if user.isEmpty && password.isEmpty {
-                        try Self.removeIfPresent(at: credURL)
-                    } else {
-                        let content = user + "\n" + password + "\n"
-                        try content.write(to: credURL, atomically: true, encoding: .utf8)
-                    }
-                } catch {
-                    let msg = ".proxycredentials write error: \(error)"
-                    log("RunnerProxyStore › \(msg)")
-                    messages.append(msg)
-                }
+                do    { try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL) }
+                catch { let m = ".proxycredentials write error: \(error)"; log("RunnerProxyStore › \(m)"); messages.append(m) }
 
                 if messages.isEmpty {
                     continuation.resume()
@@ -184,6 +163,25 @@ actor RunnerProxyStore {
     }
 
     // MARK: - Private helpers
+
+    /// Writes `url + "\n"` to `destination`, or removes the file when `url` is empty.
+    private static func writeProxyURL(_ url: String, to destination: URL) throws {
+        if url.isEmpty {
+            try removeIfPresent(at: destination)
+        } else {
+            try (url + "\n").write(to: destination, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Writes `user + "\n" + secret + "\n"` to `destination`,
+    /// or removes the file when both values are empty.
+    private static func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
+        if user.isEmpty && secret.isEmpty {
+            try removeIfPresent(at: destination)
+        } else {
+            try (user + "\n" + secret + "\n").write(to: destination, atomically: true, encoding: .utf8)
+        }
+    }
 
     /// Removes the file at `url` if it exists, silently ignoring `NSFileNoSuchFileError`.
     /// Any other error is re-thrown so callers can distinguish a missing file
