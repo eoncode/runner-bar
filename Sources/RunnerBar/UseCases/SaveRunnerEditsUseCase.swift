@@ -10,6 +10,9 @@ import RunnerBarCore
 /// Lives in RunnerBar (not Core) because `patchRunnerLabels` is an app-layer free function
 /// that depends on `GitHubURLSessionTransport`, which cannot be a RunnerBarCore dependency.
 struct DefaultRunnerLabelsService: RunnerLabelsService {
+    /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`
+    /// by delegating to the `patchRunnerLabels` free function.
+    /// - Returns: The updated label names on success, `nil` on any API failure.
     func patch(scope: String, runnerID: Int, labels: [String]) async -> [String]? {
         await patchRunnerLabels(scope: scope, runnerID: runnerID, labels: labels)
     }

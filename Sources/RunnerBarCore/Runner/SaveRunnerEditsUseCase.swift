@@ -34,6 +34,9 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     // MARK: - Init
 
+    /// Creates a `SaveRunnerEditsUseCase` with the given dependency implementations.
+    /// Pass `RunnerConfigStore.shared`, `RunnerProxyStore.shared`, and
+    /// `DefaultRunnerLabelsService()` for production use.
     public init(
         configStore: any RunnerConfigStoreProtocol,
         proxyStore: any RunnerProxyStoreProtocol,

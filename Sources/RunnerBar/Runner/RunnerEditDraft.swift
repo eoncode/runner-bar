@@ -8,6 +8,8 @@ import RunnerBarCore
 
 // Convenience extension: production call site uses the concrete shared singletons
 // so views don't need to import RunnerBarCore actors directly.
+/// Convenience extension bridging `RunnerEditDraft` (defined in RunnerBarCore)
+/// to the production `RunnerConfigStore.shared` and `RunnerProxyStore.shared` singletons.
 extension RunnerEditDraft {
     /// Loads disk state using the production `RunnerConfigStore.shared` and `RunnerProxyStore.shared`.
     @discardableResult
