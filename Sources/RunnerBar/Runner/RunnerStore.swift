@@ -10,12 +10,15 @@ import RunnerBarCore
 ///
 /// `Sendable` conformance is required so the existential can be captured by the
 /// actor and read inside `await MainActor.run { }` closures without triggering
-/// Swift 6’s non-Sendable-type-exits-actor-isolated-context error.
+/// Swift 6's non-Sendable-type-exits-actor-isolated-context error.
 @MainActor
 protocol AppPreferencesStoreProtocol: AnyObject, Sendable {
+    /// The current polling interval, in seconds, as configured by the user.
     var pollingInterval: Int { get }
 }
 
+/// Conforms `AppPreferencesStore` to `AppPreferencesStoreProtocol` so the live
+/// singleton can be injected at the production call site without any wrapper.
 extension AppPreferencesStore: AppPreferencesStoreProtocol {}
 
 /// Protocol that abstracts the active-scopes store, allowing test doubles
@@ -23,12 +26,15 @@ extension AppPreferencesStore: AppPreferencesStoreProtocol {}
 ///
 /// `Sendable` conformance is required so the existential can be captured by the
 /// actor and read inside `await MainActor.run { }` closures without triggering
-/// Swift 6’s non-Sendable-type-exits-actor-isolated-context error.
+/// Swift 6's non-Sendable-type-exits-actor-isolated-context error.
 @MainActor
 protocol ScopeStoreProtocol: AnyObject, Sendable {
+    /// The list of scope identifiers (org or repo slugs) currently active.
     var activeScopes: [String] { get }
 }
 
+/// Conforms `ScopeStore` to `ScopeStoreProtocol` so the live singleton can be
+/// injected at the production call site without any wrapper.
 extension ScopeStore: ScopeStoreProtocol {}
 
 // MARK: - Observation helpers
@@ -108,7 +114,7 @@ private final class ScopesObserver {
 /// - `preferencesStore` and `scopeStore` are `@MainActor`-isolated `Sendable` protocol
 ///   values; any read of their properties must happen inside `await MainActor.run { }`.
 /// - After every fetch cycle, results are pushed to the injected `RunnerViewModel` on the
-///   main actor via `await MainActor.run { }`. SwiftUI’s `@Observable` machinery
+///   main actor via `await MainActor.run { }`. SwiftUI's `@Observable` machinery
 ///   picks up the mutation automatically — no Combine `PassthroughSubject` needed.
 /// - `LocalRunnerStore` is an `actor`; its state is read via the main-actor snapshot
 ///   pushed to `RunnerViewModel`, not by crossing the actor boundary synchronously.
@@ -137,7 +143,7 @@ actor RunnerStore {
     /// IDs of action groups whose failure hook has already fired.
     ///
     /// Kept separate from `actionGroupCache` so that cache eviction does not re-arm
-    /// the hook for old completed groups still present in GitHub’s last-completed feed.
+    /// the hook for old completed groups still present in GitHub's last-completed feed.
     private var seenGroupIDs: Set<String> = []
 
     /// Whether the GitHub API is currently rate-limiting this client.
@@ -174,7 +180,7 @@ actor RunnerStore {
     // MARK: - Aggregate status
 
     /// The combined health status across all runners, derived from the current `runners` array.
-    /// Read by external consumers (e.g. `AppDelegate`) outside this file’s analysis scope.
+    /// Read by external consumers (e.g. `AppDelegate`) outside this file's analysis scope.
     /// periphery:ignore
     var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) }
 
@@ -237,7 +243,7 @@ actor RunnerStore {
     /// `AsyncStream.makeStream` returns the stream and a separate continuation value.
     /// The continuation is handed to `PreferencesObserver`, a `@MainActor` class that
     /// owns the recursive `withObservationTracking` registration entirely on the main
-    /// actor. The observer is returned from `MainActor.run` and held in the Task’s
+    /// actor. The observer is returned from `MainActor.run` and held in the Task's
     /// async scope so it stays alive for the full lifetime of the stream — without
     /// this, `[weak self]` in `onChange` would find `self == nil` on the first change
     /// and silently stop all future polling-interval updates.
@@ -262,9 +268,9 @@ actor RunnerStore {
 
     /// Starts (or restarts) the `activeScopes` observation loop.
     ///
-    /// Same approach as `_startObservingPreferences` — see that method’s
+    /// Same approach as `_startObservingPreferences` — see that method's
     /// doc-comment for the full rationale, including why the observer must be
-    /// retained in the Task’s async scope beyond the `MainActor.run` closure.
+    /// retained in the Task's async scope beyond the `MainActor.run` closure.
     private func _startObservingScopes() {
         let injectedStore = scopeStore
         scopeObservationTask?.cancel()
@@ -330,7 +336,7 @@ actor RunnerStore {
     }
 
     /// Computes the delay before the next poll: 10 s while jobs/actions are active,
-    /// otherwise the user’s configured idle interval (clamped to ≥ 10 s). Also widened
+    /// otherwise the user's configured idle interval (clamped to ≥ 10 s). Also widened
     /// to the idle interval while rate-limited.
     ///
     /// `async` because it reads `preferencesStore.pollingInterval` which is
