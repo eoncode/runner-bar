@@ -147,7 +147,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// another app is activated. Removed by `tearDownOpenState()`.
     var workspaceObserver: NSObjectProtocol?
     /// Task retained for the sign-out listener started in `setupSignOutSubscription()`.
-    var signOutTask: Task<Void, Never>?
 
     // Regression guard — see ARCHITECTURE.md §panelVisibilityState.
     /// Shared observable that tracks whether the panel is open.

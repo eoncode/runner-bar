@@ -25,7 +25,7 @@ extension AppDelegate {
     /// `Task.sleep` — it never calls `start()` again, so the token fallback
     /// only works if `start()` is explicitly invoked after sign-out.
     func setupSignOutSubscription() {
-        signOutTask = Task { [weak self] in
+        Task { [weak self] in
             for await _ in OAuthService.shared.makeSignOutStream() {
                 log("AppDelegate › didSignOut — restarting poll loop for env-token fallback")
                 await self?.runnerStore.start()
