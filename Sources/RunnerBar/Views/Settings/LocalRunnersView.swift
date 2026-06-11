@@ -358,15 +358,11 @@ struct LocalRunnersView: View {
                 // compares against actual persisted values, not model defaults.
                 // (#1001 fix: was RunnerEditDraft(runner: runner) which left
                 // autoUpdate=true and proxy fields empty regardless of disk state.)
-                var original = RunnerEditDraft(runner: runner)
-                if let installPath = runner.installPath {
-                    original.load(installPath: installPath)
-                }
-                // Task.detached keeps the blocking file-I/O in commitRunnerEdit
-                // (patchRunnerJSONMulti, writeProxyFiles) off the main thread.
-                // RunnerEditDraft: Sendable so `original` crosses the isolation
-                // boundary without a Swift 6 data-race diagnostic.
-                Task.detached(priority: .userInitiated) {
+                Task(priority: .userInitiated) {
+                    var original = RunnerEditDraft(runner: runner)
+                    if let installPath = runner.installPath {
+                        await original.load(installPath: installPath)
+                    }
                     let result = await commitRunnerEdit(runner: runner, draft: draft, original: original)
                     await MainActor.run {
                         isCommitting = false
