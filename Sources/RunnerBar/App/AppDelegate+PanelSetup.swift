@@ -199,9 +199,19 @@ extension AppDelegate: NSPopoverDelegate {
         LocalRunnerStore.configure(viewModel: observable)
         log("AppDelegate › setupCombineSubscriptions — LocalRunnerStore.configure(viewModel:) called")
 
-        // RunnerStore.init no longer accepts @MainActor-isolated default values,
-        // so AppPreferencesStore.shared and ScopeStore.shared are passed explicitly
-        // here, where we are already on the @MainActor.
+        // NOTE: The `RunnerStore.didUpdate` Combine sink has been removed.
+        // `RunnerStore` is now a Swift actor that pushes state directly to
+        // the injected `viewModel` (AppDelegate.observable) via `await MainActor.run { }`
+        // at the end of every fetch cycle, and calls `AppDelegate.updateStatusIcon()` inside
+        // that same `MainActor.run` block — so icon refresh is still driven once
+        // per completed fetch cycle without any Combine subscription.
+        // ℹ️ `RunnerViewModel.shared` is a fatalError accessor — the live instance
+        // is AppDelegate.observable, injected explicitly into both stores.
+
+        // RunnerStore.init no longer accepts @MainActor-isolated default values
+        // (Swift 6: default values for parameters must not be @MainActor-isolated
+        // in a nonisolated context). AppPreferencesStore.shared and ScopeStore.shared
+        // are therefore passed explicitly here, where we are already on the @MainActor.
         runnerStore = RunnerStore(
             viewModel: observable,
             localRunnerStore: localRunnerStore,
