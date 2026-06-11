@@ -185,12 +185,16 @@ actor RunnerStore {
     /// Active structured poll task. Cancelled and replaced on every `start()` call.
     private var pollTask: Task<Void, Never>?
     /// Observation task that restarts the poll loop when `pollingInterval` changes.
-    /// Assigned inside `_startObservingPreferences` before its first `await`, so
-    /// `deinit` always holds a real `Task` value by the time any suspension occurs.
+    /// The `Task` handle is assigned synchronously in `_startObservingPreferences` —
+    /// in the calling function body, before the task's async work runs — so `deinit`
+    /// always cancels a real `Task` value rather than `nil`, even if the actor is
+    /// deallocated immediately after `init`.
     private var intervalObservationTask: Task<Void, Never>?
     /// Observation task that restarts the poll loop when active scopes change.
-    /// Assigned inside `_startObservingScopes` before its first `await`, so
-    /// `deinit` always holds a real `Task` value by the time any suspension occurs.
+    /// The `Task` handle is assigned synchronously in `_startObservingScopes` —
+    /// in the calling function body, before the task's async work runs — so `deinit`
+    /// always cancels a real `Task` value rather than `nil`, even if the actor is
+    /// deallocated immediately after `init`.
     private var scopeObservationTask: Task<Void, Never>?
 
     /// The view model this store pushes updates into.
@@ -235,15 +239,15 @@ actor RunnerStore {
     ///   - scopeStore: Provides `activeScopes`. Pass `ScopeStore.shared` in production;
     ///     inject a test double in unit tests.
     ///   - onStatusUpdate: Closure called on the main actor after every fetch cycle
-    ///     to update the status-bar icon. Typically `{ AppDelegate.shared.updateStatusIcon() }`
-    ///     or equivalent — injected here so the actor body never touches `NSApp.delegate`.
+    ///     to update the status-bar icon. Typically `{ [weak self] in self?.updateStatusIcon() }`
+    ///     — injected here so the actor body never touches `NSApp.delegate`.
     ///
-    /// - Note: Swift 6 actor `init` is nonisolated; isolated stored properties cannot be
-    ///   assigned after `self` is captured by a `Task` closure. The observation tasks are
-    ///   therefore started with `Task { await self.helper() }` and each helper assigns its
-    ///   own task property (`intervalObservationTask` / `scopeObservationTask`) as its
-    ///   very first statement — before any `await` — so `deinit` always holds a real
-    ///   `Task` value by the time any suspension occurs.
+    /// - Note: Swift 6 actor `init` is nonisolated. The observation task `Task` handles
+    ///   are assigned synchronously inside `_startObservingPreferences` /
+    ///   `_startObservingScopes` (in the calling function body, before any suspension in
+    ///   the task's async work). This means `deinit` always holds real `Task` values by
+    ///   the time any suspension occurs, even if the actor is deallocated immediately after
+    ///   `init`.
     init(
         viewModel: RunnerViewModel,
         localRunnerStore: LocalRunnerStore,
@@ -272,9 +276,10 @@ actor RunnerStore {
 
     /// Starts (or restarts) the `pollingInterval` observation loop.
     ///
-    /// Assigns `intervalObservationTask` to `self` as its first statement — before any
-    /// `await` — so that `deinit` always cancels a real `Task` rather than a `nil`
-    /// optional, even if the actor is deallocated immediately after `init`.
+    /// `intervalObservationTask` is assigned synchronously in this function body —
+    /// before the task's async work runs — so `deinit` always cancels a real `Task`
+    /// rather than a `nil` optional, even if the actor is deallocated immediately
+    /// after `init`.
     ///
     /// `AsyncStream.makeStream` returns the stream and a separate continuation value.
     /// The continuation is handed to `PreferencesObserver`, a `@MainActor` class that
@@ -306,9 +311,10 @@ actor RunnerStore {
 
     /// Starts (or restarts) the `activeScopes` observation loop.
     ///
-    /// Assigns `scopeObservationTask` to `self` as its first statement — before any
-    /// `await` — so that `deinit` always cancels a real `Task` rather than a `nil`
-    /// optional, even if the actor is deallocated immediately after `init`.
+    /// `scopeObservationTask` is assigned synchronously in this function body —
+    /// before the task's async work runs — so `deinit` always cancels a real `Task`
+    /// rather than a `nil` optional, even if the actor is deallocated immediately
+    /// after `init`.
     ///
     /// Same approach as `_startObservingPreferences` — see that method's
     /// doc-comment for the full rationale, including why the observer must be
