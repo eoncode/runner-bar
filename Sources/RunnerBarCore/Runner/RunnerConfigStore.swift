@@ -26,8 +26,9 @@ public enum RunnerConfigStoreError: LocalizedError {
 
 /// Actor that owns all disk read/write for runner `.runner` configuration files.
 ///
-/// The store performs a typed decode via `RunnerConfig`, then writes the updated
-/// value back using `JSONEncoder`. All caller-facing APIs are strongly typed and
+/// The store performs a typed decode via `RunnerConfig` for reads. For writes it uses
+/// a read-modify-write merge with `JSONSerialization` to preserve agent-managed keys
+/// not modelled by `RunnerConfig`. All caller-facing APIs are strongly typed and
 /// `async`, which keeps runner config I/O out of view code and commit helpers.
 public actor RunnerConfigStore {
 
@@ -56,7 +57,7 @@ public actor RunnerConfigStore {
     ///   for the duration of the disk read. `.runner` files are small (< 1 KB) so
     ///   this is acceptable in practice. Phase 4/5 should migrate to
     ///   `FileHandle`+`AsyncBytes` or a `CheckedContinuation`+`DispatchQueue.global`
-    ///   wrapper once `RunnerProxyStore` is introduced — tracked in #1341.
+    ///   wrapper once `RunnerProxyStore` is introduced — tracked in a follow-up issue (TBD).
     public func load(at installPath: String) async throws -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
         var data = try Data(contentsOf: url)
@@ -108,11 +109,15 @@ public actor RunnerConfigStore {
         } else {
             // File is missing or temporarily unreadable. Writing from scratch.
             // If the file exists but was unreadable, unknown agent-managed keys (e.g.
-            // jitConfig, gitHubUrl) will be dropped — tracked in #1341.
+            // jitConfig, gitHubUrl) will be dropped — tracked in a follow-up issue (TBD).
             log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
         }
 
-        raw[RunnerConfig.CodingKeys.workFolder.rawValue] = config.workFolder
+        // Guard against overwriting the agent's value with an empty string — e.g. if
+        // `load(at:)` failed and `workFolder` defaulted to `""`.
+        if !config.workFolder.isEmpty {
+            raw[RunnerConfig.CodingKeys.workFolder.rawValue] = config.workFolder
+        }
         // Only write disableUpdate when it is explicitly set; omit the key when nil
         // to match the agent's own convention (key absent == false).
         if let disableUpdate = config.disableUpdate {

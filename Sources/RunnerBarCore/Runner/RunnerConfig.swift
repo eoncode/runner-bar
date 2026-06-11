@@ -17,7 +17,10 @@ public struct RunnerConfig: Codable, Sendable {
     // MARK: - Properties
 
     /// Absolute path to the runner's work folder.
-    public var workFolder: String
+    ///
+    /// Defaults to `""` when the key is absent from the file so that `JSONDecoder`
+    /// does not throw `keyNotFound` on a malformed or agent-version-skewed install.
+    public var workFolder: String = ""
 
     /// Whether automatic self-update is disabled for this runner.
     ///
@@ -48,19 +51,19 @@ public struct RunnerConfig: Codable, Sendable {
     /// (e.g. `"workFolder"`, `"agentId"`). PascalCase mappings will cause `keyNotFound`
     /// on every existing install.
     public enum CodingKeys: String, CodingKey {
-        /// JSON key: `workFolder`
+        /// Absolute path to the runner's work folder.
         case workFolder
-        /// JSON key: `disableUpdate`
+        /// Whether automatic self-update is disabled (`true` = updates off).
         case disableUpdate
-        /// JSON key: `platform`
+        /// Platform identifier (e.g. `"linux"`, `"osx"`).
         case platform
-        /// JSON key: `platformArchitecture`
+        /// CPU architecture (e.g. `"x64"`, `"arm64"`).
         case platformArchitecture
-        /// JSON key: `agentVersion`
+        /// Version string of the installed runner agent.
         case agentVersion
-        /// JSON key: `ephemeral`
+        /// Whether the runner is configured in ephemeral (single-job) mode.
         case ephemeral
-        /// JSON key: `agentId`
+        /// Numeric agent ID assigned by GitHub.
         case agentId
     }
 
@@ -68,7 +71,7 @@ public struct RunnerConfig: Codable, Sendable {
 
     /// Creates a `RunnerConfig` with the given values.
     public init(
-        workFolder: String,
+        workFolder: String = "",
         disableUpdate: Bool? = nil,
         platform: String? = nil,
         platformArchitecture: String? = nil,

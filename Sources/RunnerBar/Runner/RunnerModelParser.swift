@@ -78,10 +78,11 @@ private struct RunnerDiscoveryFields: Decodable {
     /// The display name the runner registered with (JSON key: `AgentName`).
     let runnerName: String?
 
+    /// Maps the `.runner` / `.credentials` JSON keys to Swift property names.
     private enum CodingKeys: String, CodingKey {
-        /// JSON key: `gitHubUrl`
+        /// Maps to the `gitHubUrl` key in the `.credentials` JSON.
         case gitHubUrl
-        /// JSON key: `AgentName`
+        /// Maps to the `AgentName` key in the `.runner` JSON (PascalCase — agent-written).
         case runnerName = "AgentName"
     }
 }
