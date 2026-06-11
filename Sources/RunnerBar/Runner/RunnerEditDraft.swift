@@ -64,7 +64,10 @@ struct RunnerEditDraft: Equatable, Sendable {
     @discardableResult
     mutating func load(installPath: String) async -> RunnerConfig? {
         let config = await loadRunnerConfig(installPath: installPath)
-        loadProxy(installPath: installPath)
+        let proxy = await RunnerProxyStore.shared.load(at: installPath)
+        proxyUrl      = proxy.url
+        proxyUser     = proxy.user
+        proxyPassword = proxy.password
         return config
     }
 
@@ -101,27 +104,6 @@ struct RunnerEditDraft: Equatable, Sendable {
         } catch {
             log("RunnerEditDraft › loadRunnerConfig failed at \(installPath): \(error)")
             return nil
-        }
-    }
-
-    /// Reads `.proxy` and `.proxycredentials` at `installPath` and applies values to the draft.
-    /// `.proxy` — single line containing the raw proxy URL.
-    /// `.proxycredentials` — two-line format: line 1 = username, line 2 = password.
-    /// Missing files leave the corresponding draft fields as empty strings.
-    private mutating func loadProxy(installPath: String) {
-        let base = URL(fileURLWithPath: installPath)
-        let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL = base.appendingPathComponent(".proxycredentials")
-
-        proxyUrl = (try? String(contentsOf: proxyURL, encoding: .utf8))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
-
-        if let credContent = try? String(contentsOf: credURL, encoding: .utf8) {
-            let lines = credContent.components(separatedBy: "\n")
-            proxyUser = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
-            proxyPassword = lines.indices.contains(1)
-                ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                : ""
         }
     }
 }

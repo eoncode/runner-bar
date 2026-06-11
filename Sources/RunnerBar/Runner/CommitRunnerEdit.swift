@@ -84,83 +84,19 @@ func commitRunnerEdit(
             return errors.isEmpty ? .success : .failure(errors)
         }
         log("commitRunnerEdit › writing proxy files installPath=\(installPath)")
-        let proxyOk = writeProxyFiles(
-            installPath: installPath,
+        let proxyConfig = RunnerProxyConfig(
             url: draft.proxyUrl.trimmingCharacters(in: .whitespacesAndNewlines),
             user: draft.proxyUser.trimmingCharacters(in: .whitespacesAndNewlines),
             password: draft.proxyPassword.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        if !proxyOk {
-            errors.append("Failed to save proxy settings")
-            log("commitRunnerEdit › proxy write failed")
-        } else {
+        do {
+            try await RunnerProxyStore.shared.save(proxyConfig, at: installPath)
             log("commitRunnerEdit › proxy files updated ok")
+        } catch {
+            errors.append("Failed to save proxy settings")
+            log("commitRunnerEdit › proxy write failed: \(error)")
         }
     }
 
     return errors.isEmpty ? .success : .failure(errors)
-}
-
-// MARK: - Private helpers
-
-/// Writes (or removes) `.proxy` and `.proxycredentials` files at `installPath`.
-/// Removes the file when the relevant field is empty; writes atomically otherwise.
-///
-/// Rules:
-/// - `.proxy` contains the raw URL on one line.
-/// - `.proxycredentials` is only present when either user or password is non-empty,
-///   written as `user\npassword\n`.
-private func writeProxyFiles(
-    installPath: String,
-    url: String,
-    user: String,
-    password: String
-) -> Bool {
-    let base = URL(fileURLWithPath: installPath)
-    let proxyURL = base.appendingPathComponent(".proxy")
-    let credURL = base.appendingPathComponent(".proxycredentials")
-
-    // Each file is written (or removed) in its own do/catch so a failure on one
-    // does not mask the result of the other, and partial-write state is reported
-    // accurately. Both errors are logged; false is returned if either fails.
-    var ok = true
-
-    do {
-        if url.isEmpty {
-            try removeIfPresent(at: proxyURL)
-        } else {
-            try (url + "\n").write(to: proxyURL, atomically: true, encoding: .utf8)
-        }
-    } catch {
-        log("writeProxyFiles › .proxy write error: \(error)")
-        ok = false
-    }
-
-    do {
-        if user.isEmpty && password.isEmpty {
-            try removeIfPresent(at: credURL)
-        } else {
-            let content = user + "\n" + password + "\n"
-            try content.write(to: credURL, atomically: true, encoding: .utf8)
-        }
-    } catch {
-        log("writeProxyFiles › .proxycredentials write error: \(error)")
-        ok = false
-    }
-
-    return ok
-}
-
-/// Removes the file at `url` if it exists, ignoring `NSFileNoSuchFileError`.
-///
-/// Any other error (e.g. permissions) is **re-thrown** so callers can
-/// distinguish a missing file (harmless) from a genuine I/O failure.
-/// `writeProxyFiles` catches re-thrown errors and returns `false`, which
-/// propagates to the commit result as an error entry.
-private func removeIfPresent(at url: URL) throws {
-    do {
-        try FileManager.default.removeItem(at: url)
-    } catch let error as NSError where error.code == NSFileNoSuchFileError {
-        // File didn't exist — expected, not an error.
-    }
 }
