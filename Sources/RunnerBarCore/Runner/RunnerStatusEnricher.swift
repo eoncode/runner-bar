@@ -119,6 +119,7 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
         }
 
         // Step 2: fetch all scopes concurrently.
+        // Use (scopeURL, [RunnerPayload]) tuples so results stay scope-keyed.
         // Keying by (scopeURL, name) prevents last-write-wins collisions when two
         // scopes (e.g. org + repo) expose a runner with the same registered name.
         var apiByScope: [String: [String: RunnerPayload]] = [:]
@@ -143,8 +144,9 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
         // name AND that runner's gitHubUrl is nil (so the scoped lookup misses),
         // the fallback dict's `first` wins. The winner is the first scope whose
         // withTaskGroup task completes — non-deterministic but harmless in practice
-        // since both payloads describe the same physical runner.
-        var seenInFallback: [String: String] = []  // name → first winning scopeURL
+        // since both payloads describe the same physical runner. A warning is logged
+        // so collisions are visible in diagnostic output without any code change needed.
+        var seenInFallback: [String: String] = [:]  // name → first winning scopeURL
         let fallbackAPI = apiByScope.reduce(into: [String: RunnerPayload]()) { result, entry in
             let (scopeURL, scopeDict) = entry
             for (name, payload) in scopeDict {
