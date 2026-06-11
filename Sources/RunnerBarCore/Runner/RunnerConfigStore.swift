@@ -93,7 +93,13 @@ public actor RunnerConfigStore {
         }
 
         raw[RunnerConfig.CodingKeys.workFolder.rawValue] = config.workFolder
-        raw[RunnerConfig.CodingKeys.disableUpdate.rawValue] = config.disableUpdate
+        // Only write disableUpdate when it is explicitly set; omit the key when nil
+        // to match the agent's own convention (key absent == false).
+        if let disableUpdate = config.disableUpdate {
+            raw[RunnerConfig.CodingKeys.disableUpdate.rawValue] = disableUpdate
+        } else {
+            raw.removeValue(forKey: RunnerConfig.CodingKeys.disableUpdate.rawValue)
+        }
         raw[RunnerConfig.CodingKeys.platform.rawValue] = config.platform
         raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = config.platformArchitecture
         raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = config.agentVersion

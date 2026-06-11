@@ -20,7 +20,10 @@ public struct RunnerConfig: Codable, Sendable {
     public var workFolder: String
 
     /// Whether automatic self-update is disabled for this runner.
-    public var disableUpdate: Bool
+    ///
+    /// Optional because the runner agent omits this key entirely when the value
+    /// is `false` (the default). Treat `nil` as `false`.
+    public var disableUpdate: Bool?
 
     /// Platform identifier (e.g. `"linux"`, `"osx"`).
     public var platform: String?
@@ -39,18 +42,19 @@ public struct RunnerConfig: Codable, Sendable {
 
     // MARK: - CodingKeys
 
-    /// Maps Swift property names to the PascalCase JSON keys written by the runner agent.
+    /// Maps Swift property names to the camelCase JSON keys written by the runner agent.
     ///
-    /// The agent uses PascalCase for almost all keys. `disableUpdate` maps to `"DisableUpdate"`;
-    /// `workFolder` maps to `"WorkFolder"`, and so on.
+    /// The `.runner` file uses camelCase throughout — verified against real on-disk files
+    /// (e.g. `"workFolder"`, `"agentId"`). PascalCase mappings will cause `keyNotFound`
+    /// on every existing install.
     public enum CodingKeys: String, CodingKey {
-        case workFolder           = "WorkFolder"
-        case disableUpdate        = "DisableUpdate"
-        case platform             = "Platform"
-        case platformArchitecture = "PlatformArchitecture"
-        case agentVersion         = "AgentVersion"
-        case ephemeral            = "Ephemeral"
-        case agentId              = "AgentId"
+        case workFolder           = "workFolder"
+        case disableUpdate        = "disableUpdate"
+        case platform             = "platform"
+        case platformArchitecture = "platformArchitecture"
+        case agentVersion         = "agentVersion"
+        case ephemeral            = "ephemeral"
+        case agentId              = "agentId"
     }
 
     // MARK: - Init
@@ -58,7 +62,7 @@ public struct RunnerConfig: Codable, Sendable {
     /// Creates a `RunnerConfig` with the given values.
     public init(
         workFolder: String,
-        disableUpdate: Bool,
+        disableUpdate: Bool? = nil,
         platform: String? = nil,
         platformArchitecture: String? = nil,
         agentVersion: String? = nil,

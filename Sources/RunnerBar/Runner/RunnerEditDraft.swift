@@ -93,7 +93,7 @@ struct RunnerEditDraft: Equatable, Sendable {
     private mutating func loadRunnerConfig(installPath: String) async -> RunnerConfig? {
         do {
             let config = try await RunnerConfigStore.shared.load(at: installPath)
-            autoUpdate = !config.disableUpdate
+            autoUpdate = !(config.disableUpdate ?? false)
             if !config.workFolder.isEmpty {
                 workFolder = config.workFolder
             }

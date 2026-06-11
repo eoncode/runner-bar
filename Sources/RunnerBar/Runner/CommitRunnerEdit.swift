@@ -120,24 +120,35 @@ private func writeProxyFiles(
     let proxyURL = base.appendingPathComponent(".proxy")
     let credURL = base.appendingPathComponent(".proxycredentials")
 
+    // Each file is written (or removed) in its own do/catch so a failure on one
+    // does not mask the result of the other, and partial-write state is reported
+    // accurately. Both errors are logged; false is returned if either fails.
+    var ok = true
+
     do {
         if url.isEmpty {
             removeIfPresent(at: proxyURL)
         } else {
             try (url + "\n").write(to: proxyURL, atomically: true, encoding: .utf8)
         }
+    } catch {
+        log("writeProxyFiles › .proxy write error: \(error)")
+        ok = false
+    }
 
+    do {
         if user.isEmpty && password.isEmpty {
             removeIfPresent(at: credURL)
         } else {
             let content = user + "\n" + password + "\n"
             try content.write(to: credURL, atomically: true, encoding: .utf8)
         }
-        return true
     } catch {
-        log("writeProxyFiles › write error: \(error)")
-        return false
+        log("writeProxyFiles › .proxycredentials write error: \(error)")
+        ok = false
     }
+
+    return ok
 }
 
 /// Removes the file at `url` if it exists, ignoring `NSFileNoSuchFileError`.

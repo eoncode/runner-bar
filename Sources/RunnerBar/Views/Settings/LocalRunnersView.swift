@@ -283,8 +283,11 @@ struct LocalRunnersView: View {
         guard let runner = runnerPendingRemoval else { return }
         runnerPendingRemoval = nil
         removeErrorMessage = nil
-        Task { await localRunnerStore.optimisticallyRemove(runner.runnerName) }
-        // Task.detached is required here for two independent reasons:
+        // optimisticallyRemove is awaited inline at the top of the same Task so that
+        // the removal is always visible before the lifecycle call starts. A separate
+        // fire-and-forget Task risks the rollback path (optimisticallyRestore) running
+        // before optimisticallyRemove, leaving the row permanently deleted on failure.
+        // Task.detached is required for two independent reasons:
         //   1. The surrounding context inherits @MainActor isolation from the view; a plain
         //      Task { } would run remove() on the main actor and block the UI.
         //   2. RunnerLifecycleService.remove calls runScriptWithOutput, which uses a
@@ -294,6 +297,7 @@ struct LocalRunnersView: View {
         // CheckedContinuation+DispatchQueue.global, reason 2 is resolved and Task.detached
         // can be replaced with a plain Task { } (which resolves reason 1 automatically).
         Task {
+            await localRunnerStore.optimisticallyRemove(runner.runnerName)
             let ok = await Task.detached(priority: .userInitiated) {
                 await RunnerLifecycleService.shared.remove(runner: runner)
             }.value
