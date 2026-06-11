@@ -36,8 +36,9 @@ import Foundation
 private struct RunnerPayload: Decodable, Sendable {
     // MARK: Nested types
 
-    /// A single label entry in the `labels` array.
+    /// A single label entry in the `labels` array returned by the GitHub runners API.
     struct Label: Decodable, Sendable {
+        /// The label's display name (e.g. `"macos"`, `"arm64"`, `"self-hosted"`).
         let name: String
     }
 
@@ -62,8 +63,20 @@ private struct RunnerPayload: Decodable, Sendable {
     let labels: [Label]
 
     // MARK: CodingKeys
+
+    /// Maps Swift property names to the snake_case keys used in the GitHub API JSON response.
     enum CodingKeys: String, CodingKey {
-        case id, name, status, busy, labels
+        /// Maps to the `id` JSON key.
+        case id
+        /// Maps to the `name` JSON key.
+        case name
+        /// Maps to the `status` JSON key.
+        case status
+        /// Maps to the `busy` JSON key.
+        case busy
+        /// Maps to the `labels` JSON key.
+        case labels
+        /// Maps to the `runner_group_name` JSON key.
         case runnerGroupName = "runner_group_name"
     }
 
@@ -73,11 +86,16 @@ private struct RunnerPayload: Decodable, Sendable {
 
 /// Envelope for the GitHub `/actions/runners` list endpoint.
 private struct RunnerListEnvelope: Decodable, Sendable {
+    /// Total number of runners registered for the scope (may exceed one page).
     let totalCount: Int
+    /// The runner objects returned on this page.
     let runners: [RunnerPayload]
 
+    /// Maps Swift property names to the snake_case keys used in the GitHub API JSON response.
     enum CodingKeys: String, CodingKey {
+        /// Maps to the `total_count` JSON key.
         case totalCount = "total_count"
+        /// Maps to the `runners` JSON key.
         case runners
     }
 }
