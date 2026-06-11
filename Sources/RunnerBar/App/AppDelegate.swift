@@ -120,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var runnerStore: RunnerStore = RunnerStore(
         viewModel: observable,
         localRunnerStore: localRunnerStore,
+        preferencesStore: AppPreferencesStore.shared,
+        scopeStore: ScopeStore.shared,
         onStatusUpdate: { [weak self] in self?.updateStatusIcon() }
     )
     /// The last nav destination the user was on before the popover was closed or hidden.
