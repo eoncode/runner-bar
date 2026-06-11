@@ -76,7 +76,7 @@ actor RunnerProxyStore {
     // MARK: Init
 
     /// Use `RunnerProxyStore.shared` — direct instantiation is not permitted.
-    private init() {}
+    private init() { /* singleton — use RunnerProxyStore.shared */ }
 
     // MARK: - load(at:)
 
@@ -112,11 +112,7 @@ actor RunnerProxyStore {
                 var password = ""
                 do {
                     let credContent = try String(contentsOf: credURL, encoding: .utf8)
-                    let lines = credContent.components(separatedBy: "\n")
-                    user     = lines.first.map { $0.trimmingCharacters(in: .newlines) } ?? ""
-                    password = lines.indices.contains(1)
-                        ? lines[1].trimmingCharacters(in: .newlines)
-                        : ""
+                    (user, password) = Self.parseCredentialLines(credContent)
                 } catch let err as NSError where err.code == NSFileNoSuchFileError {
                     // Missing credentials file is expected — most runners have no proxy.
                 } catch {
@@ -184,6 +180,15 @@ actor RunnerProxyStore {
     }
 
     // MARK: - Private helpers
+
+    /// Parses the content of a `.proxycredentials` file into `(user, password)`.
+    /// Lines are trimmed of newline characters only.
+    private static func parseCredentialLines(_ content: String) -> (user: String, password: String) {
+        let lines = content.components(separatedBy: "\n")
+        let user  = lines.first.map { $0.trimmingCharacters(in: .newlines) } ?? ""
+        let pass  = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .newlines) : ""
+        return (user, pass)
+    }
 
     /// Writes `url + "\n"` to `destination`, or removes the file when `url` is empty.
     private static func writeProxyURL(_ url: String, to destination: URL) throws {
