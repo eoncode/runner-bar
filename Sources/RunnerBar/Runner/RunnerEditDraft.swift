@@ -9,6 +9,12 @@ import RunnerBarCore
 
 // MARK: - Production convenience
 
+/// Production-layer convenience shim for `RunnerEditDraft.load`.
+///
+/// Bridges the protocol-typed Core API to the concrete shared actors available
+/// only in the `RunnerBar` app target. Call sites in the app can use
+/// `draft.load(installPath:)` without referencing `RunnerConfigStore` or
+/// `RunnerProxyStore` directly.
 extension RunnerEditDraft {
     /// Loads disk state using the production `RunnerConfigStore.shared` and `RunnerProxyStore.shared`.
     @discardableResult

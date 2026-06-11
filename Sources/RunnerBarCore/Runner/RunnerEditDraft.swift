@@ -92,6 +92,9 @@ public struct RunnerEditDraft: Equatable, Sendable {
 
     // MARK: - Private disk helpers
 
+    /// Loads `.runner` JSON via `store`, applies `autoUpdate` and `workFolder` to the draft,
+    /// and returns the decoded `RunnerConfig` for callers that need display-only fields.
+    /// Logs and returns `nil` on any decoding or I/O error.
     @discardableResult
     private mutating func loadRunnerConfig(
         installPath: String,
