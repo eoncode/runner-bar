@@ -99,7 +99,10 @@ public struct SaveRunnerEditsUseCase: Sendable {
             do {
                 var config = try await configStore.load(at: installPath)
                 config.workFolder = draft.trimmedWorkFolder
-                config.disableUpdate = !draft.autoUpdate
+                // Assign nil (key omitted) when auto-update is enabled — the agent
+                // treats key-absent and false identically, but omitting keeps the
+                // file idiomatic. Only write true when the user explicitly disables.
+                config.disableUpdate = draft.autoUpdate ? nil : true
                 try await configStore.save(config, at: installPath)
             } catch {
                 errors.append("Failed to write runner configuration (.runner JSON)")
@@ -129,5 +132,17 @@ public struct SaveRunnerEditsUseCase: Sendable {
         }
 
         return errors.isEmpty ? .success : .failure(errors)
+    }
+
+    // MARK: - Private helpers
+
+    /// Extracts `owner/repo` or `orgName` scope from a GitHub HTML URL.
+    /// Returns `nil` if the URL cannot be parsed.
+    private func scopeFromHtmlUrl(_ url: String) -> String? {
+        guard let u = URL(string: url) else { return nil }
+        let parts = u.pathComponents.filter { $0 != "/" }
+        if parts.count >= 2 { return parts[0] + "/" + parts[1] }
+        if parts.count == 1 { return parts[0] }
+        return nil
     }
 }
