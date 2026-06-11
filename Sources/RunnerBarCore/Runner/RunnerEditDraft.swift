@@ -92,9 +92,6 @@ public struct RunnerEditDraft: Equatable, Sendable {
 
     // MARK: - Private disk helpers
 
-    /// Loads the `.runner` JSON config at `installPath` using the injected `store`
-    /// and applies `autoUpdate` and `workFolder` values to the draft.
-    /// - Returns: The decoded `RunnerConfig`, or `nil` if the file is absent or malformed.
     @discardableResult
     private mutating func loadRunnerConfig(
         installPath: String,
@@ -108,6 +105,7 @@ public struct RunnerEditDraft: Equatable, Sendable {
             }
             return config
         } catch {
+            log("RunnerEditDraft › loadRunnerConfig failed at \(installPath): \(error)")
             return nil
         }
     }

@@ -1,15 +1,14 @@
 // RunnerEditDraft.swift
 // RunnerBar
-// Re-exported from RunnerBarCore. This stub keeps the file present so
-// any in-progress local edits referencing this path still compile;
-// the real type now lives in Sources/RunnerBarCore/Runner/RunnerEditDraft.swift.
+// `RunnerEditDraft` lives in RunnerBarCore (Sources/RunnerBarCore/Runner/RunnerEditDraft.swift).
+// This file adds a production convenience extension so call sites in the app target
+// can call load(installPath:) without importing or naming the shared store actors directly.
+// This is a permanent part of the app-layer API, not a migration artifact.
 import Foundation
 import RunnerBarCore
 
-// Convenience extension: production call site uses the concrete shared singletons
-// so views don't need to import RunnerBarCore actors directly.
-/// Convenience extension bridging `RunnerEditDraft` (defined in RunnerBarCore)
-/// to the production `RunnerConfigStore.shared` and `RunnerProxyStore.shared` singletons.
+// MARK: - Production convenience
+
 extension RunnerEditDraft {
     /// Loads disk state using the production `RunnerConfigStore.shared` and `RunnerProxyStore.shared`.
     @discardableResult
