@@ -209,7 +209,7 @@ extension AddRunnerSheet {
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }.keyboardShortcut(.cancelAction)
-                Button("Import Runner", action: importExistingRunner)
+                Button("Import Runner") { Task { await importExistingRunner() } }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canImport)
             }
@@ -344,10 +344,14 @@ extension AddRunnerSheet {
 
     /// Writes the LaunchAgent plist, registers with `LocalRunnerStore`, and dismisses the sheet.
     ///
+    /// `async` so that `localRunnerStore.add()` can be awaited directly — this guarantees
+    /// the actor has appended the runner before `isPresented = false` fires and `onComplete()`
+    /// enqueues its refresh(). Matches the fix already applied to the `register()` path.
+    ///
     /// The `canImport` check at entry is a defensive safety net. The primary gate is the
     /// `.disabled(!canImport)` modifier on the Import button; this guard catches any
     /// programmatic calls that bypass the UI.
-    func importExistingRunner() {
+    func importExistingRunner() async {
         guard canImport else { return }
 
         let scope = effectiveGitHubURL
@@ -364,9 +368,11 @@ extension AddRunnerSheet {
             runnerName: detectedName,
             workingDirectory: existingDir
         )
-        Task {
-            await localRunnerStore.add(runnerName: detectedName, installPath: existingDir)
-        }
+        // Await directly — importExistingRunner() is async, no Task wrapper needed.
+        // This guarantees add() completes before isPresented = false fires and
+        // onComplete() enqueues its refresh(), so the new runner row is always
+        // present in the actor's index before the scan runs.
+        await localRunnerStore.add(runnerName: detectedName, installPath: existingDir)
         isPresented = false
         onComplete()
     }

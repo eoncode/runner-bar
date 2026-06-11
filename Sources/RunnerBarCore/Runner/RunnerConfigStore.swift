@@ -30,6 +30,11 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// a read-modify-write merge with `JSONSerialization` to preserve agent-managed keys
 /// not modelled by `RunnerConfig`. All caller-facing APIs are strongly typed and
 /// `async`, which keeps runner config I/O out of view code and commit helpers.
+///
+/// All disk operations are dispatched to `DispatchQueue.global(qos: .utility)` via
+/// `withCheckedContinuation` / `withCheckedThrowingContinuation` so the actor's
+/// cooperative thread is never blocked by synchronous file I/O — consistent with
+/// the pattern used in `RunnerProxyStore`.
 public actor RunnerConfigStore {
 
     // MARK: Shared instance
@@ -52,17 +57,22 @@ public actor RunnerConfigStore {
     /// Loads the typed runner config from `installPath/.runner`.
     ///
     /// Handles the UTF-8 BOM prefix emitted by the GitHub runner agent.
-    ///
-    /// - Note: `Data(contentsOf:)` is synchronous and blocks the actor's thread
-    ///   for the duration of the disk read. `.runner` files are small (< 1 KB) so
-    ///   this is acceptable in practice. Phase 4/5 should migrate to
-    ///   `FileHandle`+`AsyncBytes` or a `CheckedContinuation`+`DispatchQueue.global`
-    ///   wrapper once `RunnerProxyStore` is introduced — tracked in a follow-up issue (TBD).
+    /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the
+    /// actor's cooperative thread is never blocked.
     public func load(at installPath: String) async throws -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        var data = try Data(contentsOf: url)
-        if data.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) {
-            data.removeFirst(3)
+        let data: Data = try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    var raw = try Data(contentsOf: url)
+                    if raw.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) {
+                        raw.removeFirst(3)
+                    }
+                    continuation.resume(returning: raw)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
         }
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
@@ -86,62 +96,69 @@ public actor RunnerConfigStore {
     /// callers — which satisfies the Phase 3 acceptance criterion in #1298 ("no
     /// `[String: Any]` in caller paths") while preserving round-trip fidelity.
     ///
-    /// - Note: Both `Data(contentsOf:)` reads here are synchronous (see `load(at:)` note).
+    /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the actor's
+    /// cooperative thread is never blocked.
     public func save(_ config: RunnerConfig, at installPath: String) async throws {
         let url = runnerConfigURL(for: installPath)
 
-        var raw: [String: Any] = [:]
-        if let existingData = try? Data(contentsOf: url) {
-            let data: Data
-            if existingData.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) {
-                data = Data(existingData.dropFirst(3))
-            } else {
-                data = existingData
-            }
-            if let object = try? JSONSerialization.jsonObject(with: data),
-               let dict = object as? [String: Any] {
-                raw = dict
-            } else {
-                // JSONSerialization failed — existing file is malformed. Proceeding
-                // from an empty dict will drop unknown agent-managed keys on this save.
-                log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
-            }
-        } else {
-            // File is missing or temporarily unreadable. Writing from scratch.
-            // If the file exists but was unreadable, unknown agent-managed keys (e.g.
-            // jitConfig, gitHubUrl) will be dropped — tracked in a follow-up issue (TBD).
-            log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
-        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global(qos: .utility).async {
+                // Read-modify-write: load existing keys so agent-managed keys are preserved.
+                var raw: [String: Any] = [:]
+                if let existingData = try? Data(contentsOf: url) {
+                    let data: Data
+                    if existingData.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) {
+                        data = Data(existingData.dropFirst(3))
+                    } else {
+                        data = existingData
+                    }
+                    if let object = try? JSONSerialization.jsonObject(with: data),
+                       let dict = object as? [String: Any] {
+                        raw = dict
+                    } else {
+                        // JSONSerialization failed — existing file is malformed. Proceeding
+                        // from an empty dict will drop unknown agent-managed keys on this save.
+                        log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
+                    }
+                } else {
+                    // File is missing or temporarily unreadable. Writing from scratch.
+                    // If the file exists but was unreadable, unknown agent-managed keys (e.g.
+                    // jitConfig, gitHubUrl) will be dropped — tracked in a follow-up issue (TBD).
+                    log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
+                }
 
-        // Always write workFolder so the user can clear a custom path back to the
-        // agent default. An empty string is normalised to "_work" here — identical
-        // to the value the agent writes on a fresh registration — so a load-failure
-        // zero value and an intentional clear are both safe to round-trip.
-        let workFolderValue = config.workFolder.isEmpty ? "_work" : config.workFolder
-        raw[RunnerConfig.CodingKeys.workFolder.rawValue] = workFolderValue
-        // Only write disableUpdate when it is explicitly set; omit the key when nil
-        // to match the agent's own convention (key absent == false).
-        if let disableUpdate = config.disableUpdate {
-            raw[RunnerConfig.CodingKeys.disableUpdate.rawValue] = disableUpdate
-        } else {
-            raw.removeValue(forKey: RunnerConfig.CodingKeys.disableUpdate.rawValue)
-        }
-        // Write optional fields only when non-nil to avoid injecting "key": null
-        // into the agent-managed file (JSONSerialization encodes Swift nil as NSNull).
-        if let v = config.platform             { raw[RunnerConfig.CodingKeys.platform.rawValue] = v }
-        if let v = config.platformArchitecture { raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = v }
-        if let v = config.agentVersion         { raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = v }
-        if let v = config.ephemeral            { raw[RunnerConfig.CodingKeys.ephemeral.rawValue] = v }
-        if let v = config.agentId             { raw[RunnerConfig.CodingKeys.agentId.rawValue] = v }
+                // Always write workFolder so the user can clear a custom path back to the
+                // agent default. An empty string is normalised to "_work" here — identical
+                // to the value the agent writes on a fresh registration — so a load-failure
+                // zero value and an intentional clear are both safe to round-trip.
+                let workFolderValue = config.workFolder.isEmpty ? "_work" : config.workFolder
+                raw[RunnerConfig.CodingKeys.workFolder.rawValue] = workFolderValue
+                // Only write disableUpdate when it is explicitly set; omit the key when nil
+                // to match the agent's own convention (key absent == false).
+                if let disableUpdate = config.disableUpdate {
+                    raw[RunnerConfig.CodingKeys.disableUpdate.rawValue] = disableUpdate
+                } else {
+                    raw.removeValue(forKey: RunnerConfig.CodingKeys.disableUpdate.rawValue)
+                }
+                // Write optional fields only when non-nil to avoid injecting "key": null
+                // into the agent-managed file (JSONSerialization encodes Swift nil as NSNull).
+                if let v = config.platform             { raw[RunnerConfig.CodingKeys.platform.rawValue] = v }
+                if let v = config.platformArchitecture { raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = v }
+                if let v = config.agentVersion         { raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = v }
+                if let v = config.ephemeral            { raw[RunnerConfig.CodingKeys.ephemeral.rawValue] = v }
+                if let v = config.agentId             { raw[RunnerConfig.CodingKeys.agentId.rawValue] = v }
 
-        do {
-            let data = try JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: url, options: .atomic)
-        } catch {
-            log("RunnerConfigStore › save failed for \(url.path): \(error)")
-            throw RunnerConfigStoreError.writeFailed(installPath, error)
+                do {
+                    let data = try JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .sortedKeys])
+                    try data.write(to: url, options: .atomic)
+                    log("RunnerConfigStore › saved config to \(url.path)")
+                    continuation.resume()
+                } catch {
+                    log("RunnerConfigStore › save failed for \(url.path): \(error)")
+                    continuation.resume(throwing: RunnerConfigStoreError.writeFailed(installPath, error))
+                }
+            }
         }
-        log("RunnerConfigStore › saved config to \(url.path)")
     }
 
     // MARK: Private
