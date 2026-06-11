@@ -1,13 +1,18 @@
 // RunnerModelParser.swift
 // RunnerBar
 import Foundation
+import RunnerBarCore
 
 // MARK: - .runner JSON parser
 
 /// Reads `installPath/.runner` JSON and builds a `RunnerModel`.
 ///
 /// Handles UTF-8 BOM stripping (the GitHub Actions runner agent writes BOM-prefixed JSON)
-/// and decodes the `RunnerJSON` envelope into a fully-constructed `RunnerModel`.
+/// and decodes via `RunnerConfig` (typed) + `RunnerDiscoveryFields` (discovery-only fields).
+///
+/// `RunnerJSON` has been removed — `RunnerConfig` is the single typed path for all
+/// `.runner` file access. Discovery-only fields (`gitHubUrl`, `AgentName`) are decoded
+/// by the lightweight `RunnerDiscoveryFields` struct, which is local to this file.
 ///
 /// - Parameters:
 ///   - name: The runner name used as the dedup key in `LocalRunnerIndex`.
@@ -28,71 +33,49 @@ func runnerModelFromIndex(name: String, installPath: String) -> RunnerModel? {
         log("RunnerModelParser › runnerModelFromIndex — stripped UTF-8 BOM from '\(name)'")
     }
 
-    let json = try? JSONDecoder().decode(RunnerJSON.self, from: data)
-    if json == nil {
-        log("RunnerModelParser › ⚠️ runnerModelFromIndex — JSON decode failed for '\(name)' at \(installPath). File may be malformed.")
+    let decoder = JSONDecoder()
+    let config = try? decoder.decode(RunnerConfig.self, from: data)
+    let discovery = try? decoder.decode(RunnerDiscoveryFields.self, from: data)
+
+    if config == nil {
+        log("RunnerModelParser › ⚠️ runnerModelFromIndex — RunnerConfig decode failed for '\(name)' at \(installPath). File may be malformed.")
     } else {
-        log("RunnerModelParser › runnerModelFromIndex — '\(name)' agentId=\(String(describing: json?.agentId)) gitHubUrl=\(String(describing: json?.gitHubUrl))")
+        log("RunnerModelParser › runnerModelFromIndex — '\(name)' agentId=\(String(describing: config?.agentId)) gitHubUrl=\(String(describing: discovery?.gitHubUrl))")
     }
+
     return RunnerModel(
         // Prefer the AgentName decoded from the .runner file; fall back to the index key
         // if the field is absent (older runner agent versions may omit it).
-        runnerName: json?.runnerName ?? name,
-        gitHubUrl: json?.gitHubUrl,
-        agentId: json?.agentId,
-        workFolder: json?.workFolder,
+        runnerName: discovery?.runnerName ?? name,
+        gitHubUrl: discovery?.gitHubUrl,
+        agentId: config?.agentId,
+        workFolder: config?.workFolder,
         installPath: installPath,
         isRunning: false,
-        platform: json?.platform,
-        platformArchitecture: json?.platformArchitecture,
-        agentVersion: json?.agentVersion,
-        isEphemeral: json?.ephemeral ?? false
+        platform: config?.platform,
+        platformArchitecture: config?.platformArchitecture,
+        agentVersion: config?.agentVersion,
+        isEphemeral: config?.ephemeral ?? false
     )
 }
 
-// MARK: - RunnerJSON
+// MARK: - RunnerDiscoveryFields
 
-/// Decodable envelope for the `.runner` JSON file written by the GitHub Actions runner agent.
+/// Lightweight `Decodable` for the two `.runner` fields used only during discovery
+/// that are not part of `RunnerConfig` (which covers the editable/persisted subset).
 ///
-/// Used by both `runnerModelFromIndex` (store hydration) and `AddRunnerSheet` (pre-existing
-/// runner import) so that both code paths decode from the same struct.
-struct RunnerJSON: Decodable {
+/// - `gitHubUrl` — the GitHub server URL the runner registered against.
+/// - `runnerName` — the display name the runner registered with (`AgentName` in JSON).
+///
+/// All other fields are decoded via `RunnerConfig` directly.
+private struct RunnerDiscoveryFields: Decodable {
     /// The GitHub server URL associated with this runner (e.g. `https://github.com`).
     let gitHubUrl: String?
-    /// The display name the runner registered with.
-    /// Present in the `.runner` file as `AgentName`.
+    /// The display name the runner registered with (JSON key: `AgentName`).
     let runnerName: String?
-    /// The numeric agent identifier assigned by the GitHub Actions service.
-    let agentId: Int?
-    /// The working folder used by jobs executed on this runner.
-    let workFolder: String?
-    /// The OS platform string reported by the runner agent (e.g. `linux`, `darwin`).
-    let platform: String?
-    /// The CPU architecture string reported by the runner agent (e.g. `X64`, `ARM64`).
-    let platformArchitecture: String?
-    /// The version string of the runner agent binary.
-    let agentVersion: String?
-    /// Whether this runner is configured as ephemeral (single-job, then self-removes).
-    let ephemeral: Bool?
 
-    /// Maps Swift property names to the JSON keys used by the runner agent.
-    /// Note: the agent uses PascalCase for most keys but camelCase for `gitHubUrl`.
     private enum CodingKeys: String, CodingKey {
-        /// Maps to the camelCase `gitHubUrl` key in the agent JSON.
         case gitHubUrl
-        /// Maps to the PascalCase `AgentName` key in the agent JSON.
-        case runnerName           = "AgentName"
-        /// Maps to the PascalCase `AgentId` key in the agent JSON.
-        case agentId              = "AgentId"
-        /// Maps to the PascalCase `WorkFolder` key in the agent JSON.
-        case workFolder           = "WorkFolder"
-        /// Maps to the PascalCase `Platform` key in the agent JSON.
-        case platform             = "Platform"
-        /// Maps to the PascalCase `PlatformArchitecture` key in the agent JSON.
-        case platformArchitecture = "PlatformArchitecture"
-        /// Maps to the PascalCase `AgentVersion` key in the agent JSON.
-        case agentVersion         = "AgentVersion"
-        /// Maps to the PascalCase `Ephemeral` key in the agent JSON.
-        case ephemeral            = "Ephemeral"
+        case runnerName = "AgentName"
     }
 }

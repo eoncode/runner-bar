@@ -37,6 +37,22 @@ public struct RunnerConfig: Codable, Sendable {
     /// Numeric agent ID assigned by GitHub.
     public var agentId: Int?
 
+    // MARK: - CodingKeys
+
+    /// Maps Swift property names to the PascalCase JSON keys written by the runner agent.
+    ///
+    /// The agent uses PascalCase for almost all keys. `disableUpdate` maps to `"DisableUpdate"`;
+    /// `workFolder` maps to `"WorkFolder"`, and so on.
+    public enum CodingKeys: String, CodingKey {
+        case workFolder           = "WorkFolder"
+        case disableUpdate        = "DisableUpdate"
+        case platform             = "Platform"
+        case platformArchitecture = "PlatformArchitecture"
+        case agentVersion         = "AgentVersion"
+        case ephemeral            = "Ephemeral"
+        case agentId              = "AgentId"
+    }
+
     // MARK: - Init
 
     /// Creates a `RunnerConfig` with the given values.
