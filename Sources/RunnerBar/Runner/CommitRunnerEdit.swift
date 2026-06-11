@@ -1,14 +1,5 @@
 // CommitRunnerEdit.swift
 // RunnerBar
-import Foundation
+// CommitResult has moved to RunnerBarCore/Runner/CommitResult.swift.
+// This file is intentionally empty — kept so git history shows the migration path.
 import RunnerBarCore
-
-// MARK: - CommitResult
-
-/// The outcome of a `SaveRunnerEditsUseCase.execute` call.
-enum CommitResult {
-    /// All requested writes succeeded.
-    case success
-    /// One or more writes failed. `errors` contains human-readable messages.
-    case failure([String])
-}
