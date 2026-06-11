@@ -92,16 +92,19 @@ actor RunnerProxyStore {
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
+                // Trim only newlines here — `save` writes `value + "\n"` so we
+                // strip exactly that. Using `.whitespacesAndNewlines` would also
+                // strip intentional surrounding spaces from credentials.
                 let url: String = (try? String(contentsOf: proxyURL, encoding: .utf8))
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                    .map { $0.trimmingCharacters(in: .newlines) } ?? ""
 
                 var user = ""
                 var password = ""
                 if let credContent = try? String(contentsOf: credURL, encoding: .utf8) {
                     let lines = credContent.components(separatedBy: "\n")
-                    user     = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                    user     = lines.first.map { $0.trimmingCharacters(in: .newlines) } ?? ""
                     password = lines.indices.contains(1)
-                        ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                        ? lines[1].trimmingCharacters(in: .newlines)
                         : ""
                 }
 
@@ -127,6 +130,10 @@ actor RunnerProxyStore {
     ///   ensuring a round-trip through load → save is idempotent. Callers should
     ///   not rely on preserving surrounding whitespace in proxy credentials.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
+        // Fast path: nothing to write or remove when all fields are empty.
+        // This also avoids spawning a background task for zero-config runners.
+        guard !config.isEmpty else { return }
+
         let base     = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
         let credURL  = base.appendingPathComponent(".proxycredentials")
