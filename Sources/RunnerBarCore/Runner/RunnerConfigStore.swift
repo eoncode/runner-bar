@@ -79,8 +79,17 @@ public actor RunnerConfigStore {
 
     /// Saves the typed runner config to `installPath/.runner`.
     ///
-    /// Performs a read-modify-write merge so unknown agent-managed keys already
-    /// present in `.runner` are preserved instead of being dropped on save.
+    /// Uses a **read-modify-write merge** strategy:
+    /// 1. The existing `.runner` file is read as a raw `[String: Any]` dictionary.
+    /// 2. Only the fields covered by `RunnerConfig` are overwritten in that dictionary.
+    /// 3. The merged dictionary is written back atomically.
+    ///
+    /// This intentionally retains `JSONSerialization` and `[String: Any]` *inside* this
+    /// method so that agent-managed keys not modelled by `RunnerConfig` (e.g. `jitConfig`,
+    /// `gitHubUrl`) are never silently dropped when the user saves editable fields.
+    /// The `[String: Any]` dict is fully contained within this actor and never exposed to
+    /// callers — which satisfies the Phase 3 acceptance criterion in #1298 ("no
+    /// `[String: Any]` in caller paths") while preserving round-trip fidelity.
     ///
     /// - Note: Both `Data(contentsOf:)` reads here are synchronous (see `load(at:)` note).
     public func save(_ config: RunnerConfig, at installPath: String) async throws {
