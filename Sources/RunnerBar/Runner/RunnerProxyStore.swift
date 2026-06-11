@@ -92,20 +92,35 @@ actor RunnerProxyStore {
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                // Trim only newlines here — `save` writes `value + "\n"` so we
-                // strip exactly that. Using `.whitespacesAndNewlines` would also
-                // strip intentional surrounding spaces from credentials.
-                let url: String = (try? String(contentsOf: proxyURL, encoding: .utf8))
-                    .map { $0.trimmingCharacters(in: .newlines) } ?? ""
+                // Trim only newlines — `save` writes `value + "\n"` so we strip
+                // exactly that. `.whitespacesAndNewlines` would strip intentional
+                // surrounding spaces from credentials.
+                // `try?` is replaced with do/catch so non-ENOENT errors are logged
+                // rather than silently producing empty proxy fields.
+                let url: String
+                do {
+                    url = try String(contentsOf: proxyURL, encoding: .utf8)
+                        .trimmingCharacters(in: .newlines)
+                } catch let err as NSError where err.code == NSFileNoSuchFileError {
+                    url = ""
+                } catch {
+                    log("RunnerProxyStore › .proxy read error (using empty): \(error)")
+                    url = ""
+                }
 
                 var user = ""
                 var password = ""
-                if let credContent = try? String(contentsOf: credURL, encoding: .utf8) {
+                do {
+                    let credContent = try String(contentsOf: credURL, encoding: .utf8)
                     let lines = credContent.components(separatedBy: "\n")
                     user     = lines.first.map { $0.trimmingCharacters(in: .newlines) } ?? ""
                     password = lines.indices.contains(1)
                         ? lines[1].trimmingCharacters(in: .newlines)
                         : ""
+                } catch let err as NSError where err.code == NSFileNoSuchFileError {
+                    // Missing credentials file is expected — most runners have no proxy.
+                } catch {
+                    log("RunnerProxyStore › .proxycredentials read error (using empty): \(error)")
                 }
 
                 continuation.resume(returning: RunnerProxyConfig(url: url, user: user, password: password))
@@ -130,10 +145,6 @@ actor RunnerProxyStore {
     ///   ensuring a round-trip through load → save is idempotent. Callers should
     ///   not rely on preserving surrounding whitespace in proxy credentials.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
-        // Fast path: zero-config runners have no proxy files to write or remove.
-        // `isEmpty` checks all three fields; this is not an incomplete implementation.
-        guard !config.isEmpty else { return }
-
         let base     = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
         let credURL  = base.appendingPathComponent(".proxycredentials")
@@ -143,7 +154,7 @@ actor RunnerProxyStore {
         let user           = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
         let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+        try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 var messages: [String] = []
 
