@@ -83,8 +83,6 @@ extension AppDelegate: NSPopoverDelegate {
 
     // MARK: Popover construction
 
-    /// Builds the NSPopover, embeds the SwiftUI hosting controller, wires KVO
-    /// and Combine subscriptions.
     func setupPanel() {
         log("AppDelegate › setupPanel — begin")
         let controller = NSHostingController(rootView: mainView())
@@ -95,9 +93,6 @@ extension AppDelegate: NSPopoverDelegate {
         newPopover.contentViewController = controller
         newPopover.contentSize = NSSize(width: 480, height: 300)
         newPopover.animates = false
-        // .applicationDefined: popoverShouldClose(_:) is consulted on every
-        // is true, keeping the popover alive when user clicks in NSOpenPanel.
-        // Manual NSEvent monitor + NSWorkspace observer handle hide-on-app-switch.
         newPopover.behavior = .applicationDefined
         newPopover.delegate = self
 
@@ -111,24 +106,6 @@ extension AppDelegate: NSPopoverDelegate {
 
     // MARK: NSPopoverDelegate
 
-    /// Always returns `true` — AppKit is never blocked from closing the popover here.
-    ///
-    /// All dismiss control is handled by the manual `outsideClickMonitor` and
-    /// `workspaceObserver` in `openPanel()`. Those monitors guard against
-    /// NSOpenPanel clicks via `hasActiveSheet` (the panel is attached as a sheet
-    /// via `beginSheetModal`, so `popoverWindow.sheets` is non-empty while it
-    /// is open). There is no need to block AppKit here.
-    ///
-    /// `isFilePickerActive` is intentionally NOT used here. Earlier attempts
-    /// (Attempts 4–6, see `docs/graveyard.md`) tried gating this method on a
-    /// boolean flag, but `beginSheetModal` makes that unnecessary: the sheet
-    /// attachment is structural truth visible via `popoverWindow.sheets`, which
-    /// `hasActiveSheet` reads directly. The flag approach was removed in favour
-    /// of that structural check.
-    ///
-    /// See the OUTSIDE-CLICK / APP-SWITCH HIDE comment block above for the full
-    /// mechanism. See `docs/graveyard.md` for the history of approaches that
-    /// tried to gate this method and why they all failed.
     public func popoverShouldClose(_ popover: NSPopover) -> Bool {
         #if DEBUG
         log("AppDelegate › popoverShouldClose — CALLED behavior=\(popover.behavior.rawValue) panelIsOpen=\(panelIsOpen) caller=\(Thread.callStackSymbols[1])")
@@ -137,11 +114,6 @@ extension AppDelegate: NSPopoverDelegate {
         return true
     }
 
-    /// Syncs internal state after the popover closes for any reason.
-    /// Primary purpose: safety net for OS-initiated closes (e.g. user clicks outside).
-    /// When `closePanel()` or `hidePanel()` drives the close, they call
-    /// `tearDownOpenState()` directly — by the time this fires, `panelIsOpen`
-    /// is already `false` and the guard exits immediately.
     public func popoverDidClose(_ notification: Notification) {
         #if DEBUG
         log("AppDelegate › popoverDidClose — panelIsOpen=\(panelIsOpen) behavior=\((NSApp.delegate as? AppDelegate)?.popover?.behavior.rawValue ?? -1) stack=\(Thread.callStackSymbols.prefix(5).joined(separator: "||"))")
@@ -156,7 +128,6 @@ extension AppDelegate: NSPopoverDelegate {
 
     // MARK: KVO
 
-    /// Observes `preferredContentSize` and updates both width and height.
     private func setupKVO(controller: NSHostingController<AnyView>) {
         log("AppDelegate › setupKVO — attaching preferredContentSize observer")
         sizeObservation = controller.observe(
@@ -164,62 +135,35 @@ extension AppDelegate: NSPopoverDelegate {
             options: [.new]
         ) { [weak self] _, change in
             guard let size = change.newValue, size.height > 0 else { return }
-            // KVO can fire on a background thread — hop to main before touching UI.
             DispatchQueue.main.async { [weak self] in self?.resizeAndRepositionPanel() }
         }
     }
 
     // MARK: Combine subscriptions
 
-    /// Starts all Combine subscriptions.
     private func setupCombineSubscriptions() {
         log("AppDelegate › setupCombineSubscriptions — begin")
 
-        // local runner list changes are now pushed directly from LocalRunnerStore
-        // into observable.localRunners via await MainActor.run — no Combine sink needed.
-
-        // Everything below makes live network calls — skip entirely in UI tests.
         guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else {
             log("AppDelegate › setupCombineSubscriptions — UI_TESTING detected, skipping network setup")
             return
         }
 
-        // Wire LocalRunnerStore.shared to this AppDelegate's RunnerViewModel instance.
-        //
-        // ⚠️ Must be called before the startup Task below (and before any other
-        // LocalRunnerStore.shared access). LocalRunnerStore no longer self-initialises
-        // with RunnerViewModel.shared — that singleton was a different object from
-        // AppDelegate.observable and caused localRunners to push into a view model
-        // that no SwiftUI view observed (permanent empty local-runner list).
-        //
-        // ❌ NEVER move this call inside the Task — AppDelegate.localRunnerStore
-        //    is a computed `lazy var` backed by `LocalRunnerStore.shared`. The first
-        //    access to `localRunnerStore` (inside the Task) must find the instance
-        //    already configured, or it fatalErrors.
         LocalRunnerStore.configure(viewModel: observable)
         log("AppDelegate › setupCombineSubscriptions — LocalRunnerStore.configure(viewModel:) called")
 
-        // NOTE: The `RunnerStore.didUpdate` Combine sink has been removed.
-        // `RunnerStore` is now a Swift actor that pushes state directly to
-        // the injected `viewModel` (AppDelegate.observable) via `await MainActor.run { }`
-        // at the end of every fetch cycle, and calls `AppDelegate.updateStatusIcon()` inside
-        // that same `MainActor.run` block — so icon refresh is still driven once
-        // per completed fetch cycle without any Combine subscription.
-        // ℹ️ `RunnerViewModel.shared` is a fatalError accessor — the live instance
-        // is AppDelegate.observable, injected explicitly into both stores.
+        // RunnerStore.init no longer accepts @MainActor-isolated default values,
+        // so AppPreferencesStore.shared and ScopeStore.shared are passed explicitly
+        // here, where we are already on the @MainActor.
+        runnerStore = RunnerStore(
+            viewModel: observable,
+            localRunnerStore: localRunnerStore,
+            preferencesStore: AppPreferencesStore.shared,
+            scopeStore: ScopeStore.shared,
+            onStatusUpdate: { [weak self] in self?.updateStatusIcon() }
+        )
+        log("AppDelegate › setupCombineSubscriptions — RunnerStore created with injected stores")
 
-        // FIX: Await LocalRunnerStore.refreshAsync() before starting the poll loop.
-        //
-        // refresh() (fire-and-forget) spawns a Task and returns immediately.
-        // start() fires fetch() on the very next runloop turn — before refresh()'s
-        // Task has a chance to run, because both are @MainActor and start() is called
-        // synchronously. Result: localRunners=[] on cycle 1, installPathMap empty,
-        // metrics missing on first runner appearance.
-        //
-        // refreshAsync() suspends until disk hydration + launchctl + GitHub enrichment
-        // completes, then start() fires. Cycle 1 always has a populated installPathMap
-        // so runner rows appear with CPU/MEM already set.
-        log("AppDelegate › setupCombineSubscriptions — scheduling async startup sequence")
         Task { [weak self] in
             guard let self else { return }
             log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
@@ -229,10 +173,6 @@ extension AppDelegate: NSPopoverDelegate {
             log("AppDelegate › startup — runnerStore poll loop started")
         }
 
-        // Scope changes (add / remove / enable toggle) restart RunnerStore so it polls
-        // the correct repos from the beginning. RunnerStore observes
-        // ScopeStore.activeScopes internally via withObservationTracking/AsyncStream,
-        // so no Combine sink is needed here — the actor's own observer handles it.
         log("AppDelegate › setupCombineSubscriptions — complete")
     }
 }

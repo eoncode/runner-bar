@@ -7,46 +7,42 @@ import RunnerBarCore
 
 /// Protocol that abstracts the polling-interval preference, allowing test doubles
 /// to be injected into `RunnerStore` without going through the live singleton.
+/// `Sendable` conformance is required so the existential can be captured by the
+/// actor and read inside `await MainActor.run { }` closures.
 @MainActor
-protocol AppPreferencesStoreProtocol: AnyObject {
-    /// The polling interval (in seconds) used by `RunnerStore` to schedule fetch cycles.
+protocol AppPreferencesStoreProtocol: AnyObject, Sendable {
     var pollingInterval: Int { get }
 }
 
-/// Conforms `AppPreferencesStore` to `AppPreferencesStoreProtocol` for live use.
 extension AppPreferencesStore: AppPreferencesStoreProtocol {}
 
 /// Protocol that abstracts the active-scopes store, allowing test doubles
 /// to be injected into `RunnerStore` without going through the live singleton.
+/// `Sendable` conformance is required so the existential can be captured by the
+/// actor and read inside `await MainActor.run { }` closures.
 @MainActor
-protocol ScopeStoreProtocol: AnyObject {
-    /// The currently active scope identifiers used to filter runner polling.
+protocol ScopeStoreProtocol: AnyObject, Sendable {
     var activeScopes: [String] { get }
 }
 
-/// Conforms `ScopeStore` to `ScopeStoreProtocol` for live use.
 extension ScopeStore: ScopeStoreProtocol {}
 
 // MARK: - Observation helpers
 
-/// Drives a recursive `withObservationTracking` loop for a `AppPreferencesStoreProtocol.pollingInterval`
+/// Drives a recursive `withObservationTracking` loop for `AppPreferencesStoreProtocol.pollingInterval`
 /// entirely on the `@MainActor`. Because every method is `@MainActor`-isolated, the local
 /// `func observe()` inside `start()` is implicitly `@MainActor` — no `@Sendable` annotation
 /// is required and no value crosses an isolation boundary.
 @MainActor
 private final class PreferencesObserver {
-    /// The continuation used to push new `pollingInterval` values into the `AsyncStream`.
     private let continuation: AsyncStream<Int>.Continuation
-    /// The injected preferences store — avoids singleton access inside the observer.
     private let store: any AppPreferencesStoreProtocol
 
-    /// Creates a new observer that writes changes into `continuation`.
     init(continuation: AsyncStream<Int>.Continuation, store: any AppPreferencesStoreProtocol) {
         self.continuation = continuation
         self.store = store
     }
 
-    /// Registers a single `withObservationTracking` pass and re-registers itself on change.
     func start() {
         func observe() {
             withObservationTracking {
@@ -63,22 +59,18 @@ private final class PreferencesObserver {
     }
 }
 
-/// Drives a recursive `withObservationTracking` loop for a `ScopeStoreProtocol.activeScopes`
+/// Drives a recursive `withObservationTracking` loop for `ScopeStoreProtocol.activeScopes`
 /// entirely on the `@MainActor`. Same isolation rationale as `PreferencesObserver`.
 @MainActor
 private final class ScopesObserver {
-    /// The continuation used to push new `activeScopes` values into the `AsyncStream`.
     private let continuation: AsyncStream<[String]>.Continuation
-    /// The injected scope store — avoids singleton access inside the observer.
     private let store: any ScopeStoreProtocol
 
-    /// Creates a new observer that writes changes into `continuation`.
     init(continuation: AsyncStream<[String]>.Continuation, store: any ScopeStoreProtocol) {
         self.continuation = continuation
         self.store = store
     }
 
-    /// Registers a single `withObservationTracking` pass and re-registers itself on change.
     func start() {
         func observe() {
             withObservationTracking {
@@ -101,8 +93,8 @@ private final class ScopesObserver {
 ///
 /// **Concurrency model**
 /// - The actor runs on its own executor (background thread).
-/// - `preferencesStore` and `scopeStore` are `@MainActor`-isolated protocol values;
-///   any read of their properties must happen inside `await MainActor.run { }`.
+/// - `preferencesStore` and `scopeStore` are `@MainActor`-isolated `Sendable` protocol
+///   values; reads must happen inside `await MainActor.run { }`.
 /// - After every fetch cycle, results are pushed to the injected `RunnerViewModel` on the
 ///   main actor via `await MainActor.run { }`. SwiftUI's `@Observable` machinery
 ///   picks up the mutation automatically — no Combine `PassthroughSubject` needed.
@@ -115,62 +107,36 @@ actor RunnerStore {
 
     // MARK: - State
 
-    /// Runners currently shown in the panel.
     private(set) var runners: [Runner] = []
-    /// Jobs currently shown in the panel, including dimmed completed entries.
     private(set) var jobs: [ActiveJob] = []
-    /// Workflow action groups currently shown in the panel.
     private(set) var actions: [WorkflowActionGroup] = []
 
-    /// Live-job snapshot from the previous poll, used to detect vanished jobs.
     private var prevLiveJobs: [Int: ActiveJob] = [:]
-    /// Completed-job cache keyed by job ID; capped at `PollResultBuilder.jobCacheLimit`.
     private var completedCache: [Int: ActiveJob] = [:]
-    /// Live-group snapshot from the previous poll, used to detect vanished groups.
     private var prevLiveGroups: [String: WorkflowActionGroup] = [:]
-    /// Group cache keyed by group ID; capped at `PollResultBuilder.groupCacheLimit`.
     private var actionGroupCache: [String: WorkflowActionGroup] = [:]
-    /// IDs of action groups whose failure hook has already fired.
-    ///
-    /// Kept separate from `actionGroupCache` so that cache eviction does not re-arm
-    /// the hook for old completed groups still present in GitHub's last-completed feed.
     private var seenGroupIDs: Set<String> = []
 
-    /// Whether the GitHub API is currently rate-limiting this client.
     private(set) var isRateLimited = false
-    /// The exact moment the current rate-limit window expires, or `nil` when no
-    /// rate-limit is active or the reset time is unknown.
-    /// Assigned in `applyFetchResult` and mirrored to `RunnerViewModel`;
-    /// consumed externally via the view model. periphery:ignore
+    /// periphery:ignore
     private(set) var rateLimitResetDate: Date?
 
-    /// Active structured poll task. Cancelled and replaced on every `start()` call.
     private var pollTask: Task<Void, Never>?
-    /// Observation task that restarts the poll loop when `pollingInterval` changes.
     private var intervalObservationTask: Task<Void, Never>?
-    /// Observation task that restarts the poll loop when active scopes change.
     private var scopeObservationTask: Task<Void, Never>?
 
-    /// The view model this store pushes updates into.
     private let viewModel: RunnerViewModel
-    /// Injected reference to the local runner store — avoids singleton cross-references
-    /// inside the actor body (Swift 6 / PR #1303 requirement).
     private let localRunnerStore: LocalRunnerStore
-    /// Injected preferences store. Provides `pollingInterval`. Defaults to
-    /// `AppPreferencesStore.shared` at the production call site.
+    /// Injected preferences store — provides `pollingInterval`.
+    /// Pass `AppPreferencesStore.shared` in production; inject a test double in unit tests.
     private let preferencesStore: any AppPreferencesStoreProtocol
-    /// Injected scope store. Provides `activeScopes`. Defaults to
-    /// `ScopeStore.shared` at the production call site.
+    /// Injected scope store — provides `activeScopes`.
+    /// Pass `ScopeStore.shared` in production; inject a test double in unit tests.
     private let scopeStore: any ScopeStoreProtocol
-    /// Called on the main actor at the end of every fetch cycle to refresh the status-bar
-    /// icon. Injected at init to avoid accessing `NSApp.delegate` from inside the actor
-    /// body (PR Principle #4: no singleton access inside actor bodies).
     private let onStatusUpdate: @MainActor @Sendable () -> Void
 
     // MARK: - Aggregate status
 
-    /// The combined health status across all runners, derived from the current `runners` array.
-    /// Read by external consumers (e.g. `AppDelegate`) outside this file's analysis scope.
     /// periphery:ignore
     var aggregateStatus: AggregateStatus { AggregateStatus(runners: runners) }
 
@@ -178,28 +144,25 @@ actor RunnerStore {
 
     /// Designated init for dependency injection.
     ///
+    /// `preferencesStore` and `scopeStore` have no default values because their
+    /// concrete `.shared` accessors are `@MainActor`-isolated, and Swift 6 forbids
+    /// `@MainActor`-isolated default values in a nonisolated (actor) init.
+    /// Pass `AppPreferencesStore.shared` and `ScopeStore.shared` at every production
+    /// call site (see `AppDelegate+PanelSetup.swift`).
+    ///
     /// - Parameters:
     ///   - viewModel: The view model this store pushes UI state into.
     ///   - localRunnerStore: The local runner store used for metrics write-back.
-    ///   - preferencesStore: Provides `pollingInterval`. Pass `AppPreferencesStore.shared`
-    ///     in production; inject a test double in unit tests.
-    ///   - scopeStore: Provides `activeScopes`. Pass `ScopeStore.shared` in production;
-    ///     inject a test double in unit tests.
-    ///   - onStatusUpdate: Closure called on the main actor after every fetch cycle
-    ///     to update the status-bar icon. Typically `{ AppDelegate.shared.updateStatusIcon() }`
-    ///     or equivalent — injected here so the actor body never touches `NSApp.delegate`.
-    ///
-    /// - Note: The two observation Tasks capture `self` directly (no `[weak self]`).
-    ///   Actors are not classes and cannot form reference cycles through their own
-    ///   isolated Tasks. Using `[weak self]` was incorrect here: if the actor were
-    ///   deallocated before the Task hopped back onto the actor executor, the
-    ///   observation would silently never start. `deinit` cancels both tasks,
-    ///   so the Tasks never outlive the actor.
+    ///   - preferencesStore: Provides `pollingInterval`. Use `AppPreferencesStore.shared`
+    ///     in production; inject a `FakeAppPreferencesStore` in tests.
+    ///   - scopeStore: Provides `activeScopes`. Use `ScopeStore.shared` in production;
+    ///     inject a `FakeScopeStore` in tests.
+    ///   - onStatusUpdate: Closure called on the main actor after every fetch cycle.
     init(
         viewModel: RunnerViewModel,
         localRunnerStore: LocalRunnerStore,
-        preferencesStore: any AppPreferencesStoreProtocol = AppPreferencesStore.shared,
-        scopeStore: any ScopeStoreProtocol = ScopeStore.shared,
+        preferencesStore: any AppPreferencesStoreProtocol,
+        scopeStore: any ScopeStoreProtocol,
         onStatusUpdate: @escaping @MainActor @Sendable () -> Void
     ) {
         self.viewModel = viewModel
@@ -221,15 +184,6 @@ actor RunnerStore {
 
     // MARK: - Observation helpers
 
-    /// Starts (or restarts) the `pollingInterval` observation loop.
-    ///
-    /// `AsyncStream.makeStream` returns the stream and a separate continuation value.
-    /// The continuation is handed to `PreferencesObserver`, a `@MainActor` class that
-    /// owns the recursive `withObservationTracking` registration entirely on the main
-    /// actor. The observer is returned from `MainActor.run` and held in the Task's
-    /// async scope so it stays alive for the full lifetime of the stream — without
-    /// this, `[weak self]` in `onChange` would find `self == nil` on the first change
-    /// and silently stop all future polling-interval updates.
     private func _startObservingPreferences() {
         let injectedStore = preferencesStore
         intervalObservationTask?.cancel()
@@ -245,15 +199,10 @@ actor RunnerStore {
                 log("RunnerStore › pollingInterval changed to \(newInterval) — restarting poll loop")
                 await self?.start()
             }
-            _ = observer // retain until stream ends — do not remove
+            _ = observer
         }
     }
 
-    /// Starts (or restarts) the `activeScopes` observation loop.
-    ///
-    /// Same approach as `_startObservingPreferences` — see that method's
-    /// doc-comment for the full rationale, including why the observer must be
-    /// retained in the Task's async scope beyond the `MainActor.run` closure.
     private func _startObservingScopes() {
         let injectedStore = scopeStore
         scopeObservationTask?.cancel()
@@ -269,17 +218,12 @@ actor RunnerStore {
                 log("RunnerStore › ScopeStore.activeScopes changed — restarting fetch")
                 await self?.start()
             }
-            _ = observer // retain until stream ends — do not remove
+            _ = observer
         }
     }
 
     // MARK: - Poll loop
 
-    /// Starts (or restarts) the structured async poll loop.
-    ///
-    /// Safe to call multiple times — the previous task is always cancelled first.
-    /// `async` because it reads `@MainActor`-isolated properties via `await MainActor.run { }`.
-    /// All callers already wrap this in `Task { await ... }` or `await self?.start()`.
     func start() async {
         let scopes = await MainActor.run { scopeStore.activeScopes }
         log("RunnerStore › start — activeScopes=\(scopes)")
@@ -318,12 +262,6 @@ actor RunnerStore {
         }
     }
 
-    /// Computes the delay before the next poll: 10 s while jobs/actions are active,
-    /// otherwise the user's configured idle interval (clamped to ≥ 10 s). Also widened
-    /// to the idle interval while rate-limited.
-    ///
-    /// `async` because it reads `preferencesStore.pollingInterval` which is
-    /// `@MainActor`-isolated; uses `await MainActor.run { }` consistently with `fetch()`.
     private func nextPollInterval() async -> TimeInterval {
         let hasActiveJobs = jobs.contains { $0.status == "in_progress" || $0.status == "queued" }
         let hasActiveActions = actions.contains {
@@ -338,9 +276,6 @@ actor RunnerStore {
 
     // MARK: - Fetch
 
-    /// Performs one full poll cycle: snapshots active scopes and local runners,
-    /// fetches and enriches runners/jobs/action groups, then applies the result
-    /// to actor state and pushes it to `RunnerViewModel`.
     func fetch() async {
         await clearGhRateLimit()
 
@@ -391,8 +326,6 @@ actor RunnerStore {
 
     // MARK: - Apply result
 
-    /// Merges a completed fetch into actor state (runners, jobs, action groups, rate-limit)
-    /// and pushes the resulting snapshot to `RunnerViewModel` on the main actor.
     private func applyFetchResult(
         enrichedRunners: [Runner],
         jobResult: JobPollResult,
@@ -425,9 +358,6 @@ actor RunnerStore {
 
     // MARK: - fetchAndEnrichRunners
 
-    /// Fetches runners for the given scopes, resolves install paths, and enriches each
-    /// runner with live metrics. Writes busy-runner metrics back to `LocalRunnerStore`
-    /// and returns the enriched runner list.
     func fetchAndEnrichRunners(
         scopes: [String],
         localRunners: [RunnerModel],
