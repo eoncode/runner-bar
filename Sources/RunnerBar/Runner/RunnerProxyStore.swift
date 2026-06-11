@@ -64,6 +64,11 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
+                // Trim only newlines — `save` writes `value + "\n"` so we strip
+                // exactly that. `.whitespacesAndNewlines` would strip intentional
+                // surrounding spaces from credentials.
+                // `try?` is replaced with do/catch so non-ENOENT errors are logged
+                // rather than silently producing empty proxy fields.
                 let url: String
                 do {
                     url = try String(contentsOf: proxyURL, encoding: .utf8)
@@ -99,11 +104,20 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     /// Each file is handled independently so a failure on one does not mask
     /// a failure on the other. Both errors are logged; if either write fails
     /// `RunnerProxyStoreError.writeFailed` is thrown with all messages.
+    ///
+    /// - `.proxy` is written as `url + "\n"`, or removed when `config.url` is empty.
+    /// - `.proxycredentials` is written as `user + "\n" + password + "\n"`,
+    ///   or removed when both `config.user` and `config.password` are empty.
+    /// - All three fields are trimmed of leading/trailing whitespace before
+    ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
+    ///   load → save round-trip is idempotent. Callers must not rely on
+    ///   preserving surrounding whitespace in proxy credentials.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
         let base     = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
         let credURL  = base.appendingPathComponent(".proxycredentials")
 
+        // Trim defensively here so no call site can accidentally write whitespace to disk.
         let url            = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
         let user           = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
         let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -150,7 +164,7 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         return (user, credential)
     }
 
-    /// Writes the proxy URL to `destination`, or removes the file if `url` is empty.
+    /// Writes the proxy URL to `destination` as `url + "\n"`, or removes the file if `url` is empty.
     private static func writeProxyURL(_ url: String, to destination: URL) throws {
         if url.isEmpty {
             try removeIfPresent(at: destination)
@@ -159,8 +173,8 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         }
     }
 
-    /// Writes the proxy credentials (user + password) to `destination`,
-    /// or removes the file if both values are empty.
+    /// Writes the proxy credentials to `destination` as `user + "\n" + secret + "\n"`,
+    /// or removes the file when both values are empty.
     private static func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
         if user.isEmpty && secret.isEmpty {
             try removeIfPresent(at: destination)
@@ -169,7 +183,9 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         }
     }
 
-    /// Removes the file at `url` if it exists; silently ignores "file not found" errors.
+    /// Removes the file at `url` if it exists; silently ignores `NSFileNoSuchFileError`.
+    /// Any other error is re-thrown so callers can distinguish a missing file
+    /// (harmless) from a genuine I/O failure (permissions, locked volume, etc.).
     private static func removeIfPresent(at url: URL) throws {
         do {
             try FileManager.default.removeItem(at: url)
