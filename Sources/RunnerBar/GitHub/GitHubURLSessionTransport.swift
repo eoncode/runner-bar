@@ -14,13 +14,13 @@ import Foundation
 /// Only the four JSON value kinds that GitHub pagination actually produces are needed:
 /// object, array, string, number, bool, and null.
 private enum AnyJSON: Codable {
-    // swiftlint:disable missing_docs
     case object([String: AnyJSON])
     case array([AnyJSON])
     case string(String)
     case number(Double)
     case bool(Bool)
     case null
+
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let v = try? c.decode([String: AnyJSON].self) { self = .object(v); return }
@@ -43,7 +43,6 @@ private enum AnyJSON: Codable {
         case .null:          try c.encodeNil()
         }
     }
-    // swiftlint:enable missing_docs
 }
 
 // MARK: - Shared execution core
@@ -141,6 +140,8 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [AnyJSON] = []
     var didFailAuthentication = false
+    let decoder = JSONDecoder()
+    let encoder = JSONEncoder()
 
     while let urlString = nextURL {
         guard let token = githubToken() else {
@@ -168,7 +169,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
                 break
             }
             await rateLimitActor.clear()
-            if let page = try? JSONDecoder().decode([AnyJSON].self, from: data) {
+            if let page = try? decoder.decode([AnyJSON].self, from: data) {
                 allItems.append(contentsOf: page)
             } else {
                 log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
@@ -192,7 +193,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
     guard !allItems.isEmpty else { return nil }
-    return try? JSONEncoder().encode(allItems)
+    return try? encoder.encode(allItems)
 }
 
 // MARK: - Raw async (log endpoints)
