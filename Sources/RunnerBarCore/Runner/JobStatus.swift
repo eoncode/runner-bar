@@ -61,6 +61,9 @@ public enum JobStatus: Hashable, Sendable {
     /// - Note: `.unknown` is treated as **inactive** to avoid polling indefinitely
     ///   if GitHub introduces a new status value this client does not yet recognise.
     ///   Erring on the side of stopping the poll is safer than a stuck spinner.
+    ///   This is consistent with `WorkflowActionGroup.groupStatus`, which falls
+    ///   through to `.completed` whenever no run is `.inProgress` or `.queued` —
+    ///   an `.unknown` status run is therefore implicitly treated as completed there too.
     public var isActive: Bool {
         switch self {
         case .queued, .inProgress, .waiting, .requested, .pending: return true
