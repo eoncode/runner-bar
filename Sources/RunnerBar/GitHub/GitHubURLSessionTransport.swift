@@ -4,6 +4,11 @@
 import Foundation
 import RunnerBarCore
 
+// Hoisted to avoid re-instantiation on every call. Both types are thread-safe:
+// JSONDecoder/JSONEncoder have no mutable state after initialisation.
+private let sharedDecoder = JSONDecoder()
+private let sharedEncoder = JSONEncoder()
+
 // MARK: - Shared execution core
 
 /// The result of a single URLSession round-trip through `urlSessionExecute`.
@@ -99,8 +104,8 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [AnyJSON] = []
     var didFailAuthentication = false
-    let decoder = JSONDecoder()
-    let encoder = JSONEncoder()
+    let decoder = sharedDecoder
+    let encoder = sharedEncoder
 
     while let urlString = nextURL {
         guard let token = githubToken() else {
@@ -257,7 +262,7 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
 }
 
 /// Encodable body for the GitHub runner labels PUT endpoint.
-private struct LabelsBody: Encodable { let labels: [String] }
+private struct LabelsBody: Encodable { let labels: [String] } // periphery:ignore
 
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
 /// - Returns: The updated label names on success, `nil` on any failure.
@@ -269,7 +274,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
     log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
-    guard let bodyData = try? JSONEncoder().encode(LabelsBody(labels: labels)) else {
+    guard let bodyData = try? sharedEncoder.encode(LabelsBody(labels: labels)) else {
         log("patchRunnerLabels › failed to serialise request body")
         return nil
     }
@@ -287,7 +292,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
         /// The full list of labels now assigned to the runner.
         let labels: [Label]
     }
-    guard let resp = try? JSONDecoder().decode(LabelsResponse.self, from: outData) else {
+    guard let resp = try? sharedDecoder.decode(LabelsResponse.self, from: outData) else {
         let raw = String(data: outData, encoding: .utf8) ?? ""
         log("patchRunnerLabels › decode failed raw=\(raw.prefix(200))")
         return nil
@@ -322,7 +327,7 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) asy
         /// The short-lived token string returned by GitHub.
         let token: String
     }
-    guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
+    guard let resp = try? sharedDecoder.decode(TokenResponse.self, from: outputData) else {
         log("\(logPrefix) › decode failed (\(outputData.count)b)")
         return nil
     }

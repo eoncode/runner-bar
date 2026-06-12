@@ -196,6 +196,7 @@ final class OAuthService {
     // MARK: Token Exchange
 
     /// Request body for the GitHub OAuth token exchange.
+    // periphery:ignore
     private struct OAuthTokenRequest: Encodable {
         /// The GitHub OAuth app client ID.
         let clientID: String
