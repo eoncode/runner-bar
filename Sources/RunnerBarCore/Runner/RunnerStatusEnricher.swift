@@ -246,7 +246,8 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
                 let envelope = try decoder.decode(RunnerListEnvelope.self, from: data)
                 log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) returned \(envelope.runners.count) runners (total_count=\(envelope.totalCount))")
                 allRunners.append(contentsOf: envelope.runners)
-                guard envelope.runners.count == perPage else { break }
+                guard envelope.runners.count == perPage,
+                      allRunners.count < envelope.totalCount else { break }
                 page += 1
             } catch {
                 log("[Enricher] fetchRunnersForScope \(scopeURL) page \(page) — JSONDecoder failed: \(error)")

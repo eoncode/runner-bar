@@ -239,6 +239,7 @@ actor LocalRunnerStore {
     /// is never empty and metrics appear on first runner appearance.
     func refresh() {
         log("LocalRunnerStore › refresh() — fire-and-forget wrapper")
+        refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             await self?.performRefresh()
         }

@@ -306,6 +306,7 @@ actor RunnerStore {
                 guard !Task.isCancelled else { break }
                 log("RunnerStore › pollingInterval changed to \(newInterval) — restarting poll loop")
                 await self?._startObservingPreferences()
+                guard !Task.isCancelled else { break }
                 await self?.start()
                 break
             }
@@ -341,6 +342,7 @@ actor RunnerStore {
                 guard !Task.isCancelled else { break }
                 log("RunnerStore › ScopeStore.activeScopes changed — restarting fetch")
                 await self?._startObservingScopes()
+                guard !Task.isCancelled else { break }
                 await self?.start()
                 break
             }
