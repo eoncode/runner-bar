@@ -266,7 +266,9 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
     log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
-    guard let bodyData = try? JSONSerialization.data(withJSONObject: ["labels": labels]) else {
+    /// Encodable body for the GitHub runner labels PUT endpoint.
+    private struct LabelsBody: Encodable { let labels: [String] }
+    guard let bodyData = try? JSONEncoder().encode(LabelsBody(labels: labels)) else {
         log("patchRunnerLabels › failed to serialise request body")
         return nil
     }

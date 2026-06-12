@@ -36,6 +36,9 @@ public enum AnyJSON: Codable {
     /// Decodes a single JSON value into the appropriate `AnyJSON` case.
     ///
     /// Decode order is intentional and must not be changed without care:
+    /// - `object` and `array` are tried first because a `singleValueContainer` for a plain
+    ///   string or number will simply fail to decode as `[String: AnyJSON]` or `[AnyJSON]`,
+    ///   keeping the fast-path correct; placing them first makes the intent explicit.
     /// - `Bool` is tried before `Double` because on Apple platforms `JSONDecoder` decodes
     ///   `true`/`false` as `Bool` — but if `Double` were tried first it would succeed for
     ///   any valid number, causing booleans to be misidentified as `.number(1.0)` / `.number(0.0)`.
