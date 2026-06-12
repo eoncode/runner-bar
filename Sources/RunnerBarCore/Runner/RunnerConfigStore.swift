@@ -59,6 +59,16 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// Private initialiser — use `RunnerConfigStore.shared`.
     private init() {}
 
+    // MARK: Private helpers
+
+    /// Strips the UTF-8 BOM (`0xEF 0xBB 0xBF`) from `data` if present.
+    ///
+    /// The GitHub runner agent emits a UTF-8 BOM at the start of `.runner` files on some
+    /// platforms. `JSONDecoder` rejects the BOM, so it must be removed before decoding.
+    private func stripBOM(from data: Data) -> Data {
+        data.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) ? Data(data.dropFirst(3)) : data
+    }
+
     // MARK: Public
 
     /// Loads the typed runner config from `installPath/.runner`.
@@ -71,10 +81,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
         let data: Data = try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 do {
-                    var raw = try Data(contentsOf: url)
-                    if raw.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) {
-                        raw.removeFirst(3)
-                    }
+                    let raw = self.stripBOM(from: try Data(contentsOf: url))
                     continuation.resume(returning: raw)
                 } catch {
                     continuation.resume(throwing: error)
@@ -110,12 +117,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                 // Read-modify-write: load existing keys so agent-managed keys are preserved.
                 var raw: [String: AnyJSON] = [:]
                 if let existingData = try? Data(contentsOf: url) {
-                    let data: Data
-                    if existingData.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) {
-                        data = Data(existingData.dropFirst(3))
-                    } else {
-                        data = existingData
-                    }
+                    let data = self.stripBOM(from: existingData)
                     if let dict = try? self.decoder.decode([String: AnyJSON].self, from: data) {
                         raw = dict
                     } else {
