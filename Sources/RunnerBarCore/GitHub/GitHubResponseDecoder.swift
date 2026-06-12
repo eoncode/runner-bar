@@ -50,6 +50,10 @@ func handleRateLimitResponse(
         return
     }
 
+    // Log the response body to aid debugging — rate-limit responses from GitHub
+    // often include a message field explaining the specific limit that was hit.
+    logErrorBody(data, endpoint: endpoint, status: statusCode)
+
     let resetAt: TimeInterval?
     if let retryAfter {
         resetAt = Date().timeIntervalSince1970 + retryAfter
