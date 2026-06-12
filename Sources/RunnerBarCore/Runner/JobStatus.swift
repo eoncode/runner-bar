@@ -160,15 +160,28 @@ public enum JobConclusion: Hashable, Sendable {
         }
     }
 
-    /// Returns `true` for terminal failure-like conclusions that should trigger alerts.
+    /// Returns `true` for terminal failure-like conclusions that should trigger alerts
+    /// and display the failure badge.
     ///
-    /// - Note: `.cancelled` and `.skipped` are intentionally excluded — both are
-    ///   user-initiated or dependency-driven outcomes, not CI errors. Treating them
-    ///   as failures would trigger the failure hook for routine branch cancellations
-    ///   and conditional-skip patterns.
-    /// - Note: `.neutral` is also excluded — it represents an inconclusive outcome
-    ///   with no definitive pass/fail signal, not an error condition. Same class of
-    ///   outcome as `.skipped`: informational, not actionable.
+    /// **Inclusion rationale:**
+    /// - `.failure` — a step explicitly failed.
+    /// - `.timedOut` — the job exceeded its configured timeout; always actionable.
+    /// - `.startupFailure` — the runner itself failed to initialise; indicates
+    ///   infrastructure problems that need attention.
+    /// - `.actionRequired` — a required check (e.g. a code-scanning tool) determined
+    ///   that manual review is needed before the run can be considered passing.
+    ///   Intentionally treated as a failure so the badge and failure hook both fire,
+    ///   prompting the developer to act. If your workflow uses `action_required` for
+    ///   routine deployment approvals and you find this noisy, introduce a separate
+    ///   predicate at the call site rather than removing it here.
+    ///
+    /// **Exclusion rationale:**
+    /// - `.cancelled` — user-initiated or triggered by a superseding push; not a CI
+    ///   error. The failure hook uses a separate `isHookConclusion` predicate that
+    ///   additionally includes `.cancelled` for hook-firing purposes.
+    /// - `.skipped` — dependency-driven, controlled by `if:` conditions; informational.
+    /// - `.neutral` — inconclusive outcome with no definitive pass/fail signal;
+    ///   same class as `.skipped`: informational, not actionable.
     public var isFailure: Bool {
         switch self {
         case .failure, .timedOut, .startupFailure, .actionRequired: return true
