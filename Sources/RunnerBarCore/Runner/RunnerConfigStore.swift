@@ -75,7 +75,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
         let data: Data = try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 do {
-                    let raw = self.stripBOM(from: try Data(contentsOf: url))
+                    let raw = Self.stripBOM(from: try Data(contentsOf: url))
                     continuation.resume(returning: raw)
                 } catch {
                     continuation.resume(throwing: error)
@@ -111,7 +111,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                 // Read-modify-write: load existing keys so agent-managed keys are preserved.
                 var raw: [String: AnyJSON] = [:]
                 if let existingData = try? Data(contentsOf: url) {
-                    let data = self.stripBOM(from: existingData)
+                    let data = Self.stripBOM(from: existingData)
                     if let dict = try? self.decoder.decode([String: AnyJSON].self, from: data) {
                         raw = dict
                     } else {
