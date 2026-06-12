@@ -47,12 +47,6 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// Decoder used for reading `.runner` JSON.
     private let decoder = JSONDecoder()
 
-    /// Encoder used for writing the merged `.runner` JSON.
-    private let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return e
-    }()
 
     // MARK: Init
 
@@ -154,7 +148,9 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                 if let v = config.agentId             { raw[RunnerConfig.CodingKeys.agentId.rawValue]              = .int(v) }
 
                 do {
-                    let data = try self.encoder.encode(raw)
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                    let data = try encoder.encode(raw)
                     try data.write(to: url, options: .atomic)
                     log("RunnerConfigStore › saved config to \(url.path)")
                     continuation.resume()
