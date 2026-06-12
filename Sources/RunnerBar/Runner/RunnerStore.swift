@@ -291,6 +291,8 @@ actor RunnerStore {
     private func _startObservingPreferences() {
         intervalObservationTask?.cancel()
         let injectedStore = preferencesStore
+        intervalObservationTask?.cancel()
+        let injectedStore = preferencesStore
         intervalObservationTask = Task { [weak self] in
             let (stream, continuation) = AsyncStream<Int>.makeStream()
             let observer: PreferencesObserver = await MainActor.run {
@@ -320,6 +322,8 @@ actor RunnerStore {
     /// doc-comment for the full rationale, including why the observer must be
     /// retained in the Task's async scope beyond the `MainActor.run` closure.
     private func _startObservingScopes() {
+        scopeObservationTask?.cancel()
+        let injectedStore = scopeStore
         scopeObservationTask?.cancel()
         let injectedStore = scopeStore
         scopeObservationTask = Task { [weak self] in
