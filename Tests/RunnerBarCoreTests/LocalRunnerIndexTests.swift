@@ -10,14 +10,14 @@ import Testing
 ///
 /// Each test receives its own `UserDefaults` suite (UUID-namespaced) via `makeSuite()` so tests
 /// are fully isolated from each other and from the app's real defaults. The suite is removed
-/// after each test.
+/// after each test via `defer`.
 @Suite("LocalRunnerIndex")
 struct LocalRunnerIndexTests {
 
     // MARK: - Helpers
 
     /// Returns a fresh, UUID-namespaced `UserDefaults` suite and its suite name.
-    /// Call `UserDefaults.standard.removePersistentDomain(forName:)` with the name when done.
+    /// Callers are responsible for cleanup via `UserDefaults.standard.removePersistentDomain(forName:)`.
     private static func makeSuite() -> (UserDefaults, String) {
         let suiteName = "com.runnerbar.tests.LocalRunnerIndex.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
