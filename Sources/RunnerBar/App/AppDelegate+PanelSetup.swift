@@ -208,6 +208,19 @@ extension AppDelegate: NSPopoverDelegate {
         // ℹ️ `RunnerViewModel.shared` is a fatalError accessor — the live instance
         // is AppDelegate.observable, injected explicitly into both stores.
 
+        // RunnerStore.init no longer accepts @MainActor-isolated default values
+        // (Swift 6: default values for parameters must not be @MainActor-isolated
+        // in a nonisolated context). AppPreferencesStore.shared and ScopeStore.shared
+        // are therefore passed explicitly here, where we are already on the @MainActor.
+        runnerStore = RunnerStore(
+            viewModel: observable,
+            localRunnerStore: localRunnerStore,
+            preferencesStore: AppPreferencesStore.shared,
+            scopeStore: ScopeStore.shared,
+            onStatusUpdate: { [weak self] in self?.updateStatusIcon() }
+        )
+        log("AppDelegate › setupCombineSubscriptions — RunnerStore created with injected stores")
+
         // FIX: Await LocalRunnerStore.refreshAsync() before starting the poll loop.
         //
         // refresh() (fire-and-forget) spawns a Task and returns immediately.

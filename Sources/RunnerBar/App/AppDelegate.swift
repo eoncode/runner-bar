@@ -114,14 +114,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// eagerly during `AppDelegate.init()` — before `configure()` runs —
     /// triggering the `fatalError` guard inside `LocalRunnerStore.shared`.
     lazy var localRunnerStore: LocalRunnerStore = .shared
-    /// Owned `RunnerStore` actor — injected with `observable`, `localRunnerStore`, and an
-    /// `onStatusUpdate` closure so the actor body never touches `NSApp.delegate` directly
-    /// (Swift 6 / PR #1303 Principle #4: no singleton access inside actor bodies).
-    lazy var runnerStore: RunnerStore = RunnerStore(
-        viewModel: observable,
-        localRunnerStore: localRunnerStore,
-        onStatusUpdate: { [weak self] in self?.updateStatusIcon() }
-    )
+    /// Owned `RunnerStore` actor.
+    ///
+    /// ⚠️ This property has no lazy default body. The sole init site is
+    /// `AppDelegate+PanelSetup.swift` → `setupCombineSubscriptions()`, which
+    /// runs on the `@MainActor` and can therefore pass `AppPreferencesStore.shared`
+    /// and `ScopeStore.shared` as explicit arguments. Never add a `lazy var` body
+    /// here — doing so creates a dual-init path: if anything reads `runnerStore`
+    /// before `setupCombineSubscriptions()` runs, a second `RunnerStore` instance
+    /// with live observation tasks would be created and then silently replaced,
+    /// causing a brief window with two competing poll loops.
+    var runnerStore: RunnerStore!
     /// The last nav destination the user was on before the popover was closed or hidden.
     /// Restored by `openPanel()` so the user lands back where they left off.
     var savedNavState: NavState?
