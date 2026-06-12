@@ -1,15 +1,12 @@
 // GitHubResponseDecoder.swift
-// RunnerBar
+// RunnerBarCore
 
 import Foundation
 
 // MARK: - Error logging
 
 /// Logs the response body (up to 400 chars) for non-2xx responses.
-///
-/// Intentionally internal: called from `GitHubURLSessionTransport` across the
-/// file boundary introduced by the transport split. No side-effects beyond logging.
-func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
+public func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
     guard let data, !data.isEmpty else { return }
     let body = String(data: data, encoding: .utf8) ?? "<non-UTF8, \(data.count)b>"
     let preview = body.count > 400 ? String(body.prefix(400)) + "…" : body
@@ -27,7 +24,7 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 /// GitHub uses this for per-minute abuse / concurrency throttling. The `Retry-After`
 /// value (seconds) is used as the reset delay so the timer honours the server window.
 /// See https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api#secondary-rate-limits
-func handleRateLimitResponse(
+public func handleRateLimitResponse(
     statusCode: Int,
     _ data: Data?,
     response: HTTPURLResponse,
@@ -59,9 +56,7 @@ func handleRateLimitResponse(
 // MARK: - Pagination
 
 /// Parses the `Link` header from a GitHub paginated response and returns the `next` URL, if any.
-///
-/// Intentionally internal: called from `GitHubURLSessionTransport` across the file boundary.
-func extractNextURL(from header: String?) -> String? {
+public func extractNextURL(from header: String?) -> String? {
     guard let header else { return nil }
     for part in header.components(separatedBy: ",") {
         let segments = part.components(separatedBy: ";")
