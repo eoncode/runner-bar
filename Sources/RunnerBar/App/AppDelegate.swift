@@ -132,7 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Retained handle for the sign-out observation task started in
     /// `setupSignOutSubscription()` (AppDelegate+Polling.swift).
     /// Keeping a strong reference ensures the task is never silently abandoned.
-    // periphery:ignore - write-only by design; assignment keeps the Task alive
     var signOutTask: Task<Void, Never>?
     /// Mirrors `popover.isShown`. Kept separately because `NSPopover.isShown` is not
     /// reliable immediately after `performClose` — our flag is the source of truth.

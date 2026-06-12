@@ -157,3 +157,30 @@ For complex conflicts mid-stack, it can help to rebase one branch at a time and 
 | Bottom PR merges | Retarget next PR to `main`, rebase locally, push |
 | Conflict during rebase | Fix file, `git add`, `git rebase --continue` |
 | Force push | Always `--force-with-lease`, never `--force` |
+
+---
+
+## Current Stack: `refactor-tweak-branch`
+
+> ⚠️ Historical note for the current PR stack. Remove or update this section once PR #1340 lands so branch names do not become stale.
+
+The active stack for Codable + concurrency tweaks follows this plan:
+
+```text
+main
+ └── refactor-tweak-branch              ← umbrella PR (targets main)
+       └── tweak/oauth-codable          ← #1335: Codable in OAuthService
+             └── tweak/transport-codable  ← #1334: Codable in transport layer
+                   └── tweak/dispatchqueue  ← DispatchQueue → async/await cleanup
+```
+
+Branches are cut **incrementally** — each child is only created once its parent is stable. No pre-created empty branches.
+
+**Merge order** (bottom-up — each PR must land before its parent can retarget `main`):
+
+| Order | Branch | PR | Targets |
+|---|---|---|---|
+| 1 | `tweak/dispatchqueue` | — | `tweak/transport-codable` |
+| 2 | `tweak/transport-codable` | #1334 | `tweak/oauth-codable` |
+| 3 | `tweak/oauth-codable` | #1335 | `refactor-tweak-branch` |
+| 4 | `refactor-tweak-branch` | #1340 | `main` |

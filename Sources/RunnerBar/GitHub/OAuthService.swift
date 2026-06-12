@@ -195,6 +195,52 @@ final class OAuthService {
 
     // MARK: Token Exchange
 
+    /// Request body for the GitHub OAuth token exchange.
+    private struct OAuthTokenRequest: Encodable { // periphery:ignore
+        /// The GitHub OAuth app client ID.
+        let clientID: String
+        /// The GitHub OAuth app client secret.
+        let clientSecret: String
+        /// The authorization code received from GitHub's redirect callback.
+        let code: String
+
+        // swiftlint:disable missing_docs
+        private enum CodingKeys: String, CodingKey {
+            case clientID = "client_id"
+            case clientSecret = "client_secret"
+            case code
+        }
+        // swiftlint:enable missing_docs
+    }
+
+    /// Response body from the GitHub OAuth token exchange.
+    /// GitHub returns HTTP 200 even on failure, so both `accessToken` and `error` are optional.
+    private struct OAuthTokenResponse: Decodable {
+        /// The access token returned on success; `nil` when GitHub reports an error.
+        let accessToken: String?
+        /// Short error code returned by GitHub on failure (e.g. `"bad_verification_code"`).
+        let error: String?
+        /// Human-readable description of the error, if present.
+        let errorDescription: String?
+
+        // swiftlint:disable missing_docs
+        private enum CodingKeys: String, CodingKey {
+            case accessToken = "access_token"
+            case error
+            case errorDescription = "error_description"
+        }
+        // swiftlint:enable missing_docs
+
+        /// Returns the names of modelled fields that are non-nil, for safe diagnostic logging.
+        var debugKeys: [String] {
+            var keys: [String] = []
+            if accessToken != nil { keys.append("access_token") }
+            if error != nil { keys.append("error") }
+            if errorDescription != nil { keys.append("error_description") }
+            return keys
+        }
+    }
+
     /// POSTs the authorization code to GitHub and saves the returned access token to Keychain.
     private func exchangeCode(_ code: String) async {
         log("OAuthService › exchangeCode — POST to GitHub")
@@ -203,27 +249,29 @@ final class OAuthService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "client_id": OAuthSecrets.clientID,
-            "client_secret": OAuthSecrets.clientSecret,
-            "code": code
-        ])
+        req.httpBody = try? JSONEncoder().encode(
+            OAuthTokenRequest(
+                clientID: OAuthSecrets.clientID,
+                clientSecret: OAuthSecrets.clientSecret,
+                code: code
+            )
+        )
         guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+              let response = try? JSONDecoder().decode(OAuthTokenResponse.self, from: data)
         else {
             log("OAuthService › exchangeCode — network/parse failure, calling onCompletion(false)")
             onCompletion?(false)
             return
         }
-        // GitHub returns 200 even on failure; check for an error field before access_token.
-        if let errorCode = json["error"] as? String {
-            let desc = json["error_description"] as? String ?? ""
+        // GitHub returns 200 even on failure; check for an error field before accessToken.
+        if let errorCode = response.error {
+            let desc = response.errorDescription ?? ""
             log("OAuthService › exchangeCode: GitHub error=\(errorCode) \(desc)")
             onCompletion?(false)
             return
         }
-        guard let token = json["access_token"] as? String, !token.isEmpty else {
-            log("OAuthService › exchangeCode: no access_token in response — keys=\(json.keys.sorted())")
+        guard let token = response.accessToken, !token.isEmpty else {
+            log("OAuthService › exchangeCode: no access_token in response — keys=\(response.debugKeys)")
             onCompletion?(false)
             return
         }

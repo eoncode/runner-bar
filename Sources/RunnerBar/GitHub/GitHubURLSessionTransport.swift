@@ -2,6 +2,14 @@
 // RunnerBar
 
 import Foundation
+import RunnerBarCore
+
+/// Shared decoder hoisted to avoid re-instantiation on every call.
+/// Thread-safe: `JSONDecoder` has no mutable state after initialisation.
+private let sharedDecoder = JSONDecoder()
+/// Shared encoder hoisted to avoid re-instantiation on every call.
+/// Thread-safe: `JSONEncoder` has no mutable state after initialisation.
+private let sharedEncoder = JSONEncoder()
 
 // MARK: - Shared execution core
 
@@ -96,8 +104,10 @@ func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async ->
 /// Returns `nil` on auth failure; returns partial results if pagination is stopped by a rate limit.
 func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
-    var allItems: [[String: Any]] = []
+    var allItems: [AnyJSON] = []
     var didFailAuthentication = false
+    let decoder = sharedDecoder
+    let encoder = sharedEncoder
 
     while let urlString = nextURL {
         guard let token = githubToken() else {
@@ -125,7 +135,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
                 break
             }
             await rateLimitActor.clear()
-            if let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            if let page = try? decoder.decode([AnyJSON].self, from: data) {
                 allItems.append(contentsOf: page)
             } else {
                 log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
@@ -149,7 +159,7 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
     guard !allItems.isEmpty else { return nil }
-    return try? JSONSerialization.data(withJSONObject: allItems)
+    return try? encoder.encode(allItems)
 }
 
 // MARK: - Raw async (log endpoints)
@@ -253,6 +263,12 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
     return success
 }
 
+/// Encodable body for the GitHub runner labels PUT endpoint.
+private struct LabelsBody: Encodable {
+    /// The label names to set on the runner.
+    let labels: [String] // periphery:ignore
+}
+
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
 /// - Returns: The updated label names on success, `nil` on any failure.
 @discardableResult
@@ -263,7 +279,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
     log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
-    guard let bodyData = try? JSONSerialization.data(withJSONObject: ["labels": labels]) else {
+    guard let bodyData = try? sharedEncoder.encode(LabelsBody(labels: labels)) else {
         log("patchRunnerLabels › failed to serialise request body")
         return nil
     }
@@ -281,7 +297,7 @@ func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String
         /// The full list of labels now assigned to the runner.
         let labels: [Label]
     }
-    guard let resp = try? JSONDecoder().decode(LabelsResponse.self, from: outData) else {
+    guard let resp = try? sharedDecoder.decode(LabelsResponse.self, from: outData) else {
         let raw = String(data: outData, encoding: .utf8) ?? ""
         log("patchRunnerLabels › decode failed raw=\(raw.prefix(200))")
         return nil
@@ -316,7 +332,7 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) asy
         /// The short-lived token string returned by GitHub.
         let token: String
     }
-    guard let resp = try? JSONDecoder().decode(TokenResponse.self, from: outputData) else {
+    guard let resp = try? sharedDecoder.decode(TokenResponse.self, from: outputData) else {
         log("\(logPrefix) › decode failed (\(outputData.count)b)")
         return nil
     }
