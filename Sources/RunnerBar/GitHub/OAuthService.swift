@@ -198,11 +198,11 @@ final class OAuthService {
     /// Request body for the GitHub OAuth token exchange.
     private struct OAuthTokenRequest: Encodable { // periphery:ignore
         /// The GitHub OAuth app client ID.
-        let clientID: String
+        let clientID: String // periphery:ignore
         /// The GitHub OAuth app client secret.
-        let clientSecret: String
+        let clientSecret: String // periphery:ignore
         /// The authorization code received from GitHub's redirect callback.
-        let code: String
+        let code: String // periphery:ignore
 
         // swiftlint:disable missing_docs
         private enum CodingKeys: String, CodingKey {
