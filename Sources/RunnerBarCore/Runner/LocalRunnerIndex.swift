@@ -1,5 +1,6 @@
 // LocalRunnerIndex.swift
-// RunnerBar
+// RunnerBarCore
+
 import Foundation
 
 // MARK: - LocalRunnerIndex
@@ -10,7 +11,7 @@ import Foundation
 /// Non-isolated: owned exclusively by the `LocalRunnerStore` actor, which serializes all access.
 /// `UserDefaults` read/write of individual keys is thread-safe; this class uses no KVO or
 /// change notifications on `UserDefaults`, so no main-actor coordination is required.
-final class LocalRunnerIndex {
+public final class LocalRunnerIndex {
 
     // MARK: - Storage key
 
@@ -20,26 +21,30 @@ final class LocalRunnerIndex {
     // MARK: - State
 
     /// Maps runnerName → installPath, persisted to `UserDefaults`.
-    private(set) var runnerIndex: [String: String] = [:]
+    public private(set) var runnerIndex: [String: String] = [:]
 
     // MARK: - Init
 
+    /// The `UserDefaults` store used for persistence. Defaults to `.standard`; injectable for tests.
+    private let defaults: UserDefaults
+
     /// Initialises the index and loads the persisted entries from `UserDefaults`.
-    init() {
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         loadIndex()
     }
 
     // MARK: - Mutations
 
     /// Adds or updates the index entry for `name`, mapping it to `installPath`, then persists.
-    func register(name: String, installPath: String) {
+    public func register(name: String, installPath: String) {
         log("LocalRunnerIndex › register — '\(name)' at \(installPath) (was: \(String(describing: runnerIndex[name])))")
         runnerIndex[name] = installPath
         persistIndex()
     }
 
     /// Removes `name` from the persisted index.
-    func unregister(name: String) {
+    public func unregister(name: String) {
         log("LocalRunnerIndex › unregister '\(name)'")
         runnerIndex.removeValue(forKey: name)
         persistIndex()
@@ -49,14 +54,14 @@ final class LocalRunnerIndex {
 
     /// Hydrates `runnerIndex` from `UserDefaults` at init time.
     private func loadIndex() {
-        runnerIndex = UserDefaults.standard
+        runnerIndex = defaults
             .dictionary(forKey: Self.indexKey) as? [String: String] ?? [:]
         log("LocalRunnerIndex › loadIndex — \(runnerIndex.count) entry(ies): \(runnerIndex.keys.sorted())")
     }
 
     /// Writes the current `runnerIndex` to `UserDefaults`.
     private func persistIndex() {
-        UserDefaults.standard.set(runnerIndex, forKey: Self.indexKey)
+        defaults.set(runnerIndex, forKey: Self.indexKey)
         log("LocalRunnerIndex › persistIndex — \(runnerIndex.count) entry(ies) written")
     }
 }

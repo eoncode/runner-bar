@@ -1,8 +1,7 @@
 // GitHubURLSessionTransport.swift
-// RunnerBar
+// RunnerBarCore
 
 import Foundation
-import RunnerBarCore
 
 /// Shared decoder hoisted to avoid re-instantiation on every call.
 /// Thread-safe: `JSONDecoder` has no mutable state after initialisation.
@@ -17,10 +16,13 @@ private let sharedEncoder = JSONEncoder()
 private enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
     case success(Data, statusCode: Int)
-    /// Non-2xx response that is not a rate-limit; the request failed.
+    /// Non-2xx response that is not a rate-limit or permission error; the request failed.
     case httpError(Int)
-    /// 403 or 429 that triggered the rate-limit actor.
+    /// 403 or 429 that triggered the rate-limit actor (genuine rate limit).
     case rateLimited
+    /// 403 that did NOT trigger the rate-limit actor — token scope, revoked PAT, or
+    /// repo access denial. The actor is not armed; the token needs attention.
+    case permissionDenied
     /// Network-level error (timeout, no connectivity, etc.).
     case networkError(Error)
 }
@@ -49,7 +51,7 @@ private func urlSessionExecute(
     useRawAccept: Bool = false,
     configure: (URLRequest) -> URLRequest = { $0 }
 ) async -> ExecuteResult {
-    guard let token = githubToken() else {
+    guard let token = githubTokenCore() else {
         log("\(logTag) › no token available")
         return .networkError(URLError(.userAuthenticationRequired))
     }
@@ -68,10 +70,22 @@ private func urlSessionExecute(
             return .networkError(URLError(.badServerResponse))
         }
         if http.statusCode == 403 || http.statusCode == 429 {
+            let wasRateLimited = await rateLimitActor.isLimited
             await handleRateLimitResponse(
                 statusCode: http.statusCode, data, response: http, endpoint: urlString
             )
-            return .rateLimited
+            let isNowRateLimited = await rateLimitActor.isLimited
+            // If the actor was armed by this call it's a genuine rate limit.
+            // If it wasn't armed (permission-denied 403), return .permissionDenied
+            // so callers can distinguish token-scope problems from rate limits.
+            if isNowRateLimited && !wasRateLimited {
+                return .rateLimited
+            } else if isNowRateLimited {
+                // Actor was already armed before this request (ongoing rate limit).
+                return .rateLimited
+            } else {
+                return .permissionDenied
+            }
         }
         guard (200..<300).contains(http.statusCode) else {
             logErrorBody(data, endpoint: urlString, status: http.statusCode)
@@ -89,10 +103,10 @@ private func urlSessionExecute(
 
 /// Fetches a single GitHub API page using `URLSession.data(for:)` async/await.
 ///
-/// Intentionally internal: this is a stable call site consumed by `RunnerStore` and other
-/// module-level consumers across files. The underlying `urlSessionExecute` remains private
-/// to this file.
-func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
+/// Intentionally internal to the module: this is a stable call site consumed by `RunnerStore`
+/// and other module-level consumers across files. The underlying `urlSessionExecute` remains
+/// private to this file.
+public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     guard case .success(let data, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionAPIAsync"
     ) else { return nil }
@@ -101,16 +115,19 @@ func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async ->
 
 /// Fetches and concatenates all pages for a GitHub paginated endpoint.
 /// Follows `Link: <url>; rel="next"` until all pages are consumed or an error stops pagination.
-/// Returns `nil` on auth failure; returns partial results if pagination is stopped by a rate limit.
-func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+///
+/// - Returns `nil` on auth failure (401, permission-denied 403, or no token).
+/// - Returns partial results if pagination is stopped by a genuine rate limit.
+public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [AnyJSON] = []
     var didFailAuthentication = false
+    var didFailPermission = false
     let decoder = sharedDecoder
     let encoder = sharedEncoder
 
     while let urlString = nextURL {
-        guard let token = githubToken() else {
+        guard let token = githubTokenCore() else {
             log("urlSessionAPIPaginated › no token available, stopping pagination")
             didFailAuthentication = true
             break
@@ -127,7 +144,16 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
                 break
             }
             if http.statusCode == 403 || http.statusCode == 429 {
+                let wasRateLimited = await rateLimitActor.isLimited
                 await handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
+                let isNowRateLimited = await rateLimitActor.isLimited
+                if !isNowRateLimited && !wasRateLimited {
+                    // handleRateLimitResponse did not arm the actor — this is a
+                    // permission-denied 403 (wrong scope, revoked PAT, repo access denial).
+                    // Treat identically to 401: discard partial results and return nil.
+                    log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
+                    didFailPermission = true
+                }
                 break
             }
             guard (200..<300).contains(http.statusCode) else {
@@ -148,9 +174,9 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
         }
     }
 
-    if didFailAuthentication {
+    if didFailAuthentication || didFailPermission {
         if !allItems.isEmpty {
-            log("urlSessionAPIPaginated › authentication failed mid-pagination — discarding \(allItems.count) partial items")
+            log("urlSessionAPIPaginated › auth/permission failure mid-pagination — discarding \(allItems.count) partial items")
         }
         return nil
     }
@@ -167,10 +193,10 @@ func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) asyn
 /// Fetches raw bytes from a GitHub API endpoint that 302-redirects to S3.
 ///
 /// - Note: This function uses `makeRawRequest` which sets `Accept: application/vnd.github.v3.raw`.
-///   Apple’s URLSession strips the `Authorization` header before following cross-origin
+///   Apple's URLSession strips the `Authorization` header before following cross-origin
 ///   redirects (RFC 7235), so the Bearer token is never forwarded to S3.
 ///   See `makeRawRequest` in `GitHubRequestBuilder.swift` for full details.
-func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+public func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     guard case .success(let data, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionRaw", useRawAccept: true
     ) else { return nil }
@@ -182,11 +208,11 @@ func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data
 
 /// Sends a POST to the given GitHub API endpoint.
 ///
-/// Intentionally internal: backs `ghPost` and the runner mutation helpers below,
+/// Intentionally internal to the module: backs `ghPost` and the runner mutation helpers below,
 /// all of which are called from outside this file.
 /// - Returns: Response body on 2xx (`Data()` for 204 No Content), `nil` on failure.
 @discardableResult
-func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
+public func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPost") { req in
         var r = req
         r.httpMethod = "POST"
@@ -203,7 +229,7 @@ func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval
 
 /// Sends a PUT to the given GitHub API endpoint with a JSON body.
 /// - Returns: Response body on 2xx, `nil` on failure.
-func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) async -> Data? {
+public func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) async -> Data? {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPut") { req in
         var r = req
         r.httpMethod = "PUT"
@@ -219,7 +245,7 @@ func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) a
 /// Sends a DELETE to the given GitHub API endpoint.
 /// - Returns: `true` on 2xx, `false` on any failure.
 @discardableResult
-func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> Bool {
+public func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> Bool {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionDelete") { req in
         var r = req
         r.httpMethod = "DELETE"
@@ -236,13 +262,13 @@ func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> B
 
 /// Calls the GitHub REST API for a single page via URLSession.
 /// Returns `nil` when no token is available or the request fails.
-func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
+public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
 }
 
 /// Calls the GitHub REST API for all pages via URLSession.
 /// Returns `nil` when no token is available or the request fails.
-func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+public func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     await urlSessionAPIPaginated(endpoint, timeout: timeout)
 }
 
@@ -251,7 +277,7 @@ func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Dat
 /// Directly deregisters a runner from GitHub via DELETE.
 /// - Returns: `true` on success, `false` if the scope is invalid or the request fails.
 @discardableResult
-func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
+public func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
     guard let scope = Scope.parse(scopeString) else {
         log("deleteRunnerByID › invalid scope: \(scopeString)")
         return false
@@ -263,23 +289,17 @@ func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> Bool {
     return success
 }
 
-/// Encodable body for the GitHub runner labels PUT endpoint.
-private struct LabelsBody: Encodable {
-    /// The label names to set on the runner.
-    let labels: [String] // periphery:ignore
-}
-
 /// Replaces ALL custom labels on the runner identified by `runnerID` within `scope`.
 /// - Returns: The updated label names on success, `nil` on any failure.
 @discardableResult
-func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
+public func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
     guard let scope = Scope.parse(scopeString) else {
         log("patchRunnerLabels › invalid scope: \(scopeString)")
         return nil
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
     log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
-    guard let bodyData = try? sharedEncoder.encode(LabelsBody(labels: labels)) else {
+    guard let bodyData = try? sharedEncoder.encode(["labels": labels]) else {
         log("patchRunnerLabels › failed to serialise request body")
         return nil
     }
@@ -341,7 +361,7 @@ private func fetchRunnerToken(type: String, scope: Scope, logPrefix: String) asy
 
 /// Fetches a short-lived runner registration token for the given scope.
 /// - Returns: The registration token string, or `nil` on failure.
-func fetchRegistrationToken(scope scopeString: String) async -> String? {
+public func fetchRegistrationToken(scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRegistrationToken › invalid scope: \(scopeString)")
         return nil
@@ -355,7 +375,7 @@ func fetchRegistrationToken(scope scopeString: String) async -> String? {
 
 /// Fetches a runner removal token for the given scope.
 /// - Returns: The removal token string, or `nil` on failure.
-func fetchRemovalToken(scope scopeString: String) async -> String? {
+public func fetchRemovalToken(scope scopeString: String) async -> String? {
     guard let scope = Scope.parse(scopeString) else {
         log("fetchRemovalToken › invalid scope: \(scopeString)")
         return nil
@@ -372,7 +392,7 @@ func fetchRemovalToken(scope scopeString: String) async -> String? {
 /// Thin convenience wrapper over `urlSessionPost` for fire-and-forget mutation endpoints.
 /// - Returns: `true` if the POST returned a non-nil result (2xx), `false` otherwise.
 @discardableResult
-func ghPost(_ endpoint: String) async -> Bool {
+public func ghPost(_ endpoint: String) async -> Bool {
     let result = await urlSessionPost(endpoint)
     let success = result != nil
     log("ghPost › \(endpoint) success=\(success)")
@@ -380,10 +400,20 @@ func ghPost(_ endpoint: String) async -> Bool {
 }
 
 /// Cancels a workflow run via the GitHub Actions API.
+/// Only valid for repo-scoped scopes; org-scoped strings are rejected with a diagnostic log.
 /// - Returns: `true` if the cancellation request succeeded.
 @discardableResult
-func cancelRun(runID: Int, scope: String) async -> Bool {
-    let result = await ghPost("repos/\(scope)/actions/runs/\(runID)/cancel")
-    log("cancelRun › run=\(runID) scope=\(scope) success=\(result)")
+public func cancelRun(runID: Int, scope scopeString: String) async -> Bool {
+    guard let scope = Scope.parse(scopeString) else {
+        log("cancelRun › invalid scope: \(scopeString)")
+        return false
+    }
+    guard case .repo = scope else {
+        log("cancelRun › scope must be a repo (owner/name), got: \(scopeString)")
+        return false
+    }
+    let endpoint = "\(scope.apiPrefix)/actions/runs/\(runID)/cancel"
+    let result = await ghPost(endpoint)
+    log("cancelRun › run=\(runID) scope=\(scopeString) success=\(result)")
     return result
 }

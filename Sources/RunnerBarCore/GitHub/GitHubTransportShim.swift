@@ -24,6 +24,12 @@ public typealias GHAPITransport = @Sendable (_ endpoint: String) async -> Data?
 /// These endpoints 302-redirect to S3; the transport must follow redirects.
 public typealias GHRawTransport = @Sendable (_ endpoint: String) async -> Data?
 
+/// A sync closure that returns the active GitHub personal access token, or `nil` if
+/// no token is currently available. Used by `GitHubURLSessionTransport` inside
+/// `RunnerBarCore` so the transport layer stays independent of the app target's
+/// `Keychain` / `OAuthService` implementations.
+public typealias GHTokenProvider = @Sendable () -> String?
+
 // MARK: - Module-level state
 
 /// Serialises all reads and writes to the active JSON transport closure.
@@ -31,6 +37,9 @@ private let transportLock = OSAllocatedUnfairLock<GHAPITransport>(initialState: 
 
 /// Serialises all reads and writes to the active raw-bytes transport closure.
 private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialState: { _ in nil })
+
+/// Serialises all reads and writes to the active token-provider closure.
+private let tokenProviderLock = OSAllocatedUnfairLock<GHTokenProvider>(initialState: { nil })
 
 // MARK: - Configuration
 
@@ -51,6 +60,14 @@ public func configureGHRaw(_ rawTransport: @escaping GHRawTransport) {
     rawTransportLock.withLock { $0 = rawTransport }
 }
 
+/// Wire up the token provider. Call once at launch before any authenticated fetch.
+///
+/// - Parameter provider: Sync closure that returns the current GitHub token, or `nil`
+///   when no token is available (e.g. user is signed out).
+public func configureGHToken(_ provider: @escaping GHTokenProvider) {
+    tokenProviderLock.withLock { $0 = provider }
+}
+
 // MARK: - Module-level symbols consumed by RunnerBarCore files
 
 /// Calls the configured GitHub API transport for the given endpoint.
@@ -68,4 +85,11 @@ func ghAPI(_ endpoint: String) async -> Data? {
 func ghRaw(_ endpoint: String) async -> Data? {
     let transport = rawTransportLock.withLock { $0 }
     return await transport(endpoint)
+}
+
+/// Returns the active GitHub token via the configured provider.
+/// Reads the closure under the lock then invokes it outside —
+/// `OSAllocatedUnfairLock.withLock` cannot contain a non-trivial call.
+func githubTokenCore() -> String? {
+    tokenProviderLock.withLock { $0 }()
 }

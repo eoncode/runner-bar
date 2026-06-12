@@ -1,7 +1,7 @@
 // RunnerModelParser.swift
-// RunnerBar
+// RunnerBarCore
+
 import Foundation
-import RunnerBarCore
 
 // MARK: - .runner JSON parser
 
@@ -18,7 +18,7 @@ import RunnerBarCore
 ///   - name: The runner name used as the dedup key in `LocalRunnerIndex`.
 ///   - installPath: The absolute path to the runner's install directory.
 /// - Returns: A hydrated `RunnerModel`, or `nil` if the `.runner` file is missing or malformed.
-func runnerModelFromIndex(name: String, installPath: String) -> RunnerModel? {
+public func runnerModelFromIndex(name: String, installPath: String) -> RunnerModel? {
     log("RunnerModelParser › runnerModelFromIndex — parsing '\(name)' at \(installPath)")
     let jsonURL = URL(fileURLWithPath: installPath).appendingPathComponent(".runner")
     guard var data = try? Data(contentsOf: jsonURL) else {

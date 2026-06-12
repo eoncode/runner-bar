@@ -1,5 +1,5 @@
 // GitHubRateLimitHandler.swift
-// RunnerBar
+// RunnerBarCore
 
 import Foundation
 
@@ -24,14 +24,14 @@ import Foundation
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
-actor RateLimitActor {
+public actor RateLimitActor {
     /// Whether the GitHub API is currently rate-limiting this client.
-    private(set) var isLimited = false
+    public private(set) var isLimited = false
     /// The moment at which the rate-limit window expires.
     /// Derived from the clamped delay (not the raw server timestamp) so that the
     /// UI countdown and the internal auto-clear timer always agree.
     /// `nil` when the reset time is unknown.
-    private(set) var resetDate: Date?
+    public private(set) var resetDate: Date?
     /// Structured task that clears `isLimited` when it fires.
     private var resetTask: Task<Void, Never>?
     /// Incremented on every `set(resetAt:)` call. Captured by each reset task
@@ -39,12 +39,15 @@ actor RateLimitActor {
     /// cannot clear state that belongs to a newer rate-limit window.
     private var generation = 0
 
+    /// Creates a new `RateLimitActor` instance.
+    public init() {}
+
     /// Arms the rate-limit flag and schedules an automatic reset.
     ///
     /// - Parameter resetAt: Unix timestamp from the `X-RateLimit-Reset` response header.
     ///   When non-nil the reset fires precisely at that time (clamped to [5, 7200] s);
     ///   otherwise falls back to 60 minutes from now.
-    func set(resetAt: TimeInterval?) {
+    public func set(resetAt: TimeInterval?) {
         let delay: TimeInterval
         if let ts = resetAt {
             let secondsUntilReset = ts - Date().timeIntervalSince1970
@@ -62,8 +65,10 @@ actor RateLimitActor {
         resetTask?.cancel()
         isLimited = true
         resetDate = date
-        resetTask = Task { [weak self] in
-            guard let self else { return }
+        // No [weak self] — rateLimitActor is a module-level let constant that
+        // lives for the entire process lifetime; a weak reference would always
+        // be non-nil and the guard branch would be unreachable dead code.
+        resetTask = Task {
             do {
                 try await Task.sleep(for: .seconds(delay))
             } catch {
@@ -76,7 +81,7 @@ actor RateLimitActor {
 
     /// Clears the rate-limit flag and cancels any pending reset task.
     /// Unconditional — resets both `isLimited` and `resetDate` to keep them consistent.
-    func clear() {
+    public func clear() {
         resetTask?.cancel()
         resetTask = nil
         isLimited = false
@@ -84,7 +89,7 @@ actor RateLimitActor {
     }
 
     /// Returns both `isLimited` and `resetDate` in a single actor hop, guaranteeing consistency.
-    func snapshot() -> (isLimited: Bool, resetDate: Date?) {
+    public func snapshot() -> (isLimited: Bool, resetDate: Date?) {
         (isLimited: isLimited, resetDate: resetDate)
     }
 
@@ -109,26 +114,26 @@ actor RateLimitActor {
 }
 
 /// The module-wide `RateLimitActor` instance shared by `GitHubResponseDecoder`
-/// and `GitHubURLSessionTransport`. Internal so both files can call `set(resetAt:)`,
+/// and `GitHubURLSessionTransport`. Public so both files can call `set(resetAt:)`,
 /// `clear()`, and `snapshot()` without duplication.
-let rateLimitActor = RateLimitActor()
+public let rateLimitActor = RateLimitActor()
 
 // MARK: - Rate-limit accessors
 
 /// Whether the GitHub API is currently rate-limiting this client.
 /// Backed by `RateLimitActor`; must be `await`-ed from async contexts.
-var ghIsRateLimited: Bool {
+public var ghIsRateLimited: Bool {
     get async { await rateLimitActor.isLimited }
 }
 
 /// Clears the rate-limit flag. Called at the start of each poll cycle in `RunnerStore.fetch()`.
-func clearGhRateLimit() async {
+public func clearGhRateLimit() async {
     await rateLimitActor.clear()
 }
 
 /// Returns `isLimited` and `resetDate` in a single actor hop.
 /// Prefer this over a separate `await ghIsRateLimited` read plus a reset-date lookup
 /// to avoid the TOCTOU window between two hops.
-func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
+public func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
     await rateLimitActor.snapshot()
 }

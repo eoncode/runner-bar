@@ -195,24 +195,6 @@ final class OAuthService {
 
     // MARK: Token Exchange
 
-    /// Request body for the GitHub OAuth token exchange.
-    private struct OAuthTokenRequest: Encodable { // periphery:ignore
-        /// The GitHub OAuth app client ID.
-        let clientID: String
-        /// The GitHub OAuth app client secret.
-        let clientSecret: String
-        /// The authorization code received from GitHub's redirect callback.
-        let code: String
-
-        // swiftlint:disable missing_docs
-        private enum CodingKeys: String, CodingKey {
-            case clientID = "client_id"
-            case clientSecret = "client_secret"
-            case code
-        }
-        // swiftlint:enable missing_docs
-    }
-
     /// Response body from the GitHub OAuth token exchange.
     /// GitHub returns HTTP 200 even on failure, so both `accessToken` and `error` are optional.
     private struct OAuthTokenResponse: Decodable {
@@ -249,13 +231,11 @@ final class OAuthService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONEncoder().encode(
-            OAuthTokenRequest(
-                clientID: OAuthSecrets.clientID,
-                clientSecret: OAuthSecrets.clientSecret,
-                code: code
-            )
-        )
+        req.httpBody = try? JSONEncoder().encode([
+            "client_id": OAuthSecrets.clientID,
+            "client_secret": OAuthSecrets.clientSecret,
+            "code": code
+        ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let response = try? JSONDecoder().decode(OAuthTokenResponse.self, from: data)
         else {

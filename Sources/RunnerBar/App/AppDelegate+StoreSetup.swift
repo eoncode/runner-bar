@@ -21,6 +21,7 @@ extension AppDelegate {
     /// - Parameter _: The notification (unused).
     func applicationDidFinishLaunching(_ _: Notification) {
         log("AppDelegate › applicationDidFinishLaunching — START")
+        configureGHToken { githubToken() }
         configureGHAPI { endpoint in await ghAPI(endpoint) }
         configureGHRaw { endpoint in await urlSessionRaw(endpoint) }
         setupStatusItem()
