@@ -98,13 +98,12 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     /// - Returns `"00:00"` for queued/in-progress jobs with no timing yet.
     /// - Uses `startedAt` if available, falls back to `createdAt`.
     public var elapsed: String {
-        let start = startedAt ?? createdAt
-        guard let start else {
-            return (status == .completed || conclusion != nil) ? "--:--" : "00:00"
-        }
-        let end = completedAt ?? Date()
-        let secs = max(0, Int(end.timeIntervalSince(start)))
-        return String(format: "%02d:%02d", secs / 60, secs % 60)
+        let isCompleted = status == .completed || conclusion != nil
+        return formatElapsed(
+            start: startedAt ?? createdAt,
+            end: completedAt,
+            isCompleted: isCompleted
+        )
     }
 
     /// `true` when this job ran on a self-hosted runner; `nil` when runner name is unknown.
@@ -175,12 +174,11 @@ public struct JobStep: Identifiable, Equatable, Sendable {
     /// - Returns `"--:--"` for completed steps where `startedAt` is nil (timing unavailable).
     /// - Returns `"00:00"` for in-progress or queued steps with no timing yet.
     public var elapsed: String {
-        guard let start = startedAt else {
-            return (conclusion != nil) ? "--:--" : "00:00"
-        }
-        let end = completedAt ?? Date()
-        let secs = max(0, Int(end.timeIntervalSince(start)))
-        return String(format: "%02d:%02d", secs / 60, secs % 60)
+        formatElapsed(
+            start: startedAt,
+            end: completedAt,
+            isCompleted: conclusion != nil
+        )
     }
 
     /// Unicode character summarising the step outcome for display.
