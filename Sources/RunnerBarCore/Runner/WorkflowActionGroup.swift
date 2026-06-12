@@ -221,7 +221,13 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
             // ⚠️ Do NOT change this to read from runs[].conclusion — run-level API
             // conclusions are stale and can report “failure” even when all jobs pass
             // (e.g. after a retry). This caused the spurious FAILED badge (issue #294).
-            if jobs.contains(where: { $0.conclusion == .failure }) { return "failure" }
+            // Use the canonical `JobConclusion.isFailure` check so this branch stays
+            // aligned with the run-based fallback below (and PollResultBuilder /
+            // FailureHookRunner). Previously this matched only `.failure`, so a
+            // `.timedOut` / `.startupFailure` / `.actionRequired` group reported
+            // "failure" while jobs were loading, then incorrectly flipped to
+            // "success" once jobs populated.
+            if jobs.contains(where: { $0.conclusion?.isFailure == true }) { return "failure" }
             if jobs.contains(where: { $0.conclusion == .cancelled }) { return "cancelled" }
             let hasSuccess = jobs.contains(where: { $0.conclusion == .success })
             let allSkippedOrCancelled = jobs.allSatisfy {
