@@ -21,7 +21,7 @@ extension GroupStatus {
     /// Sort priority for display ordering.
     ///
     /// Lower value = higher display priority (in-progress before queued before completed).
-    var sortPriority: Int {
+    public var sortPriority: Int {
         switch self {
         case .inProgress: return 0
         case .queued:     return 1
