@@ -50,6 +50,17 @@ func handleRateLimitResponse(
         return
     }
 
+    // Primary = quota exhausted (X-RateLimit-Remaining: 0).
+    // Secondary = abuse / concurrency throttle (Retry-After present, or 429).
+    // The distinction is operationally useful: primary means wait for reset window;
+    // secondary means back off from request rate.
+    let limitKind: String
+    if retryAfter != nil || statusCode == 429 {
+        limitKind = "secondary"
+    } else {
+        limitKind = "primary"
+    }
+
     // Log the response body to aid debugging — rate-limit responses from GitHub
     // often include a message field explaining the specific limit that was hit.
     logErrorBody(data, endpoint: endpoint, status: statusCode)
@@ -61,7 +72,8 @@ func handleRateLimitResponse(
         resetAt = resetHeader
     }
     log(
-        "RateLimit \(statusCode) \(endpoint) "
+        "RateLimit › ⚠️ rate limited (\(limitKind)) — \(endpoint) "
+        + "status=\(statusCode) "
         + "retryAfter=\(String(describing: retryAfter)) "
         + "resetAt=\(String(describing: resetAt))"
     )
