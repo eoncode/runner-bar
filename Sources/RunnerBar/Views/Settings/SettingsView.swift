@@ -1,6 +1,5 @@
 // SettingsView.swift
 // RunnerBar
-import Combine
 import RunnerBarCore
 import ServiceManagement
 import SwiftUI
@@ -67,12 +66,8 @@ struct SettingsView: View {
     @State var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
     /// `true` while the OAuth sign-in flow is in progress.
     @State var isSigningIn = false
-    // FIXME: AnyCancellable stored in @State risks silent subscription drop if SwiftUI
-    // recreates the view struct and reallocates @State storage. The correct pattern
-    // (used by RunnerViewModel) is to hold cancellables as stored properties on a
-    // @MainActor class. Tracked for refactor alongside #1077. // NOSONAR
-    /// Retains the sign-out Combine subscription.
-    @State private var signOutCancellable: AnyCancellable?
+    /// Retains the sign-out listener Task so it is cancelled when the view disappears.
+    @State private var signOutTask: Task<Void, Never>?
     /// `true` while `LocalRunnersView` is displayed instead of the main settings scroll.
     @State var showLocalRunners = false
     /// `true` while `ScopesView` is displayed instead of the main settings scroll.
@@ -116,6 +111,9 @@ struct SettingsView: View {
             // Without this, the last-opened instance permanently owns onCompletion.
             // Guard: do not clear while an OAuth flow is in progress — the callback must land.
             if !isSigningIn { OAuthService.shared.onCompletion = nil }
+            // Cancel the sign-out listener — a new Task is started on next onAppear.
+            signOutTask?.cancel()
+            signOutTask = nil
         }
     }
 
@@ -178,15 +176,15 @@ struct SettingsView: View {
             log("SettingsView › onCompletion — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             isSigningIn = false
         }
-        signOutCancellable = OAuthService.shared.didSignOut
-            .receive(on: DispatchQueue.main)
-            .sink {
+        signOutTask = Task { @MainActor in
+            for await _ in OAuthService.shared.makeSignOutStream() {
                 let postToken = githubToken()
-                log("SettingsView › didSignOut sink — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
+                log("SettingsView › didSignOut — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = postToken != nil
-                log("SettingsView › didSignOut sink — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+                log("SettingsView › didSignOut — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             }
+        }
     }
 
     // MARK: - Header

@@ -1,7 +1,6 @@
 // AppDelegate+Polling.swift
 // RunnerBar
 
-import Combine
 import Foundation
 
 /// AppDelegate extension managing the OAuth sign-out subscription and poll-loop coordination.
@@ -14,9 +13,9 @@ extension AppDelegate {
     /// on the very next fetch cycle.
     ///
     /// ## Why this lives here and not in SettingsView
-    /// `SettingsView`'s `signOutCancellable` is stored in `@State` and is
+    /// `SettingsView`'s `signOutTask` is stored in `@State` and is
     /// only alive while Settings is visible. `AppDelegate` is a true singleton
-    /// for the app's lifetime, so this subscription is always active.
+    /// for the app's lifetime, so this task is always active.
     ///
     /// ## What was broken (regression from PR #1138)
     /// Before #1138, polling was driven by `Timer + scheduleTimer()`. After
@@ -26,12 +25,11 @@ extension AppDelegate {
     /// `Task.sleep` — it never calls `start()` again, so the token fallback
     /// only works if `start()` is explicitly invoked after sign-out.
     func setupSignOutSubscription() {
-        OAuthService.shared.didSignOut
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
+        signOutTask = Task { [weak self] in
+            for await _ in OAuthService.shared.makeSignOutStream() {
                 log("AppDelegate › didSignOut — restarting poll loop for env-token fallback")
-                Task { [weak self] in await self?.runnerStore.start() }
+                await self?.runnerStore.start()
             }
-            .store(in: &cancellables)
+        }
     }
 }

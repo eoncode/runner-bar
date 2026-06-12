@@ -1,7 +1,6 @@
 // OAuthService.swift
 // RunnerBar
 import AppKit
-import Combine
 import Foundation
 
 // MARK: - OAuthService
@@ -34,9 +33,7 @@ final class OAuthService {
     /// The shared singleton instance.
     static let shared = OAuthService()
     /// Private initialiser — use `shared`.
-    private init() {
-        // Singleton — intentionally empty; default property values are sufficient.
-    }
+    private init() {}
 
     /// The OAuth redirect URI. Must match the value registered in the GitHub OAuth app settings.
     /// Sourced from `GitHubConstants.oauthRedirectURI` — do not duplicate this string inline.
@@ -77,9 +74,38 @@ final class OAuthService {
     /// Register once in SettingsView.onAppearAction — do NOT re-assign in signIn().
     var onCompletion: ((Bool) -> Void)?
 
-    /// Emits on the main thread after a successful sign-out.
-    /// Subscribe via `.sink { }.store(in: &cancellables)` — do NOT use a raw closure.
-    let didSignOut = PassthroughSubject<Void, Never>()
+    // MARK: - Sign-out multicast
+    //
+    // Each caller receives its own dedicated AsyncStream via makeSignOutStream().
+    // signOut() yields to every registered continuation, restoring the multicast
+    // semantics of the old PassthroughSubject without reintroducing Combine.
+    // AsyncStream is single-consumer — sharing one stream across multiple Tasks
+    // would deliver each event to only one consumer (whichever wakes first).
+
+    /// Registered continuations keyed by UUID — one per active consumer.
+    /// Entries are removed automatically via `onTermination` when the consumer's
+    /// Task is cancelled (e.g. SettingsView.onDisappear), preventing unbounded growth.
+    private var signOutContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
+
+    /// Returns a new `AsyncStream<Void>` that fires once per `signOut()` call.
+    /// Each call site must request its own stream; the streams are multicasted.
+    /// The continuation is removed from the registry when the consumer's Task
+    /// is cancelled or the stream is otherwise terminated.
+    /// Observe via:
+    /// ```swift
+    /// Task { for await _ in OAuthService.shared.makeSignOutStream() { … } }
+    /// ```
+    func makeSignOutStream() -> AsyncStream<Void> {
+        let id = UUID()
+        let (stream, cont) = AsyncStream<Void>.makeStream()
+        signOutContinuations[id] = cont
+        cont.onTermination = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.signOutContinuations.removeValue(forKey: id)
+            }
+        }
+        return stream
+    }
 
     // MARK: Sign In
 
@@ -130,8 +156,8 @@ final class OAuthService {
         let deleted = Keychain.delete()
         log("OAuthService › signOut — Keychain.delete result=\(deleted)")
         if deleted {
-            log("OAuthService › signOut — emitting didSignOut")
-            didSignOut.send()
+            log("OAuthService › signOut — emitting didSignOut to \(signOutContinuations.count) consumer(s)")
+            signOutContinuations.values.forEach { $0.yield(()) }
         } else {
             log("OAuthService › signOut: Keychain.delete failed — sign-out suppressed to prevent ghost sign-in")
         }

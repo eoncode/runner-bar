@@ -2,7 +2,6 @@
 // RunnerBar
 
 import AppKit
-import Combine
 import SwiftUI
 
 // MARK: - NSPopover architecture note
@@ -130,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var savedNavState: NavState?
     /// Sheet state that must survive transient popover hides.
     let panelSheetState = PanelSheetState()
+    /// Retained handle for the sign-out observation task started in
+    /// `setupSignOutSubscription()` (AppDelegate+Polling.swift).
+    /// Keeping a strong reference ensures the task is never silently abandoned.
+    var signOutTask: Task<Void, Never>?
     /// Mirrors `popover.isShown`. Kept separately because `NSPopover.isShown` is not
     /// reliable immediately after `performClose` — our flag is the source of truth.
     /// Set to `true` by `openPanel()`, set to `false` by `tearDownOpenState()`.
@@ -147,9 +150,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// NSWorkspace observer installed by `openPanel()` to hide the popover when
     /// another app is activated. Removed by `tearDownOpenState()`.
     var workspaceObserver: NSObjectProtocol?
-    /// Combine cancellable bag for all long-lived subscriptions wired in `setupCombineSubscriptions()`.
-    var cancellables = Set<AnyCancellable>()
-
     // Regression guard — see ARCHITECTURE.md §panelVisibilityState.
     /// Shared observable that tracks whether the panel is open.
     /// Injected into every SwiftUI view via `wrapEnv(_:)`.

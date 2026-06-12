@@ -293,6 +293,8 @@ actor RunnerStore {
         let injectedStore = preferencesStore
         intervalObservationTask?.cancel()
         let injectedStore = preferencesStore
+        intervalObservationTask?.cancel()
+        let injectedStore = preferencesStore
         intervalObservationTask = Task { [weak self] in
             let (stream, continuation) = AsyncStream<Int>.makeStream()
             let observer: PreferencesObserver = await MainActor.run {
@@ -304,6 +306,7 @@ actor RunnerStore {
                 guard !Task.isCancelled else { break }
                 log("RunnerStore › pollingInterval changed to \(newInterval) — restarting poll loop")
                 await self?._startObservingPreferences()
+                guard !Task.isCancelled else { break }
                 await self?.start()
                 break
             }
@@ -326,6 +329,8 @@ actor RunnerStore {
         let injectedStore = scopeStore
         scopeObservationTask?.cancel()
         let injectedStore = scopeStore
+        scopeObservationTask?.cancel()
+        let injectedStore = scopeStore
         scopeObservationTask = Task { [weak self] in
             let (stream, continuation) = AsyncStream<[String]>.makeStream()
             let observer: ScopesObserver = await MainActor.run {
@@ -337,6 +342,7 @@ actor RunnerStore {
                 guard !Task.isCancelled else { break }
                 log("RunnerStore › ScopeStore.activeScopes changed — restarting fetch")
                 await self?._startObservingScopes()
+                guard !Task.isCancelled else { break }
                 await self?.start()
                 break
             }

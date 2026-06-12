@@ -1,12 +1,11 @@
 // AppDelegate+PanelSetup.swift
 // RunnerBar
 import AppKit
-import Combine
 import SwiftUI
 
 // MARK: - AppDelegate + Panel Setup
 //
-// Owns NSPopover construction, KVO on preferredContentSize, and Combine
+// Owns NSPopover construction, KVO on preferredContentSize, and
 // subscriptions that drive icon/store updates.
 // Called once from applicationDidFinishLaunching via setupPanel().
 //
@@ -78,13 +77,13 @@ import SwiftUI
 // the popover in-place — the arrow stays pinned to the original
 // positioningRect. ❌ NEVER call popover.show() again on resize.
 
-/// Extension responsible for NSPopover construction, KVO, and Combine subscriptions.
+/// Extension responsible for NSPopover construction, KVO, and async subscriptions.
 extension AppDelegate: NSPopoverDelegate {
 
     // MARK: Popover construction
 
     /// Builds the NSPopover, embeds the SwiftUI hosting controller, wires KVO
-    /// and Combine subscriptions.
+    /// and async subscriptions.
     func setupPanel() {
         log("AppDelegate › setupPanel — begin")
         let controller = NSHostingController(rootView: mainView())
@@ -102,10 +101,10 @@ extension AppDelegate: NSPopoverDelegate {
         newPopover.delegate = self
 
         popover = newPopover
-        log("AppDelegate › setupPanel — popover created, wiring KVO + Combine")
+        log("AppDelegate › setupPanel — popover created, wiring KVO + subscriptions")
 
         setupKVO(controller: controller)
-        setupCombineSubscriptions()
+        setupSubscriptions()
         log("AppDelegate › setupPanel — complete")
     }
 
@@ -169,18 +168,18 @@ extension AppDelegate: NSPopoverDelegate {
         }
     }
 
-    // MARK: Combine subscriptions
+    // MARK: Async subscriptions
 
-    /// Starts all Combine subscriptions.
-    private func setupCombineSubscriptions() {
-        log("AppDelegate › setupCombineSubscriptions — begin")
+    /// Wires all long-lived async subscriptions (sign-out listener, startup sequence).
+    private func setupSubscriptions() {
+        log("AppDelegate › setupSubscriptions — begin")
 
         // local runner list changes are now pushed directly from LocalRunnerStore
         // into observable.localRunners via await MainActor.run — no Combine sink needed.
 
         // Everything below makes live network calls — skip entirely in UI tests.
         guard ProcessInfo.processInfo.environment["UI_TESTING"] == nil else {
-            log("AppDelegate › setupCombineSubscriptions — UI_TESTING detected, skipping network setup")
+            log("AppDelegate › setupSubscriptions — UI_TESTING detected, skipping network setup")
             return
         }
 
@@ -197,7 +196,7 @@ extension AppDelegate: NSPopoverDelegate {
         //    access to `localRunnerStore` (inside the Task) must find the instance
         //    already configured, or it fatalErrors.
         LocalRunnerStore.configure(viewModel: observable)
-        log("AppDelegate › setupCombineSubscriptions — LocalRunnerStore.configure(viewModel:) called")
+        log("AppDelegate › setupSubscriptions — LocalRunnerStore.configure(viewModel:) called")
 
         // NOTE: The `RunnerStore.didUpdate` Combine sink has been removed.
         // `RunnerStore` is now a Swift actor that pushes state directly to
@@ -207,6 +206,19 @@ extension AppDelegate: NSPopoverDelegate {
         // per completed fetch cycle without any Combine subscription.
         // ℹ️ `RunnerViewModel.shared` is a fatalError accessor — the live instance
         // is AppDelegate.observable, injected explicitly into both stores.
+
+        // RunnerStore.init no longer accepts @MainActor-isolated default values
+        // (Swift 6: default values for parameters must not be @MainActor-isolated
+        // in a nonisolated context). AppPreferencesStore.shared and ScopeStore.shared
+        // are therefore passed explicitly here, where we are already on the @MainActor.
+        runnerStore = RunnerStore(
+            viewModel: observable,
+            localRunnerStore: localRunnerStore,
+            preferencesStore: AppPreferencesStore.shared,
+            scopeStore: ScopeStore.shared,
+            onStatusUpdate: { [weak self] in self?.updateStatusIcon() }
+        )
+        log("AppDelegate › setupSubscriptions — RunnerStore created with injected stores")
 
         // RunnerStore.init no longer accepts @MainActor-isolated default values
         // (Swift 6: default values for parameters must not be @MainActor-isolated
@@ -245,7 +257,7 @@ extension AppDelegate: NSPopoverDelegate {
         // refreshAsync() suspends until disk hydration + launchctl + GitHub enrichment
         // completes, then start() fires. Cycle 1 always has a populated installPathMap
         // so runner rows appear with CPU/MEM already set.
-        log("AppDelegate › setupCombineSubscriptions — scheduling async startup sequence")
+        log("AppDelegate › setupSubscriptions — scheduling async startup sequence")
         Task { [weak self] in
             guard let self else { return }
             log("AppDelegate › startup — awaiting localRunnerStore.refreshAsync()")
@@ -259,6 +271,6 @@ extension AppDelegate: NSPopoverDelegate {
         // the correct repos from the beginning. RunnerStore observes
         // ScopeStore.activeScopes internally via withObservationTracking/AsyncStream,
         // so no Combine sink is needed here — the actor's own observer handles it.
-        log("AppDelegate › setupCombineSubscriptions — complete")
+        log("AppDelegate › setupSubscriptions — complete")
     }
 }
