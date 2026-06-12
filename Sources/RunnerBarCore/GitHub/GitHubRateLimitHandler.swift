@@ -65,8 +65,10 @@ public actor RateLimitActor {
         resetTask?.cancel()
         isLimited = true
         resetDate = date
-        resetTask = Task { [weak self] in
-            guard let self else { return }
+        // No [weak self] — rateLimitActor is a module-level let constant that
+        // lives for the entire process lifetime; a weak reference would always
+        // be non-nil and the guard branch would be unreachable dead code.
+        resetTask = Task {
             do {
                 try await Task.sleep(for: .seconds(delay))
             } catch {

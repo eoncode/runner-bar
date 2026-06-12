@@ -71,14 +71,18 @@ func handleRateLimitResponse(
 // MARK: - Pagination
 
 /// Parses the `Link` header from a GitHub paginated response and returns the `next` URL, if any.
-/// Uses `>= 2` to tolerate RFC 8288 multi-parameter parts (e.g. `rel="next"; hreflang="en"`).
+///
+/// Scans all semicolon-delimited tokens after the URL so `rel="next"` is found regardless
+/// of its position in a multi-parameter Link part (RFC 8288 compliant).
 func extractNextURL(from header: String?) -> String? {
     guard let header else { return nil }
     for part in header.components(separatedBy: ",") {
         let segments = part.components(separatedBy: ";")
         guard segments.count >= 2 else { continue }
-        let rel = segments[1].trimmingCharacters(in: .whitespaces)
-        guard rel == "rel=\"next\"" else { continue }
+        let hasNextRel = segments.dropFirst().contains {
+            $0.trimmingCharacters(in: .whitespaces) == "rel=\"next\""
+        }
+        guard hasNextRel else { continue }
         let urlPart = segments[0].trimmingCharacters(in: .whitespaces)
         if urlPart.hasPrefix("<"), urlPart.hasSuffix(">") {
             return String(urlPart.dropFirst().dropLast())
