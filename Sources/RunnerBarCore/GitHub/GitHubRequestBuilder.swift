@@ -3,16 +3,17 @@
 
 import Foundation
 
+/// Module-level constant allocated once; avoids a fresh `CharacterSet` allocation
+/// on every `resolveURL` call and pagination iteration.
+private let slashCharacterSet = CharacterSet(charactersIn: "/")
+
 // MARK: - URL helpers
 
 /// Resolves an endpoint string to a full GitHub API URL string.
 /// Absolute URLs (starting with "http") are returned unchanged;
 /// relative paths are prefixed with `GitHubConstants.apiBase`.
 public func resolveURL(_ endpoint: String) -> String {
-    /// Module-level constant reused to avoid allocating a new `CharacterSet`
-    /// on every API call and pagination iteration.
-    let slashCharacterSet = CharacterSet(charactersIn: "/")
-    return endpoint.hasPrefix("http")
+    endpoint.hasPrefix("http")
         ? endpoint
         : "\(GitHubConstants.apiBase)/\(endpoint.trimmingCharacters(in: slashCharacterSet))"
 }
