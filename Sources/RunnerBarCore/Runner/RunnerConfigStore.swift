@@ -47,7 +47,6 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// Decoder used for reading `.runner` JSON.
     private let decoder = JSONDecoder()
 
-
     // MARK: Init
 
     /// Private initialiser — use `RunnerConfigStore.shared`.
