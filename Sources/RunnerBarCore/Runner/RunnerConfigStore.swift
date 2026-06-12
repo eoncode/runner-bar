@@ -58,7 +58,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     ///
     /// The GitHub runner agent emits a UTF-8 BOM at the start of `.runner` files on some
     /// platforms. `JSONDecoder` rejects the BOM, so it must be removed before decoding.
-    private func stripBOM(from data: Data) -> Data {
+    private nonisolated func stripBOM(from data: Data) -> Data {
         data.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) ? Data(data.dropFirst(3)) : data
     }
 

@@ -41,7 +41,7 @@ public enum AnyJSON: Codable {
     ///   any valid number, causing booleans to be misidentified as `.number(1.0)` / `.number(0.0)`.
     /// - `Int` is tried before `Double` so that integer-valued fields (e.g. `agentId`) are
     ///   stored losslessly as `.int` rather than being coerced to a `Double` mantissa.
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let v = try? c.decode([String: AnyJSON].self) { self = .object(v); return }
         if let v = try? c.decode([AnyJSON].self)          { self = .array(v);  return }
@@ -54,7 +54,7 @@ public enum AnyJSON: Codable {
     }
 
     /// Encodes this `AnyJSON` value into the given encoder.
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
         switch self {
         case .object(let v): try c.encode(v)
