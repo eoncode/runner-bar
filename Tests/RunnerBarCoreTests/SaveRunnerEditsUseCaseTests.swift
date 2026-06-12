@@ -231,6 +231,8 @@ struct SaveRunnerEditsUseCaseTests {
 
     @Test("returns failure when installPath is nil and proxy changes pending")
     func missingInstallPathForProxy() async {
+        // Runner has no installPath; only a proxy field is changed so Step 2
+        // (JSON) is skipped and we land directly on the Step 3 guard.
         let runner   = makeRunner(installPath: nil)
         var draft    = RunnerEditDraft(runner: runner)
         let original = RunnerEditDraft(runner: runner)

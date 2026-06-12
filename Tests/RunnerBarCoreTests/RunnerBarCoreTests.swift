@@ -460,9 +460,9 @@ struct PollResultBuilderTests {
             into: &cache
         )
         #expect(cache[55] != nil)
-        #expect(cache[55]?.status == "completed", "Missing conclusion defaults to cancelled")
+        #expect(cache[55]?.status == "completed")
         #expect(cache[55]?.isDimmed == true)
-        #expect(cache[55]?.conclusion == "cancelled")
+        #expect(cache[55]?.conclusion == "cancelled", "Missing conclusion defaults to cancelled")
     }
 
     /// An existing cached entry for a vanished job is not overwritten by the vanish logic.
@@ -729,7 +729,7 @@ struct PollResultBuilderGroupStateTests {
             enrichJobs: { $0 }
         )
 
-        #expect(await counter.value == 1)
+        #expect(await counter.value == 1, "fireFailureHook must fire exactly once for a new failed group")
     }
 
     /// fireFailureHook must NOT fire for a successfully completed group.
@@ -867,7 +867,7 @@ struct PollResultBuilderGroupStateTests {
             enrichJobs: { $0 }
         )
 
-        #expect(await counter.value == 1)
+        #expect(await counter.value == 1, "doneGroups must be marked seen before freezeVanishedGroups runs to prevent double-fire")
     }
 }
 
