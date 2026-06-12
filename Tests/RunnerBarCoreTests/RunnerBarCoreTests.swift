@@ -1,5 +1,6 @@
 // RunnerBarCoreTests.swift
 // RunnerBarCoreTests
+import Foundation
 import Testing
 import RunnerBarCore
 
@@ -292,7 +293,7 @@ struct RunnerDisplayStatusTests {
 
     /// An online, non-busy runner with no metrics returns the idle placeholder.
     @Test func onlineIdleNoMetrics() {
-        #expect(makeRunner(status: .online, busy: false).displayStatus == "idle (CPU: \u2014 MEM: \u2014)")
+        #expect(makeRunner(status: .online, busy: false).displayStatus == "idle (CPU: \u{2014} MEM: \u{2014})")
     }
 
     /// An online, busy runner with metrics returns the active format.
@@ -352,7 +353,7 @@ struct AggregateStatusTests {
 
     /// allOffline status returns the black circle dot character.
     @Test func dotAllOffline() {
-        #expect(AggregateStatus.allOffline.dot == "\u26AB")
+        #expect(AggregateStatus.allOffline.dot == "\u{26AB}")
     }
 
     /// allOnline status maps to the SF Symbol "circle.fill".
@@ -871,7 +872,7 @@ struct PollResultBuilderGroupStateTests {
 struct ProcessRunnerRunAsyncStdinTests {
 
     /// runAsync correctly pipes stdin through to the child process for a small payload.
-    @Test(.timeLimit(.seconds(5)))
+    @Test(.timeLimit(.minutes(1)))
     func runAsyncStdinSmallPayloadRoundtrip() async {
         let input = "hello stdin"
         let data = Data(input.utf8)
@@ -886,7 +887,7 @@ struct ProcessRunnerRunAsyncStdinTests {
 
     /// runAsync does NOT deadlock with a large stdin payload (1 MB — above the ~64 KB kernel pipe buffer).
     /// Regression test for the pre-launch synchronous write bug in #1228.
-    @Test(.timeLimit(.seconds(10)))
+    @Test(.timeLimit(.minutes(1)))
     func runAsyncStdinLargePayloadRoundtrip() async {
         let input = String(repeating: "x", count: 1_024 * 1_024) // 1 MB
         let data = Data(input.utf8)
