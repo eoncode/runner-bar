@@ -49,7 +49,7 @@ enum FailureHookRunner {
             log("FailureHookRunner › SKIP — hook not enabled for scope=\(scope)")
             return
         }
-        // #560: Branch filter — skip if a branch filter is set and doesn't match
+        // #560: Branch filter — skip if a branch filter is set and doesn’t match
         let filterBranch = ScopePreferencesStore.failureHookBranch(for: scope)
         if let filter = filterBranch {
             let groupBranch = group.headBranch ?? ""
@@ -64,7 +64,7 @@ enum FailureHookRunner {
         let command = storedCommand ?? Self.defaultCommand
         log("FailureHookRunner › resolved command (first 200): \(command.prefix(200))")
         let failure = isFailure(group: group)
-        let runSummary = group.runs.map { "\($0.id):\($0.conclusion ?? "nil")" }.joined(separator: ",")
+        let runSummary = group.runs.map { "\($0.id):\($0.conclusion?.rawValue ?? "nil")" }.joined(separator: ",")
         log("FailureHookRunner › isFailure=\(failure) for groupID=\(group.id) runs=\(runSummary)")
         guard failure else {
             log("FailureHookRunner › SKIP — group is not a failure, groupID=\(group.id)")
@@ -95,16 +95,19 @@ enum FailureHookRunner {
 
     // MARK: - Private
 
-    /// Raw-string failure conclusions matching GitHub API values.
-    /// WorkflowRunRef.conclusion is String? so we stay in String-land here.
-    private static let failureConclusions: Set<String> = ["failure", "timed_out", "cancelled", "startup_failure"]
+    /// Returns `true` when a `JobConclusion` warrants firing the failure hook.
+    ///
+    /// This is a superset of `JobConclusion.isFailure`: it additionally includes `.cancelled`
+    /// because a cancelled run often signals a problem (e.g. a runner disconnect or manual
+    /// intervention) that the user wants to be notified about.
+    /// `startup_failure` and `timed_out` are covered by `isFailure`.
+    private static func isHookConclusion(_ conclusion: JobConclusion) -> Bool {
+        conclusion.isFailure || conclusion == .cancelled
+    }
 
-    /// Returns `true` when at least one run in `group` has a failure-class conclusion.
+    /// Returns `true` when at least one run in `group` has a hook-triggering conclusion.
     private static func isFailure(group: WorkflowActionGroup) -> Bool {
-        group.runs.contains {
-            guard let c = $0.conclusion else { return false }
-            return failureConclusions.contains(c.lowercased())
-        }
+        group.runs.contains { isHookConclusion($0.conclusion) }
     }
 
     /// The result of fetching a single failed job, including its raw log tail.
@@ -120,11 +123,11 @@ enum FailureHookRunner {
         var result: [FailedJobResult] = []
         var seenIDs = Set<Int>()
         for run in group.runs {
-            guard let c = run.conclusion, failureConclusions.contains(c.lowercased()) else {
-                log("FailureHookRunner › fetchFailedJobs — run \(run.id) conclusion=\(run.conclusion ?? "nil") — skipping (not failure)")
+            guard isHookConclusion(run.conclusion) else {
+                log("FailureHookRunner › fetchFailedJobs — run \(run.id) conclusion=\(run.conclusion?.rawValue ?? "nil") — skipping (not hook-triggering)")
                 continue
             }
-            log("FailureHookRunner › fetchFailedJobs — fetching jobs for failed run=\(run.id) conclusion=\(c)")
+            log("FailureHookRunner › fetchFailedJobs — fetching jobs for failed run=\(run.id) conclusion=\(run.conclusion?.rawValue ?? "nil")")
             guard let data = await ghAPI("repos/\(scope)/actions/runs/\(run.id)/jobs?per_page=100") else {
                 log("FailureHookRunner › fetchFailedJobs — ghAPI returned nil for run=\(run.id)")
                 continue
@@ -136,8 +139,7 @@ enum FailureHookRunner {
             log("FailureHookRunner › fetchFailedJobs — run=\(run.id) decoded \(resp.jobs.count) jobs")
             for job in resp.jobs where seenIDs.insert(job.id).inserted {
                 let tail: String?
-                if let jobConclusion = job.conclusion,
-                   failureConclusions.contains(jobConclusion.rawValue.lowercased()) {
+                if let jobConclusion = job.conclusion, isHookConclusion(jobConclusion) {
                     log("FailureHookRunner › fetchFailedJobs — fetching log for failed jobID=\(job.id) name=\(job.name)")
                     if let fullLog = await fetchJobLog(jobID: job.id, scope: scope) {
                         let lines = fullLog.components(separatedBy: "\n")
@@ -161,7 +163,7 @@ enum FailureHookRunner {
     /// Escapes `s` so it is safe to embed between single-quotes in a shell command.
     /// Replaces every `'` with `'\''` — the standard POSIX single-quote escape.
     private static func singleQuoteEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "'", with: "'\\''")
+        s.replacingOccurrences(of: "'", with: "'\\''")  // swiftlint:disable:this escape_string
     }
 
     /// Builds the `$FAILURE_LOG` content from failed job results.
@@ -176,11 +178,9 @@ enum FailureHookRunner {
     ) -> String {
         guard !jobs.isEmpty else {
             log("FailureHookRunner › buildLogContent — no jobs, falling back to run-level summary")
-            var lines: [String] = []
-            for run in group.runs {
-                if let c = run.conclusion, failureConclusions.contains(c.lowercased()) {
-                    lines.append("FAILED run \(run.id): conclusion=\(c) workflow=\(run.name)")
-                }
+            let lines: [String] = group.runs.compactMap { run in
+                guard let c = run.conclusion, isHookConclusion(c) else { return nil }
+                return "FAILED run \(run.id): conclusion=\(c.rawValue) workflow=\(run.name)"
             }
             return lines.joined(separator: "\n")
         }
@@ -192,14 +192,14 @@ enum FailureHookRunner {
             } else {
                 let failedSteps = job.steps.filter {
                     guard let c = $0.conclusion else { return false }
-                    return failureConclusions.contains(c.rawValue.lowercased())
+                    return isHookConclusion(c)
                 }
                 var lines: [String] = ["Job: \(job.name) [failed]"]
                 if failedSteps.isEmpty {
                     lines.append("  (no failed steps reported)")
                 } else {
                     for step in failedSteps {
-                        lines.append("  ✗ Step \(step.number): \(step.name) — \(step.conclusion?.rawValue ?? step.status.rawValue)")
+                        lines.append("  \u2717 Step \(step.number): \(step.name) — \(step.conclusion?.rawValue ?? step.status.rawValue)")
                     }
                 }
                 parts.append(lines.joined(separator: "\n"))
@@ -217,7 +217,7 @@ enum FailureHookRunner {
     /// - `$COMMIT_SHA`     — full 40-char SHA of the triggering commit
     /// - `$RUN_ID`         — GitHub Actions run ID of the first *failed* run
     /// - `$WORKFLOW_NAME`  — display name of the workflow (from `WorkflowRunRef.name`)
-    /// - `$RUN_LINK`       — deep link to the first failed run's Actions page on GitHub
+    /// - `$RUN_LINK`       — deep link to the first failed run’s Actions page on GitHub
     /// - `$COMMIT_LINK`    — deep link to the commit diff on GitHub
     /// - `$BRANCH_LINK`    — deep link to the branch on GitHub (percent-encoded)
     /// - `$REPO_LINK`      — deep link to the repository root on GitHub
@@ -237,7 +237,7 @@ enum FailureHookRunner {
         // happens to sit first in the array.
         let failedRun = group.runs.first(where: {
             guard let c = $0.conclusion else { return false }
-            return failureConclusions.contains(c.lowercased())
+            return isHookConclusion(c)
         })
         let failedRunID = failedRun.map { String($0.id) } ?? group.id
         let runLink = failedRun?.htmlUrl ?? "\(baseURL)/actions/runs/\(failedRunID)"
@@ -266,4 +266,13 @@ enum FailureHookRunner {
             .replacingOccurrences(of: "$REPO_LINK", with: repoLink)
             .replacingOccurrences(of: "$FAILURE_LOG", with: escapedLog)
     }
+}
+
+// MARK: - JobConclusion hook guard
+
+/// Returns `true` when `conclusion` is `nil` (run still in progress).
+/// Used as a nil-tolerant guard at `WorkflowRunRef` call sites.
+private func isHookConclusion(_ conclusion: JobConclusion?) -> Bool {
+    guard let conclusion else { return false }
+    return FailureHookRunner.isHookConclusion(conclusion)
 }
