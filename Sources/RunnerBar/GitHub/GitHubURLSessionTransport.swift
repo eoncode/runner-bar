@@ -11,7 +11,7 @@ import Foundation
 /// endpoints. Each page is decoded as `[AnyJSON]`; all pages are concatenated and re-encoded
 /// as a single JSON array returned to callers as `Data`.
 ///
-/// Only the four JSON value kinds that GitHub pagination actually produces are needed:
+/// Only the six JSON value kinds that GitHub pagination actually produces are needed:
 /// object, array, string, number, bool, and null.
 private enum AnyJSON: Codable {
     case object([String: AnyJSON])
