@@ -240,6 +240,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         log("AppDelegate › tearDownOpenState — caller=\(Thread.callStackSymbols[1])")
         #endif
+        // Order matters: coordinator clears panelIsOpen first, then SwiftUI state follows.
+        // Both are @MainActor so there is no concurrency gap between the two writes,
+        // but panelIsOpen must be false before panelVisibilityState.isOpen triggers
+        // any onChange observer that reads panelIsOpen.
         lifecycleCoordinator.tearDown()
         panelVisibilityState.isOpen = false
     }

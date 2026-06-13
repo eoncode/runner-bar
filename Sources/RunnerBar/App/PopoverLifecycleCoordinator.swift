@@ -219,4 +219,19 @@ final class PopoverLifecycleCoordinator {
             log("PopoverLifecycleCoordinator › removeMonitors — workspaceObserver was already nil")
         }
     }
+
+    // MARK: - Lifecycle
+
+    /// Defensive cleanup: removes any installed monitors if the coordinator is
+    /// deallocated without an explicit `tearDown()` call. In normal app lifetime
+    /// `lifecycleCoordinator` is `let` on `AppDelegate` and is never released,
+    /// so this path is never taken — but guards against a future shorter-lived owner.
+    deinit {
+        if outsideClickMonitor != nil, let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if workspaceObserver != nil, let observer = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+    }
 }
