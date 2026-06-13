@@ -1,6 +1,7 @@
 // ProcessRunner.swift
 // RunnerBarCore
 import Foundation
+import os
 
 // MARK: - ProcessRunner
 
@@ -44,26 +45,10 @@ import Foundation
 /// the subprocess runs. `withTaskCancellationHandler` wires `task.terminate()`
 /// directly to Swift structured concurrency cancellation. A sibling
 /// `Task.detached` replaces the `DispatchWorkItem` timeout from `run(_:)`.
-/// Tiny mutable reference wrapper used only to bridge `DispatchQueue.async` /
-/// `terminationHandler` closures to outer local state without tripping Swift 6.2
-/// `#SendableClosureCaptures` diagnostics.
-///
-/// Why `@unchecked Sendable` is acceptable here:
-/// - The *box reference* is captured as a `let` constant by the `@Sendable` closure.
-/// - Only the stored `value` field is mutated.
-/// - Mutation is serialised by a dedicated private queue (`drainQueue`).
-/// - A matching `drainQueue.sync {}` barrier establishes the happens-before edge
-///   before the outer function reads `value`.
-///
-/// In other words, this is not shared unsynchronised mutable state; it is a tiny,
-/// queue-confined handoff cell. Replacing it with an actor would complicate the
-/// subprocess drain path without improving safety.
-private final class Box<T>: @unchecked Sendable {
-    /// The wrapped mutable value.
-    var value: T
-    /// Creates a box with the given initial value.
-    init(_ initial: T) { value = initial }
-}
+// Note: the old `Box<T>: @unchecked Sendable` handoff cell has been replaced
+// throughout with `OSAllocatedUnfairLock` (P4 compliance). The lock is captured
+// as a `let` constant by `@Sendable` closures; `withLock` provides compiler-verified
+// `Sendable` conformance and the same queue-serialised happens-before semantics.
 
 /// Shared primitive for launching subprocesses. See file-level doc comment above for full details.
 public enum ProcessRunner {
@@ -144,16 +129,16 @@ public enum ProcessRunner {
         // See class-level doc: draining must overlap with waitUntilExit() to
         // prevent the kernel pipe buffer (~64 KB) from filling and deadlocking.
         //
-        // We use a single-element array as a heap-allocated mutable box.
-        // The array itself is a `let` constant captured by the closure — only the
-        // *element* is mutated, which is valid without `nonisolated(unsafe)` and
-        // avoids the Swift 6.2 `#SendableClosureCaptures` diagnostic.
+        // OSAllocatedUnfairLock is the Swift 6.2-blessed mutable handoff cell:
+        // it is Sendable, requires no @unchecked annotation, and the lock is
+        // held only for the brief assignment/read — never across a suspension.
         // `drainQueue.sync {}` after `waitUntilExit()` provides the happens-before
-        // guarantee: the write at [0] is always complete before we read it.
-        let outputBox = Box<Data>(Data())
+        // guarantee: the write inside withLock is always complete before we read it.
+        let outputBox = OSAllocatedUnfairLock(initialState: Data())
         let drainQueue = DispatchQueue(label: "ProcessRunner.drain")
         drainQueue.async {
-            outputBox.value = outPipe.fileHandleForReading.readDataToEndOfFile()
+            let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+            outputBox.withLock { $0 = data }
         }
 
         // ⚠️ DO NOT remove this DispatchWorkItem timeout.
@@ -178,7 +163,7 @@ public enum ProcessRunner {
         drainQueue.sync {}
 
         let exitCode = task.terminationStatus
-        let outputData = outputBox.value
+        let outputData = outputBox.withLock { $0 }
         log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
         return Result(data: outputData.isEmpty ? nil : outputData, exitCode: exitCode)
     }
@@ -293,7 +278,7 @@ public enum ProcessRunner {
         // thread pool, avoids the fire-and-forget Task.detached-per-chunk pattern, and
         // ensures drainQueue.sync {} in terminationHandler is the sole synchronisation
         // point — no actor, no lock, no untracked tasks required.
-        let outputBox = Box<Data>(Data())
+        let outputBox = OSAllocatedUnfairLock(initialState: Data())
         let drainQueue = DispatchQueue(label: "ProcessRunner.drain.async")
 
         // Dedicated serial queue for stdin writes. Dispatched after task.run() so the
@@ -310,22 +295,24 @@ public enum ProcessRunner {
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Result, Never>) in
                 drainQueue.async {
-                    outputBox.value = outPipe.fileHandleForReading.readDataToEndOfFile()
+                    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+                    outputBox.withLock { $0 = data }
                 }
 
                 // Timeout guard — terminates the process if it outlives `timeout`.
-                // Box<Task?> is used so terminationHandler (a @Sendable closure) can capture
-                // a reference type (let) rather than a var, satisfying Swift 6.2 strict
-                // concurrency. The box is written once after task.run() and read once inside
+                // OSAllocatedUnfairLock is used so terminationHandler (a @Sendable closure)
+                // can capture a reference type (let) rather than a var, satisfying Swift 6.2
+                // strict concurrency. The lock is held only for the brief assignment/read.
+                // The box is written once after task.run() and read once inside
                 // terminationHandler — both on the same serialised execution path (#1152).
-                let timeoutTaskBox = Box<Task<Void, Never>?>(nil)
+                let timeoutTaskBox = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
 
                 task.terminationHandler = { t in
                     let exitCode = t.terminationStatus
                     // Cancel the timeout guard immediately — process has already exited.
-                    timeoutTaskBox.value?.cancel()
+                    timeoutTaskBox.withLock { $0 }?.cancel()
                     // Join the drain queue: blocks until readDataToEndOfFile() finishes.
-                    // This is the happens-before guarantee that makes outputBox.value safe
+                    // This is the happens-before guarantee that makes outputBox safe
                     // to read immediately after. The drainQueue.sync call is cheap here
                     // because the process has already exited and the pipe is closed.
                     //
@@ -336,7 +323,7 @@ public enum ProcessRunner {
                     // DispatchGroup.wait() here would be a step backwards for the #1220
                     // modernisation effort.
                     drainQueue.sync {}
-                    let outputData = outputBox.value
+                    let outputData = outputBox.withLock { $0 }
                     log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
                     continuation.resume(returning: Result(
                         data: outputData.isEmpty ? nil : outputData,
@@ -387,7 +374,7 @@ public enum ProcessRunner {
                     }
                 }
 
-                timeoutTaskBox.value = Task.detached {
+                timeoutTaskBox.withLock { $0 = Task.detached {
                     do {
                         try await Task.sleep(for: .seconds(timeout))
                         guard task.isRunning else { return }
@@ -396,7 +383,7 @@ public enum ProcessRunner {
                     } catch {
                         // CancellationError from timeoutTask.cancel() — process already done.
                     }
-                }
+                } }
             }
         } onCancel: {
             // Enclosing Task was cancelled (e.g. pollTask replaced by start()).
