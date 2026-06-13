@@ -258,11 +258,23 @@ public enum ProcessRunner {
 
                 // Create the Task *before* acquiring the lock so it is already
                 // scheduled by the time timeoutTaskBox is written.
-                // Note: a very fast-exiting process can trigger terminationHandler
-                // before this write, causing it to see nil and skip .cancel().
-                // That is safe: guard task.isRunning inside the timeout task
-                // ensures it exits without terminating the (already-gone) process.
-                // This race existed in the pre-refactor Box<T> code as well (#1152).
+                //
+                // Two benign races exist here:
+                //
+                // 1. Fast-exit: terminationHandler fires before timeoutTaskBox is
+                //    written — it reads nil and skips .cancel(). The timeout task
+                //    then fires later but finds task.isRunning == false and exits
+                //    without calling terminate(). Safe.
+                //
+                // 2. Slow-exit: the process outlives the timeout, terminate() is
+                //    called by the timeout task, then terminationHandler fires and
+                //    reads timeoutTaskBox — but by then the timeout task has already
+                //    finished (it returned after terminate()), so .cancel() is a
+                //    benign no-op on a completed Task. Safe.
+                //
+                // In both cases guard task.isRunning is the invariant that prevents
+                // a double-terminate. This race existed in the pre-refactor Box<T>
+                // code as well (#1152).
                 let timeoutTask = Task.detached {
                     do {
                         try await Task.sleep(for: .seconds(timeout))
