@@ -1,0 +1,174 @@
+// PopoverLifecycleCoordinator.swift
+// RunnerBar
+//
+// Extracted from AppDelegate as part of #1374.
+// Owns the four lifecycle concerns that AppDelegate previously stored directly:
+//   • panelIsOpen flag
+//   • preservedSheetWindowHide flag
+//   • outsideClickMonitor (global NSEvent monitor)
+//   • workspaceObserver (NSWorkspace app-switch notification)
+//
+// AppDelegate retains NSPopover and NSStatusItem — they have broader scope
+// and are passed at call-time rather than stored here, keeping the
+// dependency surface explicit and avoiding a back-reference to AppDelegate.
+//
+// ⚠️ All methods must be called on the main actor.
+
+import AppKit
+
+@MainActor
+final class PopoverLifecycleCoordinator {
+
+    // MARK: - State
+
+    /// Mirrors `popover.isShown`. Source of truth for panel visibility.
+    /// Set by `setPanelIsOpen(_:)`, cleared by `tearDown()`.
+    private(set) var panelIsOpen: Bool = false
+
+    /// Set to `true` by `hidePopoverWindowsPreservingSheets()` when the popover
+    /// window is hidden without closing so the sheet NSWindow survives.
+    /// ❌ NEVER read outside the three methods that manage it.
+    private(set) var preservedSheetWindowHide: Bool = false
+
+    // MARK: - Private monitor storage
+
+    /// Global NSEvent monitor installed by `installMonitors(…)`.
+    /// Removed by `tearDown()`.
+    private var outsideClickMonitor: Any?
+
+    /// NSWorkspace observer installed by `installMonitors(…)`.
+    /// Removed by `tearDown()`.
+    private var workspaceObserver: NSObjectProtocol?
+
+    // MARK: - Mutators
+
+    func setPanelIsOpen(_ value: Bool) {
+        panelIsOpen = value
+    }
+
+    func setPreservedSheetWindowHide(_ value: Bool) {
+        preservedSheetWindowHide = value
+    }
+
+    // MARK: - Monitor lifecycle
+
+    /// Installs the outside-click monitor and app-switch observer.
+    ///
+    /// - Parameters:
+    ///   - hasActiveSheet: Closure returning whether a sheet is currently presented.
+    ///     The monitor skips `hidePanel` while a sheet is active so sheet-picker
+    ///     re-activation doesn't dismiss the popover.
+    ///   - popoverWindow: Closure returning the live NSPopover backing window,
+    ///     used to hit-test outside clicks.
+    ///   - onHide: Called on the main actor when the monitor decides the popover
+    ///     should be hidden. Typically `AppDelegate.hidePanel`.
+    func installMonitors(
+        hasActiveSheet: @escaping @MainActor () -> Bool,
+        popoverWindow: @escaping @MainActor () -> NSWindow?,
+        onHide: @escaping @MainActor () -> Void
+    ) {
+        // Outside-click monitor.
+        // Fires on every left/right click outside the popover.
+        // tearDown() removes it on every close path.
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            let screenLoc = event.window?.convertToScreen(
+                NSRect(origin: event.locationInWindow, size: .zero)
+            ).origin ?? NSEvent.mouseLocation
+            log("PopoverLifecycleCoordinator › outsideClickMonitor — FIRED type=\(event.type.rawValue) screenLoc=\(screenLoc)")
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    log("PopoverLifecycleCoordinator › outsideClickMonitor — self is nil, skipping")
+                    return
+                }
+                log("PopoverLifecycleCoordinator › outsideClickMonitor — panelIsOpen=\(self.panelIsOpen)")
+                guard self.panelIsOpen else {
+                    log("PopoverLifecycleCoordinator › outsideClickMonitor — guard exit: panel not open")
+                    return
+                }
+                guard !hasActiveSheet() else {
+                    log("PopoverLifecycleCoordinator › outsideClickMonitor — guard exit: hasActiveSheet=true, skipping hidePanel")
+                    return
+                }
+                guard let window = popoverWindow() else {
+                    log("PopoverLifecycleCoordinator › outsideClickMonitor — WARNING: popoverWindow is nil, skipping hidePanel")
+                    return
+                }
+                log("PopoverLifecycleCoordinator › outsideClickMonitor — popoverFrame=\(window.frame) screenLoc=\(screenLoc) contains=\(window.frame.contains(screenLoc))")
+                if window.frame.contains(screenLoc) {
+                    log("PopoverLifecycleCoordinator › outsideClickMonitor — click inside popover window, ignoring")
+                    return
+                }
+                log("PopoverLifecycleCoordinator › outsideClickMonitor — calling onHide() screenLoc=\(screenLoc)")
+                onHide()
+            }
+        }
+        log("PopoverLifecycleCoordinator › installMonitors — outsideClickMonitor installed: \(String(describing: outsideClickMonitor))")
+
+        // App-switch observer.
+        //
+        // IMPORTANT — self-activation guard below is intentional:
+        // Prevents the popover from self-dismissing when RunnerBar regains focus
+        // after an NSOpenPanel picker closes (the picker re-activates its parent
+        // app, which would otherwise trigger onHide on the way back in).
+        // ❌ Do NOT remove the `activatedApp != NSRunningApplication.current` guard.
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication else {
+                log("PopoverLifecycleCoordinator › workspaceObserver — FIRED but activatedApp is nil, skipping")
+                return
+            }
+            let appName = activatedApp.localizedName ?? "unknown"
+            log("PopoverLifecycleCoordinator › workspaceObserver — FIRED activated=\(appName)")
+            guard activatedApp != NSRunningApplication.current else {
+                log("PopoverLifecycleCoordinator › workspaceObserver — guard exit: RunnerBar self-activated, skipping hidePanel")
+                return
+            }
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    log("PopoverLifecycleCoordinator › workspaceObserver — self is nil, skipping")
+                    return
+                }
+                log("PopoverLifecycleCoordinator › workspaceObserver — panelIsOpen=\(self.panelIsOpen)")
+                guard self.panelIsOpen else {
+                    log("PopoverLifecycleCoordinator › workspaceObserver — guard exit: panel not open")
+                    return
+                }
+                guard !hasActiveSheet() else {
+                    log("PopoverLifecycleCoordinator › workspaceObserver — guard exit: hasActiveSheet=true, skipping hidePanel")
+                    return
+                }
+                log("PopoverLifecycleCoordinator › workspaceObserver — calling onHide() because activated=\(appName)")
+                onHide()
+            }
+        }
+        log("PopoverLifecycleCoordinator › installMonitors — workspaceObserver installed")
+    }
+
+    // MARK: - Teardown
+
+    /// Clears `panelIsOpen` and removes all installed monitors.
+    /// Must be called on every close path (explicit close, outside-click, app-switch).
+    func tearDown() {
+        panelIsOpen = false
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+            log("PopoverLifecycleCoordinator › tearDown — outsideClickMonitor removed")
+        } else {
+            log("PopoverLifecycleCoordinator › tearDown — outsideClickMonitor was already nil")
+        }
+        if let observer = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            workspaceObserver = nil
+            log("PopoverLifecycleCoordinator › tearDown — workspaceObserver removed")
+        } else {
+            log("PopoverLifecycleCoordinator › tearDown — workspaceObserver was already nil")
+        }
+    }
+}

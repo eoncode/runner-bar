@@ -134,23 +134,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `setupSignOutSubscription()` (AppDelegate+Polling.swift).
     /// Keeping a strong reference ensures the task is never silently abandoned.
     var signOutTask: Task<Void, Never>?
-    /// Mirrors `popover.isShown`. Kept separately because `NSPopover.isShown` is not
-    /// reliable immediately after `performClose` — our flag is the source of truth.
-    /// Set to `true` by `openPanel()`, set to `false` by `tearDownOpenState()`.
-    var panelIsOpen = false
-    /// Set to `true` by `hidePopoverWindowsPreservingSheets()` when the popover window
-    /// is hidden without closing, so the sheet NSWindow survives.
-    /// ❌ NEVER read outside hidePopoverWindowsPreservingSheets / restorePopoverWindowsPreservingSheetsIfNeeded / closePanel()
-    var preservedSheetWindowHide = false
+    /// Owns `panelIsOpen`, `preservedSheetWindowHide`, the global NSEvent
+    /// outside-click monitor, and the NSWorkspace app-switch observer.
+    /// AppDelegate is reduced to a wiring layer for these concerns (#1374).
+    let lifecycleCoordinator = PopoverLifecycleCoordinator()
     /// KVO observation token for `NSHostingController.preferredContentSize`.
     /// Drives popover resize without re-calling `popover.show()`.
     var sizeObservation: NSKeyValueObservation?
-    /// Global NSEvent monitor installed by `openPanel()` to hide the popover on
-    /// outside clicks. Removed by `tearDownOpenState()`.
-    var outsideClickMonitor: Any?
-    /// NSWorkspace observer installed by `openPanel()` to hide the popover when
-    /// another app is activated. Removed by `tearDownOpenState()`.
-    var workspaceObserver: NSObjectProtocol?
     // Regression guard — see ARCHITECTURE.md §panelVisibilityState.
     /// Shared observable that tracks whether the panel is open.
     /// Injected into every SwiftUI view via `wrapEnv(_:)`.
@@ -159,6 +149,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Minimum popover content width.
     static let minWidth: CGFloat = 280
+    /// Forwarded from `lifecycleCoordinator` for read access across AppDelegate extensions.
+    var panelIsOpen: Bool { lifecycleCoordinator.panelIsOpen }
+    /// Forwarded from `lifecycleCoordinator` for read access across AppDelegate extensions.
+    var preservedSheetWindowHide: Bool { lifecycleCoordinator.preservedSheetWindowHide }
+
     /// Maximum popover content width (90% of screen).
     var maxWidth: CGFloat { min(900, statusItemScreen.visibleFrame.width * 0.9) }
     /// Maximum popover height (85% of visible screen).
@@ -243,22 +238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         log("AppDelegate › tearDownOpenState — caller=\(Thread.callStackSymbols[1])")
         #endif
-        panelIsOpen = false
+        lifecycleCoordinator.tearDown()
         panelVisibilityState.isOpen = false
-        if let monitor = outsideClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            outsideClickMonitor = nil
-            log("AppDelegate › tearDownOpenState — outsideClickMonitor removed")
-        } else {
-            log("AppDelegate › tearDownOpenState — outsideClickMonitor was already nil")
-        }
-        if let observer = workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(observer)
-            workspaceObserver = nil
-            log("AppDelegate › tearDownOpenState — workspaceObserver removed")
-        } else {
-            log("AppDelegate › tearDownOpenState — workspaceObserver was already nil")
-        }
     }
 
     /// Closes the popover explicitly (Escape / back navigation / manual close).
@@ -271,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         popover?.performClose(nil)
-        preservedSheetWindowHide = false
+        lifecycleCoordinator.setPreservedSheetWindowHide(false)
         tearDownOpenState()
         savedNavState = nil
         panelSheetState.clearRunnerSheet()
@@ -334,7 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context.allowsImplicitAnimation = false
             popoverWindow.orderOut(nil)
         }
-        preservedSheetWindowHide = true
+        lifecycleCoordinator.setPreservedSheetWindowHide(true)
         log("AppDelegate › hidePopoverWindowsPreservingSheets — done, preservedSheetWindowHide=true")
         return true
     }
@@ -349,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context.allowsImplicitAnimation = false
             popoverWindow.orderFront(nil)
         }
-        preservedSheetWindowHide = false
+        lifecycleCoordinator.setPreservedSheetWindowHide(false)
         return true
     }
 
@@ -380,7 +361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func openPanel() {
         guard let button = statusItem?.button, let popover else { return }
         log("AppDelegate › openPanel — LocalRunnerStore pushes state on every cycle, no seed needed")
-        panelIsOpen = true
+        lifecycleCoordinator.setPanelIsOpen(true)
         panelVisibilityState.isOpen = true
         if !restorePopoverWindowsPreservingSheetsIfNeeded() {
             // Apply arrow visibility preference (#1184).
@@ -419,85 +400,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !self.preservedSheetWindowHide else { return }
             self.panelSheetState.restoreTransientHideStateIfNeeded()
         }
-        // Install outside-click monitor. Fires on every left/right click outside
-        // the popover. tearDownOpenState() removes the monitor on every close path.
-        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] event in
-            let screenLoc = event.window?.convertToScreen(
-                NSRect(origin: event.locationInWindow, size: .zero)
-            ).origin ?? NSEvent.mouseLocation
-            log("AppDelegate › outsideClickMonitor — FIRED type=\(event.type.rawValue) screenLoc=\(screenLoc)")
-            Task { @MainActor [weak self] in
-                guard let self else {
-                    log("AppDelegate › outsideClickMonitor — self is nil, skipping")
-                    return
-                }
-                log("AppDelegate › outsideClickMonitor — panelIsOpen=\(self.panelIsOpen)")
-                guard self.panelIsOpen else {
-                    log("AppDelegate › outsideClickMonitor — guard exit: panel not open")
-                    return
-                }
-                guard !self.hasActiveSheet else {
-                    log("AppDelegate › outsideClickMonitor — guard exit: hasActiveSheet=true, skipping hidePanel")
-                    return
-                }
-                guard let popoverWindow = self.popover?.contentViewController?.view.window else {
-                    log("AppDelegate › outsideClickMonitor — WARNING: popoverWindow is nil, skipping hidePanel")
-                    return
-                }
-                log("AppDelegate › outsideClickMonitor — popoverFrame=\(popoverWindow.frame) screenLoc=\(screenLoc) contains=\(popoverWindow.frame.contains(screenLoc))")
-                if popoverWindow.frame.contains(screenLoc) {
-                    log("AppDelegate › outsideClickMonitor — click inside popover window, ignoring")
-                    return
-                }
-                log("AppDelegate › outsideClickMonitor — calling hidePanel() screenLoc=\(screenLoc)")
-                self.hidePanel()
-            }
-        }
-        log("AppDelegate › openPanel — outsideClickMonitor installed: \(String(describing: outsideClickMonitor))")
-        // Install app-switch observer. Fires when any app becomes frontmost,
-        // including RunnerBar itself.
-        //
-        // IMPORTANT — self-activation guard is intentional:
-        // `guard activatedApp != NSRunningApplication.current` prevents the
-        // popover from self-dismissing when RunnerBar regains focus after an
-        // NSOpenPanel picker closes (the picker re-activates its parent app,
-        // which would otherwise trigger hidePanel on the way back in).
-        // Do NOT remove this guard.
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
-                log("AppDelegate › workspaceObserver — FIRED but activatedApp is nil, skipping")
-                return
-            }
-            let appName = activatedApp.localizedName ?? "unknown"
-            log("AppDelegate › workspaceObserver — FIRED activated=\(appName)")
-            guard activatedApp != NSRunningApplication.current else {
-                log("AppDelegate › workspaceObserver — guard exit: RunnerBar self-activated, skipping hidePanel")
-                return
-            }
-            Task { @MainActor [weak self] in
-                guard let self else {
-                    log("AppDelegate › workspaceObserver — self is nil, skipping")
-                    return
-                }
-                log("AppDelegate › workspaceObserver — panelIsOpen=\(self.panelIsOpen)")
-                guard self.panelIsOpen else {
-                    log("AppDelegate › workspaceObserver — guard exit: panel not open")
-                    return
-                }
-                guard !self.hasActiveSheet else {
-                    log("AppDelegate › workspaceObserver — guard exit: hasActiveSheet=true, skipping hidePanel")
-                    return
-                }
-                log("AppDelegate › workspaceObserver — calling hidePanel() because activated=\(appName) panelIsOpen=\(self.panelIsOpen)")
-                self.hidePanel()
-            }
-        }
-        log("AppDelegate › openPanel — workspaceObserver installed")
+        // Delegate monitor installation to the lifecycle coordinator.
+        // The coordinator owns outsideClickMonitor and workspaceObserver;
+        // AppDelegate passes closures so the coordinator never holds a
+        // back-reference to AppDelegate (#1374).
+        lifecycleCoordinator.installMonitors(
+            hasActiveSheet: { [weak self] in self?.hasActiveSheet ?? false },
+            popoverWindow: { [weak self] in self?.popover?.contentViewController?.view.window },
+            onHide: { [weak self] in self?.hidePanel() }
+        )
+        log("AppDelegate › openPanel — monitors installed via lifecycleCoordinator")
     }
 }
