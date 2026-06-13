@@ -108,7 +108,11 @@ enum Keychain {
                         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
                     ] as CFDictionary
                 )
-                if retryStatus == errSecSuccess { succeeded = true } else { log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)") }
+                if retryStatus == errSecSuccess {
+                    succeeded = true
+                } else {
+                    log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)")
+                }
             } else if addStatus == errSecSuccess {
                 succeeded = true
             } else {

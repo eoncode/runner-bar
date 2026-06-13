@@ -2,6 +2,7 @@
 // RunnerBar
 import Foundation
 import RunnerBarCore
+import os
 
 // MARK: - Token cache
 //
@@ -18,8 +19,6 @@ import RunnerBarCore
 // to become async. OSAllocatedUnfairLock provides equivalent mutual exclusion
 // with synchronous semantics, which is correct here because the critical section
 // is a single pointer swap — no suspension point needed.
-
-import os
 
 /// Lock-protected in-memory cache for the resolved GitHub token.
 private let tokenCacheLock = OSAllocatedUnfairLock(initialState: Optional<String>.none)
@@ -53,7 +52,10 @@ func githubToken() -> String? {
         #if DEBUG
         log("GitHubTokenCache › githubToken — resolved from Keychain (len=\(token.count)), populating cache")
         #endif
-        tokenCacheLock.withLock { $0 = token }
+        // Compare-before-write: a concurrent caller may have already populated
+        // the cache between our read above and this write. Only write if still nil
+        // to avoid a redundant store on cold-start stampede.
+        tokenCacheLock.withLock { if $0 == nil { $0 = token } }
         return token
     }
     #if DEBUG
@@ -65,7 +67,7 @@ func githubToken() -> String? {
             #if DEBUG
             log("GitHubTokenCache › githubToken — resolved from env var \(key) (len=\(token.count)), populating cache")
             #endif
-            tokenCacheLock.withLock { $0 = token }
+            tokenCacheLock.withLock { if $0 == nil { $0 = token } }
             return token
         } else {
             #if DEBUG
