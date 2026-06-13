@@ -172,11 +172,15 @@ final class PopoverLifecycleCoordinator {
 
     // MARK: - Teardown
 
-    /// Clears all state flags and removes all installed monitors.
+    /// Removes all installed monitors and clears `panelIsOpen`.
+    /// Does **not** touch `preservedSheetWindowHide` — that flag is exclusively
+    /// managed by `hidePopoverWindowsPreservingSheets()` and
+    /// `restorePopoverWindowsPreservingSheetsIfNeeded()`. Resetting it here
+    /// would orphan a temporarily hidden popover window on the outside-click /
+    /// app-switch close paths.
     /// Must be called on every close path (explicit close, outside-click, app-switch).
     func tearDown() {
         panelIsOpen = false
-        preservedSheetWindowHide = false
         if let monitor = outsideClickMonitor {
             NSEvent.removeMonitor(monitor)
             outsideClickMonitor = nil
