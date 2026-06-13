@@ -16,10 +16,10 @@
 
 import AppKit
 
-@MainActor
 /// Owns the four popover lifecycle concerns extracted from `AppDelegate`:
 /// panel-open flag, preserved-sheet-window flag, outside-click monitor, and
 /// workspace app-switch observer. All methods must be called on the main actor.
+@MainActor
 final class PopoverLifecycleCoordinator {
 
     // MARK: - State
