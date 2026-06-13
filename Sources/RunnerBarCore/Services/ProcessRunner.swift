@@ -46,10 +46,10 @@ import os
 // directly to Swift structured concurrency cancellation. A sibling
 // `Task.detached` replaces the `DispatchWorkItem` timeout from `run(_:)`.
 //
-// Note: the old `Box<T>: @unchecked Sendable` handoff cell has been replaced
-// throughout with `OSAllocatedUnfairLock` (P4 compliance). The lock is captured
-// as a `let` constant by `@Sendable` closures; `withLock` provides compiler-verified
-// `Sendable` conformance and the same queue-serialised happens-before semantics.
+// Migration (#1365): `Box<T>: @unchecked Sendable` replaced throughout with
+// `OSAllocatedUnfairLock`. The lock is a `let` constant captured by `@Sendable`
+// closures; `withLock` provides compiler-verified `Sendable` conformance with
+// the same queue-serialised happens-before semantics.
 
 /// Shared primitive for launching subprocesses. See file-level doc comment above for full details.
 public enum ProcessRunner {
@@ -159,8 +159,10 @@ public enum ProcessRunner {
         timeoutItem.cancel()
 
         // Join the drain queue — blocks until readDataToEndOfFile() has finished
-        // writing outputBox.value. After this sync barrier the value is safe to
-        // read on the calling thread; the queue serialisation is the happens-before edge.
+        // writing into outputBox. After this sync barrier the stored Data is safe to
+        // read on the calling thread; queue serialisation is the happens-before edge.
+        // (The OSAllocatedUnfairLock on outputBox satisfies Sendable — the actual
+        // mutual-exclusion guarantee here comes from drainQueue.sync, not the lock.)
         drainQueue.sync {}
 
         let exitCode = task.terminationStatus
@@ -375,7 +377,12 @@ public enum ProcessRunner {
                     }
                 }
 
-                timeoutTaskBox.withLock { $0 = Task.detached {
+                // Create the Task *before* acquiring the lock so it is already
+                // scheduled by the time timeoutTaskBox is written. terminationHandler
+                // reads timeoutTaskBox only after the process exits, which is always
+                // after this write completes — the serialised continuation path
+                // provides the happens-before edge (#1152).
+                let timeoutTask = Task.detached {
                     do {
                         try await Task.sleep(for: .seconds(timeout))
                         guard task.isRunning else { return }
@@ -384,7 +391,8 @@ public enum ProcessRunner {
                     } catch {
                         // CancellationError from timeoutTask.cancel() — process already done.
                     }
-                } }
+                }
+                timeoutTaskBox.withLock { $0 = timeoutTask }
             }
         } onCancel: {
             // Enclosing Task was cancelled (e.g. pollTask replaced by start()).
