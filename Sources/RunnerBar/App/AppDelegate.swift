@@ -150,8 +150,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Minimum popover content width.
     static let minWidth: CGFloat = 280
     /// Forwarded from `lifecycleCoordinator` for read access across AppDelegate extensions.
+    /// Extensions read via this computed var; writes go via `lifecycleCoordinator.setPanelIsOpen(_:)`.
     var panelIsOpen: Bool { lifecycleCoordinator.panelIsOpen }
     /// Forwarded from `lifecycleCoordinator` for read access across AppDelegate extensions.
+    /// Extensions read via this computed var; writes go via `lifecycleCoordinator.setPreservedSheetWindowHide(_:)`.
     var preservedSheetWindowHide: Bool { lifecycleCoordinator.preservedSheetWindowHide }
 
     /// Maximum popover content width (90% of screen).
@@ -404,6 +406,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The coordinator owns outsideClickMonitor and workspaceObserver;
         // AppDelegate passes closures so the coordinator never holds a
         // back-reference to AppDelegate (#1374).
+        //
+        // NOTE: monitors are installed on EVERY open, including the preserved-sheet
+        // restore path (restorePopoverWindowsPreservingSheetsIfNeeded() == true).
+        // tearDownOpenState() removes them on every hide/close, so reinstalling
+        // here is always correct — the coordinator guards against double-install.
         lifecycleCoordinator.installMonitors(
             hasActiveSheet: { [weak self] in self?.hasActiveSheet ?? false },
             popoverWindow: { [weak self] in self?.popover?.contentViewController?.view.window },

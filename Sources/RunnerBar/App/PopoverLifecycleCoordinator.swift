@@ -126,6 +126,13 @@ final class PopoverLifecycleCoordinator {
         // after an NSOpenPanel picker closes (the picker re-activates its parent
         // app, which would otherwise trigger onHide on the way back in).
         // ❌ Do NOT remove the `activatedApp != NSRunningApplication.current` guard.
+        // NOTE: the `hasActiveSheet` closure itself captures `[weak self]` from
+        // AppDelegate, so there is a double-weak chain:
+        //   coordinator (weak) → AppDelegate (weak) → popover
+        // This is intentional and safe. If AppDelegate is deallocated while the
+        // observer is still installed (shouldn't happen in normal lifetime, but
+        // guards against future scope changes), `hasActiveSheet` returns false
+        // and `onHide` is a no-op — no crash, no leak.
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
