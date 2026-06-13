@@ -172,6 +172,8 @@ final class PopoverLifecycleCoordinator {
             // (see `queue: .main` in addObserver above), so assumeIsolated is safe and
             // avoids the async scheduling overhead. The outside-click path uses a global
             // NSEvent monitor whose callback thread is unspecified, hence the Task hop.
+            // ⚠️ If NSNotificationCenter ever changes delivery guarantees, replace with
+            // Task { @MainActor [weak self] in … } to match the outside-click path.
             MainActor.assumeIsolated {
                 guard let self else {
                     log("PopoverLifecycleCoordinator › workspaceObserver — self is nil, skipping")
@@ -227,17 +229,17 @@ final class PopoverLifecycleCoordinator {
         }
     }
 
-    // MARK: - Lifecycle
+    // MARK: - Deallocation
 
     /// Defensive cleanup: removes any installed monitors if the coordinator is
     /// deallocated without an explicit `tearDown()` call. In normal app lifetime
     /// `lifecycleCoordinator` is `let` on `AppDelegate` and is never released,
     /// so this path is never taken — but guards against a future shorter-lived owner.
     deinit {
-        if outsideClickMonitor != nil, let monitor = outsideClickMonitor {
+        if let monitor = outsideClickMonitor {
             NSEvent.removeMonitor(monitor)
         }
-        if workspaceObserver != nil, let observer = workspaceObserver {
+        if let observer = workspaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
     }
