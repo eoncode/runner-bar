@@ -229,7 +229,7 @@ struct LocalRunnersView: View {
     /// between the tap and the first visible state change.
     @MainActor private func performResume(runner: RunnerModel) {
         log("LocalRunnersView > performResume called runner=\(runner.runnerName)")
-        Task {
+        Task(priority: .userInitiated) {
             // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: true)
             let result = await RunnerLifecycleService.shared.start(runner: runner)
@@ -256,7 +256,7 @@ struct LocalRunnersView: View {
     /// between the tap and the first visible state change.
     @MainActor private func performStop(runner: RunnerModel) {
         log("LocalRunnersView > performStop called runner=\(runner.runnerName)")
-        Task {
+        Task(priority: .userInitiated) {
             // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
             let result = await RunnerLifecycleService.shared.stop(runner: runner)
@@ -283,7 +283,7 @@ struct LocalRunnersView: View {
         // the removal is always visible before the lifecycle call starts. A separate
         // fire-and-forget Task risks the rollback path (optimisticallyRestore) running
         // before optimisticallyRemove, leaving the row permanently deleted on failure.
-        Task {
+        Task(priority: .userInitiated) {
             await localRunnerStore.optimisticallyRemove(runner.runnerName)
             let ok = await RunnerLifecycleService.shared.remove(runner: runner)
             if !ok {
