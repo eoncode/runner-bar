@@ -73,6 +73,13 @@ final class PopoverLifecycleCoordinator {
         popoverWindow: @escaping @MainActor () -> NSWindow?,
         onHide: @escaping @MainActor () -> Void
     ) {
+        // Guard against double-installation: tear down any previously installed
+        // monitors before installing new ones so nothing leaks on re-entrant calls.
+        if outsideClickMonitor != nil || workspaceObserver != nil {
+            log("PopoverLifecycleCoordinator › installMonitors — WARNING: called with active monitors, tearing down first")
+            tearDown()
+        }
+
         // Outside-click monitor.
         // Fires on every left/right click outside the popover.
         // tearDown() removes it on every close path.
@@ -123,7 +130,7 @@ final class PopoverLifecycleCoordinator {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
+        ) { @MainActor [weak self] notification in
             guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                     as? NSRunningApplication else {
                 log("PopoverLifecycleCoordinator › workspaceObserver — FIRED but activatedApp is nil, skipping")
@@ -158,10 +165,18 @@ final class PopoverLifecycleCoordinator {
 
     // MARK: - Teardown
 
-    /// Clears `panelIsOpen` and removes all installed monitors.
+    deinit {
+        // Defensive assertion: if this coordinator is ever moved to a shorter-lived
+        // scope, a missing tearDown() call would leave monitors dangling.
+        assert(outsideClickMonitor == nil, "PopoverLifecycleCoordinator deallocated with active outsideClickMonitor — call tearDown() first")
+        assert(workspaceObserver == nil, "PopoverLifecycleCoordinator deallocated with active workspaceObserver — call tearDown() first")
+    }
+
+    /// Clears all state flags and removes all installed monitors.
     /// Must be called on every close path (explicit close, outside-click, app-switch).
     func tearDown() {
         panelIsOpen = false
+        preservedSheetWindowHide = false
         if let monitor = outsideClickMonitor {
             NSEvent.removeMonitor(monitor)
             outsideClickMonitor = nil
