@@ -160,6 +160,11 @@ final class PopoverLifecycleCoordinator {
                 return
             }
             // Already on main queue (queue: .main above) — access actor state directly.
+            // NB: intentional asymmetry with the outsideClickMonitor closure, which uses
+            // a Task { @MainActor } hop. NSNotificationCenter delivers on queue: .main here
+            // (see `queue: .main` in addObserver above), so assumeIsolated is safe and
+            // avoids the async scheduling overhead. The outside-click path uses a global
+            // NSEvent monitor whose callback thread is unspecified, hence the Task hop.
             MainActor.assumeIsolated {
                 guard let self else {
                     log("PopoverLifecycleCoordinator › workspaceObserver — self is nil, skipping")
