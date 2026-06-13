@@ -37,7 +37,7 @@ struct RunnerLifecycleService {
     /// `.success` if the start step exits 0, or `.failed` with the first non-empty
     /// output line otherwise.
     @discardableResult
-    func start(runner: RunnerModel) -> LifecycleResult {
+    func start(runner: RunnerModel) async -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
         let gh = runner.gitHubUrl ?? "nil"
         logStep("START", "called runner=\(runner.runnerName) installPath=\(ip) gitHubUrl=\(gh)")
@@ -50,7 +50,7 @@ struct RunnerLifecycleService {
         logStep("START", "svc.sh=\(svcPath) exists=\(FileManager.default.fileExists(atPath: svcPath)) executable=\(FileManager.default.isExecutableFile(atPath: svcPath))")
 
         logStep("START", "step1: svc.sh install")
-        let (installOk, installOutput) = runScriptWithOutput(
+        let (installOk, installOutput) = await runScriptWithOutput(
             executableName: "svc.sh", arguments: ["install"],
             workingDirectory: dir, timeout: 15, logTag: "svc.sh install")
         logStep("START", "step1 done: ok=\(installOk) output=\(installOutput.prefix(300))")
@@ -60,7 +60,7 @@ struct RunnerLifecycleService {
         }
 
         logStep("START", "step2: svc.sh start")
-        let (startOk, startOutput) = runScriptWithOutput(
+        let (startOk, startOutput) = await runScriptWithOutput(
             executableName: "svc.sh", arguments: ["start"],
             workingDirectory: dir, timeout: 15, logTag: "svc.sh start")
         logStep("START", "step2 done: ok=\(startOk) output=\(startOutput.prefix(300))")
@@ -90,7 +90,7 @@ struct RunnerLifecycleService {
     ///   return value because a successful `svc.sh stop` is sufficient to take the runner offline.
     ///   A corrupt-install signal from `uninstallOutput` is still surfaced as `.corruptInstall`.
     @discardableResult
-    func stop(runner: RunnerModel) -> LifecycleResult {
+    func stop(runner: RunnerModel) async -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
         logStep("STOP", "called runner=\(runner.runnerName) installPath=\(ip)")
         guard let path = runner.installPath else {
@@ -100,7 +100,7 @@ struct RunnerLifecycleService {
         let dir = URL(fileURLWithPath: path)
 
         logStep("STOP", "step1: svc.sh stop")
-        let (stopOk, stopOutput) = runScriptWithOutput(
+        let (stopOk, stopOutput) = await runScriptWithOutput(
             executableName: "svc.sh", arguments: ["stop"],
             workingDirectory: dir, timeout: 15, logTag: "svc.sh stop")
         logStep("STOP", "step1 done: ok=\(stopOk) output=\(stopOutput.prefix(300))")
@@ -110,7 +110,7 @@ struct RunnerLifecycleService {
         }
 
         logStep("STOP", "step2: svc.sh uninstall")
-        let (_, uninstallOutput) = runScriptWithOutput(
+        let (_, uninstallOutput) = await runScriptWithOutput(
             // uninstall exit code is intentionally ignored — best-effort after a successful stop.
             executableName: "svc.sh", arguments: ["uninstall"],
             workingDirectory: dir, timeout: 15, logTag: "svc.sh uninstall")
@@ -157,7 +157,7 @@ struct RunnerLifecycleService {
         let dir = URL(fileURLWithPath: path)
 
         logStep("REMOVE", "step1: svc.sh uninstall")
-        let (svcOk, _) = runScriptWithOutput(
+        let (svcOk, _) = await runScriptWithOutput(
             executableName: "svc.sh", arguments: ["uninstall"],
             workingDirectory: dir, timeout: 30, logTag: "svc.sh uninstall")
         logStep("REMOVE", "step1 result=\(svcOk) (non-fatal)")
@@ -176,7 +176,7 @@ struct RunnerLifecycleService {
         logStep("REMOVE", "step2: got token len=\(token.count)")
 
         logStep("REMOVE", "step3: config.sh remove --token <token> in \(path)")
-        let (cfgOk, cfgOutput) = runScriptWithOutput(
+        let (cfgOk, cfgOutput) = await runScriptWithOutput(
             executableName: "config.sh", arguments: ["remove", "--token", token],
             workingDirectory: dir, timeout: 30, logTag: "config.sh remove")
         logStep("REMOVE", "step3 result=\(cfgOk) for \(runner.runnerName)")
@@ -262,7 +262,7 @@ struct RunnerLifecycleService {
 
     /// Runs a shell script relative to `workingDirectory` and returns `(exitCode == 0, combined output)`.
     ///
-    /// Thin wrapper around `ProcessRunner.run` that resolves the executable by name within the
+    /// Thin wrapper around `ProcessRunner.runAsync` that resolves the executable by name within the
     /// runner's install directory, guards against non-executable files, and merges stderr into stdout.
     private func runScriptWithOutput(
         executableName: String,
@@ -270,7 +270,7 @@ struct RunnerLifecycleService {
         workingDirectory: URL,
         timeout: TimeInterval,
         logTag: String
-    ) -> (Bool, String) {
+    ) async -> (Bool, String) {
         let executableURL = workingDirectory.appendingPathComponent(executableName)
         let execPath = executableURL.path
         let isExec = FileManager.default.isExecutableFile(atPath: execPath)
@@ -279,7 +279,7 @@ struct RunnerLifecycleService {
             logStep("runScript [\(logTag)]", "ABORT not executable")
             return (false, "")
         }
-        let result = ProcessRunner.run(
+        let result = await ProcessRunner.runAsync(
             executableURL: executableURL,
             arguments: arguments,
             workingDirectory: workingDirectory,

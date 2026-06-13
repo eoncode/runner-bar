@@ -232,9 +232,7 @@ struct LocalRunnersView: View {
         Task {
             // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: true)
-            let result = await Task.detached(priority: .userInitiated) {
-                RunnerLifecycleService.shared.start(runner: runner)
-            }.value
+            let result = await RunnerLifecycleService.shared.start(runner: runner)
             switch result {
             case .success: break
             case .corruptInstall:
@@ -261,9 +259,7 @@ struct LocalRunnersView: View {
         Task {
             // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
-            let result = await Task.detached(priority: .userInitiated) {
-                RunnerLifecycleService.shared.stop(runner: runner)
-            }.value
+            let result = await RunnerLifecycleService.shared.stop(runner: runner)
             switch result {
             case .success: break
             case .corruptInstall:
@@ -287,17 +283,9 @@ struct LocalRunnersView: View {
         // the removal is always visible before the lifecycle call starts. A separate
         // fire-and-forget Task risks the rollback path (optimisticallyRestore) running
         // before optimisticallyRemove, leaving the row permanently deleted on failure.
-        // Task.detached is used for RunnerLifecycleService.remove because
-        // runScriptWithOutput calls synchronous Process + waitUntilExit, which must
-        // stay off the cooperative thread pool regardless of actor isolation.
-        // TODO (Batch C): Once runScriptWithOutput is migrated to AsyncProcess /
-        // CheckedContinuation+DispatchQueue.global, Task.detached can be replaced
-        // with a plain Task { } here.
-        Task {
+                Task {
             await localRunnerStore.optimisticallyRemove(runner.runnerName)
-            let ok = await Task.detached(priority: .userInitiated) {
-                await RunnerLifecycleService.shared.remove(runner: runner)
-            }.value
+            let ok = await RunnerLifecycleService.shared.remove(runner: runner)
             if !ok {
                 await localRunnerStore.optimisticallyRestore(runner)
                 removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
