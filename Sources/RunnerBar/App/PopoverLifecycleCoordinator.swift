@@ -137,7 +137,7 @@ final class PopoverLifecycleCoordinator {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { @MainActor [weak self] notification in
+        ) { [weak self] notification in
             guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                     as? NSRunningApplication else {
                 log("PopoverLifecycleCoordinator › workspaceObserver — FIRED but activatedApp is nil, skipping")
@@ -175,8 +175,12 @@ final class PopoverLifecycleCoordinator {
     deinit {
         // Defensive assertion: if this coordinator is ever moved to a shorter-lived
         // scope, a missing tearDown() call would leave monitors dangling.
-        assert(outsideClickMonitor == nil, "PopoverLifecycleCoordinator deallocated with active outsideClickMonitor — call tearDown() first")
-        assert(workspaceObserver == nil, "PopoverLifecycleCoordinator deallocated with active workspaceObserver — call tearDown() first")
+        // deinit is nonisolated so we snapshot to locals first to avoid
+        // referencing @MainActor-isolated properties from a nonisolated context.
+        let monitor = outsideClickMonitor
+        let observer = workspaceObserver
+        assert(monitor == nil, "PopoverLifecycleCoordinator deallocated with active outsideClickMonitor — call tearDown() first")
+        assert(observer == nil, "PopoverLifecycleCoordinator deallocated with active workspaceObserver — call tearDown() first")
     }
 
     /// Clears all state flags and removes all installed monitors.
