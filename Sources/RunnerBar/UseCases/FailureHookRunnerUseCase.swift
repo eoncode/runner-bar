@@ -142,13 +142,19 @@ public struct FailureHookRunnerUseCase: Sendable {
         let logContent = buildLogContent(group: group, scope: scope, jobs: jobs)
         let escapedLog = singleQuoteEscape(logContent)
         log("FailureHookRunnerUseCase resolveTokens -- $LOCAL_PATH='\(localRepoPath)' $BRANCH='\(branch)' $RUN_ID='\(failedRunID)' $WORKFLOW_NAME='\(workflowName)' $COMMIT_SHA='\(sha)' logContentBytes=\(escapedLog.count)")
+        // All string tokens are resolved in Swift before the command is passed to
+        // /bin/zsh -c, so every substituted value must be safe to embed in shell.
+        // singleQuoteEscape() wraps the value in single quotes and escapes any
+        // embedded single quote as '\'' — applied consistently to all user-controlled
+        // string tokens. URL tokens ($*_LINK) are percent-encoded and contain no
+        // shell-special characters, so they are substituted verbatim.
         return command
             .replacingOccurrences(of: "$LOCAL_PATH", with: singleQuoteEscape(localRepoPath))
-            .replacingOccurrences(of: "$SCOPE", with: scope)
-            .replacingOccurrences(of: "$BRANCH", with: branch)
-            .replacingOccurrences(of: "$COMMIT_SHA", with: sha)
-            .replacingOccurrences(of: "$RUN_ID", with: failedRunID)
-            .replacingOccurrences(of: "$WORKFLOW_NAME", with: workflowName)
+            .replacingOccurrences(of: "$SCOPE", with: singleQuoteEscape(scope))
+            .replacingOccurrences(of: "$BRANCH", with: singleQuoteEscape(branch))
+            .replacingOccurrences(of: "$COMMIT_SHA", with: singleQuoteEscape(sha))
+            .replacingOccurrences(of: "$RUN_ID", with: singleQuoteEscape(failedRunID))
+            .replacingOccurrences(of: "$WORKFLOW_NAME", with: singleQuoteEscape(workflowName))
             .replacingOccurrences(of: "$RUN_LINK", with: runLink)
             .replacingOccurrences(of: "$COMMIT_LINK", with: commitLink)
             .replacingOccurrences(of: "$BRANCH_LINK", with: branchLink)
