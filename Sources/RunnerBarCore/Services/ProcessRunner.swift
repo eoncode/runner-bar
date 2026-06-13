@@ -35,9 +35,10 @@ import os
 // block on a write and `waitUntilExit()` to spin forever (Apple QA1858).
 // `launchctl list` on a loaded Mac easily exceeds 64 KB.
 //
-// `run` drains stdout into a plain `var` inside a `DispatchQueue.async` block
-// and reads it back after `drainQueue.sync {}` — the queue provides the
-// happens-before guarantee with zero unsafe annotations.
+// `run` drains stdout into an `OSAllocatedUnfairLock<Data>` via a
+// `DispatchQueue.async` block and reads it back after `drainQueue.sync {}`.
+// The queue provides the happens-before guarantee; the lock provides
+// compiler-verified `Sendable` conformance with zero unsafe annotations.
 //
 // ## Async variant (`runAsync`)
 // `runAsync` owns its own `Process` instance and bridges completion via
