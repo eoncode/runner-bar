@@ -5,46 +5,47 @@ import os
 
 // MARK: - ProcessRunner
 
-/// Shared primitive for launching subprocesses with streaming output,
-/// optional stdin, optional working directory, and a DispatchWorkItem timeout.
-///
-/// Both `runRegistrationCommand` and `runScriptWithOutput`
-/// (RunnerLifecycleService) are thin wrappers around this type.
-///
-/// ## Migration note (from Shell.swift — deleted in #956)
-/// The old `Shell` enum used `/bin/zsh -c "<command string>"` which had
-/// a documented shell-injection risk: any unsanitised argument could escape
-/// the command string and execute arbitrary shell code. `ProcessRunner.run`
-/// takes a typed `[String]` arguments array and passes it directly to
-/// `Process`, bypassing the shell entirely. Never reintroduce a string-based
-/// shell invocation here.
-///
-/// ## ⚠️ Timeout implementation — do NOT simplify
-/// The timeout is implemented as a `DispatchWorkItem` + `DispatchQueue.asyncAfter`
-/// rather than a bare `process.waitUntilExit()` with no deadline.
-/// Reason: `waitUntilExit()` with no timeout can hang indefinitely if a child
-/// process ignores SIGTERM or holds an open pipe. This pattern was the root
-/// cause of the main-thread hang tracked in bug #477. The `DispatchWorkItem`
-/// approach guarantees termination within `timeout` seconds even in that case.
-/// Do NOT remove the timeout guard.
-///
-/// ## ⚠️ Pipe-drain concurrency — do NOT move readDataToEndOfFile after waitUntilExit
-/// The stdout pipe must be drained on a background thread *while*
-/// `waitUntilExit()` blocks. Deferring the drain until after exit lets the
-/// kernel pipe buffer (~64 KB on macOS) fill up, causing the child process to
-/// block on a write and `waitUntilExit()` to spin forever (Apple QA1858).
-/// `launchctl list` on a loaded Mac easily exceeds 64 KB.
-///
-/// `run` drains stdout into a plain `var` inside a `DispatchQueue.async` block
-/// and reads it back after `drainQueue.sync {}` — the queue provides the
-/// happens-before guarantee with zero unsafe annotations.
-///
-/// ## Async variant (`runAsync`)
-/// `runAsync` owns its own `Process` instance and bridges completion via
-/// `terminationHandler` + `withCheckedContinuation` — no thread is held while
-/// the subprocess runs. `withTaskCancellationHandler` wires `task.terminate()`
-/// directly to Swift structured concurrency cancellation. A sibling
-/// `Task.detached` replaces the `DispatchWorkItem` timeout from `run(_:)`.
+// Shared primitive for launching subprocesses with streaming output,
+// optional stdin, optional working directory, and a DispatchWorkItem timeout.
+//
+// Both `runRegistrationCommand` and `runScriptWithOutput`
+// (RunnerLifecycleService) are thin wrappers around this type.
+//
+// ## Migration note (from Shell.swift — deleted in #956)
+// The old `Shell` enum used `/bin/zsh -c "<command string>"` which had
+// a documented shell-injection risk: any unsanitised argument could escape
+// the command string and execute arbitrary shell code. `ProcessRunner.run`
+// takes a typed `[String]` arguments array and passes it directly to
+// `Process`, bypassing the shell entirely. Never reintroduce a string-based
+// shell invocation here.
+//
+// ## ⚠️ Timeout implementation — do NOT simplify
+// The timeout is implemented as a `DispatchWorkItem` + `DispatchQueue.asyncAfter`
+// rather than a bare `process.waitUntilExit()` with no deadline.
+// Reason: `waitUntilExit()` with no timeout can hang indefinitely if a child
+// process ignores SIGTERM or holds an open pipe. This pattern was the root
+// cause of the main-thread hang tracked in bug #477. The `DispatchWorkItem`
+// approach guarantees termination within `timeout` seconds even in that case.
+// Do NOT remove the timeout guard.
+//
+// ## ⚠️ Pipe-drain concurrency — do NOT move readDataToEndOfFile after waitUntilExit
+// The stdout pipe must be drained on a background thread *while*
+// `waitUntilExit()` blocks. Deferring the drain until after exit lets the
+// kernel pipe buffer (~64 KB on macOS) fill up, causing the child process to
+// block on a write and `waitUntilExit()` to spin forever (Apple QA1858).
+// `launchctl list` on a loaded Mac easily exceeds 64 KB.
+//
+// `run` drains stdout into a plain `var` inside a `DispatchQueue.async` block
+// and reads it back after `drainQueue.sync {}` — the queue provides the
+// happens-before guarantee with zero unsafe annotations.
+//
+// ## Async variant (`runAsync`)
+// `runAsync` owns its own `Process` instance and bridges completion via
+// `terminationHandler` + `withCheckedContinuation` — no thread is held while
+// the subprocess runs. `withTaskCancellationHandler` wires `task.terminate()`
+// directly to Swift structured concurrency cancellation. A sibling
+// `Task.detached` replaces the `DispatchWorkItem` timeout from `run(_:)`.
+//
 // Note: the old `Box<T>: @unchecked Sendable` handoff cell has been replaced
 // throughout with `OSAllocatedUnfairLock` (P4 compliance). The lock is captured
 // as a `let` constant by `@Sendable` closures; `withLock` provides compiler-verified
