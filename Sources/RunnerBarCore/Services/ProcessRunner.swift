@@ -161,7 +161,9 @@ public enum ProcessRunner {
         // Using a DispatchQueue here (not a Task) keeps the drain off the cooperative
         // thread pool, avoids the fire-and-forget Task.detached-per-chunk pattern, and
         // ensures drainQueue.sync {} in terminationHandler is the sole synchronisation
-        // point — no actor, no lock, no untracked tasks required.
+        // point. `outputBox` is an `OSAllocatedUnfairLock` for Swift 6 `Sendable`
+        // compliance — the lock is held only for the brief Data assignment/read;
+        // the queue's `sync {}` barrier, not the lock, is the happens-before edge.
         let outputBox = OSAllocatedUnfairLock(initialState: Data())
         let drainQueue = DispatchQueue(label: "ProcessRunner.drain.async")
 
