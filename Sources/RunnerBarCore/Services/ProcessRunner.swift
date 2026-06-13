@@ -52,8 +52,8 @@ public enum ProcessRunner {
 
     /// Launches an executable asynchronously without blocking the cooperative thread pool.
     ///
-    /// Unlike `run(_:)`, this method owns its `Process` instance directly so that
-    /// Swift structured concurrency can interact with it properly:
+    /// This method owns its `Process` instance directly so that Swift structured
+    /// concurrency can interact with it properly:
     ///
     /// - **Suspension:** the caller suspends at the `await` and is resumed by
     ///   `terminationHandler` when the process exits — no thread is held.
@@ -63,11 +63,15 @@ public enum ProcessRunner {
     ///   full `timeout`.
     /// - **Timeout:** a sibling `Task.detached` sleeps for `timeout` seconds and
     ///   then calls `task.terminate()` if the process is still running, preserving
-    ///   the hang-safety guarantee of `run(_:)` without a `DispatchWorkItem`.
+    ///   hang-safety without a `DispatchWorkItem`. The timeout task is intentionally
+    ///   `Task.detached` — it must outlive the `withCheckedContinuation` scope and
+    ///   run regardless of the parent task's cancellation state. Its lifetime is
+    ///   bounded by the earlier of: (a) `terminationHandler` cancelling it after
+    ///   process exit, or (b) the `timeout` interval elapsing.
     ///
-    /// ## ⚠️ Pipe-drain concurrency — same invariant as `run(_:)`
+    /// ## ⚠️ Pipe-drain concurrency
     /// stdout is drained via a dedicated serial `DispatchQueue` *concurrently* with
-    /// process execution, mirroring the `Box + drainQueue.sync` pattern in `run(_:)`
+    /// process execution (concurrent drain + `terminationHandler` join pattern).
     /// `readDataToEndOfFile()` blocks until the pipe's write end closes (i.e. the
     /// process exits), so all bytes are captured in a single call with one clear
     /// happens-before edge. `terminationHandler` joins the drain queue with
@@ -122,7 +126,7 @@ public enum ProcessRunner {
     ///    the continuation is that stdout is fully captured — which `drainQueue.sync {}`
     ///    already guarantees.
     ///
-    /// All parameters mirror `run(_:)`; defaults are identical.
+    /// All parameters and defaults are identical to the removed synchronous `run()` method.
     public static func runAsync(
         executableURL: URL,
         arguments: [String],
@@ -150,7 +154,7 @@ public enum ProcessRunner {
         }
 
         // Drain stdout on a dedicated serial queue concurrently with process execution,
-        // mirroring the run() synchronous pattern. readDataToEndOfFile() blocks until
+        // (concurrent drain + terminationHandler join pattern). readDataToEndOfFile() blocks until
         // the write end of the pipe is closed (i.e. the process exits), so it captures
         // all output in one call with a single clear happens-before edge.
         //
