@@ -133,6 +133,11 @@ final class PopoverLifecycleCoordinator {
         // observer is still installed (shouldn't happen in normal lifetime, but
         // guards against future scope changes), `hasActiveSheet` returns false
         // and `onHide` is a no-op — no crash, no leak.
+        //
+        // `queue: .main` delivers this closure on the main queue, so we are
+        // already on the main actor — no Task hop needed. The body accesses
+        // @MainActor-isolated state (`panelIsOpen`) and calls @MainActor
+        // closures (`hasActiveSheet`, `onHide`) directly.
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -149,7 +154,8 @@ final class PopoverLifecycleCoordinator {
                 log("PopoverLifecycleCoordinator › workspaceObserver — guard exit: RunnerBar self-activated, skipping hidePanel")
                 return
             }
-            Task { @MainActor [weak self] in
+            // Already on main queue (queue: .main above) — access actor state directly.
+            MainActor.assumeIsolated {
                 guard let self else {
                     log("PopoverLifecycleCoordinator › workspaceObserver — self is nil, skipping")
                     return
