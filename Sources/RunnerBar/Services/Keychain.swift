@@ -14,8 +14,28 @@ import Security
 // Without this, SecItemCopyMatching can trigger a C++ CSSMERR_DL_DATASTORE_DOESNOT_EXIST
 // exception that crashes the process on launch when the legacy keychain DB file
 // is missing or was created under a different signing identity.
+//
+// Thread-safety / P16 rationale:
+// SecItem* calls are serialised by the Security framework at the OS level and
+// are documented as safe to call concurrently from multiple threads. No
+// additional actor or lock is needed around the SecItem* calls themselves.
+//
+// The one piece of mutable shared state — the in-memory token cache — lives in
+// GitHubTokenCache.swift and is already guarded by an OSAllocatedUnfairLock.
+// invalidateTokenCache() (called after every mutation here) clears that cache
+// under the lock, so there is no unprotected shared mutable state in this type.
+//
+// Conclusion: a KeychainActor would require all call-sites to become async with
+// no correctness benefit. The current design satisfies P16.
 
 /// Wrapper around Security.framework for storing and retrieving the GitHub OAuth token.
+///
+/// ## Thread safety
+/// `SecItem*` calls are OS-serialised by the Security framework and are safe to
+/// call concurrently. The in-memory token cache is protected by
+/// `OSAllocatedUnfairLock` in `GitHubTokenCache`; `invalidateTokenCache()` is
+/// called after every mutation to keep it consistent. No actor wrapper is
+/// required — see the file-level comment for the full P16 rationale.
 enum Keychain {
     /// Keychain service name used for RunnerBar credentials.
     private static let service = "runner-bar"

@@ -13,7 +13,11 @@ import RunnerBarCore
 //   - OAuthService.signOut() via invalidateTokenCache()
 //   - Keychain.save()         via invalidateTokenCache()
 //
-// Thread-safety: read/write guarded by tokenCacheLock (OSAllocatedUnfairLock).
+// Thread-safety (P16): read/write guarded by tokenCacheLock (OSAllocatedUnfairLock).
+// An actor wrapper was considered but rejected: it would require all call-sites
+// to become async. OSAllocatedUnfairLock provides equivalent mutual exclusion
+// with synchronous semantics, which is correct here because the critical section
+// is a single pointer swap — no suspension point needed.
 
 import os
 
