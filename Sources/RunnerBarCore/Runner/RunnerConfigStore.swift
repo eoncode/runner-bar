@@ -50,6 +50,17 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// is immutable after initialisation and has no mutable state.
     nonisolated private let decoder = JSONDecoder()
 
+    /// Encoder used for writing `.runner` JSON. Hoisted so `save(_:at:)` avoids
+    /// allocating/configuring a new `JSONEncoder` on every call.
+    /// `nonisolated` so the DispatchQueue.global closure in `save(_:at:)` can capture
+    /// it without crossing the actor's isolation boundary. Safe because `JSONEncoder`
+    /// configuration is fixed after initialisation.
+    nonisolated private let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }()
+
     // MARK: Init
 
     /// Private initialiser — use `RunnerConfigStore.shared`.
@@ -150,9 +161,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                 if let v = config.agentId              { raw[RunnerConfig.CodingKeys.agentId.rawValue]              = .int(v)    }
 
                 do {
-                    let encoder = JSONEncoder()
-                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                    let data = try encoder.encode(raw)
+                    let data = try self.encoder.encode(raw)
                     try data.write(to: url, options: .atomic)
                     log("RunnerConfigStore › saved config to \(url.path)")
                     continuation.resume()
