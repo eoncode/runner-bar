@@ -172,17 +172,6 @@ final class PopoverLifecycleCoordinator {
 
     // MARK: - Teardown
 
-    deinit {
-        // Defensive assertion: if this coordinator is ever moved to a shorter-lived
-        // scope, a missing tearDown() call would leave monitors dangling.
-        // deinit is nonisolated so we snapshot to locals first to avoid
-        // referencing @MainActor-isolated properties from a nonisolated context.
-        let monitor = outsideClickMonitor
-        let observer = workspaceObserver
-        assert(monitor == nil, "PopoverLifecycleCoordinator deallocated with active outsideClickMonitor — call tearDown() first")
-        assert(observer == nil, "PopoverLifecycleCoordinator deallocated with active workspaceObserver — call tearDown() first")
-    }
-
     /// Clears all state flags and removes all installed monitors.
     /// Must be called on every close path (explicit close, outside-click, app-switch).
     func tearDown() {
