@@ -37,11 +37,18 @@ final class PopoverLifecycleCoordinator {
 
     /// Global NSEvent monitor installed by `installMonitors(…)`.
     /// Removed by `tearDown()`.
-    private var outsideClickMonitor: Any?
+    ///
+    /// `nonisolated(unsafe)`: required so `deinit` (which is nonisolated per SE-0327)
+    /// can release the monitor without a data-race warning. Every live read/write
+    /// is `@MainActor`-guarded; `deinit` runs only after the last strong reference
+    /// drops (app teardown), so no concurrent access is possible in practice.
+    nonisolated(unsafe) private var outsideClickMonitor: Any?
 
     /// NSWorkspace observer installed by `installMonitors(…)`.
     /// Removed by `tearDown()`.
-    private var workspaceObserver: NSObjectProtocol?
+    ///
+    /// `nonisolated(unsafe)`: same rationale as `outsideClickMonitor` above.
+    nonisolated(unsafe) private var workspaceObserver: NSObjectProtocol?
 
     // MARK: - Mutators
 
