@@ -41,20 +41,6 @@ public struct FailureHookRunnerUseCase: Sendable {
     /// Opens Terminal.app with the resolved command. Must run on `@MainActor`.
     let terminalLauncher: any TerminalLauncherProtocol
 
-    // MARK: - Init
-
-    /// Creates a use-case with the given dependency implementations.
-    /// - Parameters:
-    ///   - preferencesStore: Reads per-scope failure-hook preferences.
-    ///   - terminalLauncher: Opens Terminal.app with the resolved command.
-    public init(
-        preferencesStore: any ScopePreferencesStoreProtocol,
-        terminalLauncher: any TerminalLauncherProtocol
-    ) {
-        self.preferencesStore = preferencesStore
-        self.terminalLauncher = terminalLauncher
-    }
-
     // MARK: - Public API
 
     /// Call this whenever a group transitions to done with a failure conclusion.
