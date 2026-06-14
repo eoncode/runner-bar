@@ -22,7 +22,8 @@ enum FailureHookRunner {
     /// Default command used when no command has been explicitly saved for the scope.
     /// Shared with `FailureHookCommandSheet` for pre-population and referenced by
     /// `FailureHookRunnerUseCase` as the fallback command.
-    static let defaultCommand = "cd $LOCAL_PATH && gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo"
+    /// Forwards to `FailureHookRunnerUseCase.defaultCommand` — canonical definition lives there.
+    static let defaultCommand = FailureHookRunnerUseCase.defaultCommand
 
     /// Forwards to `FailureHookRunnerUseCase` wired with production dependencies.
     static func fireIfNeeded(

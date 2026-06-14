@@ -14,8 +14,28 @@ import Security
 // Without this, SecItemCopyMatching can trigger a C++ CSSMERR_DL_DATASTORE_DOESNOT_EXIST
 // exception that crashes the process on launch when the legacy keychain DB file
 // is missing or was created under a different signing identity.
+//
+// Thread-safety / P16 rationale:
+// SecItem* calls are serialised by the Security framework at the OS level and
+// are documented as safe to call concurrently from multiple threads. No
+// additional actor or lock is needed around the SecItem* calls themselves.
+//
+// The one piece of mutable shared state — the in-memory token cache — lives in
+// GitHubTokenCache.swift and is already guarded by an OSAllocatedUnfairLock.
+// invalidateTokenCache() (called after every mutation here) clears that cache
+// under the lock, so there is no unprotected shared mutable state in this type.
+//
+// Conclusion: a KeychainActor would require all call-sites to become async with
+// no correctness benefit. The current design satisfies P16.
 
 /// Wrapper around Security.framework for storing and retrieving the GitHub OAuth token.
+///
+/// ## Thread safety
+/// `SecItem*` calls are OS-serialised by the Security framework and are safe to
+/// call concurrently. The in-memory token cache is protected by
+/// `OSAllocatedUnfairLock` in `GitHubTokenCache`; `invalidateTokenCache()` is
+/// called after every mutation to keep it consistent. No actor wrapper is
+/// required — see the file-level comment for the full P16 rationale.
 enum Keychain {
     /// Keychain service name used for RunnerBar credentials.
     private static let service = "runner-bar"
@@ -37,6 +57,9 @@ enum Keychain {
     // MARK: - Public API
 
     /// The stored OAuth token, or nil if none is present.
+    ///
+    /// - Note: `nonisolated` — `SecItem*` calls are OS-serialised by the Security
+    ///   framework. No actor or lock is required. See file-level P16 rationale.
     static var token: String? {
         var query = baseQuery()
         query[kSecReturnData as String] = true
@@ -52,6 +75,10 @@ enum Keychain {
 
     /// Saves (or overwrites) the token and invalidates the in-memory token cache.
     /// Returns true if the token was successfully persisted.
+    ///
+    /// - Note: `nonisolated` — `SecItemUpdate`/`SecItemAdd` are OS-serialised.
+    ///   Concurrent writers are handled by the upsert retry guard below.
+    ///   See file-level P16 rationale.
     @discardableResult
     static func save(_ token: String) -> Bool {
         guard let data = token.data(using: .utf8) else { return false }
@@ -88,7 +115,11 @@ enum Keychain {
                         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
                     ] as CFDictionary
                 )
-                if retryStatus == errSecSuccess { succeeded = true } else { log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)") }
+                if retryStatus == errSecSuccess {
+                    succeeded = true
+                } else {
+                    log("Keychain.save › retry SecItemUpdate failed: \(retryStatus)")
+                }
             } else if addStatus == errSecSuccess {
                 succeeded = true
             } else {
@@ -104,6 +135,9 @@ enum Keychain {
     /// Deletes the stored token.
     /// Invalidates the in-memory token cache only when deletion actually succeeds
     /// (or the item was already absent). Returns true on success.
+    ///
+    /// - Note: `nonisolated` — `SecItemDelete` is OS-serialised.
+    ///   See file-level P16 rationale.
     @discardableResult
     static func delete() -> Bool {
         let status = SecItemDelete(baseQuery() as CFDictionary)

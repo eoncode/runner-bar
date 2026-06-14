@@ -29,6 +29,11 @@ import RunnerBarCore
 /// `TerminalLauncherProtocol.open(command:)` — matching the pre-refactor behaviour.
 public struct FailureHookRunnerUseCase: Sendable {
 
+    /// Default failure-hook command used when the user has not configured a
+    /// custom command for the scope. `FailureHookRunner.defaultCommand` forwards
+    /// to this constant — it is the canonical definition.
+    public static let defaultCommand = "cd $LOCAL_PATH && gemini -p '$FAILURE_LOG' --model=gemini-2.5-flash --approval-mode=yolo"
+
     // MARK: Dependencies
 
     /// Reads per-scope failure-hook preferences from storage.
@@ -78,7 +83,7 @@ public struct FailureHookRunnerUseCase: Sendable {
         }
         let storedCommand = preferencesStore.failureHookCommand(for: scope)
         log("FailureHookRunnerUseCase storedCommand for scope=\(scope) -> \(storedCommand ?? "<nil -- will use defaultCommand>")")
-        let command = storedCommand ?? FailureHookRunner.defaultCommand
+        let command = storedCommand ?? FailureHookRunnerUseCase.defaultCommand
         log("FailureHookRunnerUseCase resolved command (first 200): \(command.prefix(200))")
         let failure = Self.isFailure(group: group)
         let runSummary = group.runs.map { "\($0.id):\($0.conclusion?.rawValue ?? "nil")" }.joined(separator: ",")
