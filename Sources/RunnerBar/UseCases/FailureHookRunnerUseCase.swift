@@ -144,10 +144,12 @@ struct FailureHookRunnerUseCase: Sendable {
         log("FailureHookRunnerUseCase resolveTokens -- $LOCAL_PATH='\(localRepoPath)' $BRANCH='\(branch)' $RUN_ID='\(failedRunID)' $WORKFLOW_NAME='\(workflowName)' $COMMIT_SHA='\(sha)' logContentBytes=\(escapedLog.count)")
         // All string tokens are resolved in Swift before the command is passed to
         // /bin/zsh -c, so every substituted value must be safe to embed in shell.
-        // singleQuoteEscape() wraps the value in single quotes and escapes any
-        // embedded single quote as '\'' — applied consistently to all user-controlled
-        // string tokens. URL tokens ($*_LINK) are percent-encoded and contain no
-        // shell-special characters, so they are substituted verbatim.
+        // singleQuoteEscape() escapes any embedded single quote as '\'' so the value
+        // is safe to place between single quotes in the command template. The surrounding
+        // single quotes must be present in the template (e.g. '$BRANCH') — without them,
+        // values containing spaces or other shell-special characters are still unsafe.
+        // URL tokens ($*_LINK) are percent-encoded and contain no shell-special characters,
+        // so they are substituted verbatim.
         return command
             .replacingOccurrences(of: "$LOCAL_PATH", with: singleQuoteEscape(localRepoPath))
             .replacingOccurrences(of: "$SCOPE", with: singleQuoteEscape(scope))
