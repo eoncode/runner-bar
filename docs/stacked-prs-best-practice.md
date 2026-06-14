@@ -11,4 +11,7 @@
 > 7. If squash‑merge is used on `main`, after each squash always use `git rebase --onto main <old-base-sha> <branch>` so the squashed‑away commits don't reappear as conflicts.
 > 8. If a rebase gets stuck, run `git rebase --abort` and report back — do not force a resolution.
 
+
+DO NOT DELTE BRANCHES!!!!!!
 ```
+
