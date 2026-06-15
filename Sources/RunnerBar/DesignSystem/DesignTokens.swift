@@ -202,4 +202,3 @@ enum RBFont {
     /// 10 pt regular monospaced — numeric stat value.
     static let statValue: Font = .system(size: 10, weight: .regular, design: .monospaced)
 }
-
