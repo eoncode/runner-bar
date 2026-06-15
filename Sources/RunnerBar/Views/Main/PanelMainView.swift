@@ -174,7 +174,7 @@ struct PanelMainView: View {
     /// Rate-limit warning banner showing a countdown to API reset.
     /// Reads `displayTick` as a dependency so the label refreshes every second.
     private var rateLimitBanner: some View {
-        withExtendedLifetime(displayTick) {}
+        withExtendedLifetime(displayTick) {} // read-tap: registers displayTick as a SwiftUI dependency so the view refreshes each tick
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
             let remaining = max(0, resetDate.timeIntervalSinceNow)
