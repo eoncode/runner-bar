@@ -295,7 +295,6 @@ struct AddRunnerSheet: View {
 
     // MARK: - Register (Add new)
 
-    // swiftlint:disable:next function_body_length cyclomatic_complexity
     /// Downloads, unpacks, configures a new runner, registers with `LocalRunnerStore`, and dismisses.
     ///
     /// ## Actor isolation — read before changing this function
