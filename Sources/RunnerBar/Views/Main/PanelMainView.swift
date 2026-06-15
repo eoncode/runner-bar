@@ -148,7 +148,7 @@ struct PanelMainView: View {
     @ViewBuilder private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
         if nextBatch > 0 {
-            Button(action: { visibleCount += nextBatch }) {
+            Button { visibleCount += nextBatch } label: {
                 Text("Load \(nextBatch) more workflows\u{2026}")
                     .font(.caption).foregroundColor(.secondary)
             }
