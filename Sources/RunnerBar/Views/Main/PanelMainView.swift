@@ -148,7 +148,7 @@ struct PanelMainView: View {
     @ViewBuilder private var loadMoreButton: some View {
         let nextBatch = min(10, store.actions.count - visibleCount)
         if nextBatch > 0 {
-            Button(action: { visibleCount += nextBatch }) {
+            Button { visibleCount += nextBatch } label: {
                 Text("Load \(nextBatch) more workflows\u{2026}")
                     .font(.caption).foregroundColor(.secondary)
             }
@@ -172,9 +172,11 @@ struct PanelMainView: View {
     }
 
     /// Rate-limit warning banner showing a countdown to API reset.
-    /// Reads `displayTick` as a dependency so the label refreshes every second.
+    /// The label refreshes every second because `displayTick` is threaded through
+    /// `body → actionsSectionContent → ActionRowView(tick:)`. The `withExtendedLifetime`
+    /// call here makes the read intent explicit but does not itself register a new dependency.
     private var rateLimitBanner: some View {
-        _ = displayTick // swiftlint:disable:this redundant_discardable_let
+        withExtendedLifetime(displayTick) {} // makes read intent explicit; actual refresh is driven by the tick: param chain in body
         let countdownLabel: String
         if let resetDate = store.rateLimitResetDate {
             let remaining = max(0, resetDate.timeIntervalSinceNow)

@@ -201,8 +201,7 @@ extension ScopeEditSheet {
                         Text("GitHub")
                             .font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
                             .frame(width: 100, alignment: .leading).fixedSize()
-                        // swiftlint:disable:next multiple_closures_with_trailing_closure
-                        Button(action: { NSWorkspace.shared.open(url) }) {
+                        Button { NSWorkspace.shared.open(url) } label: {
                             HStack(spacing: 4) {
                                 Text("Open on GitHub")
                                     .font(.system(size: 12))
@@ -294,8 +293,7 @@ extension ScopeEditSheet {
     /// Row for selecting the branch filter applied by the failure hook.
     /// Tapping opens `BranchSelectorSheet`; an ×-button clears the draft filter.
     var branchRow: some View {
-        // swiftlint:disable:next multiple_closures_with_trailing_closure
-        Button(action: { showBranchSheet = true }) {
+        Button { showBranchSheet = true } label: {
             HStack(spacing: 8) {
                 Text("Branch")
                     .font(.system(size: 12))
@@ -353,11 +351,10 @@ extension ScopeEditSheet {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(Color.rbAccent)
             } else {
-                // swiftlint:disable:next multiple_closures_with_trailing_closure
-                Button(action: {
+                Button {
                     log("[PICKER] localPathRow — text button tapped, calling startEditingPath")
                     startEditingPath()
-                }) {
+                } label: {
                     Text(localRepoPath.isEmpty ? "Tap to set path…" : localRepoPath)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(localRepoPath.isEmpty ? Color.rbTextTertiary : Color.rbTextPrimary)
@@ -394,8 +391,7 @@ extension ScopeEditSheet {
     /// Row for configuring the hook command. Tapping opens
     /// `FailureHookCommandSheet` where the user can enter or edit the command.
     var commandRow: some View {
-        // swiftlint:disable:next multiple_closures_with_trailing_closure
-        Button(action: { showHookSheet = true }) {
+        Button { showHookSheet = true } label: {
             HStack(spacing: 8) {
                 Text("Command")
                     .font(.system(size: 12))
@@ -554,11 +550,10 @@ extension ScopeEditSheet {
                 .lineLimit(2).truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if copyable {
-                // swiftlint:disable:next multiple_closures_with_trailing_closure
-                Button(action: {
+                Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(value, forType: .string)
-                }) {
+                } label: {
                     Image(systemName: "doc.on.doc").font(.system(size: 10)).foregroundColor(Color.rbTextTertiary)
                 }
                 .buttonStyle(.plain).help("Copy to clipboard")

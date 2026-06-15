@@ -98,7 +98,6 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
 
     // MARK: - Init
 
-    // swiftlint:disable:next function_parameter_count
     // NOSONAR — 18 parameters faithfully model the GitHub API runner payload; splitting would break all call sites.
     /// Creates a new `RunnerModel` instance.
     ///

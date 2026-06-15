@@ -14,22 +14,26 @@ struct SparklineView: View {
 
     /// Renders a gradient fill path and a stroke polyline scaled to the available geometry.
     var body: some View {
-        // swiftlint:disable:next multiple_closures_with_trailing_closure
         GeometryReader { geo in
-            ZStack {
-                fillPath(in: geo.size)
-                    .fill(
-                        LinearGradient(
-                            colors: [themeColor.opacity(0.85), themeColor.opacity(0.05)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                strokePath(in: geo.size)
-                    .stroke(themeColor, lineWidth: 1.5)
-            }
+            layers(in: geo.size)
         }
         .background(Color.clear)
+    }
+
+    /// Stacks the gradient fill and stroke polyline for a given size.
+    private func layers(in size: CGSize) -> some View {
+        ZStack {
+            fillPath(in: size)
+                .fill(
+                    LinearGradient(
+                        colors: [themeColor.opacity(0.85), themeColor.opacity(0.05)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            strokePath(in: size)
+                .stroke(themeColor, lineWidth: 1.5)
+        }
     }
 
     /// Accent color shifting green -> orange -> red as `currentPct` crosses 60 and 85.

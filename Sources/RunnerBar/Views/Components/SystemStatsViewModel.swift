@@ -91,7 +91,6 @@ final class SystemStatsViewModel {
     }
 
     // MARK: CPU
-    // swiftlint:disable:next function_body_length
     // Mach host_processor_info diff loop — cannot be extracted without losing clarity.
     /// Reads per-core tick counts via `host_processor_info` and returns aggregate CPU usage (0-100).
     /// Diffs against the previous sample; returns `0` on the first call or if the kernel call fails.

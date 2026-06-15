@@ -202,33 +202,3 @@ enum RBFont {
     /// 10 pt regular monospaced — numeric stat value.
     static let statValue: Font = .system(size: 10, weight: .regular, design: .monospaced)
 }
-
-// MARK: - DesignTokens namespace shim
-// periphery:ignore - deprecated shim with active call sites; remove after migrating SystemStatsView, PanelMainView+Subviews, InlineJobRowsView
-/// Backwards-compatibility namespace that delegates to the primary `RBFont` and `RBSpacing` token types.
-///
-/// - Note: **Deprecated shim** — prefer `RBFont`, `RBSpacing`, `RBRadius`, and the `Color`
-/// token extensions directly in all new code. This namespace exists only to avoid a
-/// mass rename of existing call sites. Do not add new members here.
-/// TODO: Remove once all remaining call sites (`DesignTokens.Fonts.*`, `DesignTokens.Spacing.*`) // NOSONAR
-/// are migrated to the `RB*` equivalents.
-/// Active call sites as of Batch 22: `SystemStatsView` (×2), `PanelMainView+Subviews` (×6),
-/// `InlineJobRowsView` (×3) — 11 total. Migrate those files before removing this shim.
-enum DesignTokens {
-    /// Font aliases forwarded from `RBFont`.
-    /// - Note: Deprecated — use `RBFont` directly.
-    @available(*, deprecated, renamed: "RBFont")
-    enum Fonts {
-        /// Monospaced label font — alias for `RBFont.monoSmall`.
-        static let monoLabel: Font = RBFont.monoSmall
-        /// Caption monospaced font — alias for `RBFont.mono`.
-        static let mono: Font = RBFont.mono
-    }
-    /// Spacing aliases forwarded from `RBSpacing`.
-    /// - Note: Deprecated — use `RBSpacing` directly.
-    @available(*, deprecated, renamed: "RBSpacing")
-    enum Spacing {
-        /// Horizontal row padding — alias for `RBSpacing.md`.
-        static let rowHPad: CGFloat = RBSpacing.md
-    }
-}

@@ -3,9 +3,8 @@
 import SwiftUI
 
 // MARK: - SettingsView sections extension
-// swiftlint:disable no_extension_access_modifier
 /// Settings sections broken out from `SettingsView` for readability.
-extension SettingsView {
+internal extension SettingsView {
 
     // MARK: - Account
     /// GitHub sign-in / sign-out controls and authentication status.
@@ -206,4 +205,3 @@ extension SettingsView {
         }
     }
 }
-// swiftlint:enable no_extension_access_modifier

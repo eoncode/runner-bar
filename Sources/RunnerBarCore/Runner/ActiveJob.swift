@@ -45,7 +45,6 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     public let steps: [JobStep]
 
     // MARK: Designated init
-    // swiftlint:disable:next function_parameter_count
     // NOSONAR — 12 parameters faithfully model the GitHub API payload.
     /// Creates a new `ActiveJob` with all fields.
     /// - Parameters:

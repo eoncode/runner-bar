@@ -205,13 +205,15 @@ final class OAuthService {
         /// Human-readable description of the error, if present.
         let errorDescription: String?
 
-        // swiftlint:disable missing_docs
+        /// Maps Swift property names to the snake_case JSON keys returned by the GitHub OAuth endpoint.
         private enum CodingKeys: String, CodingKey {
+            /// Maps to `access_token`.
             case accessToken = "access_token"
+            /// Maps to `error`.
             case error
+            /// Maps to `error_description`.
             case errorDescription = "error_description"
         }
-        // swiftlint:enable missing_docs
 
         /// Returns the names of modelled fields that are non-nil, for safe diagnostic logging.
         var debugKeys: [String] {
