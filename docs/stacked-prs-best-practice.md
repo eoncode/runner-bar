@@ -14,6 +14,6 @@
 
 - DO NOT DELTE BRANCHES!!!!!!
 -  figure out a merge strategy that doesnt send us into merge conflict hell.
-- i want all commits to land on main. no squashing. all ors are proved
+- i want all commits to land on main. no squashing. all prs are already approved
 ```
 
