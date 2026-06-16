@@ -317,27 +317,27 @@ public func makeActiveJob(
 ) -> ActiveJob {
     let steps: [JobStep] = payload.steps.map { s in
         JobStep(
-            id:          s.number,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap { iso.date(from: $0) },
+            id: s.number,
+            name: s.name,
+            status: s.status,
+            conclusion: s.conclusion,
+            startedAt: s.startedAt.flatMap { iso.date(from: $0) },
             completedAt: s.completedAt.flatMap { iso.date(from: $0) },
-            number:      s.number
+            number: s.number
         )
     }
     return ActiveJob(
-        id:          payload.id,
-        name:        payload.name,
-        htmlUrl:     payload.htmlUrl,
-        status:      payload.status,
-        conclusion:  payload.conclusion,
-        isDimmed:    isDimmed,
-        runnerName:  payload.runnerName,
-        scope:       nil,
-        startedAt:   payload.startedAt.flatMap { iso.date(from: $0) },
+        id: payload.id,
+        name: payload.name,
+        htmlUrl: payload.htmlUrl,
+        status: payload.status,
+        conclusion: payload.conclusion,
+        isDimmed: isDimmed,
+        runnerName: payload.runnerName,
+        scope: nil,
+        startedAt: payload.startedAt.flatMap { iso.date(from: $0) },
         completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
-        createdAt:   payload.createdAt.flatMap { iso.date(from: $0) },
-        steps:       steps
+        createdAt: payload.createdAt.flatMap { iso.date(from: $0) },
+        steps: steps
     )
 }

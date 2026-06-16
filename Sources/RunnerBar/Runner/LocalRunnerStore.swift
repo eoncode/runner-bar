@@ -37,8 +37,8 @@ actor LocalRunnerStore {
         guard let instance = _shared else {
             fatalError(
                 "LocalRunnerStore.shared accessed before configure(viewModel:) was called. "
-                + "Call LocalRunnerStore.configure(viewModel: appDelegate.observable) in "
-                + "applicationDidFinishLaunching before using this accessor."
+                    + "Call LocalRunnerStore.configure(viewModel: appDelegate.observable) in "
+                    + "applicationDidFinishLaunching before using this accessor."
             )
         }
         return instance
@@ -199,10 +199,10 @@ actor LocalRunnerStore {
     ///   2. runner.agentId == runnerId (local .runner JSON AgentId — repo runners use this)
     ///   3. runner.runnerName == name  (name-only last resort)
     func applyMetrics(_ metrics: RunnerMetrics?, forRunnerId runnerId: Int?, name: String) async {
-#if DEBUG
+        #if DEBUG
         log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))")
         log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
-#endif
+        #endif
 
         guard let idx = runners.firstIndex(where: { runner in
             if let rid = runnerId, let aid = runner.apiId, aid == rid {  // Priority 1: GitHub REST API id
@@ -284,9 +284,9 @@ actor LocalRunnerStore {
         log("LocalRunnerStore › performRefresh() — launchctl liveLabels.count=\(liveLabels.count): \(liveLabels)")
         hydrated = hydrated.map { runner in
             let live = liveLabels.contains { $0.contains(runner.runnerName) }
-#if DEBUG
+            #if DEBUG
             log("LocalRunnerStore › performRefresh() — '\(runner.runnerName)' isRunning=\(live)")
-#endif
+            #endif
             return runner.copying(isRunning: live)
         }
 
@@ -296,9 +296,9 @@ actor LocalRunnerStore {
         log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
         let enriched = await enricher.enrich(runners: hydrated)
         log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
-#if DEBUG
+        #if DEBUG
         log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
-#endif
+        #endif
 
         await applyRefreshResults(enriched)
     }
@@ -316,41 +316,41 @@ actor LocalRunnerStore {
     private func applyRefreshResults(_ enriched: [RunnerModel]) async {
         log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
 
-        var metricsByApiId:   [Int: RunnerMetrics] = [:]
+        var metricsByApiId: [Int: RunnerMetrics] = [:]
         var metricsByAgentId: [Int: RunnerMetrics] = [:]
-        var metricsByName:    [String: RunnerMetrics] = [:]
+        var metricsByName: [String: RunnerMetrics] = [:]
         for runner in runners {
             guard runner.isBusy, let m = runner.metrics else { continue }
             if let id = runner.apiId   { metricsByApiId[id]   = m }  // Priority 1: GitHub REST API id
             if let id = runner.agentId { metricsByAgentId[id] = m }  // Priority 2: local AgentId
             metricsByName[runner.runnerName] = m                      // Priority 3: name (last resort)
         }
-#if DEBUG
+        #if DEBUG
         log("LocalRunnerStore › applyRefreshResults — preserved metrics: byApiId=\(metricsByApiId.keys.sorted()) byAgentId=\(metricsByAgentId.keys.sorted()) byName=\(metricsByName.keys.sorted())")
-#endif
+        #endif
 
         let preserved: [RunnerModel] = enriched.map { runner in
             if let id = runner.apiId, let m = metricsByApiId[id] {
-#if DEBUG
+                #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)")
-#endif
+                #endif
                 return runner.copying(metrics: m)
             }
             if let id = runner.agentId, let m = metricsByAgentId[id] {
-#if DEBUG
+                #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)")
-#endif
+                #endif
                 return runner.copying(metrics: m)
             }
             if let m = metricsByName[runner.runnerName] {
-#if DEBUG
+                #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name")
-#endif
+                #endif
                 return runner.copying(metrics: m)
             }
-#if DEBUG
+            #if DEBUG
             log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)'")
-#endif
+            #endif
             return runner
         }
         runners = preserved.sorted { $0.runnerName < $1.runnerName }

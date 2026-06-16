@@ -85,7 +85,7 @@ public struct PollResultBuilder {
         let queuedCount = liveJobs.filter { $0.status == .queued }.count
         log(
             "PollResultBuilder › \(inProgCount) in_progress \(queuedCount) queued"
-            + " | cache: \(newCache.count) | display: \(display.count)"
+                + " | cache: \(newCache.count) | display: \(display.count)"
         )
         return JobPollResult(display: display, newCache: newCache, newPrevLive: newPrevLive)
     }
@@ -173,7 +173,7 @@ public struct PollResultBuilder {
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
         log(
             "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
-            + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
+                + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
         // Enrich jobs concurrently while preserving the sort order produced by
         // buildGroupDisplay. withTaskGroup yields results in completion order, so

@@ -108,7 +108,7 @@ struct AddRunnerSheet: View {
     /// Repository slugs fetched from GitHub for the picker.
     @State var repos: [String] = []
     /// Organisation names fetched from GitHub for the picker.
-    @State var orgs:  [String] = []
+    @State var orgs: [String] = []
     /// `true` while scope options are being fetched from GitHub.
     @State var isLoadingScopes = false
     /// `true` while the repository-selector sheet is presented.

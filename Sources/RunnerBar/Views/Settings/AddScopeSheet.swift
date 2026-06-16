@@ -180,10 +180,10 @@ struct AddScopeSheet: View {
 
                 // ── Helper caption ───────────────────────────────────────
                 Text(scopeType == .org
-                     ? "Monitors all runners in the organisation."
-                     : "Monitors runners registered to this repository.")
-                .font(.caption)
-                .foregroundColor(Color.rbTextSecondary)
+                        ? "Monitors all runners in the organisation."
+                        : "Monitors runners registered to this repository.")
+                    .font(.caption)
+                    .foregroundColor(Color.rbTextSecondary)
             }
             .padding(RBSpacing.md)
 

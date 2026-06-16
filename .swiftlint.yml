@@ -45,7 +45,7 @@ disabled_rules:
   - trailing_comma                          # SwiftPM/Xcode auto-formatter conflicts with this
   - identifier_name                         # short names (s, x, i) are fine in this codebase
   - opening_brace                           # trailing-brace style used throughout
-  - colon                                   # dictionary/type colon spacing not enforced
+  # colon re-enabled — PR #205 did a full sweep
   - cyclomatic_complexity                   # complex dispatch/switch functions are acceptable
   - file_length                             # large files are acceptable during active development
   - superfluous_disable_command             # in-file disables may pre-empt future violations

@@ -309,17 +309,17 @@ private func fetchJobsForRun(_ runID: Int, scope: String) async -> [ActiveJob] {
                 let betterSteps = !freshJob.steps.isEmpty && !freshJob.steps.contains { $0.status == JobStatus.inProgress }
                 if betterSteps {
                     return (idx, ActiveJob(
-                        id:          job.id,
-                        name:        job.name,
-                        htmlUrl:     job.htmlUrl,
-                        status:      job.status,
-                        conclusion:  job.conclusion,
-                        isDimmed:    job.isDimmed,
-                        runnerName:  freshJob.runnerName ?? job.runnerName,
-                        scope:       job.scope,
-                        startedAt:   freshJob.startedAt ?? job.startedAt,
+                        id: job.id,
+                        name: job.name,
+                        htmlUrl: job.htmlUrl,
+                        status: job.status,
+                        conclusion: job.conclusion,
+                        isDimmed: job.isDimmed,
+                        runnerName: freshJob.runnerName ?? job.runnerName,
+                        scope: job.scope,
+                        startedAt: freshJob.startedAt ?? job.startedAt,
                         completedAt: freshJob.completedAt ?? job.completedAt,
-                        steps:       freshJob.steps
+                        steps: freshJob.steps
                     ))
                 }
                 return (idx, nil)

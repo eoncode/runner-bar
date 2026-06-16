@@ -22,8 +22,8 @@ final class RunnerViewModel {
     @MainActor static var shared: RunnerViewModel {
         fatalError(
             "RunnerViewModel.shared must not be used. "
-            + "The live instance is AppDelegate.observable — inject it via the environment "
-            + "or pass it as a constructor argument."
+                + "The live instance is AppDelegate.observable — inject it via the environment "
+                + "or pass it as a constructor argument."
         )
     }
 

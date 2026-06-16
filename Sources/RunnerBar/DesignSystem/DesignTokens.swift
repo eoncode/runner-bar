@@ -32,12 +32,12 @@ extension Color {
     /// Primary blue accent — adaptive light/dark pair for in-progress status indicators.
     static let rbBlue = Color.adaptive(
         light: Color(red: 0.0, green: 0.48, blue: 1.0),
-        dark:  Color(red: 0.3, green: 0.64, blue: 1.0)
+        dark: Color(red: 0.3, green: 0.64, blue: 1.0)
     )
     /// Green success color — adaptive light/dark pair for completed / passing status.
     static let rbSuccess = Color.adaptive(
         light: Color(red: 0.18, green: 0.64, blue: 0.18),
-        dark:  Color(red: 0.25, green: 0.80, blue: 0.25)
+        dark: Color(red: 0.25, green: 0.80, blue: 0.25)
     )
     /// Amber warning color — adaptive light/dark pair for queued / pending status.
     static let rbWarning = Color.adaptive(
@@ -72,12 +72,12 @@ extension Color {
         if #available(macOS 26, *) {
             return Color.adaptive(
                 light: Color(white: 0.95).opacity(0.04),
-                dark:  Color(white: 0.11).opacity(0.04)
+                dark: Color(white: 0.11).opacity(0.04)
             )
         } else {
             return Color.adaptive(
                 light: Color(white: 0.95).opacity(0.88),
-                dark:  Color(white: 0.11).opacity(0.45)
+                dark: Color(white: 0.11).opacity(0.45)
             )
         }
     }
@@ -89,12 +89,12 @@ extension Color {
         if #available(macOS 26, *) {
             return Color.adaptive(
                 light: Color(white: 0.88).opacity(0.05),
-                dark:  Color(white: 0.15).opacity(0.05)
+                dark: Color(white: 0.15).opacity(0.05)
             )
         } else {
             return Color.adaptive(
                 light: Color(white: 0.88).opacity(0.92),
-                dark:  Color(white: 0.15).opacity(0.25)
+                dark: Color(white: 0.15).opacity(0.25)
             )
         }
     }
@@ -105,12 +105,12 @@ extension Color {
         if #available(macOS 26, *) {
             return Color.adaptive(
                 light: Color(white: 0.0).opacity(0.12),
-                dark:  Color(white: 1.0).opacity(0.06)
+                dark: Color(white: 1.0).opacity(0.06)
             )
         } else {
             return Color.adaptive(
                 light: Color(white: 0.0).opacity(0.08),
-                dark:  Color(white: 1.0).opacity(0.06)
+                dark: Color(white: 1.0).opacity(0.06)
             )
         }
     }

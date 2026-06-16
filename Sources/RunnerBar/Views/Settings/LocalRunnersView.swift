@@ -215,7 +215,7 @@ struct LocalRunnersView: View {
                 .foregroundColor(Color.rbTextTertiary)
             Button(action: { runnerPendingRemoval = runner },
                    label: { Image(systemName: "minus.circle").font(.caption2).foregroundColor(Color.rbDanger) })
-            .buttonStyle(.plain).help("Remove runner")
+                .buttonStyle(.plain).help("Remove runner")
         }
     }
 

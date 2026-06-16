@@ -168,7 +168,7 @@ extension FailureHookCommandSheet {
     /// NOTE: Only `$LOCAL_PATH` and `$SCOPE` are pre-resolved here; runtime-only tokens
     /// (`$FAILURE_LOG`, `$BRANCH`, `$RUN_ID`, etc.) are left as-is and will appear
     /// literally in the terminal window during a test run.
-    private func testCommand() {
+    func testCommand() {
         // Use the unsaved draft path passed from ScopeEditSheet, not the persisted store value,
         // so the test reflects what the hook will actually use after Save.
         let localPath = localRepoPath

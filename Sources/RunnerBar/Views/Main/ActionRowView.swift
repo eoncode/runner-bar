@@ -54,7 +54,7 @@ struct ActionRowView: View {
         .frame(maxWidth: .infinity)
         .background {
             ZStack { background() }
-            .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         }
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))

@@ -74,9 +74,9 @@ final class AppPreferencesStore {
     /// guards. This matches the pattern used by `NotificationPreferences`.
     private init() {
         UserDefaults.standard.register(defaults: [
-            Key.pollingInterval:   15,  // First-launch default: 15 s (see #511)
+            Key.pollingInterval: 15,  // First-launch default: 15 s (see #511)
             Key.showDimmedRunners: true,
-            Key.showPopoverArrow:  true,
+            Key.showPopoverArrow: true,
         ])
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
         pollingInterval   = stored.clamped(to: Self.pollingRange)
