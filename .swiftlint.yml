@@ -59,13 +59,37 @@ disabled_rules:
   # identifier_name re-enabled with min_length: 2 — see config block below
   # opening_brace re-enabled — PR #205 fixed these
   # colon re-enabled — PR #205 did a full sweep
-  - cyclomatic_complexity                   # complex dispatch/switch functions are acceptable
-  - file_length                             # large files are acceptable during active development
-  - superfluous_disable_command             # in-file disables may pre-empt future violations
-  - line_length                             # long lines are acceptable in this codebase
-  - function_body_length                    # long view bodies are acceptable in SwiftUI
+  # cyclomatic_complexity re-enabled with warning: 17 (target 15 in #1406)
+  # file_length re-enabled with warning: 620, error: 800 (target 500 in #1406)
+  # superfluous_disable_command re-enabled — stale suppressions now caught by CI
+  # line_length re-enabled with warning: 200, error: 240 (target 160 in #1406)
+  # function_body_length re-enabled with warning: 90 (target 80 in #1406)
   # operator_usage_whitespace re-enabled — PR #205 fixed these
   - vertical_whitespace_opening_braces      # conflicts with SwiftUI DSL patterns
   - multiple_closures_with_trailing_closure # SwiftUI DSL routinely uses multiple trailing closures
-  - function_parameter_count                # large model inits are acceptable in this codebase
-  - type_body_length                        # large types are acceptable; tracked for Phase 2 re-enable in #1406
+  # function_parameter_count re-enabled with warning: 6, error: 8 — tracked in #1406
+  # type_body_length re-enabled with warning: 400 — tracked in #1406
+
+line_length:
+  warning: 200   # tightened from 240 (phase 1) → target 160 tracked in #1406
+  error: 240
+
+file_length:
+  warning: 620   # tightened from 800 (phase 1) → target 500 tracked in #1406
+  error: 800
+
+cyclomatic_complexity:
+  warning: 17    # tightened from 20 (phase 1) → target 15 tracked in #1406
+  error: 30      # explicit ceiling; SwiftLint default is 20
+
+function_body_length:
+  warning: 90    # tightened from 120 (phase 1) → target 80 tracked in #1406
+  error: 150     # explicit ceiling; SwiftLint default is 200
+
+type_body_length:
+  warning: 400
+  error: 600    # explicit ceiling; tighten toward 400 in phase 3 — tracked in #1406
+
+function_parameter_count:
+  warning: 6
+  error: 8

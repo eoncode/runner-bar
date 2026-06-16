@@ -50,6 +50,7 @@ struct FailureHookRunnerUseCase: Sendable {
         scope: String,
         callsite: String = "unknown"
     ) {
+        // swiftlint:disable:next line_length
         log("FailureHookRunnerUseCase fireIfNeeded ENTER -- callsite=\(callsite) scope=\(scope) groupID=\(group.id) groupTitle=\(group.title) headSha=\(group.headSha) groupStatus=\(group.groupStatus)")
         let hookEnabled = preferencesStore.failureHookEnabled(for: scope)
         log("FailureHookRunnerUseCase failureHookEnabled for scope=\(scope) -> \(hookEnabled)")
@@ -141,6 +142,7 @@ struct FailureHookRunnerUseCase: Sendable {
         let repoLink = baseURL
         let logContent = buildLogContent(group: group, scope: scope, jobs: jobs)
         let escapedLog = singleQuoteEscape(logContent)
+        // swiftlint:disable:next line_length
         log("FailureHookRunnerUseCase resolveTokens -- $LOCAL_PATH='\(localRepoPath)' $BRANCH='\(branch)' $RUN_ID='\(failedRunID)' $WORKFLOW_NAME='\(workflowName)' $COMMIT_SHA='\(sha)' logContentBytes=\(escapedLog.count)")
         // All string tokens are resolved in Swift before the command is passed to
         // /bin/zsh -c, so every substituted value must be safe to embed in shell.

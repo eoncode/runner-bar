@@ -180,7 +180,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
         switch githubStatus {
         case .online: return .githubOnline
         case .busy: return .busy
-        default:       return .offline
+        default: return .offline
         }
     }
 

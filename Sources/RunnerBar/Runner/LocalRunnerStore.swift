@@ -201,6 +201,7 @@ actor LocalRunnerStore {
     func applyMetrics(_ metrics: RunnerMetrics?, forRunnerId runnerId: Int?, name: String) async {
         #if DEBUG
         log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))")
+        // swiftlint:disable:next line_length
         log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
         #endif
 
@@ -219,6 +220,7 @@ actor LocalRunnerStore {
             }
             return false
         }) else {
+            // swiftlint:disable:next line_length
             log("LocalRunnerStore › ⚠️ applyMetrics — NO MATCH for runnerId=\(String(describing: runnerId)) name=\(name). runners=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
             return
         }

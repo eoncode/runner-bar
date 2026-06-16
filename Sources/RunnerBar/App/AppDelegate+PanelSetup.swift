@@ -143,6 +143,7 @@ extension AppDelegate: NSPopoverDelegate {
     /// is already `false` and the guard exits immediately.
     public func popoverDidClose(_ notification: Notification) {
         #if DEBUG
+        // swiftlint:disable:next line_length
         log("AppDelegate › popoverDidClose — panelIsOpen=\(panelIsOpen) behavior=\((NSApp.delegate as? AppDelegate)?.popover?.behavior.rawValue ?? -1) stack=\(Thread.callStackSymbols.prefix(5).joined(separator: "||"))")
         #endif
         guard panelIsOpen else {

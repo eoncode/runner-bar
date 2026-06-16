@@ -479,6 +479,7 @@ actor RunnerStore {
         isRateLimited = rateLimitSnapshot.isLimited
         rateLimitResetDate = rateLimitSnapshot.resetDate
 
+        // swiftlint:disable:next line_length
         log("RunnerStore › fetch complete — actions=\(groupResult.display.count) jobs=\(jobResult.display.count) runners=\(enrichedRunners.count) isRateLimited=\(rateLimitSnapshot.isLimited) rateLimitResetDate=\(String(describing: rateLimitSnapshot.resetDate))")
 
         let statusUpdate = onStatusUpdate
@@ -538,6 +539,7 @@ actor RunnerStore {
 
         log("RunnerStore › fetchAndEnrichRunners — total runners across all scopes: \(runnersWithScope.count)")
         #if DEBUG
+        // swiftlint:disable:next line_length
         log("RunnerStore › fetchAndEnrichRunners — installPathMap.byFullKey=\(installPathMap.byFullKey.keys.sorted()) byName=\(installPathMap.byName.keys.sorted()) byAgentId=\(installPathMap.byAgentId.keys.sorted()) byApiId=\(installPathMap.byApiId.keys.sorted())")
         #endif
 
@@ -559,6 +561,7 @@ actor RunnerStore {
                 let resolvedByName = installPathMap.byName[runner.name]
                 let installPath = resolvedByApiId ?? resolvedByAgentId ?? resolvedByFull ?? resolvedByName
                 #if DEBUG
+                // swiftlint:disable:next line_length
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) id=\(runner.id) busy=true; byApiId=\(String(describing: resolvedByApiId)) byAgentId=\(String(describing: resolvedByAgentId)) byFullKey=\(String(describing: resolvedByFull)) byName=\(String(describing: resolvedByName)) → resolved=\(String(describing: installPath))")
                 #endif
                 guard let installPath else {

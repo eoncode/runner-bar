@@ -55,6 +55,7 @@ extension RunnerStore {
                 byFullKey["\(scope)/\(localRunner.runnerName)"] = path
             }
         }
+        // swiftlint:disable:next line_length
         log("RunnerStore › buildInstallPathMap — localRunners=\(localRunners.count) scopes=\(scopes) → fullKeys=\(byFullKey.keys.sorted()) nameKeys=\(byName.keys.sorted()) agentIdKeys=\(byAgentId.keys.sorted()) apiIdKeys=\(byApiId.keys.sorted())")
         if byFullKey.isEmpty && !localRunners.isEmpty {
             log("RunnerStore › ⚠️ buildInstallPathMap — fullKey map is EMPTY despite localRunners=\(localRunners.count). Scopes=\(scopes). Check scope string format alignment with localRunner names.")
