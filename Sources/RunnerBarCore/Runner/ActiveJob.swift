@@ -234,31 +234,31 @@ public struct JobPayload: Decodable, Sendable {
         /// Maps to the `steps` JSON field.
         case steps
         /// Maps to the `started_at` JSON field.
-        case startedAt   = "started_at"
+        case startedAt = "started_at"
         /// Maps to the `completed_at` JSON field.
         case completedAt = "completed_at"
         /// Maps to the `created_at` JSON field.
-        case createdAt   = "created_at"
+        case createdAt = "created_at"
         /// Maps to the `html_url` JSON field.
-        case htmlUrl     = "html_url"
+        case htmlUrl = "html_url"
         /// Maps to the `runner_name` JSON field.
-        case runnerName  = "runner_name"
+        case runnerName = "runner_name"
     }
 
     /// Decodes a `JobPayload` from a JSON container.
     /// Falls back to an empty `steps` array when the key is absent (queued jobs).
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id          = try container.decode(Int.self, forKey: .id)
-        name        = try container.decode(String.self, forKey: .name)
-        status      = try container.decode(JobStatus.self, forKey: .status)
-        conclusion  = try container.decodeIfPresent(JobConclusion.self, forKey: .conclusion)
-        startedAt   = try container.decodeIfPresent(String.self, forKey: .startedAt)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        status = try container.decode(JobStatus.self, forKey: .status)
+        conclusion = try container.decodeIfPresent(JobConclusion.self, forKey: .conclusion)
+        startedAt = try container.decodeIfPresent(String.self, forKey: .startedAt)
         completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
-        createdAt   = try container.decodeIfPresent(String.self, forKey: .createdAt)
-        htmlUrl     = try container.decodeIfPresent(String.self, forKey: .htmlUrl)
-        runnerName  = try container.decodeIfPresent(String.self, forKey: .runnerName)
-        steps       = try container.decodeIfPresent([StepPayload].self, forKey: .steps) ?? []
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        htmlUrl = try container.decodeIfPresent(String.self, forKey: .htmlUrl)
+        runnerName = try container.decodeIfPresent(String.self, forKey: .runnerName)
+        steps = try container.decodeIfPresent([StepPayload].self, forKey: .steps) ?? []
     }
 }
 
@@ -288,7 +288,7 @@ public struct StepPayload: Decodable, Sendable {
         /// Maps to the `number` JSON field.
         case number
         /// Maps to the `started_at` JSON field.
-        case startedAt   = "started_at"
+        case startedAt = "started_at"
         /// Maps to the `completed_at` JSON field.
         case completedAt = "completed_at"
     }

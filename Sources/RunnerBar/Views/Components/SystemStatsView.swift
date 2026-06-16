@@ -188,8 +188,8 @@ struct HeaderStatsBar: View {
             }
             Color.secondary.opacity(0.3).frame(width: 1, height: 14)
             let memTotal = statsVM.stats.memTotalGB
-            let memUsed  = statsVM.stats.memUsedGB
-            let memPct   = memTotal > 0 ? memUsed / memTotal * 100 : 0.0
+            let memUsed = statsVM.stats.memUsedGB
+            let memPct = memTotal > 0 ? memUsed / memTotal * 100 : 0.0
             GlassBadgeContainer {
                 SparklineMetricView(
                     label: "MEM",
@@ -200,8 +200,8 @@ struct HeaderStatsBar: View {
             }
             Color.secondary.opacity(0.3).frame(width: 1, height: 14)
             HStack(spacing: RBSpacing.xs) {
-                let diskTotal   = statsVM.stats.diskTotalGB
-                let diskUsed    = statsVM.stats.diskUsedGB
+                let diskTotal = statsVM.stats.diskTotalGB
+                let diskUsed = statsVM.stats.diskUsedGB
                 let diskUsedPct = diskTotal > 0 ? diskUsed / diskTotal * 100 : 0.0
                 GlassBadgeContainer {
                     SparklineMetricView(

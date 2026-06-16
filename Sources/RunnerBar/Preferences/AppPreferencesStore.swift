@@ -15,11 +15,11 @@ final class AppPreferencesStore {
     /// UserDefaults key constants used by `AppPreferencesStore`.
     private enum Key {
         /// Key for the polling interval setting.
-        static let pollingInterval   = "settings.pollingInterval"
+        static let pollingInterval = "settings.pollingInterval"
         /// Key for the show-dimmed-runners toggle.
         static let showDimmedRunners = "settings.showDimmedRunners"
         /// Key for the show-popover-arrow toggle.
-        static let showPopoverArrow  = "settings.showPopoverArrow"
+        static let showPopoverArrow = "settings.showPopoverArrow"
     }
 
     /// Valid range for the polling interval in seconds. Minimum 10 s, maximum 300 s.
@@ -79,9 +79,9 @@ final class AppPreferencesStore {
             Key.showPopoverArrow: true,
         ])
         let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
-        pollingInterval   = stored.clamped(to: Self.pollingRange)
+        pollingInterval = stored.clamped(to: Self.pollingRange)
         showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
-        showPopoverArrow  = UserDefaults.standard.bool(forKey: Key.showPopoverArrow)
+        showPopoverArrow = UserDefaults.standard.bool(forKey: Key.showPopoverArrow)
     }
 }
 

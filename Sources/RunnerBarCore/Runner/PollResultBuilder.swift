@@ -251,8 +251,8 @@ public struct PollResultBuilder {
     /// at `jobDisplayLimit` so the panel UI stays manageable.
     public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress: [ActiveJob] = live.filter { $0.status == .inProgress }
-        let queued: [ActiveJob]     = live.filter { $0.status == .queued }
-        let cached: [ActiveJob]     = cache.values.sorted {
+        let queued: [ActiveJob] = live.filter { $0.status == .queued }
+        let cached: [ActiveJob] = cache.values.sorted {
             ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
         }
         var display: [ActiveJob] = []
@@ -370,9 +370,9 @@ public struct PollResultBuilder {
         cache: [String: WorkflowActionGroup]
     ) -> [WorkflowActionGroup] {
         let inProgress = live.filter { $0.groupStatus == .inProgress }
-        let queued     = live.filter { $0.groupStatus == .queued }
-        let liveIDs    = Set((inProgress + queued).map { $0.id })
-        let cached     = cache.values.sorted {
+        let queued = live.filter { $0.groupStatus == .queued }
+        let liveIDs = Set((inProgress + queued).map { $0.id })
+        let cached = cache.values.sorted {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }

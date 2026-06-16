@@ -15,7 +15,7 @@ import SwiftUI
 ///   restrict this enum to `private`.
 enum GitHubURIs {
     /// The base GitHub web URL.
-    static let base            = "https://github.com/" // NOSONAR — centralised constant, not an inline hardcoded URI
+    static let base = "https://github.com/" // NOSONAR — centralised constant, not an inline hardcoded URI
     /// The GitHub API endpoint for the latest Actions runner release.
     static let apiRunnerLatest = "https://api.github.com/repos/actions/runner/releases/latest" // NOSONAR — centralised constant, not an inline hardcoded URI
     /// Relative path to the user's LaunchAgents directory.
@@ -23,9 +23,9 @@ enum GitHubURIs {
     /// Default runner install directory relative to the user's home folder.
     static let actionsRunnerDefaultDir = "actions-runner/my-runner"
     /// System path to the curl binary used when downloading the runner package.
-    static let curlPath  = "/usr/bin/curl" // NOSONAR — fixed OS path
+    static let curlPath = "/usr/bin/curl" // NOSONAR — fixed OS path
     /// System path to the tar binary used when unpacking the runner package.
-    static let tarPath   = "/usr/bin/tar"  // NOSONAR — fixed OS path
+    static let tarPath = "/usr/bin/tar"  // NOSONAR — fixed OS path
     /// System path to the uname binary used to detect CPU architecture.
     static let unamePath = "/usr/bin/uname" // NOSONAR — fixed OS path
 }
@@ -70,7 +70,7 @@ struct AddRunnerSheet: View {
     /// Controls which form body is shown in the sheet.
     enum AddMode: String, CaseIterable, Identifiable {
         /// Onboards a fresh runner via download + registration token.
-        case addNew      = "Add new"
+        case addNew = "Add new"
         /// Imports a runner folder that was configured outside of RunnerBar.
         case addExisting = "Add pre-existing"
         /// Stable identity backed by `rawValue`.
@@ -94,7 +94,7 @@ struct AddRunnerSheet: View {
         /// Runner registered to a single repository.
         case repo = "Repository"
         /// Runner registered at organisation level.
-        case org  = "Organisation"
+        case org = "Organisation"
         /// Stable identity backed by `rawValue`.
         var id: String { rawValue }
     }
@@ -104,7 +104,7 @@ struct AddRunnerSheet: View {
     /// Selected repository slug (used when `scopeType == .repo`).
     @State var selectedRepo = ""
     /// Selected organisation name (used when `scopeType == .org`).
-    @State var selectedOrg  = ""
+    @State var selectedOrg = ""
     /// Repository slugs fetched from GitHub for the picker.
     @State var repos: [String] = []
     /// Organisation names fetched from GitHub for the picker.
@@ -114,7 +114,7 @@ struct AddRunnerSheet: View {
     /// `true` while the repository-selector sheet is presented.
     @State var showRepoSelector = false
     /// `true` while the organisation-selector sheet is presented.
-    @State var showOrgSelector  = false
+    @State var showOrgSelector = false
 
     // MARK: Runner config state (Add new only)
 
@@ -131,7 +131,7 @@ struct AddRunnerSheet: View {
     // MARK: Registration state (Add new only)
 
     /// `true` while the registration command is running.
-    @State var isRegistering    = false
+    @State var isRegistering = false
     /// Human-readable description of the current registration step.
     @State var registrationStep = ""
     /// Non-nil when registration fails; shown as an inline error.
@@ -197,17 +197,17 @@ struct AddRunnerSheet: View {
 
     /// Resets all "Add new" form fields to their initial default values.
     func resetAddNewState() {
-        runnerName       = ""
-        labelsText       = "self-hosted,macOS"
-        installDir       = FileManager.default
+        runnerName = ""
+        labelsText = "self-hosted,macOS"
+        installDir = FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.actionsRunnerDefaultDir).path
-        isRegistering    = false
+        isRegistering = false
         registrationStep = ""
-        errorMessage     = nil
-        scopeType        = .repo
-        selectedRepo     = repos.first ?? ""
-        selectedOrg      = orgs.first  ?? ""
+        errorMessage = nil
+        scopeType = .repo
+        selectedRepo = repos.first ?? ""
+        selectedOrg = orgs.first  ?? ""
         if addMode == .addNew && repos.isEmpty && orgs.isEmpty {
             loadScopes()
         }
@@ -215,12 +215,12 @@ struct AddRunnerSheet: View {
 
     /// Clears all "Add pre-existing" detection state so a fresh folder can be picked.
     func resetExistingState() {
-        existingDir       = ""
-        detectedName      = ""
+        existingDir = ""
+        detectedName = ""
         detectedGitHubURL = ""
-        existingError     = nil
+        existingError = nil
         githubURLOverride = ""
-        isDuplicate       = false
+        isDuplicate = false
     }
 
     // MARK: - Plist writer (shared by both modes)
@@ -239,10 +239,10 @@ struct AddRunnerSheet: View {
         let launchAgentsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(GitHubURIs.launchAgentsDir)
         let scopeParts = scope.components(separatedBy: "/")
-        let owner      = scopeParts[0]
-        let repo       = scopeParts.count > 1 ? scopeParts[1] : scopeParts[0]
-        let label      = "actions.runner.\(owner).\(repo).\(runnerName)"
-        let plistURL   = launchAgentsDir.appendingPathComponent("\(label).plist")
+        let owner = scopeParts[0]
+        let repo = scopeParts.count > 1 ? scopeParts[1] : scopeParts[0]
+        let label = "actions.runner.\(owner).\(repo).\(runnerName)"
+        let plistURL = launchAgentsDir.appendingPathComponent("\(label).plist")
 
         do {
             try FileManager.default.createDirectory(
@@ -314,18 +314,18 @@ struct AddRunnerSheet: View {
         errorMessage = nil
         registrationStep = ""
         isRegistering = true
-        let scope  = effectiveScope
-        let name   = runnerName.trimmingCharacters(in: .whitespaces)
+        let scope = effectiveScope
+        let name = runnerName.trimmingCharacters(in: .whitespaces)
         let labels = labelsText.trimmingCharacters(in: .whitespaces)
-        let dir    = installDir.trimmingCharacters(in: .whitespaces)
+        let dir = installDir.trimmingCharacters(in: .whitespaces)
         let currentScopeType = scopeType
 
-        let homeDir     = FileManager.default.homeDirectoryForCurrentUser
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
             .resolvingSymlinksInPath().path
         let resolvedDir = URL(fileURLWithPath: dir).resolvingSymlinksInPath().path
         guard resolvedDir == homeDir || resolvedDir.hasPrefix(homeDir + "/") else {
             isRegistering = false
-            errorMessage  = "Install directory must be inside your home folder (~/…)."
+            errorMessage = "Install directory must be inside your home folder (~/…)."
             return
         }
 
@@ -340,7 +340,7 @@ struct AddRunnerSheet: View {
                                                     withIntermediateDirectories: true)
         } catch {
             isRegistering = false
-            errorMessage  = "Failed to create directory: \(error.localizedDescription)"
+            errorMessage = "Failed to create directory: \(error.localizedDescription)"
             return
         }
 
@@ -350,7 +350,7 @@ struct AddRunnerSheet: View {
             setStep("Downloading runner package…")
             guard let downloadURL = await fetchRunnerDownloadURL() else {
                 isRegistering = false
-                errorMessage  = "Could not determine runner download URL. Check your internet connection."
+                errorMessage = "Could not determine runner download URL. Check your internet connection."
                 return
             }
             let tarPath = URL(fileURLWithPath: dir)
@@ -386,13 +386,13 @@ struct AddRunnerSheet: View {
         }
 
         setStep("Configuring runner…")
-        let ghURL      = "\(GitHubURIs.base)\(scope)"
+        let ghURL = "\(GitHubURIs.base)\(scope)"
         let configExit = await runRegistrationCommand(
             dir: dir, ghURL: ghURL, token: token, name: name, labels: labels
         )
         guard configExit == 0 else {
             isRegistering = false
-            errorMessage  = "config.sh failed (exit \(configExit)). Check the token is valid and the runner name is unique."
+            errorMessage = "config.sh failed (exit \(configExit)). Check the token is valid and the runner name is unique."
             return
         }
 
@@ -403,9 +403,9 @@ struct AddRunnerSheet: View {
         // onComplete() enqueues its refresh(), so the new runner row is always
         // present in the actor's index before the scan runs.
         await localRunnerStore.add(runnerName: name, installPath: dir)
-        isRegistering    = false
+        isRegistering = false
         registrationStep = ""
-        isPresented      = false
+        isPresented = false
         onComplete()
     }
 }

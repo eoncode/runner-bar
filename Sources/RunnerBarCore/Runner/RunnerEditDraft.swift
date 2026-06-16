@@ -67,9 +67,9 @@ public struct RunnerEditDraft: Equatable, Sendable {
         proxyStore: any RunnerProxyStoreProtocol
     ) async -> RunnerConfig? {
         let config = await loadRunnerConfig(installPath: installPath, store: configStore)
-        let proxy  = await proxyStore.load(at: installPath)
-        proxyUrl      = proxy.url
-        proxyUser     = proxy.user
+        let proxy = await proxyStore.load(at: installPath)
+        proxyUrl = proxy.url
+        proxyUser = proxy.user
         proxyPassword = proxy.password
         return config
     }

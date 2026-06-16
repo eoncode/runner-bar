@@ -76,17 +76,17 @@ private struct RunPayload: Codable {
         /// Maps the `conclusion` JSON field.
         case conclusion
         /// Maps the `head_branch` JSON field.
-        case headBranch   = "head_branch"
+        case headBranch = "head_branch"
         /// Maps the `head_sha` JSON field.
-        case headSha      = "head_sha"
+        case headSha = "head_sha"
         /// Maps the `display_title` JSON field.
         case displayTitle = "display_title"
         /// Maps the `created_at` JSON field.
-        case createdAt    = "created_at"
+        case createdAt = "created_at"
         /// Maps the `html_url` JSON field.
-        case htmlUrl      = "html_url"
+        case htmlUrl = "html_url"
         /// Maps the `head_commit` JSON field.
-        case headCommit   = "head_commit"
+        case headCommit = "head_commit"
         /// Maps the `pull_requests` JSON field.
         case pullRequests = "pull_requests"
     }
@@ -136,8 +136,8 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
 
     // Fetch in_progress, queued, and completed runs concurrently.
     async let inProgressData = ghAPI("repos/\(scope)/actions/runs?status=in_progress&per_page=50")
-    async let queuedData     = ghAPI("repos/\(scope)/actions/runs?status=queued&per_page=50")
-    async let completedData  = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100")
+    async let queuedData = ghAPI("repos/\(scope)/actions/runs?status=queued&per_page=50")
+    async let completedData = ghAPI("repos/\(scope)/actions/runs?status=completed&per_page=100")
     let (ipData, qData, cData) = await (inProgressData, queuedData, completedData)
 
     var runPayloads: [RunPayload] = []
@@ -173,7 +173,7 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
         for (i, (sha, shaRuns)) in shaEntries.enumerated() {
             group.addTask {
                 let representative = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
-                let label    = prLabel(from: representative)
+                let label = prLabel(from: representative)
                 let rawTitle = representative.displayTitle ?? representative.headCommit
                     .map { String($0.message.components(separatedBy: "\n").first ?? "") }
                     ?? String(sha.prefix(7))
@@ -189,7 +189,7 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
                 }
                 let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
                 let starts = allJobs.compactMap { $0.startedAt }
-                let ends   = allJobs.compactMap { $0.completedAt }
+                let ends = allJobs.compactMap { $0.completedAt }
                 // Optional.flatMap does not accept an async closure — use if let.
                 let createdAt: Date?
                 if let dateStr = representative.createdAt {

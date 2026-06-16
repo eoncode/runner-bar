@@ -112,7 +112,7 @@ final class SystemStatsViewModel {
         for i in 0 ..< numCPUs {
             let base = Int(CPU_STATE_MAX) * i
             let userDelta = Double(cpuInfo[base + Int(CPU_STATE_USER)]   - prevInfo[base + Int(CPU_STATE_USER)])
-            let sysDelta  = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)] - prevInfo[base + Int(CPU_STATE_SYSTEM)])
+            let sysDelta = Double(cpuInfo[base + Int(CPU_STATE_SYSTEM)] - prevInfo[base + Int(CPU_STATE_SYSTEM)])
             let idleDelta = Double(cpuInfo[base + Int(CPU_STATE_IDLE)]   - prevInfo[base + Int(CPU_STATE_IDLE)])
             let niceDelta = Double(cpuInfo[base + Int(CPU_STATE_NICE)]   - prevInfo[base + Int(CPU_STATE_NICE)])
             let used = userDelta + sysDelta + niceDelta
@@ -127,7 +127,7 @@ final class SystemStatsViewModel {
     /// `nonisolated` so it is callable from `deinit` and `sampleCPU()`'s `defer` without an actor hop.
     nonisolated private func deallocPrevCPUInfo() {
         guard let prev = prevCPUInfo else { return }
-        let infoSize  = vm_size_t(MemoryLayout<integer_t>.size)
+        let infoSize = vm_size_t(MemoryLayout<integer_t>.size)
         let totalSize = vm_size_t(prevNumCPUInfo) * infoSize
         vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prev), totalSize)
         prevCPUInfo = nil
@@ -144,9 +144,9 @@ final class SystemStatsViewModel {
                 host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
             }
         }
-        let pageSize   = Double(Int(vm_kernel_page_size))
+        let pageSize = Double(Int(vm_kernel_page_size))
         let totalBytes = Double(ProcessInfo.processInfo.physicalMemory)
-        let totalGB    = totalBytes / 1_000_000_000
+        let totalGB = totalBytes / 1_000_000_000
         guard kr == KERN_SUCCESS else { return (0, totalGB) }
         let usedPages = Double(vmStats.active_count + vmStats.wire_count + vmStats.compressor_page_count)
         let usedGB = usedPages * pageSize / 1_000_000_000
@@ -162,10 +162,10 @@ final class SystemStatsViewModel {
         guard
             let attrs = try? FileManager.default.attributesOfFileSystem(forPath: Self.rootVolumePath),
             let total = attrs[.systemSize] as? Int64,
-            let free  = attrs[.systemFreeSize] as? Int64
+            let free = attrs[.systemFreeSize] as? Int64
         else { return (0, 0) }
         let totalGB = Double(total) / 1_000_000_000
-        let usedGB  = Double(total - free) / 1_000_000_000
+        let usedGB = Double(total - free) / 1_000_000_000
         return (usedGB, totalGB)
     }
 }

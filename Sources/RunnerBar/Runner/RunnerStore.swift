@@ -419,12 +419,12 @@ actor RunnerStore {
             log("RunnerStore › ⚠️ fetch — activeScopes snapshot is EMPTY")
         }
 
-        let snapPrev         = prevLiveJobs
-        let snapCache        = completedCache
-        let snapPrevGroups   = prevLiveGroups
-        let snapGroupCache   = actionGroupCache
+        let snapPrev = prevLiveJobs
+        let snapCache = completedCache
+        let snapPrevGroups = prevLiveGroups
+        let snapGroupCache = actionGroupCache
         let snapSeenGroupIDs = seenGroupIDs
-        let localRunners     = await MainActor.run { viewModel.localRunners }
+        let localRunners = await MainActor.run { viewModel.localRunners }
         log("RunnerStore › fetch — localRunners.count=\(localRunners.count) (used for installPathMap)")
         if localRunners.isEmpty {
             log("RunnerStore › ⚠️ fetch — localRunners is EMPTY; installPathMap will be empty")
@@ -483,10 +483,10 @@ actor RunnerStore {
 
         let statusUpdate = onStatusUpdate
         await MainActor.run { [viewModel] in
-            viewModel.runners            = enrichedRunners
-            viewModel.jobs               = jobResult.display
-            viewModel.actions            = groupResult.display
-            viewModel.isRateLimited      = rateLimitSnapshot.isLimited
+            viewModel.runners = enrichedRunners
+            viewModel.jobs = jobResult.display
+            viewModel.actions = groupResult.display
+            viewModel.isRateLimited = rateLimitSnapshot.isLimited
             viewModel.rateLimitResetDate = rateLimitSnapshot.resetDate
             statusUpdate()
         }
@@ -552,12 +552,12 @@ actor RunnerStore {
         await withTaskGroup(of: (Int, RunnerMetrics?).self) { group in
             for (idx, (scope, runner)) in indexed.enumerated() {
                 guard runner.busy else { continue }
-                let fullKey           = "\(scope)/\(runner.name)"
-                let resolvedByApiId   = installPathMap.byApiId[runner.id]
+                let fullKey = "\(scope)/\(runner.name)"
+                let resolvedByApiId = installPathMap.byApiId[runner.id]
                 let resolvedByAgentId = installPathMap.byAgentId[runner.id]
-                let resolvedByFull    = installPathMap.byFullKey[fullKey]
-                let resolvedByName    = installPathMap.byName[runner.name]
-                let installPath       = resolvedByApiId ?? resolvedByAgentId ?? resolvedByFull ?? resolvedByName
+                let resolvedByFull = installPathMap.byFullKey[fullKey]
+                let resolvedByName = installPathMap.byName[runner.name]
+                let installPath = resolvedByApiId ?? resolvedByAgentId ?? resolvedByFull ?? resolvedByName
                 #if DEBUG
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) id=\(runner.id) busy=true; byApiId=\(String(describing: resolvedByApiId)) byAgentId=\(String(describing: resolvedByAgentId)) byFullKey=\(String(describing: resolvedByFull)) byName=\(String(describing: resolvedByName)) → resolved=\(String(describing: installPath))")
                 #endif

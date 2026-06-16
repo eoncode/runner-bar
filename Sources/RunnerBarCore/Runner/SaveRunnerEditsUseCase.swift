@@ -52,8 +52,8 @@ public struct SaveRunnerEditsUseCase: Sendable {
         proxyStore: any RunnerProxyStoreProtocol,
         labelsService: any RunnerLabelsService
     ) {
-        self.configStore   = configStore
-        self.proxyStore    = proxyStore
+        self.configStore = configStore
+        self.proxyStore = proxyStore
         self.labelsService = labelsService
     }
 

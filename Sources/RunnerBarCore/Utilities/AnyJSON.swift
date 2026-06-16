@@ -64,12 +64,12 @@ public enum AnyJSON: Codable {
         var container = encoder.singleValueContainer()
         switch self {
         case .object(let val): try container.encode(val)
-        case .array(let val):  try container.encode(val)
+        case .array(let val): try container.encode(val)
         case .string(let val): try container.encode(val)
         case .number(let val): try container.encode(val)
-        case .int(let val):    try container.encode(val)
-        case .bool(let val):   try container.encode(val)
-        case .null:            try container.encodeNil()
+        case .int(let val): try container.encode(val)
+        case .bool(let val): try container.encode(val)
+        case .null: try container.encodeNil()
         }
     }
 }

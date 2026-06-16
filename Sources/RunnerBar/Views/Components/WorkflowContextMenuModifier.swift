@@ -28,11 +28,11 @@ private struct WorkflowContextMenuModifier: ViewModifier {
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = group.groupStatus == .completed
-        let isLive      = group.groupStatus == .inProgress
+        let isLive = group.groupStatus == .inProgress
 
         // Re-run failed
         Button {
-            let scope  = group.repo
+            let scope = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
                 await withTaskGroup(of: Void.self) { group in
@@ -44,7 +44,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 
         // Re-run all
         Button {
-            let scope  = group.repo
+            let scope = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
                 await withTaskGroup(of: Void.self) { group in
@@ -56,7 +56,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
 
         // Cancel
         Button {
-            let scope  = group.repo
+            let scope = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
                 await withTaskGroup(of: Void.self) { tg in
@@ -76,12 +76,12 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         Divider()
         Button {
             guard let htmlUrl = group.runs.first?.htmlUrl,
-                  let runUrl  = URL(string: htmlUrl) else { return }
+                  let runUrl = URL(string: htmlUrl) else { return }
             NSWorkspace.shared.open(runUrl)
         } label: { Label("Show Workflow on GitHub", systemImage: "doc.text") }
         .disabled(group.runs.first?.htmlUrl == nil)
         Button {
-            let sha  = group.headSha
+            let sha = group.headSha
             let repo = group.repo
             guard let url = URL(string: "https://github.com/\(repo)/commit/\(sha)") else { return }
             NSWorkspace.shared.open(url)
@@ -106,7 +106,7 @@ private struct JobContextMenuModifier: ViewModifier {
     @ViewBuilder
     private var menuItems: some View {
         let isConcluded = job.conclusion != nil
-        let isLive      = job.status == "in_progress"
+        let isLive = job.status == "in_progress"
 
         // Re-run job
         Button {
@@ -120,7 +120,7 @@ private struct JobContextMenuModifier: ViewModifier {
 
         // Cancel
         Button {
-            let scope  = group.repo
+            let scope = group.repo
             let runIDs = group.runs.map { $0.id }
             Task.detached(priority: .userInitiated) {
                 await withTaskGroup(of: Void.self) { tg in

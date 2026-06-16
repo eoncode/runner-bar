@@ -17,7 +17,7 @@ func fetchRunnerDownloadURL() async -> String? {
         arguments: ["-m"],
         timeout: 5
     )
-    let arch      = archResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
+    let arch = archResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
     let assetArch = (arch == "arm64") ? "arm64" : "x64"
     let assetName = "actions-runner-osx-\(assetArch)"
     log("fetchRunnerDownloadURL › arch=\(arch) assetName=\(assetName)")
@@ -73,12 +73,12 @@ extension AddRunnerSheet {
         isLoadingScopes = true
         Task(priority: .userInitiated) {
             let fetchedRepos = await fetchUserRepos()
-            let fetchedOrgs  = await fetchUserOrgs()
+            let fetchedOrgs = await fetchUserOrgs()
             await MainActor.run {
                 repos = fetchedRepos
-                orgs  = fetchedOrgs
+                orgs = fetchedOrgs
                 if let first = fetchedRepos.first { selectedRepo = first }
-                if let first = fetchedOrgs.first { selectedOrg  = first }
+                if let first = fetchedOrgs.first { selectedOrg = first }
                 isLoadingScopes = false
             }
         }

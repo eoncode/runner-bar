@@ -58,9 +58,9 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     /// case (most runners have no proxy). A zeroed `RunnerProxyConfig` is
     /// returned whenever either or both files are absent.
     func load(at installPath: String) async -> RunnerProxyConfig {
-        let base     = URL(fileURLWithPath: installPath)
+        let base = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL  = base.appendingPathComponent(".proxycredentials")
+        let credURL = base.appendingPathComponent(".proxycredentials")
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
@@ -113,13 +113,13 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     ///   load → save round-trip is idempotent. Callers must not rely on
     ///   preserving surrounding whitespace in proxy credentials.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
-        let base     = URL(fileURLWithPath: installPath)
+        let base = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL  = base.appendingPathComponent(".proxycredentials")
+        let credURL = base.appendingPathComponent(".proxycredentials")
 
         // Trim defensively here so no call site can accidentally write whitespace to disk.
-        let url            = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        let user           = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
         let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
         try await withCheckedThrowingContinuation { continuation in
@@ -162,8 +162,8 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     /// with `\r\n` line endings (e.g. by Windows-based credential tools) do not leave
     /// a trailing `\r` on each component — which would silently break proxy authentication.
     private static func parseCredentialLines(_ content: String) -> (user: String, password: String) {
-        let lines      = content.components(separatedBy: "\n")
-        let user       = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        let lines = content.components(separatedBy: "\n")
+        let user = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
         return (user, credential)
     }
