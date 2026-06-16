@@ -80,9 +80,11 @@ file_length:
 
 cyclomatic_complexity:
   warning: 17    # tightened from 20 (phase 1) → target 15 tracked in #1406
+  error: 30      # explicit ceiling; SwiftLint default is 20
 
 function_body_length:
   warning: 90    # tightened from 120 (phase 1) → target 80 tracked in #1406
+  error: 150     # explicit ceiling; SwiftLint default is 200
 
 type_body_length:
   warning: 400

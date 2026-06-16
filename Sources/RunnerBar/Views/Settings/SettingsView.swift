@@ -168,8 +168,10 @@ struct SettingsView: View {
         let envToken = githubToken()
         isOAuthAuthenticated = (keychainToken != nil)
         isCLIAuthenticated = (keychainToken == nil && envToken != nil)
+        #if DEBUG
         // swiftlint:disable:next line_length
         log("SettingsView › onAppear — Keychain.token=\(keychainToken.map { "present(len=\($0.count))" } ?? "nil") githubToken=\(envToken.map { "present(len=\($0.count))" } ?? "nil") isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+        #endif
         OAuthService.shared.onCompletion = { success in
             log("SettingsView › onCompletion — success=\(success), updating auth state")
             isOAuthAuthenticated = success
