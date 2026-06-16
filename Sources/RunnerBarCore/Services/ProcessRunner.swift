@@ -146,9 +146,9 @@ public enum ProcessRunner {
 
         let inputPipe: Pipe?
         if stdin != nil {
-            let p = Pipe()
-            task.standardInput = p
-            inputPipe = p
+            let stdinPipe = Pipe()
+            task.standardInput = stdinPipe
+            inputPipe = stdinPipe
         } else {
             inputPipe = nil
         }
@@ -193,8 +193,8 @@ public enum ProcessRunner {
                 // terminationHandler — both on the same serialised execution path (#1152).
                 let timeoutTaskBox = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
 
-                task.terminationHandler = { t in
-                    let exitCode = t.terminationStatus
+                task.terminationHandler = { process in
+                    let exitCode = process.terminationStatus
                     // Cancel the timeout guard immediately — process has already exited.
                     // Read under lock, cancel outside — avoids holding the unfair lock during Task.cancel().
                     let timeoutTask = timeoutTaskBox.withLock { $0 }

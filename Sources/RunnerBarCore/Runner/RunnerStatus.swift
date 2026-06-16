@@ -32,20 +32,20 @@ public enum RunnerStatus: Hashable, Sendable {
     /// - Parameter raw: The raw string value as returned by the GitHub REST API.
     public init(rawString raw: String) {
         switch raw {
-        case "online":  self = .online
-        case "busy":    self = .busy
+        case "online": self = .online
+        case "busy": self = .busy
         case "offline": self = .offline
-        default:        self = .unknown(raw)
+        default: self = .unknown(raw)
         }
     }
 
     /// The raw string value as returned by the GitHub API.
     public var rawValue: String {
         switch self {
-        case .online:         return "online"
-        case .busy:           return "busy"
-        case .offline:        return "offline"
-        case .unknown(let s): return s
+        case .online: return "online"
+        case .busy: return "busy"
+        case .offline: return "offline"
+        case .unknown(let raw): return raw
         }
     }
 }

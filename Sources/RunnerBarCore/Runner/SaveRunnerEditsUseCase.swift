@@ -52,8 +52,8 @@ public struct SaveRunnerEditsUseCase: Sendable {
         proxyStore: any RunnerProxyStoreProtocol,
         labelsService: any RunnerLabelsService
     ) {
-        self.configStore   = configStore
-        self.proxyStore    = proxyStore
+        self.configStore = configStore
+        self.proxyStore = proxyStore
         self.labelsService = labelsService
     }
 
@@ -139,8 +139,8 @@ public struct SaveRunnerEditsUseCase: Sendable {
     /// Extracts `owner/repo` or `orgName` scope from a GitHub HTML URL.
     /// Returns `nil` if the URL cannot be parsed.
     private func scopeFromHtmlUrl(_ url: String) -> String? {
-        guard let u = URL(string: url) else { return nil }
-        let parts = u.pathComponents.filter { $0 != "/" }
+        guard let parsedURL = URL(string: url) else { return nil }
+        let parts = parsedURL.pathComponents.filter { $0 != "/" }
         if parts.count >= 2 { return parts[0] + "/" + parts[1] }
         if parts.count == 1 { return parts[0] }
         return nil

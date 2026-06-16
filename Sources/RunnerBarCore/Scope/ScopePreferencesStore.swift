@@ -72,8 +72,8 @@ public enum ScopePreferencesStore {
 
     /// Persists a per-scope notify-on-success override.
     public static func setNotifyOnSuccess(_ value: Bool?, for scope: String) {
-        if let v = value {
-            UserDefaults.standard.set(v, forKey: key(scope, "notifyOnSuccess"))
+        if let value = value {
+            UserDefaults.standard.set(value, forKey: key(scope, "notifyOnSuccess"))
         } else {
             UserDefaults.standard.removeObject(forKey: key(scope, "notifyOnSuccess"))
         }
@@ -88,8 +88,8 @@ public enum ScopePreferencesStore {
 
     /// Persists a per-scope notify-on-failure override.
     public static func setNotifyOnFailure(_ value: Bool?, for scope: String) {
-        if let v = value {
-            UserDefaults.standard.set(v, forKey: key(scope, "notifyOnFailure"))
+        if let value = value {
+            UserDefaults.standard.set(value, forKey: key(scope, "notifyOnFailure"))
         } else {
             UserDefaults.standard.removeObject(forKey: key(scope, "notifyOnFailure"))
         }

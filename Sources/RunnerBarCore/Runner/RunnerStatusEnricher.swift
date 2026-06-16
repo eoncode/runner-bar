@@ -270,12 +270,12 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
         let githubStatus = api.status.map { RunnerStatus(rawString: $0) }
         let effectiveLabels = api.labelNames.isEmpty ? runner.labels : api.labelNames
         let labelPlatform = effectiveLabels.first(where: { label in
-            let l = label.lowercased()
-            return l == "macos" || l == "linux" || l == "windows"
+            let lowercased = label.lowercased()
+            return lowercased == "macos" || lowercased == "linux" || lowercased == "windows"
         })
         let labelArch = effectiveLabels.first(where: { label in
-            let l = label.lowercased()
-            return l == "arm64" || l == "x64" || l == "x86" || l == "aarch64"
+            let lowercased = label.lowercased()
+            return lowercased == "arm64" || lowercased == "x64" || lowercased == "x86" || lowercased == "aarch64"
         })
         let platform = labelPlatform ?? runner.platform
         let platformArchitecture = labelArch ?? runner.platformArchitecture

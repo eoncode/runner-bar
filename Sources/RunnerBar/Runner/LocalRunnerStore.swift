@@ -25,7 +25,7 @@ actor LocalRunnerStore {
     /// is mounted. `@MainActor` ensures the compiler enforces single-actor write discipline
     /// without relying on `nonisolated(unsafe)` — any read from a non-`@MainActor` context
     /// is a compile-time error rather than a silent data race.
-    @MainActor private(set) static var _shared: LocalRunnerStore?
+    @MainActor private(set) static var sharedInstance: LocalRunnerStore?
 
     /// The app-wide shared instance. Must be called on the main actor.
     ///
@@ -34,11 +34,11 @@ actor LocalRunnerStore {
     /// produces a `fatalError` with a diagnostic message.
     @MainActor
     static var shared: LocalRunnerStore {
-        guard let instance = _shared else {
+        guard let instance = sharedInstance else {
             fatalError(
                 "LocalRunnerStore.shared accessed before configure(viewModel:) was called. "
-                + "Call LocalRunnerStore.configure(viewModel: appDelegate.observable) in "
-                + "applicationDidFinishLaunching before using this accessor."
+                    + "Call LocalRunnerStore.configure(viewModel: appDelegate.observable) in "
+                    + "applicationDidFinishLaunching before using this accessor."
             )
         }
         return instance
@@ -51,9 +51,9 @@ actor LocalRunnerStore {
     /// replaces the previous instance and shuts it down).
     ///
     /// ⚠️ **Test suites that call this method must be marked `@Suite(.serialized)`.**
-    /// `_shared` is `@MainActor`; two test cases calling `configure(viewModel:)`
+    /// `sharedInstance` is `@MainActor`; two test cases calling `configure(viewModel:)`
     /// concurrently will race unless serialised. The compiler enforces `@MainActor`
-    /// access to `_shared`, so any off-actor write is a compile-time error.
+    /// access to `sharedInstance`, so any off-actor write is a compile-time error.
     @MainActor
     static func configure(viewModel: RunnerViewModel) {
         // Shut down the previous instance before replacing it so its in-flight
@@ -62,13 +62,13 @@ actor LocalRunnerStore {
         // `shutdown()` is isolated to the LocalRunnerStore actor (a different actor from
         // @MainActor), so it cannot be called synchronously here in Swift 6. A detached
         // Task is safe: shutdown() only cancels refreshTask, which is fire-and-forget by
-        // design. The new _shared assignment below happens on the main actor immediately,
+        // design. The new sharedInstance assignment below happens on the main actor immediately,
         // so any snapshot the old actor pushes after this point targets the old viewModel
         // reference it already holds — it cannot corrupt the new instance.
-        if let previous = _shared {
+        if let previous = sharedInstance {
             Task { await previous.shutdown() }
         }
-        _shared = LocalRunnerStore(viewModel: viewModel)
+        sharedInstance = LocalRunnerStore(viewModel: viewModel)
         log("LocalRunnerStore › configure — shared instance created, wired to viewModel=\(ObjectIdentifier(viewModel))")
     }
 
@@ -112,7 +112,7 @@ actor LocalRunnerStore {
 
     /// Cancels all in-flight Tasks owned by this instance.
     ///
-    /// Called by `configure(viewModel:)` before replacing `_shared` so that the
+    /// Called by `configure(viewModel:)` before replacing `sharedInstance` so that the
     /// previous actor's background work does not push stale snapshots into the
     /// incoming `viewModel`.
     func shutdown() {
@@ -199,10 +199,10 @@ actor LocalRunnerStore {
     ///   2. runner.agentId == runnerId (local .runner JSON AgentId — repo runners use this)
     ///   3. runner.runnerName == name  (name-only last resort)
     func applyMetrics(_ metrics: RunnerMetrics?, forRunnerId runnerId: Int?, name: String) async {
-#if DEBUG
+        #if DEBUG
         log("LocalRunnerStore › applyMetrics — called with runnerId=\(String(describing: runnerId)) name=\(name) metrics=\(String(describing: metrics))")
         log("LocalRunnerStore › applyMetrics — runners.count=\(runners.count) candidates=\(runners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
-#endif
+        #endif
 
         guard let idx = runners.firstIndex(where: { runner in
             if let rid = runnerId, let aid = runner.apiId, aid == rid {  // Priority 1: GitHub REST API id
@@ -284,9 +284,9 @@ actor LocalRunnerStore {
         log("LocalRunnerStore › performRefresh() — launchctl liveLabels.count=\(liveLabels.count): \(liveLabels)")
         hydrated = hydrated.map { runner in
             let live = liveLabels.contains { $0.contains(runner.runnerName) }
-#if DEBUG
+            #if DEBUG
             log("LocalRunnerStore › performRefresh() — '\(runner.runnerName)' isRunning=\(live)")
-#endif
+            #endif
             return runner.copying(isRunning: live)
         }
 
@@ -296,9 +296,9 @@ actor LocalRunnerStore {
         log("LocalRunnerStore › performRefresh() — starting GitHub enrichment for \(hydrated.count) runner(s)")
         let enriched = await enricher.enrich(runners: hydrated)
         log("LocalRunnerStore › performRefresh() — GitHub enrichment complete, \(enriched.count) runner(s) enriched")
-#if DEBUG
+        #if DEBUG
         log("LocalRunnerStore › performRefresh() — enriched apiIds=\(enriched.map { "\($0.runnerName)(apiId=\(String(describing: $0.apiId)) agentId=\(String(describing: $0.agentId)))" })")
-#endif
+        #endif
 
         await applyRefreshResults(enriched)
     }
@@ -316,41 +316,41 @@ actor LocalRunnerStore {
     private func applyRefreshResults(_ enriched: [RunnerModel]) async {
         log("LocalRunnerStore › applyRefreshResults — enriched.count=\(enriched.count), current runners.count=\(runners.count)")
 
-        var metricsByApiId:   [Int: RunnerMetrics] = [:]
+        var metricsByApiId: [Int: RunnerMetrics] = [:]
         var metricsByAgentId: [Int: RunnerMetrics] = [:]
-        var metricsByName:    [String: RunnerMetrics] = [:]
+        var metricsByName: [String: RunnerMetrics] = [:]
         for runner in runners {
-            guard runner.isBusy, let m = runner.metrics else { continue }
-            if let id = runner.apiId   { metricsByApiId[id]   = m }  // Priority 1: GitHub REST API id
-            if let id = runner.agentId { metricsByAgentId[id] = m }  // Priority 2: local AgentId
-            metricsByName[runner.runnerName] = m                      // Priority 3: name (last resort)
+            guard runner.isBusy, let preservedMetrics = runner.metrics else { continue }
+            if let id = runner.apiId { metricsByApiId[id] = preservedMetrics }  // Priority 1: GitHub REST API id
+            if let id = runner.agentId { metricsByAgentId[id] = preservedMetrics }  // Priority 2: local AgentId
+            metricsByName[runner.runnerName] = preservedMetrics  // Priority 3: name (last resort)
         }
-#if DEBUG
+        #if DEBUG
         log("LocalRunnerStore › applyRefreshResults — preserved metrics: byApiId=\(metricsByApiId.keys.sorted()) byAgentId=\(metricsByAgentId.keys.sorted()) byName=\(metricsByName.keys.sorted())")
-#endif
+        #endif
 
         let preserved: [RunnerModel] = enriched.map { runner in
-            if let id = runner.apiId, let m = metricsByApiId[id] {
-#if DEBUG
+            if let id = runner.apiId, let metrics = metricsByApiId[id] {
+                #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via apiId=\(id)")
-#endif
-                return runner.copying(metrics: m)
+                #endif
+                return runner.copying(metrics: metrics)
             }
-            if let id = runner.agentId, let m = metricsByAgentId[id] {
-#if DEBUG
+            if let id = runner.agentId, let metrics = metricsByAgentId[id] {
+                #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via agentId=\(id)")
-#endif
-                return runner.copying(metrics: m)
+                #endif
+                return runner.copying(metrics: metrics)
             }
-            if let m = metricsByName[runner.runnerName] {
-#if DEBUG
+            if let metrics = metricsByName[runner.runnerName] {
+                #if DEBUG
                 log("LocalRunnerStore › applyRefreshResults — preserved metrics for '\(runner.runnerName)' via name")
-#endif
-                return runner.copying(metrics: m)
+                #endif
+                return runner.copying(metrics: metrics)
             }
-#if DEBUG
+            #if DEBUG
             log("LocalRunnerStore › applyRefreshResults — no metrics to preserve for '\(runner.runnerName)'")
-#endif
+            #endif
             return runner
         }
         runners = preserved.sorted { $0.runnerName < $1.runnerName }

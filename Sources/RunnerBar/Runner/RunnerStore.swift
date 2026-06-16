@@ -294,9 +294,9 @@ actor RunnerStore {
         intervalObservationTask = Task { [weak self] in
             let (stream, continuation) = AsyncStream<Int>.makeStream()
             let observer: PreferencesObserver = await MainActor.run {
-                let o = PreferencesObserver(continuation: continuation, store: injectedStore)
-                o.start()
-                return o
+                let preferencesObserver = PreferencesObserver(continuation: continuation, store: injectedStore)
+                preferencesObserver.start()
+                return preferencesObserver
             }
             for await newInterval in stream {
                 guard !Task.isCancelled else { break }
@@ -326,9 +326,9 @@ actor RunnerStore {
         scopeObservationTask = Task { [weak self] in
             let (stream, continuation) = AsyncStream<[String]>.makeStream()
             let observer: ScopesObserver = await MainActor.run {
-                let o = ScopesObserver(continuation: continuation, store: injectedStore)
-                o.start()
-                return o
+                let scopesObserver = ScopesObserver(continuation: continuation, store: injectedStore)
+                scopesObserver.start()
+                return scopesObserver
             }
             for await _ in stream {
                 guard !Task.isCancelled else { break }
@@ -419,19 +419,19 @@ actor RunnerStore {
             log("RunnerStore › ⚠️ fetch — activeScopes snapshot is EMPTY")
         }
 
-        let snapPrev         = prevLiveJobs
-        let snapCache        = completedCache
-        let snapPrevGroups   = prevLiveGroups
-        let snapGroupCache   = actionGroupCache
+        let snapPrev = prevLiveJobs
+        let snapCache = completedCache
+        let snapPrevGroups = prevLiveGroups
+        let snapGroupCache = actionGroupCache
         let snapSeenGroupIDs = seenGroupIDs
-        let localRunners     = await MainActor.run { viewModel.localRunners }
+        let localRunners = await MainActor.run { viewModel.localRunners }
         log("RunnerStore › fetch — localRunners.count=\(localRunners.count) (used for installPathMap)")
         if localRunners.isEmpty {
             log("RunnerStore › ⚠️ fetch — localRunners is EMPTY; installPathMap will be empty")
         } else {
-#if DEBUG
+            #if DEBUG
             log("RunnerStore › fetch — localRunners=\(localRunners.map { "\($0.runnerName)(agentId=\(String(describing: $0.agentId)) apiId=\(String(describing: $0.apiId)))" })")
-#endif
+            #endif
         }
         let installPathMap = buildInstallPathMap(
             scopes: scopesSnapshot,
@@ -483,10 +483,10 @@ actor RunnerStore {
 
         let statusUpdate = onStatusUpdate
         await MainActor.run { [viewModel] in
-            viewModel.runners            = enrichedRunners
-            viewModel.jobs               = jobResult.display
-            viewModel.actions            = groupResult.display
-            viewModel.isRateLimited      = rateLimitSnapshot.isLimited
+            viewModel.runners = enrichedRunners
+            viewModel.jobs = jobResult.display
+            viewModel.actions = groupResult.display
+            viewModel.isRateLimited = rateLimitSnapshot.isLimited
             viewModel.rateLimitResetDate = rateLimitSnapshot.resetDate
             statusUpdate()
         }
@@ -537,9 +537,9 @@ actor RunnerStore {
         }
 
         log("RunnerStore › fetchAndEnrichRunners — total runners across all scopes: \(runnersWithScope.count)")
-#if DEBUG
+        #if DEBUG
         log("RunnerStore › fetchAndEnrichRunners — installPathMap.byFullKey=\(installPathMap.byFullKey.keys.sorted()) byName=\(installPathMap.byName.keys.sorted()) byAgentId=\(installPathMap.byAgentId.keys.sorted()) byApiId=\(installPathMap.byApiId.keys.sorted())")
-#endif
+        #endif
 
         var indexed: [(scope: String, runner: Runner)] = runnersWithScope
         for i in indexed.indices where !indexed[i].runner.busy {
@@ -552,24 +552,24 @@ actor RunnerStore {
         await withTaskGroup(of: (Int, RunnerMetrics?).self) { group in
             for (idx, (scope, runner)) in indexed.enumerated() {
                 guard runner.busy else { continue }
-                let fullKey           = "\(scope)/\(runner.name)"
-                let resolvedByApiId   = installPathMap.byApiId[runner.id]
+                let fullKey = "\(scope)/\(runner.name)"
+                let resolvedByApiId = installPathMap.byApiId[runner.id]
                 let resolvedByAgentId = installPathMap.byAgentId[runner.id]
-                let resolvedByFull    = installPathMap.byFullKey[fullKey]
-                let resolvedByName    = installPathMap.byName[runner.name]
-                let installPath       = resolvedByApiId ?? resolvedByAgentId ?? resolvedByFull ?? resolvedByName
-#if DEBUG
+                let resolvedByFull = installPathMap.byFullKey[fullKey]
+                let resolvedByName = installPathMap.byName[runner.name]
+                let installPath = resolvedByApiId ?? resolvedByAgentId ?? resolvedByFull ?? resolvedByName
+                #if DEBUG
                 log("RunnerStore › fetchAndEnrichRunners — \(runner.name) id=\(runner.id) busy=true; byApiId=\(String(describing: resolvedByApiId)) byAgentId=\(String(describing: resolvedByAgentId)) byFullKey=\(String(describing: resolvedByFull)) byName=\(String(describing: resolvedByName)) → resolved=\(String(describing: installPath))")
-#endif
+                #endif
                 guard let installPath else {
                     log("RunnerStore › ⚠️ fetchAndEnrichRunners — \(runner.name) busy but NO installPath resolved. id=\(runner.id) fullKey=\(fullKey).")
                     continue
                 }
                 group.addTask {
                     let metrics = await metricsForRunner(installPath: installPath)
-#if DEBUG
+                    #if DEBUG
                     log("RunnerStore › fetchAndEnrichRunners — \(runner.name) metrics=\(String(describing: metrics))")
-#endif
+                    #endif
                     return (idx, metrics)
                 }
             }
@@ -582,15 +582,15 @@ actor RunnerStore {
         // Only busy runners with a resolved installPath to avoid spurious warnings.
         let metricsUpdates = indexed.filter {
             $0.runner.busy
-            && (installPathMap.byApiId[$0.runner.id] != nil
-                || installPathMap.byAgentId[$0.runner.id] != nil
-                || installPathMap.byName[$0.runner.name] != nil)
+                && (installPathMap.byApiId[$0.runner.id] != nil
+                        || installPathMap.byAgentId[$0.runner.id] != nil
+                        || installPathMap.byName[$0.runner.name] != nil)
         }
         if !metricsUpdates.isEmpty {
             for (_, runner) in metricsUpdates {
-#if DEBUG
+                #if DEBUG
                 log("RunnerStore › fetchAndEnrichRunners — applyMetrics to LocalRunnerStore: \(runner.name) id=\(runner.id) busy=\(runner.busy) metrics=\(String(describing: runner.metrics))")
-#endif
+                #endif
                 await localRunnerStore.applyMetrics(
                     runner.metrics,
                     forRunnerId: runner.id,

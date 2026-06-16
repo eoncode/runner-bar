@@ -149,9 +149,9 @@ private struct StepRowView: View {
     /// Foreground colour for the step conclusion icon.
     private var iconColor: Color {
         switch step.conclusion {
-        case .success:                   return Color.rbSuccess
-        case .failure:                   return Color.rbDanger
-        case .skipped, .cancelled:       return Color.rbTextTertiary
+        case .success: return Color.rbSuccess
+        case .failure: return Color.rbDanger
+        case .skipped, .cancelled: return Color.rbTextTertiary
         default: return step.status == .inProgress ? Color.rbBlue : Color.rbTextTertiary
         }
     }
@@ -318,15 +318,15 @@ struct InlineJobRowsView: View {
     private func jobStatus(for job: ActiveJob) -> RBStatus {
         if let conclusion = job.conclusion {
             switch conclusion {
-            case .success:                   return .success
-            case .failure:                   return .failed
-            case .cancelled, .skipped:       return .unknown
+            case .success: return .success
+            case .failure: return .failed
+            case .cancelled, .skipped: return .unknown
             default:                         return .unknown
             }
         }
         switch job.status {
         case .inProgress: return .inProgress
-        case .queued:     return .queued
+        case .queued: return .queued
         default:          return .queued
         }
     }

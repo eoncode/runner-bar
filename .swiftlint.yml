@@ -31,6 +31,19 @@ nesting:
   function_level:
     warning: 3
 
+identifier_name:
+  min_length: 2
+  excluded:
+    - id  # ubiquitous Swift/SwiftUI identifier
+    - x   # geometric coordinate
+    - y   # geometric coordinate
+    - w   # geometric width
+    - h   # geometric height
+    - i   # loop index (conventional)
+    - j   # loop index (conventional)
+    - k   # loop index (conventional)
+    - n   # count/size (conventional in algorithms)
+
 missing_docs:
   warning: [open, public, internal, private, fileprivate]
   excludes_extensions: false
@@ -43,16 +56,16 @@ file_header:
 disabled_rules:
   - todo                                    # TODOs are acceptable during active development
   - trailing_comma                          # SwiftPM/Xcode auto-formatter conflicts with this
-  - identifier_name                         # short names (s, x, i) are fine in this codebase
-  - opening_brace                           # trailing-brace style used throughout
-  - colon                                   # dictionary/type colon spacing not enforced
+  # identifier_name re-enabled with min_length: 2 — see config block below
+  # opening_brace re-enabled — PR #205 fixed these
+  # colon re-enabled — PR #205 did a full sweep
   - cyclomatic_complexity                   # complex dispatch/switch functions are acceptable
   - file_length                             # large files are acceptable during active development
   - superfluous_disable_command             # in-file disables may pre-empt future violations
   - line_length                             # long lines are acceptable in this codebase
   - function_body_length                    # long view bodies are acceptable in SwiftUI
-  - operator_usage_whitespace               # conflicts with SwiftUI DSL patterns
+  # operator_usage_whitespace re-enabled — PR #205 fixed these
   - vertical_whitespace_opening_braces      # conflicts with SwiftUI DSL patterns
   - multiple_closures_with_trailing_closure # SwiftUI DSL routinely uses multiple trailing closures
   - function_parameter_count                # large model inits are acceptable in this codebase
-  - type_body_length                        # large types are acceptable in this codebase
+  - type_body_length                        # large types are acceptable; tracked for Phase 2 re-enable in #1406

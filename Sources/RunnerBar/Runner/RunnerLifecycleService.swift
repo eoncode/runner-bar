@@ -232,7 +232,7 @@ struct RunnerLifecycleService {
         let laDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
         guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: laDir, includingPropertiesForKeys: nil) else { return }
+                at: laDir, includingPropertiesForKeys: nil) else { return }
         for url in entries {
             let filename = url.deletingPathExtension().lastPathComponent
             if filename.hasPrefix("actions.runner") && filename.hasSuffix("." + runnerName) {

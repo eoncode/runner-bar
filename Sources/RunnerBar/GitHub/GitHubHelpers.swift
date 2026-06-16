@@ -205,7 +205,7 @@ private func parseStepLog(_ raw: String, stepNumber: Int) -> String? {
     guard index >= 0, index < sections.count else {
         log(
             "parseStepLog › stepNumber \(stepNumber) out of range "
-            + "(sections=\(sections.count)), returning full log"
+                + "(sections=\(sections.count)), returning full log"
         )
         return cleaned
     }

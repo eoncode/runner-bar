@@ -25,8 +25,8 @@ extension GroupStatus {
     public var sortPriority: Int {
         switch self {
         case .inProgress: return 0
-        case .queued:     return 1
-        case .completed:  return 2
+        case .queued: return 1
+        case .completed: return 2
         }
     }
 }

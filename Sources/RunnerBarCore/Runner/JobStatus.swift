@@ -31,13 +31,13 @@ public enum JobStatus: Hashable, Sendable {
     /// The raw string value as returned by the GitHub API.
     public var rawValue: String {
         switch self {
-        case .queued:         return "queued"
-        case .inProgress:     return "in_progress"
-        case .completed:      return "completed"
-        case .waiting:        return "waiting"
-        case .requested:      return "requested"
-        case .pending:        return "pending"
-        case .unknown(let s): return s
+        case .queued: return "queued"
+        case .inProgress: return "in_progress"
+        case .completed: return "completed"
+        case .waiting: return "waiting"
+        case .requested: return "requested"
+        case .pending: return "pending"
+        case .unknown(let raw): return raw
         }
     }
 
@@ -46,13 +46,13 @@ public enum JobStatus: Hashable, Sendable {
     /// - Parameter raw: The raw string value as returned by the GitHub REST API.
     public init(rawString raw: String) {
         switch raw {
-        case "queued":       self = .queued
-        case "in_progress":  self = .inProgress
-        case "completed":    self = .completed
-        case "waiting":      self = .waiting
-        case "requested":    self = .requested
-        case "pending":      self = .pending
-        default:             self = .unknown(raw)
+        case "queued": self = .queued
+        case "in_progress": self = .inProgress
+        case "completed": self = .completed
+        case "waiting": self = .waiting
+        case "requested": self = .requested
+        case "pending": self = .pending
+        default: self = .unknown(raw)
         }
     }
 
@@ -132,16 +132,16 @@ public enum JobConclusion: Hashable, Sendable {
     /// The raw string value as returned by the GitHub API.
     public var rawValue: String {
         switch self {
-        case .success:            return "success"
-        case .failure:            return "failure"
-        case .cancelled:          return "cancelled"
-        case .skipped:            return "skipped"
-        case .timedOut:           return "timed_out"
-        case .actionRequired:     return "action_required"
-        case .neutral:            return "neutral"
-        case .stale:              return "stale"
-        case .startupFailure:     return "startup_failure"
-        case .unknown(let s):     return s
+        case .success: return "success"
+        case .failure: return "failure"
+        case .cancelled: return "cancelled"
+        case .skipped: return "skipped"
+        case .timedOut: return "timed_out"
+        case .actionRequired: return "action_required"
+        case .neutral: return "neutral"
+        case .stale: return "stale"
+        case .startupFailure: return "startup_failure"
+        case .unknown(let raw): return raw
         }
     }
 
@@ -150,16 +150,16 @@ public enum JobConclusion: Hashable, Sendable {
     /// - Parameter raw: The raw string value as returned by the GitHub REST API.
     public init(rawString raw: String) {
         switch raw {
-        case "success":          self = .success
-        case "failure":          self = .failure
-        case "cancelled":        self = .cancelled
-        case "skipped":          self = .skipped
-        case "timed_out":        self = .timedOut
-        case "action_required":  self = .actionRequired
-        case "neutral":          self = .neutral
-        case "stale":            self = .stale
-        case "startup_failure":  self = .startupFailure
-        default:                 self = .unknown(raw)
+        case "success": self = .success
+        case "failure": self = .failure
+        case "cancelled": self = .cancelled
+        case "skipped": self = .skipped
+        case "timed_out": self = .timedOut
+        case "action_required": self = .actionRequired
+        case "neutral": self = .neutral
+        case "stale": self = .stale
+        case "startup_failure": self = .startupFailure
+        default: self = .unknown(raw)
         }
     }
 

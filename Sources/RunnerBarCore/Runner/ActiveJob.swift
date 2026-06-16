@@ -183,9 +183,9 @@ public struct JobStep: Identifiable, Equatable, Sendable {
     /// Unicode character summarising the step outcome for display.
     public var conclusionIcon: String {
         switch conclusion {
-        case .success:              return "\u{2713}"
-        case .failure:              return "\u{2797}"
-        case .skipped, .cancelled:  return "\u{2298}"
+        case .success: return "\u{2713}"
+        case .failure: return "\u{2797}"
+        case .skipped, .cancelled: return "\u{2298}"
         default:
             return status == .inProgress ? "\u{25B6}" : "\u{00B7}"
         }
@@ -234,31 +234,31 @@ public struct JobPayload: Decodable, Sendable {
         /// Maps to the `steps` JSON field.
         case steps
         /// Maps to the `started_at` JSON field.
-        case startedAt   = "started_at"
+        case startedAt = "started_at"
         /// Maps to the `completed_at` JSON field.
         case completedAt = "completed_at"
         /// Maps to the `created_at` JSON field.
-        case createdAt   = "created_at"
+        case createdAt = "created_at"
         /// Maps to the `html_url` JSON field.
-        case htmlUrl     = "html_url"
+        case htmlUrl = "html_url"
         /// Maps to the `runner_name` JSON field.
-        case runnerName  = "runner_name"
+        case runnerName = "runner_name"
     }
 
     /// Decodes a `JobPayload` from a JSON container.
     /// Falls back to an empty `steps` array when the key is absent (queued jobs).
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id          = try c.decode(Int.self, forKey: .id)
-        name        = try c.decode(String.self, forKey: .name)
-        status      = try c.decode(JobStatus.self, forKey: .status)
-        conclusion  = try c.decodeIfPresent(JobConclusion.self, forKey: .conclusion)
-        startedAt   = try c.decodeIfPresent(String.self, forKey: .startedAt)
-        completedAt = try c.decodeIfPresent(String.self, forKey: .completedAt)
-        createdAt   = try c.decodeIfPresent(String.self, forKey: .createdAt)
-        htmlUrl     = try c.decodeIfPresent(String.self, forKey: .htmlUrl)
-        runnerName  = try c.decodeIfPresent(String.self, forKey: .runnerName)
-        steps       = try c.decodeIfPresent([StepPayload].self, forKey: .steps) ?? []
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        status = try container.decode(JobStatus.self, forKey: .status)
+        conclusion = try container.decodeIfPresent(JobConclusion.self, forKey: .conclusion)
+        startedAt = try container.decodeIfPresent(String.self, forKey: .startedAt)
+        completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        htmlUrl = try container.decodeIfPresent(String.self, forKey: .htmlUrl)
+        runnerName = try container.decodeIfPresent(String.self, forKey: .runnerName)
+        steps = try container.decodeIfPresent([StepPayload].self, forKey: .steps) ?? []
     }
 }
 
@@ -288,7 +288,7 @@ public struct StepPayload: Decodable, Sendable {
         /// Maps to the `number` JSON field.
         case number
         /// Maps to the `started_at` JSON field.
-        case startedAt   = "started_at"
+        case startedAt = "started_at"
         /// Maps to the `completed_at` JSON field.
         case completedAt = "completed_at"
     }
@@ -315,29 +315,29 @@ public func makeActiveJob(
     iso: ISO8601DateFormatter,
     isDimmed: Bool = false
 ) -> ActiveJob {
-    let steps: [JobStep] = payload.steps.map { s in
+    let steps: [JobStep] = payload.steps.map { step in
         JobStep(
-            id:          s.number,
-            name:        s.name,
-            status:      s.status,
-            conclusion:  s.conclusion,
-            startedAt:   s.startedAt.flatMap { iso.date(from: $0) },
-            completedAt: s.completedAt.flatMap { iso.date(from: $0) },
-            number:      s.number
+            id: step.number,
+            name: step.name,
+            status: step.status,
+            conclusion: step.conclusion,
+            startedAt: step.startedAt.flatMap { iso.date(from: $0) },
+            completedAt: step.completedAt.flatMap { iso.date(from: $0) },
+            number: step.number
         )
     }
     return ActiveJob(
-        id:          payload.id,
-        name:        payload.name,
-        htmlUrl:     payload.htmlUrl,
-        status:      payload.status,
-        conclusion:  payload.conclusion,
-        isDimmed:    isDimmed,
-        runnerName:  payload.runnerName,
-        scope:       nil,
-        startedAt:   payload.startedAt.flatMap { iso.date(from: $0) },
+        id: payload.id,
+        name: payload.name,
+        htmlUrl: payload.htmlUrl,
+        status: payload.status,
+        conclusion: payload.conclusion,
+        isDimmed: isDimmed,
+        runnerName: payload.runnerName,
+        scope: nil,
+        startedAt: payload.startedAt.flatMap { iso.date(from: $0) },
         completedAt: payload.completedAt.flatMap { iso.date(from: $0) },
-        createdAt:   payload.createdAt.flatMap { iso.date(from: $0) },
-        steps:       steps
+        createdAt: payload.createdAt.flatMap { iso.date(from: $0) },
+        steps: steps
     )
 }

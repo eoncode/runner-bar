@@ -71,11 +71,11 @@ public struct Runner: Codable, Identifiable, Sendable {
     /// `init(from:)` automatically when a stored property has no CodingKey
     /// and no default value, so this explicit implementation is required.
     public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(Int.self, forKey: .id)
-        name = try c.decode(String.self, forKey: .name)
-        status = try c.decode(RunnerStatus.self, forKey: .status)
-        busy = try c.decode(Bool.self, forKey: .busy)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        status = try container.decode(RunnerStatus.self, forKey: .status)
+        busy = try container.decode(Bool.self, forKey: .busy)
         metrics = nil
     }
 
@@ -103,9 +103,9 @@ public struct Runner: Codable, Identifiable, Sendable {
         default: break
         }
         let label = busy ? "active" : "idle"
-        guard let m = metrics else { return "\(label) (CPU: \u{2014} MEM: \u{2014})" }
-        let cpu = String(format: "%.1f", m.cpu)
-        let mem = String(format: "%.1f", m.mem)
+        guard let runnerMetrics = metrics else { return "\(label) (CPU: \u{2014} MEM: \u{2014})" }
+        let cpu = String(format: "%.1f", runnerMetrics.cpu)
+        let mem = String(format: "%.1f", runnerMetrics.mem)
         return "\(label) (CPU: \(cpu)% MEM: \(mem)%)"
     }
 }

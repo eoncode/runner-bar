@@ -62,9 +62,9 @@ final class OAuthService {
 
     // MARK: - OAuth endpoint constants
     /// GitHub OAuth authorisation URL — entry point for the browser-based sign-in flow.
-    private let authorizeURL    = "\(GitHubConstants.base)/login/oauth/authorize"
+    private let authorizeURL = "\(GitHubConstants.base)/login/oauth/authorize"
     /// GitHub OAuth token-exchange URL — receives the code and returns the access token.
-    private let accessTokenURL  = "\(GitHubConstants.base)/login/oauth/access_token"
+    private let accessTokenURL = "\(GitHubConstants.base)/login/oauth/access_token"
 
     /// CSRF nonce generated in signIn(), verified in handleCallback().
     /// Cleared after use or on sign-out.

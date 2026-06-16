@@ -67,9 +67,9 @@ public struct RunnerEditDraft: Equatable, Sendable {
         proxyStore: any RunnerProxyStoreProtocol
     ) async -> RunnerConfig? {
         let config = await loadRunnerConfig(installPath: installPath, store: configStore)
-        let proxy  = await proxyStore.load(at: installPath)
-        proxyUrl      = proxy.url
-        proxyUser     = proxy.user
+        let proxy = await proxyStore.load(at: installPath)
+        proxyUrl = proxy.url
+        proxyUser = proxy.user
         proxyPassword = proxy.password
         return config
     }
@@ -86,8 +86,8 @@ public struct RunnerEditDraft: Equatable, Sendable {
 
     /// Trimmed work folder string, falling back to `"_work"` when empty.
     public var trimmedWorkFolder: String {
-        let v = workFolder.trimmingCharacters(in: .whitespacesAndNewlines)
-        return v.isEmpty ? "_work" : v
+        let trimmed = workFolder.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "_work" : trimmed
     }
 
     // MARK: - Private disk helpers

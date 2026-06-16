@@ -7,7 +7,7 @@ import SwiftUI
 /// Enumerates possible values for ScopeType.
 private enum ScopeType: String, CaseIterable, Identifiable {
     /// Coding key for the `org` field.
-    case org  = "Organisation"
+    case org = "Organisation"
     /// Coding key for the `repo` field.
     case repo = "Repository"
     /// The id property.
@@ -105,8 +105,8 @@ struct AddScopeSheet: View {
 
                 // ── Type toggle ──────────────────────────────────────────
                 Picker("", selection: $scopeType) {
-                    ForEach(ScopeType.allCases) { t in
-                        Text(t.rawValue).tag(t)
+                    ForEach(ScopeType.allCases) { scopeOption in
+                        Text(scopeOption.rawValue).tag(scopeOption)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -180,10 +180,10 @@ struct AddScopeSheet: View {
 
                 // ── Helper caption ───────────────────────────────────────
                 Text(scopeType == .org
-                     ? "Monitors all runners in the organisation."
-                     : "Monitors runners registered to this repository.")
-                .font(.caption)
-                .foregroundColor(Color.rbTextSecondary)
+                        ? "Monitors all runners in the organisation."
+                        : "Monitors runners registered to this repository.")
+                    .font(.caption)
+                    .foregroundColor(Color.rbTextSecondary)
             }
             .padding(RBSpacing.md)
 
@@ -240,7 +240,7 @@ struct AddScopeSheet: View {
         isFetching = true
         errorMessage = nil
         Task(priority: .userInitiated) {
-            async let fetchedOrgs  = fetchUserOrgs()
+            async let fetchedOrgs = fetchUserOrgs()
             async let fetchedRepos = fetchUserRepos()
             let (resolvedOrgs, resolvedRepos) = await (fetchedOrgs, fetchedRepos)
             isFetching = false
@@ -249,7 +249,7 @@ struct AddScopeSheet: View {
                 usePicker = false
                 errorMessage = "Could not load orgs/repos. Enter manually."
             } else {
-                orgs  = resolvedOrgs
+                orgs = resolvedOrgs
                 repos = resolvedRepos
                 usePicker = true
                 selectedScope = pickerItems.first ?? ""

@@ -85,7 +85,7 @@ public struct PollResultBuilder {
         let queuedCount = liveJobs.filter { $0.status == .queued }.count
         log(
             "PollResultBuilder › \(inProgCount) in_progress \(queuedCount) queued"
-            + " | cache: \(newCache.count) | display: \(display.count)"
+                + " | cache: \(newCache.count) | display: \(display.count)"
         )
         return JobPollResult(display: display, newCache: newCache, newPrevLive: newPrevLive)
     }
@@ -173,7 +173,7 @@ public struct PollResultBuilder {
         let queuedCount = liveGroups.filter { $0.groupStatus == .queued }.count
         log(
             "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
-            + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
+                + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
         // Enrich jobs concurrently while preserving the sort order produced by
         // buildGroupDisplay. withTaskGroup yields results in completion order, so
@@ -181,8 +181,8 @@ public struct PollResultBuilder {
         let enriched: [WorkflowActionGroup] = await withTaskGroup(
             of: (Int, WorkflowActionGroup).self
         ) { group in
-            for (idx, g) in display.enumerated() {
-                group.addTask { (idx, g.withJobs(await enrichJobs(g.jobs))) }
+            for (idx, actionGroup) in display.enumerated() {
+                group.addTask { (idx, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
             }
             var out: [(Int, WorkflowActionGroup)] = []
             for await pair in group { out.append(pair) }
@@ -191,9 +191,9 @@ public struct PollResultBuilder {
         let enrichedCache: [String: WorkflowActionGroup] = await withTaskGroup(
             of: (String, WorkflowActionGroup).self
         ) { group in
-            for (key, g) in newCache { group.addTask { (key, g.withJobs(await enrichJobs(g.jobs))) } }
+            for (key, actionGroup) in newCache { group.addTask { (key, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) } }
             var out: [String: WorkflowActionGroup] = [:]
-            for await (key, g) in group { out[key] = g }
+            for await (key, actionGroup) in group { out[key] = actionGroup }
             return out
         }
         return GroupPollResult(
@@ -251,8 +251,8 @@ public struct PollResultBuilder {
     /// at `jobDisplayLimit` so the panel UI stays manageable.
     public static func buildJobDisplay(live: [ActiveJob], cache: [Int: ActiveJob]) -> [ActiveJob] {
         let inProgress: [ActiveJob] = live.filter { $0.status == .inProgress }
-        let queued: [ActiveJob]     = live.filter { $0.status == .queued }
-        let cached: [ActiveJob]     = cache.values.sorted {
+        let queued: [ActiveJob] = live.filter { $0.status == .queued }
+        let cached: [ActiveJob] = cache.values.sorted {
             ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast)
         }
         var display: [ActiveJob] = []
@@ -370,16 +370,16 @@ public struct PollResultBuilder {
         cache: [String: WorkflowActionGroup]
     ) -> [WorkflowActionGroup] {
         let inProgress = live.filter { $0.groupStatus == .inProgress }
-        let queued     = live.filter { $0.groupStatus == .queued }
-        let liveIDs    = Set((inProgress + queued).map { $0.id })
-        let cached     = cache.values.sorted {
+        let queued = live.filter { $0.groupStatus == .queued }
+        let liveIDs = Set((inProgress + queued).map { $0.id })
+        let cached = cache.values.sorted {
             ($0.lastJobCompletedAt ?? $0.createdAt ?? .distantPast)
                 > ($1.lastJobCompletedAt ?? $1.createdAt ?? .distantPast)
         }
         var display: [WorkflowActionGroup] = []
-        for grp in inProgress where display.count < groupDisplayLimit                               { display.append(grp) }
-        for grp in queued     where display.count < groupDisplayLimit                               { display.append(grp) }
-        for grp in cached     where display.count < groupDisplayLimit && !liveIDs.contains(grp.id) { display.append(grp) }
+        for actionGroup in inProgress where display.count < groupDisplayLimit { display.append(actionGroup) }
+        for actionGroup in queued where display.count < groupDisplayLimit { display.append(actionGroup) }
+        for actionGroup in cached where display.count < groupDisplayLimit && !liveIDs.contains(actionGroup.id) { display.append(actionGroup) }
         return display
     }
 }

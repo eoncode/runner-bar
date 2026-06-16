@@ -177,8 +177,8 @@ struct FailureHookRunnerUseCase: Sendable {
         guard !jobs.isEmpty else {
             log("FailureHookRunnerUseCase buildLogContent -- no jobs, falling back to run-level summary")
             let lines: [String] = group.runs.compactMap { run in
-                guard let c = run.conclusion, c.isHookConclusion else { return nil }
-                return "FAILED run \(run.id): conclusion=\(c.rawValue) workflow=\(run.name)"
+                guard let conclusion = run.conclusion, conclusion.isHookConclusion else { return nil }
+                return "FAILED run \(run.id): conclusion=\(conclusion.rawValue) workflow=\(run.name)"
             }
             return lines.joined(separator: "\n")
         }
@@ -189,8 +189,8 @@ struct FailureHookRunnerUseCase: Sendable {
                 parts.append(tail)
             } else {
                 let failedSteps = job.steps.filter {
-                    guard let c = $0.conclusion else { return false }
-                    return c.isHookConclusion
+                    guard let conclusion = $0.conclusion else { return false }
+                    return conclusion.isHookConclusion
                 }
                 var lines: [String] = ["Job: \(job.name) [failed]"]
                 if failedSteps.isEmpty {
@@ -270,9 +270,9 @@ struct FailureHookRunnerUseCase: Sendable {
         return result
     }
 
-    /// Escapes `s` so it is safe to embed between single-quotes in a shell command.
+    /// Escapes `str` so it is safe to embed between single-quotes in a shell command.
     /// Replaces every `'` with `'\''` — the standard POSIX single-quote escape.
-    private static func singleQuoteEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "'", with: "'\\''")
+    private static func singleQuoteEscape(_ str: String) -> String {
+        str.replacingOccurrences(of: "'", with: "'\\''")
     }
 }

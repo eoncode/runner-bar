@@ -73,9 +73,9 @@ func handleRateLimitResponse(
     }
     log(
         "RateLimit › ⚠️ rate limited (\(limitKind)) — \(endpoint) "
-        + "status=\(statusCode) "
-        + "retryAfter=\(String(describing: retryAfter)) "
-        + "resetAt=\(String(describing: resetAt))"
+            + "status=\(statusCode) "
+            + "retryAfter=\(String(describing: retryAfter)) "
+            + "resetAt=\(String(describing: resetAt))"
     )
     await rateLimitActor.set(resetAt: resetAt)
 }

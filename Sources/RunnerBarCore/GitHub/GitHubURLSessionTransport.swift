@@ -214,13 +214,13 @@ public func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async 
 @discardableResult
 public func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeInterval = 30) async -> Data? {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPost") { req in
-        var r = req
-        r.httpMethod = "POST"
+        var request = req
+        request.httpMethod = "POST"
         if let body {
-            r.httpBody = body
-            r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        return r
+        return request
     }
     guard case .success(let data, let statusCode) = result else { return nil }
     log("urlSessionPost › \(endpoint) → \(statusCode)")
@@ -231,11 +231,11 @@ public func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeI
 /// - Returns: Response body on 2xx, `nil` on failure.
 public func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval = 30) async -> Data? {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionPut") { req in
-        var r = req
-        r.httpMethod = "PUT"
-        r.httpBody = body
-        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        return r
+        var request = req
+        request.httpMethod = "PUT"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return request
     }
     guard case .success(let data, let statusCode) = result else { return nil }
     log("urlSessionPut › \(endpoint) → \(statusCode)")
@@ -247,9 +247,9 @@ public func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval 
 @discardableResult
 public func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) async -> Bool {
     let result = await urlSessionExecute(endpoint, timeout: timeout, logTag: "urlSessionDelete") { req in
-        var r = req
-        r.httpMethod = "DELETE"
-        return r
+        var request = req
+        request.httpMethod = "DELETE"
+        return request
     }
     if case .success = result {
         log("urlSessionDelete › \(endpoint) → success")

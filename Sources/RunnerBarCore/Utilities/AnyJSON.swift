@@ -48,28 +48,28 @@ public enum AnyJSON: Codable {
     ///   stored losslessly as `.int` rather than being coerced to a `Double` mantissa.
     /// - `String` is tried last among scalar types so it cannot shadow earlier cases.
     public init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if let v = try? c.decode([String: AnyJSON].self) { self = .object(v); return }
-        if let v = try? c.decode([AnyJSON].self)          { self = .array(v);  return }
-        if let v = try? c.decode(Bool.self)               { self = .bool(v);   return }
-        if let v = try? c.decode(Int.self)                { self = .int(v);    return }
-        if let v = try? c.decode(Double.self)             { self = .number(v); return }
-        if let v = try? c.decode(String.self)             { self = .string(v); return }
-        if c.decodeNil()                                  { self = .null;      return }
-        throw DecodingError.dataCorruptedError(in: c, debugDescription: "AnyJSON: unrecognised value")
+        let container = try decoder.singleValueContainer()
+        if let val = try? container.decode([String: AnyJSON].self) { self = .object(val); return }
+        if let val = try? container.decode([AnyJSON].self) { self = .array(val); return }
+        if let val = try? container.decode(Bool.self) { self = .bool(val); return }
+        if let val = try? container.decode(Int.self) { self = .int(val); return }
+        if let val = try? container.decode(Double.self) { self = .number(val); return }
+        if let val = try? container.decode(String.self) { self = .string(val); return }
+        if container.decodeNil() { self = .null; return }
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "AnyJSON: unrecognised value")
     }
 
     /// Encodes this `AnyJSON` value into the given encoder.
     public func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
+        var container = encoder.singleValueContainer()
         switch self {
-        case .object(let v): try c.encode(v)
-        case .array(let v):  try c.encode(v)
-        case .string(let v): try c.encode(v)
-        case .number(let v): try c.encode(v)
-        case .int(let v):    try c.encode(v)
-        case .bool(let v):   try c.encode(v)
-        case .null:          try c.encodeNil()
+        case .object(let val): try container.encode(val)
+        case .array(let val): try container.encode(val)
+        case .string(let val): try container.encode(val)
+        case .number(let val): try container.encode(val)
+        case .int(let val): try container.encode(val)
+        case .bool(let val): try container.encode(val)
+        case .null: try container.encodeNil()
         }
     }
 }

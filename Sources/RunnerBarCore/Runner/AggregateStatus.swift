@@ -20,9 +20,9 @@ public enum AggregateStatus {
     /// Emoji dot used in the menu-bar title string.
     public var dot: String {
         switch self {
-        case .allOnline:   return "🟢"
+        case .allOnline: return "🟢"
         case .someOffline: return "🟡"
-        case .allOffline:  return "⚫"
+        case .allOffline: return "⚫"
         }
     }
 
@@ -44,9 +44,9 @@ public enum AggregateStatus {
     /// SF Symbol name used for the status-bar icon.
     public var symbolName: String {
         switch self {
-        case .allOnline:   return "circle.fill"
+        case .allOnline: return "circle.fill"
         case .someOffline: return "circle.lefthalf.filled"
-        case .allOffline:  return "circle"
+        case .allOffline: return "circle"
         }
     }
 }
