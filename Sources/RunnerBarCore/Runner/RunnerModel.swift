@@ -178,8 +178,8 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
         if lifecycleWarning != nil { return .warning }
         if isRunning { return (isBusy || githubStatus == .busy) ? .busy : .running }
         switch githubStatus {
-        case .online:  return .githubOnline
-        case .busy:    return .busy
+        case .online: return .githubOnline
+        case .busy: return .busy
         default:       return .offline
         }
     }
@@ -212,22 +212,22 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     /// - `"offline"` — runner is not reachable.
     public var displayStatus: String {
         switch resolvedState {
-        case .warning:     return lifecycleWarning!  // resolvedState only reaches .warning when lifecycleWarning != nil
-        case .busy:        return "busy"
-        case .running:     return "running"
+        case .warning: return lifecycleWarning!  // resolvedState only reaches .warning when lifecycleWarning != nil
+        case .busy: return "busy"
+        case .running: return "running"
         case .githubOnline: return "online"
-        case .offline:     return "offline"
+        case .offline: return "offline"
         }
     }
 
     /// Dot colour category used by `SettingsView.localRunnerDotColor(for:)`.
     public var statusColor: StatusColor {
         switch resolvedState {
-        case .warning:     return .offline
-        case .busy:        return .busy
-        case .running:     return .running
+        case .warning: return .offline
+        case .busy: return .busy
+        case .running: return .running
         case .githubOnline: return .idle
-        case .offline:     return .offline
+        case .offline: return .offline
         }
     }
 

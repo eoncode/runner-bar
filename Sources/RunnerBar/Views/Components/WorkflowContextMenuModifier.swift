@@ -131,10 +131,10 @@ private struct JobContextMenuModifier: ViewModifier {
         .disabled(!isLive)
         Divider()
         Button {
-            let j = job
+            let capturedJob = job
             let scope = group.repo
             Task.detached(priority: .userInitiated) {
-                guard let text = await fetchJobLog(jobID: j.id, scope: scope), !text.isEmpty else { return }
+                guard let text = await fetchJobLog(jobID: capturedJob.id, scope: scope), !text.isEmpty else { return }
                 await copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }

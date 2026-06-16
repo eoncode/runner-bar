@@ -300,8 +300,8 @@ struct LocalRunnersView: View {
     private func localRunnerDotColor(for runner: RunnerModel) -> Color {
         switch runner.statusColor {
         case .running: return Color.rbSuccess
-        case .busy:    return Color.rbWarning
-        case .idle:    return Color.rbTextTertiary
+        case .busy: return Color.rbWarning
+        case .idle: return Color.rbTextTertiary
         case .offline: return Color.rbDanger
         }
     }

@@ -320,8 +320,8 @@ struct RunnerDetailSheet: View {
     private func dotColor(for runnerModel: RunnerModel) -> Color {
         switch runnerModel.statusColor {
         case .running: return Color.rbSuccess
-        case .busy:    return Color.rbWarning
-        case .idle:    return Color.rbTextTertiary
+        case .busy: return Color.rbWarning
+        case .idle: return Color.rbTextTertiary
         case .offline: return Color.rbDanger
         }
     }

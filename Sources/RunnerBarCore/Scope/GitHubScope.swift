@@ -30,7 +30,7 @@ public enum Scope {
     public var apiPrefix: String {
         switch self {
         case .repo(let owner, let name): return "repos/\(owner)/\(name)"
-        case .org(let org):              return "orgs/\(org)"
+        case .org(let org): return "orgs/\(org)"
         }
     }
 }

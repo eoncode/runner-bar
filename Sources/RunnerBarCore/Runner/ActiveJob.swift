@@ -183,9 +183,9 @@ public struct JobStep: Identifiable, Equatable, Sendable {
     /// Unicode character summarising the step outcome for display.
     public var conclusionIcon: String {
         switch conclusion {
-        case .success:              return "\u{2713}"
-        case .failure:              return "\u{2797}"
-        case .skipped, .cancelled:  return "\u{2298}"
+        case .success: return "\u{2713}"
+        case .failure: return "\u{2797}"
+        case .skipped, .cancelled: return "\u{2298}"
         default:
             return status == .inProgress ? "\u{25B6}" : "\u{00B7}"
         }
