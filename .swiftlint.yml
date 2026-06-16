@@ -71,18 +71,18 @@ disabled_rules:
   # type_body_length re-enabled with warning: 400 — tracked in #1406
 
 line_length:
-  warning: 160
-  error: 200
+  warning: 200   # tightened from 240 (phase 1) → target 160 tracked in #1406
+  error: 240
 
 file_length:
-  warning: 500
+  warning: 620   # tightened from 800 (phase 1) → target 500 tracked in #1406
   error: 800
 
 cyclomatic_complexity:
-  warning: 15
+  warning: 17    # tightened from 20 (phase 1) → target 15 tracked in #1406
 
 function_body_length:
-  warning: 80
+  warning: 90    # tightened from 120 (phase 1) → target 80 tracked in #1406
 
 type_body_length:
   warning: 400
