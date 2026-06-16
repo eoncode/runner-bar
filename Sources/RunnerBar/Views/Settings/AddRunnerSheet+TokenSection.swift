@@ -78,7 +78,7 @@ extension AddRunnerSheet {
                 repos = fetchedRepos
                 orgs  = fetchedOrgs
                 if let first = fetchedRepos.first { selectedRepo = first }
-                if let first = fetchedOrgs.first  { selectedOrg  = first }
+                if let first = fetchedOrgs.first { selectedOrg  = first }
                 isLoadingScopes = false
             }
         }

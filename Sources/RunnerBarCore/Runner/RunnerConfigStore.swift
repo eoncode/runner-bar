@@ -150,11 +150,11 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                 }
                 // Write optional fields only when non-nil to avoid injecting "key": null
                 // into the agent-managed file.
-                if let v = config.platform             { raw[RunnerConfig.CodingKeys.platform.rawValue]             = .string(v) }
+                if let v = config.platform { raw[RunnerConfig.CodingKeys.platform.rawValue]             = .string(v) }
                 if let v = config.platformArchitecture { raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = .string(v) }
-                if let v = config.agentVersion         { raw[RunnerConfig.CodingKeys.agentVersion.rawValue]         = .string(v) }
-                if let v = config.ephemeral            { raw[RunnerConfig.CodingKeys.ephemeral.rawValue]            = .bool(v)   }
-                if let v = config.agentId              { raw[RunnerConfig.CodingKeys.agentId.rawValue]              = .int(v)    }
+                if let v = config.agentVersion { raw[RunnerConfig.CodingKeys.agentVersion.rawValue]         = .string(v) }
+                if let v = config.ephemeral { raw[RunnerConfig.CodingKeys.ephemeral.rawValue]            = .bool(v)   }
+                if let v = config.agentId { raw[RunnerConfig.CodingKeys.agentId.rawValue]              = .int(v)    }
 
                 do {
                     let encoder = JSONEncoder()

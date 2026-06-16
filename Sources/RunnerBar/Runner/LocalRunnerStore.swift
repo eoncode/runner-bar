@@ -321,7 +321,7 @@ actor LocalRunnerStore {
         var metricsByName: [String: RunnerMetrics] = [:]
         for runner in runners {
             guard runner.isBusy, let m = runner.metrics else { continue }
-            if let id = runner.apiId   { metricsByApiId[id]   = m }  // Priority 1: GitHub REST API id
+            if let id = runner.apiId { metricsByApiId[id]   = m }  // Priority 1: GitHub REST API id
             if let id = runner.agentId { metricsByAgentId[id] = m }  // Priority 2: local AgentId
             metricsByName[runner.runnerName] = m                      // Priority 3: name (last resort)
         }

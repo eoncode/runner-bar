@@ -50,12 +50,12 @@ public enum AnyJSON: Codable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let v = try? c.decode([String: AnyJSON].self) { self = .object(v); return }
-        if let v = try? c.decode([AnyJSON].self)          { self = .array(v);  return }
-        if let v = try? c.decode(Bool.self)               { self = .bool(v);   return }
-        if let v = try? c.decode(Int.self)                { self = .int(v);    return }
-        if let v = try? c.decode(Double.self)             { self = .number(v); return }
-        if let v = try? c.decode(String.self)             { self = .string(v); return }
-        if c.decodeNil()                                  { self = .null;      return }
+        if let v = try? c.decode([AnyJSON].self) { self = .array(v);  return }
+        if let v = try? c.decode(Bool.self) { self = .bool(v);   return }
+        if let v = try? c.decode(Int.self) { self = .int(v);    return }
+        if let v = try? c.decode(Double.self) { self = .number(v); return }
+        if let v = try? c.decode(String.self) { self = .string(v); return }
+        if c.decodeNil() { self = .null;      return }
         throw DecodingError.dataCorruptedError(in: c, debugDescription: "AnyJSON: unrecognised value")
     }
 
