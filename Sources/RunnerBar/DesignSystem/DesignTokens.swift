@@ -55,9 +55,9 @@ extension Color {
     // MARK: Surface & Border Tokens
     //
     // DESIGN TOKEN NOTE:
-    // On macOS 26+ the panel chrome uses NSGlassEffectView which provides its own
-    // backdrop blur and tinting. Surface tokens must use near-zero opacity so the
-    // glass layer shows through. Pre-26 values use the existing vibrancy opacities.
+    // On macOS 26 the panel chrome uses NSGlassEffectView which provides its own
+    // backdrop blur and tinting. Surface tokens use near-zero opacity so the
+    // glass layer shows through.
     //
     // ⚠️ TRANSLUCENCY CONTRACT — DO NOT REMOVE THIS COMMENT.
     // NSVisualEffectView uses .hudWindow (.behindWindow). MUST stay opacity < 1.0.
@@ -65,55 +65,24 @@ extension Color {
     // ❌ NEVER switch PanelChrome material back to .popover — warm brown tint.
     // If you are an agent or human, DO NOT REMOVE THIS COMMENT.
 
-    /// Base panel background surface.
-    /// macOS 26+: near-zero opacity so glass backdrop shows through.
-    /// Pre-26: standard vibrancy opacities.
-    static var rbSurface: Color {
-        if #available(macOS 26, *) {
-            return Color.adaptive(
-                light: Color(white: 0.95).opacity(0.04),
-                dark:  Color(white: 0.11).opacity(0.04)
-            )
-        } else {
-            return Color.adaptive(
-                light: Color(white: 0.95).opacity(0.88),
-                dark:  Color(white: 0.11).opacity(0.45)
-            )
-        }
-    }
+    /// Base panel background surface. Near-zero opacity so glass backdrop shows through.
+    static let rbSurface: Color = Color.adaptive(
+        light: Color(white: 0.95).opacity(0.04),
+        dark:  Color(white: 0.11).opacity(0.04)
+    )
 
-    /// Elevated row/card surface — slightly lighter than `rbSurface`.
-    /// macOS 26+: near-zero opacity so glass backdrop shows through.
-    /// Pre-26: standard vibrancy opacities.
-    static var rbSurfaceElevated: Color {
-        if #available(macOS 26, *) {
-            return Color.adaptive(
-                light: Color(white: 0.88).opacity(0.05),
-                dark:  Color(white: 0.15).opacity(0.05)
-            )
-        } else {
-            return Color.adaptive(
-                light: Color(white: 0.88).opacity(0.92),
-                dark:  Color(white: 0.15).opacity(0.25)
-            )
-        }
-    }
+    /// Elevated row/card surface — slightly lighter than `rbSurface`. Near-zero opacity so glass backdrop shows through.
+    static let rbSurfaceElevated: Color = Color.adaptive(
+        light: Color(white: 0.88).opacity(0.05),
+        dark:  Color(white: 0.15).opacity(0.05)
+    )
 
     /// Subtle border — low-contrast outline for cards and separators.
-    /// macOS 26+: light opacity bumped to 0.12 for better visibility on glass.
-    static var rbBorderSubtle: Color {
-        if #available(macOS 26, *) {
-            return Color.adaptive(
-                light: Color(white: 0.0).opacity(0.12),
-                dark:  Color(white: 1.0).opacity(0.06)
-            )
-        } else {
-            return Color.adaptive(
-                light: Color(white: 0.0).opacity(0.08),
-                dark:  Color(white: 1.0).opacity(0.06)
-            )
-        }
-    }
+    /// Light opacity bumped to 0.12 for better visibility on glass; dark stays at 0.06.
+    static let rbBorderSubtle: Color = Color.adaptive(
+        light: Color(white: 0.0).opacity(0.12),
+        dark:  Color(white: 1.0).opacity(0.06)
+    )
 
     /// Primary text — high contrast body and heading text.
     static let rbTextPrimary = Color.adaptive(

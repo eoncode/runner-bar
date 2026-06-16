@@ -23,18 +23,11 @@ struct ActionRowView: View {
     /// Tracks the previous row status to detect in-progress → done transitions.
     @State private var previousStatus: RBStatus?
 
-    /// Renders the row using the appropriate glass card background for the current OS.
+    /// Renders the row using the glass card background.
     var body: some View {
-        if #available(macOS 26, *) {
-            rowContainer {
-                Color.clear.glassCard(cornerRadius: RBRadius.card)
-                statusAccentBar
-            }
-        } else {
-            rowContainer {
-                glassCardBackground
-                statusAccentBar
-            }
+        rowContainer {
+            Color.clear.glassCard(cornerRadius: RBRadius.card)
+            statusAccentBar
         }
     }
 
@@ -73,11 +66,6 @@ struct ActionRowView: View {
             .frame(width: 4)
             .frame(maxHeight: .infinity)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Pre-macOS-26 glass card background used as the ZStack layer inside `rowContainer`.
-    @ViewBuilder private var glassCardBackground: some View {
-        Color.clear.glassCard(cornerRadius: RBRadius.card)
     }
 
     /// Sets the initial expand state based on the row's status at appear time.
@@ -187,11 +175,7 @@ struct ActionRowView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        if #available(macOS 26, *) {
-            GlassEffectContainer { statusBadge }
-        } else {
-            statusBadge
-        }
+        GlassEffectContainer { statusBadge }
     }
 
     /// Badge view produced from the group's current status and conclusion.

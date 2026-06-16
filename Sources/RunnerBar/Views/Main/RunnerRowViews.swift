@@ -115,14 +115,7 @@ struct PanelLocalRunnerRow: View {
             Spacer()
             // Standalone GlassEffectContainer — same as StatusBadge in metaTrailing.
             // NOT nested inside a card container so it samples the real backdrop.
-            if #available(macOS 26, *) {
-                GlassEffectContainer {
-                    RunnerMetricsBadge(
-                        cpu: runner.metrics?.cpu,
-                        mem: runner.metrics?.mem
-                    )
-                }
-            } else {
+            GlassEffectContainer {
                 RunnerMetricsBadge(
                     cpu: runner.metrics?.cpu,
                     mem: runner.metrics?.mem
@@ -133,8 +126,6 @@ struct PanelLocalRunnerRow: View {
         .padding(.vertical, RBSpacing.xs + 2)
         .frame(maxWidth: .infinity)
         .background {
-            // .glassCard() handles its own #available branch internally.
-            // No outer #available check needed here.
             Color.clear.glassCard(cornerRadius: RBRadius.card)
         }
         .clipShape(RoundedRectangle(cornerRadius: RBRadius.card, style: .continuous))

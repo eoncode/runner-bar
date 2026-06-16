@@ -4,13 +4,12 @@ import SwiftUI
 
 // MARK: - GlassCard
 /// Centralised Liquid Glass card modifier.
-/// On macOS 26+ uses `.glassEffect(.regular)` — passive containers must NOT
+/// Uses `.glassEffect(.regular)` — passive containers must NOT
 /// use `.interactive()`. The LiquidGlassReference guide restricts `.interactive()`
 /// to tappable controls (buttons, icons) only. Applying it to a passive container
 /// activates scaling/shimmer on the entire card surface including non-interactive
 /// children, which is semantically wrong and wastes GPU compositing budget.
 /// Tappable rows handle interactivity at the contentShape/button level via GlassButton.
-/// On older OSes falls back to `.ultraThinMaterial` + a subtle stroke overlay.
 ///
 /// All phases of the Liquid Glass adoption (Phase 3–7) must use `.glassCard()`
 /// instead of calling `.glassEffect()` or `.ultraThinMaterial` directly on
@@ -22,7 +21,7 @@ import SwiftUI
 struct GlassCard: ViewModifier {
     /// Corner radius applied to the rounded rectangle shape. Defaults to `RBRadius.card`.
     var cornerRadius: CGFloat
-    /// Opacity of the fallback stroke border. Defaults to 0.15; use 0.25 for sections.
+    /// Opacity of the stroke border overlay. Defaults to 0.15; use 0.25 for sections.
     var strokeOpacity: Double
 
     /// Creates a `GlassCard` modifier with custom corner radius and stroke opacity.
@@ -32,24 +31,9 @@ struct GlassCard: ViewModifier {
     }
 
     /// Applies the glass card effect to the given content view.
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
-                )
-        } else {
-            materialFallback(content: content)
-        }
-    }
-
-    /// Returns the pre-macOS-26 material + stroke fallback for the given content.
-    private func materialFallback(content: Content) -> some View {
         content
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 0.5)
@@ -75,8 +59,7 @@ struct GlassSection: ViewModifier {
 
 // MARK: - GlassButton
 /// Liquid Glass interactive button modifier.
-/// On macOS 26+ applies `.glassEffect(.regular.interactive())` directly to content.
-/// On older OSes passes through unstyled.
+/// Applies `.glassEffect(.regular.interactive())` directly to content.
 ///
 /// ⚠️ Call sites that group multiple `GlassButton` instances side-by-side MUST wrap
 /// them in a shared `GlassEffectContainer` so sibling buttons share a single
@@ -93,41 +76,29 @@ struct GlassButton: ViewModifier {
 
     /// Applies the interactive glass button effect to the given content view.
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        } else {
-            content
-        }
+        content.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
 // MARK: - StatPillBackground
 /// Background modifier for `StatPill` and `RunnerMetricsBadge` capsule pills.
 ///
-/// macOS 26+: identical architecture to `DiskPillBadge`:
-///   `Color.white.opacity(0.15)` tint — bleeds through the glass refractive
-///   layer and defines the pill edge visually, exactly as coloured pills do.
-///   `Color.primary` was wrong — it resolves to near-black in dark mode,
-///   making the tint invisible and leaving the glass nothing to refract.
+/// `Color.white.opacity(0.15)` tint — bleeds through the glass refractive
+/// layer and defines the pill edge visually, exactly as coloured pills do.
+/// `Color.primary` was wrong — it resolves to near-black in dark mode,
+/// making the tint invisible and leaving the glass nothing to refract.
 ///
 /// The call site MUST wrap `RunnerMetricsBadge` in its OWN `GlassEffectContainer`
 /// (separate from the card container) — same pattern as `DiskPillBadge` in
 /// `HeaderStatsBar` and `StatusBadge` in `metaTrailing`.
 ///
-/// macOS < 26: `.ultraThinMaterial` in a `Capsule()` (unchanged).
-///
 /// ❌ Do NOT revert tint to `Color.primary` — it is near-black in dark mode.
 struct StatPillBackground: ViewModifier {
-    /// Applies the stat pill background: glass capsule on macOS 26+, `.ultraThinMaterial` capsule on older OSes.
-    @ViewBuilder
+    /// Applies the stat pill background: glass capsule.
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content
-                .background(Color.white.opacity(0.15), in: Capsule())
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            content.background(.ultraThinMaterial, in: Capsule())
-        }
+        content
+            .background(Color.white.opacity(0.15), in: Capsule())
+            .glassEffect(.regular, in: Capsule())
     }
 }
 
@@ -135,41 +106,26 @@ struct StatPillBackground: ViewModifier {
 /// colour tint + glass — identical pattern to DiskPillBadge.
 /// Call site MUST wrap in GlassEffectContainer.
 struct StatusBadgeBackground: ViewModifier {
-    /// The accent colour used for the tint and (pre-macOS-26) stroke border.
+    /// The accent colour used for the tint.
     let color: Color
 
-    /// Applies the status badge background: coloured glass capsule on macOS 26+, tinted fill + hairline stroke on older OSes.
-    /// The pre-26 branch was intentionally upgraded from a bare stroke to a filled capsule (matching DiskPillBadge)
-    /// for visual consistency with the Liquid Glass design language rollout.
-    @ViewBuilder
+    /// Applies the status badge background: coloured glass capsule.
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content
-                .background(color.opacity(0.15), in: Capsule())
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            content
-                .background(color.opacity(0.25), in: Capsule())
-                .overlay(Capsule().strokeBorder(color.opacity(0.55), lineWidth: 0.5))
-        }
+        content
+            .background(color.opacity(0.15), in: Capsule())
+            .glassEffect(.regular, in: Capsule())
     }
 }
 
 // MARK: - BranchTagPillBackground
 /// Background modifier for `BranchTagPill` capsule pills.
-/// macOS 26+: accent colour tint + `.glassEffect(.regular, in: Capsule())`.
-/// macOS < 26: accent colour stroke border.
+/// Accent colour tint + `.glassEffect(.regular, in: Capsule())`.
 struct BranchTagPillBackground: ViewModifier {
-    /// Applies the branch tag pill background: accent glass capsule on macOS 26+, accent stroke capsule on older OSes.
-    @ViewBuilder
+    /// Applies the branch tag pill background: accent glass capsule.
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content
-                .background(Color.rbAccent.opacity(0.15), in: Capsule())
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            content.background(Capsule().strokeBorder(Color.rbAccent.opacity(0.4), lineWidth: 1))
-        }
+        content
+            .background(Color.rbAccent.opacity(0.15), in: Capsule())
+            .glassEffect(.regular, in: Capsule())
     }
 }
 
@@ -207,11 +163,11 @@ extension View {
     func glassButton(cornerRadius: CGFloat = RBRadius.small) -> some View { modifier(GlassButton(cornerRadius: cornerRadius)) }
 
     /// Applies the `StatPillBackground` modifier.
-    /// ⚠️ Call site MUST wrap RunnerMetricsBadge in its OWN GlassEffectContainer on macOS 26+.
+    /// ⚠️ Call site MUST wrap RunnerMetricsBadge in its OWN GlassEffectContainer.
     func statPillBackground() -> some View { modifier(StatPillBackground()) }
 
     /// Applies the `StatusBadgeBackground` modifier with the given colour.
-    /// ⚠️ Call site MUST wrap badge in a GlassEffectContainer on macOS 26+.
+    /// ⚠️ Call site MUST wrap badge in a GlassEffectContainer.
     func statusBadgeBackground(color: Color) -> some View { modifier(StatusBadgeBackground(color: color)) }
 
     /// Applies the `BranchTagPillBackground` modifier.
