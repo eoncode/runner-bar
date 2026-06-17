@@ -203,7 +203,15 @@ private func buildActionGroup(
     scope: String,
     cache: [String: WorkflowActionGroup]
 ) async -> (Int, WorkflowActionGroup) {
-    let representative = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
+    // `shaRuns` originates from `Dictionary(grouping:)` which never produces an empty
+    // value array, so this is expected to always succeed. The guard defends against
+    // a future caller constructing the dict incorrectly rather than crashing silently.
+    guard let representative = shaRuns.sorted(by: { ($0.createdAt ?? "") > ($1.createdAt ?? "") }).first else {
+        assertionFailure("buildActionGroup: shaRuns must not be empty (sha: \(sha))")
+        return (index, WorkflowActionGroup(headSha: sha, label: String(sha.prefix(7)),
+            title: sha, headBranch: nil, repo: scope, runs: [], jobs: [],
+            firstJobStartedAt: nil, lastJobCompletedAt: nil, createdAt: nil))
+    }
     let label = prLabel(from: representative)
     let rawTitle = representative.displayTitle
         ?? representative.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
