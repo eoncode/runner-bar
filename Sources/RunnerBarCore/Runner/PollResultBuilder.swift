@@ -178,24 +178,8 @@ public struct PollResultBuilder {
         // Enrich jobs concurrently while preserving the sort order produced by
         // buildGroupDisplay. withTaskGroup yields results in completion order, so
         // we key tasks by index and re-sort before returning.
-        let enriched: [WorkflowActionGroup] = await withTaskGroup(
-            of: (Int, WorkflowActionGroup).self
-        ) { group in
-            for (idx, actionGroup) in display.enumerated() {
-                group.addTask { (idx, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
-            }
-            var out: [(Int, WorkflowActionGroup)] = []
-            for await pair in group { out.append(pair) }
-            return out.sorted { $0.0 < $1.0 }.map { $0.1 }
-        }
-        let enrichedCache: [String: WorkflowActionGroup] = await withTaskGroup(
-            of: (String, WorkflowActionGroup).self
-        ) { group in
-            for (key, actionGroup) in newCache { group.addTask { (key, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) } }
-            var out: [String: WorkflowActionGroup] = [:]
-            for await (key, actionGroup) in group { out[key] = actionGroup }
-            return out
-        }
+        let enriched = await enrichConcurrentlyOrdered(display, enrichJobs: enrichJobs)
+        let enrichedCache = await enrichConcurrentlyKeyed(newCache, enrichJobs: enrichJobs)
         return GroupPollResult(
             display: enriched,
             newGroupCache: enrichedCache,
@@ -359,6 +343,42 @@ public struct PollResultBuilder {
         let excess = ids.count - limit
         let toRemove = ids.prefix(excess)
         ids.subtract(toRemove)
+    }
+
+    // MARK: - Enrich helpers
+
+    /// Enriches an ordered array of groups concurrently, preserving the original sort order.
+    ///
+    /// `withTaskGroup` yields results in completion order (fastest child first), so tasks
+    /// are keyed by their index and re-sorted before returning — identical to the inline
+    /// pattern it replaces.
+    private static func enrichConcurrentlyOrdered(
+        _ groups: [WorkflowActionGroup],
+        enrichJobs: @escaping @Sendable ([ActiveJob]) async -> [ActiveJob]
+    ) async -> [WorkflowActionGroup] {
+        await withTaskGroup(of: (Int, WorkflowActionGroup).self) { group in
+            for (idx, actionGroup) in groups.enumerated() {
+                group.addTask { (idx, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
+            }
+            var out: [(Int, WorkflowActionGroup)] = []
+            for await pair in group { out.append(pair) }
+            return out.sorted { $0.0 < $1.0 }.map { $0.1 }
+        }
+    }
+
+    /// Enriches a keyed dictionary of groups concurrently, returning an updated dictionary.
+    private static func enrichConcurrentlyKeyed(
+        _ cache: [String: WorkflowActionGroup],
+        enrichJobs: @escaping @Sendable ([ActiveJob]) async -> [ActiveJob]
+    ) async -> [String: WorkflowActionGroup] {
+        await withTaskGroup(of: (String, WorkflowActionGroup).self) { group in
+            for (key, actionGroup) in cache {
+                group.addTask { (key, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
+            }
+            var out: [String: WorkflowActionGroup] = [:]
+            for await (key, actionGroup) in group { out[key] = actionGroup }
+            return out
+        }
     }
 
     /// Builds the ordered group display list from live groups and the completed cache.
