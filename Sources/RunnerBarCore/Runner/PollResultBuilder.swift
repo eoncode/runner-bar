@@ -386,6 +386,7 @@ public struct PollResultBuilder {
 
 // MARK: - Array fill helper
 
+/// Sequence-filling helpers used by `PollResultBuilder` to top up display arrays.
 private extension Array {
     /// Appends elements from `source` until `self.count` reaches `limit`.
     ///
