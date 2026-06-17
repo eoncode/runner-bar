@@ -175,9 +175,12 @@ public struct PollResultBuilder {
             "PollResultBuilder › groups: \(inProgCount) in_progress \(queuedCount) queued"
                 + " | cache: \(newCache.count) | seenIDs: \(newSeenGroupIDs.count) | display: \(display.count)"
         )
-        // Enrich jobs concurrently while preserving the sort order produced by
-        // buildGroupDisplay. withTaskGroup yields results in completion order, so
-        // we key tasks by index and re-sort before returning.
+        // ── Sweep 1: enrich the display array ────────────────────────────────
+        // Keyed by Int (array index) so the sort order produced by buildGroupDisplay
+        // is faithfully restored after withTaskGroup yields results in completion
+        // order. Using a String group-ID key here would not be sufficient because
+        // display can contain multiple entries with the same underlying group (e.g.
+        // a live entry and a dimmed cache echo), so index is the only stable key.
         let enriched: [WorkflowActionGroup] = await withTaskGroup(
             of: (Int, WorkflowActionGroup).self
         ) { group in
@@ -188,6 +191,13 @@ public struct PollResultBuilder {
             for await pair in group { out.append(pair) }
             return out.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
+        // ── Sweep 2: enrich the group cache ──────────────────────────────────
+        // Keyed by String (group ID) because newCache is a dictionary and its
+        // semantic identity IS the group ID. These two sweeps cannot be merged
+        // into one: the key types differ (Int vs String), the source collections
+        // differ (display array vs newCache dict), and P16 (Actor-Per-Concern)
+        // intentionally keeps display-enrichment and cache-enrichment separate so
+        // neither path's concurrent mutations can interfere with the other.
         let enrichedCache: [String: WorkflowActionGroup] = await withTaskGroup(
             of: (String, WorkflowActionGroup).self
         ) { group in
