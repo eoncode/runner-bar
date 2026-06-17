@@ -30,7 +30,7 @@ final class NSWindowGrabber: NSView {
     }
 
     /// Not supported — `WindowGrabber` is created programmatically only.
-    required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
+    required init?(coder _: NSCoder) { fatalError("init(coder:) not supported") }
 
     /// Fires `onWindow` with the current `window` value whenever the view
     /// is added to or removed from a window hierarchy.
@@ -51,13 +51,13 @@ struct WindowGrabber: NSViewRepresentable {
     var onWindow: (NSWindow?) -> Void
 
     /// Creates the underlying `NSWindowGrabber` view.
-    func makeNSView(context: Context) -> NSWindowGrabber {
+    func makeNSView(context _: Context) -> NSWindowGrabber {
         NSWindowGrabber(onWindow: onWindow)
     }
 
     /// Propagates the latest closure so the grabber never holds a stale
     /// callback.
-    func updateNSView(_ nsView: NSWindowGrabber, context: Context) {
+    func updateNSView(_ nsView: NSWindowGrabber, context _: Context) {
         nsView.onWindow = onWindow
     }
 }

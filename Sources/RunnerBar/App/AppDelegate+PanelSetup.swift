@@ -141,7 +141,7 @@ extension AppDelegate: NSPopoverDelegate {
     /// When `closePanel()` or `hidePanel()` drives the close, they call
     /// `tearDownOpenState()` directly — by the time this fires, `panelIsOpen`
     /// is already `false` and the guard exits immediately.
-    public func popoverDidClose(_ notification: Notification) {
+    public func popoverDidClose(_ _: Notification) {
         #if DEBUG
         // swiftlint:disable:next line_length
         log("AppDelegate › popoverDidClose — panelIsOpen=\(panelIsOpen) behavior=\((NSApp.delegate as? AppDelegate)?.popover?.behavior.rawValue ?? -1) stack=\(Thread.callStackSymbols.prefix(5).joined(separator: "||"))")

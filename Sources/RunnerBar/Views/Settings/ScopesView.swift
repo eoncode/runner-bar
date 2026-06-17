@@ -165,7 +165,7 @@ struct ScopesView: View {
                     .foregroundColor(entry.isEnabled ? Color.rbSuccess : Color.rbTextTertiary)
                 Toggle("", isOn: Binding(
                     get: { entry.isEnabled },
-                    // ScopeStore enable/disable is observed by RunnerStore._startObservingScopes
+                    // ScopeStore enable/disable is observed by RunnerStore.startObservingScopes
                     // via withObservationTracking — no explicit restart needed here.
                     set: { ScopeStore.shared.setEnabled(entry.id, $0) }
                 ))
@@ -182,7 +182,7 @@ struct ScopesView: View {
                     ScopePreferencesStore.cleanUp(scope: entry.scope)
                     ScopeStore.shared.remove(id: entry.id)
                     // ScopeStore.remove mutates activeScopes, firing withObservationTracking
-                    // in _startObservingScopes and restarting the poll loop automatically.
+                    // in startObservingScopes and restarting the poll loop automatically.
                 } label: {
                     Image(systemName: "minus.circle")
                         .font(.caption2)

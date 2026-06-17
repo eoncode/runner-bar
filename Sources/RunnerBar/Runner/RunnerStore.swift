@@ -185,13 +185,13 @@ actor RunnerStore {
     /// Active structured poll task. Cancelled and replaced on every `start()` call.
     private var pollTask: Task<Void, Never>?
     /// Observation task that restarts the poll loop when `pollingInterval` changes.
-    /// The `Task` handle is assigned synchronously in `_startObservingPreferences` —
+    /// The `Task` handle is assigned synchronously in `startObservingPreferences` —
     /// in the calling function body, before the task's async work runs — so `deinit`
     /// always cancels a real `Task` value rather than `nil`, even if the actor is
     /// deallocated immediately after `init`.
     private var intervalObservationTask: Task<Void, Never>?
     /// Observation task that restarts the poll loop when active scopes change.
-    /// The `Task` handle is assigned synchronously in `_startObservingScopes` —
+    /// The `Task` handle is assigned synchronously in `startObservingScopes` —
     /// in the calling function body, before the task's async work runs — so `deinit`
     /// always cancels a real `Task` value rather than `nil`, even if the actor is
     /// deallocated immediately after `init`.
@@ -243,8 +243,8 @@ actor RunnerStore {
     ///     — injected here so the actor body never touches `NSApp.delegate`.
     ///
     /// - Note: Swift 6 actor `init` is nonisolated. The observation task `Task` handles
-    ///   are assigned synchronously inside `_startObservingPreferences` /
-    ///   `_startObservingScopes` (in the calling function body, before any suspension in
+    ///   are assigned synchronously inside `startObservingPreferences` /
+    ///   `startObservingScopes` (in the calling function body, before any suspension in
     ///   the task's async work). This means `deinit` always holds real `Task` values by
     ///   the time any suspension occurs, even if the actor is deallocated immediately after
     ///   `init`.
@@ -260,8 +260,8 @@ actor RunnerStore {
         self.preferencesStore = preferencesStore
         self.scopeStore = scopeStore
         self.onStatusUpdate = onStatusUpdate
-        Task { await self._startObservingPreferences() }
-        Task { await self._startObservingScopes() }
+        Task { await self.startObservingPreferences() }
+        Task { await self.startObservingScopes() }
     }
 
     // MARK: - Deinit
@@ -288,7 +288,7 @@ actor RunnerStore {
     /// async scope so it stays alive for the full lifetime of the stream — without
     /// this, `[weak self]` in `onChange` would find `self == nil` on the first change
     /// and silently stop all future polling-interval updates.
-    private func _startObservingPreferences() {
+    private func startObservingPreferences() {
         intervalObservationTask?.cancel()
         let injectedStore = preferencesStore
         intervalObservationTask = Task { [weak self] in
@@ -301,7 +301,7 @@ actor RunnerStore {
             for await newInterval in stream {
                 guard !Task.isCancelled else { break }
                 log("RunnerStore › pollingInterval changed to \(newInterval) — restarting poll loop")
-                await self?._startObservingPreferences()
+                await self?.startObservingPreferences()
                 guard !Task.isCancelled else { break }
                 await self?.start()
                 break
@@ -317,10 +317,10 @@ actor RunnerStore {
     /// rather than a `nil` optional, even if the actor is deallocated immediately
     /// after `init`.
     ///
-    /// Same approach as `_startObservingPreferences` — see that method's
+    /// Same approach as `startObservingPreferences` — see that method's
     /// doc-comment for the full rationale, including why the observer must be
     /// retained in the Task's async scope beyond the `MainActor.run` closure.
-    private func _startObservingScopes() {
+    private func startObservingScopes() {
         scopeObservationTask?.cancel()
         let injectedStore = scopeStore
         scopeObservationTask = Task { [weak self] in
@@ -333,7 +333,7 @@ actor RunnerStore {
             for await _ in stream {
                 guard !Task.isCancelled else { break }
                 log("RunnerStore › ScopeStore.activeScopes changed — restarting fetch")
-                await self?._startObservingScopes()
+                await self?.startObservingScopes()
                 guard !Task.isCancelled else { break }
                 await self?.start()
                 break

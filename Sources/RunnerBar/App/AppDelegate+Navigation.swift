@@ -57,7 +57,7 @@ extension AppDelegate {
     ///    a double-wrap here causes the gray/black flash regression.
     ///
     /// No `onRestartPolling` is passed — ScopeStore mutations are observed by
-    /// `RunnerStore._startObservingScopes` via `withObservationTracking`, which
+    /// `RunnerStore.startObservingScopes` via `withObservationTracking`, which
     /// restarts the poll task automatically without an explicit callback.
     func settingsView() -> AnyView {
         let inner = SettingsView(

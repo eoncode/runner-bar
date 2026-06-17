@@ -43,8 +43,8 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     /// Configures whether `save(...)` throws. Call from the test body before `execute`.
     func setUp(shouldThrowOnSave: Bool) { self.shouldThrowOnSave = shouldThrowOnSave }
 
-    func load(at installPath: String) async throws -> RunnerConfig { loadResult }
-    func save(_ config: RunnerConfig, at installPath: String) async throws {
+    func load(at _: String) async throws -> RunnerConfig { loadResult }
+    func save(_ config: RunnerConfig, at _: String) async throws {
         if shouldThrowOnSave { throw TestError.saveFailed }
         saveCalled = true
         savedConfig = config
@@ -62,8 +62,8 @@ actor SpyProxyStore: RunnerProxyStoreProtocol {
     /// Configures whether `save(...)` throws. Call from the test body before `execute`.
     func setUp(shouldThrowOnSave: Bool) { self.shouldThrowOnSave = shouldThrowOnSave }
 
-    func load(at installPath: String) async -> RunnerProxyConfig { RunnerProxyConfig() }
-    func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
+    func load(at _: String) async -> RunnerProxyConfig { RunnerProxyConfig() }
+    func save(_ config: RunnerProxyConfig, at _: String) async throws {
         if shouldThrowOnSave { throw TestError.saveFailed }
         saveCalled = true
         savedConfig = config
