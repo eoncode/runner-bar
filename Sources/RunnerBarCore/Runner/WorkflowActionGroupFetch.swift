@@ -167,49 +167,13 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
     }
 
     // Build groups concurrently — index-keyed to preserve insertion order.
+    // `buildActionGroup` is extracted to a private async function so each
+    // `addTask` closure body stays at depth ≤ 2 (withTaskGroup → addTask).
     let shaEntries = Array(bySha)
     var groups = Array(repeating: WorkflowActionGroup?.none, count: shaEntries.count)
     await withTaskGroup(of: (Int, WorkflowActionGroup).self) { group in
         for (i, (sha, shaRuns)) in shaEntries.enumerated() {
-            group.addTask {
-                let representative = shaRuns.sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }.first!
-                let label = prLabel(from: representative)
-                let rawTitle = representative.displayTitle ?? representative.headCommit
-                    .map { String($0.message.components(separatedBy: "\n").first ?? "") }
-                    ?? String(sha.prefix(7))
-                let title = String(rawTitle.prefix(40))
-                let runs: [WorkflowRunRef] = shaRuns.map {
-                    WorkflowRunRef(
-                        id: $0.id,
-                        name: $0.name,
-                        status: $0.status,
-                        conclusion: $0.conclusion,
-                        htmlUrl: $0.htmlUrl
-                    )
-                }
-                let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
-                let starts = allJobs.compactMap { $0.startedAt }
-                let ends = allJobs.compactMap { $0.completedAt }
-                // Optional.flatMap does not accept an async closure — use if let.
-                let createdAt: Date?
-                if let dateStr = representative.createdAt {
-                    createdAt = await ISO8601DateParser.shared.parse(dateStr)
-                } else {
-                    createdAt = nil
-                }
-                return (i, WorkflowActionGroup(
-                    headSha: sha,
-                    label: label,
-                    title: title,
-                    headBranch: representative.headBranch,
-                    repo: scope,
-                    runs: runs,
-                    jobs: allJobs,
-                    firstJobStartedAt: starts.min(),
-                    lastJobCompletedAt: ends.max(),
-                    createdAt: createdAt
-                ))
-            }
+            group.addTask { await buildActionGroup(index: i, sha: sha, shaRuns: shaRuns, scope: scope, cache: cache) }
         }
         for await (i, actionGroup) in group { groups[i] = actionGroup }
     }
@@ -226,6 +190,59 @@ public func fetchActionGroups(for scope: String, cache: [String: WorkflowActionG
 }
 
 // MARK: - Private helpers
+
+/// Constructs a single `WorkflowActionGroup` for one `head_sha` bucket.
+///
+/// Extracted from the `withTaskGroup` `addTask` body so each task closure
+/// stays at depth ≤ 2 and the overall nesting score drops below the
+/// SonarCloud `FunctionNestingDepth:3` threshold.
+private func buildActionGroup(
+    index: Int,
+    sha: String,
+    shaRuns: [RunPayload],
+    scope: String,
+    cache: [String: WorkflowActionGroup]
+) async -> (Int, WorkflowActionGroup) {
+    // `shaRuns` originates from `Dictionary(grouping:)` which never produces an empty
+    // value array, so this is expected to always succeed. The guard defends against
+    // a future caller constructing the dict incorrectly rather than crashing silently.
+    guard let representative = shaRuns.sorted(by: { ($0.createdAt ?? "") > ($1.createdAt ?? "") }).first else {
+        assertionFailure("buildActionGroup: shaRuns must not be empty (sha: \(sha))")
+        return (index, WorkflowActionGroup(headSha: sha, label: String(sha.prefix(7)),
+            title: sha, headBranch: nil, repo: scope, runs: [], jobs: [],
+            firstJobStartedAt: nil, lastJobCompletedAt: nil, createdAt: nil))
+    }
+    let label = prLabel(from: representative)
+    let rawTitle = representative.displayTitle
+        ?? representative.headCommit.map { String($0.message.components(separatedBy: "\n").first ?? "") }
+        ?? String(sha.prefix(7))
+    let title = String(rawTitle.prefix(40))
+    let runs: [WorkflowRunRef] = shaRuns.map {
+        WorkflowRunRef(id: $0.id, name: $0.name, status: $0.status, conclusion: $0.conclusion, htmlUrl: $0.htmlUrl)
+    }
+    let allJobs = await fetchJobsForGroup(shaRuns: shaRuns, scope: scope, cache: cache, sha: sha)
+    let starts = allJobs.compactMap { $0.startedAt }
+    let ends = allJobs.compactMap { $0.completedAt }
+    // Optional.flatMap does not accept an async closure — use if let.
+    let createdAt: Date?
+    if let dateStr = representative.createdAt {
+        createdAt = await ISO8601DateParser.shared.parse(dateStr)
+    } else {
+        createdAt = nil
+    }
+    return (index, WorkflowActionGroup(
+        headSha: sha,
+        label: label,
+        title: title,
+        headBranch: representative.headBranch,
+        repo: scope,
+        runs: runs,
+        jobs: allJobs,
+        firstJobStartedAt: starts.min(),
+        lastJobCompletedAt: ends.max(),
+        createdAt: createdAt
+    ))
+}
 
 /// Returns the flattened job list for all runs sharing a `head_sha`.
 ///

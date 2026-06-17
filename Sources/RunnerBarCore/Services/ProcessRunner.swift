@@ -193,30 +193,15 @@ public enum ProcessRunner {
                 // terminationHandler — both on the same serialised execution path (#1152).
                 let timeoutTaskBox = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
 
-                task.terminationHandler = { process in
-                    let exitCode = process.terminationStatus
-                    // Cancel the timeout guard immediately — process has already exited.
-                    // Read under lock, cancel outside — avoids holding the unfair lock during Task.cancel().
-                    let timeoutTask = timeoutTaskBox.withLock { $0 }
-                    timeoutTask?.cancel()
-                    // Join the drain queue: blocks until readDataToEndOfFile() finishes.
-                    // This is the happens-before guarantee that makes outputBox safe
-                    // to read immediately after. The drainQueue.sync call is cheap here
-                    // because the process has already exited and the pipe is closed.
-                    //
-                    // We do NOT sync on stdinQueue here — see the ⚠️ doc comment on
-                    // runAsync() above for the full rationale. Short version: it is
-                    // unnecessary (terminationHandler fires after exit, by which point
-                    // stdin has completed or been broken-piped), and adding a
-                    // DispatchGroup.wait() here would be a step backwards for the #1220
-                    // modernisation effort.
-                    drainQueue.sync {}
-                    let outputData = outputBox.withLock { $0 }
-                    log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableURL.lastPathComponent)")
-                    continuation.resume(returning: Result(
-                        data: outputData.isEmpty ? nil : outputData,
-                        exitCode: exitCode
-                    ))
+                task.terminationHandler = { [outputBox] process in
+                    Self.handleTermination(
+                        process: process,
+                        executableName: executableURL.lastPathComponent,
+                        outputBox: outputBox,
+                        drainQueue: drainQueue,
+                        timeoutTaskBox: timeoutTaskBox,
+                        continuation: continuation
+                    )
                 }
 
                 // Guard against the already-cancelled case: Swift invokes onCancel
@@ -309,5 +294,52 @@ public enum ProcessRunner {
             guard task.isRunning else { return }
             task.terminate()
         }
+    }
+
+    // MARK: - Private helpers
+
+    /// Handles `Process.terminationHandler` for `runAsync`.
+    ///
+    /// Extracted from the `withCheckedContinuation` body so the nesting depth inside
+    /// `runAsync` stays at ≤ 3 (withTaskCancellationHandler → withCheckedContinuation
+    /// → terminationHandler assignment), satisfying the SonarCloud
+    /// `FunctionNestingDepth:3` threshold.
+    ///
+    /// ## Concurrency contract
+    /// `terminationHandler` is called on an arbitrary Foundation thread — not on
+    /// the cooperative thread pool. All shared state (`outputBox`, `timeoutTaskBox`)
+    /// is guarded by `OSAllocatedUnfairLock`; no structured-concurrency isolation
+    /// is assumed or required here.
+    ///
+    /// ## DispatchQueue.sync rationale
+    /// `drainQueue.sync {}` is an empty barrier that blocks until the
+    /// `drainQueue.async { readDataToEndOfFile() }` block in `runAsync` has completed.
+    /// This establishes the happens-before edge that makes `outputBox` safe to read
+    /// on the next line. The drain is cheap at this point because the process has
+    /// already exited and the pipe write-end is closed.
+    ///
+    /// See the `runAsync` doc comment for why `stdinQueue` is *not* joined here.
+    private static func handleTermination(
+        process: Process,
+        executableName: String,
+        outputBox: OSAllocatedUnfairLock<Data>,
+        drainQueue: DispatchQueue,
+        timeoutTaskBox: OSAllocatedUnfairLock<Task<Void, Never>?>,
+        continuation: CheckedContinuation<Result, Never>
+    ) {
+        let exitCode = process.terminationStatus
+        // Cancel the timeout guard — process already exited.
+        // Read under lock, cancel outside: avoids holding the unfair lock during Task.cancel().
+        let timeoutTask = timeoutTaskBox.withLock { $0 }
+        timeoutTask?.cancel()
+        // Empty sync barrier — blocks until drainQueue’s readDataToEndOfFile() finishes.
+        // This is the sole happens-before edge; no work belongs inside the closure.
+        drainQueue.sync {}
+        let outputData = outputBox.withLock { $0 }
+        log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableName)")
+        continuation.resume(returning: Result(
+            data: outputData.isEmpty ? nil : outputData,
+            exitCode: exitCode
+        ))
     }
 }
