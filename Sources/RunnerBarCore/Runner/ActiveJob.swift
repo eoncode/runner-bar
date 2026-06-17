@@ -121,6 +121,29 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
         let done = steps.filter { $0.conclusion != nil }.count
         return Double(done) / Double(steps.count)
     }
+
+    /// Returns a completed, dimmed copy of this job.
+    ///
+    /// Centralises the repeated "freeze a job into the cache" pattern in
+    /// `PollResultBuilder`: sets `status` to `.completed`, `isDimmed` to `true`,
+    /// and fills `completedAt` with `fallbackDate` when the job has no recorded
+    /// completion time. All other fields are preserved verbatim.
+    /// - Parameter fallbackDate: Date used as `completedAt` when the job has none.
+    public func asCompleted(at fallbackDate: Date) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: .completed,
+            conclusion: conclusion ?? .cancelled,
+            isDimmed: true,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt ?? fallbackDate,
+            steps: steps
+        )
+    }
 }
 
 // MARK: - Job step
