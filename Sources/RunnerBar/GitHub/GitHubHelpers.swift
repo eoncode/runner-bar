@@ -118,7 +118,7 @@ func fetchUserOrgs() async -> [String] {
 
 /// Returns the `owner/repo` full names of all repositories visible to the authenticated user.
 func fetchUserRepos() async -> [String] {
-    guard let data = await ghAPIPaginated("\(GitHubConstants.userReposPath)&per_page=\(GitHubConstants.maxPageSize)") else { return [] }
+    guard let data = await ghAPIPaginated("\(GitHubConstants.userReposPath)?sort=updated&per_page=\(GitHubConstants.maxPageSize)") else { return [] }
     /// Minimal repo payload — only the full name is needed.
     struct Repo: Decodable {
         /// The repository's full name in `owner/repo` format.
