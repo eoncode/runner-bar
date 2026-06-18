@@ -96,6 +96,7 @@ public struct PollResultBuilder {
     /// - Important: `doneGroups` inserts into `newSeenGroupIDs` **before**
     ///   `freezeVanishedGroups` runs, so a group that appears in both the fetched
     ///   completed list and in `snapPrevGroups` fires the hook exactly once.
+    ///   Enrichment is split into two sequential sweeps — see inline comments for rationale.
     public static func buildGroupState(
         snapPrevGroups: [String: WorkflowActionGroup],
         snapGroupCache: [String: WorkflowActionGroup],
@@ -187,7 +188,9 @@ public struct PollResultBuilder {
         let enrichedCache: [String: WorkflowActionGroup] = await withTaskGroup(
             of: (String, WorkflowActionGroup).self
         ) { group in
-            for (key, actionGroup) in newCache { group.addTask { (key, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) } }
+            for (key, actionGroup) in newCache {
+                group.addTask { (key, actionGroup.withJobs(await enrichJobs(actionGroup.jobs))) }
+            }
             var out: [String: WorkflowActionGroup] = [:]
             for await (key, actionGroup) in group { out[key] = actionGroup }
             return out
