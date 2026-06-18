@@ -121,7 +121,11 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
         let done = steps.filter { $0.conclusion != nil }.count
         return Double(done) / Double(steps.count)
     }
+}
 
+// MARK: - Copy helpers
+
+extension ActiveJob {
     /// Returns a completed, dimmed copy of this job.
     ///
     /// Centralises the repeated "freeze a job into the cache" pattern in
@@ -135,12 +139,14 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
             name: name,
             htmlUrl: htmlUrl,
             status: .completed,
+            // deliberate: treat unknown conclusion as .cancelled for display purposes
             conclusion: conclusion ?? .cancelled,
             isDimmed: true,
             runnerName: runnerName,
             scope: scope,
             startedAt: startedAt,
             completedAt: completedAt ?? fallbackDate,
+            createdAt: createdAt,
             steps: steps
         )
     }
