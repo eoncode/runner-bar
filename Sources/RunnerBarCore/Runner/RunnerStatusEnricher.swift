@@ -183,16 +183,7 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
             // name collisions, then fall back to a scan across all scopes.
             let scopedAPI = result[idx].gitHubUrl.flatMap { apiByScope[$0] } ?? [:]
 
-            func findPayload(in dict: [String: RunnerPayload]) -> RunnerPayload? {
-                if let api = dict[name] { return api }
-                let nameLower = name.lowercased()
-                if let key = dict.keys.first(where: { $0.lowercased() == nameLower }) { return dict[key] }
-                let nameTrimmed = name.trimmingCharacters(in: .whitespaces)
-                if let key = dict.keys.first(where: { $0.trimmingCharacters(in: .whitespaces) == nameTrimmed }) { return dict[key] }
-                return nil
-            }
-
-            if let api = findPayload(in: scopedAPI) ?? findPayload(in: fallbackAPI) {
+            if let api = Self.findPayload(name: name, in: scopedAPI) ?? Self.findPayload(name: name, in: fallbackAPI) {
                 result[idx] = applyEnrichment(to: result[idx], from: api)
             } else {
                 let gitHubUrl = result[idx].gitHubUrl ?? "NIL"
@@ -203,6 +194,36 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
     }
 
     // MARK: - Private
+
+    /// Looks up a `RunnerPayload` for `name` in `dict` using four strategies:
+    /// exact match → case-insensitive match → whitespace-trimmed match →
+    /// combined trim + lowercase match.
+    ///
+    /// Extracted from the `for idx in result.indices` loop body so it is
+    /// independently testable (P13) and free of mutable outer-loop capture (P16).
+    ///
+    /// - Parameters:
+    ///   - name: The runner name to look up.
+    ///   - dict: The payload dictionary keyed by runner name.
+    /// - Returns: The matching payload, or `nil` if none is found.
+    ///
+    /// Lookup stages (applied in order, first match wins):
+    /// 1. Exact match — `dict[name]`.
+    /// 2. Case-insensitive — both sides lowercased, whitespace untouched.
+    /// 3. Whitespace-trimmed — both sides trimmed, case untouched.
+    /// 4. Combined — both sides trimmed *and* lowercased, handles names that
+    ///    differ in both casing and surrounding whitespace (e.g. `" MyRunner"`
+    ///    vs `"myrunner"`).
+    private static func findPayload(name: String, in dict: [String: RunnerPayload]) -> RunnerPayload? {
+        if let api = dict[name] { return api }
+        let nameLower = name.lowercased()
+        if let key = dict.keys.first(where: { $0.lowercased() == nameLower }) { return dict[key] }
+        let nameTrimmed = name.trimmingCharacters(in: .whitespaces)
+        if let key = dict.keys.first(where: { $0.trimmingCharacters(in: .whitespaces) == nameTrimmed }) { return dict[key] }
+        let nameNormalized = nameTrimmed.lowercased()
+        if let key = dict.keys.first(where: { $0.trimmingCharacters(in: .whitespaces).lowercased() == nameNormalized }) { return dict[key] }
+        return nil
+    }
 
     /// Fetches the **complete** runner list for a scope URL via ghAPI, paginating
     /// through all pages (per_page=100) until exhausted.
