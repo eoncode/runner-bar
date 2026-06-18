@@ -231,18 +231,23 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
 
     /// Group status derived from run-level statuses and job conclusions.
     ///
-    /// - Returns `.completed` when all jobs have a conclusion (even if the run-level
-    ///   API status lags behind — mirrors ci-dash.py override).
-    /// - Returns `.inProgress` when any run is `.inProgress`.
-    /// - Returns `.queued` when any run is `.queued` but none is in progress.
+    /// Priority order:
+    /// 1. `.completed` — all sibling runs have concluded **and** all loaded jobs have
+    ///    a conclusion. The run-level guard prevents a partially-loaded sibling run
+    ///    (whose jobs haven't arrived yet) from being prematurely frozen: job conclusions
+    ///    from other runs could otherwise satisfy `allSatisfy` while the sibling is
+    ///    still in progress.
+    /// 2. `.inProgress` — any sibling run is currently running.
+    /// 3. `.queued` — any sibling run is queued but none is running.
+    /// 4. `.completed` fallthrough — jobs empty and no run is active (loading window).
+    ///    TODO: revisit when job-fetch latency is addressed; consider a `.loading` case.
     public var groupStatus: GroupStatus {
-        if jobsTotal > 0, jobs.allSatisfy({ $0.conclusion != nil }) {
+        let allRunsConcluded = runs.allSatisfy { $0.conclusion != nil }
+        if allRunsConcluded, jobsTotal > 0, jobs.allSatisfy({ $0.conclusion != nil }) {
             return .completed
         }
         if runs.contains(where: { $0.status == .inProgress }) { return .inProgress }
         if runs.contains(where: { $0.status == .queued }) { return .queued }
-        // TODO: fallthrough when jobs are empty and no run is active — returns .completed
-        // prematurely during the loading window. Revisit when job-fetch latency is addressed.
         return .completed
     }
 
@@ -317,10 +322,20 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     ///
     /// Uses the typed `JobConclusion.isFailure` check (covers `.failure`, `.timedOut`,
     /// `.startupFailure`, `.actionRequired`) rather than raw-string comparison.
+    ///
+    /// Falls back to run-level conclusions when `jobs` is empty (loading state), mirroring
+    /// the same fallback logic used by `conclusion`. This ensures badge/hook callers get
+    /// a consistent result before jobs have loaded — a group whose runs already report a
+    /// failure-class conclusion will not show a false-negative here during the fetch window.
+    ///
     /// TODO: wire into display-layer badge colouring / hook-triggering call sites when
     /// those paths are migrated off their existing inline checks.
     public var hasFailedJob: Bool {
-        jobs.contains { $0.conclusion?.isFailure == true }
+        if !jobs.isEmpty {
+            return jobs.contains { $0.conclusion?.isFailure == true }
+        }
+        // Run-level fallback: mirrors the loading-state path in `conclusion`.
+        return runs.contains { $0.conclusion?.isFailure == true }
     }
 
     /// Name of the first in-progress job, or first queued job, or `"—"`.
