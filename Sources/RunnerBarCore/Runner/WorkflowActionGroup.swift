@@ -302,7 +302,8 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     ///
     /// Uses the typed `JobConclusion.isFailure` check (covers `.failure`, `.timedOut`,
     /// `.startupFailure`, `.actionRequired`) rather than raw-string comparison.
-    /// Intended for display-layer badge colouring and hook-triggering logic.
+    /// TODO: wire into display-layer badge colouring / hook-triggering call sites when
+    /// those paths are migrated off their existing inline checks.
     public var hasFailedJob: Bool {
         jobs.contains { $0.conclusion?.isFailure == true }
     }
