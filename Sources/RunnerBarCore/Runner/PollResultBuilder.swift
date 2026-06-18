@@ -63,19 +63,7 @@ public struct PollResultBuilder {
         var newCache: [Int: ActiveJob] = snapCache
         applyVanishedJobs(snapPrev: snapPrev, liveIDs: liveIDs, now: now, into: &newCache)
         for job in freshDone {
-            newCache[job.id] = ActiveJob(
-                id: job.id,
-                name: job.name,
-                htmlUrl: job.htmlUrl,
-                status: .completed,
-                conclusion: job.conclusion ?? .cancelled,
-                isDimmed: true,
-                runnerName: job.runnerName,
-                scope: job.scope,
-                startedAt: job.startedAt,
-                completedAt: job.completedAt ?? Date(),
-                steps: job.steps
-            )
+            newCache[job.id] = job.asCompleted(at: now)
         }
         trimJobCache(&newCache, limit: jobCacheLimit)
         await backfill(&newCache)
@@ -208,7 +196,7 @@ public struct PollResultBuilder {
     ///
     /// A job vanishes when it disappears from the API response without transitioning
     /// through a `completed` status — most commonly a cancellation or runner disconnect.
-    /// Falls back to `.cancelled` (not `.success`) when no conclusion is available.
+    /// Falls back to `.neutral` (not `.cancelled`) when no conclusion is available.
     public static func applyVanishedJobs(
         snapPrev: [Int: ActiveJob],
         liveIDs: Set<Int>,
@@ -217,19 +205,7 @@ public struct PollResultBuilder {
     ) {
         for (jobID, job) in snapPrev where !liveIDs.contains(jobID) {
             guard cache[jobID] == nil else { continue }
-            cache[jobID] = ActiveJob(
-                id: job.id,
-                name: job.name,
-                htmlUrl: job.htmlUrl,
-                status: .completed,
-                conclusion: job.conclusion ?? .cancelled,
-                isDimmed: true,
-                runnerName: job.runnerName,
-                scope: job.scope,
-                startedAt: job.startedAt,
-                completedAt: job.completedAt ?? now,
-                steps: job.steps
-            )
+            cache[jobID] = job.asCompleted(at: now)
         }
     }
 

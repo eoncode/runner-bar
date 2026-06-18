@@ -123,6 +123,43 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     }
 }
 
+// MARK: - Copy helpers
+
+/// Helpers for deriving immutable `ActiveJob` copies.
+extension ActiveJob {
+    /// Returns a completed, dimmed copy of this job.
+    ///
+    /// Centralises the repeated "freeze a job into the cache" pattern in
+    /// `PollResultBuilder`: sets `status` to `.completed`, `isDimmed` to `true`,
+    /// and fills `completedAt` with `fallbackDate` when the job has no recorded
+    /// completion time. All other fields are preserved verbatim.
+    ///
+    /// When the job has no recorded conclusion (e.g. an API timing race where the
+    /// job disappeared before the conclusion field was populated), `.neutral` is
+    /// used as the fallback. `.neutral` is the correct "inconclusive" value and
+    /// avoids the semantic side-effects of `.cancelled` (hook firing, ⊘ icon).
+    /// - Parameter fallbackDate: Date used as `completedAt` when the job has none.
+    public func asCompleted(at fallbackDate: Date) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: .completed,
+            // .neutral: inconclusive fallback for jobs that vanished before the API
+            // populated their conclusion field. Avoids .cancelled side-effects
+            // (isHookConclusion=true, conclusionIcon=⊘).
+            conclusion: conclusion ?? .neutral,
+            isDimmed: true,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt ?? fallbackDate,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+}
+
 // MARK: - Job step
 
 /// A single step within an `ActiveJob`.

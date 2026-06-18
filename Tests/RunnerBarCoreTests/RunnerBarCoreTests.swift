@@ -462,7 +462,7 @@ struct PollResultBuilderTests {
         #expect(cache[55] != nil)
         #expect(cache[55]?.status == "completed")
         #expect(cache[55]?.isDimmed == true)
-        #expect(cache[55]?.conclusion == "cancelled", "Missing conclusion defaults to cancelled")
+        #expect(cache[55]?.conclusion == "neutral", "Missing conclusion defaults to neutral (.cancelled has isHookConclusion side-effects)")
     }
 
     /// An existing cached entry for a vanished job is not overwritten by the vanish logic.
