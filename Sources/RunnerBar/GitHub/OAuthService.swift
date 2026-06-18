@@ -35,6 +35,9 @@ final class OAuthService {
     /// Private initialiser — use `shared`.
     private init() {}
 
+    /// Shared `JSONDecoder` — reused across token-exchange decode calls instead of per-call instantiation.
+    private let decoder = JSONDecoder()
+
     /// The OAuth redirect URI. Must match the value registered in the GitHub OAuth app settings.
     /// Sourced from `GitHubConstants.oauthRedirectURI` — do not duplicate this string inline.
     private let redirectURI = GitHubConstants.oauthRedirectURI
@@ -239,7 +242,7 @@ final class OAuthService {
             "code": code
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let response = try? JSONDecoder().decode(OAuthTokenResponse.self, from: data)
+              let response = try? decoder.decode(OAuthTokenResponse.self, from: data)
         else {
             log("OAuthService › exchangeCode — network/parse failure, calling onCompletion(false)")
             onCompletion?(false)

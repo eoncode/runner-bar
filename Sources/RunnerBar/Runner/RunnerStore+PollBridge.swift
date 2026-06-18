@@ -4,6 +4,11 @@ import Foundation
 import os
 import RunnerBarCore
 
+// MARK: - Shared decoder
+
+/// Shared `JSONDecoder` — one instance for all decode calls in this file.
+private let decoder = JSONDecoder()
+
 // MARK: - RunnerStore thin wrappers
 
 // These extensions delegate to PollResultBuilder so RunnerStore.fetch() call
@@ -83,7 +88,7 @@ extension RunnerStore {
                   cached.steps.isEmpty || cached.steps.contains(where: { $0.status == .inProgress }),
                   let scope = scopeFromHtmlUrl(cached.htmlUrl),
                   let data = await ghAPI("repos/\(scope)/actions/jobs/\(cacheID)"),
-                  let fresh = try? JSONDecoder().decode(JobPayload.self, from: data),
+                  let fresh = try? decoder.decode(JobPayload.self, from: data),
                   !fresh.steps.isEmpty
             else { continue }
             cache[cacheID] = await ISO8601DateParser.shared.makeJob(from: fresh, isDimmed: true)

@@ -18,6 +18,8 @@ final class ScopeStore {
     /// Shared singleton — single source of truth for all scope operations.
     static let shared = ScopeStore()
 
+    /// Shared `JSONDecoder` — reused across all `load()` calls instead of per-call instantiation.
+    private let decoder = JSONDecoder()
     /// `UserDefaults` key for the JSON-encoded `[ScopeEntry]` array.
     private let entriesKey = "scopeEntries"
     /// `UserDefaults` key for the legacy plain `[String]` scopes array, kept for migration only.
@@ -61,7 +63,7 @@ final class ScopeStore {
             return []
         }
         do {
-            let decoded = try JSONDecoder().decode([ScopeEntry].self, from: data)
+            let decoded = try decoder.decode([ScopeEntry].self, from: data)
             log("ScopeStore › loaded \(decoded.count) scope entry(ies)")
             return decoded
         } catch {
