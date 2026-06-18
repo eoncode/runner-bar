@@ -152,9 +152,7 @@ public struct PollResultBuilder {
                 }
                 newSeenGroupIDs.insert(group.id)
             }
-            var dimmed = group
-            dimmed.isDimmed = true
-            newCache[group.id] = dimmed
+            newCache[group.id] = group.copying(isDimmed: true)
         }
         await freezeVanishedGroups(
             snapPrev: snapPrevGroups,
@@ -319,24 +317,11 @@ public struct PollResultBuilder {
                     await fireFailureHook(group, scope)
                 }
             }
-            var frozen = group
-            frozen.isDimmed = true
-            if frozen.lastJobCompletedAt == nil {
-                frozen = WorkflowActionGroup(
-                    headSha: frozen.headSha,
-                    label: frozen.label,
-                    title: frozen.title,
-                    headBranch: frozen.headBranch,
-                    repo: frozen.repo,
-                    runs: frozen.runs,
-                    jobs: frozen.jobs,
-                    firstJobStartedAt: frozen.firstJobStartedAt,
-                    lastJobCompletedAt: now,
-                    createdAt: frozen.createdAt,
-                    isDimmed: true
-                )
+            if group.lastJobCompletedAt == nil {
+                cache[groupID] = group.copying(isDimmed: true, settingCompletedAt: now)
+            } else {
+                cache[groupID] = group.copying(isDimmed: true)
             }
-            cache[groupID] = frozen
         }
     }
 
