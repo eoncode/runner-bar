@@ -68,7 +68,7 @@ public struct WorkflowRunRef: Identifiable, Sendable {
 // MARK: - WorkflowActionGroup
 
 /// Represents one **commit / PR trigger**: all GitHub Actions workflow runs
-/// that share the same `head_sha`. Mirrors ci-dash.py's “Group” concept from
+/// that share the same `head_sha`. Mirrors ci-dash.py's "Group" concept from
 /// `group_runs()` + `enrich_group()`.
 ///
 /// Hierarchy: `WorkflowActionGroup` → jobs (flat across all sibling runs) → `JobStep` → log.
@@ -87,7 +87,7 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     public let repo: String
 
     /// All sibling workflow runs sharing this `head_sha`.
-    public var runs: [WorkflowRunRef]
+    public let runs: [WorkflowRunRef]
 
     /// Stable unique key: highest run ID in this group.
     ///
@@ -97,21 +97,21 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
 
     /// All jobs across every run in this group, fetched and flattened.
     /// This is what `ActionDetailView` renders.
-    public var jobs: [ActiveJob]
+    public let jobs: [ActiveJob]
 
     /// UTC time of the earliest job `startedAt` across all runs.
     /// Mirrors ci-dash.py's `first_job_started_at`.
-    public var firstJobStartedAt: Date?
+    public let firstJobStartedAt: Date?
 
     /// UTC time of the latest job `completedAt` across all runs.
     /// Mirrors ci-dash.py's `last_job_completed_at`.
-    public var lastJobCompletedAt: Date?
+    public let lastJobCompletedAt: Date?
 
     /// Fallback creation time from the representative run.
-    public var createdAt: Date?
+    public let createdAt: Date?
 
     /// Set to `true` when frozen into `actionGroupCache` after completion.
-    public var isDimmed: Bool
+    public let isDimmed: Bool
 
     // MARK: Equatable
 
@@ -119,6 +119,12 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     ///
     /// This satisfies the `onChange(of: store.actions)` requirement in `PanelMainView`
     /// without deep-comparing mutable job arrays on every poll.
+    ///
+    /// ⚠️ `copying()` can produce structurally different instances — for example,
+    /// toggling `isDimmed` or updating `lastJobCompletedAt` — that this operator
+    /// still treats as equal because only `id` is compared. Any caller that needs
+    /// to detect snapshot-level field changes (e.g. freeze-state transitions) must
+    /// compare fields directly; `==` will not fire for those differences.
     public static func == (lhs: WorkflowActionGroup, rhs: WorkflowActionGroup) -> Bool {
         lhs.id == rhs.id
     }
@@ -138,6 +144,44 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
             jobs: newJobs,
             firstJobStartedAt: firstJobStartedAt,
             lastJobCompletedAt: lastJobCompletedAt,
+            createdAt: createdAt,
+            isDimmed: isDimmed
+        )
+    }
+
+    /// Returns a copy of this group with `isDimmed` set. All other fields are preserved verbatim.
+    public func copying(isDimmed: Bool) -> WorkflowActionGroup {
+        WorkflowActionGroup(
+            headSha: headSha,
+            label: label,
+            title: title,
+            headBranch: headBranch,
+            repo: repo,
+            runs: runs,
+            jobs: jobs,
+            firstJobStartedAt: firstJobStartedAt,
+            lastJobCompletedAt: lastJobCompletedAt,
+            createdAt: createdAt,
+            isDimmed: isDimmed
+        )
+    }
+
+    /// Returns a copy of this group with `isDimmed` set and `lastJobCompletedAt` set to `date`.
+    ///
+    /// Use this overload when the completion timestamp is not yet recorded on the group
+    /// (i.e. the group vanished from the live feed before the API returned a final time).
+    /// All other fields are preserved verbatim.
+    public func copying(isDimmed: Bool, settingCompletedAt date: Date) -> WorkflowActionGroup {
+        WorkflowActionGroup(
+            headSha: headSha,
+            label: label,
+            title: title,
+            headBranch: headBranch,
+            repo: repo,
+            runs: runs,
+            jobs: jobs,
+            firstJobStartedAt: firstJobStartedAt,
+            lastJobCompletedAt: date,
             createdAt: createdAt,
             isDimmed: isDimmed
         )
@@ -187,12 +231,19 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
 
     /// Group status derived from run-level statuses and job conclusions.
     ///
-    /// - Returns `.completed` when all jobs have a conclusion (even if the run-level
-    ///   API status lags behind — mirrors ci-dash.py override).
-    /// - Returns `.inProgress` when any run is `.inProgress`.
-    /// - Returns `.queued` when any run is `.queued` but none is in progress.
+    /// Priority order:
+    /// 1. `.completed` — all sibling runs have concluded **and** all loaded jobs have
+    ///    a conclusion. The run-level guard prevents a partially-loaded sibling run
+    ///    (whose jobs haven't arrived yet) from being prematurely frozen: job conclusions
+    ///    from other runs could otherwise satisfy `allSatisfy` while the sibling is
+    ///    still in progress.
+    /// 2. `.inProgress` — any sibling run is currently running.
+    /// 3. `.queued` — any sibling run is queued but none is running.
+    /// 4. `.completed` fallthrough — jobs empty and no run is active (loading window).
+    ///    TODO: revisit when job-fetch latency is addressed; consider a `.loading` case.
     public var groupStatus: GroupStatus {
-        if jobsTotal > 0, jobs.filter({ $0.conclusion != nil }).count == jobsTotal {
+        let allRunsConcluded = runs.allSatisfy { $0.conclusion != nil }
+        if allRunsConcluded, jobsTotal > 0, jobs.allSatisfy({ $0.conclusion != nil }) {
             return .completed
         }
         if runs.contains(where: { $0.status == .inProgress }) { return .inProgress }
@@ -266,6 +317,26 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
 
     /// Human-readable job progress fraction, e.g. `"3/5"`. Returns `"—"` while jobs load.
     public var jobProgress: String { jobs.isEmpty ? "—" : "\(jobsDone)/\(jobsTotal)" }
+
+    /// `true` when at least one job in this group has a failure-class conclusion.
+    ///
+    /// Uses the typed `JobConclusion.isFailure` check (covers `.failure`, `.timedOut`,
+    /// `.startupFailure`, `.actionRequired`) rather than raw-string comparison.
+    ///
+    /// Falls back to run-level conclusions when `jobs` is empty (loading state), mirroring
+    /// the same fallback logic used by `conclusion`. This ensures badge/hook callers get
+    /// a consistent result before jobs have loaded — a group whose runs already report a
+    /// failure-class conclusion will not show a false-negative here during the fetch window.
+    ///
+    /// TODO: wire into display-layer badge colouring / hook-triggering call sites when
+    /// those paths are migrated off their existing inline checks.
+    public var hasFailedJob: Bool {
+        if !jobs.isEmpty {
+            return jobs.contains { $0.conclusion?.isFailure == true }
+        }
+        // Run-level fallback: mirrors the loading-state path in `conclusion`.
+        return runs.contains { $0.conclusion?.isFailure == true }
+    }
 
     /// Name of the first in-progress job, or first queued job, or `"—"`.
     public var currentJobName: String {

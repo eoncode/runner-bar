@@ -144,14 +144,7 @@ public enum ProcessRunner {
         task.standardOutput = outPipe
         task.standardError = mergeStderr ? outPipe : FileHandle.nullDevice
 
-        let inputPipe: Pipe?
-        if stdin != nil {
-            let stdinPipe = Pipe()
-            task.standardInput = stdinPipe
-            inputPipe = stdinPipe
-        } else {
-            inputPipe = nil
-        }
+        let inputPipe = wireStdin(hasStdin: stdin != nil, to: task)
 
         // Drain stdout on a dedicated serial queue concurrently with process execution,
         // (concurrent drain + terminationHandler join pattern). readDataToEndOfFile() blocks until
@@ -298,6 +291,28 @@ public enum ProcessRunner {
 
     // MARK: - Private helpers
 
+    /// Attaches a stdin pipe to `task` when stdin data is present.
+    ///
+    /// Returns the `Pipe` whose write end the caller must feed data to (and then
+    /// close) after `task.run()`, or `nil` when no stdin is needed.
+    /// Extracted from `runAsync` so any future `Process`-launching method can
+    /// reuse the same setup without copy-pasting the three-line wiring block.
+    ///
+    /// - Note: The `Bool` parameter intentionally accepts a pre-evaluated presence
+    ///   check (`stdin != nil`) rather than the raw `Data?`. The helper only needs
+    ///   to know *whether* stdin is required; the actual data is consumed by the
+    ///   caller's `stdinQueue` block after `task.run()`. This makes the
+    ///   "presence-only" contract explicit and avoids misleading readers into
+    ///   thinking the data is written here.
+    ///   See also the ⚠️ SIGPIPE warning in `runAsync` — any caller that retains
+    ///   the returned `Pipe` and writes to it inherits that risk.
+    private static func wireStdin(hasStdin: Bool, to task: Process) -> Pipe? {
+        guard hasStdin else { return nil }
+        let pipe = Pipe()
+        task.standardInput = pipe
+        return pipe
+    }
+
     /// Handles `Process.terminationHandler` for `runAsync`.
     ///
     /// Extracted from the `withCheckedContinuation` body so the nesting depth inside
@@ -332,7 +347,7 @@ public enum ProcessRunner {
         // Read under lock, cancel outside: avoids holding the unfair lock during Task.cancel().
         let timeoutTask = timeoutTaskBox.withLock { $0 }
         timeoutTask?.cancel()
-        // Empty sync barrier — blocks until drainQueue’s readDataToEndOfFile() finishes.
+        // Empty sync barrier — blocks until drainQueue's readDataToEndOfFile() finishes.
         // This is the sole happens-before edge; no work belongs inside the closure.
         drainQueue.sync {}
         let outputData = outputBox.withLock { $0 }

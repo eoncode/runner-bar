@@ -30,16 +30,36 @@ public typealias GHRawTransport = @Sendable (_ endpoint: String) async -> Data?
 /// `Keychain` / `OAuthService` implementations.
 public typealias GHTokenProvider = @Sendable () -> String?
 
+// MARK: - TransportBox
+
+/// Thread-safe wrapper around an `OSAllocatedUnfairLock`-guarded closure.
+///
+/// Collapses the repeated configure/read lock pair that each transport type
+/// previously declared independently. `configure(_:)` replaces the stored
+/// value under the lock; `read()` reads it under the lock so the caller can
+/// invoke the closure outside (important for async closures — `withLock`
+/// cannot contain an `await`).
+private struct TransportBox<T: Sendable> {
+    /// The underlying unfair lock protecting the stored value.
+    private let lock: OSAllocatedUnfairLock<T>
+    /// Creates a box with the given initial value.
+    init(initialState: T) { lock = .init(initialState: initialState) }
+    /// Replaces the stored value under the lock.
+    func configure(_ value: T) { lock.withLock { $0 = value } }
+    /// Returns the stored value under the lock.
+    func read() -> T { lock.withLock { $0 } }
+}
+
 // MARK: - Module-level state
 
 /// Serialises all reads and writes to the active JSON transport closure.
-private let transportLock = OSAllocatedUnfairLock<GHAPITransport>(initialState: { _ in nil })
+private let transportBox = TransportBox<GHAPITransport>(initialState: { _ in nil })
 
 /// Serialises all reads and writes to the active raw-bytes transport closure.
-private let rawTransportLock = OSAllocatedUnfairLock<GHRawTransport>(initialState: { _ in nil })
+private let rawTransportBox = TransportBox<GHRawTransport>(initialState: { _ in nil })
 
 /// Serialises all reads and writes to the active token-provider closure.
-private let tokenProviderLock = OSAllocatedUnfairLock<GHTokenProvider>(initialState: { nil })
+private let tokenProviderBox = TransportBox<GHTokenProvider>(initialState: { nil })
 
 // MARK: - Configuration
 
@@ -49,7 +69,7 @@ private let tokenProviderLock = OSAllocatedUnfairLock<GHTokenProvider>(initialSt
 public func configureGHAPI(
     _ transport: @escaping GHAPITransport
 ) {
-    transportLock.withLock { $0 = transport }
+    transportBox.configure(transport)
 }
 
 /// Wire up the raw-bytes transport for log endpoints. Call once at launch.
@@ -57,7 +77,7 @@ public func configureGHAPI(
 /// - Parameter rawTransport: Async closure that fetches raw log bytes;
 ///   follows 302 redirects and returns `nil` on failure.
 public func configureGHRaw(_ rawTransport: @escaping GHRawTransport) {
-    rawTransportLock.withLock { $0 = rawTransport }
+    rawTransportBox.configure(rawTransport)
 }
 
 /// Wire up the token provider. Call once at launch before any authenticated fetch.
@@ -65,7 +85,7 @@ public func configureGHRaw(_ rawTransport: @escaping GHRawTransport) {
 /// - Parameter provider: Sync closure that returns the current GitHub token, or `nil`
 ///   when no token is available (e.g. user is signed out).
 public func configureGHToken(_ provider: @escaping GHTokenProvider) {
-    tokenProviderLock.withLock { $0 = provider }
+    tokenProviderBox.configure(provider)
 }
 
 // MARK: - Module-level symbols consumed by RunnerBarCore files
@@ -74,7 +94,7 @@ public func configureGHToken(_ provider: @escaping GHTokenProvider) {
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
 func ghAPI(_ endpoint: String) async -> Data? {
-    let transport = transportLock.withLock { $0 }
+    let transport = transportBox.read()
     return await transport(endpoint)
 }
 
@@ -83,7 +103,7 @@ func ghAPI(_ endpoint: String) async -> Data? {
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
 func ghRaw(_ endpoint: String) async -> Data? {
-    let transport = rawTransportLock.withLock { $0 }
+    let transport = rawTransportBox.read()
     return await transport(endpoint)
 }
 
@@ -91,5 +111,6 @@ func ghRaw(_ endpoint: String) async -> Data? {
 /// Reads the closure under the lock then invokes it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain a non-trivial call.
 func githubTokenCore() -> String? {
-    tokenProviderLock.withLock { $0 }()
+    let provider = tokenProviderBox.read()
+    return provider()
 }
