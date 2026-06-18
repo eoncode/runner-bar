@@ -132,6 +132,11 @@ extension ActiveJob {
     /// `PollResultBuilder`: sets `status` to `.completed`, `isDimmed` to `true`,
     /// and fills `completedAt` with `fallbackDate` when the job has no recorded
     /// completion time. All other fields are preserved verbatim.
+    ///
+    /// When the job has no recorded conclusion (e.g. an API timing race where the
+    /// job disappeared before the conclusion field was populated), `.neutral` is
+    /// used as the fallback. `.neutral` is the correct "inconclusive" value and
+    /// avoids the semantic side-effects of `.cancelled` (hook firing, ⊘ icon).
     /// - Parameter fallbackDate: Date used as `completedAt` when the job has none.
     public func asCompleted(at fallbackDate: Date) -> ActiveJob {
         ActiveJob(
@@ -139,8 +144,10 @@ extension ActiveJob {
             name: name,
             htmlUrl: htmlUrl,
             status: .completed,
-            // deliberate: treat unknown conclusion as .cancelled for display purposes
-            conclusion: conclusion ?? .cancelled,
+            // .neutral: inconclusive fallback for jobs that vanished before the API
+            // populated their conclusion field. Avoids .cancelled side-effects
+            // (isHookConclusion=true, conclusionIcon=⊘).
+            conclusion: conclusion ?? .neutral,
             isDimmed: true,
             runnerName: runnerName,
             scope: scope,
