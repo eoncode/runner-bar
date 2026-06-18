@@ -4,9 +4,6 @@ import Foundation
 import Testing
 import RunnerBarCore
 
-/// Stable install path used across test fixtures to avoid repeating a hardcoded URI literal.
-private let testRunnerInstallPath = "/tmp/runner" // NOSONAR — test-only fixture path
-
 // MARK: - ActiveJob.elapsed
 
 @Suite("ActiveJob.elapsed")
@@ -161,59 +158,40 @@ struct ActiveJobIsLocalRunnerTests {
 @Suite("RunnerModel.displayStatus")
 struct RunnerModelDisplayStatusTests {
 
-    private func makeRunner(
-        isRunning: Bool,
-        isBusy: Bool = false,
-        githubStatus: RunnerStatus = .online,
-        lifecycleWarning: String? = nil
-    ) -> RunnerModel {
-        RunnerModel(
-            runnerName: "test-runner",
-            gitHubUrl: nil,
-            agentId: nil,
-            workFolder: nil,
-            installPath: testRunnerInstallPath,
-            isRunning: isRunning,
-            githubStatus: githubStatus,
-            isBusy: isBusy,
-            lifecycleWarning: lifecycleWarning
-        )
-    }
-
     /// A running runner displays "running" status.
     @Test func displayStatusRunning() {
-        #expect(makeRunner(isRunning: true).displayStatus == "running")
+        #expect(makeRunnerModel(isRunning: true).displayStatus == "running")
     }
 
     /// A runner with isBusy = true displays "busy" status (dead-branch fix for #773).
     @Test func displayStatusBusy() {
-        #expect(makeRunner(isRunning: true, isBusy: true).displayStatus == "busy")
+        #expect(makeRunnerModel(isRunning: true, isBusy: true).displayStatus == "busy")
     }
 
     /// A non-running runner with GitHub status .online displays "online".
     @Test func displayStatusOnline() {
-        #expect(makeRunner(isRunning: false, githubStatus: .online).displayStatus == "online")
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .online).displayStatus == "online")
     }
 
     /// A non-running runner with GitHub status .offline displays "offline".
     @Test func displayStatusOffline() {
-        #expect(makeRunner(isRunning: false, githubStatus: .offline).displayStatus == "offline")
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .offline).displayStatus == "offline")
     }
 
     /// A lifecycle warning overrides the running/busy status.
     @Test func displayStatusLifecycleWarningTakesPriority() {
-        let runner = makeRunner(isRunning: true, lifecycleWarning: "update required")
+        let runner = makeRunnerModel(isRunning: true, lifecycleWarning: "update required")
         #expect(runner.displayStatus == "update required")
     }
 
     /// A non-running runner with GitHub status .busy displays "busy".
     @Test func displayStatusBusyGithubStatusWhenNotRunning() {
-        #expect(makeRunner(isRunning: false, githubStatus: .busy).displayStatus == "busy")
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .busy).displayStatus == "busy")
     }
 
     /// A non-running runner with an unknown GitHub status defaults to "offline".
     @Test func displayStatusDefaultsToOfflineForUnknownStatus() {
-        #expect(makeRunner(isRunning: false, githubStatus: .unknown("draining")).displayStatus == "offline")
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .unknown("draining")).displayStatus == "offline")
     }
 }
 
@@ -222,53 +200,34 @@ struct RunnerModelDisplayStatusTests {
 @Suite("RunnerModel.statusColor")
 struct RunnerModelStatusColorTests {
 
-    private func makeRunner(
-        isRunning: Bool,
-        isBusy: Bool = false,
-        githubStatus: RunnerStatus = .online,
-        lifecycleWarning: String? = nil
-    ) -> RunnerModel {
-        RunnerModel(
-            runnerName: "test-runner",
-            gitHubUrl: nil,
-            agentId: nil,
-            workFolder: nil,
-            installPath: testRunnerInstallPath,
-            isRunning: isRunning,
-            githubStatus: githubStatus,
-            isBusy: isBusy,
-            lifecycleWarning: lifecycleWarning
-        )
-    }
-
     /// A running, non-busy runner gets the .running dot colour.
     @Test func statusColorRunning() {
-        #expect(makeRunner(isRunning: true).statusColor == .running)
+        #expect(makeRunnerModel(isRunning: true).statusColor == .running)
     }
 
     /// A running and busy runner gets the .busy dot colour.
     @Test func statusColorBusy() {
-        #expect(makeRunner(isRunning: true, isBusy: true).statusColor == .busy)
+        #expect(makeRunnerModel(isRunning: true, isBusy: true).statusColor == .busy)
     }
 
     /// A non-running runner that GitHub reports as online gets the .idle dot colour.
     @Test func statusColorGithubOnlineIsIdle() {
-        #expect(makeRunner(isRunning: false, githubStatus: .online).statusColor == .idle)
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .online).statusColor == .idle)
     }
 
     /// A non-running runner with an offline GitHub status gets the .offline dot colour.
     @Test func statusColorOffline() {
-        #expect(makeRunner(isRunning: false, githubStatus: .offline).statusColor == .offline)
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .offline).statusColor == .offline)
     }
 
     /// A lifecycle warning maps to the .offline dot colour.
     @Test func statusColorLifecycleWarning() {
-        #expect(makeRunner(isRunning: true, lifecycleWarning: "restart failed").statusColor == .offline)
+        #expect(makeRunnerModel(isRunning: true, lifecycleWarning: "restart failed").statusColor == .offline)
     }
 
     /// An unknown GitHub status (not running locally) maps to .offline.
     @Test func statusColorUnknownGithubStatus() {
-        #expect(makeRunner(isRunning: false, githubStatus: .unknown("draining")).statusColor == .offline)
+        #expect(makeRunnerModel(isRunning: false, githubStatus: .unknown("draining")).statusColor == .offline)
     }
 }
 
@@ -1064,10 +1023,3 @@ struct ProcessRunnerRunAsyncStdinTests {
     }
 }
 
-// MARK: - HookCounter
-
-/// Actor-isolated counter for tracking fireFailureHook call counts in async tests.
-private actor HookCounter {
-    private(set) var value = 0
-    func increment() { value += 1 }
-}
