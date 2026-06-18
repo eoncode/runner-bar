@@ -195,8 +195,9 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
 
     // MARK: - Private
 
-    /// Looks up a `RunnerPayload` for `name` in `dict` using three strategies:
-    /// exact match → case-insensitive match → whitespace-trimmed match.
+    /// Looks up a `RunnerPayload` for `name` in `dict` using four strategies:
+    /// exact match → case-insensitive match → whitespace-trimmed match →
+    /// combined trim + lowercase match.
     ///
     /// Extracted from the `for idx in result.indices` loop body so it is
     /// independently testable (P13) and free of mutable outer-loop capture (P16).
@@ -206,18 +207,21 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
     ///   - dict: The payload dictionary keyed by runner name.
     /// - Returns: The matching payload, or `nil` if none is found.
     ///
-    /// - Note: The three stages are intentionally independent transformations.
-    ///   Stage 2 handles wrong case (both sides lowercased, whitespace untouched).
-    ///   Stage 3 handles leading/trailing whitespace (both sides trimmed, case untouched).
-    ///   A name that differs in *both* case *and* whitespace (e.g. `" MyRunner"` vs
-    ///   `"myrunner"`) will not match any stage and returns `nil`. Fix in a follow-up
-    ///   by adding a stage 4: `nameTrimmedLower` vs `key.trimmingCharacters.lowercased()`.
+    /// Lookup stages (applied in order, first match wins):
+    /// 1. Exact match — `dict[name]`.
+    /// 2. Case-insensitive — both sides lowercased, whitespace untouched.
+    /// 3. Whitespace-trimmed — both sides trimmed, case untouched.
+    /// 4. Combined — both sides trimmed *and* lowercased, handles names that
+    ///    differ in both casing and surrounding whitespace (e.g. `" MyRunner"`
+    ///    vs `"myrunner"`).
     private static func findPayload(name: String, in dict: [String: RunnerPayload]) -> RunnerPayload? {
         if let api = dict[name] { return api }
         let nameLower = name.lowercased()
         if let key = dict.keys.first(where: { $0.lowercased() == nameLower }) { return dict[key] }
         let nameTrimmed = name.trimmingCharacters(in: .whitespaces)
         if let key = dict.keys.first(where: { $0.trimmingCharacters(in: .whitespaces) == nameTrimmed }) { return dict[key] }
+        let nameNormalized = nameTrimmed.lowercased()
+        if let key = dict.keys.first(where: { $0.trimmingCharacters(in: .whitespaces).lowercased() == nameNormalized }) { return dict[key] }
         return nil
     }
 
