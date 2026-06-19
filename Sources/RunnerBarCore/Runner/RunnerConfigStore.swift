@@ -103,12 +103,14 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                     }
                 }
             }
-} catch let configError as RunnerConfigStoreError {
+        } catch let configError as RunnerConfigStoreError {
             throw configError
+        } catch {
+            throw RunnerConfigStoreError.readFailed(installPath, error)
         }
-        // Note: a bare `catch { throw .readFailed(...) }` fallback is intentionally
-        // absent — the continuation only ever throws RunnerConfigStoreError, making
-        // such a branch unreachable dead code.
+        // Note: a bare `catch { throw .readFailed(...) }` fallback is required because
+        // `withCheckedThrowingContinuation` is typed as throwing `any Error`, even though
+        // the continuation closure only ever produces RunnerConfigStoreError at runtime.
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
         } catch {
