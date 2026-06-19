@@ -6,6 +6,8 @@ import Foundation
 
 /// Errors thrown while reading or writing the runner `.runner` configuration file.
 public enum RunnerConfigStoreError: LocalizedError {
+    /// The `.runner` file could not be read from disk (missing, permissions, I/O error).
+    case readFailed(String, any Error)
     /// The `.runner` file could not be decoded into `RunnerConfig`.
     case decodeFailed(String)
     /// The updated config could not be serialised or written to disk.
@@ -14,6 +16,8 @@ public enum RunnerConfigStoreError: LocalizedError {
     /// A human-readable description of the error.
     public var errorDescription: String? {
         switch self {
+        case .readFailed(let installPath, let underlying):
+            "Failed to read runner configuration at \(installPath)/.runner: \(underlying.localizedDescription)"
         case .decodeFailed(let installPath):
             "Failed to decode runner configuration at \(installPath)/.runner"
         case .writeFailed(let installPath, let underlying):
@@ -83,13 +87,14 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// actor's cooperative thread is never blocked.
     public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        let  Data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, RunnerConfigStoreError>) in
+        let data: Data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, RunnerConfigStoreError>) in
             DispatchQueue.global(qos: .utility).async {
                 do {
                     let raw = Self.stripBOM(from: try Data(contentsOf: url))
                     continuation.resume(returning: raw)
                 } catch {
-                    continuation.resume(throwing: RunnerConfigStoreError.decodeFailed(installPath))
+                    // I/O failure (file not found, permissions denied, etc.) — distinct from decode failure.
+                    continuation.resume(throwing: RunnerConfigStoreError.readFailed(installPath, error))
                 }
             }
         }
