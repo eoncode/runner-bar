@@ -88,7 +88,8 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
         // `withCheckedThrowingContinuation` requires `E == any Error`; typed errors are
-        // not supported. We re-throw as RunnerConfigStoreError in the surrounding catch.
+        // not supported. The continuation always resumes with RunnerConfigStoreError,
+        // so only the typed catch branch is needed — no bare fallback.
         let data: Data
         do {
             data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
@@ -102,11 +103,12 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                     }
                 }
             }
-        } catch let configError as RunnerConfigStoreError {
+} catch let configError as RunnerConfigStoreError {
             throw configError
-        } catch {
-            throw RunnerConfigStoreError.readFailed(installPath, error)
         }
+        // Note: a bare `catch { throw .readFailed(...) }` fallback is intentionally
+        // absent — the continuation only ever throws RunnerConfigStoreError, making
+        // such a branch unreachable dead code.
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
         } catch {
@@ -140,8 +142,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                     var raw: [String: AnyJSON] = [:]
                     if let existingData = try? Data(contentsOf: url) {
                         let data = Self.stripBOM(from: existingData)
-                        let decoder = JSONDecoder()
-                    if let dict = try? decoder.decode([String: AnyJSON].self, from: data) {
+                        if let dict = try? self.decoder.decode([String: AnyJSON].self, from: data) {
                             raw = dict
                         } else {
                             // Decode failed — existing file is malformed. Proceeding
