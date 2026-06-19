@@ -12,6 +12,8 @@ import RunnerBarCore
 /// requiring `@unchecked Sendable`. The `result` and recorded-call properties
 /// are accessed from the test body before/after `execute(...)` — never concurrently.
 actor SpyLabelsService: RunnerLabelsService {
+    // Note: defaults to [] (empty array), not nil — tests that don't call setUp will
+    // silently receive an empty label list rather than a failure. Configure via setUp(result:).
     private var result: [String]? = []
     private(set) var callCount = 0
     private(set) var lastScope: String?

@@ -4,8 +4,12 @@
 import Foundation
 import RunnerBarCore
 
+// MARK: - Constants
+
 /// Stable install path used across test fixtures to avoid repeating a hardcoded URI literal.
-let testRunnerInstallPath = "/tmp/runner" // NOSONAR — test-only fixture path
+internal let testRunnerInstallPath = "/tmp/runner" // NOSONAR — test-only fixture path
+
+// MARK: - Factories
 
 /// Creates a `RunnerModel` with sensible defaults for display-status and status-colour tests.
 ///
@@ -15,13 +19,14 @@ func makeRunnerModel(
     isRunning: Bool,
     isBusy: Bool = false,
     githubStatus: RunnerStatus = .online,
-    lifecycleWarning: String? = nil
+    lifecycleWarning: String? = nil,
+    workFolder: String? = nil
 ) -> RunnerModel {
     RunnerModel(
         runnerName: "test-runner",
         gitHubUrl: nil,
         agentId: nil,
-        workFolder: nil,
+        workFolder: workFolder,
         installPath: testRunnerInstallPath,
         isRunning: isRunning,
         githubStatus: githubStatus,
