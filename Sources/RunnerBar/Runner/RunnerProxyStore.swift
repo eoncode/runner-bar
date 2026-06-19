@@ -137,9 +137,13 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
                     }
                 }
             }
-        } catch let error as RunnerProxyStoreError {
-            throw error
+        } catch let e as RunnerProxyStoreError {
+            throw e
         } catch {
+            // Unexpected error escaping the continuation — should not happen in practice
+            // since the continuation only throws RunnerProxyStoreError, but log it so
+            // it is visible in diagnostics rather than silently swallowed.
+            log("RunnerProxyStore › save: unexpected error: \(error)")
             throw RunnerProxyStoreError.writeFailed([error.localizedDescription])
         }
     }
