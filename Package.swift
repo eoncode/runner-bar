@@ -13,17 +13,26 @@ let package = Package(
     targets: [
         .target(
             name: "RunnerBarCore",
-            path: "Sources/RunnerBarCore"
+            path: "Sources/RunnerBarCore",
+            swiftSettings: [
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+            ]
         ),
         .executableTarget(
             name: "RunnerBar",
             dependencies: ["RunnerBarCore"],
-            path: "Sources/RunnerBar"
+            path: "Sources/RunnerBar",
+            swiftSettings: [
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+            ]
         ),
         .testTarget(
             name: "RunnerBarCoreTests",
             dependencies: ["RunnerBarCore"],
-            path: "Tests/RunnerBarCoreTests"
+            path: "Tests/RunnerBarCoreTests",
+            swiftSettings: [
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+            ]
         )
     ]
 )
