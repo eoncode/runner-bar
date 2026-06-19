@@ -137,8 +137,8 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
                     }
                 }
             }
-        } catch let e as RunnerProxyStoreError {
-            throw e
+        } catch let proxyError as RunnerProxyStoreError {
+            throw proxyError
         } catch {
             // Unexpected error escaping the continuation — should not happen in practice
             // since the continuation only throws RunnerProxyStoreError, but log it so
