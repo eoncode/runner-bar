@@ -128,7 +128,8 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                 var raw: [String: AnyJSON] = [:]
                 if let existingData = try? Data(contentsOf: url) {
                     let data = Self.stripBOM(from: existingData)
-                    if let dict = try? self.decoder.decode([String: AnyJSON].self, from: data) {
+                    let decoder = JSONDecoder()
+                    if let dict = try? decoder.decode([String: AnyJSON].self, from: data) {
                         raw = dict
                     } else {
                         // Decode failed — existing file is malformed. Proceeding
