@@ -3,23 +3,6 @@
 import Foundation
 import RunnerBarCore
 
-// MARK: - RunnerProxyStoreError
-
-/// Errors thrown while writing proxy files.
-enum RunnerProxyStoreError: LocalizedError {
-    /// One or more proxy files could not be written or removed.
-    /// `messages` contains a human-readable description for each failing file.
-    case writeFailed([String])
-
-    /// A human-readable description of the error, suitable for display in alerts.
-    var errorDescription: String? {
-        switch self {
-        case .writeFailed(let messages):
-            "Failed to write proxy files: " + messages.joined(separator: "; ")
-        }
-    }
-}
-
 // MARK: - RunnerProxyStore
 
 /// Actor that owns all disk read/write for runner proxy configuration files.
@@ -112,7 +95,7 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
     ///   load → save round-trip is idempotent. Callers must not rely on
     ///   preserving surrounding whitespace in proxy credentials.
-    func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
+    func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
         let base = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
         let credURL = base.appendingPathComponent(".proxycredentials")

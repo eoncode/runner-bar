@@ -105,7 +105,12 @@ public struct SaveRunnerEditsUseCase: Sendable {
                 config.disableUpdate = draft.autoUpdate ? nil : true
                 try await configStore.save(config, at: installPath)
             } catch {
-                errors.append("Failed to write runner configuration (.runner JSON)")
+                switch error {
+                case .decodeFailed(let path):
+                    errors.append("Failed to decode runner configuration at \(path)/.runner")
+                case .writeFailed(let path, _):
+                    errors.append("Failed to write runner configuration at \(path)/.runner")
+                }
             }
         }
 
@@ -127,7 +132,10 @@ public struct SaveRunnerEditsUseCase: Sendable {
             do {
                 try await proxyStore.save(proxyConfig, at: installPath)
             } catch {
-                errors.append("Failed to save proxy settings")
+                switch error {
+                case .writeFailed(let messages):
+                    errors.append(contentsOf: messages)
+                }
             }
         }
 

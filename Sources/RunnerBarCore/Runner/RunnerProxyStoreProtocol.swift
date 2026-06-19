@@ -14,5 +14,5 @@ public protocol RunnerProxyStoreProtocol: Sendable {
     /// Non-throwing: returns a zeroed config when files are absent.
     func load(at installPath: String) async -> RunnerProxyConfig
     /// Writes (or removes) `.proxy` and `.proxycredentials` at `installPath`.
-    func save(_ config: RunnerProxyConfig, at installPath: String) async throws
+    func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError)
 }

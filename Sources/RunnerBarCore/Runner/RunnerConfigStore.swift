@@ -81,15 +81,15 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// Handles the UTF-8 BOM prefix emitted by the GitHub runner agent.
     /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the
     /// actor's cooperative thread is never blocked.
-    public func load(at installPath: String) async throws -> RunnerConfig {
+    public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        let data: Data = try await withCheckedThrowingContinuation { continuation in
+        let  Data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, RunnerConfigStoreError>) in
             DispatchQueue.global(qos: .utility).async {
                 do {
                     let raw = Self.stripBOM(from: try Data(contentsOf: url))
                     continuation.resume(returning: raw)
                 } catch {
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: RunnerConfigStoreError.decodeFailed(installPath))
                 }
             }
         }
@@ -114,10 +114,10 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     ///
     /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the actor's
     /// cooperative thread is never blocked.
-    public func save(_ config: RunnerConfig, at installPath: String) async throws {
+    public func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         let url = runnerConfigURL(for: installPath)
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, RunnerConfigStoreError>) in
             DispatchQueue.global(qos: .utility).async {
                 // Read-modify-write: load existing keys so agent-managed keys are preserved.
                 var raw: [String: AnyJSON] = [:]
