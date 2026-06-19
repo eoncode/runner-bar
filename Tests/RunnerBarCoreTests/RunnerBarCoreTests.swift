@@ -631,6 +631,20 @@ struct FormatElapsedTests {
         let end   = Date(timeIntervalSinceReferenceDate: 50)
         #expect(formatElapsed(start: start, end: end, isCompleted: true) == "00:00")
     }
+
+    /// Verifies that MM:SS format does not roll over to HH:MM:SS for durations ≥ 60 min.
+    /// Design decision: formatElapsed intentionally uses plain `secs / 60` for minutes,
+    /// so values beyond 59:59 continue counting up rather than switching to an hours display.
+    /// This keeps the UI consistent for the typical runner job duration.
+    /// Boundary: exactly 3600 s = "60:00" (the first minute value ≥ 60).
+    /// General: 4000 s = "66:40".
+    @Test func largeIntervalFormatsMmSs() {
+        let ref = Date(timeIntervalSinceReferenceDate: 0)
+        // Exactly 60-minute boundary — must not roll over to hours.
+        #expect(formatElapsed(start: ref, end: Date(timeIntervalSinceReferenceDate: 3600), isCompleted: true) == "60:00")
+        // Well beyond 60 minutes.
+        #expect(formatElapsed(start: ref, end: Date(timeIntervalSinceReferenceDate: 4000), isCompleted: true) == "66:40")
+    }
 }
 
 // MARK: - PollResultBuilder.buildGroupState (fix #1041)
@@ -963,6 +977,22 @@ struct ProcessRunnerRunAsyncStdinTests {
         )
         #expect(result.exitCode == 0)
         #expect(result.output.count == input.count)
+    }
+
+    // MARK: - Exit codes
+
+    /// A command that exits with a non-zero status must report that exit code.
+    /// Regression guard: a bug that always reports exitCode == 0 would silently pass
+    /// the stdin round-trip tests above while breaking callers that rely on exit codes.
+    /// `/usr/bin/false` always exits 1 on macOS and Linux — asserting == 1 is deterministic.
+    @Test(.timeLimit(.minutes(1)))
+    func runAsyncNonZeroExitCode() async {
+        let result = await ProcessRunner.runAsync(
+            executableURL: URL(fileURLWithPath: "/usr/bin/false"),
+            arguments: [],
+            stdin: nil
+        )
+        #expect(result.exitCode == 1)
     }
 }
 
