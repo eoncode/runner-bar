@@ -3,23 +3,6 @@
 import Foundation
 import RunnerBarCore
 
-// MARK: - RunnerProxyStoreError
-
-/// Errors thrown while writing proxy files.
-enum RunnerProxyStoreError: LocalizedError {
-    /// One or more proxy files could not be written or removed.
-    /// `messages` contains a human-readable description for each failing file.
-    case writeFailed([String])
-
-    /// A human-readable description of the error, suitable for display in alerts.
-    var errorDescription: String? {
-        switch self {
-        case .writeFailed(let messages):
-            "Failed to write proxy files: " + messages.joined(separator: "; ")
-        }
-    }
-}
-
 // MARK: - RunnerProxyStore
 
 /// Actor that owns all disk read/write for runner proxy configuration files.
@@ -112,7 +95,11 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
     ///   load → save round-trip is idempotent. Callers must not rely on
     ///   preserving surrounding whitespace in proxy credentials.
-    func save(_ config: RunnerProxyConfig, at installPath: String) async throws {
+    ///
+    /// `withCheckedThrowingContinuation` requires `E == any Error`; typed errors
+    /// are not supported by that API. The typed `RunnerProxyStoreError` is
+    /// re-thrown in the surrounding `do/catch` — consistent with `RunnerConfigStore`.
+    func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
         let base = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
         let credURL = base.appendingPathComponent(".proxycredentials")
@@ -122,32 +109,42 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
         let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                var messages: [String] = []
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                DispatchQueue.global(qos: .utility).async {
+                    var messages: [String] = []
 
-                do {
-                    try Self.writeProxyURL(url, to: proxyURL)
-                } catch {
-                    let msg = ".proxy write error: \(error)"
-                    log("RunnerProxyStore › \(msg)")
-                    messages.append(msg)
-                }
+                    do {
+                        try Self.writeProxyURL(url, to: proxyURL)
+                    } catch {
+                        let msg = ".proxy write error: \(error)"
+                        log("RunnerProxyStore › \(msg)")
+                        messages.append(msg)
+                    }
 
-                do {
-                    try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL)
-                } catch {
-                    let msg = ".proxycredentials write error: \(error)"
-                    log("RunnerProxyStore › \(msg)")
-                    messages.append(msg)
-                }
+                    do {
+                        try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL)
+                    } catch {
+                        let msg = ".proxycredentials write error: \(error)"
+                        log("RunnerProxyStore › \(msg)")
+                        messages.append(msg)
+                    }
 
-                if messages.isEmpty {
-                    continuation.resume()
-                } else {
-                    continuation.resume(throwing: RunnerProxyStoreError.writeFailed(messages))
+                    if messages.isEmpty {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: RunnerProxyStoreError.writeFailed(messages))
+                    }
                 }
             }
+        } catch let proxyError as RunnerProxyStoreError {
+            throw proxyError
+        } catch {
+            // Unexpected error escaping the continuation — should not happen in practice
+            // since the continuation only throws RunnerProxyStoreError, but log it so
+            // it is visible in diagnostics rather than silently swallowed.
+            log("RunnerProxyStore › save: unexpected error: \(error)")
+            throw RunnerProxyStoreError.writeFailed([error.localizedDescription])
         }
     }
 

@@ -100,7 +100,7 @@ struct SaveRunnerEditsUseCaseTests {
             Issue.record("expected .failure, got .success")
             return
         }
-        #expect(msgs.contains(where: { $0.contains(".runner JSON") }))
+        #expect(msgs.contains(where: { $0.contains("/.runner:") }))
         #expect(await proxy.saveCalled)
     }
 
@@ -208,11 +208,67 @@ struct SaveRunnerEditsUseCaseTests {
             return
         }
         #expect(msgs.count == 2)
-        #expect(msgs.contains(where: { $0.contains(".runner JSON") }))
+        #expect(msgs.contains(where: { $0.contains("/.runner:") }))
         #expect(msgs.contains(where: { $0.contains("proxy") }))
         // proxy.saveCalled is not asserted here: the spy only sets it on success,
         // but both stores are configured to throw. The content checks above confirm
         // the proxy error path was reached.
+    }
+
+    /// configStore.load() returning .decodeFailed must emit the
+    /// "Cannot decode config at <path>/.runner" message and still continue
+    /// to the proxy step — the decodeFailed switch arm must not be dead code.
+    @Test("config decode failure emits correct message and proxy step still runs")
+    func configDecodeFailureContinuesToProxy() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        draft.proxyUrl   = "http://proxy.example.com"
+
+        let config  = SpyConfigStore()
+        await config.setUp(shouldThrowOnDecode: true)
+        let proxy   = SpyProxyStore()
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // decodeFailed message contains the install path and /.runner (no underlying error)
+        #expect(msgs.contains(where: { $0.contains("/.runner") && !$0.contains(":") }))
+        // proxy step must still execute despite the decode error
+        #expect(await proxy.saveCalled)
+    }
+
+    /// configStore.load() failing on the read-modify-write step must accumulate a
+    /// readFailed error and still continue to the proxy step — same fan-out
+    /// behaviour as a save failure.
+    @Test("config load failure is accumulated and proxy step still runs")
+    func configLoadFailureContinuesToProxy() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        draft.proxyUrl   = "http://proxy.example.com"
+
+        let config  = SpyConfigStore()
+        await config.setUp(shouldThrowOnLoad: true)
+        let proxy   = SpyProxyStore()
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // readFailed message contains the install path and /.runner:
+        #expect(msgs.contains(where: { $0.contains("/.runner:") }))
+        // proxy step must still execute despite the config load error
+        #expect(await proxy.saveCalled)
     }
 
     /// #1452 — Changing only a non-label field must not trigger the labels API.

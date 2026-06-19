@@ -8,7 +8,7 @@ import RunnerBarCore
 
 /// Spy conformance for `RunnerLabelsService`.
 ///
-/// Implemented as an `actor` so Swift’s compiler enforces isolation without
+/// Implemented as an `actor` so Swift's compiler enforces isolation without
 /// requiring `@unchecked Sendable`. The `result` and recorded-call properties
 /// are accessed from the test body before/after `execute(...)` — never concurrently.
 actor SpyLabelsService: RunnerLabelsService {
@@ -39,16 +39,25 @@ actor SpyLabelsService: RunnerLabelsService {
 /// Implemented as an `actor` — see `SpyLabelsService` for rationale.
 actor SpyConfigStore: RunnerConfigStoreProtocol {
     var loadResult: RunnerConfig = RunnerConfig(workFolder: "_work", disableUpdate: false)
-    private var shouldThrowOnSave = false
+    private var shouldThrowOnSave   = false
+    private var shouldThrowOnLoad   = false
+    private var shouldThrowOnDecode = false
     private(set) var saveCalled = false
     private(set) var savedConfig: RunnerConfig?
 
     /// Configures whether `save(...)` throws. Call from the test body before `execute`.
     func setUp(shouldThrowOnSave: Bool) { self.shouldThrowOnSave = shouldThrowOnSave }
+    /// Configures whether `load(...)` throws a `readFailed` error. Call from the test body before `execute`.
+    func setUp(shouldThrowOnLoad: Bool)   { self.shouldThrowOnLoad   = shouldThrowOnLoad }
+    func setUp(shouldThrowOnDecode: Bool) { self.shouldThrowOnDecode = shouldThrowOnDecode }
 
-    func load(at _: String) async throws -> RunnerConfig { loadResult }
-    func save(_ config: RunnerConfig, at _: String) async throws {
-        if shouldThrowOnSave { throw TestError.saveFailed }
+    func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
+        if shouldThrowOnLoad   { throw RunnerConfigStoreError.readFailed(installPath, TestError.saveFailed) }
+        if shouldThrowOnDecode { throw RunnerConfigStoreError.decodeFailed(installPath) }
+        return loadResult
+    }
+    func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
+        if shouldThrowOnSave { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
         saveCalled = true
         savedConfig = config
     }
@@ -68,8 +77,8 @@ actor SpyProxyStore: RunnerProxyStoreProtocol {
     func setUp(shouldThrowOnSave: Bool) { self.shouldThrowOnSave = shouldThrowOnSave }
 
     func load(at _: String) async -> RunnerProxyConfig { RunnerProxyConfig() }
-    func save(_ config: RunnerProxyConfig, at _: String) async throws {
-        if shouldThrowOnSave { throw TestError.saveFailed }
+    func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
+        if shouldThrowOnSave { throw RunnerProxyStoreError.writeFailed(["spy: save not allowed"]) }
         saveCalled = true
         savedConfig = config
     }

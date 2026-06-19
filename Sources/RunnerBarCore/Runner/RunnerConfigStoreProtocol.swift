@@ -11,7 +11,7 @@ import Foundation
 /// pass `RunnerConfigStore.shared` in production.
 public protocol RunnerConfigStoreProtocol: Sendable {
     /// Loads the typed runner config from `installPath/.runner`.
-    func load(at installPath: String) async throws -> RunnerConfig
+    func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig
     /// Saves the typed runner config to `installPath/.runner`.
-    func save(_ config: RunnerConfig, at installPath: String) async throws
+    func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError)
 }

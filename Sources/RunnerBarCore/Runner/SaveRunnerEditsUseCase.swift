@@ -105,7 +105,17 @@ public struct SaveRunnerEditsUseCase: Sendable {
                 config.disableUpdate = draft.autoUpdate ? nil : true
                 try await configStore.save(config, at: installPath)
             } catch {
-                errors.append("Failed to write runner configuration (.runner JSON)")
+                // Exhaustive switch — compiler enforces all RunnerConfigStoreError cases
+                // are handled. .readFailed arises from configStore.load(at:) above;
+                // save()'s internal read-modify-write pre-read uses try? and never throws.
+                switch error {
+                case .readFailed(let path, let underlying):
+                    errors.append("Cannot read config at \(path)/.runner: \(underlying.localizedDescription)")
+                case .decodeFailed(let path):
+                    errors.append("Cannot decode config at \(path)/.runner")
+                case .writeFailed(let path, let underlying):
+                    errors.append("Cannot write config at \(path)/.runner: \(underlying.localizedDescription)")
+                }
             }
         }
 
@@ -127,7 +137,13 @@ public struct SaveRunnerEditsUseCase: Sendable {
             do {
                 try await proxyStore.save(proxyConfig, at: installPath)
             } catch {
-                errors.append("Failed to save proxy settings")
+                switch error {
+                case .writeFailed(let messages):
+                    // Wrap the per-file internal messages into a single user-facing
+                    // string rather than leaking raw DispatchQueue-level detail.
+                    // The full detail is already logged inside RunnerProxyStore.
+                    errors.append("Cannot write proxy files at \(installPath): \(messages.joined(separator: "; "))")
+                }
             }
         }
 
