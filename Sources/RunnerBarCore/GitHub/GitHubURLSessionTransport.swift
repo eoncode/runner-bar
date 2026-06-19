@@ -46,13 +46,15 @@ private enum ExecuteResult {
 ///   - configure: A closure applied to the pre-built `URLRequest` just before it is sent.
 ///     Use this to set `httpMethod`, `httpBody`, or additional headers. The closure receives
 ///     the base request and must return the mutated copy; the default is the identity closure.
+///     Must be `@Sendable`: `urlSessionExecute` is `@concurrent` and all parameters crossing
+///     into the cooperative thread pool must satisfy the `Sendable` requirement.
 @concurrent
 private func urlSessionExecute(
     _ endpoint: String,
     timeout: TimeInterval,
     logTag: String,
     useRawAccept: Bool = false,
-    configure: (URLRequest) -> URLRequest = { $0 }
+    configure: @Sendable (URLRequest) -> URLRequest = { $0 }
 ) async -> ExecuteResult {
     guard let token = githubTokenCore() else {
         log("\(logTag) › no token available")
