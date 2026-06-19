@@ -120,6 +120,8 @@ public actor RateLimitActor {
 
 /// The module-wide `RateLimitActor` instance shared by `GitHubResponseDecoder`
 /// and `GitHubURLSessionTransport`.
+/// Public so both files can call `set(resetAt:)`, `clear()`, and `snapshot()`
+/// without crossing module boundaries.
 public let rateLimitActor = RateLimitActor()
 
 // MARK: - Rate-limit accessors
