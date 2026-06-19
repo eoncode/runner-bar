@@ -87,10 +87,9 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// actor's cooperative thread is never blocked.
     public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        // `withCheckedThrowingContinuation` requires `E == any Error`; typed errors are
-        // not supported by that API. The continuation always produces
-        // RunnerConfigStoreError at runtime, but the compiler still sees the broader
-        // `any Error` signature — so both a typed catch and a bare fallback are needed.
+        // `withCheckedThrowingContinuation` exposes `throws(any Error)` even though the
+        // closure only ever resumes with `RunnerConfigStoreError` at runtime. Both a typed
+        // catch and a bare fallback are required to bridge the gap.
         let data: Data
         do {
             data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
@@ -99,7 +98,6 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                         let raw = Self.stripBOM(from: try Data(contentsOf: url))
                         continuation.resume(returning: raw)
                     } catch {
-                        // I/O failure (file not found, permissions denied, etc.) — distinct from decode failure.
                         continuation.resume(throwing: RunnerConfigStoreError.readFailed(installPath, error))
                     }
                 }
@@ -107,7 +105,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
         } catch let configError as RunnerConfigStoreError {
             throw configError
         } catch {
-            throw RunnerConfigStoreError.readFailed(installPath, error) // bare fallback — bridges any Error → typed
+            throw RunnerConfigStoreError.readFailed(installPath, error)
         }
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
