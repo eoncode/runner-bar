@@ -124,13 +124,21 @@ public let rateLimitActor = RateLimitActor()
 
 /// Whether the GitHub API is currently rate-limiting this client.
 /// Backed by `RateLimitActor`; must be `await`-ed from async contexts.
-/// This is a computed async property — SE-0461 function annotations do not apply.
+///
+/// This is a computed async property — SE-0461 executor annotations apply to `func`
+/// declarations, not `var get async`. No `@concurrent` or `nonisolated(nonsending)`
+/// annotation is possible here; the property inherits nonisolated semantics by default.
 public var ghIsRateLimited: Bool {
     get async { await rateLimitActor.isLimited }
 }
 
 /// Clears the rate-limit flag. Called at the start of each poll cycle in `RunnerStore.fetch()`.
-@concurrent
+///
+/// Uses `nonisolated(nonsending)` rather than `@concurrent`: both satisfy
+/// `NonisolatedNonsendingByDefault`, but since the entire body immediately suspends
+/// onto `rateLimitActor`, `@concurrent` would cause an unnecessary intermediate hop
+/// to the cooperative thread pool before the actor hop.
+nonisolated(nonsending)
 public func clearGhRateLimit() async {
     await rateLimitActor.clear()
 }
@@ -138,7 +146,12 @@ public func clearGhRateLimit() async {
 /// Returns `isLimited` and `resetDate` in a single actor hop.
 /// Prefer this over a separate `await ghIsRateLimited` read plus a reset-date lookup
 /// to avoid the TOCTOU window between two hops.
-@concurrent
+///
+/// Uses `nonisolated(nonsending)` rather than `@concurrent`: both satisfy
+/// `NonisolatedNonsendingByDefault`, but since the entire body immediately suspends
+/// onto `rateLimitActor`, `@concurrent` would cause an unnecessary intermediate hop
+/// to the cooperative thread pool before the actor hop.
+nonisolated(nonsending)
 public func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
     await rateLimitActor.snapshot()
 }
