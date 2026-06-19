@@ -105,16 +105,7 @@ public struct SaveRunnerEditsUseCase: Sendable {
                 config.disableUpdate = draft.autoUpdate ? nil : true
                 try await configStore.save(config, at: installPath)
             } catch {
-                // Exhaustive switch — compiler enforces all RunnerConfigStoreError
-                // cases are handled, matching the P22 intent of Step 3.
-                switch error {
-                case .readFailed(let path, let underlying):
-                    errors.append("Cannot read config at \(path)/.runner: \(underlying.localizedDescription)")
-                case .decodeFailed(let path):
-                    errors.append("Cannot decode config at \(path)/.runner")
-                case .writeFailed(let path, let underlying):
-                    errors.append("Cannot write config at \(path)/.runner: \(underlying.localizedDescription)")
-                }
+                errors.append(error.localizedDescription)
             }
         }
 
