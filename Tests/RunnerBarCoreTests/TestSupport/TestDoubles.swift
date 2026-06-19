@@ -8,7 +8,7 @@ import RunnerBarCore
 
 /// Spy conformance for `RunnerLabelsService`.
 ///
-/// Implemented as an `actor` so Swift’s compiler enforces isolation without
+/// Implemented as an `actor` so Swift's compiler enforces isolation without
 /// requiring `@unchecked Sendable`. The `result` and recorded-call properties
 /// are accessed from the test body before/after `execute(...)` — never concurrently.
 actor SpyLabelsService: RunnerLabelsService {
@@ -46,7 +46,7 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     /// Configures whether `save(...)` throws. Call from the test body before `execute`.
     func setUp(shouldThrowOnSave: Bool) { self.shouldThrowOnSave = shouldThrowOnSave }
 
-    func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig { loadResult }
+    func load(at _: String) async throws(RunnerConfigStoreError) -> RunnerConfig { loadResult }
     func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         if shouldThrowOnSave { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
         saveCalled = true
