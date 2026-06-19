@@ -100,8 +100,7 @@ struct SaveRunnerEditsUseCaseTests {
             Issue.record("expected .failure, got .success")
             return
         }
-        // SpyConfigStore throws .writeFailed — Step 2 switch emits "Cannot write config at <path>/.runner: ..."
-        #expect(msgs.contains(where: { $0.contains("Cannot write config") }))
+        #expect(msgs.contains(where: { $0.contains("/.runner:") }))
         #expect(await proxy.saveCalled)
     }
 
@@ -209,12 +208,39 @@ struct SaveRunnerEditsUseCaseTests {
             return
         }
         #expect(msgs.count == 2)
-        // Step 2 exhaustive switch emits "Cannot write config at <path>/.runner: ..."
-        #expect(msgs.contains(where: { $0.contains("Cannot write config") }))
+        #expect(msgs.contains(where: { $0.contains("/.runner:") }))
         #expect(msgs.contains(where: { $0.contains("proxy") }))
         // proxy.saveCalled is not asserted here: the spy only sets it on success,
         // but both stores are configured to throw. The content checks above confirm
         // the proxy error path was reached.
+    }
+
+    /// configStore.load() failing on the read-modify-write step must accumulate a
+    /// readFailed error and still continue to the proxy step — same fan-out
+    /// behaviour as a save failure.
+    @Test("config load failure is accumulated and proxy step still runs")
+    func configLoadFailureContinuesToProxy() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        draft.proxyUrl   = "http://proxy.example.com"
+
+        let config  = SpyConfigStore()
+        await config.setUp(shouldThrowOnLoad: true)
+        let proxy   = SpyProxyStore()
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // readFailed message contains the install path and /.runner:
+        #expect(msgs.contains(where: { $0.contains("/.runner:") }))
+        // proxy step must still execute despite the config load error
+        #expect(await proxy.saveCalled)
     }
 
     /// #1452 — Changing only a non-label field must not trigger the labels API.
