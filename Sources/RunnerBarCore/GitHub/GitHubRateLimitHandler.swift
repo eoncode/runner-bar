@@ -40,7 +40,9 @@ public actor RateLimitActor {
     private var generation = 0
 
     /// Creates a new `RateLimitActor` instance.
-    public init() {}
+    public init() {
+        // Default initialiser — no stored properties to initialise.
+    }
 
     /// Arms the rate-limit flag and schedules an automatic reset.
     ///

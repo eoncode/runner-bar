@@ -290,7 +290,7 @@ struct BranchTagPill: View { // periphery:ignore — used dynamically inside Act
 }
 #Preview("GlassSection") { Text("Section Header").padding().glassSection().padding() }
 #Preview("GlassButton") {
-    Button(action: {}) { Text("Re-run").font(.caption).padding(.horizontal, 8).padding(.vertical, 4) }
+    Button(action: { /* Preview only — no action needed in a static preview. */ }) { Text("Re-run").font(.caption).padding(.horizontal, 8).padding(.vertical, 4) }
         .buttonStyle(.plain).glassButton().padding()
 }
 #Preview("StatPill") {

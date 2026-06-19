@@ -33,7 +33,9 @@ final class OAuthService {
     /// The shared singleton instance.
     static let shared = OAuthService()
     /// Private initialiser — use `shared`.
-    private init() {}
+    private init() {
+        // Singleton — intentionally empty; all state is lazily initialised on first access.
+    }
 
     /// Shared `JSONDecoder` — reused across token-exchange decode calls instead of per-call instantiation.
     private let decoder = JSONDecoder()

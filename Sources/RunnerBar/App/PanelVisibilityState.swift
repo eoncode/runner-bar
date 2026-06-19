@@ -114,5 +114,8 @@ final class PanelVisibilityState {
     /// default initialiser so that: (a) DocC surfaces it as part of the public API, and
     /// (b) adding a future stored property without a default will produce a compile error
     /// at the call site rather than silently changing the initialiser's signature.
-    init() {}
+    init() {
+        // Intentionally empty — memberwise init is suppressed to ensure future stored
+        // properties require an explicit default, surfacing signature changes at the call site.
+    }
 }

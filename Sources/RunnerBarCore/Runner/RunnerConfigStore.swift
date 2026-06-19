@@ -60,7 +60,9 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     // MARK: Init
 
     /// Private initialiser — use `RunnerConfigStore.shared`.
-    private init() {}
+    private init() {
+        // Singleton — intentionally empty; use `RunnerConfigStore.shared`.
+    }
 
     // MARK: Private helpers
 
