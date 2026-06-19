@@ -124,11 +124,13 @@ public let rateLimitActor = RateLimitActor()
 
 /// Whether the GitHub API is currently rate-limiting this client.
 /// Backed by `RateLimitActor`; must be `await`-ed from async contexts.
+/// This is a computed async property — SE-0461 function annotations do not apply.
 public var ghIsRateLimited: Bool {
     get async { await rateLimitActor.isLimited }
 }
 
 /// Clears the rate-limit flag. Called at the start of each poll cycle in `RunnerStore.fetch()`.
+@concurrent
 public func clearGhRateLimit() async {
     await rateLimitActor.clear()
 }
@@ -136,6 +138,7 @@ public func clearGhRateLimit() async {
 /// Returns `isLimited` and `resetDate` in a single actor hop.
 /// Prefer this over a separate `await ghIsRateLimited` read plus a reset-date lookup
 /// to avoid the TOCTOU window between two hops.
+@concurrent
 public func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
     await rateLimitActor.snapshot()
 }
