@@ -272,6 +272,11 @@ struct RunnerModelStatusColorTests {
     }
 }
 
+// MARK: - RunnerMetrics (Equatable — no tests)
+// RunnerMetrics is a plain struct of two Double fields with compiler-synthesised Equatable.
+// Equatable tests were deliberately removed in #1450 — testing the compiler adds noise with
+// no regression value. If a custom == is ever added to RunnerMetrics, restore tests here.
+
 // MARK: - Runner.displayStatus
 
 @Suite("Runner.displayStatus")
@@ -1004,8 +1009,8 @@ struct PollResultBuilderGroupStateTests {
 struct ProcessRunnerRunAsyncStdinTests {
 
     /// runAsync correctly pipes stdin through to the child process for a small payload.
-    /// Note: Swift Testing .timeLimit only accepts .minutes; .seconds is not available.
-    /// 1 minute is the minimum granularity and is intentionally loose vs the original 5 s XCTest limit.
+    /// Note: .timeLimit(.minutes(1)) is used intentionally — 1 minute is a loose upper bound
+    /// for a fast operation. .seconds is available in Swift 6+ but minutes gives more headroom on CI.
     @Test(.timeLimit(.minutes(1)))
     func runAsyncStdinSmallPayloadRoundtrip() async {
         let input = "hello stdin"
@@ -1021,8 +1026,8 @@ struct ProcessRunnerRunAsyncStdinTests {
 
     /// runAsync does NOT deadlock with a large stdin payload (1 MB — above the ~64 KB kernel pipe buffer).
     /// Regression test for the pre-launch synchronous write bug in #1228.
-    /// Note: Swift Testing .timeLimit only accepts .minutes; .seconds is not available.
-    /// 1 minute is the minimum granularity and is intentionally loose vs the original 10 s XCTest limit.
+    /// Note: .timeLimit(.minutes(1)) is used intentionally — 1 minute is a loose upper bound
+    /// for a slow-ish operation. .seconds is available in Swift 6+ but minutes gives more headroom on CI.
     @Test(.timeLimit(.minutes(1)))
     func runAsyncStdinLargePayloadRoundtrip() async {
         let input = String(repeating: "x", count: 1_024 * 1_024) // 1 MB
