@@ -105,7 +105,7 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
         let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        try await withCheckedThrowingContinuation { continuation in
+        let result: Result<Void, RunnerProxyStoreError> = await withCheckedContinuation { (continuation: CheckedContinuation<Result<Void, RunnerProxyStoreError>, Never>) in
             DispatchQueue.global(qos: .utility).async {
                 var messages: [String] = []
 
@@ -126,11 +126,15 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
                 }
 
                 if messages.isEmpty {
-                    continuation.resume()
+                    continuation.resume(returning: .success(()))
                 } else {
-                    continuation.resume(throwing: RunnerProxyStoreError.writeFailed(messages))
+                    continuation.resume(returning: .failure(RunnerProxyStoreError.writeFailed(messages)))
                 }
             }
+        }
+        switch result {
+        case .success: break
+        case .failure(let e): throw e
         }
     }
 

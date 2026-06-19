@@ -83,15 +83,20 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// actor's cooperative thread is never blocked.
     public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        let  Data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, RunnerConfigStoreError>) in
+        let loadResult: Result<Data, RunnerConfigStoreError> = await withCheckedContinuation { (continuation: CheckedContinuation<Result<Data, RunnerConfigStoreError>, Never>) in
             DispatchQueue.global(qos: .utility).async {
                 do {
                     let raw = Self.stripBOM(from: try Data(contentsOf: url))
-                    continuation.resume(returning: raw)
+                    continuation.resume(returning: .success(raw))
                 } catch {
-                    continuation.resume(throwing: RunnerConfigStoreError.decodeFailed(installPath))
+                    continuation.resume(returning: .failure(RunnerConfigStoreError.decodeFailed(installPath)))
                 }
             }
+        }
+        let  Data
+        switch loadResult {
+        case .success(let d): data = d
+        case .failure(let e): throw e
         }
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
@@ -117,7 +122,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     public func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         let url = runnerConfigURL(for: installPath)
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, RunnerConfigStoreError>) in
+        let result: Result<Void, RunnerConfigStoreError> = await withCheckedContinuation { (continuation: CheckedContinuation<Result<Void, RunnerConfigStoreError>, Never>) in
             DispatchQueue.global(qos: .utility).async {
                 // Read-modify-write: load existing keys so agent-managed keys are preserved.
                 var raw: [String: AnyJSON] = [:]
@@ -164,12 +169,16 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                     let data = try encoder.encode(raw)
                     try data.write(to: url, options: .atomic)
                     log("RunnerConfigStore › saved config to \(url.path)")
-                    continuation.resume()
+                    continuation.resume(returning: .success(()))
                 } catch {
                     log("RunnerConfigStore › save failed for \(url.path): \(error)")
-                    continuation.resume(throwing: RunnerConfigStoreError.writeFailed(installPath, error))
+                    continuation.resume(returning: .failure(RunnerConfigStoreError.writeFailed(installPath, error)))
                 }
             }
+        }
+        switch result {
+        case .success: break
+        case .failure(let e): throw e
         }
     }
 
