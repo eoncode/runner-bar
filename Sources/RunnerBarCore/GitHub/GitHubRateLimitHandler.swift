@@ -55,6 +55,9 @@ public actor RateLimitActor {
         } else {
             delay = 3600
         }
+        // Derive resetDate from the clamped delay so the UI countdown matches
+        // the actual auto-clear time even when the raw server timestamp falls
+        // outside the [5, 7200] clamp range.
         let date = Date().addingTimeInterval(delay)
         log("RateLimitActor › arming: delay=\(Int(delay))s resetDate=\(date)")
         generation &+= 1
@@ -62,10 +65,14 @@ public actor RateLimitActor {
         resetTask?.cancel()
         isLimited = true
         resetDate = date
+        // No [weak self] — rateLimitActor is a module-level `let` constant that
+        // lives for the entire process lifetime. A weak reference would always
+        // resolve to non-nil, making the guard branch unreachable dead code.
         resetTask = Task {
             do {
                 try await Task.sleep(for: .seconds(delay))
             } catch {
+                // Cancelled — a newer set(resetAt:) has taken over; do nothing.
                 return
             }
             await self.didFire(generation: capturedGeneration, scheduledDelay: delay)
@@ -73,6 +80,11 @@ public actor RateLimitActor {
     }
 
     /// Clears the rate-limit flag and cancels any pending reset task.
+    ///
+    /// Unconditional: both `isLimited` and `resetDate` are always reset together
+    /// to keep them consistent. Clearing only `isLimited` while leaving a stale
+    /// `resetDate` would cause the UI to show a countdown for a limit that is no
+    /// longer active.
     public func clear() {
         resetTask?.cancel()
         resetTask = nil
@@ -87,6 +99,13 @@ public actor RateLimitActor {
 
     // MARK: Private
 
+    /// Fires when the `Task.sleep` in `set(resetAt:)` completes without cancellation.
+    ///
+    /// The `generation` check guards against a subtle race: a reset task that has
+    /// already exited `Task.sleep` (so `Task.cancel()` can no longer stop it) may
+    /// arrive here *after* a newer `set(resetAt:)` has incremented `self.generation`.
+    /// Without the check, the stale task would clear `isLimited` and `resetDate` for
+    /// the newer, still-active rate-limit window — silently unblocking the app mid-limit.
     private func didFire(generation: Int, scheduledDelay: TimeInterval) {
         guard generation == self.generation else {
             log("RateLimitActor › stale didFire ignored (gen=\(generation) current=\(self.generation))")
