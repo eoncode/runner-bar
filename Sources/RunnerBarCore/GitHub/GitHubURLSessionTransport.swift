@@ -75,14 +75,11 @@ private func urlSessionExecute(
             return .networkError(URLError(.badServerResponse))
         }
         if http.statusCode == 403 || http.statusCode == 429 {
-            let wasRateLimited = await rateLimitActor.isLimited
             await handleRateLimitResponse(
                 statusCode: http.statusCode, data, response: http, endpoint: urlString
             )
             let isNowRateLimited = await rateLimitActor.isLimited
-            if isNowRateLimited && !wasRateLimited {
-                return .rateLimited
-            } else if isNowRateLimited {
+            if isNowRateLimited {
                 return .rateLimited
             } else {
                 return .permissionDenied
@@ -435,11 +432,12 @@ public func fetchRemovalToken(scope scopeString: String) async -> String? {
 /// Thin convenience wrapper over `urlSessionPost` for fire-and-forget mutation endpoints.
 /// - Returns: `true` if the POST returned a non-nil result (2xx), `false` otherwise.
 ///
-/// Uses `nonisolated(nonsending)` rather than `@concurrent`: this function has no work
-/// before its first suspension and immediately delegates to the already-`@concurrent`
-/// `urlSessionPost`. Caller-context inheritance is always correct here.
+/// Uses `@concurrent` because this function has post-suspension work (nil-check + log)
+/// that must run on the cooperative thread pool regardless of the caller's executor.
+/// Unlike the pure-delegate wrappers `ghAPI` / `ghAPIPaginated`, this function is not
+/// a straight pass-through and therefore does not qualify for `nonisolated(nonsending)`.
+@concurrent
 @discardableResult
-nonisolated(nonsending)
 public func ghPost(_ endpoint: String) async -> Bool {
     let result = await urlSessionPost(endpoint)
     let success = result != nil
