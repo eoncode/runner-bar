@@ -105,13 +105,9 @@ public struct SaveRunnerEditsUseCase: Sendable {
                 config.disableUpdate = draft.autoUpdate ? nil : true
                 try await configStore.save(config, at: installPath)
             } catch {
-                // Exhaustive switch — compiler enforces all RunnerConfigStoreError
-                // cases are handled, matching the P22 intent of Step 3.
-                // Note: .readFailed can arise here from save()'s internal
-                // read-modify-write pre-read, not from the caller's load() call.
-                // Use the canonical errorDescription from RunnerConfigStoreError
-                // (which contains "runner configuration") as the single source of truth
-                // for user-facing messages rather than duplicating the wording here.
+                // .readFailed arises from the configStore.load(at:) call above.
+                // save()'s internal read-modify-write pre-read uses try? and never throws.
+                // Delegate to RunnerConfigStoreError.errorDescription — single source of truth.
                 errors.append(error.localizedDescription)
             }
         }
