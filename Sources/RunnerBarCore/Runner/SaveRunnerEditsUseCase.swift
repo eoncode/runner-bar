@@ -138,7 +138,10 @@ public struct SaveRunnerEditsUseCase: Sendable {
             } catch {
                 switch error {
                 case .writeFailed(let messages):
-                    errors.append(contentsOf: messages)
+                    // Wrap the per-file internal messages into a single user-facing
+                    // string rather than leaking raw DispatchQueue-level detail.
+                    // The full detail is already logged inside RunnerProxyStore.
+                    errors.append("Cannot write proxy files at \(installPath): \(messages.joined(separator: "; "))")
                 }
             }
         }
