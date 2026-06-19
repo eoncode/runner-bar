@@ -11,7 +11,7 @@ private func makeRunner(
     runnerName: String = "test-runner",
     agentId: Int? = 42,
     gitHubUrl: String? = "https://github.com/owner/repo",
-    installPath: String? = "/tmp/runner"
+    installPath: String? = testRunnerInstallPath
 ) -> RunnerModel {
     RunnerModel(
         runnerName: runnerName,
