@@ -95,6 +95,10 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
     ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
     ///   load → save round-trip is idempotent. Callers must not rely on
     ///   preserving surrounding whitespace in proxy credentials.
+    ///
+    /// `withCheckedThrowingContinuation` requires `E == any Error`; typed errors
+    /// are not supported by that API. The typed `RunnerProxyStoreError` is
+    /// re-thrown in the surrounding `do/catch` — consistent with `RunnerConfigStore`.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
         let base = URL(fileURLWithPath: installPath)
         let proxyURL = base.appendingPathComponent(".proxy")
@@ -105,36 +109,38 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
         let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let result: Result<Void, RunnerProxyStoreError> = await withCheckedContinuation { (continuation: CheckedContinuation<Result<Void, RunnerProxyStoreError>, Never>) in
-            DispatchQueue.global(qos: .utility).async {
-                var messages: [String] = []
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                DispatchQueue.global(qos: .utility).async {
+                    var messages: [String] = []
 
-                do {
-                    try Self.writeProxyURL(url, to: proxyURL)
-                } catch {
-                    let msg = ".proxy write error: \(error)"
-                    log("RunnerProxyStore › \(msg)")
-                    messages.append(msg)
-                }
+                    do {
+                        try Self.writeProxyURL(url, to: proxyURL)
+                    } catch {
+                        let msg = ".proxy write error: \(error)"
+                        log("RunnerProxyStore › \(msg)")
+                        messages.append(msg)
+                    }
 
-                do {
-                    try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL)
-                } catch {
-                    let msg = ".proxycredentials write error: \(error)"
-                    log("RunnerProxyStore › \(msg)")
-                    messages.append(msg)
-                }
+                    do {
+                        try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL)
+                    } catch {
+                        let msg = ".proxycredentials write error: \(error)"
+                        log("RunnerProxyStore › \(msg)")
+                        messages.append(msg)
+                    }
 
-                if messages.isEmpty {
-                    continuation.resume(returning: .success(()))
-                } else {
-                    continuation.resume(returning: .failure(RunnerProxyStoreError.writeFailed(messages)))
+                    if messages.isEmpty {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: RunnerProxyStoreError.writeFailed(messages))
+                    }
                 }
             }
-        }
-        switch result {
-        case .success: break
-        case .failure(let e): throw e
+        } catch let e as RunnerProxyStoreError {
+            throw e
+        } catch {
+            throw RunnerProxyStoreError.writeFailed([error.localizedDescription])
         }
     }
 
