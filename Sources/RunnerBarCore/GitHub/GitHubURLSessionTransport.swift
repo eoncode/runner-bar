@@ -4,12 +4,14 @@
 import Foundation
 
 /// Shared decoder hoisted to avoid re-instantiation on every call.
-/// Thread-safe: `JSONDecoder` has no mutable state after initialisation.
-/// Safe for concurrent use: Foundation guarantees `JSONDecoder` is reentrant after init.
+/// Thread-safe: `JSONDecoder` has no mutable state after initialisation and is safe
+/// for concurrent reads in practice; this is consistent with Apple's own sample code
+/// and established community practice, though not a formally documented API guarantee.
 private let sharedDecoder = JSONDecoder()
 /// Shared encoder hoisted to avoid re-instantiation on every call.
-/// Thread-safe: `JSONEncoder` has no mutable state after initialisation.
-/// Safe for concurrent use: Foundation guarantees `JSONEncoder` is reentrant after init.
+/// Thread-safe: `JSONEncoder` has no mutable state after initialisation and is safe
+/// for concurrent reads in practice; this is consistent with Apple's own sample code
+/// and established community practice, though not a formally documented API guarantee.
 private let sharedEncoder = JSONEncoder()
 
 // MARK: - Shared execution core
@@ -21,6 +23,9 @@ private enum ExecuteResult {
     /// Non-2xx response that is not a rate-limit or permission error; the request failed.
     case httpError(Int)
     /// 403 or 429 that triggered the rate-limit actor (genuine rate limit).
+    /// Covers both the case where this request freshly armed the actor and the case
+    /// where the actor was already armed by a concurrent caller — callers treat both
+    /// identically (back off and retry).
     case rateLimited
     /// 403 that did NOT trigger the rate-limit actor — token scope, revoked PAT, or
     /// repo access denial. The actor is not armed; the token needs attention.
@@ -120,7 +125,8 @@ public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) a
 ///
 /// - Note: This function owns its own URLSession loop rather than delegating to
 ///   `urlSessionExecute`. Any fix to the shared execute pipeline must be mirrored here
-///   until this is refactored. See the dual-code-path tracking issue.
+///   until this is refactored.
+// TODO: Refactor to delegate to urlSessionExecute and eliminate this dual code path.
 @concurrent
 public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
@@ -147,14 +153,9 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
                 break
             }
             if http.statusCode == 403 || http.statusCode == 429 {
-                let wasRateLimited = await rateLimitActor.isLimited
                 await handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-                let isNowRateLimited = await rateLimitActor.isLimited
-                if isNowRateLimited && !wasRateLimited {
+                if await rateLimitActor.isLimited {
                     log("urlSessionAPIPaginated › rate limited — returning \(allItems.count) partial items")
-                    didRateLimit = true
-                } else if isNowRateLimited {
-                    log("urlSessionAPIPaginated › ongoing rate limit — returning \(allItems.count) partial items")
                     didRateLimit = true
                 } else {
                     log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
@@ -286,6 +287,10 @@ public func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) asy
 /// - Note: Safe to call from `@MainActor` because `urlSessionAPIAsync` is `@concurrent`
 ///   and will move execution to the cooperative thread pool at the first `await`.
 ///   Do not perform heavy synchronous work before this call from a `@MainActor` context.
+///
+/// - IMPORTANT: This function must remain a pure pass-through with no synchronous work
+///   before the `await`. If any guard, log, or computation is ever added before the first
+///   suspension, this annotation must be upgraded to `@concurrent`.
 nonisolated(nonsending)
 public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
@@ -302,6 +307,10 @@ public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data?
 /// - Note: Safe to call from `@MainActor` because `urlSessionAPIPaginated` is `@concurrent`
 ///   and will move execution to the cooperative thread pool at the first `await`.
 ///   Do not perform heavy synchronous work before this call from a `@MainActor` context.
+///
+/// - IMPORTANT: This function must remain a pure pass-through with no synchronous work
+///   before the `await`. If any guard, log, or computation is ever added before the first
+///   suspension, this annotation must be upgraded to `@concurrent`.
 nonisolated(nonsending)
 public func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
     await urlSessionAPIPaginated(endpoint, timeout: timeout)
