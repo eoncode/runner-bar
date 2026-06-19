@@ -134,6 +134,7 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
     var allItems: [AnyJSON] = []
     var didFailAuthentication = false
     var didFailPermission = false
+    var didRateLimit = false
 
     while let urlString = nextURL {
         guard let token = githubTokenCore() else {
@@ -163,9 +164,11 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
                 if isNowRateLimited && !wasRateLimited {
                     // Newly armed by this response — genuine rate limit.
                     log("urlSessionAPIPaginated › rate limited — returning \(allItems.count) partial items")
+                    didRateLimit = true
                 } else if isNowRateLimited {
                     // Actor was already armed before this request — ongoing rate limit.
                     log("urlSessionAPIPaginated › ongoing rate limit — returning \(allItems.count) partial items")
+                    didRateLimit = true
                 } else {
                     // handleRateLimitResponse did not arm the actor — permission-denied 403.
                     log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
@@ -197,8 +200,7 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
         }
         return nil
     }
-    let isRateLimited = await ghIsRateLimited
-    if isRateLimited && !allItems.isEmpty {
+    if didRateLimit && !allItems.isEmpty {
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
     guard !allItems.isEmpty else { return nil }
