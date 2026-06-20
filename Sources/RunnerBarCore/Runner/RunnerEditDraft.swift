@@ -12,6 +12,9 @@ import Foundation
 /// until the user confirms (OK) or discards (Cancel) in `RunnerDetailPopover`.
 ///
 /// No persistence writes happen inside this type.
+///
+/// - Note: Intended for single use. Pass to `SaveRunnerEditsUseCase.execute(draft:)`
+///   exactly once — the `consuming` annotation on that parameter enforces this at compile time.
 public struct RunnerEditDraft: Equatable, Sendable {
 
     // MARK: Labels

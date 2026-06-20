@@ -13,5 +13,5 @@ public protocol RunnerConfigStoreProtocol: Sendable {
     /// Loads the typed runner config from `installPath/.runner`.
     func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig
     /// Saves the typed runner config to `installPath/.runner`.
-    func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError)
+    func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError)
 }

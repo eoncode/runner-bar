@@ -56,7 +56,7 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
         if shouldThrowOnDecode { throw RunnerConfigStoreError.decodeFailed(installPath) }
         return loadResult
     }
-    func save(_ config: RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
+    func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         if shouldThrowOnSave { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
         saveCalled = true
         savedConfig = config

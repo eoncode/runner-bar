@@ -64,9 +64,9 @@ public struct SaveRunnerEditsUseCase: Sendable {
     /// - Returns: `.success` when all writes succeed;
     ///   `.failure([String])` with human-readable messages otherwise.
     public func execute(
-        runner: RunnerModel,
-        draft: RunnerEditDraft,
-        original: RunnerEditDraft
+        runner: borrowing RunnerModel,
+        draft: consuming RunnerEditDraft,
+        original: borrowing RunnerEditDraft
     ) async -> CommitResult {
         var errors: [String] = []
 
