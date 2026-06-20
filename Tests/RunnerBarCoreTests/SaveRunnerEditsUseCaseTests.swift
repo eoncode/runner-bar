@@ -283,10 +283,12 @@ struct SaveRunnerEditsUseCaseTests {
         var draft    = RunnerEditDraft(runner: runner)
         let original = RunnerEditDraft(runner: runner)
         draft.workFolder = "custom_work"
+        // No proxyUrl change — Step 3 must be skipped entirely.
 
         let config  = SpyConfigStore()
+        let proxy   = SpyProxyStore()
         await config.setUp(shouldThrowMalformedOnSave: true)
-        let useCase = makeUseCase(config: config)
+        let useCase = makeUseCase(config: config, proxy: proxy)
 
         let result = await useCase.execute(runner: runner, draft: draft, original: original)
 
@@ -295,7 +297,9 @@ struct SaveRunnerEditsUseCaseTests {
             return
         }
         // Message must mention the path, malformed, and agent-managed keys
-        #expect(msgs.contains(where: { $0.contains("malformed") && $0.contains("/.runner") }))
+        #expect(msgs.contains(where: { $0.contains("malformed") && $0.contains("/.runner") && $0.contains("agent-managed") }))
+        // No proxy change — proxy step must not have run
+        #expect(await !proxy.saveCalled)
     }
 
     /// #1478 — configStore.save() throwing .malformedExistingFile must still allow

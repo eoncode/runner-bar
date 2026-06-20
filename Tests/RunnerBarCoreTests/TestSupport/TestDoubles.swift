@@ -77,6 +77,9 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         // Copy the borrowed value before storing — a `borrowing` parameter cannot be consumed.
         let config = copy config
+        // Flag priority: shouldThrowOnSave (.writeFailed) fires before shouldThrowMalformedOnSave
+        // (.malformedExistingFile). Setting both simultaneously is not meaningful — configure
+        // exactly one throw flag per test to avoid ambiguity.
         if shouldThrowOnSave          { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
         if shouldThrowMalformedOnSave { throw RunnerConfigStoreError.malformedExistingFile(installPath) }
         saveCalled = true

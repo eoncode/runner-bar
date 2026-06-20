@@ -127,7 +127,7 @@ public struct SaveRunnerEditsUseCase: Sendable {
                     // The existing .runner file is present but undecodable. Aborting rather
                     // than proceeding protects agent-managed keys (e.g. jitConfig) from
                     // being silently dropped during the read-modify-write merge.
-                    errors.append("Cannot save config at \(path)/.runner: existing file is malformed and agent-managed keys would be lost")
+                    errors.append("Cannot write config at \(path)/.runner: existing file is malformed and agent-managed keys would be lost")
                 }
             }
         }

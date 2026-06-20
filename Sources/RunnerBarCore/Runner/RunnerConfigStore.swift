@@ -52,6 +52,7 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// cannot be decoded (malformed JSON), `save()` throws `malformedExistingFile` rather
 /// than proceeding from an empty dictionary — which would silently drop agent-managed
 /// keys such as `jitConfig`. See `RunnerConfigStoreError.malformedExistingFile`.
+/// `load(at:)` never throws `malformedExistingFile` — only `readFailed` / `decodeFailed`.
 public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Shared instance
