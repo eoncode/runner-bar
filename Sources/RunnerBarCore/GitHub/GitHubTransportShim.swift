@@ -128,6 +128,16 @@ func ghRaw(_ endpoint: String) async -> Data? {
 /// Calls the configured paginated JSON transport for the given endpoint.
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
+///
+/// Uses `nonisolated(nonsending)` rather than `@concurrent`: this function has no work
+/// before its first suspension and immediately delegates to the already-`@concurrent`
+/// `urlSessionAPIPaginated`. Caller-context inheritance is always correct here; a
+/// cooperative-pool hop would be redundant.
+///
+/// - IMPORTANT: This function must remain a pure pass-through with no synchronous work
+///   before the `await`. If any guard, log, or computation is ever added before the first
+///   suspension, this annotation must be upgraded to `@concurrent`.
+nonisolated(nonsending)
 public func ghAPIPaginated(_ endpoint: String) async -> Data? {
     let transport = paginatedTransportBox.read()
     return await transport(endpoint)

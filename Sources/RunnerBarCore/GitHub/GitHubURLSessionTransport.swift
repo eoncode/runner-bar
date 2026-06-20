@@ -136,7 +136,7 @@ public func urlSessionAPIPaginated(
     var didFailPermission = false
     var didRateLimit = false
 
-    while let urlString = nextURL {
+    pagination: while let urlString = nextURL {
         let result = await urlSessionExecute(
             urlString, timeout: timeout, logTag: "urlSessionAPIPaginated",
             rateLimiter: rateLimiter
@@ -145,27 +145,30 @@ public func urlSessionAPIPaginated(
         case .success(let data, _, let linkHeader):
             if let page = try? sharedDecoder.decode([AnyJSON].self, from: data) {
                 allItems.append(contentsOf: page)
+                nextURL = extractNextURL(from: linkHeader)
             } else {
                 log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
-                break
+                break pagination
             }
-            nextURL = extractNextURL(from: linkHeader)
         case .httpError(401):
             log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
             didFailAuthentication = true
+            break pagination
         case .httpError:
             log("urlSessionAPIPaginated › non-2xx error at \(urlString) — stopping pagination")
+            break pagination
         case .rateLimited:
             log("urlSessionAPIPaginated › rate limited — \(allItems.count) items collected so far")
             didRateLimit = true
+            break pagination
         case .permissionDenied:
             log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
             didFailPermission = true
+            break pagination
         case .networkError:
             log("urlSessionAPIPaginated › network error at \(urlString) — stopping pagination")
+            break pagination
         }
-        // Break out of while loop on any non-success result
-        if case .success = result { /* continue */ } else { break }
     }
 
     if didFailAuthentication || didFailPermission {
