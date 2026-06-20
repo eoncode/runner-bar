@@ -80,7 +80,7 @@ extension WorkflowActionGroup {
     /// `true` when the group is completed and its conclusion is neither success nor failure.
     var isDimmed: Bool {
         guard groupStatus == .completed else { return false }
-        return conclusion != "success" && conclusion != "failure"
+        return conclusion != .success && conclusion?.isFailure != true
     }
 
     /// `true` when the group originated from a self-hosted (local) runner.

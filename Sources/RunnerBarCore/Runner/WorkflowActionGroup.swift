@@ -266,15 +266,13 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
     /// has not yet concluded, to prevent a premature FAILED badge.
     ///
     /// ⚠️ NORMALISATION NOTE — run-based fallback:
-    /// The run-based fallback (reached only while `jobs.isEmpty`) returns the string
-    /// `"failure"` for **all** `isFailure` conclusions, including `.actionRequired`
-    /// (raw value `"action_required"`), `.timedOut`, and `.startupFailure`. This is
-    /// intentional: the run-based path is a **loading-state placeholder** only. Once
-    /// jobs populate, the job-based path above takes over with the same `"failure"`
-    /// string. No downstream consumer should specialise on `"action_required"` vs
-    /// `"failure"` during this window — if that need arises, promote the return type
-    /// to `JobConclusion?` and let callers switch on the enum directly.
-    public var conclusion: String? {
+    /// The run-based fallback (reached only while `jobs.isEmpty`) returns
+    /// `JobConclusion.failure` for **all** `isFailure` conclusions, including `.actionRequired`,
+    /// `.timedOut`, and `.startupFailure`. This is intentional: the run-based path is a
+    /// **loading-state placeholder** only. Once jobs populate, the job-based path above
+    /// takes over with the precise `JobConclusion` value. Callers can switch on the enum
+    /// directly for full type-safety.
+    public var conclusion: JobConclusion? {
         // Job-based conclusion (preferred) — use when data is fully loaded.
         if !jobs.isEmpty {
             // Only conclude when every single job has a conclusion.
@@ -286,27 +284,27 @@ public struct WorkflowActionGroup: Identifiable, Equatable, Sendable {
             // aligned with the run-based fallback below (and PollResultBuilder /
             // FailureHookRunner). Previously this matched only `.failure`, so a
             // `.timedOut` / `.startupFailure` / `.actionRequired` group reported
-            // "failure" while jobs were loading, then incorrectly flipped to
-            // "success" once jobs populated.
-            if jobs.contains(where: { $0.conclusion?.isFailure == true }) { return "failure" }
-            if jobs.contains(where: { $0.conclusion == .cancelled }) { return "cancelled" }
+            // failure while jobs were loading, then incorrectly flipped to
+            // success once jobs populated.
+            if jobs.contains(where: { $0.conclusion?.isFailure == true }) { return .failure }
+            if jobs.contains(where: { $0.conclusion == .cancelled }) { return .cancelled }
             let hasSuccess = jobs.contains(where: { $0.conclusion == .success })
             let allSkippedOrCancelled = jobs.allSatisfy {
                 $0.conclusion == .skipped || $0.conclusion == .cancelled
             }
-            if !hasSuccess && allSkippedOrCancelled { return "skipped" }
-            return "success"
+            if !hasSuccess && allSkippedOrCancelled { return .skipped }
+            return .success
         }
         // Run-based conclusion (fallback when jobs haven't loaded yet).
         // ⚠️ This path is only reached when jobs is empty (loading state).
         // Once jobs are populated the block above takes over.
         // All isFailure conclusions (.actionRequired, .timedOut, .startupFailure, .failure)
-        // normalise to "failure" here — see NORMALISATION NOTE in the doc comment above.
+        // normalise to .failure here — see NORMALISATION NOTE in the doc comment above.
         guard runs.allSatisfy({ $0.conclusion != nil }) else { return nil }
-        if runs.contains(where: { $0.conclusion?.isFailure == true }) { return "failure" }
-        if runs.contains(where: { $0.conclusion == .cancelled }) { return "cancelled" }
-        if runs.contains(where: { $0.conclusion == .skipped }) { return "skipped" }
-        return "success"
+        if runs.contains(where: { $0.conclusion?.isFailure == true }) { return .failure }
+        if runs.contains(where: { $0.conclusion == .cancelled }) { return .cancelled }
+        if runs.contains(where: { $0.conclusion == .skipped }) { return .skipped }
+        return .success
     }
 
     /// Number of jobs with a concluded result across all sibling runs.

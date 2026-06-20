@@ -106,8 +106,8 @@ struct ActionRowView: View {
         case .queued: return .queued
         case .completed:
             switch group.conclusion {
-            case "success": return .success
-            case "failure": return .failed
+            case .success: return .success
+            case .failure, .timedOut, .actionRequired, .startupFailure: return .failed
             default: return .unknown
             }
         }
@@ -201,8 +201,11 @@ struct ActionRowView: View {
         case .queued: StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             switch group.conclusion {
-            case "success": StatusBadge(status: .success, text: "SUCCESS")
-            case "failure": StatusBadge(status: .failed, text: "FAILED")
+            case .success: StatusBadge(status: .success, text: "SUCCESS")
+            case .failure, .timedOut, .actionRequired, .startupFailure:
+                StatusBadge(status: .failed, text: "FAILED")
+            case .cancelled: StatusBadge(status: .unknown, text: "CANCELLED")
+            case .skipped: StatusBadge(status: .unknown, text: "SKIPPED")
             default: StatusBadge(status: .unknown, text: "DONE")
             }
         }
