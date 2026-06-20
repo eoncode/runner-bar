@@ -128,7 +128,7 @@ func ghRaw(_ endpoint: String) async -> Data? {
 /// Calls the configured paginated JSON transport for the given endpoint.
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
-func ghAPIPaginated(_ endpoint: String) async -> Data? {
+public func ghAPIPaginated(_ endpoint: String) async -> Data? {
     let transport = paginatedTransportBox.read()
     return await transport(endpoint)
 }
