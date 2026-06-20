@@ -12,7 +12,7 @@ import Foundation
 /// until the user confirms (OK) or discards (Cancel) in `RunnerDetailPopover`.
 ///
 /// Once the user confirms, the draft is passed to `SaveRunnerEditsUseCase.execute(...)`
-/// where it crosses an actor isolation boundary. The parameter is annotated `sending`
+/// where it crosses an actor isolation boundary. The parameter is annotated `consuming`
 /// at that call site so the compiler (and future readers) understand that ownership
 /// transfers into the async function and the caller should not read the draft afterwards.
 ///
