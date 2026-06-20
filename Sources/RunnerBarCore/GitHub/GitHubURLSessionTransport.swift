@@ -284,26 +284,6 @@ public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data?
     await urlSessionAPIAsync(endpoint, timeout: timeout)
 }
 
-/// Calls the GitHub REST API for all pages via URLSession.
-/// Returns `nil` when no token is available or the request fails.
-///
-/// Uses `nonisolated(nonsending)` rather than `@concurrent`: this function has no work
-/// before its first suspension and immediately delegates to the already-`@concurrent`
-/// `urlSessionAPIPaginated`. Caller-context inheritance is always correct here; a
-/// cooperative-pool hop would be redundant.
-///
-/// - Note: Safe to call from `@MainActor` because `urlSessionAPIPaginated` is `@concurrent`
-///   and will move execution to the cooperative thread pool at the first `await`.
-///   Do not perform heavy synchronous work before this call from a `@MainActor` context.
-///
-/// - IMPORTANT: This function must remain a pure pass-through with no synchronous work
-///   before the `await`. If any guard, log, or computation is ever added before the first
-///   suspension, this annotation must be upgraded to `@concurrent`.
-nonisolated(nonsending)
-public func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-    await urlSessionAPIPaginated(endpoint, timeout: timeout)
-}
-
 // MARK: - Runner mutation helpers
 
 /// Directly deregisters a runner from GitHub via DELETE.
@@ -432,8 +412,8 @@ public func fetchRemovalToken(scope scopeString: String) async -> String? {
 ///
 /// Uses `@concurrent` because this function has post-suspension work (nil-check + log)
 /// that must run on the cooperative thread pool regardless of the caller's executor.
-/// Unlike the pure-delegate wrappers `ghAPI` / `ghAPIPaginated`, this function is not
-/// a straight pass-through and therefore does not qualify for `nonisolated(nonsending)`.
+/// Unlike the pure-delegate wrapper `ghAPI`, this function is not a straight pass-through
+/// and therefore does not qualify for `nonisolated(nonsending)`.
 @concurrent
 @discardableResult
 public func ghPost(_ endpoint: String) async -> Bool {

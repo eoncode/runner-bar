@@ -24,6 +24,7 @@ extension AppDelegate {
         configureGHToken { githubToken() }
         configureGHAPI { endpoint in await ghAPI(endpoint) }
         configureGHRaw { endpoint in await urlSessionRaw(endpoint) }
+        configureGHAPIPaginated { endpoint in await urlSessionAPIPaginated(endpoint) }
         setupStatusItem()
         setupPanel()
         setupSignOutSubscription()
