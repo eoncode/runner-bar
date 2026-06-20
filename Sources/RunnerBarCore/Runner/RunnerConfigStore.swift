@@ -12,6 +12,12 @@ public enum RunnerConfigStoreError: LocalizedError {
     case decodeFailed(String)
     /// The updated config could not be serialised or written to disk.
     case writeFailed(String, any Error)
+    /// The existing `.runner` file is present but cannot be decoded during a save.
+    ///
+    /// Proceeding from an empty dict would silently drop agent-managed keys such as
+    /// `jitConfig`, de-registering ephemeral JIT runners with no user-visible error.
+    /// The caller must surface this error before attempting a write.
+    case malformedExistingFile(String)
 
     /// A human-readable description of the error.
     public var errorDescription: String? {
@@ -22,6 +28,8 @@ public enum RunnerConfigStoreError: LocalizedError {
             "Failed to decode runner configuration at \(installPath)/.runner"
         case .writeFailed(let installPath, let underlying):
             "Failed to write runner configuration at \(installPath)/.runner: \(underlying.localizedDescription)"
+        case .malformedExistingFile(let installPath):
+            "Existing runner configuration at \(installPath)/.runner is malformed and cannot be safely overwritten — agent-managed keys would be lost"
         }
     }
 }
@@ -153,9 +161,13 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
                         if let dict = try? self.decoder.decode([String: AnyJSON].self, from: data) {
                             raw = dict
                         } else {
-                            // Decode failed — existing file is malformed. Proceeding
-                            // from an empty dict will drop unknown agent-managed keys on this save.
-                            log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
+                            // Decode failed — the file is present but malformed. Proceeding
+                            // from an empty dict would silently drop agent-managed keys (e.g.
+                            // jitConfig), de-registering ephemeral JIT runners. Throw so the
+                            // caller can surface the error instead of silently corrupting state.
+                            log("RunnerConfigStore › save: existing .runner at \(url.path) is malformed; aborting save to protect agent-managed keys")
+                            continuation.resume(throwing: RunnerConfigStoreError.malformedExistingFile(installPath))
+                            return
                         }
                     } else {
                         // File is missing or temporarily unreadable. Writing from scratch.
