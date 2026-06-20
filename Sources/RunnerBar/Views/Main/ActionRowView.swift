@@ -108,7 +108,8 @@ struct ActionRowView: View {
             switch group.conclusion {
             case .success: return .success
             case .failure, .timedOut, .actionRequired, .startupFailure: return .failed
-            default: return .unknown
+            case .cancelled, .skipped, .neutral, .stale, .unknown: return .unknown
+            case nil: return .unknown
             }
         }
     }
@@ -206,7 +207,8 @@ struct ActionRowView: View {
                 StatusBadge(status: .failed, text: "FAILED")
             case .cancelled: StatusBadge(status: .unknown, text: "CANCELLED")
             case .skipped: StatusBadge(status: .unknown, text: "SKIPPED")
-            default: StatusBadge(status: .unknown, text: "DONE")
+            case .neutral, .stale, .unknown: StatusBadge(status: .unknown, text: "DONE")
+            case nil: StatusBadge(status: .unknown, text: "DONE")
             }
         }
     }
