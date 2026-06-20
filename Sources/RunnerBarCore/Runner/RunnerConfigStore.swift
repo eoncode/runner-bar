@@ -129,6 +129,9 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the actor's
     /// cooperative thread is never blocked.
     public func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
+        // Copy the borrowed value before entering the escaping DispatchQueue closure —
+        // a `borrowing` parameter cannot be captured by an escaping closure directly.
+        let config = copy config
         let url = runnerConfigURL(for: installPath)
 
         // `withCheckedThrowingContinuation` requires `E == any Error`; typed errors are
