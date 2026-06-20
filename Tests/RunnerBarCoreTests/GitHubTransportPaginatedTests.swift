@@ -1,129 +1,279 @@
 // GitHubTransportPaginatedTests.swift
 // RunnerBarCoreTests
 //
-// Tests for urlSessionAPIPaginated via the configureGHAPIPaginated shim.
-// Covers: rate-limit partial return, 401 auth discard, permission-denied discard,
-// and rate-limit-actor clear on full success.
+// Integration tests for urlSessionAPIPaginated.
+// Uses URLProtocol stubbing + configureGHToken + SpyRateLimitActor to exercise
+// the real pagination loop, rate-limit partial-return, and auth-abort logic.
 //
 import Foundation
 import Testing
 @testable import RunnerBarCore
 
+// MARK: - StubURLProtocol
+
+/// A URLProtocol subclass that serves pre-registered per-URL responses.
+/// Register stubs before each test; the registry is cleared in teardown.
+final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+    /// A single canned response for one URL.
+    struct Stub {
+        let data: Data
+        let statusCode: Int
+        let headers: [String: String]
+    }
+
+    private static let lock = NSLock()
+    private static var stubs: [String: Stub] = [:]
+
+    static func register(_ stub: Stub, for url: String) {
+        lock.withLock { stubs[url] = stub }
+    }
+
+    static func reset() {
+        lock.withLock { stubs = [:] }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let key = request.url?.absoluteString ?? ""
+        let stub = StubURLProtocol.lock.withLock { StubURLProtocol.stubs[key] }
+        guard let stub else {
+            client?.urlProtocol(self, didFailWithError: URLError(.fileDoesNotExist))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: stub.statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: stub.headers
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: stub.data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 // MARK: - Helpers
 
-/// Encodes a `[[String: String]]` array to JSON `Data`.
-/// Used to build fake paginated API responses in tests.
+/// Encodes `[[String: String]]` to AnyJSON-compatible JSON Data.
 private func jsonPage(_ items: [[String: String]]) -> Data {
     (try? JSONEncoder().encode(items.map { $0.mapValues { AnyJSON.string($0) } })) ?? Data()
 }
 
+/// Decodes a JSON Data blob back to `[[String: AnyJSON]]` for assertion.
+private func decodeItems(_ data: Data?) -> [[String: AnyJSON]]? {
+    guard let data else { return nil }
+    return try? JSONDecoder().decode([[String: AnyJSON]].self, from: data)
+}
+
+/// Base URL used by all stubs (must match GitHubConstants.apiBase resolution).
+private let apiBase = "https://api.github.com/"
+
 // MARK: - GitHubTransportPaginatedTests
 
-/// Tests for the `urlSessionAPIPaginated` / `ghAPIPaginated` contract.
+/// Integration tests for `urlSessionAPIPaginated`.
 ///
-/// Strategy: inject behaviour via `configureGHAPIPaginated` — the same seam used
-/// in production. Each test configures a deterministic stub and asserts on the
-/// return value and, where relevant, the `SpyRateLimitActor` state.
+/// Strategy: register `StubURLProtocol` on `URLSession.shared`'s configuration,
+/// inject a real token via `configureGHToken`, and inject a `SpyRateLimitActor`
+/// to control and observe rate-limit state. Each test calls `urlSessionAPIPaginated`
+/// directly — the real pagination loop runs every time.
 @Suite("GitHubTransportPaginated")
 struct GitHubTransportPaginatedTests {
 
-    // MARK: - Full success path
+    init() {
+        // Register stub protocol and a valid token before every test.
+        URLProtocol.registerClass(StubURLProtocol.self)
+        configureGHToken { "test-token" }
+    }
 
-    /// A stub that returns two pages of items should yield a combined JSON array
-    /// and the rate-limit actor's `clear()` should have been called once.
+    // Teardown via deinit is not available on structs; stubs are reset at the
+    // top of each test to keep tests independent.
+
+    // MARK: - Happy path: two-page accumulation
+
+    /// Two pages linked via `Link: rel="next"` are fetched and combined.
     ///
-    /// This exercises the happy path end-to-end through the shim and verifies
-    /// that a successful run clears any previously-armed rate-limit state.
-    @Test func paginatedClearsRateLimitOnSuccess() async {
-        // Arrange: two-page stub encoded as a combined array (shim contract).
-        let page1 = [["id": "1", "name": "runner-a"]]
-        let page2 = [["id": "2", "name": "runner-b"]]
-        let combined: [[String: String]] = page1 + page2
-        let expectedData = try? JSONEncoder().encode(
-            combined.map { $0.mapValues { AnyJSON.string($0) } }
-        )
+    /// Verifies: pagination loop follows the Link header and `allItems` is
+    /// correctly accumulated across both pages.
+    @Test func paginatedHappyPathAccumulatesTwoPages() async {
+        StubURLProtocol.reset()
+        let page1URL = "\(apiBase)orgs/test/actions/runners"
+        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
+        let page1Data = jsonPage([["id": "1", "name": "runner-a"]])
+        let page2Data = jsonPage([["id": "2", "name": "runner-b"]])
 
-        configureGHAPIPaginated { _ in expectedData }
+        StubURLProtocol.register(.init(
+            data: page1Data,
+            statusCode: 200,
+            headers: ["Link": "<\(page2URL)>; rel=\"next\""]
+        ), for: page1URL)
+        StubURLProtocol.register(.init(
+            data: page2Data,
+            statusCode: 200,
+            headers: [:]
+        ), for: page2URL)
 
-        // Act
-        let result = await ghAPIPaginated("/orgs/test/actions/runners")
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
 
-        // Assert: combined payload returned
-        #expect(result == expectedData)
+        let items = decodeItems(result)
+        #expect(items?.count == 2)
+        #expect(items?[0]["id"] == .string("1"))
+        #expect(items?[1]["id"] == .string("2"))
+        // A successful run must clear any previously-armed rate limit.
+        let wasClearCalled = await spy.clearCalled
+        #expect(wasClearCalled)
+    }
+
+    // MARK: - Non-array body stops pagination gracefully
+
+    /// A 200 response with a non-array JSON body stops pagination and returns
+    /// items collected so far (not nil, not a crash).
+    ///
+    /// Verifies: the labeled `break pagination` on the decode-failure path exits
+    /// the while loop correctly (regression guard for the unlabeled-break bug).
+    @Test func paginatedStopsOnNonArrayBody() async {
+        StubURLProtocol.reset()
+        let page1URL = "\(apiBase)orgs/test/actions/runners"
+        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
+        let page1Data = jsonPage([["id": "1"]])
+        // Non-array body on page 2 — e.g. a GitHub error object.
+        let badData = "{\"message\":\"unexpected\"}".data(using: .utf8)!
+
+        StubURLProtocol.register(.init(
+            data: page1Data,
+            statusCode: 200,
+            headers: ["Link": "<\(page2URL)>; rel=\"next\""]
+        ), for: page1URL)
+        StubURLProtocol.register(.init(
+            data: badData,
+            statusCode: 200,
+            headers: [:]
+        ), for: page2URL)
+
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        // Page 1 was accumulated before the bad page stopped things.
+        let items = decodeItems(result)
+        #expect(items?.count == 1)
+        #expect(items?[0]["id"] == .string("1"))
     }
 
     // MARK: - Rate-limit partial return
 
-    /// When pagination is interrupted by a rate limit, any items collected
-    /// before the limit was hit must be returned (not discarded).
+    /// A genuine 429 rate-limit mid-pagination arms the spy and returns partial items.
     ///
-    /// This verifies that `urlSessionAPIPaginated` does NOT discard partial
-    /// results on `.rateLimited` — in contrast to auth/permission failures
-    /// which must return `nil`.
+    /// Verifies: `.rateLimited` path returns collected items (not nil), and
+    /// `SpyRateLimitActor.setCalled` is true — confirming the injected actor
+    /// (not the global) was armed.
     @Test func paginatedReturnsPartialResultsOnRateLimit() async {
-        // Arrange: stub returns partial data (simulates one page collected before rate-limit).
-        let partial = [["id": "1", "name": "runner-a"]]
-        let partialData = try? JSONEncoder().encode(
-            partial.map { $0.mapValues { AnyJSON.string($0) } }
-        )
-        // A real rate-limited paginator would return whatever was collected so far.
-        configureGHAPIPaginated { _ in partialData }
+        StubURLProtocol.reset()
+        let page1URL = "\(apiBase)orgs/test/actions/runners"
+        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
+        let page1Data = jsonPage([["id": "1", "name": "runner-a"]])
 
-        // Act
-        let result = await ghAPIPaginated("/orgs/test/actions/runners")
+        StubURLProtocol.register(.init(
+            data: page1Data,
+            statusCode: 200,
+            headers: ["Link": "<\(page2URL)>; rel=\"next\""]
+        ), for: page1URL)
+        // 429 on page 2 — genuine rate limit (always a rate limit by definition).
+        StubURLProtocol.register(.init(
+            data: Data(),
+            statusCode: 429,
+            headers: ["X-RateLimit-Remaining": "0"]
+        ), for: page2URL)
 
-        // Assert: partial payload returned, not nil
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        // Partial results from page 1 must be returned.
+        let items = decodeItems(result)
+        #expect(items?.count == 1)
         #expect(result != nil)
-        #expect(result == partialData)
+        // The injected spy — not the global — must have been armed.
+        let wasSetCalled = await spy.setCalled
+        #expect(wasSetCalled)
     }
 
-    // MARK: - 401 auth failure
+    // MARK: - Permission-denied discards all items
 
-    /// On a 401 Unauthorized response, `urlSessionAPIPaginated` must discard all
-    /// partially collected items and return `nil`.
+    /// A plain 403 with no rate-limit headers is permission-denied: partial items
+    /// are discarded and nil is returned. The spy must NOT be armed.
     ///
-    /// This covers the critical auth-abort semantics that must survive the
-    /// `urlSessionAPIPaginated` → `urlSessionExecute` refactor (#1476 AC).
-    @Test func paginatedReturnsNilOnAuthFailure401() async {
-        // Arrange: stub returns nil (simulates auth failure path).
-        configureGHAPIPaginated { _ in nil }
-
-        // Act
-        let result = await ghAPIPaginated("/orgs/test/actions/runners")
-
-        // Assert: nil returned — no partial data leaked
-        #expect(result == nil)
-    }
-
-    // MARK: - Permission-denied discard
-
-    /// On a 403 permission-denied response (token has insufficient scope),
-    /// partial results must be discarded and `nil` returned.
-    ///
-    /// Distinct from a genuine rate-limit 403 (which arms the rate-limit actor
-    /// and returns partial results). The distinguishing signal is whether the
-    /// rate-limit actor becomes armed after the response.
+    /// Verifies: `.permissionDenied` path returns nil, and `SpyRateLimitActor.setCalled`
+    /// is false — confirming the injected actor distinguishes rate-limit from perm-denied.
     @Test func paginatedReturnsNilOnPermissionDenied() async {
-        // Arrange: stub returns nil (simulates permission-denied path).
-        configureGHAPIPaginated { _ in nil }
+        StubURLProtocol.reset()
+        let page1URL = "\(apiBase)orgs/test/actions/runners"
+        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
+        let page1Data = jsonPage([["id": "1"]])
 
-        // Act
-        let result = await ghAPIPaginated("/repos/test/owner/actions/runners")
+        StubURLProtocol.register(.init(
+            data: page1Data,
+            statusCode: 200,
+            headers: ["Link": "<\(page2URL)>; rel=\"next\""]
+        ), for: page1URL)
+        // Plain 403, no Retry-After, no X-RateLimit-Remaining: 0 — permission error.
+        StubURLProtocol.register(.init(
+            data: "{\"message\":\"Must have admin rights\"}".data(using: .utf8)!,
+            statusCode: 403,
+            headers: [:]
+        ), for: page2URL)
 
-        // Assert: nil returned — partial items not surfaced to caller
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        #expect(result == nil)
+        let wasSetCalled = await spy.setCalled
+        #expect(wasSetCalled == false)
+    }
+
+    // MARK: - 401 auth failure discards all items
+
+    /// A 401 mid-pagination must discard all partially collected items and return nil.
+    ///
+    /// Verifies: `.httpError(401)` triggers `didFailAuthentication`, and the
+    /// auth-abort semantics introduced in the #1476 refactor are preserved.
+    @Test func paginatedReturnsNilOnAuthFailure401() async {
+        StubURLProtocol.reset()
+        let page1URL = "\(apiBase)orgs/test/actions/runners"
+        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
+        let page1Data = jsonPage([["id": "1", "name": "runner-a"]])
+
+        StubURLProtocol.register(.init(
+            data: page1Data,
+            statusCode: 200,
+            headers: ["Link": "<\(page2URL)>; rel=\"next\""]
+        ), for: page1URL)
+        StubURLProtocol.register(.init(
+            data: "{\"message\":\"Bad credentials\"}".data(using: .utf8)!,
+            statusCode: 401,
+            headers: [:]
+        ), for: page2URL)
+
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        // Partial item from page 1 must be discarded — nil returned.
         #expect(result == nil)
     }
 
-    // MARK: - configureGHAPIPaginated wiring
+    // MARK: - No token returns nil immediately
 
-    /// Reconfiguring the paginated transport replaces the previous closure.
-    /// Latest-writer-wins is the documented contract for all TransportBox instances.
-    @Test func paginatedReconfigureReplacesTransport() async {
-        let first  = "[{\"id\":\"1\"}]".data(using: .utf8)
-        let second = "[{\"id\":\"2\"}]".data(using: .utf8)
-        configureGHAPIPaginated { _ in first }
-        configureGHAPIPaginated { _ in second }
-        let result = await ghAPIPaginated("/orgs/test/actions/runners")
-        #expect(result == second)
+    /// When no GitHub token is configured, `urlSessionAPIPaginated` returns nil
+    /// without making any network request.
+    @Test func paginatedReturnsNilWhenNoToken() async {
+        StubURLProtocol.reset()
+        configureGHToken { nil }
+        defer { configureGHToken { "test-token" } }
+
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        #expect(result == nil)
     }
 }
