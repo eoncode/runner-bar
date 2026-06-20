@@ -106,9 +106,14 @@ struct ActionRowView: View {
         case .queued: return .queued
         case .completed:
             switch group.conclusion {
-            case "success": return .success
-            case "failure": return .failed
-            default: return .unknown
+            case .success: return .success
+            // All failure-class subtypes map to the red (.failed) tier.
+            // timedOut / actionRequired / startupFailure are intentionally grouped here
+            // alongside .failure — statusBadge uses the same grouping.
+            case .failure, .timedOut, .actionRequired, .startupFailure: return .failed
+            // Accent-bar colour is undifferentiated for these — all map to the grey
+            // (.unknown) tier. See statusBadge below for per-case text differentiation.
+            case .cancelled, .skipped, .neutral, .stale, .unknown, nil: return .unknown
             }
         }
     }
@@ -195,15 +200,20 @@ struct ActionRowView: View {
     }
 
     /// Badge view produced from the group's current status and conclusion.
+    /// Keep conclusion groupings in sync with `rowStatus` above.
     @ViewBuilder private var statusBadge: some View {
         switch group.groupStatus {
         case .inProgress: StatusBadge(status: .inProgress, text: "IN PROGRESS")
         case .queued: StatusBadge(status: .queued, text: "QUEUED")
         case .completed:
             switch group.conclusion {
-            case "success": StatusBadge(status: .success, text: "SUCCESS")
-            case "failure": StatusBadge(status: .failed, text: "FAILED")
-            default: StatusBadge(status: .unknown, text: "DONE")
+            case .success: StatusBadge(status: .success, text: "SUCCESS")
+            case .failure, .timedOut, .actionRequired, .startupFailure:
+                StatusBadge(status: .failed, text: "FAILED")
+            // TODO: promote .cancelled and .skipped to dedicated RBStatus cases when available.
+            case .cancelled: StatusBadge(status: .unknown, text: "CANCELLED")
+            case .skipped: StatusBadge(status: .unknown, text: "SKIPPED")
+            case .neutral, .stale, .unknown, nil: StatusBadge(status: .unknown, text: "DONE")
             }
         }
     }
