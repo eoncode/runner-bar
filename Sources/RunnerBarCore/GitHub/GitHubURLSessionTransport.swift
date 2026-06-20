@@ -13,7 +13,9 @@ private let sharedDecoder = JSONDecoder()
 /// The result of a single URLSession round-trip through `urlSessionExecute`.
 private enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
-    case success(Data, statusCode: Int)
+    /// `linkHeader` carries the raw `Link:` response header value used by paginated callers
+    /// to discover the next-page URL; `nil` for non-paginated endpoints.
+    case success(Data, statusCode: Int, linkHeader: String?)
     /// Non-2xx response that is not a rate-limit or permission error; the request failed.
     case httpError(Int)
     /// 403 or 429 that triggered the rate-limit actor (genuine rate limit).
@@ -90,7 +92,8 @@ private func urlSessionExecute(
             return .httpError(http.statusCode)
         }
         await rateLimiter.clear()
-        return .success(data, statusCode: http.statusCode)
+        let linkHeader = http.value(forHTTPHeaderField: "Link")
+        return .success(data, statusCode: http.statusCode, linkHeader: linkHeader)
     } catch {
         log("\(logTag) › \(urlString) network error: \(error.localizedDescription)")
         return .networkError(error)
@@ -106,7 +109,7 @@ private func urlSessionExecute(
 /// private to this file.
 @concurrent
 public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
-    guard case .success(let data, _) = await urlSessionExecute(
+    guard case .success(let data, _, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionAPIAsync"
     ) else { return nil }
     return data
@@ -115,15 +118,18 @@ public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) a
 /// Fetches and concatenates all pages for a GitHub paginated endpoint.
 /// Follows `Link: <url>; rel="next"` until all pages are consumed or an error stops pagination.
 ///
+/// Delegates the per-page token-guard → request-build → rate-limit-check → response-handle
+/// pipeline to `urlSessionExecute`, keeping only the accumulation loop and the
+/// partial-results return path here.
+///
 /// - Returns `nil` on auth failure (401, permission-denied 403, or no token).
 /// - Returns partial results if pagination is stopped by a genuine rate limit.
-///
-/// - Note: This function owns its own URLSession loop rather than delegating to
-///   `urlSessionExecute`. Any fix to the shared execute pipeline must be mirrored here
-///   until this is refactored.
-/// - TODO: Refactor to delegate to `urlSessionExecute` and eliminate this dual code path.
 @concurrent
-public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+public func urlSessionAPIPaginated(
+    _ endpoint: String,
+    timeout: TimeInterval = 60,
+    rateLimiter: some RateLimitActorProtocol = rateLimitActor
+) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [AnyJSON] = []
     var didFailAuthentication = false
@@ -131,49 +137,35 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
     var didRateLimit = false
 
     while let urlString = nextURL {
-        guard let token = githubTokenCore() else {
-            log("urlSessionAPIPaginated › no token available, stopping pagination")
-            didFailAuthentication = true
-            break
-        }
-        guard let url = URL(string: urlString) else { break }
-        let req = makeRequest(url: url, token: token, timeout: timeout)
-        do {
-            let (data, response) = try await URLSession.shared.data(for: req)
-            guard let http = response as? HTTPURLResponse else { break }
-
-            if http.statusCode == 401 {
-                log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
-                didFailAuthentication = true
-                break
-            }
-            if http.statusCode == 403 || http.statusCode == 429 {
-                await handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-                if await rateLimitActor.isLimited {
-                    log("urlSessionAPIPaginated › rate limited — \(allItems.count) items collected so far")
-                    didRateLimit = true
-                } else {
-                    log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
-                    didFailPermission = true
-                }
-                break
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                logErrorBody(data, endpoint: urlString, status: http.statusCode)
-                break
-            }
-            await rateLimitActor.clear()
+        let result = await urlSessionExecute(
+            urlString, timeout: timeout, logTag: "urlSessionAPIPaginated",
+            rateLimiter: rateLimiter
+        )
+        switch result {
+        case .success(let data, _, let linkHeader):
             if let page = try? sharedDecoder.decode([AnyJSON].self, from: data) {
                 allItems.append(contentsOf: page)
             } else {
                 log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
                 break
             }
-            nextURL = extractNextURL(from: http.value(forHTTPHeaderField: "Link"))
-        } catch {
-            log("URLSessionTransport(paginated) › \(urlString) network error: \(error.localizedDescription)")
-            break
+            nextURL = extractNextURL(from: linkHeader)
+        case .httpError(401):
+            log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
+            didFailAuthentication = true
+        case .httpError:
+            log("urlSessionAPIPaginated › non-2xx error at \(urlString) — stopping pagination")
+        case .rateLimited:
+            log("urlSessionAPIPaginated › rate limited — \(allItems.count) items collected so far")
+            didRateLimit = true
+        case .permissionDenied:
+            log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
+            didFailPermission = true
+        case .networkError:
+            log("urlSessionAPIPaginated › network error at \(urlString) — stopping pagination")
         }
+        // Break out of while loop on any non-success result
+        if case .success = result { /* continue */ } else { break }
     }
 
     if didFailAuthentication || didFailPermission {
@@ -206,7 +198,7 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
 ///   See `makeRawRequest` in `GitHubRequestBuilder.swift` for full details.
 @concurrent
 public func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-    guard case .success(let data, _) = await urlSessionExecute(
+    guard case .success(let data, _, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionRaw", useRawAccept: true
     ) else { return nil }
     log("urlSessionRaw › \(endpoint) → \(data.count)b")
@@ -232,7 +224,7 @@ public func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeI
         }
         return request
     }
-    guard case .success(let data, let statusCode) = result else { return nil }
+    guard case .success(let data, let statusCode, _) = result else { return nil }
     log("urlSessionPost › \(endpoint) → \(statusCode)")
     return data
 }
@@ -248,7 +240,7 @@ public func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval 
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request
     }
-    guard case .success(let data, let statusCode) = result else { return nil }
+    guard case .success(let data, let statusCode, _) = result else { return nil }
     log("urlSessionPut › \(endpoint) → \(statusCode)")
     return data
 }
