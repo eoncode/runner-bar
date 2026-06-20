@@ -14,7 +14,7 @@ import Foundation
 /// Once the user confirms, the draft is passed to `SaveRunnerEditsUseCase.execute(...)`
 /// where it crosses an actor isolation boundary. The parameter is annotated `sending`
 /// at that call site so the compiler (and future readers) understand that ownership
-/// transfers into the async function and the caller must not read the draft afterwards.
+/// transfers into the async function and the caller should not read the draft afterwards.
 ///
 /// No persistence writes happen inside this type.
 public struct RunnerEditDraft: Equatable, Sendable {

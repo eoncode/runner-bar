@@ -45,6 +45,7 @@ struct FailureHookRunnerUseCase: Sendable {
 
     /// Call this whenever a group transitions to done with a failure conclusion.
     /// Spawns a detached background Task, fetches failed job/step details, then fires.
+    ///
     /// `group` is annotated `sending` because it crosses from the caller's isolation
     /// domain into the `Task.detached` closure (the closure captures `group` and
     /// uses it across the actor boundary). The caller relinquishes access after

@@ -61,26 +61,12 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     /// Persists all changed fields in `draft` for `runner` as a single transaction.
     ///
-    /// Each value-type parameter is annotated `sending` to document the ownership
-    /// transfer that occurs when the value crosses an isolation boundary (this
-    /// async function is called from `@MainActor` context). The caller relinquishes
-    /// access to these values after the call — consistent with their use as
-    /// end-of-life local variables at every call site today.
-    ///
-    /// - Note: `RunnerModel` and `RunnerEditDraft` are both `Sendable` today. For
-    ///   `Sendable` types the compiler permits the caller to continue using the
-    ///   value after a `sending` call (safe sharing is already guaranteed), so
-    ///   there is no additional enforcement at current call sites. The annotation
-    ///   becomes active if either type drops `Sendable` conformance (e.g. by
-    ///   gaining a non-`Sendable` stored property): at that point `sending`
-    ///   prevents post-call access without requiring `@unchecked Sendable`.
-    ///
     /// - Returns: `.success` when all writes succeed;
     ///   `.failure([String])` with human-readable messages otherwise.
     public func execute(
-        runner: sending RunnerModel,
-        draft: sending RunnerEditDraft,
-        original: sending RunnerEditDraft
+        runner: RunnerModel,
+        draft: RunnerEditDraft,
+        original: RunnerEditDraft
     ) async -> CommitResult {
         var errors: [String] = []
 
