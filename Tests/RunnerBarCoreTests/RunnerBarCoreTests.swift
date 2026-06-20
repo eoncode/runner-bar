@@ -996,3 +996,29 @@ struct ProcessRunnerRunAsyncStdinTests {
     }
 }
 
+// MARK: - RunnerConfigStoreError.errorDescription
+
+@Suite("RunnerConfigStoreError.errorDescription")
+struct RunnerConfigStoreErrorDescriptionTests {
+
+    /// .malformedExistingFile errorDescription must contain the install path,
+    /// the word "malformed", and the phrase "agent-managed" so callers and UI
+    /// can identify both the file location and the consequence.
+    @Test func malformedExistingFileDescriptionContainsPathAndConsequence() {
+        let error = RunnerConfigStoreError.malformedExistingFile("/opt/runners/my-runner")
+        let desc  = error.errorDescription ?? ""
+        #expect(desc.contains("/opt/runners/my-runner"))
+        #expect(desc.contains("malformed"))
+        #expect(desc.contains("agent-managed"))
+    }
+
+    /// .malformedExistingFile must be distinct from .decodeFailed — the two cases
+    /// describe different failure sites (save pre-read vs. load) and must not
+    /// share an identical description.
+    @Test func malformedExistingFileDescriptionDiffersFromDecodeFailed() {
+        let malformed = RunnerConfigStoreError.malformedExistingFile("/opt/runners/r")
+        let decode    = RunnerConfigStoreError.decodeFailed("/opt/runners/r")
+        #expect(malformed.errorDescription != decode.errorDescription)
+    }
+}
+

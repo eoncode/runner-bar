@@ -46,9 +46,10 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     var loadResult: RunnerConfig = RunnerConfig(workFolder: "_work", disableUpdate: false)
 
     // MARK: Throw-control flags (configure via setUp)
-    private var shouldThrowOnSave   = false
-    private var shouldThrowOnLoad   = false
-    private var shouldThrowOnDecode = false
+    private var shouldThrowOnSave            = false
+    private var shouldThrowOnLoad            = false
+    private var shouldThrowOnDecode          = false
+    private var shouldThrowMalformedOnSave   = false
 
     // MARK: Observation (assert on after execute)
     private(set) var saveCalled = false
@@ -57,13 +58,15 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     /// Configures throw behaviour for all operations in a single call, resetting any
     /// previously set flags. Omitted parameters default to `false` (no throw).
     func setUp(
-        shouldThrowOnSave: Bool   = false,
-        shouldThrowOnLoad: Bool   = false,
-        shouldThrowOnDecode: Bool = false
+        shouldThrowOnSave: Bool          = false,
+        shouldThrowOnLoad: Bool          = false,
+        shouldThrowOnDecode: Bool        = false,
+        shouldThrowMalformedOnSave: Bool = false
     ) {
-        self.shouldThrowOnSave   = shouldThrowOnSave
-        self.shouldThrowOnLoad   = shouldThrowOnLoad
-        self.shouldThrowOnDecode = shouldThrowOnDecode
+        self.shouldThrowOnSave           = shouldThrowOnSave
+        self.shouldThrowOnLoad           = shouldThrowOnLoad
+        self.shouldThrowOnDecode         = shouldThrowOnDecode
+        self.shouldThrowMalformedOnSave  = shouldThrowMalformedOnSave
     }
 
     func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
@@ -74,7 +77,11 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         // Copy the borrowed value before storing — a `borrowing` parameter cannot be consumed.
         let config = copy config
-        if shouldThrowOnSave { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
+        // Flag priority: shouldThrowOnSave (.writeFailed) fires before shouldThrowMalformedOnSave
+        // (.malformedExistingFile). Setting both simultaneously is not meaningful — configure
+        // exactly one throw flag per test to avoid ambiguity.
+        if shouldThrowOnSave          { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
+        if shouldThrowMalformedOnSave { throw RunnerConfigStoreError.malformedExistingFile(installPath) }
         saveCalled = true
         savedConfig = config
     }

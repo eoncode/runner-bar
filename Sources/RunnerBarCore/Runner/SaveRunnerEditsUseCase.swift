@@ -20,7 +20,8 @@ import Foundation
 /// - Labels API returns `nil` → immediate abort (steps 2 and 3 are skipped).
 /// - Missing `agentId`/`gitHubUrl` → error appended, execution continues.
 /// - JSON and proxy errors → accumulated independently; both steps always run
-///   when applicable.
+///   when applicable. Config write errors — including `malformedExistingFile` —
+///   are accumulated and do not abort step 3.
 /// - `installPath == nil` while a JSON *or* proxy change is pending → immediate
 ///   abort with the accumulated errors so far. Without a known install path there
 ///   is no safe target for further writes. The `missingInstallPathForJSON` and
@@ -113,8 +114,9 @@ public struct SaveRunnerEditsUseCase: Sendable {
                 try await configStore.save(config, at: installPath)
             } catch {
                 // Exhaustive switch — compiler enforces all RunnerConfigStoreError cases
-                // are handled. .readFailed arises from configStore.load(at:) above;
-                // save()'s internal read-modify-write pre-read uses try? and never throws.
+                // are handled (guaranteed by throws(RunnerConfigStoreError) on the protocol):
+                // .readFailed / .decodeFailed arise from configStore.load(at:) above;
+                // .writeFailed / .malformedExistingFile arise from configStore.save(...).
                 switch error {
                 case .readFailed(let path, let underlying):
                     errors.append("Cannot read config at \(path)/.runner: \(underlying.localizedDescription)")
@@ -122,6 +124,11 @@ public struct SaveRunnerEditsUseCase: Sendable {
                     errors.append("Cannot decode config at \(path)/.runner")
                 case .writeFailed(let path, let underlying):
                     errors.append("Cannot write config at \(path)/.runner: \(underlying.localizedDescription)")
+                case .malformedExistingFile(let path):
+                    // The existing .runner file is present but undecodable. Aborting rather
+                    // than proceeding protects agent-managed keys (e.g. jitConfig) from
+                    // being silently dropped during the read-modify-write merge.
+                    errors.append("Cannot write config at \(path)/.runner: existing file is malformed and agent-managed keys would be lost")
                 }
             }
         }
