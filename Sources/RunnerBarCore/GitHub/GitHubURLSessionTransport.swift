@@ -89,12 +89,12 @@ private func urlSessionExecute(
                 statusCode: http.statusCode, data, response: http,
                 endpoint: urlString, rateLimiter: rateLimiter
             )
-            let isNowRateLimited = await rateLimiter.isLimited
-            if isNowRateLimited {
-                return .rateLimited
-            } else {
-                return .permissionDenied
-            }
+            // Use snapshot() for a single atomic actor hop (P10 — Atomic Snapshot Pattern).
+            // A separate await rateLimiter.isLimited read would introduce a TOCTOU window:
+            // a concurrent caller could clear() the actor between handleRateLimitResponse
+            // and the isLimited read, causing the wrong result to be returned.
+            let snap = await rateLimiter.snapshot()
+            return snap.isLimited ? .rateLimited : .permissionDenied
         }
         guard (200..<300).contains(http.statusCode) else {
             logErrorBody(data, endpoint: urlString, status: http.statusCode)
@@ -132,8 +132,12 @@ public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) a
 /// partial-results return path here.
 ///
 /// - Returns `nil` on auth failure (401, permission-denied 403, missing/revoked token).
-/// - Returns partial results if pagination is stopped by a genuine rate limit.
-/// - Returns partial results if pagination is stopped by a transient network error.
+/// - Returns partial results (not nil) if pagination is stopped by a genuine rate limit.
+/// - Returns partial results (not nil) if pagination is stopped by a transient network error
+///   (e.g. timeout, no connectivity). This distinguishes recoverable mid-pagination
+///   interruptions from auth failures, which always discard all collected items.
+/// - Note: `extractNextURL(from: nil)` returns `nil`, so passing a non-paginated endpoint
+///   (which returns no `Link` header) terminates the loop naturally after the first page.
 @concurrent
 public func urlSessionAPIPaginated(
     _ endpoint: String,
@@ -445,7 +449,7 @@ public func ghPost(_ endpoint: String) async -> Bool {
 /// Cancels a workflow run via the GitHub Actions API.
 /// Intentionally repo-only: the GitHub Actions cancel endpoint
 /// (`/repos/{owner}/{repo}/actions/runs/{run_id}/cancel`) is scoped to repositories.
-/// Org/enterprise-level cancel is not uniformly supported by by the API.
+/// Org/enterprise-level cancel is not uniformly supported by the API.
 /// Update this guard if org-scope cancel support is added in a future GitHub API version.
 /// - Returns: `true` if the cancellation request succeeded.
 @concurrent
