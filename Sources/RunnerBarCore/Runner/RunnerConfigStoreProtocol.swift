@@ -13,5 +13,9 @@ public protocol RunnerConfigStoreProtocol: Sendable {
     /// Loads the typed runner config from `installPath/.runner`.
     func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig
     /// Saves the typed runner config to `installPath/.runner`.
+    ///
+    /// `config` is declared `borrowing` — conformers must not consume or transfer
+    /// the value (e.g. store it in an actor property or pass it `consuming`). Read
+    /// it for encoding only; copy explicitly with `copy config` if persistence is needed.
     func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError)
 }

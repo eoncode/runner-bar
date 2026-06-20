@@ -35,6 +35,9 @@ private func makeUseCase(
 
 // MARK: - Tests
 
+// Note: ownership semantics (`consuming draft:`, `borrowing runner:/original:`) are
+// enforced at compile time — there is no runtime behaviour to test for those annotations.
+// The tests below verify *what* gets written and *when*, not ownership transfer.
 @Suite("SaveRunnerEditsUseCase")
 struct SaveRunnerEditsUseCaseTests {
 

@@ -13,7 +13,7 @@ import Foundation
 ///
 /// No persistence writes happen inside this type.
 ///
-/// - Note: Intended for single use. Pass to `SaveRunnerEditsUseCase.execute(draft:)`
+/// - Note: Intended for single use. Pass to `SaveRunnerEditsUseCase.execute(runner:draft:original:)`
 ///   exactly once — the `consuming` annotation on that parameter enforces this at compile time.
 public struct RunnerEditDraft: Equatable, Sendable {
 

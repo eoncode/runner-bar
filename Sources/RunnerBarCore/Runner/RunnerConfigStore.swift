@@ -128,6 +128,11 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     ///
     /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the actor's
     /// cooperative thread is never blocked.
+    ///
+    /// `config` is `borrowing` because this function only reads it for encoding — it never
+    /// mutates or stores the value. The explicit `let config = copy config` below is required
+    /// because a `borrowing` parameter cannot be captured by an escaping closure; the copy
+    /// transfers ownership into the `DispatchQueue.global` block.
     public func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         // Copy the borrowed value before entering the escaping DispatchQueue closure —
         // a `borrowing` parameter cannot be captured by an escaping closure directly.

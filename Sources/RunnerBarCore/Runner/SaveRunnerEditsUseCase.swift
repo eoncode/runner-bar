@@ -61,6 +61,13 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     /// Persists all changed fields in `draft` for `runner` as a single transaction.
     ///
+    /// Ownership conventions:
+    /// - `draft` is `consuming` — enforces one-shot commit semantics at compile time;
+    ///   the call site cannot reuse the draft after passing it here.
+    /// - `runner` and `original` are `borrowing` — read-only baselines that are never
+    ///   mutated or stored. Both types conform to `Sendable`, which makes the borrow
+    ///   safe across the `await` suspension points inside this function.
+    ///
     /// - Returns: `.success` when all writes succeed;
     ///   `.failure([String])` with human-readable messages otherwise.
     public func execute(
