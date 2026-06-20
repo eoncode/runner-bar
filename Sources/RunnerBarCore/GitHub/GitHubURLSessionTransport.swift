@@ -8,12 +8,6 @@ import Foundation
 /// for concurrent reads in practice; this is consistent with Apple's own sample code
 /// and established community practice, though not a formally documented API guarantee.
 private let sharedDecoder = JSONDecoder()
-/// Shared encoder hoisted to avoid re-instantiation on every call.
-/// Thread-safe: `JSONEncoder` has no mutable state after initialisation and is safe
-/// for concurrent reads in practice; this is consistent with Apple's own sample code
-/// and established community practice, though not a formally documented API guarantee.
-private let sharedEncoder = JSONEncoder()
-
 // MARK: - Shared execution core
 
 /// The result of a single URLSession round-trip through `urlSessionExecute`.
@@ -197,7 +191,8 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
     guard !allItems.isEmpty else { return nil }
-    return try? sharedEncoder.encode(allItems)
+    let encoder = JSONEncoder()
+    return try? encoder.encode(allItems)
 }
 
 // MARK: - Raw async (log endpoints)
@@ -345,7 +340,8 @@ public func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: 
     }
     let endpoint = "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels"
     log("patchRunnerLabels › PUT \(endpoint) labels=\(labels)")
-    guard let bodyData = try? sharedEncoder.encode(["labels": labels]) else {
+    let encoder = JSONEncoder()
+    guard let bodyData = try? encoder.encode(["labels": labels]) else {
         log("patchRunnerLabels › failed to serialise request body")
         return nil
     }
