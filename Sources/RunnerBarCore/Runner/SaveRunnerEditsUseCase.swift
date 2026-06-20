@@ -123,6 +123,11 @@ public struct SaveRunnerEditsUseCase: Sendable {
                     errors.append("Cannot decode config at \(path)/.runner")
                 case .writeFailed(let path, let underlying):
                     errors.append("Cannot write config at \(path)/.runner: \(underlying.localizedDescription)")
+                case .malformedExistingFile(let path):
+                    // The existing .runner file is present but undecodable. Aborting rather
+                    // than proceeding protects agent-managed keys (e.g. jitConfig) from
+                    // being silently dropped during the read-modify-write merge.
+                    errors.append("Cannot save config at \(path)/.runner: existing file is malformed and agent-managed keys would be lost")
                 }
             }
         }
