@@ -3,6 +3,24 @@
 
 import Foundation
 
+// MARK: - RateLimitActorProtocol
+
+/// Injectable abstraction over `RateLimitActor` for deterministic testing.
+///
+/// `urlSessionExecute` and `urlSessionAPIPaginated` accept any conforming type via
+/// a defaulted `rateLimiter` parameter, so production code is unchanged while tests
+/// can substitute a `SpyRateLimitActor` without touching the real actor.
+public protocol RateLimitActorProtocol: Actor {
+    /// Whether the GitHub API is currently rate-limiting this client.
+    var isLimited: Bool { get }
+    /// Arms the rate-limit flag and schedules an automatic reset.
+    func set(resetAt: TimeInterval?)
+    /// Clears the rate-limit flag and cancels any pending reset task.
+    func clear()
+    /// Returns `isLimited` and `resetDate` in a single actor hop.
+    func snapshot() -> (isLimited: Bool, resetDate: Date?)
+}
+
 // MARK: - RateLimitActor
 
 /// Actor-isolated rate-limit state.
@@ -24,7 +42,7 @@ import Foundation
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
-public actor RateLimitActor {
+public actor RateLimitActor: RateLimitActorProtocol {
     /// Whether the GitHub API is currently rate-limiting this client.
     public private(set) var isLimited = false
     /// The moment at which the rate-limit window expires.

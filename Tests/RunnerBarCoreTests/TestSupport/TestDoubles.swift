@@ -113,6 +113,34 @@ actor HookCounter {
     func increment() { value += 1 }
 }
 
+// MARK: - SpyRateLimitActor
+
+/// Test double conforming to `RateLimitActorProtocol`.
+/// Injects controllable rate-limit state into transport functions under test.
+actor SpyRateLimitActor: RateLimitActorProtocol {
+    /// Seed this to simulate a pre-armed rate-limit state.
+    var isLimited = false
+    private(set) var resetDate: Date?
+    private(set) var setCalled = false
+    private(set) var clearCalled = false
+
+    func set(resetAt: TimeInterval?) {
+        setCalled = true
+        isLimited = true
+        resetDate = resetAt.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    func clear() {
+        clearCalled = true
+        isLimited = false
+        resetDate = nil
+    }
+
+    func snapshot() -> (isLimited: Bool, resetDate: Date?) {
+        (isLimited: isLimited, resetDate: resetDate)
+    }
+}
+
 // MARK: - TestError
 
 enum TestError: Error { case saveFailed }

@@ -53,6 +53,7 @@ private func urlSessionExecute(
     timeout: TimeInterval,
     logTag: String,
     useRawAccept: Bool = false,
+    rateLimiter: some RateLimitActorProtocol = rateLimitActor,
     configure: @Sendable (URLRequest) -> URLRequest = { $0 }
 ) async -> ExecuteResult {
     guard let token = githubTokenCore() else {
@@ -77,7 +78,7 @@ private func urlSessionExecute(
             await handleRateLimitResponse(
                 statusCode: http.statusCode, data, response: http, endpoint: urlString
             )
-            let isNowRateLimited = await rateLimitActor.isLimited
+            let isNowRateLimited = await rateLimiter.isLimited
             if isNowRateLimited {
                 return .rateLimited
             } else {
@@ -88,7 +89,7 @@ private func urlSessionExecute(
             logErrorBody(data, endpoint: urlString, status: http.statusCode)
             return .httpError(http.statusCode)
         }
-        await rateLimitActor.clear()
+        await rateLimiter.clear()
         return .success(data, statusCode: http.statusCode)
     } catch {
         log("\(logTag) › \(urlString) network error: \(error.localizedDescription)")
