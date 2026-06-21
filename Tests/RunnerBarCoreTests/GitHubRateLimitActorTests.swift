@@ -12,6 +12,11 @@
 // that belongs to a newer window. Without this guard, the app would silently
 // unblock mid-limit.
 //
+// RateLimitSnapshot protocol-conformance smoke tests (snapshotEquatable,
+// snapshotHashable, snapshotSendable) were removed in #1500 — RateLimitSnapshot
+// is a plain struct with compiler-synthesised conformances; testing the compiler
+// adds noise with no regression value, consistent with the policy in #1450.
+//
 import Foundation
 import Testing
 @testable import RunnerBarCore
@@ -90,7 +95,7 @@ struct RateLimitActorTests {
         #expect(snap.isLimited)
         if let date = snap.resetDate {
             let diff = date.timeIntervalSinceReferenceDate - now.timeIntervalSinceReferenceDate
-            // Assert diff ≥ (minClamp - clampTolerance) so a loaded CI host
+            // Assert diff >= (minClamp - clampTolerance) so a loaded CI host
             // with up to `clampTolerance` seconds of scheduling latency still
             // passes without losing the signal that the 5 s floor was applied.
             #expect(diff >= 5.0 - Self.clampTolerance)
@@ -160,7 +165,7 @@ struct RateLimitActorTests {
 
     /// Multiple rapid set calls: only the last window's state survives.
     /// Loop starts at i=1 so every call passes a strictly future timestamp
-    /// (now + 10 … now + 40), keeping the test off the clamp-floor path.
+    /// (now + 10 ... now + 40), keeping the test off the clamp-floor path.
     /// Uses the captured `now` timestamp for assertions to avoid wall-clock
     /// drift in slow CI environments.
     @Test("rapid successive sets keep only the latest window")
@@ -231,5 +236,4 @@ struct RateLimitActorTests {
             Issue.record("resetDate should not be nil")
         }
     }
-
 }

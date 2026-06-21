@@ -9,7 +9,7 @@ import RunnerBarCore
 
 // MARK: - OrgRunnerMetricsResolutionTests
 
-/// Tests that verify `RunnerModel.apiId` is preserved through `copying(…)` and
+/// Tests that verify `RunnerModel.apiId` is preserved through `copying(...)` and
 /// can be used to distinguish the GitHub REST API runner id from the local agentId.
 ///
 /// The full `byApiId` lookup lives in `RunnerStore` (a `@MainActor` type in the
@@ -17,6 +17,10 @@ import RunnerBarCore
 /// These tests therefore cover the data-model layer: that `apiId` round-trips
 /// correctly and that a `RunnerModel` with mismatched `agentId` / `apiId` values
 /// behaves as expected.
+///
+/// Equatable tests (equalityWithMatchingApiId / inequalityWhenApiIdDiffers) were
+/// removed in #1500 — RunnerModel has compiler-synthesised Equatable; testing the
+/// compiler adds noise with no regression value, consistent with the policy in #1450.
 @Suite("OrgRunnerMetricsResolution")
 struct OrgRunnerMetricsResolutionTests {
 
@@ -64,7 +68,7 @@ struct OrgRunnerMetricsResolutionTests {
 
     // MARK: - copying() round-trips
 
-    /// `copying(…)` must preserve `apiId` when no apiId-related field is changed.
+    /// `copying(...)` must preserve `apiId` when no apiId-related field is changed.
     @Test func copyingPreservesApiId() {
         let original = makeOrgRunner(agentId: 100, apiId: 999)
         let copy = original.copying(isRunning: false)
@@ -107,21 +111,5 @@ struct OrgRunnerMetricsResolutionTests {
         let runner = makeOrgRunner(agentId: 100, apiId: nil)
         let byApiId: [Int: String] = runner.apiId.map { [$0: runner.installPath!] } ?? [:]
         #expect(byApiId.isEmpty)
-    }
-
-    // MARK: - Equatable
-
-    /// Two runners with the same fields including matching apiId must be equal.
-    @Test func equalityWithMatchingApiId() {
-        let a = makeOrgRunner(agentId: 100, apiId: 999)
-        let b = makeOrgRunner(agentId: 100, apiId: 999)
-        #expect(a == b)
-    }
-
-    /// Two runners that differ only in apiId must not be equal.
-    @Test func inequalityWhenApiIdDiffers() {
-        let a = makeOrgRunner(agentId: 100, apiId: 999)
-        let b = makeOrgRunner(agentId: 100, apiId: 888)
-        #expect(a != b)
     }
 }
