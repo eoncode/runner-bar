@@ -284,7 +284,7 @@ public func urlSessionAPIPaginated(
     }
     do {
         let encoded = try sharedEncoder.encode(allItems)
-        log("urlSessionAPIPaginated › returning \\(allItems.count) items (\\(encoded.count)b)")
+        log("urlSessionAPIPaginated › returning \(allItems.count) items (\(encoded.count)b)")
         return encoded
     } catch {
         log("urlSessionAPIPaginated › encode failed: \(error) — returning nil")
