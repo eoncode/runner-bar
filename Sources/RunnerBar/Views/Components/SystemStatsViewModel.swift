@@ -45,7 +45,8 @@ final class SystemStatsViewModel {
         // Task.cancel() is safe to call from any isolation context — no DispatchQueue hop needed.
         samplingTask?.cancel()
         // deallocPrevCPUInfo() is @MainActor-isolated and cannot be called from nonisolated deinit.
-        // Inline the deallocation here using the nonisolated(unsafe) prevCPUInfo pointer directly.
+        // This block is an intentional duplicate — KEEP IN SYNC WITH deallocPrevCPUInfo() below.
+        // If the size calculation ever changes, update both sites.
         if let prev = prevCPUInfo {
             let infoSize = vm_size_t(MemoryLayout<integer_t>.size)
             let totalSize = vm_size_t(prevNumCPUInfo) * infoSize
@@ -58,9 +59,14 @@ final class SystemStatsViewModel {
 
     /// Starts the 2-second structured sample loop and takes an immediate first sample.
     /// Safe to call multiple times — no-ops if the loop is already running.
+    ///
+    /// `Task { @MainActor [weak self] in }` is used rather than the bare `Task { [weak self] in }`
+    /// to make the `@MainActor` isolation explicit. A bare `Task { }` created from an
+    /// `@MainActor`-isolated context does inherit `@MainActor` today, but the annotation
+    /// anchors that guarantee against a future refactor that moves `start()` off `@MainActor`.
     func start() {
         guard samplingTask == nil else { return }
-        samplingTask = Task { [weak self] in
+        samplingTask = Task { @MainActor [weak self] in
             // Immediate first sample before the first sleep.
             self?.sample()
             while !Task.isCancelled {
@@ -145,8 +151,11 @@ final class SystemStatsViewModel {
 
     /// Deallocates the `prevCPUInfo` Mach buffer via `vm_deallocate` and nils the pointer.
     /// Called from `sampleCPU()`'s `defer` block (always on `@MainActor`).
-    /// `deinit` has its own inline copy because this method is `@MainActor`-isolated
-    /// and cannot be called from the nonisolated `deinit` context.
+    ///
+    /// - Important: `deinit` contains an intentional duplicate of this logic because this method
+    ///   is `@MainActor`-isolated and cannot be called from the nonisolated `deinit` context.
+    ///   KEEP IN SYNC WITH the inline block in `deinit` above.
+    ///   If the size calculation changes, update both sites.
     private func deallocPrevCPUInfo() {
         guard let prev = prevCPUInfo else { return }
         let infoSize = vm_size_t(MemoryLayout<integer_t>.size)
