@@ -11,6 +11,10 @@ import Foundation
 /// Non-isolated: owned exclusively by the `LocalRunnerStore` actor, which serializes all access.
 /// `UserDefaults` read/write of individual keys is thread-safe; this class uses no KVO or
 /// change notifications on `UserDefaults`, so no main-actor coordination is required.
+///
+/// Storage format: JSON-encoded `[String: String]` stored as `Data` under `indexKey`.
+/// One-time migration: if the key holds a legacy `NSPropertyList` dictionary (pre-Codable),
+/// it is decoded via `NSDictionary` cast and immediately re-persisted as JSON.
 public final class LocalRunnerIndex {
 
     // MARK: - Storage key
@@ -29,6 +33,8 @@ public final class LocalRunnerIndex {
     private let defaults: UserDefaults
 
     /// Initialises the index and loads the persisted entries from `UserDefaults`.
+    /// If stored `Data` exists but cannot be decoded, the error is logged and the
+    /// index starts empty — preserving the invariant that `init` never throws.
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         loadIndex()
@@ -53,15 +59,51 @@ public final class LocalRunnerIndex {
     // MARK: - Private helpers
 
     /// Hydrates `runnerIndex` from `UserDefaults` at init time.
+    ///
+    /// Decode order:
+    /// 1. `Data` key present → JSON-decode as `[String: String]`.
+    ///    On `DecodingError`, logs and falls through to empty so malformed data
+    ///    is surfaced in logs without crashing or losing other entries.
+    /// 2. Legacy `NSDictionary` present → cast and immediately re-persist as JSON
+    ///    (one-time migration from pre-Codable plist format).
+    /// 3. Key absent → start with empty index.
     private func loadIndex() {
-        runnerIndex = defaults
-            .dictionary(forKey: Self.indexKey) as? [String: String] ?? [:]
-        log("LocalRunnerIndex › loadIndex — \(runnerIndex.count) entry(ies): \(runnerIndex.keys.sorted())")
+        if let data = defaults.data(forKey: Self.indexKey) {
+            do {
+                runnerIndex = try JSONDecoder().decode([String: String].self, from: data)
+                log("LocalRunnerIndex › loadIndex — \(runnerIndex.count) entry(ies): \(runnerIndex.keys.sorted())")
+            } catch {
+                log("LocalRunnerIndex › loadIndex — JSON decode failed: \(error). Starting with empty index.")
+                runnerIndex = [:]
+            }
+        } else if let legacy = defaults.dictionary(forKey: Self.indexKey) as? [String: String] {
+            // Migration path: executes once after upgrading from the pre-Codable plist format.
+            // persistIndex() overwrites the same key as Data; if it succeeds, this branch
+            // becomes permanently unreachable on subsequent launches (the `if let data` branch
+            // fires instead). If encode fails (logged inside persistIndex), the plist value
+            // remains and migration retries on next launch — safe and visible in logs.
+            runnerIndex = legacy
+            persistIndex()
+            if defaults.data(forKey: Self.indexKey) != nil {
+                log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON")
+            } else {
+                log("LocalRunnerIndex › loadIndex — migration encode failed; plist retained, will retry next launch")
+            }
+        } else {
+            runnerIndex = [:]
+            log("LocalRunnerIndex › loadIndex — no data found, starting empty")
+        }
     }
 
-    /// Writes the current `runnerIndex` to `UserDefaults`.
+    /// JSON-encodes and writes the current `runnerIndex` to `UserDefaults`.
+    /// On encode failure, logs the error and leaves the stored value unchanged.
     private func persistIndex() {
-        defaults.set(runnerIndex, forKey: Self.indexKey)
-        log("LocalRunnerIndex › persistIndex — \(runnerIndex.count) entry(ies) written")
+        do {
+            let data = try JSONEncoder().encode(runnerIndex)
+            defaults.set(data, forKey: Self.indexKey)
+            log("LocalRunnerIndex › persistIndex — \(runnerIndex.count) entry(ies) written")
+        } catch {
+            log("LocalRunnerIndex › persistIndex — encode failed: \(error)")
+        }
     }
 }

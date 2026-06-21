@@ -20,7 +20,8 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
     /// Typed conclusion (nil while the job is still running).
     public let conclusion: JobConclusion?
     /// `true` for recently-completed jobs shown as faded history entries.
-    public var isDimmed: Bool
+    /// `let`: use `copying(isDimmed:)` to derive a mutated copy.
+    public let isDimmed: Bool
 
     // MARK: Runner / scope
     /// The name of the runner that executed (or is executing) this job.
@@ -127,6 +128,25 @@ public struct ActiveJob: Identifiable, Equatable, Sendable {
 
 /// Helpers for deriving immutable `ActiveJob` copies.
 extension ActiveJob {
+    /// Returns a copy of this job with `isDimmed` replaced.
+    /// Use this instead of mutating `isDimmed` directly — the field is `let`.
+    public func copying(isDimmed newValue: Bool) -> ActiveJob {
+        ActiveJob(
+            id: id,
+            name: name,
+            htmlUrl: htmlUrl,
+            status: status,
+            conclusion: conclusion,
+            isDimmed: newValue,
+            runnerName: runnerName,
+            scope: scope,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            createdAt: createdAt,
+            steps: steps
+        )
+    }
+
     /// Returns a completed, dimmed copy of this job.
     ///
     /// Centralises the repeated "freeze a job into the cache" pattern in
