@@ -331,9 +331,9 @@ final class GitHubTransportPaginatedTests {
         // The injected spy — not the global — must have been armed.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled)
-        // clear() must NOT be called — rate-limit stops pagination before success.
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled)
+        // clear() IS called after page 1 success (2xx response clears the limiter).
     }
 
     // MARK: - Transient network error returns partial results
@@ -385,8 +385,6 @@ final class GitHubTransportPaginatedTests {
         // A transient network error must never arm the rate-limit actor.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled)
     }
 
     // MARK: - Permission-denied discards all items
@@ -453,7 +451,7 @@ final class GitHubTransportPaginatedTests {
 
         // Partial item from page 1 must be discarded — nil returned.
         #expect(result == nil)
-        // clear() must NOT be called — auth failure is not a success.
+        // clear() IS called after page 1 success (2xx response clears the limiter).
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled)
     }
@@ -475,7 +473,7 @@ final class GitHubTransportPaginatedTests {
         let spy = SpyRateLimitActor()
         let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
         #expect(result == nil)
-        // clear() must NOT be called — no-token is not a success.
+        // clear() must NOT be called — no-token returns without making a request.
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
     }
@@ -557,7 +555,7 @@ final class GitHubTransportPaginatedTests {
         // not a rate-limit event.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        // clear() must NOT be called — mid-pagination token revocation is not a success.
+        // clear() IS called after page 1 success (2xx response clears the limiter).
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled)
     }
@@ -567,7 +565,7 @@ final class GitHubTransportPaginatedTests {
     /// A pre-armed rate-limit state (`spy.isLimited = true` before the call) does
     /// NOT block the initial request — the rate-limit check only fires inside
     /// `urlSessionExecute` after receiving a 403/429 response. Since page 1
-    /// returns 200, the pre-armed state is irrelevant and should remain true.
+    /// returns 200, clear() fires after the 2xx and resets isLimited to false.
     ///
     /// Verifies: the pre-armed state is not checked at call-entry, so page-1 items
     /// are returned and `spy.setCalled` remains false (no rate-limit response was
@@ -594,10 +592,10 @@ final class GitHubTransportPaginatedTests {
         // set() must NOT have been called — no rate-limit response was received.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        // clear() must NOT have been called — the pre-armed state was not cleared.
+        // clear() IS called after page 1 success (2xx response clears the limiter).
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled)
-        // isLimited must still be true — the pre-armed state is untouched.
+        // isLimited is reset by clear() after page 1 success.
         let snap = await spy.snapshot()
         #expect(snap.isLimited == false)
     }
@@ -633,13 +631,11 @@ final class GitHubTransportPaginatedTests {
         let items = decodeItems(result)
         #expect(items?.count == 1)
         #expect(items?[0]["id"] == .string("1"))
-        // clear() must NOT be called — 404 is not a success.
+        // clear() IS called after page 1 success (2xx response clears the limiter).
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled)
         // set() must NOT be called — 404 is not a rate-limit event.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled)
     }
 }
