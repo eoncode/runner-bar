@@ -4,7 +4,7 @@ Tracking file for the principles audit against:
 - [Issue #1471](https://github.com/eoncode/runner-bar/issues/1471) + [`project-principles.md`](../architecture/project-principles.md)
 - [Issue #1387](https://github.com/eoncode/runner-bar/issues/1387) + [`reach-goal-principles.md`](../principles/reach-goal-principles.md)
 
-Last updated: 2026-06-21 (session 5)
+Last updated: 2026-06-21 (session 6)
 
 ---
 
@@ -23,14 +23,14 @@ Last updated: 2026-06-21 (session 5)
 ### App/
 | File | Status | Notes |
 |------|--------|-------|
-| `AppDelegate.swift` | ✅ | **Clean.** `@MainActor` isolated. `AppPreferencesStore.shared` + `ScopeStore.shared` accessed only at construction (injected into `RunnerStore`). One `DispatchQueue.main.async` in `openPanel()` — low risk. No fire-and-forget Tasks. |
-| `AppDelegate+PanelSetup.swift` | ✅ | **Finding #51.** Triple `runnerStore = RunnerStore(…)` assignments — first two orphaned with live Tasks (competing poll loops). Paste-artifact confirmed. |
+| `AppDelegate.swift` | ✅ | **Clean.** `@MainActor` isolated. Singletons accessed only at construction (injected into `RunnerStore`). |
+| `AppDelegate+PanelSetup.swift` | ✅ | **Finding #51.** Triple `RunnerStore` init — first two orphaned with live Tasks (competing poll loops). |
 | `AppDelegate+Navigation.swift` | ✅ | Finding #15 confirmed — stale guard on `observable.jobs`. TODO present. |
-| `AppDelegate+Polling.swift` | 🔲 | |
+| `AppDelegate+Polling.swift` | ✅ | **Clean.** `setupSignOutSubscription()` creates one actor-bound `Task { [weak self] }` on `AppDelegate` lifetime. `for await` stream loop is structured. `OAuthService.shared` is the only singleton — it is the natural app-lifetime service (documented why). No fire-and-forget, no GCD. |
 | `AppDelegate+StatusItem.swift` | 🔲 | |
 | `AppDelegate+StoreSetup.swift` | 🔲 | |
 | `AppDelegate+OAuthCallback.swift` | 🔲 | |
-| `PopoverLifecycleCoordinator.swift` | 🔲 | Medium priority |
+| `PopoverLifecycleCoordinator.swift` | ✅ | **Clean.** `@MainActor final class`. `nonisolated(unsafe)` on monitor/observer storage is documented and safe (deinit-only write-after-last-ref). `Task { @MainActor [weak self] }` for global NSEvent callback (unspecified thread) is correct. `MainActor.assumeIsolated` for workspace observer (delivered on `queue: .main`) is correct with documented rationale. `tearDown()` correctly does not clear `preservedSheetWindowHide`. Double-install guard prevents monitor leaks. No findings. |
 | `PanelVisibilityState.swift` | 🔲 | |
 | `PanelSheetState.swift` | 🔲 | |
 | `NavState.swift` | 🔲 | |
@@ -39,7 +39,7 @@ Last updated: 2026-06-21 (session 5)
 | File | Status | Notes |
 |------|--------|-------|
 | `DesignTokens.swift` | ⏭️ | Pure UI tokens |
-| `PanelViewModifiers.swift` | ✅ | **Clean.** View modifiers only, no async, no GCD, no singletons. |
+| `PanelViewModifiers.swift` | ✅ | **Clean.** View modifiers only. |
 | `RemovalAlertModifier.swift` | ⏭️ | Small modifier |
 
 ### GitHub/
@@ -47,7 +47,7 @@ Last updated: 2026-06-21 (session 5)
 |------|--------|-------|
 | `GitHubHelpers.swift` | ✅ | Root of Finding #1 — free transport functions `ghAPI`, `ghPost`, `cancelRun`, `fetchActionLogs`, `fetchJobLog` (P7) |
 | `GitHubTokenCache.swift` | 🔲 | |
-| `OAuthService.swift` | ✅ | **Clean.** `@MainActor` isolated. `Task {}` is actor-bound. |
+| `OAuthService.swift` | ✅ | **Clean.** `@MainActor` isolated. |
 | `OAuthSecrets.swift` | 🔲 | |
 
 ### Preferences/
@@ -60,7 +60,7 @@ Last updated: 2026-06-21 (session 5)
 | File | Status | Notes |
 |------|--------|-------|
 | `RunnerStore.swift` | ✅ | Finding #7 raw string `nextPollInterval()` (P5); protocols defined inline (P6) |
-| `RunnerStore+PollBridge.swift` | ✅ | Finding #2 `ScopeStore.shared` bypass (P7); Finding #13 `.scopes` returns disabled scopes — **functional bug** |
+| `RunnerStore+PollBridge.swift` | ✅ | Finding #2 `ScopeStore.shared` bypass (P7); Finding #13 `.scopes` functional bug |
 | `RunnerLifecycleService.swift` | ✅ | Finding #11 singleton, no injection seam (P7) |
 
 ### Scope/
@@ -82,7 +82,7 @@ Last updated: 2026-06-21 (session 5)
 ### UseCases/
 | File | Status | Notes |
 |------|--------|-------|
-| `FailureHookRunnerUseCase.swift` | ✅ | Finding #52 `ghAPI`/`fetchJobLog` free fn (P7); Finding #53 `JSONDecoder()` per loop (P6). `Task.detached` justified. |
+| `FailureHookRunnerUseCase.swift` | ✅ | Finding #52 `ghAPI`/`fetchJobLog` free fn (P7); Finding #53 `JSONDecoder()` per loop (P6). |
 
 ### Utilities/
 | File | Status | Notes |
@@ -93,7 +93,7 @@ Last updated: 2026-06-21 (session 5)
 | File | Status | Notes |
 |------|--------|-------|
 | `WorkflowContextMenuModifier.swift` | ✅ | Finding #3 three `Task.detached` (P9); Finding #8 `JobContextMenuModifier` free fn calls (P7) |
-| `SystemStatsViewModel.swift` | 🔲 | Medium priority — 12.8 KB |
+| `SystemStatsViewModel.swift` | ✅ | **Clean — exemplary.** `@MainActor @Observable`. Generation-stamped sampling loop prevents `stop()→start()` race. `nonisolated(unsafe)` on Mach buffer pointers is documented and correct (deinit-only access). `private static nonisolated func deallocBuffer` correctly shared between `@MainActor` hot path and nonisolated `deinit`. `Task { @MainActor [weak self] }` with explicit annotation. All three `sampleCPU/Memory/Disk` methods correctly isolated. No findings — use as reference implementation for sampling loops. |
 | `SystemStatsView.swift` | 🔲 | |
 | `DonutStatusView.swift` | ⏭️ | Pure rendering |
 | `SparklineView.swift` | ⏭️ | Pure rendering |
@@ -102,8 +102,8 @@ Last updated: 2026-06-21 (session 5)
 ### Views/Main/
 | File | Status | Notes |
 |------|--------|-------|
-| `InlineJobRowsView.swift` | ✅ | Finding #20 confirmed — `jobStatus(for:)` duplicates `ActionRowView.rowStatus`. P5 clean. |
-| `ActionRowView.swift` | ✅ | **Clean.** Typed enums, no GCD, no singletons, no fire-and-forget. |
+| `InlineJobRowsView.swift` | ✅ | Finding #20 — `jobStatus(for:)` duplicates `ActionRowView.rowStatus`. TODO in file. |
+| `ActionRowView.swift` | ✅ | **Clean.** Typed enums, no GCD, no singletons. |
 | `PanelContainerView.swift` | 🔲 | |
 | `PanelMainView.swift` | ✅ | Finding #19 — `localRunnerStore: LocalRunnerStore = .shared` singleton default (P7) |
 | `RunnerRowViews.swift` | 🔲 | |
@@ -119,7 +119,7 @@ Last updated: 2026-06-21 (session 5)
 ### Views/Settings/
 | File | Status | Notes |
 |------|--------|-------|
-| `ScopeEditSheet.swift` | ✅ | **Finding #54 (new).** `init` calls `ScopePreferencesStore.failureHookEnabled/Branch/Command/localRepoPath` as **static methods** on the concrete type — no injection seam (P7). `confirmSave()` calls four more `ScopePreferencesStore.set*` static methods directly. `@State private var scopeStore = ScopeStore.shared` is a documented singleton hold (comment explains it). All other logic is clean: draft-state pattern correct, `openFolderPicker` properly uses `beginSheetModal`, `@MainActor confirmSave` correct. |
+| `ScopeEditSheet.swift` | ✅ | Finding #54 — 8 `ScopePreferencesStore` static calls in `init`/`confirmSave`, no DI seam (P7) |
 | `AddRunnerSheet.swift` | ✅ | Finding #23 — `ScopeType` enum redefined (P6 DRY) |
 | `LocalRunnersView.swift` | ✅ | Finding #22 — `localRunnerDotColor(for:)` duplicated |
 | `RunnerDetailSheet.swift` | ✅ | Finding #22 call site |
@@ -173,7 +173,7 @@ Last updated: 2026-06-21 (session 5)
 | `RunnerConfigStore.swift` | ✅ | Finding #6b BOM stripping duplicated (P6 DRY) |
 | `SaveRunnerEditsUseCase.swift` | ✅ | Finding #7b `LabelsPrerequisiteError` lost at module boundary |
 | `ActiveJob.swift` | ✅ | Finding #25 call site |
-| `JobStatus.swift` | ✅ | **Clean.** `JobStatus` (6 cases + `.unknown`) and `JobConclusion` (9 cases + `.unknown`) are complete, well-documented, with `isActive`, `isFailure`, `isHookConclusion` predicates. `ExpressibleByStringLiteral` for test ergonomics. No findings. |
+| `JobStatus.swift` | ✅ | **Clean.** `JobStatus` (6 cases) + `JobConclusion` (9 cases) complete with `.unknown(String)`. `isActive`, `isFailure`, `isHookConclusion` predicates. `ExpressibleByStringLiteral` for tests. |
 | `RunnerModel.swift` | ✅ | Clean |
 | `RunnerMetrics.swift` | ✅ | Finding #13b — `pgrep`→`ps` pipeline duplicated (P6 DRY) |
 | `RunnerModelParser.swift` | ✅ | Finding #6b BOM stripping duplicated (P6 DRY) |
@@ -195,7 +195,7 @@ Last updated: 2026-06-21 (session 5)
 ### Scope/
 | File | Status | Notes |
 |------|--------|-------|
-| `ScopePreferencesStore.swift` | ✅ | Finding #11b — `UserDefaults.standard` hardcoded, not injectable (P7) |
+| `ScopePreferencesStore.swift` | ✅ | Finding #11b — `UserDefaults.standard` hardcoded (P7) |
 | `ScopeEntry.swift` | ⏭️ | Small model |
 | `GitHubScope.swift` | ⏭️ | Small model |
 | `FailureHookRunnerDependencies.swift` | 🔲 | |
@@ -204,7 +204,7 @@ Last updated: 2026-06-21 (session 5)
 | File | Status | Notes |
 |------|--------|-------|
 | `ProcessRunner.swift` | ✅ | **Clean (by design).** Intentional GCD sync + `Task.detached` — both documented. |
-| `LogFetcher.swift` | ✅ | **Finding #55 (new).** `fetchJobLog` and `fetchActionLogs` are public free functions that call `ghRaw(…)` directly — same P7 transport DI violation as #1/#50/#52. `fetchActionLogs` uses a properly structured `withTaskGroup` (no fire-and-forget). `unzipLogs` is correctly isolated: temp-dir + `defer` cleanup, materialises `FileManager.DirectoryEnumerator` before any `await` (Swift concurrency restriction). No GCD. **Finding #56 (new):** `fetchJobLog` and `fetchActionLogs` are public free functions — they form part of the same untestable transport surface as Finding #1. |
+| `LogFetcher.swift` | ✅ | Finding #55/#56 — `fetchJobLog`/`fetchActionLogs` call `ghRaw` free fn (P7); `fetchActionLogs` structured `withTaskGroup` is correct. |
 
 ### Utilities/
 | File | Status | Notes |
@@ -222,22 +222,22 @@ Last updated: 2026-06-21 (session 5)
 
 | # | File | Principle | Tier | Notes |
 |---|------|-----------|------|-------|
-| 1 | `GitHubTransportShim.swift` — free transport functions (`ghAPI`, `ghPost`, `cancelRun`) | P7 DI | 🔴 1 | Root cause of #8, #9, #50, #52, #55 |
-| 55/56 | `LogFetcher.swift` — `fetchJobLog`/`fetchActionLogs` free fns call `ghRaw` directly | P7 DI | 🔴 1 | **New** — public API surface, blocked by #1 |
-| 51 | `AppDelegate+PanelSetup.swift` — triple `RunnerStore` init, orphaned Tasks | P9 | 🔴 1 | **New** — competing poll loops |
+| 1 | `GitHubTransportShim.swift` — free transport functions | P7 DI | 🔴 1 | Root cause of #8, #9, #50, #52, #55 |
+| 55 | `LogFetcher.swift` — `fetchJobLog`/`fetchActionLogs` → `ghRaw` | P7 DI | 🔴 1 | Part of same transport surface |
+| 51 | `AppDelegate+PanelSetup.swift` — triple `RunnerStore` init, orphaned Tasks | P9 | 🔴 1 | Competing poll loops |
 | 2 | `RunnerStore+PollBridge.swift` — `ScopeStore.shared` bypass | P7 DI | 🔴 1 | Ignores injected `scopeStore` |
-| 13 | `RunnerStore+PollBridge.swift` — `.scopes` returns disabled scopes | P5 bug | 🔴 1 | Functional bug — disabled scope used for live calls |
+| 13 | `RunnerStore+PollBridge.swift` — `.scopes` returns disabled scopes | P5 bug | 🔴 1 | Functional bug |
 | 3 | `WorkflowContextMenuModifier.swift` — 3× `Task.detached` mutations | P9+P7 | 🔴 1 | Silent failure swallowing |
 | 50 | `WorkflowActionGroupFetch.swift` — `ghAPI` on hot poll path | P7 DI | 🔴 1 | Every poll cycle |
 | 4 | `StepLogView.loadLog` — `Task.detached` + `ScopeStore.shared` | P9+P7 | 🔴 1 | View dealloc risk |
-| 54 | `ScopeEditSheet.init`/`confirmSave` — `ScopePreferencesStore` static calls, no DI | P7 DI | 🟠 2 | **New** — 8 static call-sites |
-| 52 | `FailureHookRunnerUseCase.fetchFailedJobs` — `ghAPI`/`fetchJobLog` direct | P7 DI | 🟠 2 | Blocked by #1 |
+| 54 | `ScopeEditSheet` — 8 `ScopePreferencesStore` static calls | P7 DI | 🟠 2 | |
+| 52 | `FailureHookRunnerUseCase` — `ghAPI`/`fetchJobLog` direct | P7 DI | 🟠 2 | Blocked by #1 |
 | 5 | `StepLogView` → `LogCopyButton` — GCD round-trip | P2 GCD | 🟠 2 | Trivial fix |
-| 6 | `StepLogView` — raw string status comparisons | P5 typed | 🟠 2 | `JobStatus`/`JobConclusion` enums confirmed complete |
+| 6 | `StepLogView` — raw string status comparisons | P5 typed | 🟠 2 | Enums confirmed complete |
 | 7 | `RunnerStore.nextPollInterval` — raw string `JobStatus` | P5 typed | 🟠 2 | Disables fast-poll silently |
 | 8 | `JobContextMenuModifier` — `fetchJobLog`/`fetchActionLogs` free fn | P7 DI | 🟠 2 | Blocked by #1/#55 |
 | 9 | `BranchSelectorSheet.fetchBranchNames` — `ghAPI` free fn | P7 DI | 🟠 2 | Blocked by #1 |
-| 53 | `FailureHookRunnerUseCase` — `JSONDecoder()` per loop | P6 | 🟡 3 | Hoist to method top |
+| 53 | `FailureHookRunnerUseCase` — `JSONDecoder()` per loop | P6 | 🟡 3 | Trivial hoist |
 | 20 | `InlineJobRowsView.jobStatus` — duplicates `ActionRowView.rowStatus` | P6 DRY | 🟡 3 | TODO in file |
 | 10 | `WorkflowActionGroup` — identity-only `==` | P5 | 🟡 3 | |
 | 12 | `Keychain.swift` — FIXME(P24) atomicity gap | P24 | 🟡 3 | Tracked FIXME |
@@ -245,13 +245,25 @@ Last updated: 2026-06-21 (session 5)
 
 ---
 
+## Notable Clean Files (Reference Implementations)
+
+| File | Why It’s Exemplary |
+|------|--------------------|
+| `SystemStatsViewModel.swift` | Generation-stamped sampling loop; `nonisolated(unsafe)` with correct deinit pattern; `private static nonisolated` dealloc helper |
+| `PopoverLifecycleCoordinator.swift` | `Task { @MainActor }` for unspecified-thread callbacks; `MainActor.assumeIsolated` for `queue:.main` callbacks with correct rationale; double-install guard |
+| `ProcessRunner.swift` | Intentional GCD/`Task.detached` both fully documented |
+| `PollResultBuilder.swift` | Pure static; all side-effects injected; typed enums throughout |
+| `ActionRowView.swift` | Clean typed-enum status/conclusion usage — model for #6/#7 fixes |
+
+---
+
 ## Next Files to Read (Priority Order)
 
-1. `RunnerBar/App/AppDelegate+Polling.swift`
-2. `RunnerBar/Views/Components/SystemStatsViewModel.swift` — 12.8 KB
-3. `RunnerBar/Views/Settings/SettingsView.swift` — 10.6 KB
-4. `RunnerBarCore/Runner/Runner.swift`
-5. `RunnerBarCore/GitHub/GitHubRateLimitHandler.swift`
-6. `RunnerBar/Views/Main/PanelContainerView.swift` — 12.9 KB
-7. `RunnerBar/App/PopoverLifecycleCoordinator.swift` — 12.8 KB
-8. `RunnerBar/Services/FailureHookRunner.swift`
+1. `RunnerBar/Views/Main/PanelContainerView.swift` — 12.9 KB
+2. `RunnerBar/Views/Settings/SettingsView.swift` — 10.6 KB
+3. `RunnerBarCore/Runner/Runner.swift`
+4. `RunnerBarCore/GitHub/GitHubRateLimitHandler.swift`
+5. `RunnerBar/Services/FailureHookRunner.swift` + `FailureHookRunnerAdapters.swift`
+6. `RunnerBar/App/AppDelegate+StatusItem.swift` + `AppDelegate+StoreSetup.swift` + `AppDelegate+OAuthCallback.swift`
+7. `RunnerBarCore/GitHub/GitHubResponseDecoder.swift` + `GitHubRequestBuilder.swift`
+8. `RunnerBar/Views/Main/RunnerRowViews.swift` + `PanelContainerView.swift`
