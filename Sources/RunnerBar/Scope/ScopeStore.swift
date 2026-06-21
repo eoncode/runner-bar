@@ -119,6 +119,8 @@ final class ScopeStore {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[idx] = entries[idx].copying(isEnabled: enabled)
         persist()
-        log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(enabled)")
+        // Log the committed value from the array, not the argument, so the log
+        // remains accurate if copying(isEnabled:) ever gains filtering logic.
+        log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(entries[idx].isEnabled)")
     }
 }
