@@ -102,10 +102,6 @@ private func urlSessionExecute(
 ) async -> ExecuteResult {
 // Called exactly once per call; paginated tests rely on this call-count.
     guard let token = githubTokenCore() else {
-        log("\\(logTag) › no token available")
-        return .noToken
-    }
-    guard let token = githubTokenCore() else {
         log("\(logTag) › no token available")
         return .noToken
     }

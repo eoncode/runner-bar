@@ -331,7 +331,7 @@ final class GitHubTransportPaginatedTests {
         // The injected spy — not the global — must have been armed.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled)
-// clear() must NOT be called — rate-limit stops pagination before success.
+        // clear() must NOT be called — rate-limit stops pagination before success.
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
     }
@@ -532,14 +532,18 @@ final class GitHubTransportPaginatedTests {
         // githubTokenCore() read (page-1 iteration) and nil for all subsequent
         // reads (page-2 iteration onward). The lock makes the counter safe under
         // @Suite(.serialized) without requiring an actor hop.
-        let callCountLock = NSLock()
-        var tokenCallCount = 0
-        configureGHToken {
-            callCountLock.withLock {
-                defer { tokenCallCount += 1 }
-                return tokenCallCount == 0 ? "test-token" : nil
+        final class TokenCallCounter: @unchecked Sendable {
+            let lock = NSLock()
+            var count = 0
+            func next() -> String? {
+                lock.withLock {
+                    defer { count += 1 }
+                    return count == 0 ? "test-token" : nil
+                }
             }
         }
+        let counter = TokenCallCounter()
+        configureGHToken { counter.next() }
         defer { configureGHToken { "test-token" } }
 
         let spy = SpyRateLimitActor()
@@ -555,7 +559,8 @@ final class GitHubTransportPaginatedTests {
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
     }
-// MARK: - Pre-armed rate limit does not block first request
+
+    // MARK: - Pre-armed rate limit does not block first request
 
     /// A pre-armed rate-limit state (`spy.isLimited = true` before the call) does
     /// NOT block the initial request — the rate-limit check only fires inside
@@ -567,7 +572,7 @@ final class GitHubTransportPaginatedTests {
     /// received to trigger `handleRateLimitResponse`).
     @Test func paginatedReturnsItemsWhenPreArmedRateLimit() async {
         StubURLProtocol.reset()
-        let pageURL = "\\(apiBase)orgs/test/actions/runners"
+        let pageURL = "\(apiBase)orgs/test/actions/runners"
 
         StubURLProtocol.register(.init(
             data: jsonPage([["id": "1", "name": "runner-a"]]),
@@ -576,7 +581,7 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        spy.isLimited = true  // Pre-arm before the call.
+        await spy.setUp(isLimited: true)
 
         let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
 
@@ -591,7 +596,8 @@ final class GitHubTransportPaginatedTests {
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
         // isLimited must still be true — the pre-armed state is untouched.
-        #expect(spy.isLimited == true)
+        let snap = await spy.snapshot()
+        #expect(snap.isLimited == true)
     }
 
     // MARK: - Non-auth HTTP error (404) returns partial results
@@ -601,8 +607,8 @@ final class GitHubTransportPaginatedTests {
     /// path does NOT set `didFailAuth`, preserving partial results.
     @Test func paginatedReturnsPartialResultsOnHttpError404() async {
         StubURLProtocol.reset()
-        let page1URL = "\\(apiBase)orgs/test/actions/runners"
-        let page2URL = "\\(apiBase)orgs/test/actions/runners?page=2"
+        let page1URL = "\(apiBase)orgs/test/actions/runners"
+        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
         let page1Data = jsonPage([["id": "1", "name": "runner-a"]])
 
         StubURLProtocol.register(.init(
@@ -632,5 +638,4 @@ final class GitHubTransportPaginatedTests {
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
     }
-}
 }

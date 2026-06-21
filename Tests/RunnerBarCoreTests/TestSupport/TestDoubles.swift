@@ -119,7 +119,8 @@ actor HookCounter {
 /// Injects controllable rate-limit state into transport functions under test.
 actor SpyRateLimitActor: RateLimitActorProtocol {
     /// Seed this to simulate a pre-armed rate-limit state.
-    var isLimited = false
+    /// Must be called via `await` from outside the actor.
+    private var isLimited = false
     /// The reset date set by the most recent `set(resetAt:)` call, or `nil` if never set.
     ///
     /// - Note: `resetDate` is not part of `RateLimitActorProtocol` by design — the
@@ -135,6 +136,10 @@ actor SpyRateLimitActor: RateLimitActorProtocol {
     ///   or `snapshot().isLimited` for that.
     private(set) var setCalled = false
     private(set) var clearCalled = false
+
+    func setUp(isLimited: Bool) {
+        self.isLimited = isLimited
+    }
 
     func set(resetAt: TimeInterval?) {
         setCalled = true
