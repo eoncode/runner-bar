@@ -514,9 +514,7 @@ actor RunnerStore {
         let configuredScopeSet = Set(scopes)
         var extraOrgScopes: [String] = []
         for localRunner in localRunners {
-            guard let urlString = localRunner.gitHubUrl,
-                  let url = URL(string: urlString)
-            else { continue }
+            guard let url = localRunner.gitHubUrl else { continue }
             let parts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
             guard parts.count == 1 else { continue }
             let orgScope = parts[0]

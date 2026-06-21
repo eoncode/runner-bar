@@ -167,7 +167,7 @@ struct RunnerDetailSheet: View {
             sectionHeader("Runner Info")
             infoCard {
                 if let url = runner.gitHubUrl {
-                    infoRow(label: "GitHub URL", value: url, copyable: true)
+                    infoRow(label: "GitHub URL", value: url.absoluteString, copyable: true)
                     Divider().padding(.leading, RBSpacing.md)
                 }
                 infoRow(label: "Work folder", value: runner.workFolder ?? "_work")

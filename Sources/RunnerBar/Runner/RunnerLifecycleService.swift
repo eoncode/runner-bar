@@ -39,7 +39,7 @@ struct RunnerLifecycleService {
     @discardableResult
     func start(runner: RunnerModel) async -> LifecycleResult {
         let ip = runner.installPath ?? "nil"
-        let gh = runner.gitHubUrl ?? "nil"
+        let gh = runner.gitHubUrl?.absoluteString ?? "nil"
         logStep("START", "called runner=\(runner.runnerName) installPath=\(ip) gitHubUrl=\(gh)")
         guard let path = runner.installPath else {
             logStep("START", "abort — no installPath for \(runner.runnerName)")
@@ -148,7 +148,7 @@ struct RunnerLifecycleService {
     @discardableResult
     func remove(runner: RunnerModel) async -> Bool {
         let ip = runner.installPath ?? "nil"
-        let gh = runner.gitHubUrl ?? "nil"
+        let gh = runner.gitHubUrl?.absoluteString ?? "nil"
         logStep("REMOVE", "called runner=\(runner.runnerName) installPath=\(ip) gitHubUrl=\(gh)")
         guard let path = runner.installPath else {
             logStep("REMOVE", "abort — no installPath for \(runner.runnerName)")
@@ -166,7 +166,7 @@ struct RunnerLifecycleService {
             logStep("REMOVE", "abort — no gitHubUrl on runner \(runner.runnerName)")
             return false
         }
-        let scopeString = scopeFromGitHubUrl(gitHubUrl)
+        let scopeString = scopeFromGitHubUrl(gitHubUrl.absoluteString)
 
         logStep("REMOVE", "step2: fetching removal token for scope=\(scopeString)")
         guard let token = await fetchRemovalToken(scope: scopeString) else {

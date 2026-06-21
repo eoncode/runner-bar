@@ -10,7 +10,7 @@ import Testing
 private func makeRunner(
     runnerName: String = "test-runner",
     agentId: Int? = 42,
-    gitHubUrl: String? = "https://github.com/owner/repo",
+    gitHubUrl: URL? = URL(string: "https://github.com/owner/repo"),
     installPath: String? = testRunnerInstallPath
 ) -> RunnerModel {
     RunnerModel(
@@ -129,7 +129,7 @@ struct SaveRunnerEditsUseCaseTests {
 
     @Test("calls labelsService with correct scope and runnerID")
     func labelsCalledWithCorrectArgs() async {
-        let runner   = makeRunner(agentId: 99, gitHubUrl: "https://github.com/myorg/myrepo")
+        let runner   = makeRunner(agentId: 99, gitHubUrl: URL(string: "https://github.com/myorg/myrepo"))
         var draft    = RunnerEditDraft(runner: runner)
         let original = RunnerEditDraft(runner: runner)
         draft.labelsText = "gpu, large"

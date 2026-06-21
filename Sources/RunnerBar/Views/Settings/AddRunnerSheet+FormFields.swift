@@ -336,7 +336,7 @@ extension AddRunnerSheet {
         // the folder's last path component if absent or empty.
         let nameFromFile = model.runnerName.isEmpty ? nil : model.runnerName
         detectedName = nameFromFile ?? folderName
-        detectedGitHubURL = model.gitHubUrl ?? ""
+        detectedGitHubURL = model.gitHubUrl?.absoluteString ?? ""
         isDuplicate = checkDuplicate(runnerName: detectedName)
 
         log("AddRunnerSheet › pre-existing: name=\(detectedName) url=\(detectedGitHubURL) duplicate=\(isDuplicate)")

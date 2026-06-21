@@ -29,7 +29,7 @@ struct OrgRunnerMetricsResolutionTests {
     ) -> RunnerModel {
         RunnerModel(
             runnerName: "org-runner-1",
-            gitHubUrl: "https://github.com/myorg",
+            gitHubUrl: URL(string: "https://github.com/myorg"),
             agentId: agentId,
             apiId: apiId,
             workFolder: nil,

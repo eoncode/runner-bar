@@ -189,7 +189,7 @@ struct LocalRunnersView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(runner.runnerName).font(.system(size: 13)).lineLimit(1)
                 if let url = runner.gitHubUrl {
-                    Text(url).font(.caption2).foregroundColor(Color.rbTextSecondary).lineLimit(1)
+                    Text(url.absoluteString).font(.caption2).foregroundColor(Color.rbTextSecondary).lineLimit(1)
                 }
             }
             Spacer()
