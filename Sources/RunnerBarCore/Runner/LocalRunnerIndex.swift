@@ -78,12 +78,17 @@ public final class LocalRunnerIndex {
             }
         } else if let legacy = defaults.dictionary(forKey: Self.indexKey) as? [String: String] {
             // Migration path: executes once after upgrading from the pre-Codable plist format.
-            // After first launch post-update, persistIndex() rewrites the value as Data under
-            // the same key, so this branch becomes permanently unreachable on all subsequent
-            // launches — the `if let data` branch above fires instead.
+            // persistIndex() overwrites the same key as Data; if it succeeds, this branch
+            // becomes permanently unreachable on subsequent launches (the `if let data` branch
+            // fires instead). If encode fails (logged inside persistIndex), the plist value
+            // remains and migration retries on next launch — safe and visible in logs.
             runnerIndex = legacy
             persistIndex()
-            log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON")
+            if defaults.data(forKey: Self.indexKey) != nil {
+                log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON")
+            } else {
+                log("LocalRunnerIndex › loadIndex — migration encode failed; plist retained, will retry next launch")
+            }
         } else {
             runnerIndex = [:]
             log("LocalRunnerIndex › loadIndex — no data found, starting empty")
