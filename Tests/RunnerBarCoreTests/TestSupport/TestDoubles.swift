@@ -161,8 +161,15 @@ actor SpyRateLimitActor: RateLimitActorProtocol {
         resetDate = nil
     }
 
-    /// Clears the rate-limit flag only when the actor is not currently limited.
-    /// Mirrors `RateLimitActor.clearIfNotLimited()` — no-ops when already limited.
+    /// Clears the rate-limit flag only when not currently limited.
+    ///
+    /// Mirrors `RateLimitActor.clearIfNotLimited()` semantics exactly:
+    /// - When `isLimited == false`: calls `clear()`, so `clearCalled` becomes `true`.
+    /// - When `isLimited == true`: no-op; `clearCalled` remains unchanged.
+    ///
+    /// This means tests that seed `spy.isLimited = true` before the call under test
+    /// will correctly see `clearCalled == false` after a 2xx response, confirming
+    /// that the pre-armed rate-limit window was not disturbed.
     func clearIfNotLimited() {
         guard !isLimited else { return }
         clear()

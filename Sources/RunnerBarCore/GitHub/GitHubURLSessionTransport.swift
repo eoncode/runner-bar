@@ -136,25 +136,21 @@ private func urlSessionExecute(
             logErrorBody(data, endpoint: urlString, status: http.statusCode)
             return .httpError(http.statusCode)
         }
-        // Guard against erasing an active rate-limit window.
+        // Clear the rate-limit flag after a successful 2xx response, but only
+        // when the actor is not currently limited. A single `clearIfNotLimited()`
+        // call performs the check and the clear in one atomic actor hop, eliminating
+        // the TOCTOU window that existed with the old snapshot+clear two-hop pattern:
         //
-        // Calling clear() unconditionally on every 2xx introduces a race: concurrent
-        // scope fetches can interleave so that request A receives a genuine 403/429
-        // and arms the actor, while request B — already in-flight and returning 200 —
-        // clears the actor milliseconds later, hiding the active limit from RunnerStore
-        // and causing the app to resume high-frequency polling during the GitHub window.
+        //   OLD (racy): let snap = await rateLimiter.snapshot()   // hop 1
+        //               if !snap.isLimited { await rateLimiter.clear() }  // hop 2
         //
-        // Fix: snapshot the actor first. Only call clear() when the actor is not
-        // currently limited. If isLimited is true, a concurrent request has armed it
-        // for a real window and we must not disturb it; the actor's own scheduled
-        // reset task will clear it when the window expires.
+        // Between hop 1 and hop 2 a concurrent request could arm the actor, and the
+        // subsequent unconditional clear() would erase an active rate-limit window.
         //
         // The intentional clear site (RunnerStore.fetch() calls clearGhRateLimit() at
-        // the start of each poll cycle) is unaffected — that call bypasses this guard.
-        let snapshot = await rateLimiter.snapshot()
-        if !snapshot.isLimited {
-            await rateLimiter.clear()
-        }
+        // the start of each poll cycle) bypasses this guard by design — it continues
+        // to call clear() directly.
+        await rateLimiter.clearIfNotLimited()
         let linkHeader = http.value(forHTTPHeaderField: "Link")
         return .success(data, statusCode: http.statusCode, linkHeader: linkHeader)
     } catch {
