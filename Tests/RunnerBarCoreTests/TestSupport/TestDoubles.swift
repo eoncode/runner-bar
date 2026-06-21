@@ -120,7 +120,8 @@ actor HookCounter {
 actor SpyRateLimitActor: RateLimitActorProtocol {
     /// Seed this to simulate a pre-armed rate-limit state.
     /// Must be called via `await` from outside the actor.
-    private var isLimited = false
+    /// Read-only access from tests is through `snapshot().isLimited`.
+    var isLimited = false
     /// The reset date set by the most recent `set(resetAt:)` call, or `nil` if never set.
     ///
     /// - Note: `resetDate` is not part of `RateLimitActorProtocol` by design — the

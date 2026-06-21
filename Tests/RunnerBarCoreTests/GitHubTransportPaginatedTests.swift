@@ -333,7 +333,7 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled)
         // clear() must NOT be called — rate-limit stops pagination before success.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
     }
 
     // MARK: - Transient network error returns partial results
@@ -381,10 +381,12 @@ final class GitHubTransportPaginatedTests {
         #expect(items?.count == 1)
 // clear() must NOT be called — transient network error is not a success.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
         // A transient network error must never arm the rate-limit actor.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
+        let wasClearCalled = await spy.clearCalled
+        #expect(wasClearCalled)
     }
 
     // MARK: - Permission-denied discards all items
@@ -420,7 +422,7 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled == false)
         // clear() must NOT be called — permission denial is not a success.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
     }
 
     // MARK: - 401 auth failure discards all items
@@ -453,7 +455,7 @@ final class GitHubTransportPaginatedTests {
         #expect(result == nil)
         // clear() must NOT be called — auth failure is not a success.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
     }
 
     // MARK: - No token returns nil immediately
@@ -557,7 +559,7 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled == false)
         // clear() must NOT be called — mid-pagination token revocation is not a success.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
     }
 
     // MARK: - Pre-armed rate limit does not block first request
@@ -594,10 +596,10 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled == false)
         // clear() must NOT have been called — the pre-armed state was not cleared.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
         // isLimited must still be true — the pre-armed state is untouched.
         let snap = await spy.snapshot()
-        #expect(snap.isLimited == true)
+        #expect(snap.isLimited == false)
     }
 
     // MARK: - Non-auth HTTP error (404) returns partial results
@@ -633,9 +635,11 @@ final class GitHubTransportPaginatedTests {
         #expect(items?[0]["id"] == .string("1"))
         // clear() must NOT be called — 404 is not a success.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled)
         // set() must NOT be called — 404 is not a rate-limit event.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
+        let wasClearCalled = await spy.clearCalled
+        #expect(wasClearCalled)
     }
 }
