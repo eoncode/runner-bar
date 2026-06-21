@@ -209,7 +209,14 @@ public struct SaveRunnerEditsUseCase: Sendable {
         guard let url = runner.gitHubUrl else { return .failure(.missingGitHubUrl) }
         let parts = url.pathComponents.filter { $0 != "/" }
         let scope: String
-        if parts.count >= 2 { scope = parts[0] + "/" + parts[1] } else if parts.count == 1 { scope = parts[0] } else { return .failure(.invalidScope(url)) }
+        if parts.count >= 2 {
+            scope = parts[0] + "/" + parts[1]
+        } else if parts.count == 1 {
+            scope = parts[0]
+        } else {
+            // URL is present but has no org/repo path components (e.g. bare `https://github.com`).
+            return .failure(.invalidScope(url))
+        }
         return .success((agentId, scope))
     }
 }

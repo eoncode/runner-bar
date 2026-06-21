@@ -375,6 +375,28 @@ struct SaveRunnerEditsUseCaseTests {
         #expect(await labels.callCount == 0)
     }
 
+    /// #1480 — When agentId is present but gitHubUrl is nil, execute() must append
+    /// the `.missingGitHubUrl` message and must NOT call labelsService.patch.
+    @Test("labels step — nil gitHubUrl appends correct error and skips patch")
+    func labelsPrereqMissingGitHubUrl() async {
+        let runner   = makeRunner(gitHubUrl: nil)
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.labelsText = "some-label"
+
+        let labels  = SpyLabelsService()
+        let useCase = makeUseCase(labels: labels)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        #expect(msgs.contains(where: { $0.contains("missing GitHub URL") }))
+        #expect(await labels.callCount == 0)
+    }
+
     /// #1480 — When gitHubUrl is present but is a bare-host URL (no org/repo path),
     /// execute() must append the `.invalidScope` message and must NOT call labelsService.patch.
     @Test("labels step — bare-host gitHubUrl appends invalidScope error and skips patch")
