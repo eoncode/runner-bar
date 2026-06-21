@@ -455,6 +455,15 @@ final class GitHubTransportPaginatedTests {
     ///
     /// - Note: Safe under `@Suite(.serialized)` — the token mutation is sequenced
     ///   away from all other tests in this suite.
+    ///
+    /// - Warning: The call-count provider assumes `urlSessionExecute` calls
+    ///   `githubTokenCore()` exactly once per pagination iteration (the
+    ///   `guard let token = githubTokenCore()` at the top of the function).
+    ///   If that guard is hoisted, cached, or called more than once per iteration,
+    ///   the counter will misfire — either returning nil too early (page-1 gets
+    ///   nil, test passes trivially) or too late (page-2 still gets a token,
+    ///   stub miss produces a network error instead of `.noToken`). Re-examine
+    ///   this test whenever `urlSessionExecute`'s token-read pattern changes.
     @Test func paginatedReturnsNilWhenTokenRevokedMidPagination() async {
         StubURLProtocol.reset()
         let page1URL = "\(apiBase)orgs/test/actions/runners"
