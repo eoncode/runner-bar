@@ -181,12 +181,12 @@ public struct RunnerStatusEnricher: RunnerStatusEnricherProtocol, Sendable {
             let name = result[idx].runnerName
             // Restrict lookup to the runner's own scope first to avoid cross-scope
             // name collisions, then fall back to a scan across all scopes.
-            let scopedAPI = result[idx].gitHubUrl.flatMap { apiByScope[$0] } ?? [:]
+            let scopedAPI = result[idx].gitHubUrl.flatMap { apiByScope[$0.absoluteString] } ?? [:]
 
             if let api = Self.findPayload(name: name, in: scopedAPI) ?? Self.findPayload(name: name, in: fallbackAPI) {
                 result[idx] = applyEnrichment(to: result[idx], from: api)
             } else {
-                let gitHubUrl = result[idx].gitHubUrl ?? "NIL"
+                let gitHubUrl = result[idx].gitHubUrl?.absoluteString ?? "NIL"
                 log("[Enricher] NO MATCH for '\(name)' — available API names: \(scopedAPI.keys.sorted()) gitHubUrl=\(gitHubUrl)")
             }
         }
