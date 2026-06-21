@@ -25,8 +25,9 @@ import SwiftUI
 ///   replaced with a plain `nonisolated var pollingTask: Task<Void, Never>?`.
 private final class TaskBox: @unchecked Sendable {
     /// The structured polling task, or `nil` before polling has started.
+    /// Invariant: must only be written from `@MainActor` context.
     var task: Task<Void, Never>?
-    /// Creates an empty box.
+    /// Creates an empty `TaskBox` with no active polling task.
     init() {}
 }
 
@@ -91,7 +92,6 @@ public final class APICallCounterViewModel {
                 } catch {
                     return
                 }
-                guard !Task.isCancelled else { return }
             }
         }
     }
