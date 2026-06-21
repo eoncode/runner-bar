@@ -214,11 +214,11 @@ final class OAuthService {
 
         /// Maps Swift property names to the snake_case JSON keys returned by the GitHub OAuth endpoint.
         private enum CodingKeys: String, CodingKey {
-            /// Maps to `access_token`.
+            /// JSON key: `access_token`.
             case accessToken = "access_token"
-            /// Maps to `error`.
+            /// JSON key: `error` — maps directly (no rename).
             case error
-            /// Maps to `error_description`.
+            /// JSON key: `error_description`.
             case errorDescription = "error_description"
         }
 
@@ -232,6 +232,32 @@ final class OAuthService {
         }
     }
 
+    /// Typed request body for the GitHub OAuth token-exchange POST.
+    ///
+    /// Replaces the `[String: String]` dictionary literal previously used in
+    /// `exchangeCode(_:)`. Using a concrete `Encodable` struct:
+    /// - Makes the three required fields explicit and compiler-checked.
+    /// - Eliminates stringly-typed key spellings (`"client_id"` etc.) at the call site.
+    /// - Documents the contract of the GitHub OAuth token endpoint inline.
+    private struct OAuthTokenRequest: Encodable {
+        /// The GitHub OAuth app client ID.
+        let clientID: String
+        /// The GitHub OAuth app client secret.
+        let clientSecret: String
+        /// The one-time authorization code received in the OAuth redirect callback.
+        let code: String
+
+        /// Maps Swift property names to the snake_case JSON keys expected by the GitHub OAuth endpoint.
+        private enum CodingKeys: String, CodingKey {
+            /// JSON key: `client_id`.
+            case clientID     = "client_id"
+            /// JSON key: `client_secret`.
+            case clientSecret = "client_secret"
+            /// JSON key: `code` — maps directly (no rename).
+            case code
+        }
+    }
+
     /// POSTs the authorization code to GitHub and saves the returned access token to Keychain.
     private func exchangeCode(_ code: String) async {
         log("OAuthService › exchangeCode — POST to GitHub")
@@ -240,11 +266,21 @@ final class OAuthService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? encoder.encode([
-            "client_id": OAuthSecrets.clientID,
-            "client_secret": OAuthSecrets.clientSecret,
-            "code": code
-        ])
+        let body = OAuthTokenRequest(
+            clientID: OAuthSecrets.clientID,
+            clientSecret: OAuthSecrets.clientSecret,
+            code: code
+        )
+        // OAuthTokenRequest contains only String fields and will always encode
+        // successfully in practice. However, a nil httpBody would silently send
+        // a broken POST to GitHub with no diagnostic — fail loudly instead.
+        do {
+            req.httpBody = try encoder.encode(body)
+        } catch {
+            log("OAuthService › exchangeCode: failed to encode request body — \(error)")
+            onCompletion?(false)
+            return
+        }
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let response = try? decoder.decode(OAuthTokenResponse.self, from: data)
         else {
