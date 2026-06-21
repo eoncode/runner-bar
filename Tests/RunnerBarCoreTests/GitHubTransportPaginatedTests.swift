@@ -192,6 +192,41 @@ final class GitHubTransportPaginatedTests {
         #expect(wasClearCalled)
     }
 
+    // MARK: - Valid empty-array response returns non-nil
+
+    /// A 200 response with a valid empty-array body (`[]`) must return non-nil
+    /// so callers can distinguish "confirmed zero items" from a failure (nil).
+    ///
+    /// Regression guard for the former `guard !allItems.isEmpty else { return nil }`
+    /// which made a legitimate empty endpoint (e.g. an org with no registered runners)
+    /// indistinguishable from an auth failure at the call site. If the store falls back
+    /// to cached data on nil, a zero-runner response would permanently show stale entries.
+    ///
+    /// Verifies:
+    /// - `result != nil` — a valid 200 [] must not be collapsed to a failure
+    /// - `items` decodes to an empty array (not nil, not a non-empty array)
+    @Test func paginatedReturnsEmptyArrayOnValidEmptyResponse() async {
+        StubURLProtocol.reset()
+        let pageURL = "\(apiBase)orgs/test/actions/runners"
+
+        // Valid 200 with an empty JSON array — e.g. org has no registered runners.
+        StubURLProtocol.register(.init(
+            data: jsonPage([]),
+            statusCode: 200,
+            headers: [:]
+        ), for: pageURL)
+
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        // Must be non-nil: a valid empty response is distinguishable from a failure.
+        #expect(result != nil)
+        // Must decode to an empty array, not nil.
+        let items = decodeItems(result)
+        #expect(items != nil)
+        #expect(items?.count == 0)
+    }
+
     // MARK: - Non-array body stops pagination gracefully
 
     /// A 200 response with a non-array JSON body stops pagination and returns

@@ -160,10 +160,11 @@ public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) a
 /// partial-results return path here.
 ///
 /// - Returns `nil` on auth failure (401, permission-denied 403, missing/revoked token).
-/// - Returns `nil` when the endpoint returns a valid empty-array response (`[]`) or when
-///   a stopping condition occurs before any items are accumulated (e.g. rate-limited or
-///   network error on the very first page). Callers cannot distinguish these two nil cases;
-///   see `guard !allItems.isEmpty` below.
+/// - Returns `nil` when a stopping condition occurs before any items are accumulated
+///   (e.g. rate-limited or network error on the very first page).
+/// - Returns encoded `[]` (non-nil) when the endpoint returns a valid empty-array
+///   response. Callers can decode this to an empty array and distinguish "confirmed
+///   empty" from "something went wrong" (nil).
 /// - Returns partial results (not nil) if at least one page was accumulated before
 ///   pagination was stopped by a genuine rate limit.
 /// - Returns partial results (not nil) if at least one page was accumulated before
@@ -191,10 +192,6 @@ public func urlSessionAPIPaginated(
     // retain the distinction so operators can tell them apart.
     var didFailAuth = false
     var didRateLimit = false
-    // Tracks whether at least one page decoded successfully. Used in the post-loop
-    // guard to distinguish a legitimate empty-array response (200 []) — which should
-    // return empty Data, not nil — from a loop that never got a successful page at all.
-    var hadAtLeastOnePage = false
 
     pagination: while let urlString = nextURL {
         let result = await urlSessionExecute(
@@ -263,7 +260,11 @@ public func urlSessionAPIPaginated(
         }
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
-    guard !allItems.isEmpty else { return nil }
+    // Encode allItems unconditionally: a valid empty-array response (200 []) must
+    // return non-nil so callers can distinguish "confirmed zero items" from a failure.
+    // Encoding [] produces the JSON bytes for "[]" which decodes back to an empty
+    // array — never nil. Auth-failure and first-page-rate-limit paths already
+    // returned nil explicitly above, so their behaviour is unchanged.
     return try? sharedEncoder.encode(allItems)
 }
 
