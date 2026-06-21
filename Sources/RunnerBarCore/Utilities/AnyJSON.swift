@@ -14,7 +14,7 @@ import Foundation
 ///
 /// The `.int` case exists specifically to support integer fields — such as `agentId` — that
 /// may exceed `2^53` and would lose precision if round-tripped through `Double`.
-public enum AnyJSON: Codable {
+public enum AnyJSON: Codable, Equatable {
     /// A JSON object (`{ ... }`).
     case object([String: AnyJSON])
     /// A JSON array (`[ ... ]`).

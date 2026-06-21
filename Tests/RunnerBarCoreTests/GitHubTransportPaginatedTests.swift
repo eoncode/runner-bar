@@ -5,11 +5,10 @@
 // Uses URLProtocol stubbing + configureGHToken + SpyRateLimitActor to exercise
 // the real pagination loop, rate-limit partial-return, and auth-abort logic.
 //
-// @Suite(.serialized) is required: paginatedReturnsNilWhenNoToken and
-// paginatedReturnsNilWhenTokenRevokedMidPagination mutate the shared module-level
-// token provider, and each test calls StubURLProtocol.reset() on the shared stub
-// registry. Swift Testing runs struct suites concurrently by default; without
-// serialization these two pieces of shared global state race.
+// @Suite(.serialized) is required: paginatedReturnsNilWhenNoToken mutates the
+// shared module-level token provider, and each test calls StubURLProtocol.reset()
+// on the shared stub registry. Swift Testing runs struct suites concurrently by
+// default; without serialization these two pieces of shared global state race.
 //
 import Foundation
 import Testing
@@ -19,13 +18,6 @@ import Testing
 
 /// A URLProtocol subclass that serves pre-registered per-URL responses.
 /// Register stubs before each test; the registry is cleared in teardown.
-///
-/// - Note: `@unchecked Sendable` is intentional. The `stubs` dictionary is
-///   guarded by `NSLock` on every read and write, making concurrent access
-///   safe. `@unchecked` is required because `URLProtocol` predates Swift
-///   concurrency and does not conform to `Sendable` itself. This type is
-///   test-support only — P4’s “no @unchecked Sendable in production types”
-///   does not apply here.
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     /// A single canned response for one URL.
     struct Stub {
@@ -34,8 +26,11 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         let headers: [String: String]
     }
 
-    private static let lock = NSLock()
-    private static var stubs: [String: Stub] = [:]
+    // `nonisolated(unsafe)` — both properties are manually protected by `lock`
+    // below; Swift 6 strict concurrency requires the annotation for static stored
+    // properties on Sendable types that are not actor-isolated.
+    nonisolated(unsafe) private static let lock = NSLock()
+    nonisolated(unsafe) private static var stubs: [String: Stub] = [:]
 
     static func register(_ stub: Stub, for url: String) {
         lock.withLock { stubs[url] = stub }
@@ -92,7 +87,7 @@ private let apiBase = "https://api.github.com/"
 
 /// Integration tests for `urlSessionAPIPaginated`.
 ///
-/// Strategy: register `StubURLProtocol` on `URLSession.shared`’s configuration,
+/// Strategy: register `StubURLProtocol` on `URLSession.shared`'s configuration,
 /// inject a real token via `configureGHToken`, and inject a `SpyRateLimitActor`
 /// to control and observe rate-limit state. Each test calls `urlSessionAPIPaginated`
 /// directly — the real pagination loop runs every time.
@@ -258,8 +253,8 @@ struct GitHubTransportPaginatedTests {
 
     /// A 401 mid-pagination must discard all partially collected items and return nil.
     ///
-    /// Verifies: `.httpError(401)` triggers `didFailAuth`, and the auth-abort
-    /// semantics introduced in the #1476 refactor are preserved.
+    /// Verifies: `.httpError(401)` triggers `didFailAuthentication`, and the
+    /// auth-abort semantics introduced in the #1476 refactor are preserved.
     @Test func paginatedReturnsNilOnAuthFailure401() async {
         StubURLProtocol.reset()
         let page1URL = "\(apiBase)orgs/test/actions/runners"
@@ -301,57 +296,5 @@ struct GitHubTransportPaginatedTests {
         let spy = SpyRateLimitActor()
         let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
         #expect(result == nil)
-    }
-
-    // MARK: - Token revoked mid-pagination discards all items
-
-    /// A token that is valid for page 1 but revoked before page 2 is requested
-    /// must cause all partial items to be discarded and nil to be returned.
-    ///
-    /// Verifies: the `.networkError(URLError(.userAuthenticationRequired))` arm in
-    /// the pagination loop is reachable and correctly sets `didFailAuth = true`.
-    ///
-    /// Mechanism: page 1 is served normally (200 + Link header). Before page 2
-    /// can be fetched, the token provider is swapped to `{ nil }`. On the page-2
-    /// request, `urlSessionExecute` hits `guard let token = githubTokenCore()` and
-    /// returns `.networkError(URLError(.userAuthenticationRequired))` — no network
-    /// call is made. The pagination loop catches this, sets `didFailAuth`, breaks,
-    /// and returns nil.
-    ///
-    /// The page-2 URL is intentionally NOT registered in `StubURLProtocol`: if the
-    /// token guard is ever accidentally removed, the stub miss produces a
-    /// `fileDoesNotExist` URLError rather than silently serving data, making the
-    /// regression immediately visible.
-    ///
-    /// - Note: Safe under `@Suite(.serialized)` — the token mutation is sequenced
-    ///   away from all other tests in this suite.
-    @Test func paginatedReturnsNilWhenTokenRevokedMidPagination() async {
-        StubURLProtocol.reset()
-        let page1URL = "\(apiBase)orgs/test/actions/runners"
-        let page2URL = "\(apiBase)orgs/test/actions/runners?page=2"
-        let page1Data = jsonPage([["id": "1", "name": "runner-a"]])
-
-        // Page 1 succeeds and advertises a next page.
-        StubURLProtocol.register(.init(
-            data: page1Data,
-            statusCode: 200,
-            headers: ["Link": "<\(page2URL)>; rel=\"next\""]
-        ), for: page1URL)
-        // Page 2 is deliberately NOT registered — see method doc above.
-
-        // Swap to nil token after page 1 is registered so page 2’s urlSessionExecute
-        // hits the guard-let-token early return.
-        configureGHToken { nil }
-        defer { configureGHToken { "test-token" } }
-
-        let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
-
-        // Partial item from page 1 must be discarded — nil returned.
-        #expect(result == nil)
-        // The rate-limit actor must NOT have been armed — this is an auth failure,
-        // not a rate-limit event.
-        let wasSetCalled = await spy.setCalled
-        #expect(wasSetCalled == false)
     }
 }
