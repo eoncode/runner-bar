@@ -29,6 +29,7 @@ final class PollLoopCoordinator {
 
     // MARK: - Init
 
+    /// Creates a new coordinator with all task handles set to `nil`.
     init() {}
 
     deinit { cancelAll() }
