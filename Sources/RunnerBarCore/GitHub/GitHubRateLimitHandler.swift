@@ -187,7 +187,12 @@ public actor RateLimitActor: RateLimitActorProtocol {
     /// arrive here *after* a newer `set(resetAt:)` has incremented `self.generation`.
     /// Without the check, the stale task would clear `isLimited` and `resetDate` for
     /// the newer, still-active rate-limit window — silently unblocking the app mid-limit.
-    private func didFire(generation: Int, scheduledDelay: TimeInterval) {
+    ///
+    /// Declared `async` even though the body is synchronous — this method is called
+    /// with `await` from a non-isolated `Task` closure to cross the actor boundary,
+    /// and making it `async` satisfies the Swift 6 compiler warning about `await`
+    /// used on a non-async callee.
+    private func didFire(generation: Int, scheduledDelay: TimeInterval) async {
         guard generation == self.generation else {
             log("RateLimitActor › stale didFire ignored (gen=\(generation) current=\(self.generation))")
             return
