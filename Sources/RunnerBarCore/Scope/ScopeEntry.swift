@@ -44,6 +44,8 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
 
 // MARK: - Copy helpers
 
+/// Helpers for deriving immutable `ScopeEntry` copies with a single field replaced.
+/// Follows the same `copying(…)` pattern used by `ActiveJob` and `RunnerModel`.
 extension ScopeEntry {
     /// Returns a copy of this entry with `isEnabled` replaced, preserving `id` and `scope`.
     /// Use this instead of mutating `isEnabled` directly — the field is `let`.
