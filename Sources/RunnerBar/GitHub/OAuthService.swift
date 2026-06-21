@@ -232,6 +232,28 @@ final class OAuthService {
         }
     }
 
+    /// Typed request body for the GitHub OAuth token-exchange POST.
+    ///
+    /// Replaces the `[String: String]` dictionary literal previously used in
+    /// `exchangeCode(_:)`. Using a concrete `Encodable` struct:
+    /// - Makes the three required fields explicit and compiler-checked.
+    /// - Eliminates stringly-typed key spellings (`"client_id"` etc.) at the call site.
+    /// - Documents the contract of the GitHub OAuth token endpoint inline.
+    private struct OAuthTokenRequest: Encodable {
+        /// The GitHub OAuth app client ID. Sourced from `OAuthSecrets.clientID`.
+        let clientID: String
+        /// The GitHub OAuth app client secret. Sourced from `OAuthSecrets.clientSecret`.
+        let clientSecret: String
+        /// The one-time authorization code received in the OAuth redirect callback.
+        let code: String
+
+        private enum CodingKeys: String, CodingKey {
+            case clientID     = "client_id"
+            case clientSecret = "client_secret"
+            case code
+        }
+    }
+
     /// POSTs the authorization code to GitHub and saves the returned access token to Keychain.
     private func exchangeCode(_ code: String) async {
         log("OAuthService › exchangeCode — POST to GitHub")
@@ -240,11 +262,12 @@ final class OAuthService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? encoder.encode([
-            "client_id": OAuthSecrets.clientID,
-            "client_secret": OAuthSecrets.clientSecret,
-            "code": code
-        ])
+        let body = OAuthTokenRequest(
+            clientID: OAuthSecrets.clientID,
+            clientSecret: OAuthSecrets.clientSecret,
+            code: code
+        )
+        req.httpBody = try? encoder.encode(body)
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let response = try? decoder.decode(OAuthTokenResponse.self, from: data)
         else {

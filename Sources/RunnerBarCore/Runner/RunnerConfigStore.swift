@@ -35,10 +35,11 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// by `RunnerConfig`. All caller-facing APIs are strongly typed and `async`, which keeps
 /// runner config I/O out of view code and commit helpers.
 ///
-/// All disk operations are dispatched to `DispatchQueue.global(qos: .utility)` via
-/// `withCheckedContinuation` / `withCheckedThrowingContinuation` so the actor's
-/// cooperative thread is never blocked by synchronous file I/O — consistent with
-/// the pattern used in `RunnerProxyStore`.
+/// Disk I/O is performed in `@concurrent` free functions so the actor's cooperative
+/// thread is never blocked by synchronous file I/O. This replaces the previous
+/// `DispatchQueue.global` + `withCheckedThrowingContinuation` bridge pattern and also
+/// removes the `let config = copy config` workaround that was needed because a
+/// `borrowing` parameter cannot escape into an `@escaping` closure.
 public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Shared instance
@@ -49,17 +50,12 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     // MARK: Private properties
 
     /// Decoder used for reading `.runner` JSON. Thread-safe: `JSONDecoder` has no mutable state after init.
-    /// `nonisolated` so the DispatchQueue.global closure in `save(_:at:)` can capture
-    /// it without crossing the actor's isolation boundary. Safe because `JSONDecoder`
-    /// is immutable after initialisation and has no mutable state.
     nonisolated private let decoder = JSONDecoder()
 
-    // Note: JSONEncoder is intentionally created per-call in save(_:at:) rather than
-    // hoisted as a shared instance. save(_:at:) suspends the actor at
-    // withCheckedThrowingContinuation, so two concurrent save() calls can reach
-    // encoder.encode() simultaneously on DispatchQueue.global(). Apple does not
-    // document JSONEncoder as safe for concurrent encode calls, so a fresh instance
-    // per invocation is the only safe approach.
+    // Note: JSONEncoder is intentionally created per-call in the @concurrent save helper rather
+    // than hoisted as a shared instance, because two concurrent save() calls can invoke
+    // the encoder simultaneously. Apple does not document JSONEncoder as safe for concurrent
+    // encode calls, so a fresh instance per invocation is the only safe approach.
 
     // MARK: Init
 
@@ -83,25 +79,13 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// Loads the typed runner config from `installPath/.runner`.
     ///
     /// Handles the UTF-8 BOM prefix emitted by the GitHub runner agent.
-    /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the
-    /// actor's cooperative thread is never blocked.
+    /// Disk I/O runs in a `@concurrent` free function so the actor's cooperative
+    /// thread is never blocked.
     public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        // `withCheckedThrowingContinuation` exposes `throws(any Error)` even though the
-        // closure only ever resumes with `RunnerConfigStoreError` at runtime. Both a typed
-        // catch and a bare fallback are required to bridge the gap.
         let data: Data
         do {
-            data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
-                DispatchQueue.global(qos: .utility).async {
-                    do {
-                        let raw = Self.stripBOM(from: try Data(contentsOf: url))
-                        continuation.resume(returning: raw)
-                    } catch {
-                        continuation.resume(throwing: RunnerConfigStoreError.readFailed(installPath, error))
-                    }
-                }
-            }
+            data = try await _loadData(from: url, installPath: installPath)
         } catch let configError as RunnerConfigStoreError {
             throw configError
         } catch {
@@ -126,78 +110,14 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// are preserved via the private `AnyJSON` type — no `[String: Any]` or
     /// `JSONSerialization` is used anywhere in the merge path.
     ///
-    /// Disk I/O is dispatched to `DispatchQueue.global(qos: .utility)` so the actor's
-    /// cooperative thread is never blocked.
-    ///
-    /// `config` is `borrowing` because this function only reads it for encoding — it never
-    /// mutates or stores the value. The explicit `let config = copy config` below is required
-    /// because a `borrowing` parameter cannot be captured by an escaping closure; the copy
-    /// transfers ownership into the `DispatchQueue.global` block.
+    /// Disk I/O runs in a `@concurrent` free function so the actor's cooperative
+    /// thread is never blocked. `config` can be `borrowing` here because a
+    /// `borrowing` parameter does not escape into an `@escaping` closure — the
+    /// previous `let config = copy config` workaround is no longer needed.
     public func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
-        // Copy the borrowed value before entering the escaping DispatchQueue closure —
-        // a `borrowing` parameter cannot be captured by an escaping closure directly.
-        // TODO(reach-goal P8): copy can be removed once DispatchQueue bridging is replaced
-        //   with @concurrent. See reach-goal-principles.md §8 for the migration path.
-        let config = copy config
         let url = runnerConfigURL(for: installPath)
-
-        // `withCheckedThrowingContinuation` requires `E == any Error`; typed errors are
-        // not supported. We re-throw as RunnerConfigStoreError in the surrounding catch.
         do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                DispatchQueue.global(qos: .utility).async {
-                    // Read-modify-write: load existing keys so agent-managed keys are preserved.
-                    var raw: [String: AnyJSON] = [:]
-                    if let existingData = try? Data(contentsOf: url) {
-                        let data = Self.stripBOM(from: existingData)
-                        if let dict = try? self.decoder.decode([String: AnyJSON].self, from: data) {
-                            raw = dict
-                        } else {
-                            // Decode failed — existing file is malformed. Proceeding
-                            // from an empty dict will drop unknown agent-managed keys on this save.
-                            log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
-                        }
-                    } else {
-                        // File is missing or temporarily unreadable. Writing from scratch.
-                        // If the file exists but was unreadable, unknown agent-managed keys (e.g.
-                        // jitConfig, gitHubUrl) will be dropped — tracked in a follow-up issue (TBD).
-                        log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
-                    }
-
-                    // Always write workFolder so the user can clear a custom path back to the
-                    // agent default. An empty string is normalised to "_work" here — identical
-                    // to the value the agent writes on a fresh registration — so a load-failure
-                    // zero value and an intentional clear are both safe to round-trip.
-                    let workFolderValue = config.workFolder.isEmpty ? "_work" : config.workFolder
-                    raw[RunnerConfig.CodingKeys.workFolder.rawValue] = .string(workFolderValue)
-                    // Only write disableUpdate when it is explicitly set; omit the key when nil
-                    // to match the agent's own convention (key absent == false).
-                    if let disableUpdate = config.disableUpdate {
-                        raw[RunnerConfig.CodingKeys.disableUpdate.rawValue] = .bool(disableUpdate)
-                    } else {
-                        raw.removeValue(forKey: RunnerConfig.CodingKeys.disableUpdate.rawValue)
-                    }
-                    // Write optional fields only when non-nil to avoid injecting "key": null
-                    // into the agent-managed file.
-                    if let val = config.platform { raw[RunnerConfig.CodingKeys.platform.rawValue] = .string(val) }
-                    if let val = config.platformArchitecture { raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = .string(val) }
-                    if let val = config.agentVersion { raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = .string(val) }
-                    if let val = config.ephemeral { raw[RunnerConfig.CodingKeys.ephemeral.rawValue] = .bool(val) }
-                    if let val = config.agentId { raw[RunnerConfig.CodingKeys.agentId.rawValue] = .int(val) }
-
-                    do {
-                        let encoder = JSONEncoder()
-                        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                        let data = try encoder.encode(raw)
-                        try data.write(to: url, options: .atomic)
-                        log("RunnerConfigStore › saved config to \(url.path)")
-                        continuation.resume()
-                    } catch {
-                        log("RunnerConfigStore › save failed for \(url.path): \(error)")
-                        continuation.resume(throwing: RunnerConfigStoreError.writeFailed(installPath, error))
-                    }
-                }
-            }
+            try await _saveConfig(config, to: url, installPath: installPath, decoder: decoder)
         } catch let configError as RunnerConfigStoreError {
             throw configError
         } catch {
@@ -211,4 +131,90 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     private func runnerConfigURL(for installPath: String) -> URL {
         URL(fileURLWithPath: installPath).appendingPathComponent(".runner")
     }
+}
+
+// MARK: - @concurrent disk helpers
+
+/// Reads and BOM-strips the `.runner` file at `url`.
+///
+/// Runs on the Swift cooperative thread pool without blocking an actor's serial
+/// executor. Throws `RunnerConfigStoreError.readFailed` on any I/O error.
+@concurrent
+private func _loadData(from url: URL, installPath: String) throws -> Data {
+    do {
+        let raw = try Data(contentsOf: url)
+        return RunnerConfigStore_stripBOM(raw)
+    } catch {
+        throw RunnerConfigStoreError.readFailed(installPath, error)
+    }
+}
+
+/// Performs the read-modify-write merge and writes the result to `url` atomically.
+///
+/// Runs on the Swift cooperative thread pool without blocking an actor's serial
+/// executor. `config` is a plain value parameter here — no `borrowing` escape
+/// issue arises because `@concurrent` functions do not use `@escaping` closures.
+@concurrent
+private func _saveConfig(
+    _ config: RunnerConfig,
+    to url: URL,
+    installPath: String,
+    decoder: JSONDecoder
+) throws {
+    // Read-modify-write: load existing keys so agent-managed keys are preserved.
+    var raw: [String: AnyJSON] = [:]
+    if let existingData = try? Data(contentsOf: url) {
+        let data = RunnerConfigStore_stripBOM(existingData)
+        if let dict = try? decoder.decode([String: AnyJSON].self, from: data) {
+            raw = dict
+        } else {
+            // Decode failed — existing file is malformed. Proceeding
+            // from an empty dict will drop unknown agent-managed keys on this save.
+            log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
+        }
+    } else {
+        // File is missing or temporarily unreadable. Writing from scratch.
+        // If the file exists but was unreadable, unknown agent-managed keys (e.g.
+        // jitConfig, gitHubUrl) will be dropped — tracked in a follow-up issue (TBD).
+        log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
+    }
+
+    // Always write workFolder so the user can clear a custom path back to the
+    // agent default. An empty string is normalised to "_work" here — identical
+    // to the value the agent writes on a fresh registration — so a load-failure
+    // zero value and an intentional clear are both safe to round-trip.
+    let workFolderValue = config.workFolder.isEmpty ? "_work" : config.workFolder
+    raw[RunnerConfig.CodingKeys.workFolder.rawValue] = .string(workFolderValue)
+    // Only write disableUpdate when it is explicitly set; omit the key when nil
+    // to match the agent's own convention (key absent == false).
+    if let disableUpdate = config.disableUpdate {
+        raw[RunnerConfig.CodingKeys.disableUpdate.rawValue] = .bool(disableUpdate)
+    } else {
+        raw.removeValue(forKey: RunnerConfig.CodingKeys.disableUpdate.rawValue)
+    }
+    // Write optional fields only when non-nil to avoid injecting "key": null
+    // into the agent-managed file.
+    if let val = config.platform { raw[RunnerConfig.CodingKeys.platform.rawValue] = .string(val) }
+    if let val = config.platformArchitecture { raw[RunnerConfig.CodingKeys.platformArchitecture.rawValue] = .string(val) }
+    if let val = config.agentVersion { raw[RunnerConfig.CodingKeys.agentVersion.rawValue] = .string(val) }
+    if let val = config.ephemeral { raw[RunnerConfig.CodingKeys.ephemeral.rawValue] = .bool(val) }
+    if let val = config.agentId { raw[RunnerConfig.CodingKeys.agentId.rawValue] = .int(val) }
+
+    do {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(raw)
+        try data.write(to: url, options: .atomic)
+        log("RunnerConfigStore › saved config to \(url.path)")
+    } catch {
+        log("RunnerConfigStore › save failed for \(url.path): \(error)")
+        throw RunnerConfigStoreError.writeFailed(installPath, error)
+    }
+}
+
+/// BOM-strip helper accessible to the `@concurrent` free functions above.
+/// Mirrors `RunnerConfigStore.stripBOM` — extracted so it is callable outside
+/// the actor without synthesising `nonisolated` access.
+private func RunnerConfigStore_stripBOM(_ data: Data) -> Data {
+    data.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]) ? Data(data.dropFirst(3)) : data
 }
