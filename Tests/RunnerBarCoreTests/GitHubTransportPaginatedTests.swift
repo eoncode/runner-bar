@@ -44,9 +44,12 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         let error: URLError
     }
 
-    private static let lock = NSLock()
-    private static var stubs: [String: Stub] = [:]
-    private static var errorStubs: [String: ErrorStub] = [:]
+    // `nonisolated(unsafe)` — all three properties are manually protected by `lock`
+    // below; Swift 6 strict concurrency requires the annotation for static stored
+    // properties on Sendable types that are not actor-isolated.
+    nonisolated(unsafe) private static let lock = NSLock()
+    nonisolated(unsafe) private static var stubs: [String: Stub] = [:]
+    nonisolated(unsafe) private static var errorStubs: [String: ErrorStub] = [:]
 
     static func register(_ stub: Stub, for url: String) {
         lock.withLock { stubs[url] = stub }
@@ -145,6 +148,10 @@ final class GitHubTransportPaginatedTests {
         // Unregister so StubURLProtocol does not intercept requests in other
         // test suites that run in the same process after this suite completes.
         URLProtocol.unregisterClass(StubURLProtocol.self)
+        // Reset the token provider to its default (nil) so that unrelated test
+        // suites running in the same process do not accidentally inherit
+        // "test-token" and issue live authenticated requests via githubTokenCore().
+        configureGHToken { nil }
     }
 
     // MARK: - Happy path: two-page accumulation
