@@ -10,13 +10,13 @@
 //   4. snapshot() is atomic — consistent count + limit in one hop (P10).
 //   5. APICallCounterSnapshot is Equatable and Sendable.
 //   6. snapshot() returns zero after all timestamps expire (idle-gap regression).
-//   7. ghAPI() / ghAPIPaginated() do NOT increment when transport returns nil.
+//   7. ghAPI() / ghAPIPaginated() increment on non-nil AND skip on nil transport result.
 //   8. record() trims buffer to hourlyLimit at >5,000 entries.
 import Foundation
 import Testing
 @testable import RunnerBarCore
 
-/// Stable endpoint string used by transport nil-guard tests.
+/// Stable endpoint string used by transport tests.
 /// Extracted to avoid SonarCloud S1075 (hardcoded URI) on test call sites.
 private let testEndpoint = "https://api.github.com/test"
 
@@ -166,42 +166,6 @@ struct APICallCounterTests {
         #expect(snap.count == 0)
     }
 
-    // MARK: - Transport nil-guard (shared actor pollution regression)
-
-    /// Asserts that `ghAPI()` does **not** increment the counter when the
-    /// transport returns `nil`.
-    ///
-    /// - Note: This test mutates `APICallCounter.shared` (a module-level singleton)
-    ///   and resets it via the test seam. If Swift Testing ever runs tests in
-    ///   parallel within the same process, this shared-state mutation is a
-    ///   potential race. The `reset()` call at the top provides best-effort
-    ///   isolation but does not eliminate the race window entirely.
-    ///   See issue #1511 for the follow-up to make `apiCallCounter` overridable.
-    @Test("ghAPI() does not increment counter when transport returns nil")
-    func ghAPISkipsCounterOnNilResult() async {
-        await apiCallCounter.reset()
-        configureGHAPI { _ in nil }
-        _ = await ghAPI(testEndpoint)
-        let snap = await apiCallCounter.snapshot()
-        #expect(snap.count == 0)
-        configureGHAPI { _ in nil }
-    }
-
-    /// Asserts that `ghAPIPaginated()` does **not** increment the counter when
-    /// the transport returns `nil`. Symmetric coverage with `ghAPISkipsCounterOnNilResult`.
-    ///
-    /// - Note: Same shared-state mutation caveat as `ghAPISkipsCounterOnNilResult`.
-    ///   See issue #1511 for the follow-up to make `apiCallCounter` overridable.
-    @Test("ghAPIPaginated() does not increment counter when transport returns nil")
-    func ghAPIPaginatedSkipsCounterOnNilResult() async {
-        await apiCallCounter.reset()
-        configureGHAPIPaginated { _, _ in nil }
-        _ = await ghAPIPaginated(testEndpoint)
-        let snap = await apiCallCounter.snapshot()
-        #expect(snap.count == 0)
-        configureGHAPIPaginated { _, _ in nil }
-    }
-
     // MARK: - APICallCounterSnapshot struct
 
     @Test("APICallCounterSnapshot is Equatable")
@@ -214,12 +178,6 @@ struct APICallCounterTests {
     }
 
     /// Compile-time conformance check for `APICallCounterSnapshot.Sendable`.
-    ///
-    /// Transfers a snapshot across a `Task.detached` boundary to verify the
-    /// compiler accepts the value as `Sendable`. This cannot fail at runtime
-    /// for a value-type struct — it is a static conformance check, not a
-    /// behavioural assertion. If `APICallCounterSnapshot` were ever changed to
-    /// a `class`, this test would begin to carry runtime meaning.
     @Test("APICallCounterSnapshot is Sendable across task boundary")
     func snapshotSendable() async {
         let counter = APICallCounter()
@@ -229,5 +187,78 @@ struct APICallCounterTests {
         let transferred = await Task.detached { snap }.value
         #expect(transferred.count == snap.count)
         #expect(transferred.limit == snap.limit)
+    }
+
+    // MARK: - Transport increment guard
+
+    /// Serialized sub-suite for all tests that touch module-level singletons
+    /// (`apiCallCounter`, `configureGHAPI`, `configureGHAPIPaginated`).
+    ///
+    /// `.serialized` prevents Swift Testing from scheduling these concurrently,
+    /// eliminating the reset()+call+snapshot interleaving race that the
+    /// `// Note:` caveats in each test document. See issue #1511 for the
+    /// follow-up to make `apiCallCounter` overridable and remove this constraint.
+    @Suite("Transport increment guard", .serialized)
+    struct TransportIncrementGuard {
+
+        /// Asserts that `ghAPI()` **does** increment the counter when the
+        /// transport returns non-nil data.
+        ///
+        /// This is the positive-path complement to `ghAPISkipsCounterOnNilResult`.
+        /// If the `if result != nil { await apiCallCounter.record() }` guard
+        /// were silently dropped from `ghAPI()`, this test would fail.
+        @Test("ghAPI() increments counter when transport returns non-nil data")
+        func ghAPIIncrementsCounterOnNonNilResult() async {
+            await apiCallCounter.reset()
+            configureGHAPI { _ in Data() }
+            _ = await ghAPI(testEndpoint)
+            let snap = await apiCallCounter.snapshot()
+            #expect(snap.count == 1)
+            configureGHAPI { _ in nil }
+        }
+
+        /// Asserts that `ghAPIPaginated()` **does** increment the counter when
+        /// the transport returns non-nil data.
+        ///
+        /// Symmetric positive-path complement to `ghAPIPaginatedSkipsCounterOnNilResult`.
+        @Test("ghAPIPaginated() increments counter when transport returns non-nil data")
+        func ghAPIPaginatedIncrementsCounterOnNonNilResult() async {
+            await apiCallCounter.reset()
+            configureGHAPIPaginated { _, _ in Data() }
+            _ = await ghAPIPaginated(testEndpoint)
+            let snap = await apiCallCounter.snapshot()
+            #expect(snap.count == 1)
+            configureGHAPIPaginated { _, _ in nil }
+        }
+
+        /// Asserts that `ghAPI()` does **not** increment the counter when the
+        /// transport returns `nil`.
+        ///
+        /// - Note: Mutates `APICallCounter.shared`. Serialized via parent suite
+        ///   trait to prevent concurrent interleaving. See issue #1511.
+        @Test("ghAPI() does not increment counter when transport returns nil")
+        func ghAPISkipsCounterOnNilResult() async {
+            await apiCallCounter.reset()
+            configureGHAPI { _ in nil }
+            _ = await ghAPI(testEndpoint)
+            let snap = await apiCallCounter.snapshot()
+            #expect(snap.count == 0)
+            configureGHAPI { _ in nil }
+        }
+
+        /// Asserts that `ghAPIPaginated()` does **not** increment the counter
+        /// when the transport returns `nil`.
+        ///
+        /// - Note: Mutates `APICallCounter.shared`. Serialized via parent suite
+        ///   trait to prevent concurrent interleaving. See issue #1511.
+        @Test("ghAPIPaginated() does not increment counter when transport returns nil")
+        func ghAPIPaginatedSkipsCounterOnNilResult() async {
+            await apiCallCounter.reset()
+            configureGHAPIPaginated { _, _ in nil }
+            _ = await ghAPIPaginated(testEndpoint)
+            let snap = await apiCallCounter.snapshot()
+            #expect(snap.count == 0)
+            configureGHAPIPaginated { _, _ in nil }
+        }
     }
 }
