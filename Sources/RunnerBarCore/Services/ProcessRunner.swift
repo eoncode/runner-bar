@@ -326,12 +326,23 @@ public enum ProcessRunner {
     /// is guarded by `OSAllocatedUnfairLock`; no structured-concurrency isolation
     /// is assumed or required here.
     ///
-    /// ## DispatchQueue.sync rationale
-    /// `drainQueue.sync {}` is an empty barrier that blocks until the
-    /// `drainQueue.async { readDataToEndOfFile() }` block in `runAsync` has completed.
-    /// This establishes the happens-before edge that makes `outputBox` safe to read
-    /// on the next line. The drain is cheap at this point because the process has
-    /// already exited and the pipe write-end is closed.
+    /// ## DispatchQueue.sync rationale — last GCD sync in the production path
+    /// `drainQueue.sync {}` is an intentional empty barrier that blocks the
+    /// `terminationHandler` thread until the `drainQueue.async { readDataToEndOfFile() }`
+    /// block in `runAsync` has completed. This establishes the happens-before edge
+    /// that makes `outputBox` safe to read on the next line.
+    ///
+    /// **Why not replace this with structured concurrency?**
+    /// The drain deliberately runs on a `DispatchQueue` (not a `Task`) to keep
+    /// `readDataToEndOfFile()` off the cooperative thread pool — a blocking call
+    /// on a pool worker would starve other tasks. The `drainQueue.sync {}` join
+    /// here is therefore the correct and intended cross-boundary synchronisation
+    /// point. Migrating away from it would require a fundamentally different drain
+    /// architecture (e.g. `AsyncBytes`) and is tracked as a Principle-2 audit item.
+    ///
+    /// **This is the last remaining `DispatchQueue.sync` in the production code
+    /// path.** It is preserved intentionally; do not remove it without a full
+    /// Principle-2 audit of the drain and terminationHandler lifecycle.
     ///
     /// See the `runAsync` doc comment for why `stdinQueue` is *not* joined here.
     private static func handleTermination(
@@ -349,6 +360,7 @@ public enum ProcessRunner {
         timeoutTask?.cancel()
         // Empty sync barrier — blocks until drainQueue's readDataToEndOfFile() finishes.
         // This is the sole happens-before edge; no work belongs inside the closure.
+        // See doc comment above for why this DispatchQueue.sync is intentionally retained.
         drainQueue.sync {}
         let outputData = outputBox.withLock { $0 }
         log("ProcessRunner › exit=\(exitCode) bytes=\(outputData.count) — \(executableName)")

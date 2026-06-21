@@ -1,25 +1,19 @@
 // RunnerStore+PollLoop.swift
 // RunnerBar
 //
-// Migration status: PLACEHOLDER — poll loop not yet extracted.
+// Migration boundary established in PR #1256 (closed 2026-06-09) and
+// superseded by the PollLoopCoordinator extraction in this PR (PR-D).
 //
-// The poll loop (start, nextPollInterval, pollTask, intervalCancellable,
-// scopeCancellable, deinit) currently lives in RunnerStore.swift because
-// Swift's `private` access is file-scoped, not type-scoped. Extracting
-// those members here would require widening them to `internal`, exposing
-// them across the entire module.
+// The poll-loop methods (`start`, `nextPollInterval`, `startObservingPreferences`,
+// `startObservingScopes`) remain in `RunnerStore.swift` because they are `private`
+// and therefore file-scoped. Moving them here would require widening them to
+// `internal`. This is deferred until Swift gains extension-scoped `private` access.
 //
-// This file marks the intended extraction boundary. Once either:
-//   a) Swift gains extension-scoped `private`, or
-//   b) the poll-loop state is encapsulated in a dedicated sub-object,
-// the members below can be moved here without widening their access.
+// The three `Task?` handles that back those methods are owned by `PollLoopCoordinator`
+// (`private let pollLoop` on `RunnerStore`) — that type provides the extraction
+// boundary the architecture needs without requiring access-level widening.
 //
-// TODO: Complete poll-loop extraction — tracked in PR #1256.
-//       Members to migrate (currently in RunnerStore.swift):
-//         - var pollTask: Task<Void, Never>?
-//         - var intervalCancellable: AnyCancellable?
-//         - var scopeCancellable: AnyCancellable?
-//         - func start()
-//         - func nextPollInterval() -> TimeInterval
-//         - deinit
+// Combine dependency removed: `intervalCancellable` and `scopeCancellable`
+// (AnyCancellable) have been replaced by structured `Task`-based observation.
+// There are no remaining Combine imports in `RunnerStore.swift`.
 import Foundation

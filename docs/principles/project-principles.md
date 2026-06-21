@@ -23,7 +23,7 @@ This document captures the engineering and design principles that govern the Run
 15. [Static Code Quality Pipeline](#15-static-code-quality-pipeline)
 16. [Actor-Per-Concern Isolation](#16-actor-per-concern-isolation)
 17. [nonisolated for Safe Cross-Boundary Capture](#17-nonisolated-for-safe-cross-boundary-capture)
-18. [withCheckedContinuation for Blocking I/O](#18-withcheckedcontinuation-for-blocking-io)
+18. [@concurrent for Blocking I/O](#18-concurrent-for-blocking-io)
 19. [AnyJSON Type-Erased Codec](#19-anyjson-type-erased-codec)
 20. [Typed Error Discrimination with ExecuteResult](#20-typed-error-discrimination-with-executeresult)
 21. [Human-Readable Config Writes](#21-human-readable-config-writes)
@@ -134,13 +134,21 @@ The concurrency model goes beyond a single background actor. Each mutable domain
 
 ## 17. nonisolated for Safe Cross-Boundary Capture
 
-`JSONDecoder` instances are marked `nonisolated` on actors where they need to be captured inside closures that cross isolation boundaries. This is a deliberate, compiler-enforced acknowledgment that `JSONDecoder` has no mutable state after initialisation and is therefore safe to use across actor boundaries without synchronisation. It is not a workaround — it is a precise application of `nonisolated` to express an immutability guarantee that the compiler can then verify.
+`JSONDecoder` instances are marked `nonisolated` on actors where they need to be captured inside closures or called from `@concurrent` free functions that cross isolation boundaries. This is a deliberate, compiler-enforced acknowledgment that `JSONDecoder` has no mutable state after initialisation and is therefore safe to use across actor boundaries without synchronisation. It is not a workaround — it is a precise application of `nonisolated` to express an immutability guarantee that the compiler can then verify.
 
 ---
 
-## 18. withCheckedContinuation for Blocking I/O
+## 18. @concurrent for Blocking I/O
 
-All synchronous disk I/O is bridged into the async world using `withCheckedContinuation` / `withCheckedThrowingContinuation`, dispatching the actual blocking work to `DispatchQueue.global(qos: .utility)`. This ensures the actor's cooperative thread is never blocked by a disk operation — a key Swift 6 correctness requirement for not starving the concurrency runtime. The pattern is: async surface, synchronous implementation, bridged explicitly at the boundary.
+Synchronous disk I/O is kept off actor cooperative threads using `@concurrent` async free functions. A function marked `@concurrent` runs on the Swift cooperative thread pool but is not bound to any actor's serial executor, so a blocking `Data(contentsOf:)` or `Data.write(to:)` call inside it cannot stall the actor that called it.
+
+**Important limitation:** `@concurrent` is an *isolation* solution, not a *non-blocking I/O* solution. A blocking call inside a `@concurrent` function still occupies one cooperative thread pool worker for the duration of the I/O. This is the same trade-off the legacy `DispatchQueue.global(qos: .utility)` bridge made — actor starvation is eliminated, but pool-thread starvation under high I/O concurrency remains a theoretical concern. For the low-frequency disk operations in this codebase (reading and writing a single `.runner` file per user action), this is an acceptable trade-off.
+
+This is the preferred pattern for new I/O helpers in this codebase, replacing the legacy `withCheckedContinuation` / `withCheckedThrowingContinuation` + `DispatchQueue.global(qos: .utility)` bridge. The older bridge pattern remains in `ProcessRunner` where a deliberate `DispatchQueue.sync` barrier is required as a cross-boundary join point (see `handleTermination` doc comment), but it should not be introduced in new code.
+
+**Key requirement:** `@concurrent` is only valid on `async` functions. The attribute instructs the runtime to schedule the call onto the cooperative thread pool, which requires an async context — a `throws`-only function is not eligible.
+
+**Migration note:** `RunnerConfigStore` was migrated from the `withCheckedContinuation` bridge to `@concurrent` helpers in PR #1489. `withCheckedContinuation` usage elsewhere in the codebase is tracked separately.
 
 ---
 

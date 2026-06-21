@@ -19,18 +19,42 @@ final class SystemStatsViewModel {
     private(set) var memHistory: RingBuffer = RingBuffer(capacity: 60)
     /// Rolling 60-sample history for disk-usage sparkline charts.
     private(set) var diskHistory: RingBuffer = RingBuffer(capacity: 60)
-    /// Only mutated on MainActor (start/stop). Captured as a local `let` in
-    /// deinit before dispatching invalidation to the main run loop — Timer.invalidate()
-    /// must be called on the thread that installed the timer (main run loop).
-    /// `@ObservationIgnored` excludes this from macro-generated tracking storage so
-    /// `nonisolated(unsafe)` can be applied for deinit access off the main actor.
-    @ObservationIgnored nonisolated(unsafe) private var timer: Timer?
-    /// Accessed only from `sampleCPU()` (always called on MainActor) and
-    /// `deinit` (which implies no other references exist, so no concurrent access is possible).
-    /// `@ObservationIgnored` + `nonisolated(unsafe)` for same reason as `timer`.
+    /// Structured task driving the 2-second sample loop.
+    /// Cancelled and niled in `stop()` and `deinit`; `@ObservationIgnored` keeps it out of
+    /// the `@Observable` macro’s tracking storage.
+    @ObservationIgnored private var samplingTask: Task<Void, Never>?
+    /// Liveness flag for the sample loop, decoupled from `samplingTask`.
+    ///
+    /// `samplingTask` is the cancellation handle only. `isSampling` is the single
+    /// source of truth for whether the loop is running. Keeping them separate means
+    /// a caller that calls `samplingTask?.cancel()` directly (without niling) cannot
+    /// make `start()` silently no-op on a loop that has already exited.
+    ///
+    /// Both `start()` and the task body itself reset this flag: `start()` sets it
+    /// `true`, the task’s `defer` sets it `false` on every exit path, and `stop()`
+    /// sets it `false` via cancellation. The `defer` is generation-stamped so a
+    /// stale task exiting after a rapid `stop()→start()` cannot reset `isSampling`
+    /// on the newly started loop.
+    private var isSampling = false
+    /// Monotonically increasing counter incremented on every `start()` call.
+    ///
+    /// Each task closure captures its own generation value at launch. The `defer`
+    /// block only resets `isSampling` when the captured generation still matches
+    /// `samplingGeneration`, i.e. no newer `start()` has run since this task began.
+    /// This prevents a stale task’s `defer` from permanently no-opping future
+    /// `start()` calls after a rapid `stop()→start()` cycle.
+    private var samplingGeneration: Int = 0
+    /// Per-core CPU tick counts from the previous `host_processor_info` call.
+    ///
+    /// Written exclusively on `@MainActor` (inside `sampleCPU()`’s `defer` block).
+    /// `nonisolated(unsafe)` is required because `deinit` is nonisolated in Swift 6
+    /// and must read this pointer to pass to `deallocBuffer(_:count:)` — crossing
+    /// into `@MainActor` asynchronously from `deinit` is not possible. This is safe
+    /// because `deinit` only runs after all strong references are gone, guaranteeing
+    /// no concurrent `@MainActor` write can occur at that point.
     @ObservationIgnored nonisolated(unsafe) private var prevCPUInfo: processor_info_array_t?
-    /// Same as `prevCPUInfo` — MainActor during sampling, no concurrency in deinit.
     /// Entry count of `prevCPUInfo`, required by `vm_deallocate` for correct deallocation size.
+    /// Same `nonisolated(unsafe)` rationale as `prevCPUInfo`.
     @ObservationIgnored nonisolated(unsafe) private var prevNumCPUInfo: mach_msg_type_number_t = 0
     /// Root volume path used for disk-space queries via `FileManager.attributesOfFileSystem`.
     private static let rootVolumePath = NSOpenStepRootDirectory()
@@ -39,28 +63,66 @@ final class SystemStatsViewModel {
     init() { /* no custom setup required — all stored properties have default values */ }
 
     deinit {
-        // Timer.invalidate() must be called on the thread that installed the timer (main run loop).
-        // deinit is nonisolated in Swift 6 and may run off-main, so we dispatch explicitly.
-        let capturedTimer = timer
-        DispatchQueue.main.async { capturedTimer?.invalidate() }
-        deallocPrevCPUInfo()
+        // Task.cancel() is safe to call from any isolation context — no DispatchQueue hop needed.
+        samplingTask?.cancel()
+        // Capture pointer and count as locals before calling the nonisolated static helper.
+        // deallocPrevCPUInfo() is @MainActor-isolated and unreachable from nonisolated deinit;
+        // deallocBuffer(_:count:) takes values by copy, requires no actor hop, no duplication.
+        SystemStatsViewModel.deallocBuffer(prevCPUInfo, count: prevNumCPUInfo)
     }
 
     // MARK: Lifecycle
-    /// Starts the 2-second repeating timer and takes an immediate first sample.
-    /// Safe to call multiple times -- no-ops if the timer is already running.
+
+    /// Starts the 2-second structured sample loop and takes an immediate first sample.
+    /// Safe to call multiple times — no-ops if the loop is already running.
+    ///
+    /// `isSampling` is the liveness guard; `samplingTask` is the cancellation handle only.
+    /// This separation ensures that a direct `samplingTask?.cancel()` call (without niling)
+    /// cannot make `start()` silently no-op on a loop that has already exited.
+    ///
+    /// The task captures `generation` at launch. The `defer` only resets `isSampling` when
+    /// the captured generation still matches `samplingGeneration` — preventing a stale
+    /// exiting task from no-opping a freshly started loop after a rapid `stop()→start()`.
+    ///
+    /// `Task { @MainActor [weak self] in }` is used rather than the bare `Task { [weak self] in }`
+    /// to make the `@MainActor` isolation explicit. A bare `Task { }` created from an
+    /// `@MainActor`-isolated context does inherit `@MainActor` today, but the annotation
+    /// anchors that guarantee against a future refactor that moves `start()` off `@MainActor`.
     func start() {
-        guard timer == nil else { return }
-        sample()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.sample() }
+        guard !isSampling else { return }
+        isSampling = true
+        samplingGeneration &+= 1
+        let generation = samplingGeneration
+        samplingTask = Task { @MainActor [weak self] in
+            defer {
+                // Only reset isSampling if this is still the current generation.
+                // A stale task exiting after a rapid stop→start must not clobber
+                // the liveness flag owned by the newer task.
+                if self?.samplingGeneration == generation {
+                    self?.isSampling = false
+                }
+            }
+            // Immediate first sample before the first sleep.
+            self?.sample()
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(2))
+                } catch is CancellationError {
+                    break   // clean cooperative cancellation — exit silently
+                } catch {
+                    break   // unexpected error — exit defensively
+                }
+                guard !Task.isCancelled else { break }
+                self?.sample()
+            }
         }
     }
 
-    /// Invalidates the sampling timer. Call from `onDisappear`.
+    /// Cancels the sampling loop immediately. Call from `onDisappear`.
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        samplingTask?.cancel()
+        samplingTask = nil
+        isSampling = false
     }
 
     // MARK: Sampling
@@ -123,14 +185,33 @@ final class SystemStatsViewModel {
         return totalUsed / totalAll * 100
     }
 
-    /// Deallocates the `prevCPUInfo` Mach buffer via `vm_deallocate` and nils the pointer.
-    /// `nonisolated` so it is callable from `deinit` and `sampleCPU()`'s `defer` without an actor hop.
-    nonisolated private func deallocPrevCPUInfo() {
-        guard let prev = prevCPUInfo else { return }
-        let infoSize = vm_size_t(MemoryLayout<integer_t>.size)
-        let totalSize = vm_size_t(prevNumCPUInfo) * infoSize
-        vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prev), totalSize)
+    /// Frees the current `prevCPUInfo` Mach buffer and nils the pointer.
+    /// Called from `sampleCPU()`’s `defer` block (always on `@MainActor`).
+    /// Delegates to `deallocBuffer(_:count:)` so the deallocation logic lives in one place.
+    private func deallocPrevCPUInfo() {
+        let ptr = prevCPUInfo
+        let count = prevNumCPUInfo
         prevCPUInfo = nil
+        SystemStatsViewModel.deallocBuffer(ptr, count: count)
+    }
+
+    /// Frees a Mach `processor_info_array_t` buffer obtained from `host_processor_info`.
+    ///
+    /// This helper is `private static nonisolated` so it can be called from both
+    /// the `@MainActor`-isolated `deallocPrevCPUInfo()` (hot path) and the
+    /// nonisolated `deinit` (cleanup path) without duplication or an actor hop.
+    /// The pointer and count are passed by value — no instance state is read.
+    ///
+    /// - Parameters:
+    ///   - ptr: The `processor_info_array_t` returned by `host_processor_info`, or `nil`.
+    ///   - count: The `mach_msg_type_number_t` entry count returned alongside `ptr`.
+    private static nonisolated func deallocBuffer(
+        _ ptr: processor_info_array_t?,
+        count: mach_msg_type_number_t
+    ) {
+        guard let ptr else { return }
+        let size = vm_size_t(MemoryLayout<integer_t>.size) * vm_size_t(count)
+        vm_deallocate(mach_task_self_, vm_address_t(bitPattern: ptr), size)
     }
 
     // MARK: Memory
