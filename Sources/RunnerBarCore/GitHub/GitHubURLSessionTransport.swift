@@ -270,6 +270,7 @@ func urlSessionAPIPaginated(
             // repo access denial. Treated identically to an auth failure: discard all
             // collected items and return nil. Folded into didFailAuth (not a separate flag)
             // because the post-loop behaviour is the same; post-loop logging covers it.
+            log("urlSessionAPIPaginated › permission denied at \(urlString) — stopping pagination and discarding \(allItems.count) collected items")
             didFailAuth = true
             break pagination
         case .networkError:

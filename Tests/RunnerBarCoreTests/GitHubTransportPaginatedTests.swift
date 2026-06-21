@@ -665,4 +665,37 @@ final class GitHubTransportPaginatedTests {
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
     }
+
+    // MARK: - Non-auth HTTP error on the very first page returns nil
+
+    /// A non-auth HTTP error (e.g. 404) on the very first page — before any items
+    /// are accumulated — must return nil.
+    ///
+    /// Verifies: `case .httpError: break pagination` exits the loop with
+    /// `hadAtLeastOneSuccessfulPage == false`, so the post-loop guard fails and
+    /// nil is returned. This distinguishes the first-page error from the partial-
+    /// results path tested by `paginatedReturnsPartialResultsOnHttpError404`.
+    @Test func paginatedReturnsNilOnHttpErrorFirstPage() async {
+        StubURLProtocol.reset()
+        let pageURL = "\(apiBase)orgs/test/actions/runners"
+
+        // 404 on the very first page — no prior items accumulated.
+        StubURLProtocol.register(.init(
+             "{\"message\":\"Not found\"}".data(using: .utf8)!,
+            statusCode: 404,
+            headers: [:]
+        ), for: pageURL)
+
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        // No items were ever collected — nil must be returned.
+        #expect(result == nil)
+        // Neither set() nor clear() should be called — 404 is not a rate-limit event
+        // and no 2xx page succeeded.
+        let wasSetCalled = await spy.setCalled
+        #expect(wasSetCalled == false)
+        let wasClearCalled = await spy.clearCalled
+        #expect(wasClearCalled == false)
+    }
 }
