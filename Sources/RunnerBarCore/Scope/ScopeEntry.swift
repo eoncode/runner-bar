@@ -17,8 +17,9 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
     /// remove the existing entry and add a new one via `ScopeStore`.
     public let scope: String
     /// When `false`, `RunnerStore` skips this scope during polling.
-    /// `var`: toggled by `ScopeStore.setEnabled(_:_:)` — the only intended mutation site.
-    public var isEnabled: Bool
+    /// `let`: use `copying(isEnabled:)` to derive a toggled copy — the only intended
+    /// mutation site is `ScopeStore.setEnabled(_:_:)`.
+    public let isEnabled: Bool
 
     /// Creates a new `ScopeEntry` with a fresh random `id`.
     /// - Parameters:
@@ -28,5 +29,23 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.id = UUID()
         self.scope = scope
         self.isEnabled = isEnabled
+    }
+
+    /// Identity-preserving init used by `copying(isEnabled:)`.
+    /// Internal to avoid callers accidentally reusing an existing `id`.
+    internal init(id: UUID, scope: String, isEnabled: Bool) {
+        self.id = id
+        self.scope = scope
+        self.isEnabled = isEnabled
+    }
+}
+
+// MARK: - Copy helpers
+
+extension ScopeEntry {
+    /// Returns a copy of this entry with `isEnabled` replaced, preserving `id` and `scope`.
+    /// Use this instead of mutating `isEnabled` directly — the field is `let`.
+    public func copying(isEnabled newValue: Bool) -> ScopeEntry {
+        ScopeEntry(id: id, scope: scope, isEnabled: newValue)
     }
 }

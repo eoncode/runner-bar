@@ -113,12 +113,11 @@ final class ScopeStore {
 
     /// Toggles the `isEnabled` flag for the entry with the given ID and persists
     /// the change. `RunnerStore` observes `activeScopes` via `withObservationTracking`,
-    /// so mutating the `@Observable` `entries` array triggers a poll-loop restart.
-    /// The flag is mutated in place on the element at the found index — `@Observable`
-    /// tracks that mutation on the `entries` array directly.
+    /// so replacing the element in the `@Observable` `entries` array triggers a
+    /// poll-loop restart.
     func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
-        entries[idx].isEnabled = enabled
+        entries[idx] = entries[idx].copying(isEnabled: enabled)
         persist()
         log("ScopeStore › scope \(entries[idx].scope) isEnabled=\(enabled)")
     }
