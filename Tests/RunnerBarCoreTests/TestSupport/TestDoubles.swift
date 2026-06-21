@@ -46,9 +46,10 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     var loadResult: RunnerConfig = RunnerConfig(workFolder: "_work", disableUpdate: false)
 
     // MARK: Throw-control flags (configure via setUp)
-    private var shouldThrowOnSave   = false
-    private var shouldThrowOnLoad   = false
-    private var shouldThrowOnDecode = false
+    private var shouldThrowOnSave            = false
+    private var shouldThrowOnLoad            = false
+    private var shouldThrowOnDecode          = false
+    private var shouldThrowMalformedOnSave   = false
 
     // MARK: Observation (assert on after execute)
     private(set) var saveCalled = false
@@ -57,13 +58,15 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     /// Configures throw behaviour for all operations in a single call, resetting any
     /// previously set flags. Omitted parameters default to `false` (no throw).
     func setUp(
-        shouldThrowOnSave: Bool   = false,
-        shouldThrowOnLoad: Bool   = false,
-        shouldThrowOnDecode: Bool = false
+        shouldThrowOnSave: Bool          = false,
+        shouldThrowOnLoad: Bool          = false,
+        shouldThrowOnDecode: Bool        = false,
+        shouldThrowMalformedOnSave: Bool = false
     ) {
-        self.shouldThrowOnSave   = shouldThrowOnSave
-        self.shouldThrowOnLoad   = shouldThrowOnLoad
-        self.shouldThrowOnDecode = shouldThrowOnDecode
+        self.shouldThrowOnSave           = shouldThrowOnSave
+        self.shouldThrowOnLoad           = shouldThrowOnLoad
+        self.shouldThrowOnDecode         = shouldThrowOnDecode
+        self.shouldThrowMalformedOnSave  = shouldThrowMalformedOnSave
     }
 
     func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
@@ -74,7 +77,11 @@ actor SpyConfigStore: RunnerConfigStoreProtocol {
     func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         // Copy the borrowed value before storing — a `borrowing` parameter cannot be consumed.
         let config = copy config
-        if shouldThrowOnSave { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
+        // Flag priority: shouldThrowOnSave (.writeFailed) fires before shouldThrowMalformedOnSave
+        // (.malformedExistingFile). Setting both simultaneously is not meaningful — configure
+        // exactly one throw flag per test to avoid ambiguity.
+        if shouldThrowOnSave          { throw RunnerConfigStoreError.writeFailed(installPath, TestError.saveFailed) }
+        if shouldThrowMalformedOnSave { throw RunnerConfigStoreError.malformedExistingFile(installPath) }
         saveCalled = true
         savedConfig = config
     }
@@ -111,6 +118,60 @@ actor SpyProxyStore: RunnerProxyStoreProtocol {
 actor HookCounter {
     private(set) var value = 0
     func increment() { value += 1 }
+}
+
+// MARK: - SpyRateLimitActor
+
+/// Test double conforming to `RateLimitActorProtocol`.
+/// Injects controllable rate-limit state into transport functions under test.
+actor SpyRateLimitActor: RateLimitActorProtocol {
+    /// Seed this to simulate a pre-armed rate-limit state.
+    /// Must be called via `await` from outside the actor.
+    /// Read-only access from tests is through `snapshot().isLimited`.
+    var isLimited = false
+    /// The reset date set by the most recent `set(resetAt:)` call, or `nil` if never set.
+    ///
+    /// - Note: `resetDate` is not part of `RateLimitActorProtocol` by design — the
+    ///   protocol exposes reset-time only through `snapshot()`. Read this via
+    ///   `await spy.snapshot().resetDate` in tests that need to assert on the value.
+    private(set) var resetDate: Date?
+    /// Whether `set(resetAt:)` was ever called on this instance.
+    ///
+    /// - Note: `setCalled` is sticky — it records whether `set()` was ever called,
+    ///   not whether the actor is *currently* limited. If `set()` is called and then
+    ///   `clear()` is called, `setCalled == true` but `isLimited == false`. Do not
+    ///   use `setCalled` as a proxy for the current rate-limit state; read `isLimited`
+    ///   or `snapshot().isLimited` for that.
+    private(set) var setCalled = false
+    private(set) var clearCalled = false
+
+    func setUp(isLimited: Bool) {
+        self.isLimited = isLimited
+    }
+
+    func set(resetAt: TimeInterval?) {
+        setCalled = true
+        isLimited = true
+        resetDate = resetAt.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    func clear() {
+        clearCalled = true
+        isLimited = false
+        resetDate = nil
+    }
+
+    func snapshot() -> RateLimitSnapshot {
+        RateLimitSnapshot(isLimited: isLimited, resetDate: resetDate)
+    }
+
+    /// Resets all spy observation and stub state to their default configurations.
+    func reset() {
+        isLimited = false
+        resetDate = nil
+        setCalled = false
+        clearCalled = false
+    }
 }
 
 // MARK: - TestError

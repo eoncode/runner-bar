@@ -12,6 +12,12 @@ public enum RunnerConfigStoreError: LocalizedError {
     case decodeFailed(String)
     /// The updated config could not be serialised or written to disk.
     case writeFailed(String, any Error)
+    /// The existing .runner file is present but cannot be decoded during a save.
+    ///
+    /// Proceeding from an empty dict would silently drop agent-managed keys such as
+    /// jitConfig, de-registering ephemeral JIT runners with no user-visible error.
+    /// The caller must surface this error before attempting a write.
+    case malformedExistingFile(String)
 
     /// A human-readable description of the error.
     public var errorDescription: String? {
@@ -22,6 +28,8 @@ public enum RunnerConfigStoreError: LocalizedError {
             "Failed to decode runner configuration at \(installPath)/.runner"
         case .writeFailed(let installPath, let underlying):
             "Failed to write runner configuration at \(installPath)/.runner: \(underlying.localizedDescription)"
+        case .malformedExistingFile(let installPath):
+            "Existing runner configuration at \(installPath)/.runner is malformed and cannot be safely overwritten — agent-managed keys would be lost"
         }
     }
 }
@@ -40,6 +48,12 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// `DispatchQueue.global` + `withCheckedThrowingContinuation` bridge pattern and also
 /// removes the `let config = copy config` workaround that was needed because a
 /// `borrowing` parameter cannot escape into an `@escaping` closure.
+///
+/// **Error contract for `save(_:at:)`:** if the existing `.runner` file is present but
+/// cannot be decoded (malformed JSON), `save()` throws `malformedExistingFile` rather
+/// than proceeding from an empty dictionary — which would silently drop agent-managed
+/// keys such as `jitConfig`. See `RunnerConfigStoreError.malformedExistingFile`.
+/// `load(at:)` never throws `malformedExistingFile` — only `readFailed` / `decodeFailed`.
 public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Shared instance
@@ -160,7 +174,8 @@ private func saveRunnerConfig(
         } else {
             // Decode failed — existing file is malformed. Proceeding
             // from an empty dict will drop unknown agent-managed keys on this save.
-            log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
+            log("RunnerConfigStore › save: existing .runner at \(url.path) is malformed; aborting save to protect agent-managed keys")
+            throw RunnerConfigStoreError.malformedExistingFile(installPath)
         }
     } else {
         // File is missing or temporarily unreadable. Writing from scratch.

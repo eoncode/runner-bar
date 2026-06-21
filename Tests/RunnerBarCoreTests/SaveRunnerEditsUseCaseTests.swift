@@ -274,6 +274,62 @@ struct SaveRunnerEditsUseCaseTests {
         #expect(await proxy.saveCalled)
     }
 
+    /// #1478 — configStore.save() throwing .malformedExistingFile must accumulate the
+    /// correct error message. The malformed-file path is distinct from .writeFailed and
+    /// must have its own branch in the exhaustive switch.
+    @Test("config save malformed-file error emits correct message")
+    func configSaveMalformedFileEmitsError() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        // No proxyUrl change — Step 3 must be skipped entirely.
+
+        let config  = SpyConfigStore()
+        let proxy   = SpyProxyStore()
+        await config.setUp(shouldThrowMalformedOnSave: true)
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // Message must mention the path, malformed, and agent-managed keys
+        #expect(msgs.contains(where: { $0.contains("malformed") && $0.contains("/.runner") && $0.contains("agent-managed") }))
+        // No proxy change — proxy step must not have run
+        #expect(await !proxy.saveCalled)
+    }
+
+    /// #1478 — configStore.save() throwing .malformedExistingFile must still allow
+    /// the proxy step (Step 3) to execute. The use-case accumulates errors and
+    /// continues — config and proxy writes are independent paths.
+    @Test("config save malformed-file error still runs proxy step")
+    func configSaveMalformedFileContinuesToProxy() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        draft.proxyUrl   = "http://proxy.example.com"
+
+        let config  = SpyConfigStore()
+        await config.setUp(shouldThrowMalformedOnSave: true)
+        let proxy   = SpyProxyStore()
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // Message must mention path, malformed, and agent-managed keys (same contract as the sibling test)
+        #expect(msgs.contains(where: { $0.contains("malformed") && $0.contains("/.runner") && $0.contains("agent-managed") }))
+        // Proxy step must still execute despite the malformed-file config error
+        #expect(await proxy.saveCalled)
+    }
+
     /// #1452 — Changing only a non-label field must not trigger the labels API.
     /// The label guard must be narrow enough that an unrelated field change
     /// (workFolder) does not call `labelsService.patch`.

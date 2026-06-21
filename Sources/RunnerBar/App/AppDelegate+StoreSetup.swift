@@ -24,6 +24,12 @@ extension AppDelegate {
         configureGHToken { githubToken() }
         configureGHAPI { endpoint in await ghAPI(endpoint) }
         configureGHRaw { endpoint in await urlSessionRaw(endpoint) }
+        // Both `endpoint` and `timeout` must be forwarded so callers that pass
+        // a custom timeout via ghAPIPaginated(endpoint, timeout:) are not silently
+        // overridden by urlSessionAPIPaginated’s 60s default.
+        configureGHAPIPaginated { endpoint, timeout in
+            await urlSessionAPIPaginated(endpoint, timeout: timeout)
+        }
         setupStatusItem()
         setupPanel()
         setupSignOutSubscription()
