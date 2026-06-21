@@ -214,11 +214,10 @@ final class OAuthService {
 
         /// Maps Swift property names to the snake_case JSON keys returned by the GitHub OAuth endpoint.
         private enum CodingKeys: String, CodingKey {
-            /// Maps to `access_token`.
+            /// JSON key: `access_token`.
             case accessToken = "access_token"
-            /// Maps to `error`.
             case error
-            /// Maps to `error_description`.
+            /// JSON key: `error_description`.
             case errorDescription = "error_description"
         }
 
@@ -249,11 +248,10 @@ final class OAuthService {
 
         /// Maps Swift property names to the snake_case JSON keys expected by the GitHub OAuth endpoint.
         private enum CodingKeys: String, CodingKey {
-            /// Maps `clientID` to the `client_id` JSON key.
+            /// JSON key: `client_id`.
             case clientID     = "client_id"
-            /// Maps `clientSecret` to the `client_secret` JSON key.
+            /// JSON key: `client_secret`.
             case clientSecret = "client_secret"
-            /// Maps `code` directly — the JSON key and property name are identical.
             case code
         }
     }
