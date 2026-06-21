@@ -161,6 +161,13 @@ actor SpyRateLimitActor: RateLimitActorProtocol {
         resetDate = nil
     }
 
+    /// Clears the rate-limit flag only when the actor is not currently limited.
+    /// Mirrors `RateLimitActor.clearIfNotLimited()` — no-ops when already limited.
+    func clearIfNotLimited() {
+        guard !isLimited else { return }
+        clear()
+    }
+
     func snapshot() -> RateLimitSnapshot {
         RateLimitSnapshot(isLimited: isLimited, resetDate: resetDate)
     }
