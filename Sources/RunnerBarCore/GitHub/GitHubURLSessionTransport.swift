@@ -10,7 +10,17 @@ import Foundation
 private let sharedDecoder = JSONDecoder()
 
 /// Shared encoder hoisted to avoid re-instantiation on every call.
-/// Thread-safe: `JSONEncoder` has no mutable state after initialisation.
+///
+/// Resolves #1477: the original issue requested per-call `let encoder = JSONEncoder()`
+/// instantiation to eliminate a perceived thread-safety risk. The shared instance is
+/// retained instead because:
+///   1. `JSONEncoder` has no mutable state after initialisation — `outputFormatting`
+///      and other properties are never mutated after `sharedEncoder` is created, so
+///      there is no concurrent-mutation hazard.
+///   2. Per-call allocation inside `urlSessionAPIPaginated` would create one new
+///      `JSONEncoder` per pagination page. For a large org traversal (hundreds of pages)
+///      this is measurable allocator pressure with zero benefit.
+/// Thread-safe for the same reason as `sharedDecoder` above.
 /// Used by `urlSessionAPIPaginated` (page accumulation) and `patchRunnerLabels` (label body).
 private let sharedEncoder = JSONEncoder()
 

@@ -79,14 +79,23 @@ private struct TransportBox<T: Sendable> {
 // MARK: - Module-level state
 
 /// Serialises all reads and writes to the active JSON transport closure.
-private let transportBox = TransportBox<GHAPITransport>(initialState: { _ in nil })
+private let transportBox = TransportBox<GHAPITransport>(initialState: { _ in
+    assertionFailure("ghAPI called before configureGHAPI — wire the transport at launch")
+    return nil
+})
 
 /// Serialises all reads and writes to the active raw-bytes transport closure.
-private let rawTransportBox = TransportBox<GHRawTransport>(initialState: { _ in nil })
+private let rawTransportBox = TransportBox<GHRawTransport>(initialState: { _ in
+    assertionFailure("ghRaw called before configureGHRaw — wire the transport at launch")
+    return nil
+})
 
 /// Serialises all reads and writes to the active paginated JSON transport closure.
-/// Defaults to `nil`-returning stub; wired to `urlSessionAPIPaginated` at app launch.
-private let paginatedTransportBox = TransportBox<GHAPIPaginatedTransport>(initialState: { _, _ in nil })
+/// Defaults to a debug-asserting stub; wired to `urlSessionAPIPaginated` at app launch.
+private let paginatedTransportBox = TransportBox<GHAPIPaginatedTransport>(initialState: { _, _ in
+    assertionFailure("ghAPIPaginated called before configureGHAPIPaginated — wire the transport at launch")
+    return nil
+})
 
 /// Serialises all reads and writes to the active token-provider closure.
 private let tokenProviderBox = TransportBox<GHTokenProvider>(initialState: { nil })

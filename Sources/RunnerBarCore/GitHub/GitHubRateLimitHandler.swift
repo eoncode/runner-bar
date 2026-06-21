@@ -48,7 +48,7 @@ public struct RateLimitSnapshot: Sendable {
 /// ### snapshot() and async semantics
 /// `snapshot()` is declared non-async. This is correct: Swift actors permit
 /// non-async methods that callers on *the same actor* can call synchronously.
-/// However, any caller *outside* the actor's context — including all transport
+/// However, any caller *outside* the actor’s context — including all transport
 /// functions, which run on the cooperative thread pool — must still `await` it.
 /// The compiler enforces this; the non-async declaration simply avoids an
 /// unnecessary extra suspension point for callers that are already isolated to
@@ -65,9 +65,9 @@ public protocol RateLimitActorProtocol: Actor {
     /// Prefer this over reading `isLimited` separately: two individual reads involve
     /// two actor hops with a TOCTOU window between them (P10 — Atomic Snapshot Pattern).
     ///
-    /// - Note: Although declared non-async, callers outside this actor's context
-    ///   must still `await` this function. See the protocol-level note on async
-    ///   semantics above for the full explanation.
+    /// - Note: Although declared non-async, callers outside this actor’s context must
+    ///   still `await` this function; the compiler enforces this. See the protocol-level
+    ///   `### snapshot() and async semantics` note above for the full explanation.
     func snapshot() -> RateLimitSnapshot
 }
 
