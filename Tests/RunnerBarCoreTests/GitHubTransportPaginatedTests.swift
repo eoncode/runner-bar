@@ -262,23 +262,14 @@ final class GitHubTransportPaginatedTests {
         #expect(items?[0]["id"] == .string("1"))
     }
 
-    // MARK: - Non-array body on the very first page returns nil
+    // MARK: - Non-array body on the very first page
 
     /// A 200 response with a non-array JSON body on the *first* page must return nil
-    /// and must NOT arm or clear the rate-limit actor.
+    /// and must NOT arm the rate-limit actor (clear() IS called because urlSessionExecute
+    /// clears on any 2xx before the decode step).
     ///
-    /// This is the complement of `paginatedStopsOnNonArrayBody`, which only covers
-    /// the mid-pagination case (page 2 is bad after page 1 succeeds).
-    ///
-    /// The decode failure path sets `hadAtLeastOneSuccessfulPage = false` (the flag
-    /// is only set *after* a successful `decode([AnyJSON].self, ...)` call), so the
-    /// post-loop `guard hadAtLeastOneSuccessfulPage` fires and nil is returned.
-    ///
-    /// Verifies:
-    /// - `result == nil` — no successful page was ever decoded
-    /// - `setCalled == false` — a 200 non-array is not a rate-limit event
-    /// - `clearCalled == true` — `urlSessionExecute` calls `clearIfNotLimited()` on
-    ///   any 2xx response before the pagination loop attempts decode
+    /// paginatedReturnsNilOnNonArrayBodyFirstPage was removed in #1500 — it was a
+    /// functional duplicate of this test with identical stub, result, and spy assertions.
     @Test func paginatedNonArrayFirstPageDoesNotArmRateLimiter() async {
         StubURLProtocol.reset()
         let pageURL = "\(apiBase)orgs/test/actions/runners"
@@ -598,7 +589,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page1URL)
         // Page 2 is deliberately NOT registered — see method doc above.
 
-        // Call-count–based token provider: returns a valid token for the first
+        // Call-count-based token provider: returns a valid token for the first
         // githubTokenCore() read (page-1 iteration) and nil for all subsequent
         // reads (page-2 iteration onward). The lock makes the counter safe under
         // @Suite(.serialized) without requiring an actor hop.
@@ -749,40 +740,5 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled == false)
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
-    }
-
-    // MARK: - 200 + non-array body on the very first page — clear() IS called
-
-    /// A 200 response with a non-array JSON body on the *first* page (before any items
-    /// are accumulated) must return nil.
-    ///
-    /// `clear()` IS called here because `urlSessionExecute` clears the rate-limiter on any
-    /// 2xx response (line 156) before returning `.success` to the pagination loop. The decode
-    /// failure happens afterward in the loop — `clear()` is based on the HTTP status code
-    /// alone, not on whether the body decodes as a valid JSON array.
-    ///
-    /// Verifies:
-    /// - `result == nil` — no successful page decoded
-    /// - `setCalled == false` — not a rate-limit event
-    /// - `clearCalled == true` — 2xx response in `urlSessionExecute` calls clear()
-    @Test func paginatedReturnsNilOnNonArrayBodyFirstPage() async {
-        StubURLProtocol.reset()
-        let pageURL = "\(apiBase)orgs/test/actions/runners"
-
-        // 200 with a non-array body — e.g. GitHub error object on first page.
-        StubURLProtocol.register(.init(
-            data: "{\"message\":\"Not Found\"}".data(using: .utf8)!,
-            statusCode: 200,
-            headers: [:]
-        ), for: pageURL)
-
-        let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
-
-        #expect(result == nil)
-        let wasSetCalled = await spy.setCalled
-        #expect(wasSetCalled == false)
-        let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == true)
     }
 }
