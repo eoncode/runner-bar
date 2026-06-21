@@ -114,13 +114,16 @@ struct APICallCounterTests {
 
     /// Exercises `APICallCounterSnapshot`'s `Sendable` conformance at runtime
     /// by transferring a live snapshot across a `Task` boundary.
+    /// `Task.detached` returning a `Sendable` value is non-throwing, so
+    /// `try` is not needed here (unlike the pattern copied from
+    /// `GitHubRateLimitActorTests` where the Task closure throws).
     @Test("APICallCounterSnapshot is Sendable across task boundary")
-    func snapshotSendable() async throws {
+    func snapshotSendable() async {
         let counter = APICallCounter()
         await counter.record()
         await counter.record()
         let snap = await counter.snapshot()
-        let transferred = try await Task.detached { snap }.value
+        let transferred = await Task.detached { snap }.value
         #expect(transferred.count == snap.count)
         #expect(transferred.limit == snap.limit)
     }
