@@ -79,19 +79,24 @@ public final class APICallCounterViewModel {
 
     /// Starts a structured polling loop that refreshes `snap` every 5 seconds.
     ///
-    /// Uses `do { try await Task.sleep } catch { return }` rather than `try?`
-    /// so that a `CancellationError` from `deinit` exits the loop immediately
-    /// without waiting for the full sleep window to complete.
+    /// `self` is only held strongly during the actor hop for `snapshot()` —
+    /// it is released before `Task.sleep` so that `deinit` can fire immediately
+    /// when the view disappears, cancelling the task without waiting for the
+    /// full 5-second sleep window. The loop re-checks `Task.isCancelled` after
+    /// waking and re-acquires `self` only if still alive and not cancelled.
     private func startPolling() {
         taskBox.task = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self else { return }
-                self.snap = await self.counter.snapshot()
+                // Borrow self only for the snapshot hop, then release.
+                if let self { self.snap = await self.counter.snapshot() }
+                // Sleep without holding self so deinit can fire immediately.
                 do {
                     try await Task.sleep(for: .seconds(5))
                 } catch {
-                    return
+                    return  // CancellationError — exit immediately.
                 }
+                // Re-check after waking: task may have been cancelled during sleep.
+                guard !Task.isCancelled else { return }
             }
         }
     }
