@@ -17,6 +17,7 @@ public struct RateLimitSnapshot: Sendable {
     /// The moment at which the rate-limit window expires, or `nil` if unknown.
     public let resetDate: Date?
 
+    /// Creates a rate-limit snapshot with the given state.
     public init(isLimited: Bool, resetDate: Date?) {
         self.isLimited = isLimited
         self.resetDate = resetDate

@@ -27,7 +27,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     private static let lock = NSLock()
-    private static var stubs: [String: Stub] = [:]
+    private nonisolated(unsafe) static var stubs: [String: Stub] = [:]
 
     static func register(_ stub: Stub, for url: String) {
         lock.withLock { stubs[url] = stub }
