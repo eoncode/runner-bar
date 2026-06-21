@@ -181,9 +181,10 @@ public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) a
 ///   which always discard all collected items.
 /// - Returns partial results (not nil) if at least one page was accumulated before
 ///   pagination was stopped by a non-auth HTTP error (e.g. 404, 410, 503). Only auth
-///   failures discard all collected items; non-auth errors are treated as recoverable
-///   mid-pagination interruptions. Callers that need to distinguish total failure from
-///   partial success should check the result length.
+///   failures (401, permission-denied 403, no/revoked token) discard all collected items;
+///   non-auth HTTP errors are treated as recoverable mid-pagination interruptions.
+///   Callers that need to distinguish total failure from partial success should check
+///   the result length relative to their expected total.
 /// - Note: `extractNextURL(from: nil)` returns `nil`, so passing a non-paginated endpoint
 ///   (which returns no `Link` header) terminates the loop naturally after the first page.
 @concurrent
