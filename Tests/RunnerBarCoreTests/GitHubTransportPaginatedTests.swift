@@ -454,7 +454,6 @@ final class GitHubTransportPaginatedTests {
     }
 
     // MARK: - No token returns nil immediately
-    // MARK: - No token returns nil immediately
 
     /// When no GitHub token is configured, `urlSessionAPIPaginated` returns nil
     /// without making any network request.
