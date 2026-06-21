@@ -77,6 +77,10 @@ public final class LocalRunnerIndex {
                 runnerIndex = [:]
             }
         } else if let legacy = defaults.dictionary(forKey: Self.indexKey) as? [String: String] {
+            // Migration path: executes once after upgrading from the pre-Codable plist format.
+            // After first launch post-update, persistIndex() rewrites the value as Data under
+            // the same key, so this branch becomes permanently unreachable on all subsequent
+            // launches — the `if let data` branch above fires instead.
             runnerIndex = legacy
             persistIndex()
             log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON")
