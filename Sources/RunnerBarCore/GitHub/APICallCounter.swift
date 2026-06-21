@@ -86,9 +86,9 @@ public actor APICallCounter: APICallCounterProtocol {
 
     /// Records one GitHub REST API call at the current `ContinuousClock` instant.
     ///
-    /// Purges stale entries first (O(k) front-slice), appends the current
-    /// instant, then caps the buffer at `hourlyLimit` via a suffix slice
-    /// (avoids the O(n) element-shift cost of `removeFirst(n)`).
+    /// Purges stale entries first, appends the current instant, then caps
+    /// the buffer at `hourlyLimit` via a suffix slice (avoids the O(n)
+    /// element-shift cost of `removeFirst(n)`).
     public func record() {
         purge()
         timestamps.append(.now)
@@ -105,11 +105,13 @@ public actor APICallCounter: APICallCounterProtocol {
 
     // MARK: - Private
 
-    /// Evicts instants older than the rolling 60-minute window.
+    /// Evicts timestamps older than the rolling 60-minute window.
     ///
-    /// Because instants are always appended in ascending order, stale entries
-    /// are always at the front. Uses `firstIndex(where:)` + `removeFirst(_:)`
-    /// for an O(k) front-slice rather than a full O(n) `removeAll(where:)` sweep.
+    /// Because timestamps are always appended in ascending order, stale
+    /// entries are always at the front. Uses `firstIndex(where:)` (O(k)
+    /// scan — stops at the first fresh entry) + `removeFirst(_:)` (O(n−k)
+    /// shift) — total O(n), but avoids the full-array predicate evaluation
+    /// of `removeAll(where:)` when most entries are fresh.
     ///
     /// `ContinuousClock` is monotonic, so the cutoff calculation is not
     /// susceptible to sleep/wake NTP corrections or user clock changes.

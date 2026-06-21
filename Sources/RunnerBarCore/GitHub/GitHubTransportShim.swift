@@ -66,22 +66,9 @@ public typealias GHTokenProvider = @Sendable () -> String?
 /// inside this type, as that would silently break all tests that reconfigure
 /// the transport or token provider mid-suite.
 private struct TransportBox<T: Sendable> {
-    /// The underlying unfair lock guarding the stored value.
     private let lock: OSAllocatedUnfairLock<T>
-
-    /// Creates a box with `initialState` as the starting value.
     init(initialState: T) { lock = .init(initialState: initialState) }
-
-    /// Replaces the stored closure under the lock.
-    ///
-    /// Safe to call from any thread or actor context; the lock is held only
-    /// for the duration of the pointer swap — no async work inside.
     func configure(_ value: T) { lock.withLock { $0 = value } }
-
-    /// Returns the stored closure under the lock.
-    ///
-    /// The caller is responsible for invoking the returned closure *outside*
-    /// the lock. Never pass an `async` closure into `withLock`.
     func read() -> T { lock.withLock { $0 } }
 }
 
@@ -117,6 +104,9 @@ public func configureGHAPIPaginated(_ transport: @escaping GHAPIPaginatedTranspo
 }
 
 /// Wire up the token provider. Call once at launch.
+///
+/// - Parameter provider: Sync closure that returns the current GitHub token,
+///   or `nil` when no token is available (e.g. user is signed out).
 public func configureGHToken(_ provider: @escaping GHTokenProvider) {
     tokenProviderBox.configure(provider)
 }
