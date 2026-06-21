@@ -46,13 +46,14 @@ public struct RateLimitSnapshot: Sendable, Equatable {
 /// `RateLimitSnapshot` if callers need additional state.
 ///
 /// ### snapshot() and async semantics
-/// `snapshot()` is declared non-async. This is correct: Swift actors permit
-/// non-async methods that callers on *the same actor* can call synchronously.
-/// However, any caller *outside* the actor’s context — including all transport
-/// functions, which run on the cooperative thread pool — must still `await` it.
-/// The compiler enforces this; the non-async declaration simply avoids an
-/// unnecessary extra suspension point for callers that are already isolated to
-/// the actor.
+/// `snapshot()` is declared non-async to avoid an unnecessary suspension point
+/// for intra-actor callers; external callers outside the actor's context must
+/// still `await` it — the compiler enforces this.
+/// Concretely: all transport functions in this codebase run on the cooperative
+/// thread pool and are external callers — they always write `await rateLimiter.snapshot()`.
+/// The non-async declaration has no performance benefit for them; it only spares
+/// callers *already isolated to the actor* (e.g. actor methods calling `snapshot()`
+/// on `self`) from an unnecessary extra hop.
 public protocol RateLimitActorProtocol: Actor {
     /// Whether the GitHub API is currently rate-limiting this client.
     var isLimited: Bool { get }
@@ -65,7 +66,7 @@ public protocol RateLimitActorProtocol: Actor {
     /// Prefer this over reading `isLimited` separately: two individual reads involve
     /// two actor hops with a TOCTOU window between them (P10 — Atomic Snapshot Pattern).
     ///
-    /// - Note: Although declared non-async, callers outside this actor’s context must
+    /// - Note: Although declared non-async, callers outside this actor's context must
     ///   still `await` this function; the compiler enforces this. See the protocol-level
     ///   `### snapshot() and async semantics` note above for the full explanation.
     func snapshot() -> RateLimitSnapshot
