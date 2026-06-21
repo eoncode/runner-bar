@@ -3,6 +3,18 @@
 // Phase 5 of the Swift 6.2 data model modernisation (#1287, #1300).
 import Foundation
 
+// MARK: - LabelsPrerequisiteError
+
+/// Typed errors surfaced when the labels-update prerequisite check fails in
+/// `SaveRunnerEditsUseCase.execute(…)`. Replaces the previous generic string message
+/// so callers can branch on the failure reason (#1480).
+public enum LabelsPrerequisiteError: Error, Equatable, Sendable {
+    /// The runner has no `agentId` — required to address the GitHub API runner endpoint.
+    case missingAgentId
+    /// The runner has no `gitHubUrl` — required to determine the API scope.
+    case missingGitHubUrl
+}
+
 // MARK: - SaveRunnerEditsUseCase
 
 /// Testable, dependency-injected replacement for the `commitRunnerEdit` free function.
@@ -81,15 +93,19 @@ public struct SaveRunnerEditsUseCase: Sendable {
         // MARK: Step 1 — Labels (GitHub API)
         let labelsChanged = draft.parsedLabels != original.parsedLabels
         if labelsChanged {
-            if let agentId = runner.agentId,
-               let gitHubUrl = runner.gitHubUrl,
-               let scope = scopeFromHtmlUrl(gitHubUrl) {
+            switch labelsPrerequisite(runner: runner) {
+            case .success(let (agentId, scope)):
                 let result = await labelsService.patch(scope: scope, runnerID: agentId, labels: draft.parsedLabels)
                 if result == nil {
                     return .failure(["Failed to save labels via GitHub API"])
                 }
-            } else {
-                errors.append("Cannot save labels: missing agent ID or GitHub URL")
+            case .failure(let prereqError):
+                switch prereqError {
+                case .missingAgentId:
+                    errors.append("Cannot save labels: missing agent ID")
+                case .missingGitHubUrl:
+                    errors.append("Cannot save labels: missing GitHub URL")
+                }
             }
         }
 
@@ -166,13 +182,23 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     // MARK: - Private helpers
 
-    /// Extracts `owner/repo` or `orgName` scope from a GitHub HTML URL.
-    /// Returns `nil` if the URL cannot be parsed.
-    private func scopeFromHtmlUrl(_ url: String) -> String? {
-        guard let parsedURL = URL(string: url) else { return nil }
-        let parts = parsedURL.pathComponents.filter { $0 != "/" }
-        if parts.count >= 2 { return parts[0] + "/" + parts[1] }
-        if parts.count == 1 { return parts[0] }
-        return nil
+    /// Validates the prerequisites for the labels API call and extracts the scope string.
+    ///
+    /// Since `gitHubUrl` is now typed as `URL?`, no URL parsing can fail here;
+    /// scope extraction is pure path slicing on an already-valid URL.
+    ///
+    /// - Returns: `.success((agentId, scope))` when both fields are present;
+    ///   `.failure(LabelsPrerequisiteError)` identifying the first missing field.
+    private func labelsPrerequisite(
+        runner: borrowing RunnerModel
+    ) -> Result<(Int, String), LabelsPrerequisiteError> {
+        guard let agentId = runner.agentId else { return .failure(.missingAgentId) }
+        guard let url = runner.gitHubUrl else { return .failure(.missingGitHubUrl) }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        let scope: String
+        if parts.count >= 2 { scope = parts[0] + "/" + parts[1] }
+        else if parts.count == 1 { scope = parts[0] }
+        else { return .failure(.missingGitHubUrl) }
+        return .success((agentId, scope))
     }
 }

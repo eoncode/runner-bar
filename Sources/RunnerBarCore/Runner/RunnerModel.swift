@@ -34,7 +34,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     public let installPath: String?
     /// The GitHub URL scope this runner is registered to (repo or org URL).
     /// Use `copying(gitHubUrl:)` to produce an updated value.
-    public let gitHubUrl: String?
+    public let gitHubUrl: URL?
     /// GitHub's internal numeric agent ID for this runner.
     ///
     /// Read from the `.runner` JSON `AgentId` field during local discovery.
@@ -123,7 +123,7 @@ public struct RunnerModel: Sendable, Identifiable, Equatable {
     public init(
         id: String? = nil,
         runnerName: String,
-        gitHubUrl: String?,
+        gitHubUrl: URL?,
         agentId: Int?,
         apiId: Int? = nil,
         workFolder: String?,
@@ -265,7 +265,7 @@ extension RunnerModel {
     /// runners[idx] = runners[idx].copying(lifecycleWarning: noWarning)  // clears warning — a bare `nil` literal would be a no-op
     /// ```
     public func copying(
-        gitHubUrl: String?? = nil,
+        gitHubUrl: URL?? = nil,
         isRunning: Bool? = nil,
         githubStatus: RunnerStatus?? = nil,
         isBusy: Bool? = nil,
