@@ -121,7 +121,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     public func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         let url = runnerConfigURL(for: installPath)
         do {
-            try await saveRunnerConfig(config, to: url, installPath: installPath, decoder: decoder)
+            try await saveRunnerConfig(config, to: url, installPath: installPath, using: decoder)
         } catch let configError as RunnerConfigStoreError {
             throw configError
         } catch {
@@ -158,12 +158,19 @@ private func loadRunnerData(from url: URL, installPath: String) throws -> Data {
 /// Runs on the Swift cooperative thread pool without blocking an actor's serial
 /// executor. `config` is a plain value parameter here — no `borrowing` escape
 /// issue arises because `@concurrent` functions do not use `@escaping` closures.
+///
+/// - Parameters:
+///   - config: The typed runner config whose fields are merged into the existing file.
+///   - url: The destination `.runner` file URL.
+///   - installPath: The runner install path, used only for error reporting.
+///   - decoder: The `JSONDecoder` injected from the actor; passed as a dependency
+///     rather than a data input so the call site reads `using: decoder`.
 @concurrent
 private func saveRunnerConfig(
     _ config: RunnerConfig,
     to url: URL,
     installPath: String,
-    decoder: JSONDecoder
+    using decoder: JSONDecoder
 ) throws {
     // Read-modify-write: load existing keys so agent-managed keys are preserved.
     var raw: [String: AnyJSON] = [:]
