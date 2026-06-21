@@ -216,6 +216,7 @@ final class OAuthService {
         private enum CodingKeys: String, CodingKey {
             /// JSON key: `access_token`.
             case accessToken = "access_token"
+            /// JSON key: `error` — maps directly (no rename).
             case error
             /// JSON key: `error_description`.
             case errorDescription = "error_description"
@@ -252,6 +253,7 @@ final class OAuthService {
             case clientID     = "client_id"
             /// JSON key: `client_secret`.
             case clientSecret = "client_secret"
+            /// JSON key: `code` — maps directly (no rename).
             case code
         }
     }
