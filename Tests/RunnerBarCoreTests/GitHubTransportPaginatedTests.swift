@@ -698,4 +698,39 @@ final class GitHubTransportPaginatedTests {
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
     }
+
+    // MARK: - 200 + non-array body on the very first page returns nil
+
+    /// A 200 response with a non-array JSON body on the *first* page (before any items
+    /// are accumulated) must return nil, not an empty array.
+    ///
+    /// Distinct from `paginatedStopsOnNonArrayBody`, which tests mid-pagination: that
+    /// case returns the partial items from the already-accumulated page 1.
+    /// Here `hadAtLeastOneSuccessfulPage` is never set to `true` (the `if let page`
+    /// decode fails), so the post-loop guard returns nil.
+    ///
+    /// Regression guard: without this test the first-page 200+non-array path is only
+    /// covered by inference from the mid-pagination test.
+    @Test func paginatedReturnsNilOnNonArrayBodyFirstPage() async {
+        StubURLProtocol.reset()
+        let pageURL = "\(apiBase)orgs/test/actions/runners"
+
+        // 200 but body is an object, not an array — e.g. a GitHub error envelope.
+        StubURLProtocol.register(.init(
+             "{\"message\":\"Not Found\"}".data(using: .utf8)!,
+            statusCode: 200,
+            headers: [:]
+        ), for: pageURL)
+
+        let spy = SpyRateLimitActor()
+        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+
+        // No successful page was ever decoded — nil must be returned (not `[]`).
+        #expect(result == nil)
+        // Not a rate-limit event, so neither set() nor clear() should fire.
+        let wasSetCalled = await spy.setCalled
+        #expect(wasSetCalled == false)
+        let wasClearCalled = await spy.clearCalled
+        #expect(wasClearCalled == false)
+    }
 }
