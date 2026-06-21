@@ -67,25 +67,21 @@ public typealias GHTokenProvider = @Sendable () -> String?
 /// value under the lock; `read()` reads it under the lock so the caller can
 /// invoke the closure outside (important for async closures — `withLock`
 /// cannot contain an `await`).
+///
+/// `TransportBox` is intentionally reconfigurable: `configureGHToken` is called
+/// on every test `init()` and in mid-test token-swap scenarios by design. A
+/// reconfiguration guard does not belong here — if a one-time-configure
+/// invariant is needed for a specific box, enforce it at the call site with a
+/// `precondition` before the first `configure(_:)` call.
 private struct TransportBox<T: Sendable> {
-    /// The underlying unfair lock protecting the stored value and configured state.
-    private let lock: OSAllocatedUnfairLock<(value: T, isConfigured: Bool)>
-    /// Creates a box with the given initial value.
-    init(initialState: T) { lock = .init(initialState: (initialState, false)) }
+    private let lock: OSAllocatedUnfairLock<T>
+    init(initialState: T) { lock = .init(initialState: initialState) }
     /// Replaces the stored value under the lock.
     func configure(_ value: T) {
-        lock.withLock { state in
-            if state.isConfigured {
-                log("Warning: TransportBox reconfigured — replacing existing value.")
-                #if DEBUG
-                assertionFailure("TransportBox reconfigured — this is likely a test setup error or accidental double-configure in app init.")
-                #endif
-            }
-            state = (value, true)
-        }
+        lock.withLock { $0 = value }
     }
     /// Returns the stored value under the lock.
-    func read() -> T { lock.withLock { $0.value } }
+    func read() -> T { lock.withLock { $0 } }
 }
 
 // MARK: - Module-level state
