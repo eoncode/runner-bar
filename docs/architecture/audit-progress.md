@@ -4,7 +4,7 @@ Tracking file for the principles audit against:
 - [Issue #1471](https://github.com/eoncode/runner-bar/issues/1471) + [`project-principles.md`](../architecture/project-principles.md)
 - [Issue #1387](https://github.com/eoncode/runner-bar/issues/1387) + [`reach-goal-principles.md`](../principles/reach-goal-principles.md)
 
-Last updated: 2026-06-21
+Last updated: 2026-06-21 (session 3)
 
 ---
 
@@ -23,8 +23,8 @@ Last updated: 2026-06-21
 ### App/
 | File | Status | Notes |
 |------|--------|-------|
-| `AppDelegate.swift` (23 KB) | 🔲 | High priority — likely contains DI wiring + Task usage |
-| `AppDelegate+PanelSetup.swift` (14 KB) | 🔲 | High priority |
+| `AppDelegate.swift` (23 KB) | ✅ | **Clean.** `@MainActor` isolated correctly. `AppPreferencesStore.shared` + `ScopeStore.shared` accessed only at construction (injected into `RunnerStore` at `setupCombineSubscriptions`). `DispatchQueue.main.async` used once in `openPanel()` for a one-shot UI restore — low risk. No fire-and-forget Tasks. No new findings. |
+| `AppDelegate+PanelSetup.swift` (14 KB) | 🔲 | High priority — DI wiring for `RunnerStore` init |
 | `AppDelegate+Navigation.swift` (5.4 KB) | 🔲 | |
 | `AppDelegate+Polling.swift` (1.5 KB) | 🔲 | |
 | `AppDelegate+StatusItem.swift` (3.2 KB) | 🔲 | |
@@ -47,7 +47,7 @@ Last updated: 2026-06-21
 |------|--------|-------|
 | `GitHubHelpers.swift` (9.1 KB) | ✅ | Contains free transport functions `ghAPI`, `ghPost`, `cancelRun`, `fetchActionLogs`, `fetchJobLog` — root of Finding #1 (P7) |
 | `GitHubTokenCache.swift` (4.2 KB) | 🔲 | |
-| `OAuthService.swift` (15.2 KB) | 🔲 | High priority — auth flow, likely Task/GCD usage |
+| `OAuthService.swift` (15.2 KB) | ✅ | **Clean.** `@MainActor` isolated. Uses own `URLSession.shared.data(for:)` directly (correct — OAuth token exchange is a one-off, not a polling path). `Task { await exchangeCode(code) }` in `handleCallback` is actor-bound (inherits `@MainActor`), not fire-and-forget. No new findings. |
 | `OAuthSecrets.swift` (2.4 KB) | 🔲 | |
 
 ### Preferences/
@@ -60,13 +60,13 @@ Last updated: 2026-06-21
 | File | Status | Notes |
 |------|--------|-------|
 | `RunnerStore.swift` | ✅ | Finding #7 raw string in `nextPollInterval()` (P5); protocols `AppPreferencesStoreProtocol`/`ScopeStoreProtocol` defined here (P6) |
-| `RunnerStore+PollBridge.swift` | ✅ | Finding #2 `ScopeStore.shared` bypass (P7); Finding #13 `.scopes` vs `.activeScopes` mismatch |
+| `RunnerStore+PollBridge.swift` | ✅ | Finding #2 `ScopeStore.shared` bypass (P7); Finding #13 `.scopes` vs `.activeScopes` — **confirmed real** (see ScopeStore notes below) |
 | `RunnerLifecycleService.swift` | ✅ | Finding #11 singleton `shared` with no injection seam (P7) |
 
 ### Scope/
 | File | Status | Notes |
 |------|--------|-------|
-| `ScopeStore.swift` | 🔲 | **High priority** — needed to verify Finding #2/#13 (`.scopes` vs `.activeScopes`) |
+| `ScopeStore.swift` | ✅ | **Finding #13 confirmed.** `.scopes` returns ALL entries (including disabled); `.activeScopes` returns only enabled ones. `RunnerStore+PollBridge` calls `ScopeStore.shared.scopes.first(where: { $0.contains("/") })` — it may return a **disabled** scope as fallback, which is semantically wrong. Fix: replace with `.activeScopes`. |
 | `ScopeEntry.swift` | ⏭️ | Small model |
 
 ### Services/
@@ -158,8 +158,8 @@ Last updated: 2026-06-21
 | File | Status | Notes |
 |------|--------|-------|
 | `GitHubTransportShim.swift` (9.4 KB) | ✅ | Root of Finding #1 — free functions `ghAPI`/`ghPost`/etc. defined here |
-| `GitHubURLSessionTransport.swift` (29.5 KB) | 🔲 | **Highest priority unread file** — transport implementation |
-| `GitHubRateLimitHandler.swift` (14.2 KB) | 🔲 | High priority |
+| `GitHubURLSessionTransport.swift` (29.5 KB) | ✅ | **Clean.** Well-structured. `urlSessionExecute` is private `@concurrent`, all public wrappers delegate cleanly. One intentional `DispatchQueue.sync {}` in `handleTermination` (P2 known/documented, last GCD sync in production path). Rate-limit actor properly used. No new findings. |
+| `GitHubRateLimitHandler.swift` (14.2 KB) | 🔲 | |
 | `GitHubResponseDecoder.swift` (5.5 KB) | 🔲 | |
 | `GitHubRequestBuilder.swift` (2.3 KB) | 🔲 | |
 | `GitHubConstants.swift` (2.8 KB) | ⏭️ | Constants |
@@ -167,9 +167,8 @@ Last updated: 2026-06-21
 ### Runner/
 | File | Status | Notes |
 |------|--------|-------|
-| `PollResultBuilder.swift` (20.5 KB) | 🔲 | **High priority** — core polling logic |
-| `WorkflowActionGroupFetch.swift` (15.4 KB) | 🔲 | **High priority** — fetch logic, likely free function calls |
-| `WorkflowActionGroup.swift` (18.1 KB) | 🔲 | High priority |
+| `PollResultBuilder.swift` (20.5 KB) | ✅ | **Clean.** Pure static struct. All side-effects injected as closures (`fetchJobs`, `backfill`, `fetchGroups`, `fireFailureHook`, `enrichJobs`). No free function calls, no singleton access, no GCD. Uses typed `JobStatus.inProgress`/`.queued`/`.completed` enum values throughout — consistent with P5. No new findings. |
+| `WorkflowActionGroupFetch.swift` (15.4 KB) | ✅ | **Finding #50 (new).** `fetchActionGroups`, `fetchJobsForRun`, `fetchJobsForGroup` are free functions that call `ghAPI(…)` directly — same P7 transport DI violation as Finding #1. Also: `fetchJobsForGroup` uses raw `JobStatus.inProgress` enum correctly (P5 clean). `withTaskGroup` usage is structured, no fire-and-forget. Only violation: direct `ghAPI` free function calls with no injection seam. |
 | `RunnerStatusEnricher.swift` (15.7 KB) | 🔲 | Medium priority |
 | `RunnerConfigStore.swift` (14.4 KB) | 🔲 | Medium priority |
 | `SaveRunnerEditsUseCase.swift` (11.8 KB) | 🔲 | Medium priority |
@@ -180,6 +179,7 @@ Last updated: 2026-06-21
 | `RunnerModelParser.swift` (4.5 KB) | 🔲 | |
 | `LocalRunnerIndex.swift` (5 KB) | 🔲 | |
 | `RunnerEditDraft.swift` (5.2 KB) | 🔲 | |
+| `WorkflowActionGroup.swift` (18.1 KB) | 🔲 | |
 | `RunnerConfigStoreProtocol.swift` (1 KB) | ⏭️ | Protocol definition |
 | `RunnerLabelsServiceProtocol.swift` (1.2 KB) | ⏭️ | Protocol definition |
 | `RunnerStatusEnricherProtocol.swift` (1.5 KB) | ⏭️ | Protocol definition |
@@ -195,7 +195,7 @@ Last updated: 2026-06-21
 ### Scope/
 | File | Status | Notes |
 |------|--------|-------|
-| `ScopePreferencesStore.swift` (8.1 KB) | 🔲 | **High priority** — underlying store used by `ScopeStore`, verify `.scopes` vs `.activeScopes` |
+| `ScopePreferencesStore.swift` (8.1 KB) | 🔲 | |
 | `ScopeEntry.swift` (2.4 KB) | ⏭️ | Small model |
 | `GitHubScope.swift` (1.2 KB) | ⏭️ | Small model |
 | `FailureHookRunnerDependencies.swift` (1.5 KB) | 🔲 | |
@@ -203,7 +203,7 @@ Last updated: 2026-06-21
 ### Services/
 | File | Status | Notes |
 |------|--------|-------|
-| `ProcessRunner.swift` (21.4 KB) | 🔲 | **High priority** — Process management, likely GCD/P2 violations |
+| `ProcessRunner.swift` (21.4 KB) | ✅ | **Clean (by design).** One intentional `DispatchQueue.sync {}` in `handleTermination` — the last GCD sync in the production path, deliberately retained as the happens-before edge for stdout drain. Doc comment explicitly blocks AI suggestions to remove it. `Task.detached` used for the timeout guard only, with a documented and bounded lifetime (cancelled by `terminationHandler` on process exit). No new findings — existing P2 item is tracked and justified. |
 | `LogFetcher.swift` (5.3 KB) | 🔲 | Relates to Finding #4/#9 log fetch chain |
 
 ### Utilities/
@@ -218,35 +218,38 @@ Last updated: 2026-06-21
 
 ---
 
-## Findings Summary (from files read so far)
+## Findings Summary (all confirmed findings to date)
 
-| # | File | Principle | Tier |
-|---|------|-----------|------|
-| 1 | `GitHubHelpers.swift` / `GitHubTransportShim.swift` | P7 — DI | 🔴 1 |
-| 2 | `RunnerStore+PollBridge.swift` | P7 — DI | 🔴 1 |
-| 3 | `WorkflowContextMenuModifier.swift` | P9 + P7 | 🔴 1 |
-| 4 | `StepLogView.swift` | P9 + P7 | 🔴 1 |
-| 5 | `StepLogView.swift` → `LogCopyButton.swift` | P2 — GCD | 🟠 2 |
-| 6 | `StepLogView.swift` | P5 — typed | 🟠 2 |
-| 7 | `RunnerStore.swift` | P5 — typed | 🟠 2 |
-| 8 | `JobContextMenuModifier` (location TBD) | P7 — DI | 🟠 2 |
-| 9 | `BranchSelectorSheet.swift` | P7 — DI | 🟠 2 |
-| 10 | `RunnerStore.swift` | P6 — SRP | 🟢 4 |
-| 11 | `RunnerLifecycleService.swift` | P7 — DI | 🟢 4 |
-| 12 | `Keychain.swift` | P24 — atomicity | 🟢 4 |
-| 13 | `RunnerStore+PollBridge.swift` | P5 — consistency | 🟡 3 |
+| # | File | Principle | Tier | Status |
+|---|------|-----------|------|--------|
+| 1 | `GitHubHelpers.swift` / `GitHubTransportShim.swift` | P7 — DI | 🔴 1 | Open |
+| 2 | `RunnerStore+PollBridge.swift` — `ScopeStore.shared` bypass | P7 — DI | 🔴 1 | Open |
+| 3 | `WorkflowContextMenuModifier.swift` — 3× `Task.detached` mutations | P9 + P7 | 🔴 1 | Open |
+| 4 | `StepLogView.swift` — `Task.detached` + `ScopeStore.shared` | P9 + P7 | 🔴 1 | Open |
+| 5 | `StepLogView.swift` → `LogCopyButton.swift` — GCD round-trip | P2 — GCD | 🟠 2 | Open |
+| 6 | `StepLogView.swift` — raw string status comparisons | P5 — typed | 🟠 2 | Open |
+| 7 | `RunnerStore.swift` — raw string in `nextPollInterval()` | P5 — typed | 🟠 2 | Open |
+| 8 | `JobContextMenuModifier` (location TBD) | P7 — DI | 🟠 2 | Unconfirmed location |
+| 9 | `BranchSelectorSheet.swift` — `ghAPI` free function | P7 — DI | 🟠 2 | Open |
+| 10 | `RunnerStore.swift` — protocols defined inline | P6 — SRP | 🟢 4 | Open |
+| 11 | `RunnerLifecycleService.swift` — singleton, no injection seam | P7 — DI | 🟢 4 | Open |
+| 12 | `Keychain.swift` — FIXME(P24) atomicity gap | P24 | 🟢 4 | Tracked |
+| 13 | `RunnerStore+PollBridge.swift` — `.scopes` vs `.activeScopes` | P5 — correctness | 🔴 1* | **UPGRADED** — `.scopes` returns disabled scopes; semantically wrong fallback |
+| 50 | `WorkflowActionGroupFetch.swift` — `ghAPI` free function calls | P7 — DI | 🟠 2 | Open |
+
+*Finding #13 upgraded to 🔴 after confirming `ScopeStore.scopes` includes **disabled** scopes. The fallback in `StepLogView.loadLog` may resolve a disabled scope — a functional bug, not just a style violation.
 
 ---
 
 ## Next Files to Read (Priority Order)
 
-1. `RunnerBarCore/GitHub/GitHubURLSessionTransport.swift` (29.5 KB)
-2. `RunnerBarCore/Runner/PollResultBuilder.swift` (20.5 KB)
-3. `RunnerBarCore/Runner/WorkflowActionGroupFetch.swift` (15.4 KB)
-4. `RunnerBar/GitHub/OAuthService.swift` (15.2 KB)
-5. `RunnerBar/Scope/ScopeStore.swift`
-6. `RunnerBarCore/Scope/ScopePreferencesStore.swift`
-7. `RunnerBarCore/Services/ProcessRunner.swift` (21.4 KB)
-8. `RunnerBarCore/Services/LogFetcher.swift`
-9. `RunnerBar/App/AppDelegate.swift` (23 KB)
-10. `RunnerBarCore/Runner/WorkflowActionGroup.swift` (18.1 KB)
+1. `RunnerBar/App/AppDelegate+PanelSetup.swift` (14 KB) — DI wiring for RunnerStore
+2. `RunnerBar/Views/Settings/ScopeEditSheet.swift` (26.5 KB) — largest settings file
+3. `RunnerBar/Views/Main/InlineJobRowsView.swift` (14.6 KB) — locate `JobContextMenuModifier` (Finding #8)
+4. `RunnerBar/UseCases/FailureHookRunnerUseCase.swift` (16.3 KB)
+5. `RunnerBarCore/Runner/RunnerStatusEnricher.swift` (15.7 KB)
+6. `RunnerBarCore/Runner/ActiveJob.swift` (15.4 KB)
+7. `RunnerBarCore/Services/LogFetcher.swift` (5.3 KB)
+8. `RunnerBarCore/Runner/JobStatus.swift` (9.7 KB)
+9. `RunnerBar/Views/Settings/AddRunnerSheet.swift` (18.6 KB)
+10. `RunnerBar/Views/Settings/LocalRunnersView.swift` (17.2 KB)
