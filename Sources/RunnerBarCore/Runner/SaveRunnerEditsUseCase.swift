@@ -13,6 +13,9 @@ public enum LabelsPrerequisiteError: Error, Equatable, Sendable {
     case missingAgentId
     /// The runner has no `gitHubUrl` — required to determine the API scope.
     case missingGitHubUrl
+    /// The runner has a `gitHubUrl` but it carries no org/repo path components
+    /// (e.g. a bare-host URL like `https://github.com`), so no API scope can be derived.
+    case invalidScope(URL)
 }
 
 // MARK: - SaveRunnerEditsUseCase
@@ -100,12 +103,7 @@ public struct SaveRunnerEditsUseCase: Sendable {
                     return .failure(["Failed to save labels via GitHub API"])
                 }
             case .failure(let prereqError):
-                switch prereqError {
-                case .missingAgentId:
-                    errors.append("Cannot save labels: missing agent ID")
-                case .missingGitHubUrl:
-                    errors.append("Cannot save labels: missing GitHub URL")
-                }
+                errors.append(labelsPrereqErrorMessage(prereqError))
             }
         }
 
@@ -184,6 +182,21 @@ public struct SaveRunnerEditsUseCase: Sendable {
 
     /// Validates the prerequisites for the labels API call and extracts the scope string.
     ///
+    /// Maps a `LabelsPrerequisiteError` to its human-readable error string.
+    /// Extracted from `execute()` to keep cyclomatic complexity within the SwiftLint limit.
+    private func labelsPrereqErrorMessage(_ error: LabelsPrerequisiteError) -> String {
+        switch error {
+        case .missingAgentId:
+            return "Cannot save labels: missing agent ID"
+        case .missingGitHubUrl:
+            return "Cannot save labels: missing GitHub URL"
+        case .invalidScope(let url):
+            return "Cannot save labels: GitHub URL '\(url.absoluteString)' has no org/repo path — cannot derive API scope"
+        }
+    }
+
+    /// Validates the prerequisites for the labels API call and extracts the scope string.
+    ///
     /// Since `gitHubUrl` is now typed as `URL?`, no URL parsing can fail here;
     /// scope extraction is pure path slicing on an already-valid URL.
     ///
@@ -196,7 +209,7 @@ public struct SaveRunnerEditsUseCase: Sendable {
         guard let url = runner.gitHubUrl else { return .failure(.missingGitHubUrl) }
         let parts = url.pathComponents.filter { $0 != "/" }
         let scope: String
-        if parts.count >= 2 { scope = parts[0] + "/" + parts[1] } else if parts.count == 1 { scope = parts[0] } else { return .failure(.missingGitHubUrl) }
+        if parts.count >= 2 { scope = parts[0] + "/" + parts[1] } else if parts.count == 1 { scope = parts[0] } else { return .failure(.invalidScope(url)) }
         return .success((agentId, scope))
     }
 }

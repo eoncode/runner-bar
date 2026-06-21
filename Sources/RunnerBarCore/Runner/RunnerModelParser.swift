@@ -51,7 +51,13 @@ public func runnerModelFromIndex(name: String, installPath: String) -> RunnerMod
         // Prefer the AgentName decoded from the .runner file; fall back to the index key
         // if the field is absent (older runner agent versions may omit it).
         runnerName: discovery?.runnerName ?? name,
-        gitHubUrl: discovery?.gitHubUrl.flatMap { URL(string: $0) },
+        gitHubUrl: discovery?.gitHubUrl.flatMap {
+            guard let url = URL(string: $0) else {
+                log("RunnerModelParser › ⚠️ gitHubUrl '\($0)' is not a valid URL — stored as nil")
+                return nil
+            }
+            return url
+        },
         agentId: config?.agentId,
         workFolder: config?.workFolder,
         installPath: installPath,
