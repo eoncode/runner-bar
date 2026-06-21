@@ -61,12 +61,12 @@ public final class LocalRunnerIndex {
     /// Hydrates `runnerIndex` from `UserDefaults` at init time.
     ///
     /// Decode order:
-    /// 1. If the key holds `Data`, decode as JSON `[String: String]`.
-    ///    On `DecodingError`, logs and falls through to empty — surfaces malformed data
-    ///    in the log without crashing or silently discarding entries.
-    /// 2. If the key holds a legacy `NSDictionary` (pre-Codable plist format),
-    ///    cast it and immediately re-persist as JSON (one-time migration).
-    /// 3. If the key is absent, start with an empty index.
+    /// 1. `Data` key present → JSON-decode as `[String: String]`.
+    ///    On `DecodingError`, logs and falls through to empty so malformed data
+    ///    is surfaced in logs without crashing or losing other entries.
+    /// 2. Legacy `NSDictionary` present → cast and immediately re-persist as JSON
+    ///    (one-time migration from pre-Codable plist format).
+    /// 3. Key absent → start with empty index.
     private func loadIndex() {
         if let data = defaults.data(forKey: Self.indexKey) {
             do {
@@ -77,7 +77,6 @@ public final class LocalRunnerIndex {
                 runnerIndex = [:]
             }
         } else if let legacy = defaults.dictionary(forKey: Self.indexKey) as? [String: String] {
-            // One-time migration from legacy NSPropertyList dict → JSON Data.
             runnerIndex = legacy
             persistIndex()
             log("LocalRunnerIndex › loadIndex — migrated \(runnerIndex.count) legacy plist entry(ies) to JSON")
@@ -88,6 +87,7 @@ public final class LocalRunnerIndex {
     }
 
     /// JSON-encodes and writes the current `runnerIndex` to `UserDefaults`.
+    /// On encode failure, logs the error and leaves the stored value unchanged.
     private func persistIndex() {
         do {
             let data = try JSONEncoder().encode(runnerIndex)
