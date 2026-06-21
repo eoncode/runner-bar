@@ -1,14 +1,8 @@
 // APICallCounterViewModel.swift
 // RunnerBar
 //
-// @Observable view-model that exposes live GitHub API call-counter state
+// @Observable view-model exposing live GitHub API call-counter state
 // for the Settings panel (P2 — Async/Await and @Observable for Data Flow).
-//
-// Injects `any APICallCounterProtocol` (P7 — Protocol-Oriented DI) so the
-// view can be driven by a spy in unit tests without touching the real actor.
-//
-// Polling uses Task + Task.sleep(for:) (P9 — Structured Concurrency for
-// Stateful Timers), not DispatchQueue.asyncAfter.
 import Foundation
 import Observation
 import RunnerBarCore
@@ -16,20 +10,19 @@ import SwiftUI
 
 // MARK: - TaskBox
 
-/// Reference-type wrapper that stores a cancellable `Task`.
+/// Reference-type wrapper that holds a cancellable polling `Task`.
 ///
-/// `@Observable` expands every stored property of the annotated type via the
-/// `@ObservationTracked` macro. Both `nonisolated` and `nonisolated(unsafe)`
-/// are forbidden on such expanded stored properties in Swift 6:
-/// - `nonisolated(unsafe)` — "has no effect on Sendable Task, use nonisolated"
-/// - `nonisolated` — "cannot be applied to a mutable stored property"
-///
-/// Wrapping the `Task` in a `final class` sidesteps the constraint entirely:
-/// the `@Observable` macro does not descend into reference-type properties,
-/// so `TaskBox` is invisible to `@ObservationTracked`. `deinit` can then
-/// reach into the box without any actor-isolation violation.
-private final class TaskBox {
+/// `@Observable` expands stored properties via `@ObservationTracked`.
+/// Neither `nonisolated` nor `nonisolated(unsafe)` compiles cleanly on
+/// such a property in a `@MainActor` class under Swift 6 strict concurrency.
+/// Wrapping the task in a `final class` makes it opaque to the macro.
+/// `deinit` can then call `taskBox.task?.cancel()` without an isolation
+/// violation because `TaskBox` is `@unchecked Sendable` — safe here
+/// because it is only ever written from `@MainActor` context.
+private final class TaskBox: @unchecked Sendable {
+    /// The structured polling task, or `nil` before polling has started.
     var task: Task<Void, Never>?
+    /// Creates an empty box.
     init() {}
 }
 
@@ -46,21 +39,14 @@ public final class APICallCounterViewModel {
         limit: APICallCounter.hourlyLimit
     )
 
-    /// The counter actor. Defaulted to the shared production instance;
-    /// override in tests via the initialiser.
+    /// The counter actor injected at init time (P7).
     private let counter: any APICallCounterProtocol
 
-    /// Reference-type box holding the structured polling task.
-    ///
-    /// Stored as a `final class` so that `@Observable`'s `@ObservationTracked`
-    /// macro expansion does not touch it, and `deinit` can cancel via
-    /// `taskBox.task?.cancel()` without any actor-isolation violation.
+    /// Box holding the structured polling task so `deinit` can cancel it.
     private let taskBox = TaskBox()
 
     /// Creates the view-model.
-    ///
-    /// - Parameter counter: Counter actor to poll. Defaults to the shared
-    ///   production `apiCallCounter`.
+    /// - Parameter counter: Counter to poll. Defaults to `apiCallCounter`.
     public init(counter: any APICallCounterProtocol = apiCallCounter) {
         self.counter = counter
         startPolling()
