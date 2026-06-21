@@ -66,6 +66,20 @@ public protocol RateLimitActorProtocol: Actor {
     func set(resetAt: TimeInterval?)
     /// Clears the rate-limit flag and cancels any pending reset task.
     func clear()
+    /// Clears the rate-limit flag only when the actor is not currently limited.
+    ///
+    /// This is the correct call after a successful 2xx response in
+    /// `urlSessionExecute`. Calling `clear()` unconditionally on every 2xx
+    /// introduces a race: a concurrent request that received a genuine 403/429
+    /// and armed the actor can have its window erased milliseconds later by
+    /// this request returning 200. `clearIfNotLimited()` reads `isLimited` and
+    /// calls `clear()` in a single actor hop, so no TOCTOU window exists between
+    /// the check and the clear.
+    ///
+    /// - Note: The intentional clear site — `RunnerStore.fetch()` calling
+    ///   `clearGhRateLimit()` at the start of each poll cycle — bypasses this
+    ///   guard by design and continues to call `clear()` directly.
+    func clearIfNotLimited()
     /// Returns `isLimited` and `resetDate` in a single actor hop.
     ///
     /// Prefer this over reading `isLimited` separately: two individual reads involve
@@ -171,6 +185,15 @@ public actor RateLimitActor: RateLimitActorProtocol {
         resetTask = nil
         isLimited = false
         resetDate = nil
+    }
+
+    /// Clears the rate-limit flag only when the actor is not currently limited.
+    ///
+    /// Single actor hop — no TOCTOU between the check and the clear.
+    /// See `RateLimitActorProtocol.clearIfNotLimited()` for the full rationale.
+    public func clearIfNotLimited() {
+        guard !isLimited else { return }
+        clear()
     }
 
     /// Returns both `isLimited` and `resetDate` in a single actor hop, guaranteeing consistency.

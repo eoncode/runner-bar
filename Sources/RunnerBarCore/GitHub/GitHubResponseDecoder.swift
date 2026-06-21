@@ -46,7 +46,6 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 ///   (default actor) → `urlSessionExecute` (passes actor through) → here.
 ///
 /// See https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api
-@discardableResult
 func handleRateLimitResponse(
     statusCode: Int,
     _ data: Data?,

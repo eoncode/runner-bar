@@ -262,10 +262,10 @@ final class GitHubTransportPaginatedTests {
         #expect(items?[0]["id"] == .string("1"))
     }
 
-    // MARK: - Non-array body on the very first page — rate-limit actor not armed
+    // MARK: - Non-array body on the very first page returns nil
 
     /// A 200 response with a non-array JSON body on the *first* page must return nil
-    /// and must NOT arm the rate-limit actor (set() must not be called).
+    /// and must NOT arm or clear the rate-limit actor.
     ///
     /// This is the complement of `paginatedStopsOnNonArrayBody`, which only covers
     /// the mid-pagination case (page 2 is bad after page 1 succeeds).
@@ -277,6 +277,7 @@ final class GitHubTransportPaginatedTests {
     /// Verifies:
     /// - `result == nil` — no successful page was ever decoded
     /// - `setCalled == false` — a 200 non-array is not a rate-limit event
+    /// - `clearCalled == false` — no 2xx success reached the clearIfNotLimited() branch
     @Test func paginatedNonArrayFirstPageDoesNotArmRateLimiter() async {
         StubURLProtocol.reset()
         let pageURL = "\(apiBase)orgs/test/actions/runners"
@@ -298,6 +299,9 @@ final class GitHubTransportPaginatedTests {
         // A 200 with a non-array body is not a rate-limit event — set() must not fire.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
+        // No 2xx page decoded successfully — clearIfNotLimited() must not have been called.
+        let wasClearCalled = await spy.clearCalled
+        #expect(wasClearCalled == false)
     }
 
     // MARK: - Single-page (no Link header) happy path
@@ -635,15 +639,15 @@ final class GitHubTransportPaginatedTests {
     /// A pre-armed rate-limit state (`spy.isLimited = true` before the call) does
     /// NOT block the initial request — the rate-limit check only fires inside
     /// `urlSessionExecute` after receiving a 403/429 response. Since page 1
-    /// returns 200, the 2xx handler snapshots the rate-limiter and skips
-    /// `clear()` because `isLimited` is already true (pre-armed), preserving
-    /// the active limit window set by a concurrent scope fetch.
+    /// returns 200, the 2xx handler calls `clearIfNotLimited()` which is a no-op
+    /// because `isLimited` is already true, preserving the active limit window
+    /// set by a concurrent scope fetch.
     ///
     /// Verifies: the pre-armed state is not checked at call-entry, so page-1 items
     /// are returned; `spy.setCalled` remains false (no rate-limit response was
     /// received to trigger `handleRateLimitResponse`); `clear()` is NOT called
-    /// because the guard `if !snapshot.isLimited` prevents clearing an already-armed
-    /// actor; the pre-armed `isLimited` state is preserved.
+    /// because `clearIfNotLimited()` guards against clearing an already-armed actor;
+    /// the pre-armed `isLimited` state is preserved.
     @Test func paginatedReturnsItemsWhenPreArmedRateLimit() async {
         StubURLProtocol.reset()
         let pageURL = "\(apiBase)orgs/test/actions/runners"
@@ -666,9 +670,7 @@ final class GitHubTransportPaginatedTests {
         // set() must NOT have been called — no rate-limit response was received.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        // clear() is NOT called — the 2xx handler snapshots the limiter and skips
-        // clear() when isLimited is already true, preventing the race condition
-        // where a concurrent request's active limit window would be erased.
+        // clear() is NOT called — clearIfNotLimited() is a no-op when isLimited is true.
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == false)
         // isLimited remains true — the pre-armed state is preserved.
