@@ -27,6 +27,13 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 /// doing so would lock the app out of the API for up to 60 minutes even though
 /// no rate limit was hit.
 ///
+/// - Returns: `true` when this response was a genuine rate limit **and** the actor
+///   was armed; `false` when the 403 is a plain permission error and the actor was
+///   left unchanged. Callers **must** use this return value to classify the result
+///   as `.rateLimited` vs `.permissionDenied` — reading the actor after the call
+///   is a TOCTOU: a prior concurrent request may have already armed the actor,
+///   causing a permission-denied 403 to be misclassified as a rate-limit.
+///
 /// - Parameter rateLimiter: The actor to arm on a genuine rate-limit.
 ///   **No default is provided intentionally.** This function is internal and
 ///   must always be called from `urlSessionExecute`, which threads its own
@@ -39,13 +46,14 @@ func logErrorBody(_ data: Data?, endpoint: String, status: Int) {
 ///   (default actor) → `urlSessionExecute` (passes actor through) → here.
 ///
 /// See https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api
+@discardableResult
 func handleRateLimitResponse(
     statusCode: Int,
     _ data: Data?,
     response: HTTPURLResponse,
     endpoint: String,
     rateLimiter: some RateLimitActorProtocol
-) async {
+) async -> Bool {
     let retryAfter = response.value(forHTTPHeaderField: "Retry-After")
         .flatMap(Double.init)
     let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
@@ -59,7 +67,7 @@ func handleRateLimitResponse(
     let isRealRateLimit = statusCode == 429 || remaining == 0 || retryAfter != nil
     guard isRealRateLimit else {
         log("RateLimit › 403 permission error (not rate limit) — \(endpoint)")
-        return
+        return false
     }
 
     // Primary = quota exhausted (X-RateLimit-Remaining: 0).
@@ -90,6 +98,7 @@ func handleRateLimitResponse(
             + "resetAt=\(String(describing: resetAt))"
     )
     await rateLimiter.set(resetAt: resetAt)
+    return true
 }
 
 // MARK: - Pagination

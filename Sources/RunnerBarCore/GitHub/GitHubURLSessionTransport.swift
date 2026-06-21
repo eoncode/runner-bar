@@ -120,17 +120,17 @@ private func urlSessionExecute(
             return .networkError(URLError(.badServerResponse))
         }
         if http.statusCode == 403 || http.statusCode == 429 {
-            await handleRateLimitResponse(
+            // Use the Bool return value from handleRateLimitResponse to classify
+            // this response directly from its headers — never from the actor state.
+            // Reading the actor after the call is a TOCTOU: a prior concurrent
+            // request may have already armed the actor, causing a plain
+            // permission-denied 403 (no rate-limit headers) to be misclassified
+            // as .rateLimited instead of .permissionDenied.
+            let wasRateLimited = await handleRateLimitResponse(
                 statusCode: http.statusCode, data, response: http,
                 endpoint: urlString, rateLimiter: rateLimiter
             )
-            // snapshot() returns isLimited and resetDate in a single actor hop, keeping
-            // both values consistent with each other. Only isLimited is used here, but
-            // snapshot() is preferred over a bare await rateLimiter.isLimited so that a
-            // future reader who adds a resetDate check does not accidentally introduce a
-            // TOCTOU between two separate awaits (P10 — Atomic Snapshot Pattern).
-            let snap = await rateLimiter.snapshot()
-            return snap.isLimited ? .rateLimited : .permissionDenied
+            return wasRateLimited ? .rateLimited : .permissionDenied
         }
         guard (200..<300).contains(http.statusCode) else {
             logErrorBody(data, endpoint: urlString, status: http.statusCode)
