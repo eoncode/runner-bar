@@ -352,7 +352,7 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled)
         // clear() must NOT be called — no 2xx page succeeded before the 429.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == true)
+        #expect(wasClearCalled == false)
     }
 
     // MARK: - Rate-limit partial return
@@ -540,7 +540,7 @@ final class GitHubTransportPaginatedTests {
         #expect(result == nil)
         // clear() must NOT be called — no-token returns without making a request.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == true)
+        #expect(wasClearCalled == false)
     }
 
     // MARK: - Token revoked mid-pagination discards all items
@@ -630,7 +630,9 @@ final class GitHubTransportPaginatedTests {
     /// A pre-armed rate-limit state (`spy.isLimited = true` before the call) does
     /// NOT block the initial request — the rate-limit check only fires inside
     /// `urlSessionExecute` after receiving a 403/429 response. Since page 1
-    /// returns 200, clear() fires after the 2xx and resets isLimited to false.
+    /// returns 200, the 2xx response guard reads the actor's snapshot; because
+    /// `isLimited` is already `true`, `clear()` is NOT called — preserving the
+    /// pre-armed state.
     ///
     /// Verifies: the pre-armed state is not checked at call-entry, so page-1 items
     /// are returned and `spy.setCalled` remains false (no rate-limit response was
@@ -657,12 +659,13 @@ final class GitHubTransportPaginatedTests {
         // set() must NOT have been called — no rate-limit response was received.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        // clear() IS called after page 1 success (2xx response clears the limiter).
+        // clear() must NOT be called — the guard `if !snapshot.isLimited` prevents clearing
+        // when the actor is already limited.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled)
-        // isLimited is reset by clear() after page 1 success.
+        #expect(wasClearCalled == false)
+        // isLimited remains true — clear() was not called.
         let snap = await spy.snapshot()
-        #expect(snap.isLimited == false)
+        #expect(snap.isLimited == true)
     }
 
     // MARK: - Non-auth HTTP error (404) returns partial results
@@ -734,7 +737,7 @@ final class GitHubTransportPaginatedTests {
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == true)
+        #expect(wasClearCalled == false)
     }
 
     // MARK: - 200 + non-array body on the very first page — clear() not called
