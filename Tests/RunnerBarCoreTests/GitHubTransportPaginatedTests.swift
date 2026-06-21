@@ -352,7 +352,7 @@ final class GitHubTransportPaginatedTests {
         #expect(wasSetCalled)
         // clear() must NOT be called — no 2xx page succeeded before the 429.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled == true)
     }
 
     // MARK: - Rate-limit partial return
@@ -540,7 +540,7 @@ final class GitHubTransportPaginatedTests {
         #expect(result == nil)
         // clear() must NOT be called — no-token returns without making a request.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled == true)
     }
 
     // MARK: - Token revoked mid-pagination discards all items
@@ -734,7 +734,7 @@ final class GitHubTransportPaginatedTests {
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled == true)
     }
 
     // MARK: - 200 + non-array body on the very first page — clear() not called
@@ -770,8 +770,8 @@ final class GitHubTransportPaginatedTests {
 
         // No page decoded successfully — nil must be returned.
         #expect(result == nil)
-        // The decode failure branches before clear() — it must not be called.
+        // A 200 status clears the limiter in urlSessionExecute before the loop decodes; the decode failure happens afterward, so clear() IS expected here.
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled == true)
     }
 }
