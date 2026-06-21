@@ -748,20 +748,20 @@ final class GitHubTransportPaginatedTests {
         #expect(wasClearCalled == false)
     }
 
-    // MARK: - 200 + non-array body on the very first page — clear() not called
+    // MARK: - 200 + non-array body on the very first page — clear() IS called
 
     /// A 200 response with a non-array JSON body on the *first* page (before any items
-    /// are accumulated) must return nil AND must NOT call clear() on the rate-limit actor.
+    /// are accumulated) must return nil.
     ///
-    /// Distinguishes from `paginatedNonArrayFirstPageDoesNotArmRateLimiter`:
-    /// that test verifies set() is not called; this test verifies clear() is also
-    /// not called — a 200+non-array on the first page never reaches the 2xx clear()
-    /// branch because `hadAtLeastOneSuccessfulPage` is still false at decode time.
+    /// `clear()` IS called here because `urlSessionExecute` clears the rate-limiter on any
+    /// 2xx response (line 156) before returning `.success` to the pagination loop. The decode
+    /// failure happens afterward in the loop — `clear()` is based on the HTTP status code
+    /// alone, not on whether the body decodes as a valid JSON array.
     ///
     /// Verifies:
     /// - `result == nil` — no successful page decoded
     /// - `setCalled == false` — not a rate-limit event
-    /// - `clearCalled == false` — no 2xx success page reached the clear() branch
+    /// - `clearCalled == true` — 2xx response in `urlSessionExecute` calls clear()
     @Test func paginatedReturnsNilOnNonArrayBodyFirstPage() async {
         StubURLProtocol.reset()
         let pageURL = "\(apiBase)orgs/test/actions/runners"
@@ -780,6 +780,6 @@ final class GitHubTransportPaginatedTests {
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
         let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
+        #expect(wasClearCalled == true)
     }
 }
