@@ -31,6 +31,11 @@ public typealias GHRawTransport = @Sendable (_ endpoint: String) async -> Data?
 /// - Parameters:
 ///   - endpoint: Relative or absolute URL for the first page.
 ///   - timeout: Per-request timeout forwarded to `URLSession`.
+///
+/// - Warning: The `timeout` value is forwarded directly to each page request.
+///   Callers must account for the fact that a paginated fetch may issue many
+///   sequential requests; total wall-clock time can therefore exceed `timeout`
+///   by a factor of the page count.
 public typealias GHAPIPaginatedTransport = @Sendable (_ endpoint: String, _ timeout: TimeInterval) async -> Data?
 
 /// A sync closure that returns the active GitHub personal access token, or `nil`.
@@ -39,16 +44,30 @@ public typealias GHTokenProvider = @Sendable () -> String?
 // MARK: - TransportBox
 
 /// Thread-safe wrapper around an `OSAllocatedUnfairLock`-guarded closure.
+///
+/// `OSAllocatedUnfairLock.withLock` accepts a **synchronous** closure only.
+/// This is intentional: `os_unfair_lock` must not be held across a suspension
+/// point. Transport closures are `async`, so they are *never* called from
+/// inside `withLock` — only read out under the lock, then invoked outside it.
 private struct TransportBox<T: Sendable> {
     /// The underlying unfair lock guarding the stored value.
     private let lock: OSAllocatedUnfairLock<T>
+
     /// Creates a box with `initialState` as the starting value.
     init(initialState: T) { lock = .init(initialState: initialState) }
-    /// Replaces the stored value under the lock.
+
+    /// Replaces the stored closure under the lock.
+    ///
+    /// Safe to call from any thread or actor context; the lock is held only
+    /// for the duration of the pointer swap — no async work inside.
     func configure(_ value: T) {
         lock.withLock { $0 = value }
     }
-    /// Returns the stored value under the lock.
+
+    /// Returns the stored closure under the lock.
+    ///
+    /// The caller is responsible for invoking the returned closure *outside*
+    /// the lock. Never pass an `async` closure into `withLock`.
     func read() -> T { lock.withLock { $0 } }
 }
 
@@ -98,8 +117,11 @@ public func configureGHToken(_ provider: @escaping GHTokenProvider) {
 
 /// Calls the configured GitHub API transport for the given endpoint.
 ///
-/// Increments `apiCallCounter` via a fire-and-forget `Task` before dispatching
-/// so the counter reflects every REST call without adding latency to the fetch.
+/// The call counter is incremented via a fire-and-forget `Task` **before**
+/// the transport closure is read. This is intentional: the counter tracks
+/// dispatched call intent (i.e. every genuine REST call site), not confirmed
+/// network I/O. Stub/unconfigured transports (returning `nil`) are therefore
+/// also counted — callers should only wire `ghAPI` after auth is confirmed.
 func ghAPI(_ endpoint: String) async -> Data? {
     _ = Task { await apiCallCounter.record() }
     let transport = transportBox.read()
@@ -118,6 +140,7 @@ func ghRaw(_ endpoint: String) async -> Data? {
 /// Calls the configured paginated JSON transport for the given endpoint.
 ///
 /// Increments `apiCallCounter` once per invocation via a fire-and-forget `Task`.
+/// See `ghAPI` for the rationale on counting before transport dispatch.
 ///
 /// - Note: This **undercounts** actual GitHub REST quota usage for paginated
 ///   endpoints. The paginated transport internally fires one HTTP GET per page,

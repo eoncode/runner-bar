@@ -12,6 +12,7 @@
 //   3. fraction is always clamped to [0, 1].
 //   4. snapshot() is atomic — consistent count + limit in one hop (P10).
 //   5. APICallCounterSnapshot is Equatable and Sendable.
+//   6. snapshot() returns zero after all timestamps expire (idle-gap regression).
 import Foundation
 import Testing
 @testable import RunnerBarCore
@@ -99,6 +100,32 @@ struct APICallCounterTests {
         let counter = APICallCounter()
         let snap = await counter.snapshot()
         #expect(snap.limit == APICallCounter.hourlyLimit)
+    }
+
+    // MARK: - Idle-gap regression (snapshot over-count)
+
+    /// Regression test for the idle-gap over-count bug.
+    ///
+    /// **Scenario:** The actor records calls, then sits idle for over an hour.
+    /// A subsequent `snapshot()` — with no intervening `record()` — must
+    /// return zero, not the stale count from before the idle period.
+    ///
+    /// **How it works without real time travel:**
+    /// `APICallCounter` has an internal `@testable` seam: `seed(timestamps:)`
+    /// allows tests to inject pre-aged timestamps directly into the actor's
+    /// rolling buffer. By seeding two timestamps that are 90 minutes in the
+    /// past and then calling `snapshot()` without `record()`, we prove that
+    /// `snapshot()` calls `purge()` itself rather than relying on a prior
+    /// `record()` call to have done so.
+    @Test("snapshot() returns zero after all timestamps expire without a record() call")
+    func snapshotPurgesIdleStaleEntries() async {
+        let counter = APICallCounter()
+        // Inject two timestamps 90 minutes in the past — well outside the 60-min window.
+        let stale = Date().addingTimeInterval(-5_400)
+        await counter.seed(timestamps: [stale, stale])
+        // No record() call — simulates an idle actor.
+        let snap = await counter.snapshot()
+        #expect(snap.count == 0, "snapshot() must purge stale entries even without a prior record() call")
     }
 
     // MARK: - APICallCounterSnapshot struct

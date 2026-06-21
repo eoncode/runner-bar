@@ -19,6 +19,10 @@ import SwiftUI
 /// `deinit` can then call `taskBox.task?.cancel()` without an isolation
 /// violation because `TaskBox` is `@unchecked Sendable` — safe here
 /// because it is only ever written from `@MainActor` context.
+///
+/// - TODO: Revisit when `@Observable` supports `nonisolated` task storage
+///   natively (tracked in Swift Evolution). At that point `TaskBox` can be
+///   replaced with a plain `nonisolated var pollingTask: Task<Void, Never>?`.
 private final class TaskBox: @unchecked Sendable {
     /// The structured polling task, or `nil` before polling has started.
     var task: Task<Void, Never>?
@@ -73,12 +77,20 @@ public final class APICallCounterViewModel {
     // MARK: - Private
 
     /// Starts a structured polling loop that refreshes `snap` every 5 seconds.
+    ///
+    /// Uses `do { try await Task.sleep } catch { return }` rather than `try?`
+    /// so that a `CancellationError` from `deinit` exits the loop immediately
+    /// without waiting for the full sleep window to complete.
     private func startPolling() {
         taskBox.task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 self.snap = await self.counter.snapshot()
-                try? await Task.sleep(for: .seconds(5))
+                do {
+                    try await Task.sleep(for: .seconds(5))
+                } catch {
+                    return
+                }
                 guard !Task.isCancelled else { return }
             }
         }

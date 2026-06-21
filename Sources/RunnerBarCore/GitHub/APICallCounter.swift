@@ -62,8 +62,10 @@ public protocol APICallCounterProtocol: Actor {
 /// the GitHub REST quota.
 ///
 /// No persistence — the counter resets on app launch by design.
-/// Memory is bounded: `record()` purges entries older than 3,600 s on
-/// every call, capping the array at `hourlyLimit` entries at most.
+/// Memory is bounded: `purge()` is called by both `record()` and `snapshot()`
+/// to evict entries older than 3,600 s, capping the array at `hourlyLimit`
+/// entries at most and ensuring `snapshot()` never over-counts when the
+/// actor has been idle (no `record()` calls) for an extended period.
 public actor APICallCounter: APICallCounterProtocol {
     /// Shared instance wired at module level, matching the `rateLimitActor` convention.
     public static let shared = APICallCounter()
@@ -73,32 +75,47 @@ public actor APICallCounter: APICallCounterProtocol {
     public static let hourlyLimit = 5_000
 
     /// Rolling buffer of call timestamps.
-    /// Purged on every `record()` to bound memory; never exceeds `hourlyLimit` entries.
+    /// Maintained by `purge()`; never exceeds `hourlyLimit` entries.
     private var timestamps: [Date] = []
 
     /// Creates a new `APICallCounter` instance.
     public init() {}
 
+    // MARK: - Protocol
+
     /// Records one GitHub REST API call.
     ///
-    /// Appends the current timestamp and purges entries older than 60 minutes
-    /// to keep the array bounded. Called via a fire-and-forget `Task` from
+    /// Appends the current timestamp then purges stale entries to keep
+    /// the array bounded. Called via a fire-and-forget `Task` from
     /// `ghAPI()` and `ghAPIPaginated()` in `GitHubTransportShim`.
     public func record() {
-        let now = Date()
-        timestamps.append(now)
-        let cutoff = now.addingTimeInterval(-3_600)
-        timestamps.removeAll { $0 < cutoff }
+        timestamps.append(Date())
+        purge()
     }
 
     /// Returns `count` and `limit` in a single actor hop, guaranteeing consistency (P10).
     ///
+    /// Calls `purge()` before counting so that stale entries accumulated
+    /// during an idle period (no `record()` calls) are evicted first.
+    /// This prevents `snapshot()` from over-counting when the actor has
+    /// been quiet for more than 60 minutes.
+    ///
     /// Prefer this over reading count and limit separately to avoid a TOCTOU
     /// window between two independent actor hops.
     public func snapshot() -> APICallCounterSnapshot {
+        purge()
+        return APICallCounterSnapshot(count: timestamps.count, limit: Self.hourlyLimit)
+    }
+
+    // MARK: - Private
+
+    /// Evicts timestamps older than the rolling 60-minute window.
+    ///
+    /// Called by both `record()` and `snapshot()` to ensure the array is
+    /// always bounded and counts are never stale regardless of call order.
+    private func purge() {
         let cutoff = Date().addingTimeInterval(-3_600)
-        let count = timestamps.filter { $0 >= cutoff }.count
-        return APICallCounterSnapshot(count: count, limit: Self.hourlyLimit)
+        timestamps.removeAll { $0 < cutoff }
     }
 }
 
