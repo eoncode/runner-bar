@@ -12,12 +12,6 @@ public enum RunnerConfigStoreError: LocalizedError {
     case decodeFailed(String)
     /// The updated config could not be serialised or written to disk.
     case writeFailed(String, any Error)
-    /// The existing `.runner` file is present but cannot be decoded during a save.
-    ///
-    /// Proceeding from an empty dict would silently drop agent-managed keys such as
-    /// `jitConfig`, de-registering ephemeral JIT runners with no user-visible error.
-    /// The caller must surface this error before attempting a write.
-    case malformedExistingFile(String)
 
     /// A human-readable description of the error.
     public var errorDescription: String? {
@@ -28,8 +22,6 @@ public enum RunnerConfigStoreError: LocalizedError {
             "Failed to decode runner configuration at \(installPath)/.runner"
         case .writeFailed(let installPath, let underlying):
             "Failed to write runner configuration at \(installPath)/.runner: \(underlying.localizedDescription)"
-        case .malformedExistingFile(let installPath):
-            "Existing runner configuration at \(installPath)/.runner is malformed and cannot be safely overwritten — agent-managed keys would be lost"
         }
     }
 }
@@ -48,12 +40,6 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// `DispatchQueue.global` + `withCheckedThrowingContinuation` bridge pattern and also
 /// removes the `let config = copy config` workaround that was needed because a
 /// `borrowing` parameter cannot escape into an `@escaping` closure.
-///
-/// **Error contract for `save(_:at:)`:** if the existing `.runner` file is present but
-/// cannot be decoded (malformed JSON), `save()` throws `malformedExistingFile` rather
-/// than proceeding from an empty dictionary — which would silently drop agent-managed
-/// keys such as `jitConfig`. See `RunnerConfigStoreError.malformedExistingFile`.
-/// `load(at:)` never throws `malformedExistingFile` — only `readFailed` / `decodeFailed`.
 public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Shared instance
@@ -63,13 +49,9 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Private properties
 
-    /// Decoder used for reading `.runner` JSON. Thread-safe: `JSONDecoder` has no mutable state after init.
+    /// Decoder used for reading `.runner` JSON in `load()`. Thread-safe: `@MainActor`-equivalent
+    /// actor isolation serialises all access; `load()` is never called concurrently on the same actor.
     private nonisolated let decoder = JSONDecoder()
-
-    // Note: JSONEncoder is intentionally created per-call in the @concurrent save helper rather
-    // than hoisted as a shared instance, because two concurrent save() calls can invoke
-    // the encoder simultaneously. Apple does not document JSONEncoder as safe for concurrent
-    // encode calls, so a fresh instance per invocation is the only safe approach.
 
     // MARK: Init
 
@@ -156,20 +138,12 @@ private func loadRunnerData(from url: URL, installPath: String) throws -> Data {
 /// Performs the read-modify-write merge and writes the result to `url` atomically.
 ///
 /// Runs on the Swift cooperative thread pool without blocking an actor's serial
-/// executor. `config` is a plain value parameter here — no `borrowing` escape
-/// issue arises because `@concurrent` functions do not use `@escaping` closures.
+/// executor. `config` is a plain value parameter — no `borrowing` escape issue
+/// arises because `@concurrent` functions do not use `@escaping` closures.
 ///
-/// A fresh `JSONDecoder` is created per call — consistent with `JSONEncoder`
-/// below — because the function runs on the cooperative thread pool where
-/// two invocations could decode simultaneously. Apple does not document
-/// `JSONDecoder` as safe for concurrent decode calls, so a local instance
-/// per invocation avoids the assumption. The decoder is never mutated, so
-/// the one-time initialisation cost is negligible.
-///
-/// - Parameters:
-///   - config: The typed runner config whose fields are merged into the existing file.
-///   - url: The destination `.runner` file URL.
-///   - installPath: The runner install path, used only for error reporting.
+/// A fresh `JSONDecoder` and `JSONEncoder` are created per call. Apple does not
+/// document either type as safe for concurrent use on the same instance, and two
+/// simultaneous `save()` calls can invoke this helper concurrently.
 @concurrent
 private func saveRunnerConfig(
     _ config: RunnerConfig,
@@ -177,8 +151,8 @@ private func saveRunnerConfig(
     installPath: String
 ) throws {
     // Read-modify-write: load existing keys so agent-managed keys are preserved.
-    var raw: [String: AnyJSON] = [:]
     let decoder = JSONDecoder()
+    var raw: [String: AnyJSON] = [:]
     if let existingData = try? Data(contentsOf: url) {
         let data = stripRunnerConfigBOM(existingData)
         if let dict = try? decoder.decode([String: AnyJSON].self, from: data) {
@@ -186,8 +160,7 @@ private func saveRunnerConfig(
         } else {
             // Decode failed — existing file is malformed. Proceeding
             // from an empty dict will drop unknown agent-managed keys on this save.
-            log("RunnerConfigStore › save: existing .runner at \(url.path) is malformed; aborting save to protect agent-managed keys")
-            throw RunnerConfigStoreError.malformedExistingFile(installPath)
+            log("RunnerConfigStore › save: existing .runner at \(url.path) could not be parsed; unknown keys will not be preserved")
         }
     } else {
         // File is missing or temporarily unreadable. Writing from scratch.

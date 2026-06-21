@@ -240,9 +240,9 @@ final class OAuthService {
     /// - Eliminates stringly-typed key spellings (`"client_id"` etc.) at the call site.
     /// - Documents the contract of the GitHub OAuth token endpoint inline.
     private struct OAuthTokenRequest: Encodable {
-        /// The GitHub OAuth app client ID. Sourced from `OAuthSecrets.clientID`.
+        /// The GitHub OAuth app client ID.
         let clientID: String
-        /// The GitHub OAuth app client secret. Sourced from `OAuthSecrets.clientSecret`.
+        /// The GitHub OAuth app client secret.
         let clientSecret: String
         /// The one-time authorization code received in the OAuth redirect callback.
         let code: String
@@ -267,7 +267,16 @@ final class OAuthService {
             clientSecret: OAuthSecrets.clientSecret,
             code: code
         )
-        req.httpBody = try? encoder.encode(body)
+        // OAuthTokenRequest contains only String fields and will always encode
+        // successfully in practice. However, a nil httpBody would silently send
+        // a broken POST to GitHub with no diagnostic — fail loudly instead.
+        do {
+            req.httpBody = try encoder.encode(body)
+        } catch {
+            log("OAuthService › exchangeCode: failed to encode request body — \(error)")
+            onCompletion?(false)
+            return
+        }
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let response = try? decoder.decode(OAuthTokenResponse.self, from: data)
         else {
