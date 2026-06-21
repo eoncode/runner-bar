@@ -79,6 +79,7 @@ public final class APICallCounterViewModel {
                 guard let self else { return }
                 self.snap = await self.counter.snapshot()
                 try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
             }
         }
     }

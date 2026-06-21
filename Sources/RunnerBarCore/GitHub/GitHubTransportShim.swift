@@ -117,8 +117,13 @@ func ghRaw(_ endpoint: String) async -> Data? {
 
 /// Calls the configured paginated JSON transport for the given endpoint.
 ///
-/// Increments `apiCallCounter` via a fire-and-forget `Task` — paginated
-/// calls consume the same GitHub REST quota as single-page calls.
+/// Increments `apiCallCounter` once per invocation via a fire-and-forget `Task`.
+///
+/// - Note: This **undercounts** actual GitHub REST quota usage for paginated
+///   endpoints. The paginated transport internally fires one HTTP GET per page,
+///   and each page counts as one call against the 5,000/hour rate limit.
+///   The API-call counter widget is therefore an approximation for paginated
+///   workflows — actual consumption may be significantly higher.
 ///
 /// - Parameters:
 ///   - endpoint: Relative or absolute URL for the first page.
