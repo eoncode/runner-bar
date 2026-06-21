@@ -121,6 +121,13 @@ actor SpyRateLimitActor: RateLimitActorProtocol {
     /// Seed this to simulate a pre-armed rate-limit state.
     var isLimited = false
     private(set) var resetDate: Date?
+    /// Whether `set(resetAt:)` was ever called on this instance.
+    ///
+    /// - Note: `setCalled` is sticky — it records whether `set()` was ever called,
+    ///   not whether the actor is *currently* limited. If `set()` is called and then
+    ///   `clear()` is called, `setCalled == true` but `isLimited == false`. Do not
+    ///   use `setCalled` as a proxy for the current rate-limit state; read `isLimited`
+    ///   or `snapshot().isLimited` for that.
     private(set) var setCalled = false
     private(set) var clearCalled = false
 

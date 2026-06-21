@@ -30,6 +30,24 @@ public struct RateLimitSnapshot: Sendable {
 /// `urlSessionExecute` and `urlSessionAPIPaginated` accept any conforming type via
 /// a defaulted `rateLimiter` parameter, so production code is unchanged while tests
 /// can substitute a `SpyRateLimitActor` without touching the real actor.
+///
+/// ### resetDate
+/// `resetDate` is intentionally absent from this protocol. The production
+/// `RateLimitActor` exposes it as `public private(set) var resetDate: Date?`,
+/// but callers that hold only a `RateLimitActorProtocol` value should read it
+/// through `snapshot()` instead of accessing the property directly. This keeps
+/// conformers free to store reset-time however they like without polluting the
+/// protocol surface. Do not add `resetDate` to this protocol; add fields to
+/// `RateLimitSnapshot` if callers need additional state.
+///
+/// ### snapshot() and async semantics
+/// `snapshot()` is declared non-async. This is correct: Swift actors permit
+/// non-async methods that callers on *the same actor* can call synchronously.
+/// However, any caller *outside* the actor’s context — including all transport
+/// functions, which run on the cooperative thread pool — must still `await` it.
+/// The compiler enforces this; the non-async declaration simply avoids an
+/// unnecessary extra suspension point for callers that are already isolated to
+/// the actor.
 public protocol RateLimitActorProtocol: Actor {
     /// Whether the GitHub API is currently rate-limiting this client.
     var isLimited: Bool { get }
@@ -41,6 +59,10 @@ public protocol RateLimitActorProtocol: Actor {
     ///
     /// Prefer this over reading `isLimited` separately: two individual reads involve
     /// two actor hops with a TOCTOU window between them (P10 — Atomic Snapshot Pattern).
+    ///
+    /// - Note: Although declared non-async, callers outside this actor’s context
+    ///   must still `await` this function. See the protocol-level note on async
+    ///   semantics above for the full explanation.
     func snapshot() -> RateLimitSnapshot
 }
 
