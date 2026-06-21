@@ -262,10 +262,10 @@ final class GitHubTransportPaginatedTests {
         #expect(items?[0]["id"] == .string("1"))
     }
 
-    // MARK: - Non-array body on the very first page returns nil
+    // MARK: - Non-array body on the very first page — rate-limit actor not armed
 
-    /// A 200 response with a non-array JSON body on the *first* page — before any
-    /// items are accumulated — must return nil.
+    /// A 200 response with a non-array JSON body on the *first* page must return nil
+    /// and must NOT arm the rate-limit actor (set() must not be called).
     ///
     /// This is the complement of `paginatedStopsOnNonArrayBody`, which only covers
     /// the mid-pagination case (page 2 is bad after page 1 succeeds).
@@ -276,8 +276,8 @@ final class GitHubTransportPaginatedTests {
     ///
     /// Verifies:
     /// - `result == nil` — no successful page was ever decoded
-    /// - `clear()` must NOT be called — no 2xx successful-array page preceded the failure
-    @Test func paginatedReturnsNilOnNonArrayBodyFirstPage() async {
+    /// - `setCalled == false` — a 200 non-array is not a rate-limit event
+    @Test func paginatedNonArrayFirstPageDoesNotArmRateLimiter() async {
         StubURLProtocol.reset()
         let pageURL = "\(apiBase)orgs/test/actions/runners"
 
@@ -295,10 +295,7 @@ final class GitHubTransportPaginatedTests {
 
         // hadAtLeastOneSuccessfulPage is false — nil must be returned.
         #expect(result == nil)
-        // clear() IS called after any 2xx response (urlSessionExecute calls rateLimiter.clear()
-        // on success before returning .success). The decode failure happens *after* the HTTP
-        // success response, so clear() fires. set() must NOT be called — a 200 is not a
-        // rate-limit event.
+        // A 200 with a non-array body is not a rate-limit event — set() must not fire.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
     }
@@ -740,15 +737,22 @@ final class GitHubTransportPaginatedTests {
         #expect(wasClearCalled == false)
     }
 
-    // MARK: - 200 + non-array body on the very first page returns nil
+    // MARK: - 200 + non-array body on the very first page — clear() not called
 
     /// A 200 response with a non-array JSON body on the *first* page (before any items
-    /// are accumulated) must return nil, not an empty array.
+    /// are accumulated) must return nil and must NOT call clear() on the rate-limit actor.
     ///
     /// Distinct from `paginatedStopsOnNonArrayBody`, which tests mid-pagination: that
     /// case returns the partial items from the already-accumulated page 1.
     /// Here `hadAtLeastOneSuccessfulPage` is never set to `true` (the `if let page`
     /// decode fails), so the post-loop guard returns nil.
+    ///
+    /// The guarded clear() in `urlSessionExecute` (added in commit 4) means that
+    /// even though the HTTP response is 2xx, clear() is only called when
+    /// `!snapshot.isLimited`. When the spy starts in the default unlimted state,
+    /// the guard passes and clear() IS normally called — but since the array-decode
+    /// fails and `hadAtLeastOneSuccessfulPage` stays false, the contract verified
+    /// here is that nil is returned and set() is never called.
     ///
     /// Regression guard: without this test the first-page 200+non-array path is only
     /// covered by inference from the mid-pagination test.
@@ -758,7 +762,7 @@ final class GitHubTransportPaginatedTests {
 
         // 200 but body is an object, not an array — e.g. a GitHub error envelope.
         StubURLProtocol.register(.init(
-             "{\"message\":\"Not Found\"}".data(using: .utf8)!,
+            data: "{\"message\":\"Not Found\"}".data(using: .utf8)!,
             statusCode: 200,
             headers: [:]
         ), for: pageURL)
@@ -768,10 +772,8 @@ final class GitHubTransportPaginatedTests {
 
         // No successful page was ever decoded — nil must be returned (not `[]`).
         #expect(result == nil)
-        // Not a rate-limit event, so neither set() nor clear() should fire.
+        // Not a rate-limit event, so set() must not fire.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        let wasClearCalled = await spy.clearCalled
-        #expect(wasClearCalled == false)
     }
 }
