@@ -3,6 +3,87 @@
 
 import Foundation
 
+// MARK: - RateLimitSnapshot
+
+/// An atomic snapshot of rate-limit state returned by `RateLimitActorProtocol.snapshot()`.
+///
+/// Using a nominal struct rather than an anonymous tuple prevents conformers from
+/// accidentally dropping named labels (which Swift permits silently for tuples),
+/// and keeps the return type extensible (e.g. `Equatable`, `Codable`) without
+/// an API break.
+public struct RateLimitSnapshot: Sendable, Equatable, Hashable {
+    /// Whether the GitHub API is currently rate-limiting this client.
+    public let isLimited: Bool
+    /// The moment at which the rate-limit window expires, or `nil` if unknown.
+    public let resetDate: Date?
+
+    /// Creates a new snapshot with the given rate-limit state.
+    ///
+    /// - Parameters:
+    ///   - isLimited: `true` when the GitHub API is currently rate-limiting this client.
+    ///   - resetDate: The moment the rate-limit window expires, or `nil` if unknown.
+    public init(isLimited: Bool, resetDate: Date?) {
+        self.isLimited = isLimited
+        self.resetDate = resetDate
+    }
+}
+
+// MARK: - RateLimitActorProtocol
+
+/// Injectable abstraction over `RateLimitActor` for deterministic testing.
+///
+/// `urlSessionExecute` and `urlSessionAPIPaginated` accept any conforming type via
+/// a defaulted `rateLimiter` parameter, so production code is unchanged while tests
+/// can substitute a `SpyRateLimitActor` without touching the real actor.
+///
+/// ### resetDate
+/// `resetDate` is intentionally absent from this protocol. The production
+/// `RateLimitActor` exposes it as `public private(set) var resetDate: Date?`,
+/// but callers that hold only a `RateLimitActorProtocol` value should read it
+/// through `snapshot()` instead of accessing the property directly. This keeps
+/// conformers free to store reset-time however they like without polluting the
+/// protocol surface. Do not add `resetDate` to this protocol; add fields to
+/// `RateLimitSnapshot` if callers need additional state.
+///
+/// ### snapshot() and async semantics
+/// `snapshot()` is declared non-async to avoid an unnecessary suspension point
+/// for intra-actor callers; external callers outside the actor's context must
+/// still `await` it — the compiler enforces this.
+/// Concretely: all transport functions in this codebase run on the cooperative
+/// thread pool and are external callers — they always write `await rateLimiter.snapshot()`.
+/// The non-async declaration has no performance benefit for them; it only spares
+/// callers *already isolated to the actor* (e.g. actor methods calling `snapshot()`
+/// on `self`) from an unnecessary extra hop.
+public protocol RateLimitActorProtocol: Actor {
+    /// Whether the GitHub API is currently rate-limiting this client.
+    var isLimited: Bool { get }
+    /// Arms the rate-limit flag and schedules an automatic reset.
+    ///
+    /// - Parameter resetAt: Absolute seconds since epoch (Unix timestamp),
+    ///   matching the `X-RateLimit-Reset` header semantics. A `nil` value means
+    ///   the reset time is not known; the conformer should still arm the flag
+    ///   and use a reasonable default delay.
+    func set(resetAt: TimeInterval?)
+    /// Clears the rate-limit flag and cancels any pending reset task.
+    func clear()
+    /// Returns `isLimited` and `resetDate` in a single actor hop.
+    ///
+    /// Prefer this over reading `isLimited` separately: two individual reads involve
+    /// two actor hops with a TOCTOU window between them (P10 — Atomic Snapshot Pattern).
+    ///
+    /// - Note: Although declared non-async, callers outside this actor's context must
+    ///   still `await` this function; the compiler enforces this. See the protocol-level
+    ///   `### snapshot() and async semantics` note above for the full explanation.
+    ///
+    /// - Important: Conformers **must not** reach for `nonisolated(unsafe)` to work
+    ///   around the non-async declaration. If a conformer needs async work inside
+    ///   `snapshot()`, it should use a lock or actor-safe mechanism instead. All
+    ///   current conformers (`RateLimitActor`, `SpyRateLimitActor`) read actor-isolated
+    ///   state and have no such need; this constraint preempts a future contributor
+    ///   who might wrap an async operation here.
+    func snapshot() -> RateLimitSnapshot
+}
+
 // MARK: - RateLimitActor
 
 /// Actor-isolated rate-limit state.
@@ -16,7 +97,7 @@ import Foundation
 ///   1. `urlSessionAPIAsync` / `urlSessionAPIPaginated` receive a 403/429.
 ///   2. They call `rateLimitActor.set(resetAt:)` to arm the rate-limit flag and
 ///      schedule an automatic clear after the window.
-///   3. `ghIsRateLimited` (Bool) and `ghRateLimitSnapshot()` (isLimited + resetDate)
+///   3. `ghIsRateLimited` (Bool) and `ghRateLimitSnapshot()` (`RateLimitSnapshot`)
 ///      expose the current values as `async` accessors backed by the actor.
 ///   4. `RunnerStore.applyFetchResult` copies both into its own `@MainActor`
 ///      properties (`isRateLimited`, `rateLimitResetDate`) via a single atomic
@@ -24,7 +105,7 @@ import Foundation
 ///   5. `RunnerViewModel.reload()` mirrors them into `@Published` props.
 ///   6. `PanelMainView.rateLimitBanner` renders a live countdown using
 ///      `store.rateLimitResetDate` + the existing 1-second `displayTick`.
-public actor RateLimitActor {
+public actor RateLimitActor: RateLimitActorProtocol {
     /// Whether the GitHub API is currently rate-limiting this client.
     public private(set) var isLimited = false
     /// The moment at which the rate-limit window expires.
@@ -93,8 +174,8 @@ public actor RateLimitActor {
     }
 
     /// Returns both `isLimited` and `resetDate` in a single actor hop, guaranteeing consistency.
-    public func snapshot() -> (isLimited: Bool, resetDate: Date?) {
-        (isLimited: isLimited, resetDate: resetDate)
+    public func snapshot() -> RateLimitSnapshot {
+        RateLimitSnapshot(isLimited: isLimited, resetDate: resetDate)
     }
 
     // MARK: Private
@@ -136,6 +217,9 @@ public let rateLimitActor = RateLimitActor()
 ///
 /// - Note: If you need both `isLimited` and `resetDate` in the same call, prefer
 ///   `ghRateLimitSnapshot()` to avoid the TOCTOU window between two separate actor hops.
+///
+/// - Important: If this is ever refactored to a `func`, annotate it `nonisolated(nonsending)`
+///   to align with P12 and ensure caller-context executor inheritance is enforced.
 public var ghIsRateLimited: Bool {
     get async { await rateLimitActor.isLimited }
 }
@@ -153,7 +237,7 @@ public func clearGhRateLimit() async {
     await rateLimitActor.clear()
 }
 
-/// Returns `isLimited` and `resetDate` in a single actor hop.
+/// Returns a `RateLimitSnapshot` containing `isLimited` and `resetDate` in a single actor hop.
 ///
 /// Prefer this over reading `ghIsRateLimited` and `rateLimitActor.resetDate` separately:
 /// two individual reads involve two actor hops with a TOCTOU window between them.
@@ -165,6 +249,6 @@ public func clearGhRateLimit() async {
 /// `@MainActor` callers release the main thread at the first `await`, so there is no
 /// risk of main-thread blocking even without a prior cooperative-pool hop.
 nonisolated(nonsending)
-public func ghRateLimitSnapshot() async -> (isLimited: Bool, resetDate: Date?) {
+public func ghRateLimitSnapshot() async -> RateLimitSnapshot {
     await rateLimitActor.snapshot()
 }

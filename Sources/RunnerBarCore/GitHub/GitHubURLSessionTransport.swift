@@ -3,15 +3,31 @@
 
 import Foundation
 
-/// Shared decoder hoisted to avoid re-instantiation on every call.
-/// Thread-safe: `JSONDecoder` has no mutable state after initialisation and is safe
-/// for concurrent reads in practice; this is consistent with Apple's own sample code
-/// and established community practice, though not a formally documented API guarantee.
+/// Shared decoder — intentionally kept as a module-level singleton rather than
+/// replaced with per-call-site `let decoder = JSONDecoder()`. The decoder is
+/// stateless after initialisation and safe for concurrent reads (no mutable
+/// stored properties that interact with `decode`). Keeping it shared avoids
+/// one allocation per call while being functionally identical to a local
+/// instance in every call site.
+///
+/// - Note: Issue #1477 was originally scoped to replace the encoder with per-call-site
+///   local instances. After review, both the encoder and decoder are deliberately
+///   retained as shared: both are stateless after initialisation so the allocation
+///   savings outweigh the cosmetic benefit of locality.
 private let sharedDecoder = JSONDecoder()
-/// Shared encoder hoisted to avoid re-instantiation on every call.
-/// Thread-safe: `JSONEncoder` has no mutable state after initialisation and is safe
-/// for concurrent reads in practice; this is consistent with Apple's own sample code
-/// and established community practice, though not a formally documented API guarantee.
+
+/// Shared encoder — intentionally kept as a module-level singleton rather than
+/// replaced with per-call-site `let encoder = JSONEncoder()`. The encoder is
+/// stateless after initialisation and safe for concurrent reads (no mutable
+/// stored properties that interact with `encode`). Keeping it shared avoids
+/// one allocation per call while being functionally identical to a local
+/// instance in every call site.
+/// Used by `urlSessionAPIPaginated` (page accumulation) and `patchRunnerLabels` (label body).
+///
+/// - Note: Issue #1477 was originally scoped to replace this with per-call-site local
+///   instances. After review, the shared approach is deliberately retained: `JSONEncoder`
+///   is stateless after initialisation so the allocation savings outweigh the cosmetic
+///   benefit of locality. #1477 is closed as resolved by this documented decision.
 private let sharedEncoder = JSONEncoder()
 
 // MARK: - Shared execution core
@@ -19,7 +35,27 @@ private let sharedEncoder = JSONEncoder()
 /// The result of a single URLSession round-trip through `urlSessionExecute`.
 private enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
-    case success(Data, statusCode: Int)
+    ///
+    /// `linkHeader` carries the raw `Link:` response header value used by paginated callers
+    /// to discover the next-page URL. Non-paginated callers (e.g. `urlSessionAPIAsync`,
+    /// `urlSessionPost`) always receive `nil` here and destructure with `_` — this is
+    /// intentional. A split into `success` / `successPaginated` was considered but deferred:
+    /// the single case keeps `urlSessionExecute` callers uniform and the `nil` default is
+    /// always correct for endpoints that do not emit a `Link` header.
+    case success(Data, statusCode: Int, linkHeader: String?)
+    /// No GitHub token is currently available — the token provider returned `nil`.
+    /// Distinct from `.networkError` and `.httpError(401)` so callers can treat
+    /// "never had a token" separately from "token was valid but rejected by GitHub".
+    ///
+    /// - Note: Non-paginated callers (`urlSessionAPIAsync`, `urlSessionPost`,
+    ///   `urlSessionPut`, `urlSessionRaw`) use `guard case .success` and therefore
+    ///   treat `.noToken` identically to every other non-success result — a `nil`
+    ///   return. Only `urlSessionAPIPaginated` pattern-matches this case explicitly,
+    ///   to discard any partially collected items and return `nil` rather than partial
+    ///   results. If you add a new call site that needs to distinguish "never had a
+    ///   token" from other failures, match `.noToken` directly instead of relying on
+    ///   the `guard case .success` collapse.
+    case noToken
     /// Non-2xx response that is not a rate-limit or permission error; the request failed.
     case httpError(Int)
     /// 403 or 429 that triggered the rate-limit actor (genuine rate limit).
@@ -48,6 +84,8 @@ private enum ExecuteResult {
 ///   - useRawAccept: When `true`, sets `Accept: application/vnd.github.v3.raw` instead of
 ///     the standard JSON header. Required for log endpoints that 302-redirect to raw S3
 ///     content.
+///   - rateLimiter: The rate-limit actor to read from and write to. Defaults to the
+///     module-level `rateLimitActor`; tests pass a `SpyRateLimitActor` for determinism.
 ///   - configure: A closure applied to the pre-built `URLRequest` just before it is sent.
 ///     Use this to set `httpMethod`, `httpBody`, or additional headers. The closure receives
 ///     the base request and must return the mutated copy; the default is the identity closure.
@@ -59,11 +97,13 @@ private func urlSessionExecute(
     timeout: TimeInterval,
     logTag: String,
     useRawAccept: Bool = false,
+    rateLimiter: some RateLimitActorProtocol = rateLimitActor,
     configure: @Sendable (URLRequest) -> URLRequest = { $0 }
 ) async -> ExecuteResult {
+    // Called exactly once per call; paginated tests rely on this call-count.
     guard let token = githubTokenCore() else {
         log("\(logTag) › no token available")
-        return .networkError(URLError(.userAuthenticationRequired))
+        return .noToken
     }
     let urlString = resolveURL(endpoint)
     guard let url = URL(string: urlString) else {
@@ -81,21 +121,24 @@ private func urlSessionExecute(
         }
         if http.statusCode == 403 || http.statusCode == 429 {
             await handleRateLimitResponse(
-                statusCode: http.statusCode, data, response: http, endpoint: urlString
+                statusCode: http.statusCode, data, response: http,
+                endpoint: urlString, rateLimiter: rateLimiter
             )
-            let isNowRateLimited = await rateLimitActor.isLimited
-            if isNowRateLimited {
-                return .rateLimited
-            } else {
-                return .permissionDenied
-            }
+            // snapshot() returns isLimited and resetDate in a single actor hop, keeping
+            // both values consistent with each other. Only isLimited is used here, but
+            // snapshot() is preferred over a bare await rateLimiter.isLimited so that a
+            // future reader who adds a resetDate check does not accidentally introduce a
+            // TOCTOU between two separate awaits (P10 — Atomic Snapshot Pattern).
+            let snap = await rateLimiter.snapshot()
+            return snap.isLimited ? .rateLimited : .permissionDenied
         }
         guard (200..<300).contains(http.statusCode) else {
             logErrorBody(data, endpoint: urlString, status: http.statusCode)
             return .httpError(http.statusCode)
         }
-        await rateLimitActor.clear()
-        return .success(data, statusCode: http.statusCode)
+        await rateLimiter.clear()
+        let linkHeader = http.value(forHTTPHeaderField: "Link")
+        return .success(data, statusCode: http.statusCode, linkHeader: linkHeader)
     } catch {
         log("\(logTag) › \(urlString) network error: \(error.localizedDescription)")
         return .networkError(error)
@@ -111,7 +154,7 @@ private func urlSessionExecute(
 /// private to this file.
 @concurrent
 public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
-    guard case .success(let data, _) = await urlSessionExecute(
+    guard case .success(let data, _, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionAPIAsync"
     ) else { return nil }
     return data
@@ -120,68 +163,123 @@ public func urlSessionAPIAsync(_ endpoint: String, timeout: TimeInterval = 20) a
 /// Fetches and concatenates all pages for a GitHub paginated endpoint.
 /// Follows `Link: <url>; rel="next"` until all pages are consumed or an error stops pagination.
 ///
-/// - Returns `nil` on auth failure (401, permission-denied 403, or no token).
-/// - Returns partial results if pagination is stopped by a genuine rate limit.
+/// Delegates the per-page token-guard → request-build → rate-limit-check → response-handle
+/// pipeline to `urlSessionExecute`, keeping only the accumulation loop and the
+/// partial-results return path here.
 ///
-/// - Note: This function owns its own URLSession loop rather than delegating to
-///   `urlSessionExecute`. Any fix to the shared execute pipeline must be mirrored here
-///   until this is refactored.
-/// - TODO: Refactor to delegate to `urlSessionExecute` and eliminate this dual code path.
+/// - Returns `nil` on auth failure (401, permission-denied 403, missing/revoked token).
+/// - Returns `nil` when a stopping condition occurs before any items are accumulated
+///   (e.g. rate-limited or network error on the very first page).
+/// - Returns encoded `[]` (non-nil) when the endpoint returns a valid empty-array
+///   response. Callers can decode this to an empty array and distinguish "confirmed
+///   empty" from "something went wrong" (nil).
+/// - Returns partial results (not nil) if at least one page was accumulated before
+///   pagination was stopped by a genuine rate limit.
+/// - Returns partial results (not nil) if at least one page was accumulated before
+///   pagination was stopped by a transient network error (e.g. timeout, no connectivity).
+///   This distinguishes recoverable mid-pagination interruptions from auth failures,
+///   which always discard all collected items.
+/// - Returns partial results (not nil) if at least one page was accumulated before
+///   pagination was stopped by a non-auth HTTP error (e.g. 404, 410, 503). Only auth
+///   failures discard all collected items; non-auth errors are treated as recoverable
+///   mid-pagination interruptions. Callers that need to distinguish total failure from
+///   partial success should check the result length.
+/// - Note: `extractNextURL(from: nil)` returns `nil`, so passing a non-paginated endpoint
+///   (which returns no `Link` header) terminates the loop naturally after the first page.
 @concurrent
-public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+public func urlSessionAPIPaginated(
+    _ endpoint: String,
+    timeout: TimeInterval = 60
+) async -> Data? {
+    await urlSessionAPIPaginated(endpoint, timeout: timeout, rateLimiter: rateLimitActor)
+}
+
+/// Internal implementation of ``urlSessionAPIPaginated(_:timeout:)`` that accepts an
+/// explicit `rateLimiter` dependency, enabling injection during unit tests without
+/// exposing the parameter on the public API.
+///
+/// All semantics (partial results, auth-failure nil, etc.) are identical to the
+/// public overload — see its documentation for full details.
+@concurrent
+func urlSessionAPIPaginated(
+    _ endpoint: String,
+    timeout: TimeInterval = 60,
+    rateLimiter: some RateLimitActorProtocol
+) async -> Data? {
     var nextURL: String? = resolveURL(endpoint)
     var allItems: [AnyJSON] = []
-    var didFailAuthentication = false
-    var didFailPermission = false
+    // Both auth failure (401, no-token) and permission denial (403 non-rate-limit)
+    // discard all collected items and return nil. They are collapsed into a single
+    // flag because the post-loop behaviour is identical; the log messages below
+    // retain the distinction so operators can tell them apart.
+    var didFailAuth = false
     var didRateLimit = false
+    // Tracks whether at least one page decoded successfully. Used in the post-loop
+    // guard to distinguish a legitimate empty-array response (200 []) — which should
+    // return encoded empty Data, not nil — from a loop that never got any successful page.
+    var hadAtLeastOneSuccessfulPage = false
 
-    while let urlString = nextURL {
-        guard let token = githubTokenCore() else {
-            log("urlSessionAPIPaginated › no token available, stopping pagination")
-            didFailAuthentication = true
-            break
-        }
-        guard let url = URL(string: urlString) else { break }
-        let req = makeRequest(url: url, token: token, timeout: timeout)
-        do {
-            let (data, response) = try await URLSession.shared.data(for: req)
-            guard let http = response as? HTTPURLResponse else { break }
-
-            if http.statusCode == 401 {
-                log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
-                didFailAuthentication = true
-                break
-            }
-            if http.statusCode == 403 || http.statusCode == 429 {
-                await handleRateLimitResponse(statusCode: http.statusCode, data, response: http, endpoint: urlString)
-                if await rateLimitActor.isLimited {
-                    log("urlSessionAPIPaginated › rate limited — \(allItems.count) items collected so far")
-                    didRateLimit = true
-                } else {
-                    log("urlSessionAPIPaginated › 403 permission denied — discarding \(allItems.count) partial items, returning nil")
-                    didFailPermission = true
-                }
-                break
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                logErrorBody(data, endpoint: urlString, status: http.statusCode)
-                break
-            }
-            await rateLimitActor.clear()
+    pagination: while let urlString = nextURL {
+        let result = await urlSessionExecute(
+            urlString, timeout: timeout, logTag: "urlSessionAPIPaginated",
+            rateLimiter: rateLimiter
+        )
+        switch result {
+        case .success(let data, _, let linkHeader):
             if let page = try? sharedDecoder.decode([AnyJSON].self, from: data) {
+                hadAtLeastOneSuccessfulPage = true
                 allItems.append(contentsOf: page)
+                nextURL = extractNextURL(from: linkHeader)
             } else {
                 log("urlSessionAPIPaginated › unexpected non-array response at \(urlString) — stopping pagination")
-                break
+                break pagination
             }
-            nextURL = extractNextURL(from: http.value(forHTTPHeaderField: "Link"))
-        } catch {
-            log("URLSessionTransport(paginated) › \(urlString) network error: \(error.localizedDescription)")
-            break
+        case .noToken:
+            // Token was nil when urlSessionExecute ran its `guard let token = githubTokenCore()`
+            // at the top of the function. This is the sole mechanism for the mid-pagination
+            // token-revocation path: `urlSessionExecute` returns `.noToken`, never
+            // `.networkError(URLError(.userAuthenticationRequired))`. The
+            // `.userAuthenticationRequired` URLError code is produced by URLSession only for
+            // HTTP Basic/Digest auth challenges and is never emitted on the GitHub Bearer-token
+            // path. An arm matching that code was removed from this switch in a prior commit;
+            // do not re-add it.
+            //
+            // Treat as auth failure: discard partial results and return nil, matching the
+            // documented contract. Post-loop logging distinguishes first-page vs mid-pagination.
+            didFailAuth = true
+            break pagination
+        case .httpError(401):
+            log("urlSessionAPIPaginated › 401 Unauthorized — token may have been revoked, stopping pagination")
+            didFailAuth = true
+            break pagination
+        case .httpError:
+            // Non-auth HTTP errors (404, 410, 503, etc.) stop pagination but do
+            // NOT discard partial items — the items collected from earlier pages
+            // are returned. This is a deliberate design choice: only auth failures
+            // (no-token, 401, permission-denied 403) discard all items. Callers
+            // that need to distinguish total failure from partial success should
+            // check the result length relative to their expected total.
+            log("urlSessionAPIPaginated › non-2xx error at \(urlString) — stopping pagination")
+            break pagination
+        case .rateLimited:
+            log("urlSessionAPIPaginated › rate limited — \(allItems.count) items collected so far")
+            didRateLimit = true
+            break pagination
+        case .permissionDenied:
+            // 403 that did not arm the rate-limit actor — token scope, revoked PAT, or
+            // repo access denial. Treated identically to an auth failure: discard all
+            // collected items and return nil. Folded into didFailAuth (not a separate flag)
+            // because the post-loop behaviour is the same; post-loop logging covers it.
+            log("urlSessionAPIPaginated › permission denied at \(urlString) — stopping pagination and discarding \(allItems.count) collected items")
+            didFailAuth = true
+            break pagination
+        case .networkError:
+            log("urlSessionAPIPaginated › network error at \(urlString) — stopping pagination")
+            break pagination
         }
     }
 
-    if didFailAuthentication || didFailPermission {
+    if didFailAuth {
         if allItems.isEmpty {
             log("urlSessionAPIPaginated › auth/permission failure on first page — no items collected, returning nil")
         } else {
@@ -196,8 +294,23 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
         }
         log("urlSessionAPIPaginated › pagination stopped by rate limit — returning \(allItems.count) partial items")
     }
-    guard !allItems.isEmpty else { return nil }
-    return try? sharedEncoder.encode(allItems)
+    // Auth failure and rate-limited-on-first-page both return nil explicitly above.
+    // For all other paths:
+    //   - hadAtLeastOneSuccessfulPage && allItems.isEmpty → server returned 200 [], encode as "[]"
+    //   - hadAtLeastOneSuccessfulPage && !allItems.isEmpty → partial results, encode normally
+    //   - !hadAtLeastOneSuccessfulPage → loop never got a successful page (e.g. 404 on first page)
+    guard hadAtLeastOneSuccessfulPage else {
+        log("urlSessionAPIPaginated › loop ended without any successful page — returning nil")
+        return nil
+    }
+    do {
+        let encoded = try sharedEncoder.encode(allItems)
+        log("urlSessionAPIPaginated › returning \(allItems.count) items (\(encoded.count)b)")
+        return encoded
+    } catch {
+        log("urlSessionAPIPaginated › encode failed: \(error) — returning nil")
+        return nil
+    }
 }
 
 // MARK: - Raw async (log endpoints)
@@ -210,7 +323,7 @@ public func urlSessionAPIPaginated(_ endpoint: String, timeout: TimeInterval = 6
 ///   See `makeRawRequest` in `GitHubRequestBuilder.swift` for full details.
 @concurrent
 public func urlSessionRaw(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-    guard case .success(let data, _) = await urlSessionExecute(
+    guard case .success(let data, _, _) = await urlSessionExecute(
         endpoint, timeout: timeout, logTag: "urlSessionRaw", useRawAccept: true
     ) else { return nil }
     log("urlSessionRaw › \(endpoint) → \(data.count)b")
@@ -236,7 +349,7 @@ public func urlSessionPost(_ endpoint: String, body: Data? = nil, timeout: TimeI
         }
         return request
     }
-    guard case .success(let data, let statusCode) = result else { return nil }
+    guard case .success(let data, let statusCode, _) = result else { return nil }
     log("urlSessionPost › \(endpoint) → \(statusCode)")
     return data
 }
@@ -252,7 +365,7 @@ public func urlSessionPut(_ endpoint: String, body: Data, timeout: TimeInterval 
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request
     }
-    guard case .success(let data, let statusCode) = result else { return nil }
+    guard case .success(let data, let statusCode, _) = result else { return nil }
     log("urlSessionPut › \(endpoint) → \(statusCode)")
     return data
 }
@@ -294,26 +407,6 @@ public func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) asy
 nonisolated(nonsending)
 public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
-}
-
-/// Calls the GitHub REST API for all pages via URLSession.
-/// Returns `nil` when no token is available or the request fails.
-///
-/// Uses `nonisolated(nonsending)` rather than `@concurrent`: this function has no work
-/// before its first suspension and immediately delegates to the already-`@concurrent`
-/// `urlSessionAPIPaginated`. Caller-context inheritance is always correct here; a
-/// cooperative-pool hop would be redundant.
-///
-/// - Note: Safe to call from `@MainActor` because `urlSessionAPIPaginated` is `@concurrent`
-///   and will move execution to the cooperative thread pool at the first `await`.
-///   Do not perform heavy synchronous work before this call from a `@MainActor` context.
-///
-/// - IMPORTANT: This function must remain a pure pass-through with no synchronous work
-///   before the `await`. If any guard, log, or computation is ever added before the first
-///   suspension, this annotation must be upgraded to `@concurrent`.
-nonisolated(nonsending)
-public func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
-    await urlSessionAPIPaginated(endpoint, timeout: timeout)
 }
 
 // MARK: - Runner mutation helpers
@@ -443,8 +536,8 @@ public func fetchRemovalToken(scope scopeString: String) async -> String? {
 ///
 /// Uses `@concurrent` because this function has post-suspension work (nil-check + log)
 /// that must run on the cooperative thread pool regardless of the caller's executor.
-/// Unlike the pure-delegate wrappers `ghAPI` / `ghAPIPaginated`, this function is not
-/// a straight pass-through and therefore does not qualify for `nonisolated(nonsending)`.
+/// Unlike the pure-delegate wrapper `ghAPI`, this function is not a straight pass-through
+/// and therefore does not qualify for `nonisolated(nonsending)`.
 @concurrent
 @discardableResult
 public func ghPost(_ endpoint: String) async -> Bool {
