@@ -252,40 +252,9 @@ struct RunnerDisplayStatusTests {
 }
 
 // MARK: - AggregateStatus
-
-@Suite("AggregateStatus")
-struct AggregateStatusTests {
-
-    /// allOnline status returns the green circle dot character.
-    @Test func dotAllOnline() {
-        #expect(AggregateStatus.allOnline.dot == "\u{1F7E2}")
-    }
-
-    /// someOffline status returns the yellow circle dot character.
-    @Test func dotSomeOffline() {
-        #expect(AggregateStatus.someOffline.dot == "\u{1F7E1}")
-    }
-
-    /// allOffline status returns the black circle dot character.
-    @Test func dotAllOffline() {
-        #expect(AggregateStatus.allOffline.dot == "\u{26AB}")
-    }
-
-    /// allOnline status maps to the SF Symbol "circle.fill".
-    @Test func symbolNameAllOnline() {
-        #expect(AggregateStatus.allOnline.symbolName == "circle.fill")
-    }
-
-    /// someOffline status maps to the SF Symbol "circle.lefthalf.filled".
-    @Test func symbolNameSomeOffline() {
-        #expect(AggregateStatus.someOffline.symbolName == "circle.lefthalf.filled")
-    }
-
-    /// allOffline status maps to the SF Symbol "circle".
-    @Test func symbolNameAllOffline() {
-        #expect(AggregateStatus.allOffline.symbolName == "circle")
-    }
-}
+// Constant-table tests removed in #1500 — asserting hardcoded emoji/SF Symbol literals
+// against a simple enum provides no regression value; the UI catches any typo immediately.
+// If AggregateStatus gains non-trivial computed logic, restore targeted tests here.
 
 // MARK: - PollResultBuilder (pure logic)
 
@@ -495,22 +464,17 @@ struct PollResultBuilderTests {
 @Suite("JobStatus.isActive")
 struct JobStatusIsActiveTests {
 
-    /// queued, inProgress, waiting, requested, and pending are all active.
+    /// queued, inProgress, waiting, requested, pending, completed, and unknown are all covered.
+    /// completed and unknown must be inactive; active statuses must be active.
+    /// Removed separate completedIsNotActive / unknownIsNotActive tests (#1500) —
+    /// both are trivially-obvious negatives, folded here for completeness.
     @Test func activeStatuses() {
         #expect(JobStatus.queued.isActive)
         #expect(JobStatus.inProgress.isActive)
         #expect(JobStatus.waiting.isActive)
         #expect(JobStatus.requested.isActive)
         #expect(JobStatus.pending.isActive)
-    }
-
-    /// completed is not active.
-    @Test func completedIsNotActive() {
         #expect(!JobStatus.completed.isActive)
-    }
-
-    /// An unknown status is treated as inactive to avoid infinite polling.
-    @Test func unknownIsNotActive() {
         #expect(!JobStatus.unknown("draining").isActive)
     }
 }
@@ -632,11 +596,11 @@ struct FormatElapsedTests {
         #expect(formatElapsed(start: start, end: end, isCompleted: true) == "00:00")
     }
 
-    /// Verifies that MM:SS format does not roll over to HH:MM:SS for durations ≥ 60 min.
+    /// Verifies that MM:SS format does not roll over to HH:MM:SS for durations >= 60 min.
     /// Design decision: formatElapsed intentionally uses plain `secs / 60` for minutes,
     /// so values beyond 59:59 continue counting up rather than switching to an hours display.
     /// This keeps the UI consistent for the typical runner job duration.
-    /// Boundary: exactly 3600 s = "60:00" (the first minute value ≥ 60).
+    /// Boundary: exactly 3600 s = "60:00" (the first minute value >= 60).
     /// General: 4000 s = "66:40".
     @Test func largeIntervalFormatsMmSs() {
         let ref = Date(timeIntervalSinceReferenceDate: 0)
@@ -766,59 +730,10 @@ struct PollResultBuilderGroupStateTests {
         #expect(await counter.value == 0)
     }
 
-    /// fireFailureHook fires for a cancelled group — cancellation is a hook-triggering conclusion.
-    @Test func fireFailureHookFiredForCancelledGroup() async {
-        let cancelledGroup = makeGroup(id: 760, sha: "aabbee", groupStatus: .completed, conclusion: "cancelled")
-        let counter = HookCounter()
-
-        _ = await PollResultBuilder.buildGroupState(
-            snapPrevGroups: [:],
-            snapGroupCache: [:],
-            snapSeenGroupIDs: [],
-            fetchGroups: { _ in [cancelledGroup] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
-        )
-
-        #expect(await counter.value == 1, "fireFailureHook must fire for a cancelled group")
-    }
-
-    /// fireFailureHook fires for a startup_failure group.
-    @Test func fireFailureHookFiredForStartupFailureGroup() async {
-        let group = makeGroup(id: 770, sha: "aaccff", groupStatus: .completed, conclusion: "startup_failure")
-        let counter = HookCounter()
-
-        _ = await PollResultBuilder.buildGroupState(
-            snapPrevGroups: [:],
-            snapGroupCache: [:],
-            snapSeenGroupIDs: [],
-            fetchGroups: { _ in [group] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
-        )
-
-        #expect(await counter.value == 1, "fireFailureHook must fire for startup_failure")
-    }
-
-    /// fireFailureHook fires for an action_required group.
-    @Test func fireFailureHookFiredForActionRequiredGroup() async {
-        let group = makeGroup(id: 780, sha: "bbccdd", groupStatus: .completed, conclusion: "action_required")
-        let counter = HookCounter()
-
-        _ = await PollResultBuilder.buildGroupState(
-            snapPrevGroups: [:],
-            snapGroupCache: [:],
-            snapSeenGroupIDs: [],
-            fetchGroups: { _ in [group] },
-            scopeFromGroup: { $0.repo },
-            fireFailureHook: { _, _ in await counter.increment() },
-            enrichJobs: { $0 }
-        )
-
-        #expect(await counter.value == 1, "fireFailureHook must fire for action_required")
-    }
+    // fireFailureHook conclusion-variant tests (cancelled, startup_failure, action_required)
+    // removed in #1500 — already exhaustively covered by the parameterised
+    // JobConclusionIsHookConclusionTests suite. Keeping integration-level
+    // duplication of unit-level table tests adds noise without regression value.
 
     /// fireFailureHook must NOT re-fire when the group ID is already in snapSeenGroupIDs,
     /// even if it has been evicted from snapGroupCache by trimGroupCache.
@@ -839,7 +754,7 @@ struct PollResultBuilderGroupStateTests {
         #expect(await counter.value == 0)
     }
 
-    /// Stale-row self-heal: group that was live in snapPrevGroups comes back completed → must land in cache.
+    /// Stale-row self-heal: group that was live in snapPrevGroups comes back completed -> must land in cache.
     @Test func previouslyLiveGroupSelfHealsAfterCompletion() async {
         let sha = "cafe01"
         let liveGroup      = makeGroup(id: 901, sha: sha, groupStatus: .inProgress, jobStatus: .inProgress)
@@ -1021,4 +936,3 @@ struct RunnerConfigStoreErrorDescriptionTests {
         #expect(malformed.errorDescription != decode.errorDescription)
     }
 }
-
