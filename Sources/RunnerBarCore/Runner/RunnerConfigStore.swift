@@ -18,6 +18,14 @@ public enum RunnerConfigStoreError: LocalizedError {
     /// `jitConfig`, de-registering ephemeral JIT runners with no user-visible error.
     /// The caller must surface this error before attempting a write.
     case malformedExistingFile(String)
+    /// The existing `.runner` file is known to be present but could not be read
+    /// during a `save()` call (e.g. transient permissions failure or I/O error).
+    ///
+    /// Distinct from `.readFailed` (which originates from `load(at:)`) and from
+    /// `.malformedExistingFile` (file readable but not decodable). Proceeding from
+    /// an empty dict when the file exists would silently drop agent-managed keys;
+    /// the caller must surface this error instead. See #1499.
+    case ioReadFailedDuringSave(String, any Error)
 
     /// A human-readable description of the error.
     public var errorDescription: String? {
@@ -30,6 +38,8 @@ public enum RunnerConfigStoreError: LocalizedError {
             "Failed to write runner configuration at \(installPath)/.runner: \(underlying.localizedDescription)"
         case .malformedExistingFile(let installPath):
             "Existing runner configuration at \(installPath)/.runner is malformed and cannot be safely overwritten — agent-managed keys would be lost"
+        case .ioReadFailedDuringSave(let installPath, let underlying):
+            "Cannot read existing runner configuration at \(installPath)/.runner before saving — agent-managed keys would be lost: \(underlying.localizedDescription)"
         }
     }
 }
@@ -52,8 +62,11 @@ public enum RunnerConfigStoreError: LocalizedError {
 /// **Error contract for `save(_:at:)`:** if the existing `.runner` file is present but
 /// cannot be decoded (malformed JSON), `save()` throws `malformedExistingFile` rather
 /// than proceeding from an empty dictionary — which would silently drop agent-managed
-/// keys such as `jitConfig`. See `RunnerConfigStoreError.malformedExistingFile`.
-/// `load(at:)` never throws `malformedExistingFile` — only `readFailed` / `decodeFailed`.
+/// keys such as `jitConfig`. If the file is present but cannot be read at all (I/O
+/// error), `save()` throws `ioReadFailedDuringSave` for the same reason. See
+/// `RunnerConfigStoreError.malformedExistingFile` and `.ioReadFailedDuringSave`.
+/// `load(at:)` never throws `malformedExistingFile` or `ioReadFailedDuringSave` —
+/// only `readFailed` / `decodeFailed`.
 public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 
     // MARK: Shared instance
@@ -155,6 +168,19 @@ private func loadRunnerData(from url: URL, installPath: String) async throws -> 
     }
 }
 
+/// Returns `true` when `error` represents a "no such file" condition.
+///
+/// Both `NSFileNoSuchFileError` (2) and `NSFileReadNoSuchFileError` (260) are
+/// emitted by `Data(contentsOf:)` depending on the OS version and filesystem.
+/// Treating them identically lets `saveRunnerConfig` distinguish
+/// "file does not exist yet" (safe to write from empty dict) from
+/// "file exists but could not be opened" (must throw to protect agent-managed keys).
+private func isNoSuchFileError(_ error: any Error) -> Bool {
+    let nsError = error as NSError
+    guard nsError.domain == NSCocoaErrorDomain else { return false }
+    return nsError.code == NSFileNoSuchFileError || nsError.code == NSFileReadNoSuchFileError
+}
+
 /// Performs the read-modify-write merge and writes the result to `url` atomically.
 ///
 /// Marked `async` so `@concurrent` can place it on the Swift cooperative thread
@@ -164,9 +190,13 @@ private func loadRunnerData(from url: URL, installPath: String) async throws -> 
 /// document either type as safe for concurrent use on the same instance, and two
 /// simultaneous `save()` calls can invoke this helper concurrently.
 ///
-/// Throws `RunnerConfigStoreError.malformedExistingFile` if the existing `.runner`
-/// file is present but cannot be decoded — proceeding from an empty dict would
-/// silently drop agent-managed keys such as `jitConfig`.
+/// Throws:
+/// - `RunnerConfigStoreError.malformedExistingFile` if the existing `.runner`
+///   file is present but cannot be decoded — proceeding from an empty dict would
+///   silently drop agent-managed keys such as `jitConfig`.
+/// - `RunnerConfigStoreError.ioReadFailedDuringSave` if the existing `.runner`
+///   file is known to exist but could not be read (I/O error, transient permissions
+///   failure, etc.) — proceeding from an empty dict would have the same effect. (#1499)
 @concurrent
 private func saveRunnerConfig(
     _ config: RunnerConfig,
@@ -176,25 +206,33 @@ private func saveRunnerConfig(
     // Read-modify-write: load existing keys so agent-managed keys are preserved.
     let decoder = JSONDecoder()
     var raw: [String: AnyJSON] = [:]
-    if let existingData = try? Data(contentsOf: url) {
+    do {
+        let existingData = try Data(contentsOf: url)
         let data = stripRunnerConfigBOM(existingData)
         if let dict = try? decoder.decode([String: AnyJSON].self, from: data) {
             raw = dict
         } else {
-            // Decode failed — the file is present but malformed. Proceeding
-            // from an empty dict would silently drop agent-managed keys (e.g.
-            // jitConfig), de-registering ephemeral JIT runners. Throw so the
-            // caller can surface the error instead of silently corrupting state.
+            // File is readable but not decodable as JSON — malformed.
+            // Proceeding from an empty dict would silently drop agent-managed
+            // keys (e.g. jitConfig), de-registering ephemeral JIT runners.
             log("RunnerConfigStore › save: existing .runner at \(url.path) is malformed; aborting save to protect agent-managed keys")
             throw RunnerConfigStoreError.malformedExistingFile(installPath)
         }
-    } else {
-        // File is missing (first registration) or temporarily unreadable (I/O error).
-        // Writing from scratch is correct for a missing file. For a transiently
-        // unreadable file, unknown agent-managed keys (e.g. jitConfig, gitHubUrl)
-        // will be dropped — the malformed-content path above is now protected;
-        // the I/O-failure path is tracked in #1499.
-        log("RunnerConfigStore › save: could not read existing .runner at \(url.path); writing from scratch")
+    } catch let configError as RunnerConfigStoreError {
+        // Re-throw errors we already typed (malformedExistingFile from the branch above).
+        throw configError
+    } catch {
+        if isNoSuchFileError(error) {
+            // File does not exist yet — first registration. Writing from an empty
+            // dict is correct; there are no agent-managed keys to preserve.
+            log("RunnerConfigStore › save: no existing .runner at \(url.path); writing from scratch")
+        } else {
+            // File is present but could not be read (permissions, I/O error).
+            // Proceeding from an empty dict would silently drop agent-managed keys
+            // (e.g. jitConfig, gitHubUrl). Throw so the caller surfaces the error. (#1499)
+            log("RunnerConfigStore › save: could not read existing .runner at \(url.path): \(error); aborting to protect agent-managed keys")
+            throw RunnerConfigStoreError.ioReadFailedDuringSave(installPath, error)
+        }
     }
 
     // Always write workFolder so the user can clear a custom path back to the

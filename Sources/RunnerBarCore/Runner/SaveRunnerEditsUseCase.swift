@@ -36,8 +36,8 @@ enum LabelsPrerequisiteError: Error, Equatable, Sendable {
 /// - Labels API returns `nil` → immediate abort (steps 2 and 3 are skipped).
 /// - Missing `agentId`/`gitHubUrl` → error appended, execution continues.
 /// - JSON and proxy errors → accumulated independently; both steps always run
-///   when applicable. Config write errors — including `malformedExistingFile` —
-///   are accumulated and do not abort step 3.
+///   when applicable. Config write errors — including `malformedExistingFile`
+///   and `ioReadFailedDuringSave` — are accumulated and do not abort step 3.
 /// - `installPath == nil` while a JSON *or* proxy change is pending → immediate
 ///   abort with the accumulated errors so far. Without a known install path there
 ///   is no safe target for further writes. The `missingInstallPathForJSON` and
@@ -131,7 +131,8 @@ public struct SaveRunnerEditsUseCase: Sendable {
                 // Exhaustive switch — compiler enforces all RunnerConfigStoreError cases
                 // are handled (guaranteed by throws(RunnerConfigStoreError) on the protocol):
                 // .readFailed / .decodeFailed arise from configStore.load(at:) above;
-                // .writeFailed / .malformedExistingFile arise from configStore.save(...).
+                // .writeFailed / .malformedExistingFile / .ioReadFailedDuringSave arise
+                // from configStore.save(...).
                 switch error {
                 case .readFailed(let path, let underlying):
                     errors.append("Cannot read config at \(path)/.runner: \(underlying.localizedDescription)")
@@ -144,6 +145,11 @@ public struct SaveRunnerEditsUseCase: Sendable {
                     // than proceeding protects agent-managed keys (e.g. jitConfig) from
                     // being silently dropped during the read-modify-write merge.
                     errors.append("Cannot write config at \(path)/.runner: existing file is malformed and agent-managed keys would be lost")
+                case .ioReadFailedDuringSave(let path, let underlying):
+                    // The .runner file is known to exist but could not be read before the
+                    // merge write. Proceeding would drop agent-managed keys — surface the
+                    // error so the user can retry after the transient I/O condition clears.
+                    errors.append("Cannot write config at \(path)/.runner: file is present but unreadable — agent-managed keys would be lost: \(underlying.localizedDescription)")
                 }
             }
         }

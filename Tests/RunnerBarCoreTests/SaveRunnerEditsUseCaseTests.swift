@@ -418,4 +418,62 @@ struct SaveRunnerEditsUseCaseTests {
         #expect(msgs.contains(where: { $0.contains("no org/repo path") }))
         #expect(await labels.callCount == 0)
     }
+
+    // MARK: - #1499 I/O-unreadable .runner during save
+
+    /// #1499 — configStore.save() throwing .ioReadFailedDuringSave must accumulate the
+    /// correct error message. The I/O-unreadable path is distinct from .writeFailed and
+    /// .malformedExistingFile and must have its own branch in the exhaustive switch.
+    @Test("config save IO-read-failed error emits correct message")
+    func configSaveIOReadFailedEmitsError() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        // No proxyUrl change — Step 3 must be skipped entirely.
+
+        let config  = SpyConfigStore()
+        let proxy   = SpyProxyStore()
+        await config.setUp(shouldThrowIOReadFailedOnSave: true)
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // Message must mention path, unreadable, and agent-managed keys
+        #expect(msgs.contains(where: { $0.contains("unreadable") && $0.contains("/.runner") && $0.contains("agent-managed") }))
+        // No proxy change — proxy step must not have run
+        #expect(await !proxy.saveCalled)
+    }
+
+    /// #1499 — configStore.save() throwing .ioReadFailedDuringSave must still allow
+    /// the proxy step (Step 3) to execute. Error fan-out behaviour must be identical
+    /// to the .malformedExistingFile path: accumulate and continue.
+    @Test("config save IO-read-failed error still runs proxy step")
+    func configSaveIOReadFailedContinuesToProxy() async {
+        let runner   = makeRunner()
+        var draft    = RunnerEditDraft(runner: runner)
+        let original = RunnerEditDraft(runner: runner)
+        draft.workFolder = "custom_work"
+        draft.proxyUrl   = "http://proxy.example.com"
+
+        let config  = SpyConfigStore()
+        await config.setUp(shouldThrowIOReadFailedOnSave: true)
+        let proxy   = SpyProxyStore()
+        let useCase = makeUseCase(config: config, proxy: proxy)
+
+        let result = await useCase.execute(runner: runner, draft: draft, original: original)
+
+        guard case .failure(let msgs) = result else {
+            Issue.record("expected .failure, got .success")
+            return
+        }
+        // Message must mention path, unreadable, and agent-managed keys
+        #expect(msgs.contains(where: { $0.contains("unreadable") && $0.contains("/.runner") && $0.contains("agent-managed") }))
+        // Proxy step must still execute despite the I/O read error
+        #expect(await proxy.saveCalled)
+    }
 }
