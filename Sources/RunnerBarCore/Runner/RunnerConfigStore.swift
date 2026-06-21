@@ -64,11 +64,10 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     // MARK: Private properties
 
     /// Decoder used for reading `.runner` JSON in `load(at:)`.
-    /// Actor isolation serialises all access to this property; two concurrent `load()`
-    /// calls on the same actor are not possible. `nonisolated` is required so
-    /// `loadRunnerData(@concurrent)` can be called without crossing the actor boundary,
-    /// but the decoder instance itself is never shared across concurrent callers.
-    nonisolated private let decoder = JSONDecoder()
+    /// Actor isolation serialises all `load()` calls; this instance is never
+    /// accessed concurrently. `nonisolated` allows passing it into the
+    /// `@concurrent` free function without crossing the actor boundary at runtime.
+    private nonisolated let decoder = JSONDecoder()
 
     // MARK: Init
 
@@ -86,14 +85,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// thread is never blocked.
     public func load(at installPath: String) async throws(RunnerConfigStoreError) -> RunnerConfig {
         let url = runnerConfigURL(for: installPath)
-        let data: Data
-        do {
-            data = try await loadRunnerData(from: url, installPath: installPath)
-        } catch let configError as RunnerConfigStoreError {
-            throw configError
-        } catch {
-            throw RunnerConfigStoreError.readFailed(installPath, error)
-        }
+        let data = try await loadRunnerData(from: url, installPath: installPath)
         do {
             return try decoder.decode(RunnerConfig.self, from: data)
         } catch {
@@ -119,13 +111,7 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
     /// previous `let config = copy config` workaround is no longer needed.
     public func save(_ config: borrowing RunnerConfig, at installPath: String) async throws(RunnerConfigStoreError) {
         let url = runnerConfigURL(for: installPath)
-        do {
-            try await saveRunnerConfig(config, to: url, installPath: installPath)
-        } catch let configError as RunnerConfigStoreError {
-            throw configError
-        } catch {
-            throw RunnerConfigStoreError.writeFailed(installPath, error)
-        }
+        try await saveRunnerConfig(config, to: url, installPath: installPath)
     }
 
     // MARK: Private
@@ -141,9 +127,10 @@ public actor RunnerConfigStore: RunnerConfigStoreProtocol {
 /// Reads and BOM-strips the `.runner` file at `url`.
 ///
 /// Runs on the Swift cooperative thread pool without blocking an actor's serial
-/// executor. Throws `RunnerConfigStoreError.readFailed` on any I/O error.
+/// executor. Declares `throws(RunnerConfigStoreError)` so callers with a typed-throws
+/// context (e.g. `load(at:)`) need no catch bridge — the error type is already known.
 @concurrent
-private func loadRunnerData(from url: URL, installPath: String) throws -> Data {
+private func loadRunnerData(from url: URL, installPath: String) throws(RunnerConfigStoreError) -> Data {
     do {
         let raw = try Data(contentsOf: url)
         return stripRunnerConfigBOM(raw)
@@ -170,7 +157,7 @@ private func saveRunnerConfig(
     _ config: RunnerConfig,
     to url: URL,
     installPath: String
-) throws {
+) throws(RunnerConfigStoreError) {
     // Read-modify-write: load existing keys so agent-managed keys are preserved.
     let decoder = JSONDecoder()
     var raw: [String: AnyJSON] = [:]
