@@ -154,15 +154,22 @@ public func configureGHToken(_ provider: @escaping GHTokenProvider) {
 // MARK: - Module-level symbols consumed by RunnerBarCore files
 
 /// Calls the configured GitHub API transport for the given endpoint.
+///
+/// Increments `apiCallCounter` via a fire-and-forget `Task` before dispatching
+/// so the counter reflects every REST call without adding latency to the fetch.
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
 func ghAPI(_ endpoint: String) async -> Data? {
+    Task { await apiCallCounter.record() }
     let transport = transportBox.read()
     return await transport(endpoint)
 }
 
 /// Calls the configured raw-bytes transport for the given endpoint.
+///
 /// Used by `LogFetcher` to fetch log data without importing the app target.
+/// Raw log fetches hit S3 and do **not** consume the GitHub REST quota —
+/// `apiCallCounter` is intentionally not incremented here.
 /// Reads the closure under the lock then awaits it outside —
 /// `OSAllocatedUnfairLock.withLock` cannot contain an `await`.
 func ghRaw(_ endpoint: String) async -> Data? {
@@ -171,6 +178,9 @@ func ghRaw(_ endpoint: String) async -> Data? {
 }
 
 /// Calls the configured paginated JSON transport for the given endpoint.
+///
+/// Increments `apiCallCounter` via a fire-and-forget `Task` before dispatching —
+/// paginated calls consume the same GitHub REST quota as single-page calls.
 ///
 /// - Parameters:
 ///   - endpoint: Relative or absolute URL for the first page.
@@ -188,6 +198,7 @@ func ghRaw(_ endpoint: String) async -> Data? {
 ///   of truth for all ghAPIPaginated callers.
 @concurrent
 public func ghAPIPaginated(_ endpoint: String, timeout: TimeInterval = 60) async -> Data? {
+    Task { await apiCallCounter.record() }
     let transport = paginatedTransportBox.read()
     return await transport(endpoint, timeout)
 }
