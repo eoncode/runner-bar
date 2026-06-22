@@ -39,6 +39,10 @@ public protocol WorkflowActionGroupFetcherProtocol: Sendable {
     ///   - scope: A repo scope string in the form `"owner/repo"`. Org scopes (no `/`) return empty.
     ///   - cache: An optional SHA-keyed cache of previously-fetched groups to avoid redundant API calls.
     /// - Returns: An array of `WorkflowActionGroup` values, one per unique `head_sha`.
+    ///
+    /// - Important: This requirement carries `@concurrent`, which strips the caller's
+    ///   actor context. Conformers must be safe to run off any actor's executor.
+    ///   An actor-isolated conformer will fail to satisfy this requirement at compile time.
     @concurrent
     func fetch(for scope: String, cache: [String: WorkflowActionGroup]) async -> [WorkflowActionGroup]
 }

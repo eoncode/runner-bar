@@ -254,7 +254,6 @@ struct WorkflowActionGroupFetcherTests {
     }
 
     // MARK: - Refresh cap
-    // MARK: - Refresh cap
 
     @Test func fetchActionGroups_inProgressJobsCapped_atMaxRefreshConcurrency() async {
         // When a single run has 4 in-progress jobs but maxRefreshConcurrency is 3,
@@ -280,7 +279,7 @@ struct WorkflowActionGroupFetcherTests {
         for i in 1 ... 3 {
             let job = minimalJob(id: 100 + i, status: "in_progress", conclusion: nil)
             responses["repos/owner/repo/actions/jobs/\(100 + i)"] =
-                (try? JSONSerialization.data(withJSONObject: job)) ?? Data()
+                try! JSONSerialization.data(withJSONObject: job)
         }
         let t = StubTransport(responses: responses)
         let f = WorkflowActionGroupFetcher(transport: t)
