@@ -215,7 +215,7 @@ struct WorkflowActionGroupFetcherTests {
         #expect(r.first?.jobs.first?.id == 999)
         #expect(t.callCount == 3)
     }
-// MARK: - Refresh cap
+    // MARK: - Refresh cap
 
     @Test func fetchActionGroups_inProgressJobsCapped_atMaxRefreshConcurrency() async {
         // When a single run has 4 in-progress jobs but maxRefreshConcurrency is 3,
