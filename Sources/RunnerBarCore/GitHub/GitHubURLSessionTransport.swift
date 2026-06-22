@@ -59,21 +59,21 @@ public struct GitHubTransport: GitHubTransportProtocol {
     /// Kept as a stored `let` (one allocation per `GitHubTransport` instance)
     /// rather than per-call-site to avoid repeated allocations while remaining
     /// functionally identical to a local instance in every call site.
-    let decoder: JSONDecoder
+    private let decoder: JSONDecoder
 
     /// JSON encoder — stateless after `init`, safe for concurrent reads.
     /// Same rationale as `decoder`.
-    let encoder: JSONEncoder
+    private let encoder: JSONEncoder
 
     /// Rate-limit actor used to arm/clear the global back-off window.
     /// Defaults to the module-level `rateLimitActor` singleton so existing
     /// production behaviour is preserved without any call-site changes.
-    let rateLimiter: any RateLimitActorProtocol
+    private let rateLimiter: any RateLimitActorProtocol
 
     /// Synchronous closure that returns the current GitHub PAT, or `nil` when
     /// the user is signed out. Defaults to `githubTokenCore()` from
     /// `GitHubTransportShim` so the token pipeline is unchanged at launch.
-    let tokenProvider: @Sendable () -> String?
+    private let tokenProvider: @Sendable () -> String?
 
     // MARK: - Init
 
@@ -399,9 +399,19 @@ extension GitHubTransport {
             return false
         }
         let endpoint = "\(scope.apiPrefix)/actions/runs/\(runID)/cancel"
-        let result = await post(endpoint) != nil
-        log("cancelRun › run=\(runID) scope=\(scopeString) success=\(result)")
-        return result
+        let result = await execute(endpoint, timeout: 30, logTag: "cancelRun") { req in
+            var request = req
+            request.httpMethod = "POST"
+            return request
+        }
+        let success: Bool
+        if case .success = result {
+            success = true
+        } else {
+            success = false
+        }
+        log("cancelRun › run=\(runID) scope=\(scopeString) success=\(success)")
+        return success
     }
 
     // MARK: patchRunnerLabels
@@ -588,7 +598,7 @@ public func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) asy
 /// - SeeAlso: ``GitHubTransport/apiAsync(_:timeout:)``
 nonisolated(nonsending)
 public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
-    await urlSessionAPIAsync(endpoint, timeout: timeout)
+    await sharedGitHubTransport.apiAsync(endpoint, timeout: timeout)
 }
 
 /// Fire-and-forget POST alias. Returns `true` on 2xx.
