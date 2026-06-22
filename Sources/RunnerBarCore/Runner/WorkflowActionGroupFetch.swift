@@ -200,7 +200,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
         var groups = Array(repeating: WorkflowActionGroup?.none, count: shaEntries.count)
         await withTaskGroup(of: (Int, WorkflowActionGroup).self) { group in
             for (i, (sha, shaRuns)) in shaEntries.enumerated() {
-                group.addTask { await self.buildActionGroup(index: i, sha: sha, shaRuns: shaRuns, scope: scope, cache: cache[sha] }
+                group.addTask { await self.buildActionGroup(index: i, sha: sha, shaRuns: shaRuns, scope: scope, cache: cache) }
             }
             for await (i, actionGroup) in group { groups[i] = actionGroup }
         }
