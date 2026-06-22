@@ -120,12 +120,12 @@ public struct GitHubTransport: GitHubTransportProtocol {
         decoder: JSONDecoder = JSONDecoder(),
         encoder: JSONEncoder = JSONEncoder(),
         rateLimiter: some RateLimitActorProtocol = rateLimitActor,
-        tokenProvider: @escaping @Sendable () -> String? = { githubTokenCore() }
+        tokenProvider: (@Sendable () -> String?)? = nil
     ) {
         self.decoder = decoder
         self.encoder = encoder
         self.rateLimiter = rateLimiter
-        self.tokenProvider = tokenProvider
+        self.tokenProvider = tokenProvider ?? { githubTokenCore() }
     }
 }
 
@@ -148,7 +148,7 @@ extension GitHubTransport {
     ///   - configure: Closure applied to the pre-built `URLRequest` before sending.
     ///     Defaults to the identity closure. Must be `@Sendable`.
     @concurrent
-    func execute(
+    private func execute(
         _ endpoint: String,
         timeout: TimeInterval,
         logTag: String,
