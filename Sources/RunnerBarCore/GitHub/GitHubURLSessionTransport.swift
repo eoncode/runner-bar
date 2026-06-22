@@ -161,10 +161,10 @@ internal enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
     ///
     /// `linkHeader` carries the raw `Link:` response header value used by paginated callers
-    /// to discover the next-page URL. Non-paginated callers (e.g. `urlSessionAPIAsync`,
-    /// `urlSessionPost`) always receive `nil` here and destructure with `_` — this is
+    /// to discover the next-page URL. Non-paginated callers (e.g. `apiAsync`,
+    /// `post`) always receive `nil` here and destructure with `_` — this is
     /// intentional. A split into `success` / `successPaginated` was considered but deferred:
-    /// the single case keeps `urlSessionExecute` callers uniform and the `nil` default is
+    /// the single case keeps `execute` callers uniform and the `nil` default is
     /// always correct for endpoints that do not emit a `Link` header.
     case success(Data, statusCode: Int, linkHeader: String?)
     /// No GitHub token is currently available — the token provider returned `nil`.
