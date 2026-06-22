@@ -345,7 +345,8 @@ public struct WorkflowActionGroupFetcher: Sendable {
         let needsRefresh = allNeedingRefresh.prefix(maxRefreshConcurrency)
         let skippedCount = allNeedingRefresh.count - needsRefresh.count
         if skippedCount > 0 {
-            log("fetchJobsForRun -- \(skippedCount) in-progress job(s) skipped beyond cap (\(maxRefreshConcurrency)) — these jobs will serve stale data every poll cycle until the capped jobs conclude")
+            log("fetchJobsForRun -- \(skippedCount) in-progress job(s) skipped beyond cap (\(maxRefreshConcurrency)) — "
+                + "these jobs will serve stale data every poll cycle until the capped jobs conclude")
         }
         guard !needsRefresh.isEmpty else { return initial }
 
@@ -386,5 +387,6 @@ public struct WorkflowActionGroupFetcher: Sendable {
 }
 
 // MARK: - Protocol conformance
+/// Empty conformance — the struct already satisfies the protocol requirement via its ``fetch(for:cache:)`` method.
 
 extension WorkflowActionGroupFetcher: WorkflowActionGroupFetcherProtocol {}
