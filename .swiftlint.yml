@@ -9,7 +9,7 @@ excluded:
   - Package.swift
   - Tests
 
-# ── Opt-in rules ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── Opt-in rules ─────────────────────────────────────────────────────────────────────────────────────────────────────
 opt_in_rules:
   - closure_spacing        # consistent spacing inside closure braces
   - explicit_init          # disallow explicit .init() calls where redundant
@@ -24,7 +24,7 @@ opt_in_rules:
   - missing_docs           # require /// doc comments on all declarations
   - file_header            # enforce standard file header format
 
-# ── Rule configuration ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── Rule configuration ────────────────────────────────────────────────────────────────────────────────────────────────────────
 nesting:
   type_level:
     warning: 2
@@ -52,7 +52,7 @@ missing_docs:
 file_header:
   required_pattern: "^// [\\w+]+\\.swift\\n// RunnerBar"
 
-# ── Disabled rules ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── Disabled rules ────────────────────────────────────────────────────────────────────────────────────────────────────────
 disabled_rules:
   - todo                                    # TODOs are acceptable during active development
   - trailing_comma                          # SwiftPM/Xcode auto-formatter conflicts with this
@@ -60,7 +60,7 @@ disabled_rules:
   # opening_brace re-enabled — PR #205 fixed these
   # colon re-enabled — PR #205 did a full sweep
   # cyclomatic_complexity re-enabled with warning: 17 (target 15 in #1406)
-  # file_length re-enabled with warning: 500 (target 500 — reached after #1513 file split, closing #1406)
+  # file_length re-enabled with warning: 620, error: 800 (target 500 in #1406)
   # superfluous_disable_command re-enabled — stale suppressions now caught by CI
   # line_length re-enabled with warning: 200, error: 240 (target 160 in #1406)
   # function_body_length re-enabled with warning: 90 (target 80 in #1406)
@@ -75,7 +75,7 @@ line_length:
   error: 240
 
 file_length:
-  warning: 500   # reached after #1513 4-way transport file split; all 4 files under 300 lines
+  warning: 620   # tightened from 800 (phase 1) → target 500 tracked in #1406
   error: 800
 
 cyclomatic_complexity:
