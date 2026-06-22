@@ -8,24 +8,61 @@ import os
 /// Absolute path to the system `unzip` binary, always present on macOS.
 private let unzipBinaryPath = "/usr/bin/unzip" // NOSONAR — fixed OS path
 
-// MARK: - Job log (plain text, 1 call)
+// MARK: - LogFetcher
+
+/// Injectable fetcher for GitHub Actions job and workflow-run logs.
+///
+/// Wraps a `GitHubTransportProtocol` and exposes single-job and grouped-run log
+/// fetching. All network access goes through the injected transport, making this
+/// type testable without live network access.
+///
+/// ## Concurrency
+///
+/// `LogFetcher` is a `Sendable` struct — it holds a transport existential and
+/// an optional `JSONDecoder` (both safe for concurrent use). The public entry
+/// points are `async` but do not carry `@concurrent` since they are called from
+/// `Task.detached` contexts (not actor-isolated code paths).
+public struct LogFetcher: Sendable {
+    /// The injected GitHub transport used for all network access.
+    private let transport: any GitHubTransportProtocol
+
+    /// Creates a fetcher backed by the given transport.
+    ///
+    /// - Parameter transport: Defaults to `sharedGitHubTransport` so existing
+    ///   production call sites need no change beyond switching to the instance method.
+    public init(transport: any GitHubTransportProtocol = sharedGitHubTransport) {
+        self.transport = transport
+    }
+
+    // MARK: - Job log (plain text, 1 call)
+
+    /// Fetches the full plain-text log for a single job.
+    ///
+    /// `/actions/jobs/{id}/logs` 302-redirects to a short-lived S3 URL; the transport follows it.
+    /// Returns `nil` when `scope` is not in `owner/repo` form, the request fails,
+    /// or the response body looks like a JSON error object (starts with `"{"`).
+    ///
+    /// - Parameters:
+    ///   - jobID: The GitHub Actions job ID.
+    ///   - scope: The `owner/repo` string identifying the repository.
+    /// - Returns: Plain-text log content, or `nil` on failure.
+    public func fetchJobLog(jobID: Int, scope: String) async -> String? {
+        guard scope.contains("/") else { return nil }
+        guard let data = await transport.raw("repos/\(scope)/actions/jobs/\(jobID)/logs"),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        if text.hasPrefix("{") { return nil }
+        return text
+    }
+}
+
+// MARK: - Free-function forwarding wrappers (legacy)
 
 /// Fetches the full plain-text log for a single job.
 ///
-/// `/actions/jobs/{id}/logs` 302-redirects to a short-lived S3 URL; the transport follows it.
-/// Returns `nil` when `scope` is not in `owner/repo` form, the request fails,
-/// or the response body looks like a JSON error object (starts with `"{"`).
-///
-/// - Parameters:
-///   - jobID: The GitHub Actions job ID.
-///   - scope: The `owner/repo` string identifying the repository.
-/// - Returns: Plain-text log content, or `nil` on failure.
+/// Delegates to `LogFetcher().fetchJobLog(jobID:scope:)` for backward compatibility.
+@available(*, deprecated, message: "Use LogFetcher().fetchJobLog instead")
 public func fetchJobLog(jobID: Int, scope: String) async -> String? {
-    guard scope.contains("/") else { return nil }
-    guard let data = await ghRaw("repos/\(scope)/actions/jobs/\(jobID)/logs"),
-          let text = String(data: data, encoding: .utf8) else { return nil }
-    if text.hasPrefix("{") { return nil }
-    return text
+    await LogFetcher().fetchJobLog(jobID: jobID, scope: scope)
 }
 
 // MARK: - Action logs (ZIP per run, N calls)
