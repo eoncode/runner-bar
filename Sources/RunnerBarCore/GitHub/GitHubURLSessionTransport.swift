@@ -156,7 +156,7 @@ extension GitHubTransport {
 
 // MARK: - Shared execution core
 
-/// The result of a single URLSession round-trip through `urlSessionExecute`.
+/// The result of a single URLSession round-trip through `execute`.
 internal enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
     ///
