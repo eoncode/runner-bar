@@ -183,7 +183,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
 
         // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
         // Fix #1041: completed-only SHAs (groups that finished between polls) are
-        // now included so they can be routed through the normal cache/display pipeline.
+        // now included so they can be routed through the normal cache[sha]display pipeline.
         // De-duplication of old completed groups re-triggering the failure hook is
         // handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
         if let data = cData,
@@ -200,7 +200,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
         var groups = Array(repeating: WorkflowActionGroup?.none, count: shaEntries.count)
         await withTaskGroup(of: (Int, WorkflowActionGroup).self) { group in
             for (i, (sha, shaRuns)) in shaEntries.enumerated() {
-                group.addTask { await self.buildActionGroup(index: i, sha: sha, shaRuns: shaRuns, scope: scope, cache: cache) }
+                group.addTask { await self.buildActionGroup(index: i, sha: sha, shaRuns: shaRuns, scope: scope, cache: cache[sha] }
             }
             for await (i, actionGroup) in group { groups[i] = actionGroup }
         }
@@ -285,6 +285,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
         sha: String
     ) async -> [ActiveJob] {
         if let cached = cache[sha],
+           cached.repo == scope,
            !cached.jobs.isEmpty,
            // Both conditions required: a job can be concluded while one of its steps
            // is still marked in-progress (stale step data from a mid-poll snapshot).
