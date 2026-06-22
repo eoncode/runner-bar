@@ -384,3 +384,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
         return result
     }
 }
+
+// MARK: - Protocol conformance
+
+extension WorkflowActionGroupFetcher: WorkflowActionGroupFetcherProtocol {}

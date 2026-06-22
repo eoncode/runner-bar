@@ -218,9 +218,10 @@ actor RunnerStore {
     /// Fetcher for workflow action groups. Injected at init so the polling path
     /// is testable without live network access.
     ///
-    /// Production callers use the default (`sharedGitHubTransport`); unit tests
-    /// substitute a `StubTransport` or other `GitHubTransportProtocol` conformer.
-    let actionGroupFetcher: WorkflowActionGroupFetcher
+    /// Production callers use the default (`WorkflowActionGroupFetcher()`); unit tests
+    /// can supply a stub conformer that returns predetermined groups without
+    /// needing an HTTP stub.
+    let actionGroupFetcher: any WorkflowActionGroupFetcherProtocol
 
     // MARK: - Aggregate status
 
@@ -263,7 +264,7 @@ actor RunnerStore {
         preferencesStore: any AppPreferencesStoreProtocol,
         scopeStore: any ScopeStoreProtocol,
         onStatusUpdate: @escaping @MainActor @Sendable () -> Void,
-        actionGroupFetcher: WorkflowActionGroupFetcher = WorkflowActionGroupFetcher()
+        actionGroupFetcher: any WorkflowActionGroupFetcherProtocol = WorkflowActionGroupFetcher()
     ) {
         self.viewModel = viewModel
         self.localRunnerStore = localRunnerStore
