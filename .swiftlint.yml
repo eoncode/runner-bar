@@ -60,7 +60,7 @@ disabled_rules:
   # opening_brace re-enabled — PR #205 fixed these
   # colon re-enabled — PR #205 did a full sweep
   # cyclomatic_complexity re-enabled with warning: 17 (target 15 in #1406)
-  # file_length re-enabled with warning: 700, error: 800 (target 500 in #1406)
+  # file_length re-enabled with warning: 500 (target 500 — reached after #1513 file split, closing #1406)
   # superfluous_disable_command re-enabled — stale suppressions now caught by CI
   # line_length re-enabled with warning: 200, error: 240 (target 160 in #1406)
   # function_body_length re-enabled with warning: 90 (target 80 in #1406)
@@ -75,7 +75,7 @@ line_length:
   error: 240
 
 file_length:
-  warning: 705   # temporary regression from 620 due to #1513 transport refactor (protocol defaults + review fixes + URLSession injection); target 500 tracked in #1406
+  warning: 500   # reached after #1513 4-way transport file split; all 4 files under 300 lines
   error: 800
 
 cyclomatic_complexity:

@@ -295,4 +295,3 @@ extension GitHubTransport {
         return resp.token
     }
 }
-

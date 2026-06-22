@@ -24,11 +24,11 @@ public struct GitHubTransport: GitHubTransportProtocol {
     /// Kept as a stored `let` (one allocation per `GitHubTransport` instance)
     /// rather than per-call-site to avoid repeated allocations while remaining
     /// functionally identical to a local instance in every call site.
-    private let decoder: JSONDecoder
+    let decoder: JSONDecoder
 
     /// JSON encoder — stateless after `init`, safe for concurrent reads.
     /// Same rationale as `decoder`.
-    private let encoder: JSONEncoder
+    let encoder: JSONEncoder
 
     /// URL session used for all network requests. Defaults to `URLSession.shared`.
     /// Tests inject a custom session (e.g. via `URLProtocol` subclassing) to stub
@@ -92,7 +92,7 @@ extension GitHubTransport {
     ///   - configure: Closure applied to the pre-built `URLRequest` before sending.
     ///     Defaults to the identity closure. Must be `@Sendable`.
     @concurrent
-    private func execute(
+    func execute(
         _ endpoint: String,
         timeout: TimeInterval,
         logTag: String,
@@ -151,7 +151,7 @@ extension GitHubTransport {
 // MARK: - Shared execution core
 
 /// The result of a single URLSession round-trip through `urlSessionExecute`.
-private enum ExecuteResult {
+enum ExecuteResult {
     /// 2xx response with optional body data (empty `Data()` for 204 No Content).
     ///
     /// `linkHeader` carries the raw `Link:` response header value used by paginated callers
@@ -191,7 +191,7 @@ private enum ExecuteResult {
 // MARK: - Private response models
 
 /// Decoding model for the GitHub "set runner labels" PUT response.
-private struct LabelsResponse: Decodable {
+struct LabelsResponse: Decodable {
     /// A single runner label entry returned by the GitHub API.
     struct Label: Decodable {
         /// The display name of the runner label.
@@ -200,4 +200,3 @@ private struct LabelsResponse: Decodable {
     /// The full list of labels attached to the runner after the PUT.
     let labels: [Label]
 }
-
