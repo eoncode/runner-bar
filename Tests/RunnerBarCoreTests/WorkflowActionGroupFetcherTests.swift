@@ -332,6 +332,47 @@ struct WorkflowActionGroupFetcherTests {
         #expect(t.callCount == 7)
     }
 
+    // MARK: - Cross-scope cache miss
+
+    @Test func fetchActionGroups_cachedEntryForDifferentRepo_notServedAsCacheHit() async {
+        // A concluded cache entry whose `repo` doesn't match the fetch scope must
+        // NOT be served — the `cached.repo == scope` guard must fire and re-fetch.
+        let sha = "crossreposha"
+        let cached = WorkflowActionGroup(
+            headSha: sha,
+            label: sha,
+            title: "Other repo commit",
+            headBranch: nil,
+            repo: "owner/other-repo",
+            runs: [],
+            jobs: [ActiveJob(
+                id: 777, name: "other-build", htmlUrl: nil,
+                status: .completed, conclusion: .success, isDimmed: false,
+                runnerName: nil, scope: "owner/other-repo",
+                startedAt: nil, completedAt: Date(), steps: []
+            )],
+            firstJobStartedAt: nil, lastJobCompletedAt: nil, createdAt: nil
+        )
+        let e = runsEnvelope([])
+        let t = StubTransport(responses: [
+            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+                minimalRun(id: 1, sha: sha, status: "completed", conclusion: "success"),
+            ]),
+            "repos/owner/repo/actions/runs?status=queued": e,
+            "repos/owner/repo/actions/runs?status=completed": e,
+            "repos/owner/repo/actions/runs/1/jobs": jobsEnvelope([
+                minimalJob(id: 888, status: "completed", conclusion: "success"),
+            ]),
+        ])
+        let f = WorkflowActionGroupFetcher(transport: t)
+        let r = await f.fetch(for: "owner/repo", cache: [sha: cached])
+        #expect(r.count == 1)
+        // Cache was bypassed — live job id 888 is returned, not cached id 777.
+        #expect(r.first?.jobs.first?.id == 888)
+        // 3 status calls + 1 jobs-list call = 4 (not 3 — cache was not served)
+        #expect(t.callCount == 4)
+    }
+
     // MARK: - Repo label
 
     @Test func fetchActionGroups_singleRun_groupHasCorrectRepoScope() async {
