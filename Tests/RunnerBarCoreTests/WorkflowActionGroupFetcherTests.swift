@@ -95,8 +95,6 @@ private func minimalJob(id: Int, name: String = "build",
 
 @Suite("WorkflowActionGroupFetcher")
 struct WorkflowActionGroupFetcherTests {
-    /// Creates a `StubTransport` with empty response envelopes for the three
-    /// status endpoints. Callers supply additional endpoint fixtures to override.
     /// Builds a concluded `WorkflowActionGroup` cache entry for the given SHA.
     /// Callers supply only the fields that vary between tests.
     private func makeCachedGroup(
