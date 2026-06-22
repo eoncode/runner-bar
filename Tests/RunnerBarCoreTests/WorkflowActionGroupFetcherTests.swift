@@ -242,7 +242,7 @@ struct WorkflowActionGroupFetcherTests {
             ]),
             "repos/owner/repo/actions/runs?status=queued": e,
             "repos/owner/repo/actions/runs?status=completed": e,
-            "repos/owner/repo/actions/runs/1/jobs?per_page=100": jobsEnvelope([
+            "repos/owner/repo/actions/runs/1/jobs": jobsEnvelope([
                 minimalJob(id: 888, status: "completed", conclusion: "success"),
             ]),
         ])
@@ -272,7 +272,7 @@ struct WorkflowActionGroupFetcherTests {
             ]),
             "repos/owner/repo/actions/runs?status=queued": e,
             "repos/owner/repo/actions/runs?status=completed": e,
-            "repos/owner/repo/actions/runs/\(runID)/jobs?per_page=100": jobsEnvelope(inProgressJobs),
+            "repos/owner/repo/actions/runs/\(runID)/jobs": jobsEnvelope(inProgressJobs),
         ]
         // Register individual job endpoints for the first 3 jobs only.
         // Job 104 is deliberately unregistered — if the cap fails, the fetcher
