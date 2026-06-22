@@ -90,10 +90,10 @@ public extension GitHubTransportProtocol {
 
 /// The concrete `URLSession`-backed implementation of `GitHubTransportProtocol`.
 ///
-/// `GitHubTransport` owns the decoder, encoder, rate-limiter, and token-provider.
+/// `GitHubTransport` owns the decoder, encoder, session, rate-limiter, and token-provider.
 /// Callers that need a real network transport use `sharedGitHubTransport`; tests
 /// inject a mock conformer or construct a custom instance via
-/// `init(decoder:encoder:rateLimiter:tokenProvider:)`.
+/// `init(decoder:encoder:session:rateLimiter:tokenProvider:)`.
 ///
 /// **Thread safety:** `GitHubTransport` is a value type (`struct`) whose `let` properties are
 /// either value types or `Sendable` reference types. `JSONDecoder`/`JSONEncoder` are reference
@@ -135,20 +135,22 @@ public struct GitHubTransport: GitHubTransportProtocol {
     /// All parameters have defaults that reproduce the production behaviour,
     /// so `GitHubTransport()` is ready to use without any configuration.
     ///
-    /// - Parameters:
     ///   - decoder: JSON decoder instance. Defaults to a fresh `JSONDecoder()`.
     ///   - encoder: JSON encoder instance. Defaults to a fresh `JSONEncoder()`.
+    ///   - session: URL session for all network requests. Defaults to `URLSession.shared`.
     ///   - rateLimiter: Rate-limit actor. Defaults to the shared `rateLimitActor`.
     ///   - tokenProvider: Closure returning the current GitHub PAT or `nil`.
     ///     Defaults to `githubTokenCore()` from `GitHubTransportShim`.
     public init(
         decoder: JSONDecoder = JSONDecoder(),
         encoder: JSONEncoder = JSONEncoder(),
+        session: URLSession = .shared,
         rateLimiter: some RateLimitActorProtocol = rateLimitActor,
         tokenProvider: (@Sendable () -> String?)? = nil
     ) {
         self.decoder = decoder
         self.encoder = encoder
+        self.session = session
         self.rateLimiter = rateLimiter
         self.tokenProvider = tokenProvider ?? { githubTokenCore() }
     }
@@ -195,7 +197,7 @@ extension GitHubTransport {
             : makeRequest(url: url, token: token, timeout: timeout)
         let req = configure(baseReq)
         do {
-            let (data, response) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse else {
                 return .networkError(URLError(.badServerResponse))
             }
@@ -453,6 +455,9 @@ extension GitHubTransport {
     // MARK: cancelRun
 
     /// Cancels the workflow run identified by `runID` inside `scope`.
+    ///
+    /// - Note: Intentionally repo-only — GitHub does not provide a uniform
+    ///   org-scoped cancel endpoint, so we only support `repo` scope here.
     @concurrent
     @discardableResult
     public func cancelRun(runID: Int, scope scopeString: String) async -> Bool {
@@ -465,7 +470,9 @@ extension GitHubTransport {
             return false
         }
         let endpoint = "\(scope.apiPrefix)/actions/runs/\(runID)/cancel"
-        return await post(endpoint) != nil
+        let result = await post(endpoint) != nil
+        log("cancelRun › run=\(runID) scope=\(scopeString) success=\(result)")
+        return result
     }
 
     // MARK: patchRunnerLabels
@@ -640,6 +647,10 @@ public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data?
 }
 
 /// Fire-and-forget POST alias. Returns `true` on 2xx.
+///
+/// - Note: This shim intentionally discards the response body by converting the
+///   `Data?` return from ``GitHubTransport/post(_:body:timeout:)`` to a `Bool`.
+///   If a future caller needs the response body, use the transport method directly.
 /// - SeeAlso: ``GitHubTransport/post(_:body:timeout:)``
 @concurrent
 @discardableResult

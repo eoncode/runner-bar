@@ -5,9 +5,14 @@
 // Uses URLProtocol stubbing + SpyRateLimitActor to exercise the real pagination
 // loop, rate-limit partial-return, and auth-abort logic.
 //
-// @Suite(.serialized) is required because each test calls
-// StubURLProtocol.reset() on the shared stub registry. Swift Testing runs
-// struct suites concurrently by default; without serialization these resets race.
+// @Suite(.serialized) is required because:
+// 1. Each test calls StubURLProtocol.reset() on the shared stub registry. Swift
+//    Testing runs struct suites concurrently by default; without serialization
+//    these resets race with concurrent test methods.
+// 2. init()/deinit call URLProtocol.registerClass/unregisterClass, which mutate
+//    global URLSession configuration. Serialization ensures one test's setup and
+//    teardown completes before the next test begins, preventing register/unregister
+//    races between suites.
 //
 // The suite is a `final class` (not a struct) so that `deinit` is available to
 // call URLProtocol.unregisterClass. Without unregistration, StubURLProtocol
