@@ -84,13 +84,10 @@ public extension GitHubTransportProtocol {
 /// inject a mock conformer or construct a custom instance via
 /// `init(decoder:encoder:rateLimiter:tokenProvider:)`.
 ///
-/// **Thread safety:** `GitHubTransport` is a value type (`struct`) whose stored
-/// `let` properties are all either value types or `Sendable` reference types:
-/// `JSONDecoder` and `JSONEncoder` are reference types (classes), but are
-/// `@unchecked Sendable` and stateless after `init`, making them safe for
-/// concurrent reads; `any RateLimitActorProtocol` and the token closure are
-/// explicitly `Sendable`.
-/// Concurrent reads are safe; there is no mutable state.
+/// **Thread safety:** `GitHubTransport` is a value type (`struct`) whose `let` properties are
+/// either value types or `Sendable` reference types. `JSONDecoder`/`JSONEncoder` are reference
+/// types (classes) but are `@unchecked Sendable` and stateless after `init`, making them safe
+/// for concurrent reads. Concurrent reads are safe; there is no mutable state.
 public struct GitHubTransport: GitHubTransportProtocol {
 
     // MARK: - Stored properties
@@ -587,25 +584,6 @@ public func urlSessionAPIPaginated(
     timeout: TimeInterval = 60
 ) async -> Data? {
     await sharedGitHubTransport.apiPaginated(endpoint, timeout: timeout)
-}
-
-/// Internal overload retaining the injected rateLimiter for existing unit tests.
-/// ⚠️ Limitations:
-/// - The constructed `GitHubTransport` uses the **real** `githubTokenCore()` token provider
-///   (`tokenProvider: nil` → defaults to `{ githubTokenCore() }`). Tests that need both a
-///   custom rate-limiter **and** a custom token (e.g. to exercise the `.noToken` path
-///   deterministically) must construct `GitHubTransport(rateLimiter:tokenProvider:)` directly.
-/// - The injected `rateLimiter` is isolated to this ephemeral instance and does not share
-///   state with `sharedGitHubTransport`.
-/// - SeeAlso: TODO(#1513-cleanup): retire when Items 4 and 8 migrate callers to `GitHubTransportProtocol` mocks.
-@concurrent
-func urlSessionAPIPaginated(
-    _ endpoint: String,
-    timeout: TimeInterval = 60,
-    rateLimiter: some RateLimitActorProtocol
-) async -> Data? {
-    let transport = GitHubTransport(rateLimiter: rateLimiter)
-    return await transport.apiPaginated(endpoint, timeout: timeout)
 }
 
 /// Fetches raw bytes (log endpoints). Returns `nil` on failure.

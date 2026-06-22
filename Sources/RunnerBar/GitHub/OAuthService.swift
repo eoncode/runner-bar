@@ -255,13 +255,11 @@ final class OAuthService {
     }
 }
 
-// MARK: - File‑private response models
+// MARK: - Private response models
 
 /// Response body from the GitHub OAuth token exchange.
 /// GitHub returns HTTP 200 even on failure, so both `accessToken` and `error` are optional.
-/// - Note: `fileprivate` ensures these types are visible within this file only, the same
-///   effective scope as `private` at top-level but self-documenting about the intent.
-fileprivate struct OAuthTokenResponse: Decodable {
+private struct OAuthTokenResponse: Decodable {
     /// The access token returned on success; `nil` when GitHub reports an error.
     let accessToken: String?
     /// Short error code returned by GitHub on failure (e.g. `"bad_verification_code"`).
@@ -296,7 +294,7 @@ fileprivate struct OAuthTokenResponse: Decodable {
 /// - Makes the three required fields explicit and compiler-checked.
 /// - Eliminates stringly-typed key spellings (`"client_id"` etc.) at the call site.
 /// - Documents the contract of the GitHub OAuth token endpoint inline.
-fileprivate struct OAuthTokenRequest: Encodable {
+private struct OAuthTokenRequest: Encodable {
     /// The GitHub OAuth app client ID.
     let clientID: String
     /// The GitHub OAuth app client secret.
