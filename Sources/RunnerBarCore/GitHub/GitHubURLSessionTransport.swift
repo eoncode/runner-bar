@@ -60,6 +60,8 @@ public extension GitHubTransportProtocol {
         await raw(endpoint, timeout: 60)
     }
     /// Posts `body` to `endpoint` using the default 30 s timeout.
+    /// - Warning: Mock conformers must **not** add a 2-arg `post(_:body:)` override — doing so
+    ///   shadows this default and prevents dispatch to the required 3-arg `post(_:body:timeout:)`.
     func post(_ endpoint: String, body: Data? = nil) async -> Data? {
         await post(endpoint, body: body, timeout: 30)
     }
@@ -94,21 +96,21 @@ public struct GitHubTransport: GitHubTransportProtocol {
     /// Kept as a stored `let` (one allocation per `GitHubTransport` instance)
     /// rather than per-call-site to avoid repeated allocations while remaining
     /// functionally identical to a local instance in every call site.
-    let decoder: JSONDecoder
+    private let decoder: JSONDecoder
 
     /// JSON encoder — stateless after `init`, safe for concurrent reads.
     /// Same rationale as `decoder`.
-    let encoder: JSONEncoder
+    private let encoder: JSONEncoder
 
     /// Rate-limit actor used to arm/clear the global back-off window.
     /// Defaults to the module-level `rateLimitActor` singleton so existing
     /// production behaviour is preserved without any call-site changes.
-    let rateLimiter: any RateLimitActorProtocol
+    private let rateLimiter: any RateLimitActorProtocol
 
     /// Synchronous closure that returns the current GitHub PAT, or `nil` when
     /// the user is signed out. Defaults to `githubTokenCore()` from
     /// `GitHubTransportShim` so the token pipeline is unchanged at launch.
-    let tokenProvider: @Sendable () -> String?
+    private let tokenProvider: @Sendable () -> String?
 
     // MARK: - Init
 
@@ -588,7 +590,7 @@ public func urlSessionAPIPaginated(
 /// ⚠️ The constructed `GitHubTransport` uses the **real** `githubTokenCore()` token provider —
 /// the injected `rateLimiter` is isolated to this ephemeral instance and does not share state
 /// with `sharedGitHubTransport`. Verify paginated tests are not token-sensitive before Item 8 migration.
-/// Remove after tests are migrated to mock `GitHubTransportProtocol` conformers.
+/// - Note: TODO(#1513-cleanup): retire when Items 4 and 8 migrate callers to `GitHubTransportProtocol` mocks.
 @concurrent
 func urlSessionAPIPaginated(
     _ endpoint: String,
