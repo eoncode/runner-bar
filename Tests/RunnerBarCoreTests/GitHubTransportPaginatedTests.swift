@@ -1,7 +1,7 @@
 // GitHubTransportPaginatedTests.swift
 // RunnerBarCoreTests
 //
-// Integration tests for urlSessionAPIPaginated.
+// Integration tests for GitHubTransport.apiPaginated.
 // Uses URLProtocol stubbing + configureGHToken + SpyRateLimitActor to exercise
 // the real pagination loop, rate-limit partial-return, and auth-abort logic.
 //
@@ -122,12 +122,12 @@ private let apiBase = GitHubConstants.apiBase + "/"
 
 // MARK: - GitHubTransportPaginatedTests
 
-/// Integration tests for `urlSessionAPIPaginated`.
+/// Integration tests for `GitHubTransport.apiPaginated`.
 ///
 /// Strategy: register `StubURLProtocol` on `URLSession.shared`'s configuration,
 /// inject a real token via `configureGHToken`, and inject a `SpyRateLimitActor`
-/// to control and observe rate-limit state. Each test calls `urlSessionAPIPaginated`
-/// directly — the real pagination loop runs every time.
+/// via `GitHubTransport(rateLimiter:)` to control and observe rate-limit state.
+/// Each test constructs a `GitHubTransport` directly — the real pagination loop runs every time.
 ///
 /// `.serialized` is required because this suite mutates two pieces of shared global
 /// state: the module-level token provider (`configureGHToken`) and the
@@ -181,7 +181,8 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         let items = decodeItems(result)
         #expect(items?.count == 2)
@@ -217,7 +218,8 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Must be non-nil: a valid empty response is distinguishable from a failure.
         #expect(result != nil)
@@ -254,7 +256,8 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Page 1 was accumulated before the bad page stopped things.
         let items = decodeItems(result)
@@ -284,7 +287,8 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // hadAtLeastOneSuccessfulPage is false — nil must be returned.
         #expect(result == nil)
@@ -315,7 +319,8 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         let items = decodeItems(result)
         #expect(items?.count == 2)
@@ -341,7 +346,8 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         #expect(result == nil)
         let wasSetCalled = await spy.setCalled
@@ -384,7 +390,8 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial results from page 1 must be returned.
         let items = decodeItems(result)
@@ -434,7 +441,8 @@ final class GitHubTransportPaginatedTests {
         )
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial item from page 1 must be returned — not nil.
         #expect(result != nil)
@@ -474,7 +482,8 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         #expect(result == nil)
         let wasSetCalled = await spy.setCalled
@@ -508,7 +517,8 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial item from page 1 must be discarded — nil returned.
         #expect(result == nil)
@@ -519,7 +529,7 @@ final class GitHubTransportPaginatedTests {
 
     // MARK: - No token returns nil immediately
 
-    /// When no GitHub token is configured, `urlSessionAPIPaginated` returns nil
+    /// When no GitHub token is configured, `GitHubTransport.apiPaginated` returns nil
     /// without making any network request.
     ///
     /// - Note: This test temporarily sets the token provider to `{ nil }` on the
@@ -532,7 +542,8 @@ final class GitHubTransportPaginatedTests {
         defer { configureGHToken { "test-token" } }
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
         #expect(result == nil)
         // clear() must NOT be called — no-token returns without making a request.
         let wasClearCalled = await spy.clearCalled
@@ -613,7 +624,8 @@ final class GitHubTransportPaginatedTests {
         defer { configureGHToken { "test-token" } }
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial item from page 1 must be discarded — nil returned.
         #expect(result == nil)
@@ -653,7 +665,8 @@ final class GitHubTransportPaginatedTests {
         let spy = SpyRateLimitActor()
         await spy.setUp(isLimited: true)
 
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Page 1 must still be fetched — pre-armed state does not block the request.
         let items = decodeItems(result)
@@ -694,7 +707,8 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial results from page 1 must be returned — not nil.
         #expect(result != nil)
@@ -730,7 +744,8 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let result = await urlSessionAPIPaginated("/orgs/test/actions/runners", rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy)
+        let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // No items were ever collected — nil must be returned.
         #expect(result == nil)

@@ -85,8 +85,11 @@ public extension GitHubTransportProtocol {
 /// `init(decoder:encoder:rateLimiter:tokenProvider:)`.
 ///
 /// **Thread safety:** `GitHubTransport` is a value type (`struct`) whose stored
-/// `let` properties are all either value types (`JSONDecoder`, `JSONEncoder`) or
-/// `Sendable` reference types (`any RateLimitActorProtocol`, the token closure).
+/// `let` properties are all either value types or `Sendable` reference types:
+/// `JSONDecoder` and `JSONEncoder` are reference types (classes), but are
+/// `@unchecked Sendable` and stateless after `init`, making them safe for
+/// concurrent reads; `any RateLimitActorProtocol` and the token closure are
+/// explicitly `Sendable`.
 /// Concurrent reads are safe; there is no mutable state.
 public struct GitHubTransport: GitHubTransportProtocol {
 
@@ -587,10 +590,14 @@ public func urlSessionAPIPaginated(
 }
 
 /// Internal overload retaining the injected rateLimiter for existing unit tests.
-/// ⚠️ The constructed `GitHubTransport` uses the **real** `githubTokenCore()` token provider —
-/// the injected `rateLimiter` is isolated to this ephemeral instance and does not share state
-/// with `sharedGitHubTransport`. Verify paginated tests are not token-sensitive before Item 8 migration.
-/// - Note: TODO(#1513-cleanup): retire when Items 4 and 8 migrate callers to `GitHubTransportProtocol` mocks.
+/// ⚠️ Limitations:
+/// - The constructed `GitHubTransport` uses the **real** `githubTokenCore()` token provider
+///   (`tokenProvider: nil` → defaults to `{ githubTokenCore() }`). Tests that need both a
+///   custom rate-limiter **and** a custom token (e.g. to exercise the `.noToken` path
+///   deterministically) must construct `GitHubTransport(rateLimiter:tokenProvider:)` directly.
+/// - The injected `rateLimiter` is isolated to this ephemeral instance and does not share
+///   state with `sharedGitHubTransport`.
+/// - SeeAlso: TODO(#1513-cleanup): retire when Items 4 and 8 migrate callers to `GitHubTransportProtocol` mocks.
 @concurrent
 func urlSessionAPIPaginated(
     _ endpoint: String,
