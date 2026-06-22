@@ -11,7 +11,7 @@ import Foundation
 /// shims below forward to real network behaviour with zero configuration.
 /// Tests that need a fake transport should construct a `GitHubTransport` directly
 /// (or provide a mock conformer to `GitHubTransportProtocol`) and NOT use this global.
-let sharedGitHubTransport = GitHubTransport()
+public let sharedGitHubTransport = GitHubTransport()
 
 // MARK: - Backward-compatibility shims
 //
@@ -67,6 +67,10 @@ public func urlSessionDelete(_ endpoint: String, timeout: TimeInterval = 30) asy
 
 /// Thin GET alias used widely across the module.
 /// - SeeAlso: ``GitHubTransport/apiAsync(_:timeout:)``
+///
+/// Uses `nonisolated(nonsending)` rather than `@concurrent` because this is a
+/// pure pass-through with no lock acquisition before the first suspension point
+/// — `@concurrent` would add unnecessary cooperative-pool dispatch overhead.
 nonisolated(nonsending)
 public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data? {
     await urlSessionAPIAsync(endpoint, timeout: timeout)
@@ -76,11 +80,12 @@ public func ghAPI(_ endpoint: String, timeout: TimeInterval = 20) async -> Data?
 /// - Note: Intentionally discards response body (converts `Data?` → `Bool`).
 ///   Use the transport method directly if the body is needed.
 /// - SeeAlso: ``GitHubTransport/post(_:body:timeout:)``
-@concurrent
-@discardableResult
+///
 /// - Note: Returns `Bool` (success/failure) rather than `Data?`. This is an intentional
 ///   lossy conversion — existing callers only care whether the POST succeeded. If the
 ///   response body ever becomes relevant, call `sharedGitHubTransport.post(_:)` directly.
+@concurrent
+@discardableResult
 public func ghPost(_ endpoint: String) async -> Bool {
     let result = await sharedGitHubTransport.post(endpoint)
     let success = result != nil
@@ -99,6 +104,7 @@ public func deleteRunnerByID(scope scopeString: String, runnerID: Int) async -> 
 /// Replaces all custom labels on a runner.
 /// - SeeAlso: ``GitHubTransport/patchRunnerLabels(scope:runnerID:labels:)``
 @concurrent
+@discardableResult
 public func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
     await sharedGitHubTransport.patchRunnerLabels(scope: scopeString, runnerID: runnerID, labels: labels)
 }

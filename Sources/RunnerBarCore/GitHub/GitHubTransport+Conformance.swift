@@ -198,8 +198,21 @@ extension GitHubTransport {
 
     // MARK: patchRunnerLabels
 
+    /// Decoding model for the GitHub "set runner labels" PUT response.
+    /// `private` to this file — used only by `patchRunnerLabels`.
+    private struct LabelsResponse: Decodable {
+        /// A single runner label entry returned by the GitHub API.
+        struct Label: Decodable {
+            /// The display name of the runner label.
+            let name: String
+        }
+        /// The full list of labels attached to the runner after the PUT.
+        let labels: [Label]
+    }
+
     /// Replaces the labels on `runnerID` within `scope`. Returns the updated label list, or `nil`.
     @concurrent
+    @discardableResult
     public func patchRunnerLabels(scope scopeString: String, runnerID: Int, labels: [String]) async -> [String]? {
         guard let scope = Scope.parse(scopeString) else {
             log("patchRunnerLabels › invalid scope: \(scopeString)")

@@ -171,10 +171,10 @@ internal enum ExecuteResult {
     /// Distinct from `.networkError` and `.httpError(401)` so callers can treat
     /// "never had a token" separately from "token was valid but rejected by GitHub".
     ///
-    /// - Note: Non-paginated callers (`urlSessionAPIAsync`, `urlSessionPost`,
-    ///   `urlSessionPut`, `urlSessionRaw`) use `guard case .success` and therefore
+    /// - Note: Non-paginated callers (`apiAsync`, `post`,
+    ///   `put`, `raw`) use `guard case .success` and therefore
     ///   treat `.noToken` identically to every other non-success result — a `nil`
-    ///   return. Only `urlSessionAPIPaginated` pattern-matches this case explicitly,
+    ///   return. Only `apiPaginated` pattern-matches this case explicitly,
     ///   to discard any partially collected items and return `nil` rather than partial
     ///   results. If you add a new call site that needs to distinguish "never had a
     ///   token" from other failures, match `.noToken` directly instead of relying on
@@ -192,17 +192,4 @@ internal enum ExecuteResult {
     case permissionDenied
     /// Network-level error (timeout, no connectivity, etc.).
     case networkError(Error)
-}
-
-// MARK: - Internal response models
-
-/// Decoding model for the GitHub "set runner labels" PUT response.
-struct LabelsResponse: Decodable {
-    /// A single runner label entry returned by the GitHub API.
-    struct Label: Decodable {
-        /// The display name of the runner label.
-        let name: String
-    }
-    /// The full list of labels attached to the runner after the PUT.
-    let labels: [Label]
 }

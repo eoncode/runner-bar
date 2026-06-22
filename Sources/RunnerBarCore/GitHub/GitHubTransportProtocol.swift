@@ -37,6 +37,7 @@ public protocol GitHubTransportProtocol: Sendable {
     func cancelRun(runID: Int, scope: String) async -> Bool
     /// Replaces the labels on `runnerID` within `scope`. Returns the updated label list, or `nil`.
     @concurrent
+    @discardableResult
     func patchRunnerLabels(scope: String, runnerID: Int, labels: [String]) async -> [String]?
     /// Fetches a short-lived registration token for the runner identified by `scope`.
     @concurrent
