@@ -15,26 +15,37 @@ import Foundation
 ///   existing call sites require no changes when migrated.
 public protocol GitHubTransportProtocol: Sendable {
     /// Fetches a single GitHub REST API page. Returns decoded `Data` on success, `nil` on any failure.
+    @concurrent
     func apiAsync(_ endpoint: String, timeout: TimeInterval) async -> Data?
     /// Fetches and concatenates all pages for a paginated GitHub REST endpoint.
+    @concurrent
     func apiPaginated(_ endpoint: String, timeout: TimeInterval) async -> Data?
     /// Fetches raw bytes (e.g. log files) following redirects. Returns `nil` on failure.
+    @concurrent
     func raw(_ endpoint: String, timeout: TimeInterval) async -> Data?
     /// Posts `body` to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
+    @concurrent
     func post(_ endpoint: String, body: Data?, timeout: TimeInterval) async -> Data?
     /// Sends a PUT with `body` to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
+    @concurrent
     func put(_ endpoint: String, body: Data, timeout: TimeInterval) async -> Data?
     /// Sends a DELETE to `endpoint`. Returns `true` on 2xx, `false` otherwise.
+    @concurrent
     func delete(_ endpoint: String, timeout: TimeInterval) async -> Bool
     /// Cancels the workflow run identified by `runID` inside `scope`.
+    @concurrent
     func cancelRun(runID: Int, scope: String) async -> Bool
     /// Replaces the labels on `runnerID` within `scope`. Returns the updated label list, or `nil`.
+    @concurrent
     func patchRunnerLabels(scope: String, runnerID: Int, labels: [String]) async -> [String]?
     /// Fetches a short-lived registration token for the runner identified by `scope`.
+    @concurrent
     func fetchRegistrationToken(scope: String) async -> String?
     /// Fetches a short-lived removal token for the runner identified by `scope`.
+    @concurrent
     func fetchRemovalToken(scope: String) async -> String?
     /// Removes the runner identified by `runnerID` from `scope`. Returns `true` on success.
+    @concurrent
     func deleteRunnerByID(scope: String, runnerID: Int) async -> Bool
 }
 
@@ -101,6 +112,11 @@ public struct GitHubTransport: GitHubTransportProtocol {
     /// JSON encoder — stateless after `init`, safe for concurrent reads.
     /// Same rationale as `decoder`.
     private let encoder: JSONEncoder
+
+    /// URL session used for all network requests. Defaults to `URLSession.shared`.
+    /// Tests inject a custom session (e.g. via `URLProtocol` subclassing) to stub
+    /// network responses without hitting the real GitHub API.
+    private let session: URLSession
 
     /// Rate-limit actor used to arm/clear the global back-off window.
     /// Defaults to the module-level `rateLimitActor` singleton so existing
