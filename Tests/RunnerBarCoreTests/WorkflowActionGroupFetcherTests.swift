@@ -62,11 +62,15 @@ private func envelope(key: String, _ values: [[String: Any]]) -> Data {
     return (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
 }
 
+private func withConclusion(_ d: inout [String: Any], _ conclusion: String?) {
+    if let conclusion { d["conclusion"] = conclusion }
+}
+
 private func minimalRun(id: Int, sha: String, status: String = "completed",
                         conclusion: String? = "success",
                         name: String = "CI") -> [String: Any] {
     var d: [String: Any] = ["id": id, "head_sha": sha, "status": status, "name": name]
-    if let conclusion { d["conclusion"] = conclusion }
+    withConclusion(&d, conclusion)
     return d
 }
 
@@ -74,7 +78,7 @@ private func minimalJob(id: Int, name: String = "build",
                         status: String = "completed",
                         conclusion: String? = "success") -> [String: Any] {
     var d: [String: Any] = ["id": id, "name": name, "status": status]
-    if let conclusion { d["conclusion"] = conclusion }
+    withConclusion(&d, conclusion)
     return d
 }
 
