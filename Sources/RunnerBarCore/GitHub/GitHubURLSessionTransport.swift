@@ -585,6 +585,9 @@ public func urlSessionAPIPaginated(
 }
 
 /// Internal overload retaining the injected rateLimiter for existing unit tests.
+/// ⚠️ The constructed `GitHubTransport` uses the **real** `githubTokenCore()` token provider —
+/// the injected `rateLimiter` is isolated to this ephemeral instance and does not share state
+/// with `sharedGitHubTransport`. Verify paginated tests are not token-sensitive before Item 8 migration.
 /// Remove after tests are migrated to mock `GitHubTransportProtocol` conformers.
 @concurrent
 func urlSessionAPIPaginated(
