@@ -200,10 +200,10 @@ actor RunnerStore {
     private let preferencesStore: any AppPreferencesStoreProtocol
     /// Injected scope store. Provides `activeScopes`.
     /// Pass `ScopeStore.shared` in production; inject a test double in unit tests.
-    // `internal` (not `private`) so that RunnerStore+PollBridge.swift can read
-    // this property from a cross-file extension; Swift `private` does not cross
-    // file boundaries within an extension.
-    let scopeStore: any ScopeStoreProtocol
+    /// `internal` (not `private`) so that `RunnerStore+PollBridge.swift` can read
+    /// this property from a cross-file extension; Swift `private` does not cross
+    /// file boundaries within an extension.
+    internal let scopeStore: any ScopeStoreProtocol
     /// Called on the main actor at the end of every fetch cycle to refresh the status-bar
     /// icon. Injected at init to avoid accessing `NSApp.delegate` from inside the actor
     /// body (PR Principle #4: no singleton access inside actor bodies).
