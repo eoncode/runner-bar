@@ -3,6 +3,41 @@
 
 import Foundation
 
+// MARK: - Transport protocol
+
+/// Protocol describing the full set of GitHub network operations performed by
+/// `GitHubTransport`. Conforming types can be injected in place of the real
+/// `URLSession`-backed implementation, enabling unit tests to run without
+/// network access.
+///
+/// - Note: All methods mirror the existing free-function signatures in this file.
+///   Default `timeout` values match the legacy free-function defaults so that
+///   existing call sites require no changes when migrated.
+public protocol GitHubTransportProtocol: Sendable {
+    /// Fetches a single GitHub REST API page. Returns decoded `Data` on success, `nil` on any failure.
+    func apiAsync(_ endpoint: String, timeout: TimeInterval) async -> Data?
+    /// Fetches and concatenates all pages for a paginated GitHub REST endpoint.
+    func apiPaginated(_ endpoint: String, timeout: TimeInterval) async -> Data?
+    /// Fetches raw bytes (e.g. log files) following redirects. Returns `nil` on failure.
+    func raw(_ endpoint: String, timeout: TimeInterval) async -> Data?
+    /// Posts `body` to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
+    func post(_ endpoint: String, body: Data?, timeout: TimeInterval) async -> Data?
+    /// Sends a PUT with `body` to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
+    func put(_ endpoint: String, body: Data, timeout: TimeInterval) async -> Data?
+    /// Sends a DELETE to `endpoint`. Returns `true` on 2xx, `false` otherwise.
+    func delete(_ endpoint: String, timeout: TimeInterval) async -> Bool
+    /// Cancels the workflow run identified by `runID` inside `scope`.
+    func cancelRun(runID: Int, scope: String) async -> Bool
+    /// Replaces the labels on `runnerID` within `scope`. Returns the updated label list, or `nil`.
+    func patchRunnerLabels(scope: String, runnerID: Int, labels: [String]) async -> [String]?
+    /// Fetches a short-lived registration token for the runner identified by `scope`.
+    func fetchRegistrationToken(scope: String) async -> String?
+    /// Fetches a short-lived removal token for the runner identified by `scope`.
+    func fetchRemovalToken(scope: String) async -> String?
+    /// Removes the runner identified by `runnerID` from `scope`. Returns `true` on success.
+    func deleteRunnerByID(scope: String, runnerID: Int) async -> Bool
+}
+
 /// Shared decoder — intentionally kept as a module-level singleton rather than
 /// replaced with per-call-site `let decoder = JSONDecoder()`. The decoder is
 /// stateless after initialisation and safe for concurrent reads (no mutable
