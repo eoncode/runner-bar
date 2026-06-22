@@ -2,14 +2,12 @@
 // RunnerBarCoreTests
 //
 // Integration tests for GitHubTransport.apiPaginated.
-// Uses URLProtocol stubbing + configureGHToken + SpyRateLimitActor to exercise
-// the real pagination loop, rate-limit partial-return, and auth-abort logic.
+// Uses URLProtocol stubbing + SpyRateLimitActor to exercise the real pagination
+// loop, rate-limit partial-return, and auth-abort logic.
 //
-// @Suite(.serialized) is required: paginatedReturnsNilWhenNoToken and
-// paginatedReturnsNilWhenTokenRevokedMidPagination mutate the shared module-level
-// token provider, and each test calls StubURLProtocol.reset() on the shared stub
-// registry. Swift Testing runs struct suites concurrently by default; without
-// serialization these two pieces of shared global state race.
+// @Suite(.serialized) is required because each test calls
+// StubURLProtocol.reset() on the shared stub registry. Swift Testing runs
+// struct suites concurrently by default; without serialization these resets race.
 //
 // The suite is a `final class` (not a struct) so that `deinit` is available to
 // call URLProtocol.unregisterClass. Without unregistration, StubURLProtocol
@@ -125,14 +123,13 @@ private let apiBase = GitHubConstants.apiBase + "/"
 /// Integration tests for `GitHubTransport.apiPaginated`.
 ///
 /// Strategy: register `StubURLProtocol` on `URLSession.shared`'s configuration,
-/// inject a real token via `configureGHToken`, and inject a `SpyRateLimitActor`
-/// via `GitHubTransport(rateLimiter:)` to control and observe rate-limit state.
-/// Each test constructs a `GitHubTransport` directly — the real pagination loop runs every time.
+/// inject a `SpyRateLimitActor` and an explicit `tokenProvider` closure directly
+/// into a `GitHubTransport` instance. Each test constructs its own transport —
+/// no shared global state is mutated for token or rate-limiter concerns.
 ///
-/// `.serialized` is required because this suite mutates two pieces of shared global
-/// state: the module-level token provider (`configureGHToken`) and the
-/// `StubURLProtocol` stub registry (`reset()`). Without serialization, Swift Testing
-/// runs all tests concurrently and these mutations race.
+/// `.serialized` is still required because `StubURLProtocol.reset()` mutates the
+/// shared stub registry. Without serialization, concurrent test runs would race
+/// on that registry.
 ///
 /// The suite is a `final class` so that `deinit` is available to call
 /// `URLProtocol.unregisterClass`. Swift Testing supports class-based suites;
@@ -141,19 +138,13 @@ private let apiBase = GitHubConstants.apiBase + "/"
 final class GitHubTransportPaginatedTests {
 
     init() {
-        // Register stub protocol and a valid token before every test.
         URLProtocol.registerClass(StubURLProtocol.self)
-        configureGHToken { "test-token" }
     }
 
     deinit {
         // Unregister so StubURLProtocol does not intercept requests in other
         // test suites that run in the same process after this suite completes.
         URLProtocol.unregisterClass(StubURLProtocol.self)
-        // Reset the token provider to its default (nil) so that unrelated test
-        // suites running in the same process do not accidentally inherit
-        // "test-token" and issue live authenticated requests via githubTokenCore().
-        configureGHToken { nil }
     }
 
     // MARK: - Happy path: two-page accumulation
@@ -181,7 +172,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         let items = decodeItems(result)
@@ -218,7 +209,7 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Must be non-nil: a valid empty response is distinguishable from a failure.
@@ -256,7 +247,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Page 1 was accumulated before the bad page stopped things.
@@ -268,7 +259,7 @@ final class GitHubTransportPaginatedTests {
     // MARK: - Non-array body on the very first page
 
     /// A 200 response with a non-array JSON body on the *first* page must return nil
-    /// and must NOT arm the rate-limit actor (clear() IS called because urlSessionExecute
+    /// and must NOT arm the rate-limit actor (clear() IS called because execute()
     /// clears on any 2xx before the decode step).
     ///
     /// paginatedReturnsNilOnNonArrayBodyFirstPage was removed in #1500 — it was a
@@ -287,7 +278,7 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // hadAtLeastOneSuccessfulPage is false — nil must be returned.
@@ -295,7 +286,7 @@ final class GitHubTransportPaginatedTests {
         // A 200 with a non-array body is not a rate-limit event — set() must not fire.
         let wasSetCalled = await spy.setCalled
         #expect(wasSetCalled == false)
-        // clear() IS called — urlSessionExecute calls clearIfNotLimited() on every 2xx.
+        // clear() IS called — execute() calls clearIfNotLimited() on every 2xx.
         let wasClearCalled = await spy.clearCalled
         #expect(wasClearCalled == true)
     }
@@ -319,7 +310,7 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         let items = decodeItems(result)
@@ -346,7 +337,7 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         #expect(result == nil)
@@ -390,7 +381,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial results from page 1 must be returned.
@@ -441,7 +432,7 @@ final class GitHubTransportPaginatedTests {
         )
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial item from page 1 must be returned — not nil.
@@ -482,7 +473,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         #expect(result == nil)
@@ -517,7 +508,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial item from page 1 must be discarded — nil returned.
@@ -529,20 +520,13 @@ final class GitHubTransportPaginatedTests {
 
     // MARK: - No token returns nil immediately
 
-    /// When no GitHub token is configured, `GitHubTransport.apiPaginated` returns nil
+    /// When no GitHub token is configured, `apiPaginated` returns nil
     /// without making any network request.
-    ///
-    /// - Note: This test temporarily sets the token provider to `{ nil }` on the
-    ///   shared module-level `TransportBox`. It is safe only because
-    ///   `@Suite(.serialized)` guarantees no other test in this suite runs
-    ///   concurrently. Do not remove `.serialized` from the suite declaration.
     @Test func paginatedReturnsNilWhenNoToken() async {
         StubURLProtocol.reset()
-        configureGHToken { nil }
-        defer { configureGHToken { "test-token" } }
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { nil })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
         #expect(result == nil)
         // clear() must NOT be called — no-token returns without making a request.
@@ -559,33 +543,22 @@ final class GitHubTransportPaginatedTests {
     /// correctly sets `didFailAuth = true` after page 1 has already been fetched.
     ///
     /// Mechanism: a lock-protected call counter is installed as the token provider.
-    /// The first call to `githubTokenCore()` (page-1 iteration) returns "test-token";
-    /// every subsequent call returns nil. Page 1 therefore succeeds and its item is
-    /// accumulated. On the page-2 iteration, `urlSessionExecute` hits
-    /// `guard let token = githubTokenCore()`, gets nil, and returns `.noToken`
-    /// without making a network request. The pagination loop catches `.noToken`,
-    /// sets `didFailAuth`, breaks, and returns nil — discarding the page-1 item.
+    /// The first call (page-1 iteration) returns "test-token"; every subsequent
+    /// call returns nil. Page 1 therefore succeeds and its item is accumulated.
+    /// On the page-2 iteration, `execute()` hits `guard let token = tokenProvider()`,
+    /// gets nil, and returns `.noToken` without making a network request. The
+    /// pagination loop catches `.noToken`, sets `didFailAuth`, breaks, and returns
+    /// nil — discarding the page-1 item.
     ///
     /// The page-2 URL is intentionally NOT registered in `StubURLProtocol`: if the
     /// token guard is ever accidentally removed, the stub miss produces a
     /// `fileDoesNotExist` URLError rather than silently serving data, making the
     /// regression immediately visible.
     ///
-    /// Assertions:
-    /// - `result == nil` — partial items are discarded on auth failure
-    /// - `spy.setCalled == false` — `.noToken` is not a rate-limit event
-    ///
-    /// - Note: Safe under `@Suite(.serialized)` — the token mutation is sequenced
-    ///   away from all other tests in this suite.
-    ///
-    /// - Warning: The call-count provider assumes `urlSessionExecute` calls
-    ///   `githubTokenCore()` exactly once per pagination iteration (the
-    ///   `guard let token = githubTokenCore()` at the top of the function).
-    ///   If that guard is hoisted, cached, or called more than once per iteration,
-    ///   the counter will misfire — either returning nil too early (page-1 gets
-    ///   nil, test passes trivially) or too late (page-2 still gets a token,
-    ///   stub miss produces a network error instead of `.noToken`). Re-examine
-    ///   this test whenever `urlSessionExecute`'s token-read pattern changes.
+    /// - Warning: The call-count provider assumes `execute()` calls `tokenProvider()`
+    ///   exactly once per pagination iteration. If that guard is hoisted, cached, or
+    ///   called more than once per iteration, the counter will misfire. Re-examine
+    ///   this test whenever `execute()`'s token-read pattern changes.
     @Test func paginatedReturnsNilWhenTokenRevokedMidPagination() async {
         StubURLProtocol.reset()
         let page1URL = "\(apiBase)orgs/test/actions/runners"
@@ -601,9 +574,7 @@ final class GitHubTransportPaginatedTests {
         // Page 2 is deliberately NOT registered — see method doc above.
 
         // Call-count-based token provider: returns a valid token for the first
-        // githubTokenCore() read (page-1 iteration) and nil for all subsequent
-        // reads (page-2 iteration onward). The lock makes the counter safe under
-        // @Suite(.serialized) without requiring an actor hop.
+        // tokenProvider() read (page-1 iteration) and nil for all subsequent reads.
         //
         // - Note: `@unchecked Sendable` is intentional. `count` is guarded by
         //   `lock` on every read and write, making concurrent access safe.
@@ -620,11 +591,8 @@ final class GitHubTransportPaginatedTests {
             }
         }
         let counter = TokenCallCounter()
-        configureGHToken { counter.next() }
-        defer { configureGHToken { "test-token" } }
-
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { counter.next() })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial item from page 1 must be discarded — nil returned.
@@ -642,10 +610,9 @@ final class GitHubTransportPaginatedTests {
 
     /// A pre-armed rate-limit state (`spy.isLimited = true` before the call) does
     /// NOT block the initial request — the rate-limit check only fires inside
-    /// `urlSessionExecute` after receiving a 403/429 response. Since page 1
-    /// returns 200, the 2xx handler calls `clearIfNotLimited()` which is a no-op
-    /// because `isLimited` is already true, preserving the active limit window
-    /// set by a concurrent scope fetch.
+    /// `execute()` after receiving a 403/429 response. Since page 1 returns 200,
+    /// the 2xx handler calls `clearIfNotLimited()` which is a no-op because
+    /// `isLimited` is already true, preserving the active limit window.
     ///
     /// Verifies: the pre-armed state is not checked at call-entry, so page-1 items
     /// are returned; `spy.setCalled` remains false (no rate-limit response was
@@ -665,7 +632,7 @@ final class GitHubTransportPaginatedTests {
         let spy = SpyRateLimitActor()
         await spy.setUp(isLimited: true)
 
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Page 1 must still be fetched — pre-armed state does not block the request.
@@ -707,7 +674,7 @@ final class GitHubTransportPaginatedTests {
         ), for: page2URL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // Partial results from page 1 must be returned — not nil.
@@ -744,7 +711,7 @@ final class GitHubTransportPaginatedTests {
         ), for: pageURL)
 
         let spy = SpyRateLimitActor()
-        let transport = GitHubTransport(rateLimiter: spy)
+        let transport = GitHubTransport(rateLimiter: spy, tokenProvider: { "test-token" })
         let result = await transport.apiPaginated("/orgs/test/actions/runners")
 
         // No items were ever collected — nil must be returned.
