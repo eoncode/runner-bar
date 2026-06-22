@@ -214,6 +214,42 @@ struct WorkflowActionGroupFetcherTests {
         #expect(r.first?.jobs.first?.id == 999)
         #expect(t.callCount == 3)
     }
+// MARK: - Refresh cap
+
+    @Test func fetchActionGroups_inProgressJobsCapped_atMaxRefreshConcurrency() async {
+        // When a single run has 4 in-progress jobs but maxRefreshConcurrency is 3,
+        // only 3 individual /actions/jobs/{id} refresh calls are dispatched.
+        // The 4th job silently uses stale data — verified by the call count not reaching 8.
+        let runID = 1
+        let sha = "capcap"
+        let inProgressJobs = (1 ... 4).map { i in
+            minimalJob(id: 100 + i, status: "in_progress", conclusion: nil)
+        }
+        let e = runsEnvelope([])
+        var responses: [String: Data] = [
+            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+                minimalRun(id: runID, sha: sha, status: "in_progress", conclusion: nil),
+            ]),
+            "repos/owner/repo/actions/runs?status=queued": e,
+            "repos/owner/repo/actions/runs?status=completed": e,
+            "repos/owner/repo/actions/runs/\(runID)/jobs?per_page=100": jobsEnvelope(inProgressJobs),
+        ]
+        // Register individual job endpoints for the first 3 jobs only.
+        // Job 104 is deliberately unregistered — if the cap fails, the fetcher
+        // will call it and get nil; the callCount assertion detects the difference.
+        for i in 1 ... 3 {
+            let job = minimalJob(id: 100 + i, status: "in_progress", conclusion: nil)
+            responses["repos/owner/repo/actions/jobs/\(100 + i)"] =
+                (try? JSONSerialization.data(withJSONObject: job)) ?? Data()
+        }
+        let t = StubTransport(responses: responses)
+        let f = WorkflowActionGroupFetcher(transport: t)
+        let r = await f.fetchActionGroups(for: "owner/repo")
+        #expect(r.count == 1)
+        #expect(r.first?.jobs.count == 4)
+        // 3 status calls + 1 jobs-list call + 3 refresh calls = 7 (not 8)
+        #expect(t.callCount == 7)
+    }
 
     // MARK: - Repo label
 
