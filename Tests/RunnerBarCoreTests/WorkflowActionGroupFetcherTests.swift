@@ -131,6 +131,17 @@ struct WorkflowActionGroupFetcherTests {
         return StubTransport(responses: base)
     }
 
+    /// Creates a `StubTransport` with a single run + its jobs endpoint, used by
+    /// cache-bypass tests that need to verify re-fetching from the API.
+    private func makeBypassTransport(sha: String, jobData: Data) -> StubTransport {
+        makeTransport(with: [
+            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+                minimalRun(id: 1, sha: sha, status: "completed", conclusion: "success"),
+            ]),
+            "repos/owner/repo/actions/runs/1/jobs": jobData,
+        ])
+    }
+
     // MARK: - Org scope guard
 
     @Test func fetchActionGroupsOrgScopeReturnsEmpty() async {
@@ -241,14 +252,7 @@ struct WorkflowActionGroupFetcherTests {
             jobName: "stale-build",
             steps: [JobStep(id: 1, name: "lint", status: .inProgress)]
         )
-        let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
-                minimalRun(id: 1, sha: sha, status: "completed", conclusion: "success"),
-            ]),
-            "repos/owner/repo/actions/runs/1/jobs": jobsEnvelope([
-                minimalJob(id: 888, status: "completed", conclusion: "success"),
-            ]),
-        ])
+        let t = makeBypassTransport(sha: sha, jobData: jobsEnvelope([minimalJob(id: 888, status: "completed", conclusion: "success")]))
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo", cache: [sha: cached])
         #expect(r.count == 1)
@@ -303,14 +307,7 @@ struct WorkflowActionGroupFetcherTests {
             jobName: "other-build",
             jobScope: "owner/other-repo"
         )
-        let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
-                minimalRun(id: 1, sha: sha, status: "completed", conclusion: "success"),
-            ]),
-            "repos/owner/repo/actions/runs/1/jobs": jobsEnvelope([
-                minimalJob(id: 888, status: "completed", conclusion: "success"),
-            ]),
-        ])
+        let t = makeBypassTransport(sha: sha, jobData: jobsEnvelope([minimalJob(id: 888, status: "completed", conclusion: "success")]))
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo", cache: [sha: cached])
         #expect(r.count == 1)
