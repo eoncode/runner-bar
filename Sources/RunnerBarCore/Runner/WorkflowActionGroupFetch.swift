@@ -133,6 +133,14 @@ public struct WorkflowActionGroupFetcher: Sendable {
     /// The transport used for all GitHub API calls made by this fetcher.
     private let transport: any GitHubTransportProtocol
 
+    /// Shared JSON decoder reused across all API response decoding.
+    ///
+    /// Owned by the struct (rather than captured from file scope) so this type is
+    /// self-contained and safe to use across actor boundaries. `JSONDecoder.decode`
+    /// is stateless and safe for concurrent use. All configuration is set at the
+    /// declaration site below — never mutated after initialisation.
+    private let decoder = JSONDecoder()
+
     /// Creates a fetcher backed by the given transport.
     ///
     /// - Parameter transport: Defaults to `sharedGitHubTransport` so existing

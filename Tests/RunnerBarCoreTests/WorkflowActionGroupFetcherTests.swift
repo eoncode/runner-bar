@@ -23,13 +23,11 @@ import Testing
 /// `"repos/owner/repo/actions/runs?status=in_progress"` without worrying about
 /// the trailing `&per_page=N` that the fetcher appends.
 ///
-/// - Note: `nonisolated(unsafe)` on the responses dictionary is acceptable here
-///   because `StubTransport` instances are never shared across concurrent tasks
-///   in these tests — each test constructs its own instance and accesses it only
-///   from the test body and the async fetch under test, which are sequenced by
-///   Swift Testing's structured concurrency.
+/// The `responses` dictionary is a `let` property (immutable, set once at init),
+/// so `[String: Data]` is implicitly `Sendable` and the compiler synthesises
+/// `Sendable` conformance for `StubTransport` without any unsafe escape hatch.
 struct StubTransport: GitHubTransportProtocol {
-    nonisolated(unsafe) private let responses: [String: Data]
+    private let responses: [String: Data]
 
     /// Creates a stub with the given endpoint-prefix → Data map.
     /// Pass `[:]` for a fully empty transport (all endpoints return nil).
