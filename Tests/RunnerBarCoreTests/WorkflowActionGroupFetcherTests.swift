@@ -62,14 +62,6 @@ private func envelope(key: String, _ values: [[String: Any]]) -> Data {
     return (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
 }
 
-private func runsEnvelope(_ runs: [[String: Any]]) -> Data {
-    envelope(key: "workflow_runs", runs)
-}
-
-private func jobsEnvelope(_ jobs: [[String: Any]]) -> Data {
-    envelope(key: "jobs", jobs)
-}
-
 private func minimalRun(id: Int, sha: String, status: String = "completed",
                         conclusion: String? = "success",
                         name: String = "CI") -> [String: Any] {
@@ -121,7 +113,7 @@ struct WorkflowActionGroupFetcherTests {
     }
 
     private func makeTransport(with responses: [String: Data] = [:]) -> StubTransport {
-        let e = runsEnvelope([])
+        let e = envelope(key: "workflow_runs", [])
         var base: [String: Data] = [
             "repos/owner/repo/actions/runs?status=in_progress": e,
             "repos/owner/repo/actions/runs?status=queued": e,
@@ -135,11 +127,19 @@ struct WorkflowActionGroupFetcherTests {
     /// cache-bypass tests that need to verify re-fetching from the API.
     private func makeBypassTransport(sha: String, jobData: Data) -> StubTransport {
         makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", [
                 minimalRun(id: 1, sha: sha, status: "completed", conclusion: "success"),
             ]),
             "repos/owner/repo/actions/runs/1/jobs": jobData,
         ])
+    }
+
+    /// Convenience overload: single concluded run with one completed live job.
+    private func makeCompletedRunTransport(sha: String, liveJobID: Int = 888) -> StubTransport {
+        makeBypassTransport(
+            sha: sha,
+            jobData: envelope(key: "jobs", [minimalJob(id: liveJobID, status: "completed", conclusion: "success")])
+        )
     }
 
     // MARK: - Org scope guard
@@ -172,9 +172,9 @@ struct WorkflowActionGroupFetcherTests {
             minimalRun(id: 1, sha: sha, status: "in_progress", conclusion: nil, name: "build"),
             minimalRun(id: 2, sha: sha, status: "in_progress", conclusion: nil, name: "test"),
         ]
-        let j = jobsEnvelope([minimalJob(id: 101), minimalJob(id: 102)])
+        let j = envelope(key: "jobs", [minimalJob(id: 101), minimalJob(id: 102)])
         let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope(runs),
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", runs),
             "repos/owner/repo/actions/runs/1/jobs": j,
             "repos/owner/repo/actions/runs/2/jobs": j,
         ])
@@ -189,12 +189,12 @@ struct WorkflowActionGroupFetcherTests {
 
     @Test func fetchActionGroupsTwoRunsDifferentShaProducesTwoGroups() async {
         let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", [
                 minimalRun(id: 1, sha: "aaa111", status: "in_progress", conclusion: nil),
                 minimalRun(id: 2, sha: "bbb222", status: "in_progress", conclusion: nil),
             ]),
-            "repos/owner/repo/actions/runs/1/jobs": jobsEnvelope([]),
-            "repos/owner/repo/actions/runs/2/jobs": jobsEnvelope([]),
+            "repos/owner/repo/actions/runs/1/jobs": envelope(key: "jobs", []),
+            "repos/owner/repo/actions/runs/2/jobs": envelope(key: "jobs", []),
         ])
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo")
@@ -205,12 +205,12 @@ struct WorkflowActionGroupFetcherTests {
     // MARK: - Sort order
 
     @Test func fetchActionGroupsMixedStatusesInProgressSortsFirst() async {
-        let j = jobsEnvelope([])
+        let j = envelope(key: "jobs", [])
         let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", [
                 minimalRun(id: 1, sha: "aaainprogress", status: "in_progress", conclusion: nil),
             ]),
-            "repos/owner/repo/actions/runs?status=completed": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=completed": envelope(key: "workflow_runs", [
                 minimalRun(id: 2, sha: "bbbcompleted", status: "completed", conclusion: "success"),
             ]),
             "repos/owner/repo/actions/runs/1/jobs": j,
@@ -230,7 +230,7 @@ struct WorkflowActionGroupFetcherTests {
         let cached = makeCachedGroup(sha: sha)
         // No /jobs endpoints registered — fetcher must not call them.
         let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", [
                 minimalRun(id: 1, sha: sha, status: "completed", conclusion: "success"),
             ]),
         ])
@@ -252,7 +252,7 @@ struct WorkflowActionGroupFetcherTests {
             jobName: "stale-build",
             steps: [JobStep(id: 1, name: "lint", status: .inProgress)]
         )
-        let t = makeBypassTransport(sha: sha, jobData: jobsEnvelope([minimalJob(id: 888, status: "completed", conclusion: "success")]))
+        let t = makeCompletedRunTransport(sha: sha)
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo", cache: [sha: cached])
         #expect(r.count == 1)
@@ -271,10 +271,10 @@ struct WorkflowActionGroupFetcherTests {
             minimalJob(id: 100 + i, status: "in_progress", conclusion: nil)
         }
         var extras: [String: Data] = [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", [
                 minimalRun(id: runID, sha: sha, status: "in_progress", conclusion: nil),
             ]),
-            "repos/owner/repo/actions/runs/\(runID)/jobs": jobsEnvelope(inProgressJobs),
+            "repos/owner/repo/actions/runs/\(runID)/jobs": envelope(key: "jobs", inProgressJobs),
         ]
         // Register individual job endpoints for the first 3 jobs only.
         // Job 104 is deliberately unregistered — if the cap fails, the fetcher
@@ -307,7 +307,7 @@ struct WorkflowActionGroupFetcherTests {
             jobName: "other-build",
             jobScope: "owner/other-repo"
         )
-        let t = makeBypassTransport(sha: sha, jobData: jobsEnvelope([minimalJob(id: 888, status: "completed", conclusion: "success")]))
+        let t = makeCompletedRunTransport(sha: sha)
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo", cache: [sha: cached])
         #expect(r.count == 1)
@@ -321,10 +321,10 @@ struct WorkflowActionGroupFetcherTests {
 
     @Test func fetchActionGroupsSingleRunGroupHasCorrectRepoScope() async {
         let t = makeTransport(with: [
-            "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
+            "repos/owner/repo/actions/runs?status=in_progress": envelope(key: "workflow_runs", [
                 minimalRun(id: 1, sha: "scopecheck", status: "in_progress", conclusion: nil),
             ]),
-            "repos/owner/repo/actions/runs/1/jobs": jobsEnvelope([]),
+            "repos/owner/repo/actions/runs/1/jobs": envelope(key: "jobs", []),
         ])
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo")
