@@ -94,6 +94,7 @@ struct WorkflowActionGroupFetcherTests {
         let f = WorkflowActionGroupFetcher(transport: s)
         let r = await f.fetchActionGroups(for: "myorg")
         #expect(r.isEmpty)
+        #expect(s.callCount == 0)
     }
 
     // MARK: - Empty API responses
