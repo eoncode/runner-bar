@@ -189,7 +189,7 @@ public struct WorkflowActionGroupFetcher: Sendable {
 
         // Phase 2: fetch recently completed runs and merge into ALL SHA groups.
         // Fix #1041: completed-only SHAs (groups that finished between polls) are
-        // now included so they can be routed through the normal cache[sha]display pipeline.
+        // now included so they can be routed through the normal cache/display pipeline.
         // De-duplication of old completed groups re-triggering the failure hook is
         // handled upstream by PollResultBuilder.buildGroupState via seenGroupIDs.
         if let data = cData,

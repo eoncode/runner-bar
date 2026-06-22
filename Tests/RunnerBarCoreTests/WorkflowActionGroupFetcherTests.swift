@@ -34,8 +34,17 @@ struct StubTransport: GitHubTransportProtocol {
     init(responses: [String: Data] = [:]) {
         // Sort longest prefix first so `apiAsync` picks the most specific match.
         // Same-length prefix ordering is undefined (input is a Dictionary).
-        self.responses = responses.map { (prefix: $0.key, data: $0.value) }
+        let sorted = responses.map { (prefix: $0.key, data: $0.value) }
             .sorted { $0.prefix.count > $1.prefix.count }
+        // Detect same-length prefixes that share a common stem — these would be
+        // ambiguous under longest-prefix matching. This is a low-cost safety net
+        // for test authors; production code is unaffected.
+        for i in 0 ..< max(0, sorted.count - 1) {
+            let a = sorted[i], b = sorted[i + 1]
+            assert(a.prefix.count != b.prefix.count || !b.prefix.hasPrefix(a.prefix),
+                   "Ambiguous same-length prefix entries: \(sorted.map(\.prefix))")
+        }
+        self.responses = sorted
     }
 
     func apiAsync(_ endpoint: String, timeout _: TimeInterval) async -> Data? {
