@@ -59,12 +59,12 @@ struct StubTransport: GitHubTransportProtocol {
 
 private func runsEnvelope(_ runs: [[String: Any]]) -> Data {
     let envelope: [String: Any] = ["workflow_runs": runs]
-    return (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
+    return try! JSONSerialization.data(withJSONObject: envelope)
 }
 
 private func jobsEnvelope(_ jobs: [[String: Any]]) -> Data {
     let envelope: [String: Any] = ["jobs": jobs]
-    return (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
+    return try! JSONSerialization.data(withJSONObject: envelope)
 }
 
 private func minimalRun(id: Int, sha: String, status: String = "completed",
