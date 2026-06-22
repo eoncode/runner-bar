@@ -103,6 +103,7 @@ public struct GitHubTransport: GitHubTransportProtocol {
 
 // MARK: - GitHubTransport: core execution
 
+/// Core execution pipeline shared by all `GitHubTransportProtocol` methods.
 extension GitHubTransport {
 
     /// Single shared token-guard → URL-resolve → send → handle-response pipeline
@@ -218,6 +219,7 @@ private enum ExecuteResult {
 
 // MARK: - GitHubTransport: protocol conformance
 
+/// Conformance to ``GitHubTransportProtocol`` — all public API surface.
 extension GitHubTransport {
 
     // MARK: apiAsync

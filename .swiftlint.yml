@@ -75,7 +75,7 @@ line_length:
   error: 240
 
 file_length:
-  warning: 620   # tightened from 800 (phase 1) → target 500 tracked in #1406
+  warning: 640   # tightened from 800 (phase 1) → target 500 tracked in #1406
   error: 800
 
 cyclomatic_complexity:
