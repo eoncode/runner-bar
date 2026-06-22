@@ -263,13 +263,10 @@ struct WorkflowActionGroupFetcherTests {
         let inProgressJobs = (1 ... 4).map { i in
             minimalJob(id: 100 + i, status: "in_progress", conclusion: nil)
         }
-        let e = runsEnvelope([])
-        var responses: [String: Data] = [
+        var extras: [String: Data] = [
             "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
                 minimalRun(id: runID, sha: sha, status: "in_progress", conclusion: nil),
             ]),
-            "repos/owner/repo/actions/runs?status=queued": e,
-            "repos/owner/repo/actions/runs?status=completed": e,
             "repos/owner/repo/actions/runs/\(runID)/jobs": jobsEnvelope(inProgressJobs),
         ]
         // Register individual job endpoints for the first 3 jobs only.
@@ -277,10 +274,10 @@ struct WorkflowActionGroupFetcherTests {
         // will call it and get nil; the callCount assertion detects the difference.
         for i in 1 ... 3 {
             let job = minimalJob(id: 100 + i, status: "in_progress", conclusion: nil)
-            responses["repos/owner/repo/actions/jobs/\(100 + i)"] =
+            extras["repos/owner/repo/actions/jobs/\(100 + i)"] =
                 (try? JSONSerialization.data(withJSONObject: job)) ?? Data()
         }
-        let t = StubTransport(responses: responses)
+        let t = makeTransport(with: extras)
         let f = WorkflowActionGroupFetcher(transport: t)
         let r = await f.fetch(for: "owner/repo")
         #expect(r.count == 1)
@@ -295,20 +292,13 @@ struct WorkflowActionGroupFetcherTests {
         // A concluded cache entry whose `repo` doesn't match the fetch scope must
         // NOT be served — the `cached.repo == scope` guard must fire and re-fetch.
         let sha = "crossreposha"
-        let cached = WorkflowActionGroup(
-            headSha: sha,
-            label: sha,
+        let cached = makeCachedGroup(
+            sha: sha,
             title: "Other repo commit",
-            headBranch: nil,
             repo: "owner/other-repo",
-            runs: [],
-            jobs: [ActiveJob(
-                id: 777, name: "other-build", htmlUrl: nil,
-                status: .completed, conclusion: .success, isDimmed: false,
-                runnerName: nil, scope: "owner/other-repo",
-                startedAt: nil, completedAt: Date(), steps: []
-            )],
-            firstJobStartedAt: nil, lastJobCompletedAt: nil, createdAt: nil
+            jobID: 777,
+            jobName: "other-build",
+            jobScope: "owner/other-repo"
         )
         let t = makeTransport(with: [
             "repos/owner/repo/actions/runs?status=in_progress": runsEnvelope([
