@@ -150,9 +150,6 @@ actor RunnerStore {
     /// Fetcher for workflow action groups. Injected at init so the polling path
     /// is testable without live network access.
     ///
-/// Fetcher for workflow action groups. Injected at init so the polling path
-    /// is testable without live network access.
-    ///
     /// Production callers use the default (`WorkflowActionGroupFetcher()`); unit tests
     /// can supply a stub conformer that returns predetermined groups without
     /// needing an HTTP stub.

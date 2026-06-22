@@ -47,7 +47,7 @@ public protocol WorkflowActionGroupFetcherProtocol: Sendable {
 /// Default `cache` parameter for callers that don't provide one.
 extension WorkflowActionGroupFetcherProtocol {
     /// Fetches action groups without a cache.
-    func fetch(for scope: String) async -> [WorkflowActionGroup] {
+    public func fetch(for scope: String) async -> [WorkflowActionGroup] {
         await fetch(for: scope, cache: [:])
     }
 }

@@ -56,7 +56,7 @@ extension RunnerStore {
                 let scopes = await MainActor.run { self.scopeStore.activeScopes }
                 var groups: [WorkflowActionGroup] = []
                 for scope in scopes {
-groups.append(contentsOf: await self.actionGroupFetcher.fetch(for: scope, cache: shaKeyedCache))
+                    groups.append(contentsOf: await self.actionGroupFetcher.fetch(for: scope, cache: shaKeyedCache))
                 }
                 return groups
             },
