@@ -13,7 +13,6 @@ private let prNumberPattern = #"/(\d+)/"# // NOSONAR — fixed regex pattern
 /// many steps still in-progress simultaneously (e.g. a large matrix job).
 private let maxRefreshConcurrency = 3
 
-
 // MARK: - Codable helpers (private to this file)
 
 /// Response envelope for the workflow runs list API endpoint.
