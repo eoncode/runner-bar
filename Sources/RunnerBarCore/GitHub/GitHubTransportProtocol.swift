@@ -25,12 +25,14 @@ public protocol GitHubTransportProtocol: Sendable {
     func raw(_ endpoint: String, timeout: TimeInterval) async -> Data?
     /// Posts `body` to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
     @concurrent
+    @discardableResult
     func post(_ endpoint: String, body: Data?, timeout: TimeInterval) async -> Data?
     /// Sends a PUT with `body` to `endpoint`. Returns decoded response `Data`, or `nil` on failure.
     @concurrent
     func put(_ endpoint: String, body: Data, timeout: TimeInterval) async -> Data?
     /// Sends a DELETE to `endpoint`. Returns `true` on 2xx, `false` otherwise.
     @concurrent
+    @discardableResult
     func delete(_ endpoint: String, timeout: TimeInterval) async -> Bool
     /// Cancels the workflow run identified by `runID` inside `scope`.
     @concurrent
