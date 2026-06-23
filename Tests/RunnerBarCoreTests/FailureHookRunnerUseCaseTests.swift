@@ -110,6 +110,32 @@ struct FailureHookRunnerUseCaseTests {
         #expect(cmd == "echo 'CI: O'\\''Brien'\\''s job'")
     }
 
+    /// Single-quote content inside `$FAILURE_LOG` is correctly escaped end-to-end.
+    ///
+    /// `$FAILURE_LOG` is the highest-volume token — it is populated from raw CI log output
+    /// which can contain arbitrary text including single quotes. This test drives the full
+    /// path: `buildLogContent` emits a run-summary line whose workflow name contains a
+    /// single quote, `resolveTokens` applies `singleQuoteEscape` to the log block, and
+    /// the resulting command must contain no unescaped `'` that would break shell parsing.
+    ///
+    /// The fixture uses `jobs: []` so `buildLogContent` takes the run-level fallback path,
+    /// producing a line of the form `FAILED run 999: conclusion=failure workflow=O'Brien CI`.
+    /// After escaping, every `'` in that line becomes `'\''`.
+    @Test func resolveTokens_singleQuoteInFailureLog_isEscaped() {
+        let cmd = FailureHookRunnerUseCase.resolveTokens(
+            "gemini -p '$FAILURE_LOG'",
+            group: .fixture(conclusion: .failure, workflowName: "O'Brien CI"),
+            scope: "owner/repo",
+            jobs: []
+        )
+        // The log will contain "workflow=O'Brien CI". After singleQuoteEscape that
+        // apostrophe becomes '\'' — verify no raw single-quote remnant inside the token.
+        // We check the resolved command does not contain the unescaped form.
+        #expect(!cmd.contains("workflow=O'Brien"))
+        // And the escaped form is present.
+        #expect(cmd.contains("workflow=O'\\''Brien"))
+    }
+
     /// After resolution, none of the 11 placeholder tokens remain in the output.
     ///
     /// Covers both shell-escaped tokens ($LOCAL_PATH, $SCOPE, $BRANCH, $COMMIT_SHA,
