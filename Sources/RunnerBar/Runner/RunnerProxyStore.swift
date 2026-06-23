@@ -75,53 +75,6 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
             throw RunnerProxyStoreError.writeFailed([error.localizedDescription])
         }
     }
-
-    // MARK: - Private helpers
-
-    /// Parses the raw credential file content into `user` and `password` components.
-    ///
-    /// Expects the first line to be the username and the second line (if present)
-    /// to be the password. Missing lines yield empty strings.
-    ///
-    /// Trims `.whitespacesAndNewlines` (not just `.newlines`) so that files written
-    /// with `\r\n` line endings (e.g. by Windows-based credential tools) do not leave
-    /// a trailing `\r` on each component — which would silently break proxy authentication.
-    private static func parseCredentialLines(_ content: String) -> (user: String, password: String) {
-        let lines = content.components(separatedBy: "\n")
-        let user = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
-        let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
-        return (user, credential)
-    }
-
-    /// Writes the proxy URL to `destination` as `url + "\n"`, or removes the file if `url` is empty.
-    private static func writeProxyURL(_ url: String, to destination: URL) throws {
-        if url.isEmpty {
-            try removeIfPresent(at: destination)
-        } else {
-            try (url + "\n").write(to: destination, atomically: true, encoding: .utf8)
-        }
-    }
-
-    /// Writes the proxy credentials to `destination` as `user + "\n" + secret + "\n"`,
-    /// or removes the file when both values are empty.
-    private static func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
-        if user.isEmpty && secret.isEmpty {
-            try removeIfPresent(at: destination)
-        } else {
-            try (user + "\n" + secret + "\n").write(to: destination, atomically: true, encoding: .utf8)
-        }
-    }
-
-    /// Removes the file at `url` if it exists; silently ignores `NSFileNoSuchFileError`.
-    /// Any other error is re-thrown so callers can distinguish a missing file
-    /// (harmless) from a genuine I/O failure (permissions, locked volume, etc.).
-    private static func removeIfPresent(at url: URL) throws {
-        do {
-            try FileManager.default.removeItem(at: url)
-        } catch let error as NSError where error.code == NSFileNoSuchFileError {
-            // File didn't exist — expected, not an error.
-        }
-    }
 }
 
 // MARK: - @concurrent disk helpers
@@ -202,5 +155,52 @@ private func saveProxyFiles(
 
     if !messages.isEmpty {
         throw RunnerProxyStoreError.writeFailed(messages)
+    }
+}
+
+// MARK: - Private file helpers
+
+/// Parses the raw credential file content into `user` and `password` components.
+///
+/// Expects the first line to be the username and the second line (if present)
+/// to be the password. Missing lines yield empty strings.
+///
+/// Trims `.whitespacesAndNewlines` (not just `.newlines`) so that files written
+/// with `\r\n` line endings (e.g. by Windows-based credential tools) do not leave
+/// a trailing `\r` on each component — which would silently break proxy authentication.
+private func parseCredentialLines(_ content: String) -> (user: String, password: String) {
+    let lines = content.components(separatedBy: "\n")
+    let user = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+    let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    return (user, credential)
+}
+
+/// Writes the proxy URL to `destination` as `url + "\n"`, or removes the file if `url` is empty.
+private func writeProxyURL(_ url: String, to destination: URL) throws {
+    if url.isEmpty {
+        try removeIfPresent(at: destination)
+    } else {
+        try (url + "\n").write(to: destination, atomically: true, encoding: .utf8)
+    }
+}
+
+/// Writes the proxy credentials to `destination` as `user + "\n" + secret + "\n"`,
+/// or removes the file when both values are empty.
+private func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
+    if user.isEmpty && secret.isEmpty {
+        try removeIfPresent(at: destination)
+    } else {
+        try (user + "\n" + secret + "\n").write(to: destination, atomically: true, encoding: .utf8)
+    }
+}
+
+/// Removes the file at `url` if it exists; silently ignores `NSFileNoSuchFileError`.
+/// Any other error is re-thrown so callers can distinguish a missing file
+/// (harmless) from a genuine I/O failure (permissions, locked volume, etc.).
+private func removeIfPresent(at url: URL) throws {
+    do {
+        try FileManager.default.removeItem(at: url)
+    } catch let error as NSError where error.code == NSFileNoSuchFileError {
+        // File didn't exist — expected, not an error.
     }
 }
