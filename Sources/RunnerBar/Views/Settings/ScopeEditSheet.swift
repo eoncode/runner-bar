@@ -26,8 +26,7 @@ import SwiftUI
 //        synchronous. confirmSave() is async — called via plain Task{} to keep
 //        @MainActor isolation after the actor awaits (P9).
 //        Header now shows alias (from snapshot) when set, raw scope otherwise.
-//        confirmSave() reads live prefs, applies draft edits, writes back via
-//        setPreferences(_:for:), then calls ScopeStore.refreshDisplayNames().
+//        confirmSave() uses modifyPreferences(for:with:) for an atomic RMW (P10).
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -478,31 +477,41 @@ extension ScopeEditSheet {
         hookBranch = nil
     }
 
-    /// Single commit point: reads current prefs, applies draft edits, and writes
-    /// back to `ScopePreferencesStore` via `preferences(for:)` + `setPreferences(_:for:)`.
+    /// Single commit point: atomically reads, mutates, and writes the `ScopePreferences`
+    /// blob via `modifyPreferences(for:with:)` — a single actor hop that eliminates
+    /// the TOCTOU window of the former two-hop `preferences(for:)` + `setPreferences(_:for:)`
+    /// pattern warned about in P10 and the store's own doc comment.
     ///
-    /// Reading the live stored value first ensures fields not editable in this sheet
-    /// (alias, pollingInterval, notifyOnSuccess, notifyOnFailure) are preserved —
-    /// never overwritten with defaults. After saving, calls
-    /// `ScopeStore.refreshDisplayNames()` so `ScopesView` reflects any alias change
-    /// immediately without an app restart. (#1538)
+    /// Fields not editable in this sheet (alias, pollingInterval, notifyOnSuccess,
+    /// notifyOnFailure) are preserved automatically because `modifyPreferences` starts
+    /// from the live stored blob and the closure only touches the four fields above.
     ///
-    /// Marked `async` because `ScopePreferencesStore` is an actor (P16).
+    /// After saving, calls `ScopeStore.refreshDisplayNames()` so `ScopesView` reflects
+    /// any alias change immediately without an app restart. (#1538)
+    ///
+    /// ## Isolation note (P9)
+    /// `@MainActor` state (`hookEnabled`, `hookBranch`, `hookCommand`, `localRepoPath`)
+    /// cannot be read inside the actor-isolated `modifyPreferences` closure. All four
+    /// are captured into locals before the `await` so the closure is free of any
+    /// `@MainActor` references and the compiler is satisfied.
+    ///
     /// Called via `Task { await confirmSave() }` in `buttonFooter` — a plain
     /// (non-detached) Task that inherits `@MainActor` from the SwiftUI button
     /// context, so `isPresented = false` after the await still runs on
     /// `@MainActor` with no isolation gap. (P9)
     @MainActor func confirmSave() async {
         let command = hookCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        let path = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Read current prefs so fields not editable in this sheet (alias, pollingInterval,
-        // notifyOnSuccess, notifyOnFailure) are preserved — not overwritten with defaults.
-        var prefs = await ScopePreferencesStore.shared.preferences(for: scope)
-        prefs.failureHookEnabled = hookEnabled
-        prefs.failureHookBranch = hookBranch
-        prefs.failureHookCommand = command.isEmpty ? nil : command
-        prefs.localRepoPath = path.isEmpty ? nil : path
-        await ScopePreferencesStore.shared.setPreferences(prefs, for: scope)
+        let path    = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Capture @MainActor state before the actor hop — the modifyPreferences
+        // closure runs inside the actor and cannot access @MainActor properties directly.
+        let enabled = hookEnabled
+        let branch  = hookBranch
+        await ScopePreferencesStore.shared.modifyPreferences(for: scope) { prefs in
+            prefs.failureHookEnabled = enabled
+            prefs.failureHookBranch  = branch
+            prefs.failureHookCommand = command.isEmpty ? nil : command
+            prefs.localRepoPath      = path.isEmpty    ? nil : path
+        }
         // Refresh cached display names so ScopesView reflects the newly saved alias
         // immediately after the sheet closes, without requiring an app restart. (#1538)
         await ScopeStore.shared.refreshDisplayNames()

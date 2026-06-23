@@ -262,10 +262,12 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         read(scope: scope).failureHookBranch.flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    /// Sets the failure hook branch filter for `scope`. Pass `nil` or blank to run on all branches.
+    /// Sets the failure hook branch filter for `scope`, trimming whitespace.
+    /// Pass `nil` or blank to run on all branches.
     public func setFailureHookBranch(_ branch: String?, for scope: String) {
         var prefs = read(scope: scope)
-        prefs.failureHookBranch = (branch?.isEmpty == false) ? branch : nil
+        let trimmed = branch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        prefs.failureHookBranch = (trimmed?.isEmpty == false) ? trimmed : nil
         write(prefs, for: scope)
         log("ScopePreferencesStore › failureHookBranch for \(scope) = \(prefs.failureHookBranch ?? "nil (all branches)")")
     }
@@ -306,6 +308,17 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     /// Call this from `AppDelegate.applicationDidFinishLaunching` (via
     /// `AppDelegate+StoreSetup`) before any other reads occur. (Step 7)
     ///
+    /// ## Guard-flag write and empty `knownScopes`
+    /// The flag is written only when `knownScopes` is non-empty. On a fresh install
+    /// `knownScopes` is always `[]` (nothing to migrate), so the flag stays unset
+    /// until scopes are actually added and the app is restarted — harmless, because
+    /// `read()` returns a default `ScopePreferences()` for any scope with no blob.
+    /// The guard prevents the following edge case on first post-upgrade launch:
+    /// if `ScopeStore`'s own `UserDefaults` blob fails to decode (e.g. corruption),
+    /// `knownScopes` would arrive as `[]`, the loop would be skipped entirely, and
+    /// writing the flag here would permanently mark migration as done before any
+    /// scope was actually migrated — orphaning all legacy flat keys with no retry.
+    ///
     /// - Parameter knownScopes: The list of scope strings currently in `ScopeStore`.
     ///   Only scopes present in this list at call time are migrated. This is
     ///   intentional: scopes added after the migration flag is set start clean
@@ -320,6 +333,8 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
             // (no legacy flat keys) so skipping them here is intentional.
             return
         }
+        // Do not write the flag when knownScopes is empty — see doc comment above.
+        guard !knownScopes.isEmpty else { return }
         for scope in knownScopes {
             var prefs = ScopePreferences()
             if let val = store.string(forKey: "scope.\(scope).alias"), !val.isEmpty {

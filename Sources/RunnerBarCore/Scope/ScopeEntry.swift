@@ -9,6 +9,15 @@ import Foundation
 /// `scope` is either `"owner/repo"` (repository) or `"myorg"` (organisation).
 /// `isEnabled` controls whether `RunnerStore` polls this scope; disabled scopes
 /// are retained in the list but silently skipped during fetch.
+///
+/// ## Equatable / Hashable — displayName excluded
+/// `ScopeEntry` conforms to `Equatable` and `Hashable` via **explicit** implementations
+/// that compare and hash only `id`, `scope`, and `isEnabled`. The transient `displayName`
+/// field is intentionally excluded for the same reason it is excluded from `Codable`:
+/// it is runtime-only, populated by `ScopeStore.refreshDisplayNames()`, and carries no
+/// identity information. Including it would cause a stale entry and a freshly-hydrated
+/// entry for the same scope to compare as unequal and hash differently — breaking `Set`
+/// membership tests and `Dictionary` keying if those patterns are ever introduced.
 public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
     /// Stable identity for use in SwiftUI lists and `Codable` round-trips.
     public let id: UUID
@@ -24,6 +33,7 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
     /// from `ScopePreferencesStore`. `nil` when no alias has been set.
     /// Not persisted to `UserDefaults` — always re-hydrated at launch and after edits.
     /// Excluded from `Codable` synthesis via `CodingKeys` below.
+    /// Excluded from `Equatable`/`Hashable` — see type-level doc comment.
     public let displayName: String?
 
     // MARK: - CodingKeys (excludes transient displayName)
@@ -69,6 +79,25 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
         scope = try container.decode(String.self, forKey: .scope)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         displayName = nil
+    }
+
+    // MARK: - Equatable (excludes transient displayName)
+
+    /// Two entries are equal when they share the same `id`, `scope`, and `isEnabled`.
+    /// `displayName` is excluded — it is transient and carries no identity. See type doc.
+    public static func == (lhs: ScopeEntry, rhs: ScopeEntry) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.scope == rhs.scope &&
+        lhs.isEnabled == rhs.isEnabled
+    }
+
+    // MARK: - Hashable (excludes transient displayName)
+
+    /// Hashes `id`, `scope`, and `isEnabled` only. `displayName` is excluded — see type doc.
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(scope)
+        hasher.combine(isEnabled)
     }
 }
 
