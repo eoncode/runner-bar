@@ -35,48 +35,16 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
 
     // MARK: - load(at:)
 
-    /// Reads `.proxy` and `.proxycredentials` at `installPath` on a background thread.
+    /// Reads `.proxy` and `.proxycredentials` at `installPath`.
     ///
-    /// This method is **non-throwing**: missing proxy files are the normal
-    /// case (most runners have no proxy). A zeroed `RunnerProxyConfig` is
-    /// returned whenever either or both files are absent.
+    /// Disk I/O runs in a `@concurrent` free function so the actor's cooperative
+    /// thread is never blocked. Non-throwing: missing files return a zeroed config.
     func load(at installPath: String) async -> RunnerProxyConfig {
         let base = URL(fileURLWithPath: installPath)
-        let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL = base.appendingPathComponent(".proxycredentials")
-
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                // Trim only newlines — `save` writes `value + "\n"` so we strip
-                // exactly that. `.whitespacesAndNewlines` would strip intentional
-                // surrounding spaces from credentials.
-                // `try?` is replaced with do/catch so non-ENOENT errors are logged
-                // rather than silently producing empty proxy fields.
-                let url: String
-                do {
-                    url = try String(contentsOf: proxyURL, encoding: .utf8)
-                        .trimmingCharacters(in: .newlines)
-                } catch let err as NSError where err.code == NSFileNoSuchFileError {
-                    url = ""
-                } catch {
-                    log("RunnerProxyStore › .proxy read error (using empty): \(error)")
-                    url = ""
-                }
-
-                var user = ""
-                var proxyCredential = ""
-                do {
-                    let credContent = try String(contentsOf: credURL, encoding: .utf8)
-                    (user, proxyCredential) = Self.parseCredentialLines(credContent)
-                } catch let err as NSError where err.code == NSFileNoSuchFileError {
-                    // Missing credentials file is expected — most runners have no proxy.
-                } catch {
-                    log("RunnerProxyStore › .proxycredentials read error (using empty): \(error)")
-                }
-
-                continuation.resume(returning: RunnerProxyConfig(url: url, user: user, password: proxyCredential))
-            }
-        }
+        return await loadProxyFiles(
+            proxyURL: base.appendingPathComponent(".proxy"),
+            credURL:  base.appendingPathComponent(".proxycredentials")
+        )
     }
 
     // MARK: - save(_:at:)
