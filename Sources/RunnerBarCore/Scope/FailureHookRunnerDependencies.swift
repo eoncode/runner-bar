@@ -12,6 +12,16 @@ import Foundation
 /// in signature so `FailureHookRunnerUseCase` call sites only need `await` added.
 public protocol ScopePreferencesStoreProtocol: Actor {
 
+    // MARK: - Bulk snapshot
+
+    /// Returns a full `ScopePreferences` snapshot for the scope in one actor hop.
+    ///
+    /// Prefer this over calling individual getters in sequence when multiple fields
+    /// are needed at once (e.g. before presenting `ScopeEditSheet`) — one `await`
+    /// instead of four or more. The returned value is a value-type copy and is safe
+    /// to use outside the actor.
+    func preferences(for scope: String) -> ScopePreferences
+
     // MARK: - Alias
 
     /// Human-readable alias for the scope. `nil` = display raw scope string.

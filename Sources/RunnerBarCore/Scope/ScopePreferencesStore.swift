@@ -100,6 +100,16 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › saved preferences for \(scope)")
     }
 
+    // MARK: - ScopePreferencesStoreProtocol — bulk snapshot
+
+    /// Returns the full `ScopePreferences` snapshot for `scope` in a single actor hop.
+    ///
+    /// This is the preferred read path when multiple fields are needed at once
+    /// (e.g. seeding `ScopeEditSheet` draft state). One `await` instead of N.
+    public func preferences(for scope: String) -> ScopePreferences {
+        read(scope: scope)
+    }
+
     // MARK: - ScopePreferencesStoreProtocol — alias
 
     public func alias(for scope: String) -> String? {
@@ -219,6 +229,9 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     /// Reads each legacy `scope.<scope>.<field>` key, assembles a `ScopePreferences`
     /// value, writes the blob, then removes the flat keys. Guarded by a
     /// `scope.__migrated_v2` flag so it is safe to call multiple times.
+    ///
+    /// Call this from `AppDelegate.applicationDidFinishLaunching` (via
+    /// `AppDelegate+StoreSetup`) before any other reads occur. (Step 7)
     ///
     /// - Parameter knownScopes: The list of scope strings currently in `ScopeStore`.
     ///   Only scopes in this list are migrated — scopes removed before migration
