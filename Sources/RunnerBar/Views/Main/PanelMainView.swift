@@ -19,17 +19,6 @@ import SwiftUI
 // RULE 7: RunnerStore self-schedules via its own adaptive timer.
 // RULE 9: displayTick fires every 1 second ALWAYS (no open-state gate).
 //
-// ── TIMER CALLBACK — NO Task { @MainActor in } ──────────────────────────────
-//
-// Timer callbacks fire on the main run loop (scheduledTimer guarantees this)
-// but are NOT automatically bridged into Swift's actor system. Under Swift 6
-// strict concurrency, `Task { @MainActor in }` inside a Timer callback
-// introduces an @isolated(any) overload-resolution ambiguity that causes a
-// build error. We use DispatchQueue.main.async instead — semantically identical
-// (main thread, next run loop), zero concurrency-checker friction.
-//
-// ❌ NEVER revert to Task { @MainActor in } inside Timer callbacks in this file.
-//
 // NSPopover provides its own glass chrome automatically.
 // Do NOT add .background() or NSVisualEffectView at this level.
 /// Root panel view rendered inside the NSPopover.
@@ -53,8 +42,9 @@ struct PanelMainView: View {
     @State private var visibleCount: Int = 10
     /// Increments every second to drive relative-time label refreshes without re-polling.
     @State private var displayTick: Int = 0
-    /// Timer that fires `displayTick` increments; managed by `startDisplayTickTimer()`.
-    @State private var displayTickTimer: Timer?
+    /// Structured task driving the 1-second `displayTick` loop; managed by `startDisplayTickTimer()`.
+    /// Named "displayTick" for visibility in Instruments (RG6).
+    @State private var displayTickTask: Task<Void, Never>?
 
     /// Creates a `PanelMainView`.
     init(
@@ -168,23 +158,30 @@ struct PanelMainView: View {
         }
     }
 
-    /// Starts the 1-second repeating `displayTick` timer. Stops any existing timer first.
+    /// Starts the 1-second structured `displayTick` loop. Cancels any existing task first.
     ///
-    /// Uses DispatchQueue.main.async rather than Task { @MainActor in } to avoid
-    /// Swift 6 strict-concurrency @isolated(any) overload-resolution ambiguity.
-    private func startDisplayTickTimer() {
+    /// Sleep-first: fires 1 s after start, matching the prior `Timer.scheduledTimer` behaviour.
+    /// No open-state gate — RULE 9: displayTick runs always while the view is alive.
+    /// Named "displayTick" for Instruments visibility (RG6).
+    /// `try` (not `try?`) on Task.sleep propagates CancellationError cleanly so the loop
+    /// exits immediately on cancel without executing a spurious post-cancel tick.
+    /// `@MainActor` is explicit so the compiler statically verifies that `displayTickTask`
+    /// (a `@State`-backed property) is always mutated on the main actor.
+    @MainActor private func startDisplayTickTimer() {
         stopDisplayTickTimer()
-        displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [self] _ in
-            DispatchQueue.main.async {
-                self.displayTick &+= 1
+        displayTickTask = Task(name: "displayTick") { @MainActor in
+            while !Task.isCancelled {
+                try await Task.sleep(for: .seconds(1))
+                displayTick &+= 1
             }
         }
     }
 
-    /// Invalidates and nils the `displayTick` timer.
-    private func stopDisplayTickTimer() {
-        displayTickTimer?.invalidate()
-        displayTickTimer = nil
+    /// Cancels and nils the `displayTick` task.
+    /// `@MainActor` matches `startDisplayTickTimer()` — both mutate `displayTickTask`.
+    @MainActor private func stopDisplayTickTimer() {
+        displayTickTask?.cancel()
+        displayTickTask = nil
     }
 
     /// Rate-limit warning banner showing a countdown to API reset.

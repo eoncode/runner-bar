@@ -407,7 +407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let saved = savedNavState, !hasActiveSheet, let restored = validatedView(for: saved) {
             navigate(to: restored)
         }
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self, !self.preservedSheetWindowHide else { return }
             self.panelSheetState.restoreTransientHideStateIfNeeded()
         }

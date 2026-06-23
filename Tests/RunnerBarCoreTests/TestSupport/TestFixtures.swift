@@ -34,3 +34,41 @@ func makeRunnerModel(
         lifecycleWarning: lifecycleWarning
     )
 }
+
+// MARK: - WorkflowActionGroup
+
+extension WorkflowActionGroup {
+    /// Returns a minimal `WorkflowActionGroup` suitable for `FailureHookRunnerUseCaseTests`.
+    ///
+    /// - Parameters:
+    ///   - conclusion: The conclusion of the single synthetic run. Defaults to `.failure`.
+    ///   - branch: The `headBranch` of the group. Defaults to `"main"`.
+    ///   - workflowName: The `name` of the synthetic `WorkflowRunRef`. Defaults to `"CI"`.
+    ///     Use this to inject special characters (e.g. single quotes) for shell-escaping tests.
+    static func fixture(
+        conclusion: JobConclusion? = .failure,
+        branch: String? = "main",
+        workflowName: String = "CI"
+    ) -> WorkflowActionGroup {
+        let run = WorkflowRunRef(
+            id: 999,
+            name: workflowName,
+            status: .completed,
+            conclusion: conclusion,
+            htmlUrl: "https://github.com/owner/repo/actions/runs/999"
+        )
+        return WorkflowActionGroup(
+            headSha: "abc123def456abc123def456abc123def456abc1",
+            label: "abc123",
+            title: "CI",
+            headBranch: branch,
+            repo: "owner/repo",
+            runs: [run],
+            jobs: [],
+            firstJobStartedAt: nil,
+            lastJobCompletedAt: nil,
+            createdAt: nil,
+            isDimmed: false
+        )
+    }
+}

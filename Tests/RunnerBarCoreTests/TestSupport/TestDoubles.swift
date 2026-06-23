@@ -193,6 +193,42 @@ actor SpyRateLimitActor: RateLimitActorProtocol {
     }
 }
 
+// MARK: - MockScopePreferencesStore
+
+/// Stub conformance for `ScopePreferencesStoreProtocol`.
+///
+/// Implemented as a plain `struct` — all properties are set at init time and
+/// read back synchronously. No mutation occurs after construction, so there is
+/// no concurrency concern and no need for actor isolation.
+struct MockScopePreferencesStore: ScopePreferencesStoreProtocol {
+    var hookEnabled: Bool    = false
+    var command:     String? = nil
+    var branch:      String? = nil
+    var localPath:   String? = nil
+
+    func failureHookEnabled(for _: String) -> Bool    { hookEnabled }
+    func failureHookCommand(for _: String) -> String? { command }
+    func failureHookBranch(for _:  String) -> String? { branch }
+    func localRepoPath(for _:      String) -> String? { localPath }
+}
+
+// MARK: - SpyTerminalLauncher
+
+/// Spy conformance for `TerminalLauncherProtocol`.
+///
+/// `final class` + `@unchecked Sendable`: `open(command:)` is `@MainActor` so
+/// all mutations of `openCallCount` and `lastCommand` occur exclusively on the
+/// main actor — `@unchecked` is safe here.
+final class SpyTerminalLauncher: TerminalLauncherProtocol, @unchecked Sendable {
+    private(set) var openCallCount = 0
+    private(set) var lastCommand: String?
+
+    @MainActor func open(command: String) {
+        openCallCount += 1
+        lastCommand = command
+    }
+}
+
 // MARK: - TestError
 
 enum TestError: Error { case saveFailed }

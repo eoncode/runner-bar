@@ -108,9 +108,7 @@ struct StepLogView: View {
                 LogCopyButton(
                     fetch: { completion in
                         let text = logText
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            completion(text)
-                        }
+                        completion(text)
                     },
                     isDisabled: logText == nil || logText?.isEmpty == true
                 )

@@ -13,8 +13,9 @@ import RunnerBarCore
 /// Replaces the `loadProxy` private helper in `RunnerEditDraft` and the
 /// `writeProxyFiles` / `removeIfPresent` free functions in `CommitRunnerEdit`.
 ///
-/// Disk operations are dispatched to a background `DispatchQueue` so the
-/// actor's cooperative thread is never blocked by synchronous file I/O.
+/// Disk I/O is performed in `@concurrent` free functions so the actor's
+/// cooperative thread is never blocked by synchronous file I/O (P18).
+/// Follows the `RunnerConfigStore` migration in PR #1489 as template.
 ///
 /// File format (unchanged from previous implementation):
 /// - `.proxy`            — raw proxy URL followed by `"\n"`.
@@ -35,163 +36,171 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
 
     // MARK: - load(at:)
 
-    /// Reads `.proxy` and `.proxycredentials` at `installPath` on a background thread.
+    /// Reads `.proxy` and `.proxycredentials` at `installPath`.
     ///
-    /// This method is **non-throwing**: missing proxy files are the normal
-    /// case (most runners have no proxy). A zeroed `RunnerProxyConfig` is
-    /// returned whenever either or both files are absent.
+    /// Disk I/O runs in a `@concurrent` free function so the actor's cooperative
+    /// thread is never blocked. Non-throwing: missing files return a zeroed config.
     func load(at installPath: String) async -> RunnerProxyConfig {
         let base = URL(fileURLWithPath: installPath)
-        let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL = base.appendingPathComponent(".proxycredentials")
-
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                // Trim only newlines — `save` writes `value + "\n"` so we strip
-                // exactly that. `.whitespacesAndNewlines` would strip intentional
-                // surrounding spaces from credentials.
-                // `try?` is replaced with do/catch so non-ENOENT errors are logged
-                // rather than silently producing empty proxy fields.
-                let url: String
-                do {
-                    url = try String(contentsOf: proxyURL, encoding: .utf8)
-                        .trimmingCharacters(in: .newlines)
-                } catch let err as NSError where err.code == NSFileNoSuchFileError {
-                    url = ""
-                } catch {
-                    log("RunnerProxyStore › .proxy read error (using empty): \(error)")
-                    url = ""
-                }
-
-                var user = ""
-                var proxyCredential = ""
-                do {
-                    let credContent = try String(contentsOf: credURL, encoding: .utf8)
-                    (user, proxyCredential) = Self.parseCredentialLines(credContent)
-                } catch let err as NSError where err.code == NSFileNoSuchFileError {
-                    // Missing credentials file is expected — most runners have no proxy.
-                } catch {
-                    log("RunnerProxyStore › .proxycredentials read error (using empty): \(error)")
-                }
-
-                continuation.resume(returning: RunnerProxyConfig(url: url, user: user, password: proxyCredential))
-            }
-        }
+        return await loadProxyFiles(
+            proxyURL: base.appendingPathComponent(".proxy"),
+            credURL: base.appendingPathComponent(".proxycredentials")
+        )
     }
 
     // MARK: - save(_:at:)
 
-    /// Writes (or removes) `.proxy` and `.proxycredentials` at `installPath`
-    /// on a background thread.
+    /// Writes (or removes) `.proxy` and `.proxycredentials` at `installPath`.
+    ///
+    /// Disk I/O runs in a `@concurrent` free function so the actor's cooperative
+    /// thread is never blocked. Trimming and file operations happen entirely
+    /// inside the `@concurrent` helper.
     ///
     /// Each file is handled independently so a failure on one does not mask
-    /// a failure on the other. Both errors are logged; if either write fails
-    /// `RunnerProxyStoreError.writeFailed` is thrown with all messages.
-    ///
-    /// - `.proxy` is written as `url + "\n"`, or removed when `config.url` is empty.
-    /// - `.proxycredentials` is written as `user + "\n" + password + "\n"`,
-    ///   or removed when both `config.user` and `config.password` are empty.
-    /// - All three fields are trimmed of leading/trailing whitespace before
-    ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
-    ///   load → save round-trip is idempotent. Callers must not rely on
-    ///   preserving surrounding whitespace in proxy credentials.
-    ///
-    /// `withCheckedThrowingContinuation` requires `E == any Error`; typed errors
-    /// are not supported by that API. The typed `RunnerProxyStoreError` is
-    /// re-thrown in the surrounding `do/catch` — consistent with `RunnerConfigStore`.
+    /// a failure on the other. If either write fails,
+    /// `RunnerProxyStoreError.writeFailed` is thrown with all accumulated messages.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
         let base = URL(fileURLWithPath: installPath)
-        let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL = base.appendingPathComponent(".proxycredentials")
-
-        // Trim defensively here so no call site can accidentally write whitespace to disk.
-        let url = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
-        let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
-
         do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                DispatchQueue.global(qos: .utility).async {
-                    var messages: [String] = []
-
-                    do {
-                        try Self.writeProxyURL(url, to: proxyURL)
-                    } catch {
-                        let msg = ".proxy write error: \(error)"
-                        log("RunnerProxyStore › \(msg)")
-                        messages.append(msg)
-                    }
-
-                    do {
-                        try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL)
-                    } catch {
-                        let msg = ".proxycredentials write error: \(error)"
-                        log("RunnerProxyStore › \(msg)")
-                        messages.append(msg)
-                    }
-
-                    if messages.isEmpty {
-                        continuation.resume()
-                    } else {
-                        continuation.resume(throwing: RunnerProxyStoreError.writeFailed(messages))
-                    }
-                }
-            }
+            try await saveProxyFiles(
+                config,
+                proxyURL: base.appendingPathComponent(".proxy"),
+                credURL: base.appendingPathComponent(".proxycredentials")
+            )
         } catch let proxyError as RunnerProxyStoreError {
             throw proxyError
         } catch {
-            // Unexpected error escaping the continuation — should not happen in practice
-            // since the continuation only throws RunnerProxyStoreError, but log it so
-            // it is visible in diagnostics rather than silently swallowed.
-            log("RunnerProxyStore › save: unexpected error: \(error)")
+            // Defensive bridge: saveProxyFiles only throws RunnerProxyStoreError,
+            // but typed-throw bridging through `any Error` requires this catch.
             throw RunnerProxyStoreError.writeFailed([error.localizedDescription])
         }
     }
+}
 
-    // MARK: - Private helpers
+// MARK: - @concurrent disk helpers
 
-    /// Parses the raw credential file content into `user` and `password` components.
-    ///
-    /// Expects the first line to be the username and the second line (if present)
-    /// to be the password. Missing lines yield empty strings.
-    ///
-    /// Trims `.whitespacesAndNewlines` (not just `.newlines`) so that files written
-    /// with `\r\n` line endings (e.g. by Windows-based credential tools) do not leave
-    /// a trailing `\r` on each component — which would silently break proxy authentication.
-    private static func parseCredentialLines(_ content: String) -> (user: String, password: String) {
-        let lines = content.components(separatedBy: "\n")
-        let user = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
-        let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
-        return (user, credential)
+/// Reads `.proxy` and `.proxycredentials` from disk.
+///
+/// Marked `@concurrent` so Swift's cooperative thread pool schedules this
+/// off the actor's serial executor. The I/O is synchronous inside the body;
+/// `@concurrent` provides the off-actor scheduling (P18).
+///
+/// Non-throwing: missing files are the normal case and return empty strings.
+/// Non-ENOENT read errors are logged and also produce empty fields — callers
+/// cannot distinguish a read failure from a missing file, which is intentional
+/// for `load`: an unreadable proxy config is treated as "no proxy".
+@concurrent
+private func loadProxyFiles(proxyURL: URL, credURL: URL) async -> RunnerProxyConfig {
+    let url: String
+    do {
+        url = try String(contentsOf: proxyURL, encoding: .utf8)
+            .trimmingCharacters(in: .newlines)
+    } catch let err as NSError where err.code == NSFileNoSuchFileError {
+        url = ""
+    } catch {
+        log("RunnerProxyStore › .proxy read error (using empty): \(error)")
+        url = ""
     }
 
-    /// Writes the proxy URL to `destination` as `url + "\n"`, or removes the file if `url` is empty.
-    private static func writeProxyURL(_ url: String, to destination: URL) throws {
-        if url.isEmpty {
-            try removeIfPresent(at: destination)
-        } else {
-            try (url + "\n").write(to: destination, atomically: true, encoding: .utf8)
-        }
+    var user = ""
+    var credential = ""
+    do {
+        let credContent = try String(contentsOf: credURL, encoding: .utf8)
+        (user, credential) = parseCredentialLines(credContent)
+    } catch let err as NSError where err.code == NSFileNoSuchFileError {
+        // Missing credentials file is expected — most runners have no proxy.
+    } catch {
+        log("RunnerProxyStore › .proxycredentials read error (using empty): \(error)")
     }
 
-    /// Writes the proxy credentials to `destination` as `user + "\n" + secret + "\n"`,
-    /// or removes the file when both values are empty.
-    private static func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
-        if user.isEmpty && secret.isEmpty {
-            try removeIfPresent(at: destination)
-        } else {
-            try (user + "\n" + secret + "\n").write(to: destination, atomically: true, encoding: .utf8)
-        }
+    return RunnerProxyConfig(url: url, user: user, password: credential)
+}
+
+/// Writes (or removes) `.proxy` and `.proxycredentials` to disk.
+///
+/// Marked `@concurrent` so Swift's cooperative thread pool schedules this
+/// off the actor's serial executor (P18). Trimming happens here so the
+/// actor thread has no I/O work at all.
+///
+/// Both files are always attempted independently. All failures are
+/// accumulated into a single `RunnerProxyStoreError.writeFailed` throw
+/// so callers see the full picture rather than a truncated first-error.
+@concurrent
+private func saveProxyFiles(
+    _ config: RunnerProxyConfig,
+    proxyURL: URL,
+    credURL: URL
+) async throws {
+    let url = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
+    let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
+    let secret = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    var messages: [String] = []
+
+    do {
+        try writeProxyURL(url, to: proxyURL)
+    } catch {
+        let msg = ".proxy write error: \(error)"
+        log("RunnerProxyStore › \(msg)")
+        messages.append(msg)
     }
 
-    /// Removes the file at `url` if it exists; silently ignores `NSFileNoSuchFileError`.
-    /// Any other error is re-thrown so callers can distinguish a missing file
-    /// (harmless) from a genuine I/O failure (permissions, locked volume, etc.).
-    private static func removeIfPresent(at url: URL) throws {
-        do {
-            try FileManager.default.removeItem(at: url)
-        } catch let error as NSError where error.code == NSFileNoSuchFileError {
-            // File didn't exist — expected, not an error.
-        }
+    do {
+        try writeProxyCredentials(user: user, secret: secret, to: credURL)
+    } catch {
+        let msg = ".proxycredentials write error: \(error)"
+        log("RunnerProxyStore › \(msg)")
+        messages.append(msg)
+    }
+
+    if !messages.isEmpty {
+        throw RunnerProxyStoreError.writeFailed(messages)
+    }
+}
+
+// MARK: - Private file helpers
+
+/// Parses the raw credential file content into `user` and `password` components.
+///
+/// Expects the first line to be the username and the second line (if present)
+/// to be the password. Missing lines yield empty strings.
+///
+/// Trims `.whitespacesAndNewlines` (not just `.newlines`) so that files written
+/// with `\r\n` line endings (e.g. by Windows-based credential tools) do not leave
+/// a trailing `\r` on each component — which would silently break proxy authentication.
+private func parseCredentialLines(_ content: String) -> (user: String, password: String) {
+    let lines = content.components(separatedBy: "\n")
+    let user = lines.first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+    let credential = lines.indices.contains(1) ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    return (user, credential)
+}
+
+/// Writes the proxy URL to `destination` as `url + "\n"`, or removes the file if `url` is empty.
+private func writeProxyURL(_ url: String, to destination: URL) throws {
+    if url.isEmpty {
+        try removeIfPresent(at: destination)
+    } else {
+        try (url + "\n").write(to: destination, atomically: true, encoding: .utf8)
+    }
+}
+
+/// Writes the proxy credentials to `destination` as `user + "\n" + secret + "\n"`,
+/// or removes the file when both values are empty.
+private func writeProxyCredentials(user: String, secret: String, to destination: URL) throws {
+    if user.isEmpty && secret.isEmpty {
+        try removeIfPresent(at: destination)
+    } else {
+        try (user + "\n" + secret + "\n").write(to: destination, atomically: true, encoding: .utf8)
+    }
+}
+
+/// Removes the file at `url` if it exists; silently ignores `NSFileNoSuchFileError`.
+/// Any other error is re-thrown so callers can distinguish a missing file
+/// (harmless) from a genuine I/O failure (permissions, locked volume, etc.).
+private func removeIfPresent(at url: URL) throws {
+    do {
+        try FileManager.default.removeItem(at: url)
+    } catch let error as NSError where error.code == NSFileNoSuchFileError {
+        // File didn't exist — expected, not an error.
     }
 }
