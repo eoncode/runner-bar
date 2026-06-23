@@ -43,13 +43,16 @@ extension WorkflowActionGroup {
     /// - Parameters:
     ///   - conclusion: The conclusion of the single synthetic run. Defaults to `.failure`.
     ///   - branch: The `headBranch` of the group. Defaults to `"main"`.
+    ///   - workflowName: The `name` of the synthetic `WorkflowRunRef`. Defaults to `"CI"`.
+    ///     Use this to inject special characters (e.g. single quotes) for shell-escaping tests.
     static func fixture(
         conclusion: JobConclusion? = .failure,
-        branch: String? = "main"
+        branch: String? = "main",
+        workflowName: String = "CI"
     ) -> WorkflowActionGroup {
         let run = WorkflowRunRef(
             id: 999,
-            name: "CI",
+            name: workflowName,
             status: .completed,
             conclusion: conclusion,
             htmlUrl: "https://github.com/owner/repo/actions/runs/999"
