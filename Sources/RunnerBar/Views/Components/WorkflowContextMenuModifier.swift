@@ -69,7 +69,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
         Button {
             let capturedGroup = group
             Task.detached(priority: .userInitiated) {
-                guard let text = await fetchActionLogs(group: capturedGroup), !text.isEmpty else { return }
+                guard let text = await LogFetcher().fetchActionLogs(group: capturedGroup), !text.isEmpty else { return }
                 await copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
@@ -134,7 +134,7 @@ private struct JobContextMenuModifier: ViewModifier {
             let capturedJob = job
             let scope = group.repo
             Task.detached(priority: .userInitiated) {
-                guard let text = await fetchJobLog(jobID: capturedJob.id, scope: scope), !text.isEmpty else { return }
+                guard let text = await LogFetcher().fetchJobLog(jobID: capturedJob.id, scope: scope), !text.isEmpty else { return }
                 await copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
