@@ -163,11 +163,13 @@ struct PanelMainView: View {
     /// Sleep-first: fires 1 s after start, matching the prior `Timer.scheduledTimer` behaviour.
     /// No open-state gate — RULE 9: displayTick runs always while the view is alive.
     /// Named "displayTick" for Instruments visibility (RG6).
+    /// `try` (not `try?`) on Task.sleep propagates CancellationError cleanly so the loop
+    /// exits immediately on cancel without executing a spurious post-cancel tick.
     private func startDisplayTickTimer() {
         stopDisplayTickTimer()
         displayTickTask = Task(name: "displayTick") { @MainActor in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: .seconds(1))
                 displayTick &+= 1
             }
         }
