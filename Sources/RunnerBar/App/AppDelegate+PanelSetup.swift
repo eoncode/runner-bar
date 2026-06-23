@@ -165,7 +165,7 @@ extension AppDelegate: NSPopoverDelegate {
         ) { [weak self] _, change in
             guard let size = change.newValue, size.height > 0 else { return }
             // KVO can fire on a background thread — hop to main before touching UI.
-            DispatchQueue.main.async { [weak self] in self?.resizeAndRepositionPanel() }
+            Task { @MainActor [weak self] in self?.resizeAndRepositionPanel() }
         }
     }
 

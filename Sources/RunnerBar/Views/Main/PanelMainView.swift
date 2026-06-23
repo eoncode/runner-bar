@@ -42,8 +42,9 @@ struct PanelMainView: View {
     @State private var visibleCount: Int = 10
     /// Increments every second to drive relative-time label refreshes without re-polling.
     @State private var displayTick: Int = 0
-    /// Timer that fires `displayTick` increments; managed by `startDisplayTickTimer()`.
-    @State private var displayTickTimer: Timer?
+    /// Structured task driving the 1-second `displayTick` loop; managed by `startDisplayTickTimer()`.
+    /// Named "displayTick" for visibility in Instruments (RG6).
+    @State private var displayTickTask: Task<Void, Never>?
 
     /// Creates a `PanelMainView`.
     init(
@@ -157,18 +158,30 @@ struct PanelMainView: View {
         }
     }
 
-    /// Starts the 1-second repeating `displayTick` timer. Stops any existing timer first.
-    private func startDisplayTickTimer() {
+    /// Starts the 1-second structured `displayTick` loop. Cancels any existing task first.
+    ///
+    /// Sleep-first: fires 1 s after start, matching the prior `Timer.scheduledTimer` behaviour.
+    /// No open-state gate — RULE 9: displayTick runs always while the view is alive.
+    /// Named "displayTick" for Instruments visibility (RG6).
+    /// `try` (not `try?`) on Task.sleep propagates CancellationError cleanly so the loop
+    /// exits immediately on cancel without executing a spurious post-cancel tick.
+    /// `@MainActor` is explicit so the compiler statically verifies that `displayTickTask`
+    /// (a `@State`-backed property) is always mutated on the main actor.
+    @MainActor private func startDisplayTickTimer() {
         stopDisplayTickTimer()
-        displayTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            Task { @MainActor in self.displayTick &+= 1 }
+        displayTickTask = Task(name: "displayTick") { @MainActor in
+            while !Task.isCancelled {
+                try await Task.sleep(for: .seconds(1))
+                displayTick &+= 1
+            }
         }
     }
 
-    /// Invalidates and nils the `displayTick` timer.
-    private func stopDisplayTickTimer() {
-        displayTickTimer?.invalidate()
-        displayTickTimer = nil
+    /// Cancels and nils the `displayTick` task.
+    /// `@MainActor` matches `startDisplayTickTimer()` — both mutate `displayTickTask`.
+    @MainActor private func stopDisplayTickTimer() {
+        displayTickTask?.cancel()
+        displayTickTask = nil
     }
 
     /// Rate-limit warning banner showing a countdown to API reset.

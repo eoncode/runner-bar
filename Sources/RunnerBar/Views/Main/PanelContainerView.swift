@@ -73,11 +73,12 @@ import SwiftUI
 // Timer.scheduledTimer behaviour (first fire after 100ms, not immediately) and
 // avoids an immediate guard-fail tick before hostWindow is populated.
 //
-// ── CANCELLATION: do/catch around Task.sleep ───────────────────────────────────
+// ── CANCELLATION: bare try on Task.sleep ───────────────────────────────────────
 //
-// Task.sleep is wrapped in do/catch. When stopPolling() cancels the task
-// mid-sleep, CancellationError is caught and the loop breaks immediately
-// without executing a spurious post-cancel tick.
+// Task.sleep is called with bare `try`, not `try?`. When stopPolling() cancels
+// the task mid-sleep, CancellationError propagates out of the loop immediately
+// without executing a spurious post-cancel tick. `try?` would swallow the error
+// and allow one extra iteration before Task.isCancelled is re-checked.
 //
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -195,14 +196,10 @@ struct PanelContainerView<Content: View>: View {
         stopPolling()
         // Sleep-FIRST — see "SLEEP-FIRST LOOP ORDER" comment at the top of this file.
         // Single atomic guard — do NOT split. See "POLL TASK GUARD SPLIT" comment above.
-        // do/catch around sleep — see "CANCELLATION" comment at the top of this file.
+        // bare `try` — see "CANCELLATION" comment at the top of this file.
         pollTask = Task(name: "sheetPoll") { @MainActor in
             while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .milliseconds(100))
-                } catch {
-                    break
-                }
+                try await Task.sleep(for: .milliseconds(100))
                 // Single atomic guard — do NOT split into two separate guards.
                 // See "POLL TASK GUARD SPLIT" comment at the top of this file for why.
                 //
