@@ -11,7 +11,7 @@ import SwiftUI
 // in AppKit's standard modal sheet dimming path. When a SwiftUI .sheet is
 // presented, the parent popover content is NOT dimmed by the system.
 //
-// FIX: We observe the hosting NSWindow.sheets via a Timer-based poll (the only
+// FIX: We observe the hosting NSWindow.sheets via a Task-based poll (the only
 // reliable way without subclassing NSWindow) and overlay a semi-transparent
 // black rectangle when sheets are present. The observed window is captured from
 // this view hierarchy, not from NSApp.windows, so stale hidden popover windows
@@ -21,19 +21,19 @@ import SwiftUI
 //    interactive behind an open sheet, which is confusing and buggy.
 // ❌ NEVER use GeometryReader here — it fights NSPopover's sizing.
 //
-// ── TRANSIENT HIDE / RESTORE ANIMATION INVARIANT ────────────────────────────
+// ── TRANSIENT HIDE / RESTORE ANIMATION INVARIANT ────────────────────────────────────────
 //
 // PROBLEM (fixed, do not regress):
 // When the user switches away from the app while a sheet is open, hidePanel()
 // is called. hidePanel() sets panelVisibilityState.isOpen = false WITHOUT
 // dismissing the sheet — the sheet NSWindow stays attached and alive.
 // This fires onChange(isOpen) with open=false, which previously cleared
-// isSheetActive = false. On restore, the timer set it back to true, replaying
+// isSheetActive = false. On restore, the poll task set it back to true, replaying
 // the cover fade-in animation even though the sheet never closed.
 //
 // FIX:
 // hidePanel() sets panelVisibilityState.isTransientHide = true BEFORE setting
-// isOpen = false. onChange and the timer guard both check isTransientHide and
+// isOpen = false. onChange and the poll task guard both check isTransientHide and
 // skip clearing isSheetActive when it is true. On full close (closePanel),
 // isTransientHide is false, so isSheetActive is correctly cleared.
 // On re-open, onChange(open=true) resets isTransientHide = false.
@@ -43,13 +43,13 @@ import SwiftUI
 //   onChange(false): stopPolling(), isTransientHide=true so isSheetActive stays true
 //   openPanel()  →  isOpen = true
 //   onChange(true): isTransientHide = false, startPolling()
-//   timer tick: window visible, sheet found, isSheetActive already true → no change, no animation ✅
+//   poll tick: window visible, sheet found, isSheetActive already true → no change, no animation ✅
 //
 // SEQUENCE — full close while sheet is open:
 //   closePanel() →  isTransientHide stays false  →  isOpen = false
 //   onChange(false): stopPolling(), isTransientHide=false so isSheetActive = false ✅
 //
-// ── TIMER GUARD SPLIT (do not re-split, fixed jitter)───────────────────────
+// ── POLL TASK GUARD SPLIT (do not re-split, fixed jitter)───────────────────────
 //
 // PROBLEM (fixed, do not regress):
 // An earlier iteration split the guard into two: first guard hostWindow != nil,
@@ -65,6 +65,21 @@ import SwiftUI
 // consistently regardless of which condition fails. The else branch is where
 // isTransientHide is checked before any state mutation.
 //
+// ── SLEEP-FIRST LOOP ORDER (do not change) ─────────────────────────────────────
+//
+// The poll loop sleeps BEFORE executing the guard. hostWindow is delivered via
+// DispatchQueue.main.async in WindowReader.makeNSView, so it is nil for at least
+// one runloop after the view appears. Sleeping first matches the original
+// Timer.scheduledTimer behaviour (first fire after 100ms, not immediately) and
+// avoids an immediate guard-fail tick before hostWindow is populated.
+//
+// ── CANCELLATION: bare try on Task.sleep ───────────────────────────────────────
+//
+// Task.sleep is called with bare `try`, not `try?`. When stopPolling() cancels
+// the task mid-sleep, CancellationError propagates out of the loop immediately
+// without executing a spurious post-cancel tick. `try?` would swallow the error
+// and allow one extra iteration before Task.isCancelled is re-checked.
+//
 // ────────────────────────────────────────────────────────────────────────────
 
 /// Wraps popover content and dims it when a SwiftUI sheet is active.
@@ -74,8 +89,8 @@ struct PanelContainerView<Content: View>: View {
 
     /// Whether a sheet is currently active over the popover.
     ///
-    /// Driven exclusively by the 100ms poll timer reading NSWindow.sheets.
-    /// ❌ NEVER set this directly from onChange or any path other than the timer
+    /// Driven exclusively by the 100ms poll task reading NSWindow.sheets.
+    /// ❌ NEVER set this directly from onChange or any path other than the poll task
     ///    (except the isTransientHide-guarded clear on full close).
     @State private var isSheetActive = false
 
@@ -83,19 +98,20 @@ struct PanelContainerView<Content: View>: View {
     ///
     /// Populated asynchronously by WindowReader via DispatchQueue.main.async.
     /// Will be nil for at least one runloop after the view first appears.
-    /// The timer guard handles this gracefully — do not split the guard.
+    /// The poll task guard handles this gracefully — do not split the guard.
     @State private var hostWindow: NSWindow?
 
-    /// Timer used to poll NSWindow.sheets every 100ms.
+    /// Structured task driving the 100ms sheet-detection poll loop.
     ///
     /// Started on onAppear and on each panel open. Stopped on close/disappear.
-    /// Always call stopPolling() before startPolling() to avoid duplicate timers.
-    @State private var pollTimer: Timer?
+    /// Always call stopPolling() before startPolling() to avoid duplicate tasks.
+    /// Named "sheetPoll" for Instruments visibility (RG6).
+    @State private var pollTask: Task<Void, Never>?
 
     /// Tracks panel open/close state and the transient-hide flag.
     ///
     /// isTransientHide is set by hidePanel() before isOpen = false to let
-    /// onChange and the timer know NOT to clear isSheetActive.
+    /// onChange and the poll task know NOT to clear isSheetActive.
     @Environment(PanelVisibilityState.self) private var panelVisibilityState: PanelVisibilityState
 
     /// Creates a `PanelContainerView` wrapping the given content.
@@ -164,57 +180,62 @@ struct PanelContainerView<Content: View>: View {
     // post NSWindow.willBeginSheetNotification / didEndSheetNotification, and
     // there is no KVO-observable property without subclassing NSWindow.
     //
-    // Timer interval 100ms: fast enough to feel instant, cheap enough at 10Hz.
+    // Task interval 100ms: fast enough to feel instant, cheap enough at 10Hz.
 
-    /// Starts (or restarts) the repeating sheet-detection timer.
+    /// Starts (or restarts) the repeating sheet-detection poll task.
     ///
-    /// Always calls `stopPolling()` first to invalidate any existing timer.
-    /// Safe to call multiple times — will not create duplicate timers.
-    private func startPolling() {
+    /// Always calls `stopPolling()` first to cancel any existing task.
+    /// Safe to call multiple times — will not create duplicate tasks.
+    /// `@MainActor` is explicit so the compiler statically verifies that `pollTask`
+    /// (a `@State`-backed property) is always mutated on the main actor.
+    @MainActor private func startPolling() {
         stopPolling()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [self] _ in
-            Task {
-                await MainActor.run {
-                    // Single atomic guard — do NOT split into two separate guards.
-                    // See "TIMER GUARD SPLIT" comment at the top of this file for why.
+// Sleep-FIRST — see "SLEEP-FIRST LOOP ORDER" comment at the top of this file.
+        // Single atomic guard — do NOT split. See "POLL TASK GUARD SPLIT" comment above.
+        // bare `try` — see "CANCELLATION" comment at the top of this file.
+        pollTask = Task(name: "sheetPoll") { @MainActor in
+            while !Task.isCancelled {
+                try await Task.sleep(for: .milliseconds(100))
+                // Single atomic guard — do NOT split into two separate guards.
+                // See "POLL TASK GUARD SPLIT" comment at the top of this file for why.
+                //
+                // This guard fails when:
+                //   a) isOpen is false (panel is closing or closed)
+                //   b) hostWindow is nil (not yet delivered by WindowReader async)
+                //   c) window.isVisible is false (transient hide — window ordered out)
+                //
+                // In all these cases we fall into the else branch to decide whether
+                // to clear isSheetActive. We only clear it on a genuine close, not
+                // during a transient hide where the sheet window is still alive.
+                guard panelVisibilityState.isOpen,
+                      let window = hostWindow,
+                      window.isVisible
+                else {
+                    // isTransientHide = true means hidePanel() caused this guard
+                    // to fail (window ordered out but sheet still attached).
+                    // Keep isSheetActive as-is so restore has nothing to re-animate.
                     //
-                    // This guard fails when:
-                    //   a) isOpen is false (panel is closing or closed)
-                    //   b) hostWindow is nil (not yet delivered by WindowReader async)
-                    //   c) window.isVisible is false (transient hide — window ordered out)
-                    //
-                    // In all these cases we fall into the else branch to decide whether
-                    // to clear isSheetActive. We only clear it on a genuine close, not
-                    // during a transient hide where the sheet window is still alive.
-                    guard panelVisibilityState.isOpen,
-                          let window = hostWindow,
-                          window.isVisible
-                    else {
-                        // isTransientHide = true means hidePanel() caused this guard
-                        // to fail (window ordered out but sheet still attached).
-                        // Keep isSheetActive as-is so restore has nothing to re-animate.
-                        //
-                        // isTransientHide = false means closePanel() or the window
-                        // genuinely disappeared — safe to clear.
-                        if !panelVisibilityState.isTransientHide, isSheetActive {
-                            isSheetActive = false
-                        }
-                        return
+                    // isTransientHide = false means closePanel() or the window
+                    // genuinely disappeared — safe to clear.
+                    if !panelVisibilityState.isTransientHide, isSheetActive {
+                        isSheetActive = false
                     }
-
-                    // Window is visible and panel is open — ground truth read.
-                    let hasVisibleSheet = window.sheets.contains { $0.isVisible }
-                    // Guard against redundant SwiftUI state updates (no-op if unchanged).
-                    if hasVisibleSheet != isSheetActive { isSheetActive = hasVisibleSheet }
+                    continue
                 }
+
+                // Window is visible and panel is open — ground truth read.
+                let hasVisibleSheet = window.sheets.contains { $0.isVisible }
+                // Guard against redundant SwiftUI state updates (no-op if unchanged).
+                if hasVisibleSheet != isSheetActive { isSheetActive = hasVisibleSheet }
             }
         }
     }
 
-    /// Invalidates and nils the poll timer.
-    private func stopPolling() {
-        pollTimer?.invalidate()
-        pollTimer = nil
+    /// Cancels and nils the poll task.
+    /// `@MainActor` matches `startPolling()` — both mutate `pollTask`.
+    @MainActor private func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 }
 
@@ -227,7 +248,7 @@ struct PanelContainerView<Content: View>: View {
 /// is nil during the synchronous makeNSView call (the view hasn't been added
 /// to a window yet at that point).
 ///
-/// The poll timer in PanelContainerView handles the nil-window case gracefully
+/// The poll task in PanelContainerView handles the nil-window case gracefully
 /// via its atomic guard — do not assume hostWindow is non-nil on first tick.
 private struct WindowReader: NSViewRepresentable {
     /// Updated with the NSWindow that hosts this view hierarchy.
