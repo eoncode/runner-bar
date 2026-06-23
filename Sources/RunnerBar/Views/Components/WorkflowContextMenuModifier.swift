@@ -15,13 +15,28 @@ private func copyToPasteboard(_ text: String) {
 
 // MARK: - WorkflowContextMenuModifier
 /// `ViewModifier` that attaches a workflow-level right-click context menu to an `ActionRowView`.
+///
+/// All mutations are routed through `WorkflowActionsUseCase` and launched as
+/// plain structured `Task { }` values (never `Task.detached`) so they inherit
+/// the `@MainActor` context of the SwiftUI button closure, surface errors
+/// correctly, and are cancellable on view dismissal via `.onDisappear` (P9).
 private struct WorkflowContextMenuModifier: ViewModifier {
     /// The workflow action group this menu acts on.
     let group: WorkflowActionGroup
 
-    /// Wraps `content` with a right-click context menu containing workflow-level actions.
+    /// Use-case that owns all transport mutations (P7, P8).
+    private let actions = WorkflowActionsUseCase()
+
+    /// Tracks the most recently launched mutation task so it can be cancelled
+    /// when the view disappears (P9 — structured lifetime).
+    @State private var currentTask: Task<Void, Never>?
+
+    /// Wraps `content` with a right-click context menu and cancels any
+    /// in-flight mutation task when the view disappears.
     func body(content: Content) -> some View {
-        content.contextMenu { menuItems }
+        content
+            .contextMenu { menuItems }
+            .onDisappear { currentTask?.cancel() }
     }
 
     /// Context menu items: re-run failed, re-run all, cancel, copy log, open on GitHub.
@@ -29,57 +44,49 @@ private struct WorkflowContextMenuModifier: ViewModifier {
     private var menuItems: some View {
         let isConcluded = group.groupStatus == .completed
         let isLive = group.groupStatus == .inProgress
+        let scope = group.repo
+        let runIDs = group.runs.map { $0.id }
 
         // Re-run failed
         Button {
-            let scope = group.repo
-            let runIDs = group.runs.map { $0.id }
-            Task.detached(priority: .userInitiated) {
-                await withTaskGroup(of: Void.self) { taskGroup in
-                    for id in runIDs { taskGroup.addTask { await ghPost("repos/\(scope)/actions/runs/\(id)/rerun-failed-jobs") } }
-                }
-            }
+            currentTask = Task { await actions.rerunFailed(runIDs: runIDs, scope: scope) }
         } label: { Label("Re-run Failed Jobs", systemImage: "arrow.counterclockwise") }
         .disabled(!isConcluded)
 
         // Re-run all
         Button {
-            let scope = group.repo
-            let runIDs = group.runs.map { $0.id }
-            Task.detached(priority: .userInitiated) {
-                await withTaskGroup(of: Void.self) { taskGroup in
-                    for id in runIDs { taskGroup.addTask { await ghPost("repos/\(scope)/actions/runs/\(id)/rerun") } }
-                }
-            }
+            currentTask = Task { await actions.rerunAll(runIDs: runIDs, scope: scope) }
         } label: { Label("Re-run All Jobs", systemImage: "arrow.clockwise") }
         .disabled(!isConcluded)
 
         // Cancel
         Button {
-            let scope = group.repo
-            let runIDs = group.runs.map { $0.id }
-            Task.detached(priority: .userInitiated) {
-                await withTaskGroup(of: Void.self) { taskGroup in
-                    for id in runIDs { taskGroup.addTask { await cancelRun(runID: id, scope: scope) } }
-                }
-            }
+            currentTask = Task { await actions.cancel(runIDs: runIDs, scope: scope) }
         } label: { Label("Cancel", systemImage: "xmark.circle") }
         .disabled(!isLive)
+
         Divider()
+
+        // Copy log
         Button {
             let capturedGroup = group
-            Task.detached(priority: .userInitiated) {
-                guard let text = await LogFetcher().fetchActionLogs(group: capturedGroup), !text.isEmpty else { return }
+            currentTask = Task {
+                guard let text = await LogFetcher().fetchActionLogs(group: capturedGroup),
+                      !text.isEmpty else { return }
                 await copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
+
         Divider()
+
+        // Open on GitHub — synchronous, no Task needed
         Button {
             guard let htmlUrl = group.runs.first?.htmlUrl,
                   let runUrl = URL(string: htmlUrl) else { return }
             NSWorkspace.shared.open(runUrl)
         } label: { Label("Show Workflow on GitHub", systemImage: "doc.text") }
         .disabled(group.runs.first?.htmlUrl == nil)
+
         Button {
             let sha = group.headSha
             let repo = group.repo
