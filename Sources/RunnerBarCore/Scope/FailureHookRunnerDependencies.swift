@@ -26,6 +26,26 @@ public protocol ScopePreferencesStoreProtocol: Actor {
     /// `confirmSave()`) — one `await` and one encode/write instead of N.
     func setPreferences(_ prefs: ScopePreferences, for scope: String)
 
+    /// Reads, mutates, and writes the `ScopePreferences` for `scope` atomically
+    /// within a single actor hop.
+    ///
+    /// Use this instead of a separate `preferences(for:)` + `setPreferences(_:for:)`
+    /// pair when you need to mutate a subset of fields while preserving the rest.
+    /// The two-hop alternative violates P10: another writer can change the blob
+    /// between the read hop and the write hop, causing the second hop to silently
+    /// overwrite intermediate changes with a stale snapshot.
+    ///
+    /// A default implementation is provided via a protocol extension; concrete
+    /// conformers do not need to implement this unless they have a specialised
+    /// storage model.
+    ///
+    /// - Parameters:
+    ///   - scope: The scope identifier whose preferences should be modified.
+    ///   - mutation: A closure that receives the current `ScopePreferences` as
+    ///     an `inout` value and applies all desired changes before returning.
+    ///     The closure runs synchronously inside the actor.
+    func modifyPreferences(for scope: String, with mutation: (inout ScopePreferences) -> Void)
+
     // MARK: - Alias
 
     /// Human-readable alias for the scope. `nil` = display raw scope string.
@@ -77,6 +97,20 @@ public protocol ScopePreferencesStoreProtocol: Actor {
     /// Removes all persisted preferences for the scope.
     /// Call from `ScopeStore.remove(id:)` to avoid orphaned data accumulating.
     func cleanUp(scope: String)
+}
+
+// MARK: - ScopePreferencesStoreProtocol default implementations
+
+public extension ScopePreferencesStoreProtocol {
+    /// Default implementation: reads, applies `mutation`, and writes — all inside
+    /// the actor so the full RMW is a single hop. Concrete conformers can override
+    /// this if they have a specialised storage model, but the default is correct
+    /// for any conformer that implements `preferences(for:)` and `setPreferences(_:for:)`.
+    func modifyPreferences(for scope: String, with mutation: (inout ScopePreferences) -> Void) {
+        var prefs = preferences(for: scope)
+        mutation(&prefs)
+        setPreferences(prefs, for: scope)
+    }
 }
 
 // MARK: - TerminalLauncherProtocol

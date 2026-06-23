@@ -26,7 +26,8 @@ import SwiftUI
 //        synchronous. confirmSave() is async — called via plain Task{} to keep
 //        @MainActor isolation after the actor awaits (P9).
 //        Header now shows alias (from snapshot) when set, raw scope otherwise.
-//        confirmSave() uses setPreferences(_:for:) — single actor hop instead of 4.
+//        confirmSave() uses modifyPreferences(_:for:with:) — single actor hop RMW
+//        so no intermediate writer can clobber fields not owned by this sheet (P10).
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -87,7 +88,14 @@ struct ScopeEditSheet: View {
     init(scopeEntry: ScopeEntry, preferences: ScopePreferences, isPresented: Binding<Bool>) {
         self.scopeEntry = scopeEntry
         self._isPresented = isPresented
-        let alias = preferences.alias.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        // Trim first, then use the trimmed value for both the empty check and the
+        // assigned result. The previous code trimmed only to check emptiness but
+        // returned the original $0, so leading/trailing whitespace could survive
+        // into headerDisplayName if the stored alias arrived un-trimmed. (#1538)
+        let alias = preferences.alias.flatMap {
+            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
         self.headerDisplayName = alias ?? scopeEntry.scope
         _hookEnabled = State(initialValue: preferences.failureHookEnabled)
         _hookBranch = State(initialValue: preferences.failureHookBranch)
@@ -471,12 +479,16 @@ extension ScopeEditSheet {
     }
 
     /// Single commit point: writes all draft fields to `ScopePreferencesStore` in one
-    /// actor hop via `setPreferences(_:for:)`, then dismisses the sheet.
+    /// atomic actor hop via `modifyPreferences(for:with:)`, then dismisses the sheet.
     ///
-    /// Using `setPreferences` instead of individual `setXxx` calls reduces the cost from
-    /// 4 read-modify-write cycles + 4 UserDefaults writes to a single encode + write.
+    /// `modifyPreferences` performs the full read-modify-write inside the actor,
+    /// so fields not editable in this sheet (alias, pollingInterval, notifyOnSuccess,
+    /// notifyOnFailure) are always read and re-written from the live stored value —
+    /// never from a stale snapshot captured before the await. This eliminates the
+    /// TOCTOU window that existed when preferences(for:) and setPreferences(_:for:)
+    /// were called as two separate actor hops (P10). (#1538)
     ///
-    /// Marked `async` because `ScopePreferencesStore` is now an actor (P16).
+    /// Marked `async` because `ScopePreferencesStore` is an actor (P16).
     /// Called via `Task { await confirmSave() }` in `buttonFooter` — a plain
     /// (non-detached) Task that inherits `@MainActor` from the SwiftUI button
     /// context, so `isPresented = false` after the await still runs on
@@ -484,14 +496,14 @@ extension ScopeEditSheet {
     @MainActor func confirmSave() async {
         let command = hookCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         let path = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Read current prefs so fields not editable in this sheet (alias, pollingInterval,
-        // notifyOnSuccess, notifyOnFailure) are preserved — not overwritten with defaults.
-        var prefs = await ScopePreferencesStore.shared.preferences(for: scope)
-        prefs.failureHookEnabled = hookEnabled
-        prefs.failureHookBranch = hookBranch
-        prefs.failureHookCommand = command.isEmpty ? nil : command
-        prefs.localRepoPath = path.isEmpty ? nil : path
-        await ScopePreferencesStore.shared.setPreferences(prefs, for: scope)
+        let hookEnabledSnapshot = hookEnabled
+        let hookBranchSnapshot = hookBranch
+        await ScopePreferencesStore.shared.modifyPreferences(for: scope) { prefs in
+            prefs.failureHookEnabled = hookEnabledSnapshot
+            prefs.failureHookBranch = hookBranchSnapshot
+            prefs.failureHookCommand = command.isEmpty ? nil : command
+            prefs.localRepoPath = path.isEmpty ? nil : path
+        }
         isPresented = false
     }
 
