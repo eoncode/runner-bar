@@ -54,9 +54,8 @@ struct FailureHookRunnerUseCase: Sendable {
     /// are safe without `sending`.
     ///
     /// - Important: If `WorkflowActionGroup` ever drops its `Sendable` conformance,
-    ///   restore `sending` here and in `FailureHookRunner.fireIfNeeded` to re-establish
-    ///   the ownership-transfer contract across the async boundary.
-    // TODO: restore `sending` on `group` if WorkflowActionGroup drops Sendable conformance.
+    ///   restore `sending` on `group` here and in `FailureHookRunner.fireIfNeeded` to
+    ///   re-establish the ownership-transfer contract across the async boundary.
     func fireIfNeeded(
         group: WorkflowActionGroup,
         scope: String,
