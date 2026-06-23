@@ -26,7 +26,8 @@ import SwiftUI
 //        synchronous. confirmSave() is async — called via plain Task{} to keep
 //        @MainActor isolation after the actor awaits (P9).
 //        Header now shows alias (from snapshot) when set, raw scope otherwise.
-//        confirmSave() uses setPreferences(_:for:) — single actor hop instead of 4.
+//        confirmSave() reads live prefs, applies draft edits, writes back via
+//        setPreferences(_:for:), then calls ScopeStore.refreshDisplayNames().
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -87,7 +88,14 @@ struct ScopeEditSheet: View {
     init(scopeEntry: ScopeEntry, preferences: ScopePreferences, isPresented: Binding<Bool>) {
         self.scopeEntry = scopeEntry
         self._isPresented = isPresented
-        let alias = preferences.alias.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        // Trim first, then use the trimmed value for both the empty check and the
+        // assigned result. The previous code trimmed only to check emptiness but
+        // returned the original $0, so leading/trailing whitespace could survive
+        // into headerDisplayName if the stored alias arrived un-trimmed. (#1538)
+        let alias = preferences.alias.flatMap {
+            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
         self.headerDisplayName = alias ?? scopeEntry.scope
         _hookEnabled = State(initialValue: preferences.failureHookEnabled)
         _hookBranch = State(initialValue: preferences.failureHookBranch)
@@ -470,13 +478,16 @@ extension ScopeEditSheet {
         hookBranch = nil
     }
 
-    /// Single commit point: writes all draft fields to `ScopePreferencesStore` in one
-    /// actor hop via `setPreferences(_:for:)`, then dismisses the sheet.
+    /// Single commit point: reads current prefs, applies draft edits, and writes
+    /// back to `ScopePreferencesStore` via `preferences(for:)` + `setPreferences(_:for:)`.
     ///
-    /// Using `setPreferences` instead of individual `setXxx` calls reduces the cost from
-    /// 4 read-modify-write cycles + 4 UserDefaults writes to a single encode + write.
+    /// Reading the live stored value first ensures fields not editable in this sheet
+    /// (alias, pollingInterval, notifyOnSuccess, notifyOnFailure) are preserved —
+    /// never overwritten with defaults. After saving, calls
+    /// `ScopeStore.refreshDisplayNames()` so `ScopesView` reflects any alias change
+    /// immediately without an app restart. (#1538)
     ///
-    /// Marked `async` because `ScopePreferencesStore` is now an actor (P16).
+    /// Marked `async` because `ScopePreferencesStore` is an actor (P16).
     /// Called via `Task { await confirmSave() }` in `buttonFooter` — a plain
     /// (non-detached) Task that inherits `@MainActor` from the SwiftUI button
     /// context, so `isPresented = false` after the await still runs on

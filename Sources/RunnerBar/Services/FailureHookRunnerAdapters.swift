@@ -1,22 +1,10 @@
 // FailureHookRunnerAdapters.swift
 // RunnerBar
 //
-// Production adapters that bridge the `ScopePreferencesStore` actor and
-// `TerminalLauncher` singleton to the protocols expected by
+// Production adapters that bridge dependencies to the protocols expected by
 // `FailureHookRunnerUseCase`.
 import Foundation
 import RunnerBarCore
-
-// MARK: - DefaultScopePreferencesStore
-
-/// Forwards all protocol calls to `ScopePreferencesStore.shared`.
-///
-/// `ScopePreferencesStore` is itself an actor that conforms to
-/// `ScopePreferencesStoreProtocol`, so the simplest production adapter
-/// is just a typealias to the shared singleton. This wrapper exists only
-/// to preserve the `DefaultScopePreferencesStore` name used at call sites
-/// in `FailureHookRunner` without touching that file. (#1538)
-typealias DefaultScopePreferencesStore = ScopePreferencesStore
 
 // MARK: - DefaultTerminalLauncher
 
