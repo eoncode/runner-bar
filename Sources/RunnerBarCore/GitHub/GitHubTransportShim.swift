@@ -1,7 +1,7 @@
 // GitHubTransportShim.swift
 // RunnerBarCore
 //
-// Provides module-level `ghAPI`, `ghRaw`, `ghAPIPaginated` symbols
+// Provides module-level `ghAPI`, `ghAPIPaginated` symbols
 // for RunnerBarCore consumers (WorkflowActionGroupFetch, RunnerStatusEnricher,
 // LogFetcher).
 //
@@ -132,15 +132,6 @@ func ghAPI(_ endpoint: String) async -> Data? {
     let result = await transport(endpoint)
     if result != nil { await apiCallCounter.record() }
     return result
-}
-
-/// Calls the configured raw-bytes transport.
-///
-/// Raw log fetches hit S3 and do **not** consume the GitHub REST quota —
-/// `apiCallCounter` is intentionally not incremented here.
-func ghRaw(_ endpoint: String) async -> Data? {
-    let transport = rawTransportBox.read()
-    return await transport(endpoint)
 }
 
 /// Calls the configured paginated JSON transport.

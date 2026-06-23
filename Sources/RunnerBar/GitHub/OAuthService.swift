@@ -294,6 +294,7 @@ private struct OAuthTokenResponse: Decodable {
 /// - Makes the three required fields explicit and compiler-checked.
 /// - Eliminates stringly-typed key spellings (`"client_id"` etc.) at the call site.
 /// - Documents the contract of the GitHub OAuth token endpoint inline.
+// periphery:ignore:all
 private struct OAuthTokenRequest: Encodable {
     /// The GitHub OAuth app client ID.
     let clientID: String
