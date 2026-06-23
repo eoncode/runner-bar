@@ -49,69 +49,28 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
 
     // MARK: - save(_:at:)
 
-    /// Writes (or removes) `.proxy` and `.proxycredentials` at `installPath`
-    /// on a background thread.
+    /// Writes (or removes) `.proxy` and `.proxycredentials` at `installPath`.
+    ///
+    /// Disk I/O runs in a `@concurrent` free function so the actor's cooperative
+    /// thread is never blocked. Trimming and file operations happen entirely
+    /// inside the `@concurrent` helper.
     ///
     /// Each file is handled independently so a failure on one does not mask
-    /// a failure on the other. Both errors are logged; if either write fails
-    /// `RunnerProxyStoreError.writeFailed` is thrown with all messages.
-    ///
-    /// - `.proxy` is written as `url + "\n"`, or removed when `config.url` is empty.
-    /// - `.proxycredentials` is written as `user + "\n" + password + "\n"`,
-    ///   or removed when both `config.user` and `config.password` are empty.
-    /// - All three fields are trimmed of leading/trailing whitespace before
-    ///   writing. This matches `load(at:)`'s read behaviour, ensuring a
-    ///   load → save round-trip is idempotent. Callers must not rely on
-    ///   preserving surrounding whitespace in proxy credentials.
-    ///
-    /// `withCheckedThrowingContinuation` requires `E == any Error`; typed errors
-    /// are not supported by that API. The typed `RunnerProxyStoreError` is
-    /// re-thrown in the surrounding `do/catch` — consistent with `RunnerConfigStore`.
+    /// a failure on the other. If either write fails,
+    /// `RunnerProxyStoreError.writeFailed` is thrown with all accumulated messages.
     func save(_ config: RunnerProxyConfig, at installPath: String) async throws(RunnerProxyStoreError) {
         let base = URL(fileURLWithPath: installPath)
-        let proxyURL = base.appendingPathComponent(".proxy")
-        let credURL = base.appendingPathComponent(".proxycredentials")
-
-        // Trim defensively here so no call site can accidentally write whitespace to disk.
-        let url = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
-        let proxySecretVal = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
-
         do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                DispatchQueue.global(qos: .utility).async {
-                    var messages: [String] = []
-
-                    do {
-                        try Self.writeProxyURL(url, to: proxyURL)
-                    } catch {
-                        let msg = ".proxy write error: \(error)"
-                        log("RunnerProxyStore › \(msg)")
-                        messages.append(msg)
-                    }
-
-                    do {
-                        try Self.writeProxyCredentials(user: user, secret: proxySecretVal, to: credURL)
-                    } catch {
-                        let msg = ".proxycredentials write error: \(error)"
-                        log("RunnerProxyStore › \(msg)")
-                        messages.append(msg)
-                    }
-
-                    if messages.isEmpty {
-                        continuation.resume()
-                    } else {
-                        continuation.resume(throwing: RunnerProxyStoreError.writeFailed(messages))
-                    }
-                }
-            }
+            try await saveProxyFiles(
+                config,
+                proxyURL: base.appendingPathComponent(".proxy"),
+                credURL:  base.appendingPathComponent(".proxycredentials")
+            )
         } catch let proxyError as RunnerProxyStoreError {
             throw proxyError
         } catch {
-            // Unexpected error escaping the continuation — should not happen in practice
-            // since the continuation only throws RunnerProxyStoreError, but log it so
-            // it is visible in diagnostics rather than silently swallowed.
-            log("RunnerProxyStore › save: unexpected error: \(error)")
+            // Defensive bridge: saveProxyFiles only throws RunnerProxyStoreError,
+            // but typed-throw bridging through `any Error` requires this catch.
             throw RunnerProxyStoreError.writeFailed([error.localizedDescription])
         }
     }
