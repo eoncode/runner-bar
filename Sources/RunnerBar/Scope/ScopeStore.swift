@@ -37,10 +37,6 @@ final class ScopeStore {
     /// Scopes that are currently enabled — used by `RunnerStore` for polling.
     var activeScopes: [String] { entries.filter(\.isEnabled).map(\.scope) }
 
-    /// Legacy accessor: all scope strings regardless of enabled state.
-    /// Kept for call-sites not yet migrated; prefer `activeScopes`.
-    var scopes: [String] { entries.map(\.scope) }
-
     /// Initialises the store by loading persisted entries (or migrating the
     /// legacy `[String]` key if present).
     private init() {

@@ -222,9 +222,10 @@ struct StepLogView: View {
     /// re-parenting or navigation stack identity change).
     ///
     /// Uses `repoScopeForFetch` (derived from `job.htmlUrl`) as the primary scope.
-    /// Falls back to the first `owner/repo`-style entry in `scopeStore.activeScopes` when
-    /// `htmlUrl` is absent or malformed — preserving the #1106 spec intent so single-repo
-    /// setups continue to work even if the job URL is temporarily unavailable.
+    /// Falls back to the first `owner/repo`-style entry in all entries (including
+    /// disabled ones) when `htmlUrl` is absent or malformed — deliberate policy
+    /// exception from the "active only" principle established by #1515. The saved
+    /// repo is always preferred over an unrelated active repo for log fetching (#1106 intent).
     ///
     /// ## Known cancellation limitation
     ///
@@ -250,8 +251,9 @@ struct StepLogView: View {
         let scope: String = {
             let primary = repoScopeForFetch
             if !primary.isEmpty { return primary }
-            // ✅ Use injected scopeStore.activeScopes — not the stale .scopes singleton.
-            return scopeStore.activeScopes.first(where: { $0.contains("/") }) ?? ""
+            // ✅ Use injected scopeStore (not singleton). Falls back to any entry (including
+            // disabled) per #1515 policy exception — saved repo preferred over unrelated active repo.
+            return scopeStore.entries.first(where: { $0.scope.contains("/") })?.scope ?? ""
         }()
         // ✅ Plain Task inherits @MainActor context from the view.
         // ✅ Handle stored so onDisappear can signal cancellation (P9).
