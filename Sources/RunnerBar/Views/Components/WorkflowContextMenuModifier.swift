@@ -82,7 +82,7 @@ private struct WorkflowContextMenuModifier: ViewModifier {
             currentTask = Task {
                 guard let text = await LogFetcher().fetchActionLogs(group: capturedGroup),
                       !text.isEmpty else { return }
-                copyToPasteboard(text)
+                await copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
 
@@ -170,7 +170,7 @@ private struct JobContextMenuModifier: ViewModifier {
             currentTask = Task {
                 guard let text = await LogFetcher().fetchJobLog(jobID: capturedJob.id, scope: scope),
                       !text.isEmpty else { return }
-                copyToPasteboard(text)
+                await copyToPasteboard(text)
             }
         } label: { Label("Copy Log", systemImage: "doc.on.doc") }
 
