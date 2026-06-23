@@ -3,19 +3,6 @@
 import Foundation
 import RunnerBarCore
 
-// MARK: - LifecycleResult
-
-/// The result of a runner lifecycle operation (start or stop).
-enum LifecycleResult {
-    /// The operation completed successfully.
-    case success
-    /// The runner installation is corrupt (e.g. missing `svc.sh`, wrong working directory).
-    /// The caller should prompt the user to reinstall the runner.
-    case corruptInstall
-    /// The operation failed with a human-readable reason string.
-    case failed(String)
-}
-
 // MARK: - RunnerLifecycleService
 
 /// Manages the macOS launchctl service lifecycle for locally-installed GitHub Actions runner agents.
@@ -23,11 +10,7 @@ enum LifecycleResult {
 /// Each runner is installed as a launchd agent via the runner's own `svc.sh` script.
 /// This service drives the install → start, stop → uninstall, and full removal sequences,
 /// delegating process execution to `ProcessRunner` and token fetching to the GitHub API.
-struct RunnerLifecycleService {
-    /// Shared singleton — use this instead of calling init directly.
-    static let shared = RunnerLifecycleService()
-    /// Private initialiser — use `shared`.
-    private init() { /* Singleton — intentionally empty; all state is in instance properties. */ }
+struct RunnerLifecycleService: RunnerLifecycleServiceProtocol {
 
     // MARK: - Start
 

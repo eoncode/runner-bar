@@ -1,0 +1,37 @@
+// RunnerLifecycleServiceProtocol.swift
+// RunnerBar
+import Foundation
+import RunnerBarCore
+
+// MARK: - RunnerLifecycleServiceProtocol
+
+/// Abstraction over macOS launchctl runner lifecycle operations (start, stop, remove).
+///
+/// Introduced so `LocalRunnersView` and any future consumers can depend on the
+/// protocol rather than the concrete `RunnerLifecycleService`, enabling unit testing
+/// with a stub that does not spawn real `svc.sh` processes.
+///
+/// `Sendable` conformance is required so the existential can be stored as a
+/// `let` inside `@MainActor` views without triggering isolation warnings (P4).
+///
+/// ## Production usage
+/// ```swift
+/// let lifecycleService: any RunnerLifecycleServiceProtocol = RunnerLifecycleService()
+/// ```
+///
+/// ## Test double
+/// ```swift
+/// struct StubLifecycleService: RunnerLifecycleServiceProtocol {
+///     func start(runner: RunnerModel) async -> LifecycleResult { .success }
+///     func stop(runner: RunnerModel) async -> LifecycleResult { .success }
+///     func remove(runner: RunnerModel) async -> Bool { true }
+/// }
+/// ```
+protocol RunnerLifecycleServiceProtocol: Sendable {
+    @discardableResult
+    func start(runner: RunnerModel) async -> LifecycleResult
+    @discardableResult
+    func stop(runner: RunnerModel) async -> LifecycleResult
+    @discardableResult
+    func remove(runner: RunnerModel) async -> Bool
+}
