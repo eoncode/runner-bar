@@ -64,14 +64,11 @@ extension RunnerStore {
                 self.scopeFromActionGroup(group)
             },
             fireFailureHook: { group, scope in
-                // Structured Task — lifetime tied to RunnerStore's cooperative scope.
-                // Task { } (not Task.detached) at .utility priority; does not inherit
-                // @MainActor isolation because this closure runs off the main actor
-                // inside PollResultBuilder's async context.
-                // Task(name:) satisfies Reach P6 (task naming — surfaces in Instruments).
-                Task(name: "failureHook-\(scope)", priority: .utility) {
-                    await FailureHookRunner.fireIfNeeded(group: group, scope: scope, callsite: "pollResultBuilder")
-                }
+                // PollResultBuilder.buildGroupState (and freezeVanishedGroups) already
+                // `await` this closure directly — no Task wrapper needed or correct here.
+                // The hook runs inline on the cooperative thread pool as part of the
+                // structured async chain that buildGroupState owns.
+                await FailureHookRunner.fireIfNeeded(group: group, scope: scope, callsite: "pollResultBuilder")
             },
             enrichJobs: { jobs in
                 self.enrichGroupJobs(jobs, jobCache: jobCache)
