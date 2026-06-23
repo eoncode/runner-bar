@@ -254,6 +254,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
     /// old flat-key format but was removed from `ScopeStore` before `migrateIfNeeded`
     /// ran — those keys would otherwise be orphaned indefinitely in `UserDefaults`.
     /// For post-migration scopes the flat-key removals are no-ops.
+    /// Removes the stored preferences blob for `scope` from `UserDefaults`.
     public func cleanUp(scope: String) {
         store.removeObject(forKey: blobKey(for: scope))
         for field in Self.legacyFields {
@@ -264,6 +265,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
 
     // MARK: - Migration
 
+    /// `UserDefaults` flag set after a successful v2 migration; guards against re-running migration.
     private static let migrationKey = "scope.__migrated_v2"
 
     /// Migrates legacy flat `UserDefaults` keys to the single-blob format.
@@ -289,11 +291,11 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         }
         for scope in knownScopes {
             var prefs = ScopePreferences()
-            if let v = store.string(forKey: "scope.\(scope).alias"), !v.isEmpty {
-                prefs.alias = v
+            if let val = store.string(forKey: "scope.\(scope).alias"), !val.isEmpty {
+                prefs.alias = val
             }
-            if let v = store.object(forKey: "scope.\(scope).pollingInterval") as? Int {
-                prefs.pollingInterval = v
+            if let val = store.object(forKey: "scope.\(scope).pollingInterval") as? Int {
+                prefs.pollingInterval = val
             }
             if store.object(forKey: "scope.\(scope).notifyOnSuccess") != nil {
                 prefs.notifyOnSuccess = store.bool(forKey: "scope.\(scope).notifyOnSuccess")
@@ -302,14 +304,14 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
                 prefs.notifyOnFailure = store.bool(forKey: "scope.\(scope).notifyOnFailure")
             }
             prefs.failureHookEnabled = store.bool(forKey: "scope.\(scope).failureHookEnabled")
-            if let v = store.string(forKey: "scope.\(scope).failureHookCommand"), !v.isEmpty {
-                prefs.failureHookCommand = v
+            if let val = store.string(forKey: "scope.\(scope).failureHookCommand"), !val.isEmpty {
+                prefs.failureHookCommand = val
             }
-            if let v = store.string(forKey: "scope.\(scope).localRepoPath"), !v.isEmpty {
-                prefs.localRepoPath = v
+            if let val = store.string(forKey: "scope.\(scope).localRepoPath"), !val.isEmpty {
+                prefs.localRepoPath = val
             }
-            if let v = store.string(forKey: "scope.\(scope).failureHookBranch"), !v.isEmpty {
-                prefs.failureHookBranch = v
+            if let val = store.string(forKey: "scope.\(scope).failureHookBranch"), !val.isEmpty {
+                prefs.failureHookBranch = val
             }
             write(prefs, for: scope)
             for field in Self.legacyFields {
