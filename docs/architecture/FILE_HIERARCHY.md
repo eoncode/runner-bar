@@ -146,7 +146,6 @@ runner-bar/
 │       │   └── RunnerStore.swift            — observable store that owns the authoritative list of Runner values for the UI
 │       │
 │       ├── Scope/
-│       │   ├── ScopeEntry.swift             — UI-layer display wrapper around the Core ScopeEntry model
 │       │   └── ScopeStore.swift             — @MainActor store that loads, persists, and mutates the list of monitored scopes
 │       │
 │       ├── Services/
@@ -203,7 +202,7 @@ runner-bar/
 │
 └── Tests/
     ├── RunnerBarCoreTests/
-    │   ├── LocalRunnerIndexTests.swift      — tests for LocalRunnerIndex — the UserDefaults-backed name → install-path persistence layer
+    │   ├── LocalRunnerIndexTests.swift      — tests for LocalRunnerIndex — the UserDefaults-backed name → install-path index
     │   ├── OrgRunnerMetricsResolutionTests.swift — tests for org-level runner metrics resolution logic
     │   ├── RunnerBarCoreTests.swift         — unit tests for RunnerBarCore models and logic
     │   └── SaveRunnerEditsUseCaseTests.swift — tests for SaveRunnerEditsUseCase using actor-based spy conformances
