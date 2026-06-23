@@ -37,7 +37,10 @@ enum FailureHookRunner {
         callsite: String = "unknown"
     ) async {
         let useCase = FailureHookRunnerUseCase(
-            preferencesStore: DefaultScopePreferencesStore(),
+            // DefaultScopePreferencesStore is now a typealias for ScopePreferencesStore.
+            // We pass the shared singleton directly — it satisfies
+            // `any ScopePreferencesStoreProtocol` because the actor conforms. (#1538)
+            preferencesStore: ScopePreferencesStore.shared,
             terminalLauncher: DefaultTerminalLauncher()
         )
         await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)

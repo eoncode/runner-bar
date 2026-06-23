@@ -12,14 +12,14 @@ import SwiftUI
 // ScrollView uses maxHeight: .infinity to fill all remaining panel space.
 // AppDelegate.resizeAndRepositionPanel() clamps the panel at 85% visibleFrame.
 // No extra cap needed here — the panel cap IS the scroll boundary.
-// NEVER move headerBar inside the ScrollView.
-// NEVER replace .infinity with a fixed number.
-// NEVER use GeometryReader for the height.
-// NEVER add idealHeight to the root frame.
+// ❌ NEVER move headerBar inside the ScrollView.
+// ❌ NEVER replace .infinity with a fixed number.
+// ❌ NEVER use GeometryReader for the height.
+// ❌ NEVER add idealHeight to the root frame.
 //
 // WIDTH CONTRACT:
 // .frame(idealWidth: 480) — only idealWidth needed. NSPanel handles bounds.
-// NEVER remove idealWidth: 480.
+// ❌ NEVER remove idealWidth: 480.
 //
 // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
 // UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
@@ -45,14 +45,15 @@ struct SettingsView: View {
     var oauthService: any OAuthServiceProtocol
     /// Runner lifecycle service injected from `AppDelegate` and forwarded into `LocalRunnersView`.
     /// Typed to protocol so tests can supply a stub without spawning real `svc.sh` processes.
-    /// No default — callers must supply the `AppDelegate`-owned instance explicitly.
+    /// No default -- callers must supply the `AppDelegate`-owned instance explicitly.
     var lifecycleService: any RunnerLifecycleServiceProtocol
 
-    // MARK: - Observed stores
-    /// App-wide preferences (notifications, update channel, etc.).
-    @State var settings = AppPreferencesStore.shared
+    // MARK: - Injected services
+    /// App-wide preference store (notifications, update channel, etc.).
+    /// Injected as a concrete reference; `@Observable` types don't need `@State` wrapping.
+    let settings: AppPreferencesStore
     /// Notification opt-in preferences per scope.
-    @State var notifications = NotificationPreferences.shared
+    let notifications: NotificationPreferences
 
     // MARK: - Local UI state
     /// Mirrors `LoginItem.isEnabled`; toggled by the Launch at Login switch.
@@ -63,12 +64,37 @@ struct SettingsView: View {
     @State var isCLIAuthenticated = (Keychain.token == nil && githubToken() != nil)
     /// `true` while the OAuth sign-in flow is in progress.
     @State var isSigningIn = false
+    /// Retains the sign-in listener Task so it is cancelled when the view disappears.
+    @State private var signInTask: Task<Void, Never>?
     /// Retains the sign-out listener Task so it is cancelled when the view disappears.
     @State private var signOutTask: Task<Void, Never>?
     /// `true` while `LocalRunnersView` is displayed instead of the main settings scroll.
     @State var showLocalRunners = false
     /// `true` while `ScopesView` is displayed instead of the main settings scroll.
     @State var showScopes = false
+
+    // MARK: - Init
+    /// Creates the view with injected dependencies.
+    ///
+    /// Production call sites can omit all service parameters — the defaults wire
+    /// up the shared live instances automatically.
+    init(
+        onBack: @escaping () -> Void,
+        store: RunnerViewModel,
+        localRunnerStore: LocalRunnerStore = .shared,
+        oauthService: any OAuthServiceProtocol = OAuthService.shared,
+        settings: AppPreferencesStore = .shared,
+        notifications: NotificationPreferences = .shared,
+        lifecycleService: any RunnerLifecycleServiceProtocol
+    ) {
+        self.onBack = onBack
+        self.store = store
+        self.localRunnerStore = localRunnerStore
+        self.oauthService = oauthService
+        self.settings = settings
+        self.notifications = notifications
+        self.lifecycleService = lifecycleService
+    }
 
     // MARK: - Computed properties
     /// Short version string from `CFBundleShortVersionString`.
@@ -81,8 +107,13 @@ struct SettingsView: View {
     }
 
     // MARK: - Body
-    /// Switches between `LocalRunnersView`, `ScopesView`, and the main `settingsBody`.
+    /// Root view: swaps between the settings scroll, `LocalRunnersView`, and `ScopesView`.
     var body: some View {
+        // Lifecycle modifiers live on the root (wrapping all branches) so
+        // onAppearAction()/onDisappear fire only when the settings panel itself
+        // opens/closes — NOT on every navigation to LocalRunnersView/ScopesView.
+        // Attaching them to `settingsBody` caused needless Keychain re-reads and
+        // Task recreation on every back-navigation.
         Group {
             if showLocalRunners {
                 LocalRunnersView(
@@ -100,7 +131,12 @@ struct SettingsView: View {
         }
         .onAppear(perform: onAppearAction)
         .onDisappear {
-            if !isSigningIn { oauthService.onCompletion = nil }
+            // Cancel and unconditionally nil the sign-in task — the for-await loop
+            // exits promptly on cancellation (AsyncStream respects task cancellation)
+            // so isSigningIn will never flip back via the stream after this point.
+            // Nilling here ensures a re-opened panel never shows a stale spinner.
+            signInTask?.cancel()
+            signInTask = nil
             signOutTask?.cancel()
             signOutTask = nil
         }
@@ -108,9 +144,12 @@ struct SettingsView: View {
 
     /// The main settings layout (header + sections scroll).
     ///
+    /// Extracted from `body` so `LocalRunnersView` and `ScopesView` can replace it cleanly
+    /// without any structural duplication.
+    ///
     /// HEIGHT CONTRACT: headerBar is OUTSIDE the ScrollView — back button always visible.
-    /// NEVER move headerBar inside the ScrollView.
-    /// NEVER replace .infinity with a fixed number.
+    /// ❌ NEVER move headerBar inside the ScrollView.
+    /// ❌ NEVER replace .infinity with a fixed number.
     /// If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
@@ -118,18 +157,23 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             headerBar
             Divider()
+            // maxHeight: .infinity — fills all space the panel gives us.
+            // AppDelegate caps the panel at 85% visibleFrame. That IS the limit.
+            // ❌ NEVER move headerBar inside this ScrollView.
+            // ❌ NEVER replace .infinity with a fixed number.
+            // If you are an agent or human, DO NOT REMOVE THIS COMMENT, YOU ARE NOT ALLOWED
+            // UNDER ANY CIRCUMSTANCE.
             ScrollView(.vertical, showsIndicators: true) {
                 sectionsStack
             }
-            // maxHeight: .infinity — fills all space the panel gives us.
-            // AppDelegate caps the panel at 85% visibleFrame. That IS the limit.
-            // NEVER replace .infinity with a fixed number — the panel cap is the boundary.
             .frame(maxHeight: .infinity)
         }
         .frame(idealWidth: 480, maxWidth: .infinity)
     }
 
-    /// Vertical stack of all settings sections (account, management, general, about).
+    /// Vertical stack of all settings sections.
+    ///
+    /// Order: Account → Management → General → About
     private var sectionsStack: some View {
         VStack(alignment: .leading, spacing: 0) {
             accountSection
@@ -143,7 +187,7 @@ struct SettingsView: View {
         .padding(.bottom, 16)
     }
 
-    /// Wires OAuth completion/sign-out callbacks when the view appears.
+    /// Runs on `.onAppear`: refreshes auth state and starts sign-in / sign-out listeners.
     private func onAppearAction() {
         let keychainToken = Keychain.token
         let envToken = githubToken()
@@ -153,24 +197,32 @@ struct SettingsView: View {
         // swiftlint:disable:next line_length
         log("SettingsView › onAppear — Keychain.token=\(keychainToken.map { "present(len=\($0.count))" } ?? "nil") githubToken=\(envToken.map { "present(len=\($0.count))" } ?? "nil") isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
         #endif
-        oauthService.onCompletion = { success in
-            log("SettingsView › onCompletion — success=\(success), updating auth state")
-            isOAuthAuthenticated = success
-            isCLIAuthenticated = !success && githubToken() != nil
-            isSigningIn = false
+
+        // Replace the old `onCompletion` closure with a structured async stream.
+        // This avoids the retained-closure / multiple-subscriber hazard (P9).
+        signInTask = Task { @MainActor in
+            for await success in oauthService.makeSignInStream() {
+                log("SettingsView › signInStream — success=\(success), updating auth state")
+                isOAuthAuthenticated = success
+                isCLIAuthenticated = !success && githubToken() != nil
+                log("SettingsView › signInStream — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
+                isSigningIn = false
+            }
         }
+
         signOutTask = Task { @MainActor in
             for await _ in oauthService.makeSignOutStream() {
                 let postToken = githubToken()
                 log("SettingsView › didSignOut — githubToken post-signout=\(postToken != nil ? "present(len=\(postToken!.count))" : "nil")")
                 isOAuthAuthenticated = false
                 isCLIAuthenticated = postToken != nil
+                log("SettingsView › didSignOut — isOAuthAuthenticated=\(isOAuthAuthenticated) isCLIAuthenticated=\(isCLIAuthenticated)")
             }
         }
     }
 
     // MARK: - Header
-    /// Top bar with back chevron and "Settings" title.
+    /// Top bar with back button and "Settings" title.
     private var headerBar: some View {
         HStack {
             Button(action: onBack, label: {
@@ -188,17 +240,17 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
-    /// Applies or removes the Launch at Login login item.
+    /// Applies or removes the Login Item entry based on `enabled`.
     func applyLaunchAtLogin(_ enabled: Bool) { LoginItem.setEnabled(enabled) }
 
-    /// Starts the OAuth browser flow.
+    /// Initiates the OAuth sign-in flow via the injected `oauthService`.
     func signInWithGitHub() {
         log("SettingsView › signInWithGitHub — isSigningIn=true")
         isSigningIn = true
         oauthService.signIn()
     }
 
-    /// Clears the stored OAuth token and resets auth state.
+    /// Signs out of GitHub via the injected `oauthService`.
     func signOutOfGitHub() {
         log("SettingsView › signOutOfGitHub — calling oauthService.signOut()")
         oauthService.signOut()

@@ -42,7 +42,7 @@ struct FailureHookRunnerUseCaseTests {
             group: group,
             scope: scope,
             jobs: jobs,
-            localPath: localRepoPath
+            localRepoPath: localRepoPath
         )
     }
 

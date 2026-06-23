@@ -131,15 +131,21 @@ internal extension SettingsView {
 
     // MARK: - General
     /// General section: polling interval, notification toggles, launch-at-login, and popover arrow.
+    ///
+    /// `settings` and `notifications` are injected `let` properties on an `@Observable` type.
+    /// SwiftUI cannot synthesise `$`-bindings from plain `let` stored properties, so we
+    /// capture each store in a local `Bindable` wrapper before using `$` syntax.
     var generalSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let bindableSettings      = Bindable(settings)
+        let bindableNotifications = Bindable(notifications)
+        return VStack(alignment: .leading, spacing: 0) {
             Text("General").font(RBFont.sectionHeader).foregroundColor(Color.rbTextSecondary)
                 .padding(.horizontal, RBSpacing.md).padding(.top, 8).padding(.bottom, 4)
             HStack {
                 Text("Polling interval").font(.system(size: 12)); Spacer()
                 Text("\(settings.pollingInterval)s").font(.system(size: 12)).foregroundColor(Color.rbTextSecondary)
                     .frame(minWidth: 36, alignment: .trailing)
-                Stepper("", value: $settings.pollingInterval, in: 10...300).labelsHidden()
+                Stepper("", value: bindableSettings.pollingInterval, in: 10...300).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 2)
             Text("How often RunnerBar checks GitHub for runner and workflow status. Lower values use more API quota.")
@@ -148,14 +154,14 @@ internal extension SettingsView {
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Notify on success").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $notifications.notifyOnSuccess)
+                Toggle("", isOn: bindableNotifications.notifyOnSuccess)
                     .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
             Divider().padding(.leading, RBSpacing.md)
             HStack {
                 Text("Notify on failure").font(.system(size: 12)); Spacer()
-                Toggle("", isOn: $notifications.notifyOnFailure)
+                Toggle("", isOn: bindableNotifications.notifyOnFailure)
                     .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
             }
             .padding(.horizontal, RBSpacing.md).padding(.vertical, 6)
@@ -175,17 +181,17 @@ internal extension SettingsView {
     // MARK: - Popover arrow row (#1184)
     /// Toggle row that shows or hides the NSPopover anchor arrow.
     ///
-    /// Extracted as its own computed var so it is a first-class child of
-    /// `generalSection`'s VStack, identical in structure to every other row.
+    /// Uses a local `Bindable` wrapper for the same reason as `generalSection`.
     var popoverArrowRow: some View {
-        HStack {
+        let bindableSettings = Bindable(settings)
+        return HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Show popover arrow").font(.system(size: 12))
                 Text("Controls whether the anchor arrow is shown on the menu bar popover. Takes effect on next open.")
                     .font(.caption2).foregroundColor(Color.rbTextSecondary)
             }
             Spacer()
-            Toggle("", isOn: $settings.showPopoverArrow)
+            Toggle("", isOn: bindableSettings.showPopoverArrow)
                 .toggleStyle(.switch).tint(Color.rbSuccess).labelsHidden()
         }
         .padding(.horizontal, RBSpacing.md).padding(.top, 6).padding(.bottom, 6)

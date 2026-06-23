@@ -194,7 +194,7 @@ struct PanelContainerView<Content: View>: View {
     /// (a `@State`-backed property) is always mutated on the main actor.
     @MainActor private func startPolling() {
         stopPolling()
-        // Sleep-FIRST — see "SLEEP-FIRST LOOP ORDER" comment at the top of this file.
+// Sleep-FIRST — see "SLEEP-FIRST LOOP ORDER" comment at the top of this file.
         // Single atomic guard — do NOT split. See "POLL TASK GUARD SPLIT" comment above.
         // bare `try` — see "CANCELLATION" comment at the top of this file.
         pollTask = Task(name: "sheetPoll") { @MainActor in

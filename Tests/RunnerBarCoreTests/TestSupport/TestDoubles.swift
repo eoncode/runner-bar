@@ -193,6 +193,60 @@ actor SpyRateLimitActor: RateLimitActorProtocol {
     }
 }
 
+// MARK: - MockScopePreferencesStore
+
+/// Stub conformance for `ScopePreferencesStoreProtocol` (Actor-constrained).
+///
+/// Implemented as an `actor` to satisfy the protocol constraint.
+/// All stored properties are set at init time and accessed synchronously within
+/// the actor — no concurrent mutation occurs inside a single test method.
+actor MockScopePreferencesStore: ScopePreferencesStoreProtocol {
+    var hookEnabled: Bool    = false
+    var command:     String? = nil
+    var branch:      String? = nil
+    var localPath:   String? = nil
+
+    // Scoped to failure-hook only — unused properties return defaults.
+    func preferences(for _: String) -> ScopePreferences { ScopePreferences() }
+    func setPreferences(_: ScopePreferences, for _: String) {}
+    func alias(for _: String) -> String? { nil }
+    func setAlias(_: String?, for _: String) {}
+    func displayName(for scope: String) -> String { scope }
+    func pollingInterval(for _: String) -> Int? { nil }
+    func setPollingInterval(_: Int?, for _: String) {}
+    func notifyOnSuccess(for _: String) -> Bool? { nil }
+    func setNotifyOnSuccess(_: Bool?, for _: String) {}
+    func notifyOnFailure(for _: String) -> Bool? { nil }
+    func setNotifyOnFailure(_: Bool?, for _: String) {}
+    func setFailureHookEnabled(_: Bool, for _: String) {}
+    func setFailureHookCommand(_: String?, for _: String) {}
+    func setLocalRepoPath(_: String?, for _: String) {}
+    func setFailureHookBranch(_: String?, for _: String) {}
+    func cleanUp(scope _: String) {}
+
+    func failureHookEnabled(for _: String) -> Bool    { hookEnabled }
+    func failureHookCommand(for _: String) -> String? { command }
+    func failureHookBranch(for _:  String) -> String? { branch }
+    func localRepoPath(for _:      String) -> String? { localPath }
+}
+
+// MARK: - SpyTerminalLauncher
+
+/// Spy conformance for `TerminalLauncherProtocol`.
+///
+/// `final class` + `@unchecked Sendable`: `open(command:)` is `@MainActor` so
+/// all mutations of `openCallCount` and `lastCommand` occur exclusively on the
+/// main actor — `@unchecked` is safe here.
+final class SpyTerminalLauncher: TerminalLauncherProtocol, @unchecked Sendable {
+    private(set) var openCallCount = 0
+    private(set) var lastCommand: String?
+
+    @MainActor func open(command: String) {
+        openCallCount += 1
+        lastCommand = command
+    }
+}
+
 // MARK: - TestError
 
 enum TestError: Error { case saveFailed }

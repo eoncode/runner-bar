@@ -6,6 +6,15 @@ import Observation
 // MARK: - AppPreferencesStore
 
 /// Persists general app settings to UserDefaults.
+///
+/// ## Dependency injection (P7)
+/// `init(store:)` accepts a `UserDefaults` suite so unit tests can inject an
+/// ephemeral in-memory suite instead of polluting `.standard`. Production code
+/// always uses the `shared` singleton, which calls `init()` → `init(store: .standard)`.
+///
+/// ## Thread safety
+/// `@MainActor`-isolated. All `didSet` writes run on the main thread; no additional
+/// synchronisation is needed.
 @MainActor
 @Observable
 final class AppPreferencesStore {
@@ -25,6 +34,14 @@ final class AppPreferencesStore {
     /// Valid range for the polling interval in seconds. Minimum 10 s, maximum 300 s.
     static let pollingRange: ClosedRange<Int> = 10 ... 300
 
+    // MARK: - Backing store
+
+    /// The `UserDefaults` instance used for all reads and writes.
+    /// Injected at init; defaults to `.standard` in production.
+    private let defaults: UserDefaults
+
+    // MARK: - Preferences
+
     /// How often (in seconds) RunnerBar polls GitHub. Clamped to 10–300 s.
     ///
     /// Setting this property out-of-range triggers a second `didSet` call with
@@ -42,7 +59,7 @@ final class AppPreferencesStore {
                 pollingInterval = clamped
                 return
             }
-            UserDefaults.standard.set(pollingInterval, forKey: Key.pollingInterval)
+            defaults.set(pollingInterval, forKey: Key.pollingInterval)
         }
     }
 
@@ -52,7 +69,7 @@ final class AppPreferencesStore {
     /// in the UI (#510). Do not remove: removing would break the stored key for
     /// users upgrading from older versions.
     var showDimmedRunners: Bool {
-        didSet { UserDefaults.standard.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
+        didSet { defaults.set(showDimmedRunners, forKey: Key.showDimmedRunners) }
     }
 
     /// Whether the NSPopover anchor arrow is shown.
@@ -64,24 +81,33 @@ final class AppPreferencesStore {
     /// Takes effect on the next `openPanel()` call — the arrow state is baked in
     /// at `popover.show()` time and cannot be changed mid-session.
     var showPopoverArrow: Bool {
-        didSet { UserDefaults.standard.set(showPopoverArrow, forKey: Key.showPopoverArrow) }
+        didSet { defaults.set(showPopoverArrow, forKey: Key.showPopoverArrow) }
     }
 
-    /// Private initialiser — use `shared`.
+    // MARK: - Init
+
+    /// Convenience initialiser for production use. Calls `init(store: .standard)`.
+    private convenience init() {
+        self.init(store: .standard)
+    }
+
+    /// Designated initialiser.
     ///
-    /// Registers factory defaults first so both `integer(forKey:)` and `bool(forKey:)`
-    /// return the intended values on first launch without requiring `object(forKey:) == nil`
-    /// guards. This matches the pattern used by `NotificationPreferences`.
-    private init() {
-        UserDefaults.standard.register(defaults: [
+    /// - Parameter store: The `UserDefaults` suite to read from and write to.
+    ///   Pass `.standard` in production (via the `shared` singleton) or an
+    ///   ephemeral suite (`UserDefaults(suiteName:)`) in unit tests to avoid
+    ///   polluting the real preferences database. (P7)
+    init(store: UserDefaults) {
+        self.defaults = store
+        store.register(defaults: [
             Key.pollingInterval: 15,  // First-launch default: 15 s (see #511)
             Key.showDimmedRunners: true,
             Key.showPopoverArrow: true,
         ])
-        let stored = UserDefaults.standard.integer(forKey: Key.pollingInterval)
+        let stored = store.integer(forKey: Key.pollingInterval)
         pollingInterval = stored.clamped(to: Self.pollingRange)
-        showDimmedRunners = UserDefaults.standard.bool(forKey: Key.showDimmedRunners)
-        showPopoverArrow = UserDefaults.standard.bool(forKey: Key.showPopoverArrow)
+        showDimmedRunners = store.bool(forKey: Key.showDimmedRunners)
+        showPopoverArrow = store.bool(forKey: Key.showPopoverArrow)
     }
 }
 

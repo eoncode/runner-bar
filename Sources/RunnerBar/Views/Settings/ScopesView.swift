@@ -31,8 +31,15 @@ struct ScopesView: View {
 
     /// Controls presentation of `AddScopeSheet`.
     @State private var showAddScopeSheet = false
-    /// Non-nil while `ScopeEditSheet` is presented for this scope entry.
+    /// Non-nil while `ScopeEditSheet` is being presented for a scope entry.
     @State private var selectedScopeEntry: ScopeEntry?
+    /// Pre-fetched preferences snapshot for `selectedScopeEntry`.
+    /// Fetched asynchronously on row tap before the sheet is presented,
+    /// so `ScopeEditSheet.init` remains synchronous. (#1538)
+    /// Cleared automatically whenever `selectedScopeEntry` becomes nil via
+    /// the `onChange` modifier below, keeping the two pieces of state in sync
+    /// regardless of how the sheet is dismissed. (#1538)
+    @State private var selectedScopePreferences: ScopePreferences?
 
     // MARK: - Body
 
@@ -51,15 +58,34 @@ struct ScopesView: View {
         .sheet(isPresented: $showAddScopeSheet) {
             AddScopeSheet(isPresented: $showAddScopeSheet)
         }
+        // Sheet is presented only once both entry and preferences snapshot are ready.
+        // The Binding maps nil/non-nil of selectedScopeEntry to Bool.
+        // The else branch is defensive — both state writes happen in the same
+        // @MainActor turn after the await, so it should never be visible. (#1538)
         .sheet(item: $selectedScopeEntry) { entry in
-            // #992: ScopeEditSheet replaces the old nav drill-down.
-            ScopeEditSheet(
-                scopeEntry: entry,
-                isPresented: Binding(
-                    get: { selectedScopeEntry != nil },
-                    set: { if !$0 { selectedScopeEntry = nil } }
+            if let prefs = selectedScopePreferences {
+                // #992: ScopeEditSheet replaces the old nav drill-down.
+                // #1538: preferences snapshot passed in so init stays synchronous.
+                ScopeEditSheet(
+                    scopeEntry: entry,
+                    preferences: prefs,
+                    isPresented: Binding(
+                        get: { selectedScopeEntry != nil },
+                        set: { if !$0 { selectedScopeEntry = nil; selectedScopePreferences = nil } }
+                    )
                 )
-            )
+            } else {
+                // Preferences not yet fetched — renders an empty sheet rather than
+                // a blank/crashed view in the theoretical race described above.
+                EmptyView()
+            }
+        }
+        // Self-enforcing invariant: whenever selectedScopeEntry is cleared from *any*
+        // code path (sheet dismiss via binding, external nil-out, future refactors),
+        // selectedScopePreferences is cleared with it. Prevents a stale snapshot from
+        // a previously selected scope persisting in memory. (#1538)
+        .onChange(of: selectedScopeEntry) { _, newEntry in
+            if newEntry == nil { selectedScopePreferences = nil }
         }
     }
 
@@ -133,11 +159,31 @@ struct ScopesView: View {
     // MARK: - Scope rows
 
     /// Row view for a single remote scope entry.
+    ///
+    /// Display name and alias sub-label are fetched synchronously from the
+    /// `@Observable` `ScopeStore` — the actor read is deferred to the tap
+    /// handler where we await the preferences before opening the sheet.
     private func scopeRow(_ entry: ScopeEntry) -> some View {
         let isRepo = entry.scope.contains("/")
-        let displayName = ScopePreferencesStore.displayName(for: entry.scope)
+        // displayName and alias are read from ScopeStore's cached observable state
+        // (written back by ScopePreferencesStore on save), so this stays synchronous.
+        // Full actor reads happen in the tap handler below.
+        let displayName = entry.displayName ?? entry.scope
+        let hasAlias = entry.displayName != nil
         return Button {
-            selectedScopeEntry = entry
+            // Guard against double-taps: if a sheet is already being prepared or presented,
+            // ignore the second tap entirely. Without this, two simultaneous Tasks could
+            // complete out-of-order and pair selectedScopePreferences from scope A with
+            // selectedScopeEntry for scope B. (#1538)
+            guard selectedScopeEntry == nil else { return }
+            // Fetch preferences from the actor before presenting the sheet.
+            // Plain Task{} — inherits @MainActor, sheet presentation happens
+            // on main actor after the await. (P9)
+            Task {
+                let prefs = await ScopePreferencesStore.shared.preferences(for: entry.scope)
+                selectedScopePreferences = prefs
+                selectedScopeEntry = entry
+            }
         } label: {
             HStack(spacing: 8) {
                 Text(isRepo ? "Repo" : "Org")
@@ -152,7 +198,7 @@ struct ScopesView: View {
                         .font(.system(size: 12))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if ScopePreferencesStore.alias(for: entry.scope) != nil {
+                    if hasAlias {
                         Text(entry.scope)
                             .font(.caption2)
                             .foregroundColor(Color.rbTextTertiary)
@@ -179,10 +225,16 @@ struct ScopesView: View {
                     .font(.caption2)
                     .foregroundColor(Color.rbTextTertiary)
                 Button {
-                    ScopePreferencesStore.cleanUp(scope: entry.scope)
-                    scopeStore.remove(id: entry.id)
-                    // ScopeStore.remove mutates activeScopes, firing withObservationTracking
-                    // in startObservingScopes and restarting the poll loop automatically.
+                    // cleanUp MUST complete before remove so that the poll loop
+                    // restart triggered by ScopeStore.remove cannot race a
+                    // not-yet-cleaned preferences blob on the next tick. (#1538)
+                    Task {
+                        await ScopePreferencesStore.shared.cleanUp(scope: entry.scope)
+                        scopeStore.remove(id: entry.id)
+                        // ScopeStore.remove mutates activeScopes, firing
+                        // withObservationTracking in startObservingScopes and
+                        // restarting the poll loop automatically.
+                    }
                 } label: {
                     Image(systemName: "minus.circle")
                         .font(.caption2)
