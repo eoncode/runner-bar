@@ -22,6 +22,8 @@ import SwiftUI
 //       NSOpenPanel runs without closing the panel — the NSPanel is non-activating
 //       so it does not obscure the picker.
 // #1263: Removed ScrollView so sheet height is intrinsic (same fix as #1262).
+// #1540: Injected ScopePreferencesStoreProtocol — no more static ScopePreferencesStore
+//        calls in the view. Caller pre-fetches initialPrefs and passes them in.
 /// Modal sheet for editing settings of a single scope (org or repo).
 /// Presented when the user taps a scope row in `ScopesView`.
 ///
@@ -40,11 +42,11 @@ struct ScopeEditSheet: View {
     /// `confirmSave()` sets it to `false` after persisting changes.
     @Binding var isPresented: Bool
 
+    /// Injected preferences store. Defaults to the shared live instance in
+    /// production; swap for a fake in tests.
+    private let scopePrefs: any ScopePreferencesStoreProtocol
+
     /// Shared store providing the full list of scope entries.
-    /// `@State` holds a reference to the singleton — safe even though
-    /// `ScopeEditSheet` is recreated on each presentation, because `@State`
-    /// stores the reference itself (not a copy), so both presentations point
-    /// at the same `ScopeStore.shared` instance.
     @State private var scopeStore = ScopeStore.shared
     /// Controls visibility of the failure-hook configuration sheet.
     @State private var showHookSheet = false
@@ -64,22 +66,36 @@ struct ScopeEditSheet: View {
     /// it is reliably available when openFolderPicker() is called. (#1195)
     @State private var hostWindow: NSWindow?
 
-    /// Creates the view, seeding `@State` values from `ScopePreferencesStore`
-    /// so they reflect persisted user preferences on first render.
+    /// Creates the view, seeding `@State` draft values from a pre-fetched
+    /// `ScopePreferences` snapshot.
+    ///
+    /// The caller is responsible for fetching `initialPrefs` before presenting
+    /// the sheet. This keeps the `init` synchronous — required because
+    /// `ScopePreferencesStore.Live` is a `@MainActor` type whose methods are
+    /// called on the main actor, and SwiftUI view `init` is synchronous.
+    ///
     /// - Parameters:
     ///   - scopeEntry: The scope whose settings this view manages.
+    ///   - initialPrefs: Pre-fetched preferences snapshot used to seed draft state.
     ///   - isPresented: Binding that controls sheet visibility.
-    init(scopeEntry: ScopeEntry, isPresented: Binding<Bool>) {
+    ///   - scopePrefs: The preferences store to write back to on Save.
+    init(
+        scopeEntry: ScopeEntry,
+        initialPrefs: ScopePreferences,
+        isPresented: Binding<Bool>,
+        scopePrefs: any ScopePreferencesStoreProtocol = ScopePreferencesStore.Live.shared
+    ) {
         self.scopeEntry = scopeEntry
         self._isPresented = isPresented
-        _hookEnabled = State(initialValue: ScopePreferencesStore.failureHookEnabled(for: scopeEntry.scope))
-        _hookBranch = State(initialValue: ScopePreferencesStore.failureHookBranch(for: scopeEntry.scope))
+        self.scopePrefs = scopePrefs
+        _hookEnabled   = State(initialValue: initialPrefs.failureHookEnabled)
+        _hookBranch    = State(initialValue: initialPrefs.failureHookBranch)
         // Seed with the persisted value or empty string — never the default command.
         // FailureHookRunner falls back to its own default at runtime when the stored
         // value is nil, so seeding with the default here would silently persist it
         // on the first Save even when the user never opened FailureHookCommandSheet.
-        _hookCommand = State(initialValue: ScopePreferencesStore.failureHookCommand(for: scopeEntry.scope) ?? "")
-        _localRepoPath = State(initialValue: ScopePreferencesStore.localRepoPath(for: scopeEntry.scope) ?? "")
+        _hookCommand   = State(initialValue: initialPrefs.failureHookCommand ?? "")
+        _localRepoPath = State(initialValue: initialPrefs.localRepoPath ?? "")
     }
 
     /// The up-to-date entry from `ScopeStore`, or `nil` if the scope has been
@@ -155,7 +171,7 @@ extension ScopeEditSheet {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(Color.rbSurfaceElevated))
                     .overlay(Capsule().strokeBorder(Color.rbBorderSubtle, lineWidth: 0.5))
-                Text(ScopePreferencesStore.displayName(for: scope))
+                Text(scopePrefs.displayName(for: scope))
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1).truncationMode(.middle)
             }
@@ -433,27 +449,31 @@ extension ScopeEditSheet {
     }
 
     /// Normalises the draft local path: trims whitespace and clears the `~/` placeholder.
-    /// Does NOT write to `ScopePreferencesStore` — that happens in `confirmSave()`.
+    /// Does NOT write to the preferences store — that happens in `confirmSave()`.
     func commitLocalPath() {
         isEditingPath = false
         let trimmed = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
         localRepoPath = (trimmed == "~/") ? "" : trimmed
     }
 
-    /// Clears the draft branch filter. Does NOT write to `ScopePreferencesStore`.
+    /// Clears the draft branch filter. Does NOT write to the preferences store.
     func clearBranchFilter() {
         hookBranch = nil
     }
 
-    /// Single commit point: writes all three draft fields to `ScopePreferencesStore`,
-    /// then dismisses the sheet. Nothing is persisted before this runs.
+    /// Single atomic commit point: builds a `ScopePreferences` snapshot from all
+    /// draft fields and writes it via `scopePrefs`, then dismisses the sheet.
+    /// Nothing is persisted before this runs.
     @MainActor func confirmSave() {
-        ScopePreferencesStore.setFailureHookEnabled(hookEnabled, for: scope)
-        ScopePreferencesStore.setFailureHookBranch(hookBranch, for: scope)
         let command = hookCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        ScopePreferencesStore.setFailureHookCommand(command.isEmpty ? nil : command, for: scope)
-        let path = localRepoPath.isEmpty ? nil : localRepoPath
-        ScopePreferencesStore.setLocalRepoPath(path, for: scope)
+        let path    = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updated = ScopePreferences(
+            failureHookEnabled: hookEnabled,
+            failureHookCommand: command.isEmpty ? nil : command,
+            localRepoPath:      path.isEmpty   ? nil : path,
+            failureHookBranch:  hookBranch
+        )
+        scopePrefs.setPreferences(updated, for: scope)
         isPresented = false
     }
 
