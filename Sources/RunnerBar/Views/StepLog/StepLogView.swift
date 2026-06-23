@@ -61,7 +61,8 @@ struct StepLogView: View {
     @State private var logText: String?
     /// `true` while the background fetch is in-flight.
     @State private var isLoading = true
-    /// Handle for the in-flight log fetch task; cancelled in `onDisappear`.
+    /// Handle for the in-flight log fetch task; cancelled in `onDisappear` and at the
+    /// top of `loadLog()` to prevent races if `onAppear` fires more than once.
     @State private var loadTask: Task<Void, Never>?
 
     // MARK: - Formatters (static to avoid re-allocation per render)
@@ -216,14 +217,22 @@ struct StepLogView: View {
     // MARK: - Log loading
     /// Kicks off a background fetch of the step log and publishes the result to `logText`.
     ///
-    /// Stores the task handle in `loadTask` so `onDisappear` can cancel it if the user
-    /// navigates away before the fetch completes, avoiding wasted network work.
+    /// Cancels any in-flight `loadTask` before spawning a new one — prevents a stale
+    /// task from writing to `@State` if `onAppear` fires more than once (e.g. view
+    /// re-parenting or navigation stack identity change).
     ///
     /// Uses `repoScopeForFetch` (derived from `job.htmlUrl`) as the primary scope.
     /// Falls back to the first `owner/repo`-style entry in `scopeStore.activeScopes` when
     /// `htmlUrl` is absent or malformed — preserving the #1106 spec intent so single-repo
     /// setups continue to work even if the job URL is temporarily unavailable.
+    ///
+    /// - Note: `guard !Task.isCancelled` below guards the `@State` writes only. It does
+    ///   not cancel the underlying network I/O inside `fetchStepLog` — that function does
+    ///   not yet cooperate with structured cancellation internally. The full network cost
+    ///   is therefore still paid on fast back-navigation; the guard merely prevents stale
+    ///   state from being committed. TODO: make `fetchStepLog` cancellation-cooperative.
     private func loadLog() {
+        loadTask?.cancel() // Cancel any previous in-flight fetch before re-spawning.
         isLoading = true
         let jobID = job.id
         let stepNum = step.id
@@ -237,6 +246,7 @@ struct StepLogView: View {
         // ✅ Handle stored so onDisappear can cancel on fast back-navigation (P9).
         loadTask = Task(name: "StepLogView.loadLog", priority: .userInitiated) {
             let text = await fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
+            // Guard state writes only — network cost is already paid (see loadLog() doc above).
             guard !Task.isCancelled else { return }
             logText = text ?? ""
             isLoading = false
@@ -249,6 +259,9 @@ struct StepLogView: View {
 /// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
 extension StepLogView {
     /// Repo slug derived from `job.htmlUrl`, e.g. `"owner/repo"`.
+    ///
+    /// - Note: Logic is intentionally duplicated from `repoScopeForFetch` (same URL parsing,
+    ///   different fallback: "—" vs ""). Consolidation deferred — see TODO in `repoScopeForFetch`.
     var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
         guard parts.count >= 5 else { return "—" }
@@ -257,6 +270,10 @@ extension StepLogView {
     }
 
     /// Repo scope string (`owner/repo`) derived from `job.htmlUrl` for use in API fetch calls.
+    ///
+    /// - TODO: `repoSlug` duplicates this parsing logic with a different empty fallback ("—").
+    ///   When touching this area next, consolidate: `repoSlug` should call `repoScopeForFetch`
+    ///   and substitute "—" for the empty-string case.
     var repoScopeForFetch: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
         guard parts.count >= 5 else { return "" }
