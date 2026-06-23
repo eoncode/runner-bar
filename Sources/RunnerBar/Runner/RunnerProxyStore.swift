@@ -44,7 +44,7 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
         let base = URL(fileURLWithPath: installPath)
         return await loadProxyFiles(
             proxyURL: base.appendingPathComponent(".proxy"),
-            credURL:  base.appendingPathComponent(".proxycredentials")
+            credURL: base.appendingPathComponent(".proxycredentials")
         )
     }
 
@@ -65,7 +65,7 @@ actor RunnerProxyStore: RunnerProxyStoreProtocol {
             try await saveProxyFiles(
                 config,
                 proxyURL: base.appendingPathComponent(".proxy"),
-                credURL:  base.appendingPathComponent(".proxycredentials")
+                credURL: base.appendingPathComponent(".proxycredentials")
             )
         } catch let proxyError as RunnerProxyStoreError {
             throw proxyError
@@ -131,8 +131,8 @@ private func saveProxyFiles(
     proxyURL: URL,
     credURL: URL
 ) async throws {
-    let url    = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
-    let user   = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
+    let url = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
+    let user = config.user.trimmingCharacters(in: .whitespacesAndNewlines)
     let secret = config.password.trimmingCharacters(in: .whitespacesAndNewlines)
 
     var messages: [String] = []
