@@ -11,7 +11,7 @@ import RunnerBarCore
 
 /// Forwards all calls to the static `ScopePreferencesStore` methods.
 /// Used as the production dependency for `FailureHookRunnerUseCase`.
-struct DefaultScopePreferencesStore: ScopePreferencesStoreProtocol {
+struct DefaultScopePreferencesStore: FailureHookScopePreferencesProtocol {
     /// Forwards to `ScopePreferencesStore.failureHookEnabled(for:)`.
     func failureHookEnabled(for scope: String) -> Bool {
         ScopePreferencesStore.failureHookEnabled(for: scope)

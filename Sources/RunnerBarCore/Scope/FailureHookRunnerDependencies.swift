@@ -2,11 +2,11 @@
 // RunnerBarCore
 import Foundation
 
-// MARK: - ScopePreferencesStoreProtocol
+// MARK: - FailureHookScopePreferencesProtocol
 
 /// Abstracts the subset of `ScopePreferencesStore` that `FailureHookRunnerUseCase` needs,
 /// so the use-case can be tested without hitting `UserDefaults` on disk.
-public protocol ScopePreferencesStoreProtocol: Sendable {
+public protocol FailureHookScopePreferencesProtocol: Sendable {
     /// Returns `true` if the failure hook is enabled for the given scope.
     func failureHookEnabled(for scope: String) -> Bool
     /// Returns the custom failure-hook command stored for the given scope, or `nil` if none is set.
