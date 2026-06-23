@@ -29,6 +29,10 @@ struct LocalRunnersView: View {
     /// Injected by the caller; defaults to `LocalRunnerStore.shared` at the `SettingsView` boundary.
     var localRunnerStore: LocalRunnerStore = .shared
 
+    /// Runner lifecycle service. Injected from `SettingsView` (which receives it from `AppDelegate`).
+    /// Typed to protocol so tests can supply a stub without spawning real `svc.sh` processes (P7).
+    var lifecycleService: any RunnerLifecycleServiceProtocol = RunnerLifecycleService()
+
     // MARK: - Local UI state
 
     /// `true` once the initial local runner scan has completed.
@@ -221,18 +225,12 @@ struct LocalRunnersView: View {
 
     // MARK: - Lifecycle actions
 
-    /// Optimistically marks the runner as running then delegates to `RunnerLifecycleService`.
-    ///
-    /// The optimistic update is awaited inline before the lifecycle service is called so the
-    /// runner row updates on the very next main-actor frame after the toggle fires. Previously
-    /// two independent `Task {}` blocks were used, which introduced an actor-hop latency
-    /// between the tap and the first visible state change.
+    /// Optimistically marks the runner as running then delegates to `lifecycleService`.
     @MainActor private func performResume(runner: RunnerModel) {
         log("LocalRunnersView > performResume called runner=\(runner.runnerName)")
         Task(priority: .userInitiated) {
-            // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: true)
-            let result = await RunnerLifecycleService.shared.start(runner: runner)
+            let result = await lifecycleService.start(runner: runner)
             switch result {
             case .success: break
             case .corruptInstall:
@@ -248,18 +246,12 @@ struct LocalRunnersView: View {
         }
     }
 
-    /// Optimistically marks the runner as stopped then delegates to `RunnerLifecycleService`.
-    ///
-    /// The optimistic update is awaited inline before the lifecycle service is called so the
-    /// runner row updates on the very next main-actor frame after the toggle fires. Previously
-    /// two independent `Task {}` blocks were used, which introduced an actor-hop latency
-    /// between the tap and the first visible state change.
+    /// Optimistically marks the runner as stopped then delegates to `lifecycleService`.
     @MainActor private func performStop(runner: RunnerModel) {
         log("LocalRunnersView > performStop called runner=\(runner.runnerName)")
         Task(priority: .userInitiated) {
-            // Await the optimistic update first — row reflects new state immediately.
             await localRunnerStore.optimisticallySetRunning(runner.runnerName, isRunning: false)
-            let result = await RunnerLifecycleService.shared.stop(runner: runner)
+            let result = await lifecycleService.stop(runner: runner)
             switch result {
             case .success: break
             case .corruptInstall:
@@ -274,18 +266,14 @@ struct LocalRunnersView: View {
         }
     }
 
-    /// Optimistically removes the runner then delegates to `RunnerLifecycleService`. Rolls back on failure.
+    /// Optimistically removes the runner then delegates to `lifecycleService`. Rolls back on failure.
     @MainActor private func performRemoval() {
         guard let runner = runnerPendingRemoval else { return }
         runnerPendingRemoval = nil
         removeErrorMessage = nil
-        // optimisticallyRemove is awaited inline at the top of the same Task so that
-        // the removal is always visible before the lifecycle call starts. A separate
-        // fire-and-forget Task risks the rollback path (optimisticallyRestore) running
-        // before optimisticallyRemove, leaving the row permanently deleted on failure.
         Task(priority: .userInitiated) {
             await localRunnerStore.optimisticallyRemove(runner.runnerName)
-            let ok = await RunnerLifecycleService.shared.remove(runner: runner)
+            let ok = await lifecycleService.remove(runner: runner)
             if !ok {
                 await localRunnerStore.optimisticallyRestore(runner)
                 removeErrorMessage = "Failed to remove \"\(runner.runnerName)\". Check logs."
@@ -331,9 +319,6 @@ struct LocalRunnersView: View {
     }
 
     /// Builds the `RunnerDetailSheet` with commit/cancel wiring.
-    ///
-    /// Presented via `.sheet(item:)` so AppKit attaches the view as a child sheet
-    /// of `NSPopoverWindowFrame` — unconstrained by the SwiftUI view hierarchy bounds.
     @ViewBuilder
     private func runnerEditingSheet(runner: RunnerModel) -> some View {
         RunnerDetailSheet(
@@ -343,10 +328,6 @@ struct LocalRunnersView: View {
                 guard !isCommitting else { return }
                 isCommitting = true
                 commitError = nil
-                // Build original from disk so the dirty-check in SaveRunnerEditsUseCase
-                // compares against actual persisted values, not model defaults.
-                // (#1001 fix: was RunnerEditDraft(runner: runner) which left
-                // autoUpdate=true and proxy fields empty regardless of disk state.)
                 Task(priority: .userInitiated) {
                     var original = RunnerEditDraft(runner: runner)
                     if let installPath = runner.installPath {

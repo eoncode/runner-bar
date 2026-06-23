@@ -110,6 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Constructed once here — injected into `AppDelegate+OAuthCallback`, `AppDelegate+Polling`,
     /// and `SettingsView` rather than accessed via a global `.shared`.
     let oauthService: any OAuthServiceProtocol = OAuthService()
+    /// Owned lifecycle service instance. Typed to protocol so tests can supply a stub
+    /// without spawning real `svc.sh` processes (P7).
+    ///
+    /// Constructed once here — injected into `SettingsView` → `LocalRunnersView`
+    /// rather than accessed via a global `.shared`.
+    let lifecycleService: any RunnerLifecycleServiceProtocol = RunnerLifecycleService()
     /// Owned `LocalRunnerStore` actor — injected with `observable` so all state
     /// pushes land in the view model that SwiftUI actually observes.
     ///
