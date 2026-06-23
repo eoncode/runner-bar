@@ -165,7 +165,9 @@ struct PanelMainView: View {
     /// Named "displayTick" for Instruments visibility (RG6).
     /// `try` (not `try?`) on Task.sleep propagates CancellationError cleanly so the loop
     /// exits immediately on cancel without executing a spurious post-cancel tick.
-    private func startDisplayTickTimer() {
+    /// `@MainActor` is explicit so the compiler statically verifies that `displayTickTask`
+    /// (a `@State`-backed property) is always mutated on the main actor.
+    @MainActor private func startDisplayTickTimer() {
         stopDisplayTickTimer()
         displayTickTask = Task(name: "displayTick") { @MainActor in
             while !Task.isCancelled {
@@ -176,7 +178,8 @@ struct PanelMainView: View {
     }
 
     /// Cancels and nils the `displayTick` task.
-    private func stopDisplayTickTimer() {
+    /// `@MainActor` matches `startDisplayTickTimer()` — both mutate `displayTickTask`.
+    @MainActor private func stopDisplayTickTimer() {
         displayTickTask?.cancel()
         displayTickTask = nil
     }

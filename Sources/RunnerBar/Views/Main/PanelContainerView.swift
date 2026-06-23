@@ -28,7 +28,7 @@ import SwiftUI
 // is called. hidePanel() sets panelVisibilityState.isOpen = false WITHOUT
 // dismissing the sheet — the sheet NSWindow stays attached and alive.
 // This fires onChange(isOpen) with open=false, which previously cleared
-// isSheetActive = false. On restore, the timer set it back to true, replaying
+// isSheetActive = false. On restore, the poll task set it back to true, replaying
 // the cover fade-in animation even though the sheet never closed.
 //
 // FIX:
@@ -186,7 +186,9 @@ struct PanelContainerView<Content: View>: View {
     ///
     /// Always calls `stopPolling()` first to cancel any existing task.
     /// Safe to call multiple times — will not create duplicate tasks.
-    private func startPolling() {
+    /// `@MainActor` is explicit so the compiler statically verifies that `pollTask`
+    /// (a `@State`-backed property) is always mutated on the main actor.
+    @MainActor private func startPolling() {
         stopPolling()
         // Sleep-FIRST — see "SLEEP-FIRST LOOP ORDER" comment at the top of this file.
         // Single atomic guard — do NOT split. See "POLL TASK GUARD SPLIT" comment above.
@@ -230,7 +232,8 @@ struct PanelContainerView<Content: View>: View {
     }
 
     /// Cancels and nils the poll task.
-    private func stopPolling() {
+    /// `@MainActor` matches `startPolling()` — both mutate `pollTask`.
+    @MainActor private func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
     }
