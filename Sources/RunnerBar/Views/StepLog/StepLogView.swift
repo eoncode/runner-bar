@@ -210,10 +210,11 @@ struct StepLogView: View {
     /// Kicks off a background fetch of the step log and publishes the result to `logText`.
     ///
     /// Uses `repoScopeForFetch` (derived from `job.htmlUrl`) as the primary scope.
-    /// Fallback order:
-    /// 1. First `owner/repo` in all entries, including disabled ones (preserves #1106
-    ///    single-repo fallback — the saved repo is always preferred over an unrelated active repo).
-    /// 2. If no entries exist, first `owner/repo` in `activeScopes`.
+    /// Fallback order (cold edge-case only — primary path is almost always taken):
+    /// 1. First `owner/repo` in all entries, **including disabled ones** — deliberate policy
+    ///    exception from the "active only" principle established by #1515. The saved repo
+    ///    is always preferred over an unrelated active repo for log fetching (#1106 intent).
+    /// 2. If no entries exist at all, first `owner/repo` in `activeScopes`.
     private func loadLog() {
         isLoading = true
         let jobID = job.id
