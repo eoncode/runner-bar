@@ -28,10 +28,13 @@ import RunnerBarCore
 /// }
 /// ```
 protocol RunnerLifecycleServiceProtocol: Sendable {
+    /// Starts the runner's launchctl service. Returns `.success` or a failure/corrupt-install result.
     @discardableResult
     func start(runner: RunnerModel) async -> LifecycleResult
+    /// Stops the runner's launchctl service. Returns `.success` or a failure/corrupt-install result.
     @discardableResult
     func stop(runner: RunnerModel) async -> LifecycleResult
+    /// Removes the runner via `svc.sh remove` and unregisters it from GitHub. Returns `true` on success.
     @discardableResult
     func remove(runner: RunnerModel) async -> Bool
 }
