@@ -53,7 +53,10 @@ struct StubTransport: GitHubTransportProtocol {
     }
 
     func apiPaginated(_: String, timeout _: TimeInterval) async -> Data? { nil }
-    func raw(_: String, timeout _: TimeInterval) async -> Data? { nil }
+    func raw(_ endpoint: String, timeout _: TimeInterval) async -> Data? {
+        callCountLock.withLock { $0 += 1 }
+        return responses.first(where: { endpoint.hasPrefix($0.prefix) })?.data
+    }
     func post(_: String, body _: Data?, timeout _: TimeInterval) async -> Data? { nil }
     func put(_: String, body _: Data, timeout _: TimeInterval) async -> Data? { nil }
     func delete(_: String, timeout _: TimeInterval) async -> Bool { false }
