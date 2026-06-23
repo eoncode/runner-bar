@@ -59,6 +59,9 @@ extension AppPreferencesStore: AppPreferencesStoreProtocol {}
 protocol ScopeStoreProtocol: AnyObject, Sendable {
     /// The list of scope identifiers (org or repo slugs) currently active.
     var activeScopes: [String] { get }
+    /// All scope entries (including disabled) — needed for views that display
+    /// or search the full list regardless of enabled state.
+    var entries: [ScopeEntry] { get }
 }
 
 /// Conforms `ScopeStore` to `ScopeStoreProtocol` so the live singleton can be
