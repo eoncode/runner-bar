@@ -257,10 +257,16 @@ extension AppDelegate: NSPopoverDelegate {
             await self.localRunnerStore.refreshAsync()
             log("AppDelegate › startup — refreshAsync() complete, starting runnerStore poll loop")
             // `runnerStore` is `RunnerStore?`.
-            // Guard makes a nil escape observable in logs rather than silently swallowed
-            // by optional chaining — the app would appear to start but never poll.
+            // This guard is structurally unreachable in normal execution: runnerStore is
+            // assigned unconditionally just before this Task is spawned, and nothing
+            // currently nils it out. It exists to make the condition observable if that
+            // ever changes — the app would otherwise appear to start but silently never
+            // poll. The assertionFailure in DEBUG makes the severity match the consequence.
             guard let store = self.runnerStore else {
                 log("AppDelegate › startup — ⚠️ runnerStore is nil after refreshAsync(); poll loop NOT started")
+                #if DEBUG
+                assertionFailure("AppDelegate.startup: runnerStore is nil after refreshAsync() — this is structurally unreachable; a future change must have introduced an unintended nil path")
+                #endif
                 return
             }
             await store.start()
