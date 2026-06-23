@@ -149,6 +149,9 @@ public struct FailureHookRunnerUseCase: Sendable {
         let sha = group.headSha
         let baseURL = "https://github.com/\(scope)"
         let failedRun = group.runs.first(where: { $0.conclusion?.isHookConclusion == true })
+        // `failedRun.id` is an `Int` from the GitHub API — always a pure decimal string.
+        // The `group.id` fallback is also numeric: it is `String(runs.map { $0.id }.max() ?? 0)`
+        // (see `WorkflowActionGroup.id`), so the fallback path is equally shell-safe.
         let failedRunID = failedRun.map { String($0.id) } ?? group.id
         let runLink = failedRun?.htmlUrl ?? "\(baseURL)/actions/runs/\(failedRunID)"
         let workflowName = failedRun?.name ?? group.runs.first?.name ?? ""

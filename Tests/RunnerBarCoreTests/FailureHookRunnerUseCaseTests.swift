@@ -73,7 +73,11 @@ struct FailureHookRunnerUseCaseTests {
         #expect(cmd == "cd '/Users/o'\\''brien/code'")
     }
 
-    /// After resolution, none of the placeholder tokens remain in the output.
+    /// After resolution, none of the 11 placeholder tokens remain in the output.
+    ///
+    /// Covers both shell-escaped tokens ($LOCAL_PATH, $SCOPE, $BRANCH, $COMMIT_SHA,
+    /// $RUN_ID, $WORKFLOW_NAME, $FAILURE_LOG) and verbatim URL tokens ($RUN_LINK,
+    /// $COMMIT_LINK, $BRANCH_LINK, $REPO_LINK).
     @Test func resolveTokens_allTokensPresent_noLiteralsRemain() {
         let template = "$LOCAL_PATH $SCOPE $BRANCH $COMMIT_SHA $RUN_ID $WORKFLOW_NAME $RUN_LINK $COMMIT_LINK $BRANCH_LINK $REPO_LINK $FAILURE_LOG"
         let result = FailureHookRunnerUseCase.resolveTokens(
@@ -83,6 +87,7 @@ struct FailureHookRunnerUseCaseTests {
             jobs: [],
             localRepoPath: "/tmp"
         )
+        // Shell-escaped tokens
         #expect(!result.contains("$LOCAL_PATH"))
         #expect(!result.contains("$SCOPE"))
         #expect(!result.contains("$BRANCH"))
@@ -90,6 +95,11 @@ struct FailureHookRunnerUseCaseTests {
         #expect(!result.contains("$RUN_ID"))
         #expect(!result.contains("$WORKFLOW_NAME"))
         #expect(!result.contains("$FAILURE_LOG"))
+        // URL tokens (substituted verbatim — percent-encoded, no shell-special chars)
+        #expect(!result.contains("$RUN_LINK"))
+        #expect(!result.contains("$COMMIT_LINK"))
+        #expect(!result.contains("$BRANCH_LINK"))
+        #expect(!result.contains("$REPO_LINK"))
     }
 
     // MARK: - buildLogContent
