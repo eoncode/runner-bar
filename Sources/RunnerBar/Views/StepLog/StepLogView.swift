@@ -23,7 +23,7 @@ import SwiftUI
 // ║ ❌ NEVER omit idealWidth: 480 from the root frame                         ║
 // ║ ❌ NEVER add .frame(height:) here                                         ║
 // ║ ❌ NEVER add .fixedSize() here                                            ║
-// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap         ║
+// ║ ✔ ScrollView MUST have .frame(maxHeight: visibleFrame * 0.75) cap        ║
 // ║   Without it, with sizingOptions=.preferredContentSize, SwiftUI           ║
 // ║   reports the full log text height as preferredContentSize.height on      ║
 // ║   navigate → panel grows off-screen. (ref #370)                           ║
@@ -38,7 +38,8 @@ import SwiftUI
 /// Shows the raw log text for a single `JobStep`.
 ///
 /// Placed by `AppDelegate.navigate()` (rootView swap). Fits the fixed popover frame;
-/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background task.
+/// `ScrollView` absorbs overflow. Fetches log on `onAppear` via a background task;
+/// cancelled automatically on `onDisappear` to avoid wasted work on fast back-navigation.
 struct StepLogView: View {
     /// The job that owns this step.
     let job: ActiveJob
@@ -53,10 +54,16 @@ struct StepLogView: View {
     /// UNDER ANY CIRCUMSTANCE. The regression we get when this comment is removed
     /// is major major major.
     var onLogLoaded: (() -> Void)?
+    /// Injected scope store — avoids `ScopeStore.shared` singleton access inside `loadLog`.
+    /// Defaults to the live singleton so all existing call sites require no changes.
+    var scopeStore: any ScopeStoreProtocol = ScopeStore.shared
     /// `nil` = not yet fetched; `""` = fetch returned empty; non-empty = log text.
     @State private var logText: String?
     /// `true` while the background fetch is in-flight.
     @State private var isLoading = true
+    /// Handle for the in-flight log fetch task; cancelled in `onDisappear` and at the
+    /// top of `loadLog()` to prevent races if `onAppear` fires more than once.
+    @State private var loadTask: Task<Void, Never>?
 
     // MARK: - Formatters (static to avoid re-allocation per render)
     /// `HH:mm:ss` formatter used for start/end time labels in the meta row.
@@ -150,13 +157,13 @@ struct StepLogView: View {
                 Image(systemName: "clock").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(startLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("\u{2192}").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("→").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(endLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("\u{00B7}").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
+                Text("·").font(.system(size: 10)).foregroundColor(Color.rbTextSecondary)
                 Text(step.elapsed)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
-                Text("\u{00B7}").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
+                Text("·").font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary)
                 Text(dateLabel)
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(Color.rbTextSecondary).fixedSize()
                 Spacer()
@@ -204,31 +211,59 @@ struct StepLogView: View {
         // ════════════════════════════════════════════════════════════════════════
         .frame(idealWidth: 480, maxWidth: .infinity, alignment: .top)
         .onAppear { loadLog() }
+        .onDisappear { loadTask?.cancel() }
     }
 
     // MARK: - Log loading
     /// Kicks off a background fetch of the step log and publishes the result to `logText`.
     ///
+    /// Cancels any in-flight `loadTask` before spawning a new one — prevents a stale
+    /// task from writing to `@State` if `onAppear` fires more than once (e.g. view
+    /// re-parenting or navigation stack identity change).
+    ///
     /// Uses `repoScopeForFetch` (derived from `job.htmlUrl`) as the primary scope.
-    /// Falls back to the first `owner/repo`-style entry in `ScopeStore.shared.scopes` when
+    /// Falls back to the first `owner/repo`-style entry in `scopeStore.activeScopes` when
     /// `htmlUrl` is absent or malformed — preserving the #1106 spec intent so single-repo
     /// setups continue to work even if the job URL is temporarily unavailable.
+    ///
+    /// ## Known cancellation limitation
+    ///
+    /// `loadTask?.cancel()` signals cooperative cancellation but does NOT abort the
+    /// underlying network I/O inside `fetchStepLog`. Because `fetchStepLog` does not
+    /// itself check `Task.isCancelled` at suspension points, the network call runs to
+    /// completion regardless. The `guard !Task.isCancelled` below therefore does NOT
+    /// prevent a previous task’s result from being committed if the task was cancelled
+    /// and then re-checked before Swift’s cooperative cancellation machinery fires —
+    /// it merely reduces the window, not closes it.
+    ///
+    /// Concretely: on fast back → forward navigation, `loadLog()` cancels the old handle
+    /// and stores a new one, but the old `Task` is still alive. Its `Task.isCancelled`
+    /// may still be `false` at the `guard` site, so it can write stale log content.
+    ///
+    /// TODO: make `fetchStepLog` cancellation-cooperative (check `Task.isCancelled` after
+    /// each URLSession suspension point) to fully close this race.
     private func loadLog() {
+        loadTask?.cancel() // Signals cancellation; does NOT abort in-flight network I/O.
         isLoading = true
         let jobID = job.id
         let stepNum = step.id
         let scope: String = {
             let primary = repoScopeForFetch
             if !primary.isEmpty { return primary }
-            return ScopeStore.shared.scopes.first(where: { $0.contains("/") }) ?? ""
+            // ✅ Use injected scopeStore.activeScopes — not the stale .scopes singleton.
+            return scopeStore.activeScopes.first(where: { $0.contains("/") }) ?? ""
         }()
-        Task.detached(priority: .userInitiated) {
+        // ✅ Plain Task inherits @MainActor context from the view.
+        // ✅ Handle stored so onDisappear can signal cancellation (P9).
+        // ⚠️ See doc above: guard !Task.isCancelled reduces but does NOT close the
+        //   stale-write race — fetchStepLog must cooperate with cancellation to fully fix.
+        loadTask = Task(priority: .userInitiated) {
             let text = await fetchStepLog(jobID: jobID, stepNumber: stepNum, scope: scope)
-            await MainActor.run {
-                logText = text ?? ""
-                isLoading = false
-                onLogLoaded?()
-            }
+            // Reduces (but does not close) the stale-write window — see loadLog() doc.
+            guard !Task.isCancelled else { return }
+            logText = text ?? ""
+            isLoading = false
+            onLogLoaded?()
         }
     }
 }
@@ -237,14 +272,21 @@ struct StepLogView: View {
 /// Derived helper properties for `StepLogView` (status labels, colors, time formatting).
 extension StepLogView {
     /// Repo slug derived from `job.htmlUrl`, e.g. `"owner/repo"`.
+    ///
+    /// - Note: Logic is intentionally duplicated from `repoScopeForFetch` (same URL parsing,
+    ///   different fallback: "—" vs ""). Consolidation deferred — see TODO in `repoScopeForFetch`.
     var repoSlug: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
-        guard parts.count >= 5 else { return "\u{2014}" }
+        guard parts.count >= 5 else { return "—" }
         let owner = parts[3]; let repo = parts[4]
-        return (owner.isEmpty || repo.isEmpty) ? "\u{2014}" : "\(owner)/\(repo)"
+        return (owner.isEmpty || repo.isEmpty) ? "—" : "\(owner)/\(repo)"
     }
 
     /// Repo scope string (`owner/repo`) derived from `job.htmlUrl` for use in API fetch calls.
+    ///
+    /// - TODO: `repoSlug` duplicates this parsing logic with a different empty fallback ("—").
+    ///   When touching this area next, consolidate: `repoSlug` should call `repoScopeForFetch`
+    ///   and substitute "—" for the empty-string case.
     var repoScopeForFetch: String {
         let parts = (job.htmlUrl ?? "").components(separatedBy: "/")
         guard parts.count >= 5 else { return "" }
@@ -253,43 +295,61 @@ extension StepLogView {
     }
 
     /// Step conclusion label with icon, or live/queued status.
+    ///
+    /// Exhaustively matches all `JobConclusion` cases so that terminal outcomes like
+    /// `.timedOut`, `.actionRequired`, `.neutral`, `.stale`, and `.startupFailure`
+    /// are never mislabelled as running or queued.
     var stepStatusLabel: String {
         switch step.conclusion {
-        case "success": return "\u{2713} success"
-        case "failure": return "\u{2717} failure"
-        case "skipped": return "\u{2298} skipped"
-        case "cancelled": return "\u{2298} cancelled"
-        default: return step.status == "in_progress" ? "\u{25B6} running" : "\u{00B7} queued"
+        case .success:                  return "✓ success"
+        case .failure:                  return "✗ failure"
+        case .skipped:                  return "⊘ skipped"
+        case .cancelled:                return "⊘ cancelled"
+        case .timedOut:                 return "⧖ timed out"
+        case .actionRequired:           return "⚠️ action required"
+        case .neutral:                  return "· neutral"
+        case .stale:                    return "· stale"
+        case .startupFailure:           return "✗ startup failure"
+        case .unknown(let raw):         return "· \(raw)"
+        case nil:
+            return step.status == .inProgress ? "▶ running" : "· queued"
         }
     }
 
     /// Colour used to render `stepStatusLabel` based on conclusion or live status.
+    ///
+    /// Uses `JobConclusion.isFailure` semantics: `.failure`, `.timedOut`,
+    /// `.startupFailure`, and `.actionRequired` render as danger; everything else
+    /// uses secondary text or warning colours.
     var stepStatusColor: Color {
         switch step.conclusion {
-        case "success": return Color.rbSuccess
-        case "failure": return Color.rbDanger
-        case "skipped", "cancelled": return Color.rbTextSecondary
-        default: return step.status == "in_progress" ? Color.rbWarning : Color.rbTextSecondary
+        case .success:                                      return Color.rbSuccess
+        case .failure, .timedOut, .startupFailure,
+             .actionRequired:                              return Color.rbDanger
+        case .skipped, .cancelled, .neutral, .stale,
+             .unknown:                                     return Color.rbTextSecondary
+        case nil:
+            return step.status == .inProgress ? Color.rbWarning : Color.rbTextSecondary
         }
     }
 
-    /// Formatted start time, or `"\u{2014}"` if unavailable.
+    /// Formatted start time, or `"—"` if unavailable.
     var startLabel: String {
-        guard let dateValue = step.startedAt else { return "\u{2014}" }
+        guard let dateValue = step.startedAt else { return "—" }
         return Self.timeFmt.string(from: dateValue)
     }
 
-    /// Formatted end time, or `"\u{2014}"` if unavailable.
+    /// Formatted end time, or `"—"` if unavailable.
     var endLabel: String {
         guard let dateValue = step.completedAt else {
-            return step.status == "in_progress" ? "running\u{2026}" : "\u{2014}"
+            return step.status == .inProgress ? "running…" : "—"
         }
         return Self.timeFmt.string(from: dateValue)
     }
 
     /// Date string (`yyyy-MM-dd`) for context when the step ran.
     var dateLabel: String {
-        guard let dateValue = step.startedAt ?? step.completedAt else { return "\u{2014}" }
+        guard let dateValue = step.startedAt ?? step.completedAt else { return "—" }
         return Self.dateFmt.string(from: dateValue)
     }
 }
