@@ -8,7 +8,7 @@ import RunnerBarCore
 /// Production shim for `FailureHookRunnerUseCase`.
 ///
 /// Creates the use-case with the concrete production adapters
-/// (`DefaultScopePreferencesStore`, `DefaultTerminalLauncher`) and
+/// (`ScopePreferencesStore.Live.shared`, `DefaultTerminalLauncher`) and
 /// delegates `fireIfNeeded` to it. All business logic lives in
 /// `FailureHookRunnerUseCase`; this type exists only to maintain the
 /// existing call-site API (`FailureHookRunner.fireIfNeeded(group:scope:callsite:)`).
@@ -37,7 +37,7 @@ enum FailureHookRunner {
         callsite: String = "unknown"
     ) async {
         let useCase = FailureHookRunnerUseCase(
-            preferencesStore: DefaultScopePreferencesStore(),
+            preferencesStore: ScopePreferencesStore.Live.shared,
             terminalLauncher: DefaultTerminalLauncher()
         )
         await useCase.fireIfNeeded(group: group, scope: scope, callsite: callsite)
