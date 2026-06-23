@@ -132,7 +132,7 @@ public enum ScopePreferencesStore {
             .flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    /// Persists the local repository path used for this scope’s failure hook.
+    /// Persists the local repository path used for this scope's failure hook.
     public static func setLocalRepoPath(_ path: String?, for scope: String) {
         let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let value = trimmed, !value.isEmpty {
@@ -180,5 +180,50 @@ public enum ScopePreferencesStore {
             UserDefaults.standard.removeObject(forKey: key(scope, field))
         }
         log("ScopePreferencesStore › cleaned up all keys for scope: \(scope)")
+    }
+}
+
+// MARK: - ScopePreferencesStore.Live
+
+extension ScopePreferencesStore {
+
+    /// Concrete `@MainActor` class conforming to `ScopePreferencesStoreProtocol`.
+    ///
+    /// Delegates all reads and writes to the static `ScopePreferencesStore` namespace,
+    /// keeping existing call sites unaffected while unlocking protocol-based injection
+    /// in views and tests.
+    @MainActor
+    public final class Live: ScopePreferencesStoreProtocol {
+
+        public static let shared = Live()
+        private init() {}
+
+        public func preferences(for scope: String) -> ScopePreferences {
+            ScopePreferences(
+                alias:              ScopePreferencesStore.alias(for: scope),
+                pollingInterval:    ScopePreferencesStore.pollingInterval(for: scope),
+                notifyOnSuccess:    ScopePreferencesStore.notifyOnSuccess(for: scope),
+                notifyOnFailure:    ScopePreferencesStore.notifyOnFailure(for: scope),
+                failureHookEnabled: ScopePreferencesStore.failureHookEnabled(for: scope),
+                failureHookCommand: ScopePreferencesStore.failureHookCommand(for: scope),
+                localRepoPath:      ScopePreferencesStore.localRepoPath(for: scope),
+                failureHookBranch:  ScopePreferencesStore.failureHookBranch(for: scope)
+            )
+        }
+
+        public func setPreferences(_ prefs: ScopePreferences, for scope: String) {
+            ScopePreferencesStore.setAlias(prefs.alias, for: scope)
+            ScopePreferencesStore.setPollingInterval(prefs.pollingInterval, for: scope)
+            ScopePreferencesStore.setNotifyOnSuccess(prefs.notifyOnSuccess, for: scope)
+            ScopePreferencesStore.setNotifyOnFailure(prefs.notifyOnFailure, for: scope)
+            ScopePreferencesStore.setFailureHookEnabled(prefs.failureHookEnabled, for: scope)
+            ScopePreferencesStore.setFailureHookCommand(prefs.failureHookCommand, for: scope)
+            ScopePreferencesStore.setLocalRepoPath(prefs.localRepoPath, for: scope)
+            ScopePreferencesStore.setFailureHookBranch(prefs.failureHookBranch, for: scope)
+        }
+
+        public func displayName(for scope: String) -> String {
+            ScopePreferencesStore.displayName(for: scope)
+        }
     }
 }
