@@ -172,7 +172,19 @@ extension AppDelegate: NSPopoverDelegate {
     // MARK: Async subscriptions
 
     /// Wires all long-lived async subscriptions (sign-out listener, startup sequence).
+    ///
+    /// Idempotent: if `runnerStore` is already set a second call is a no-op.
+    /// This makes it structurally impossible to orphan a `RunnerStore` actor and
+    /// its live Task tree by calling this method more than once (P4, P16).
     private func setupSubscriptions() {
+        // Idempotency guard — must only run once.
+        // A second call would orphan the existing RunnerStore actor and its
+        // observation Task tree (two Tasks per instance via PollLoopCoordinator).
+        // AppDelegate is @MainActor-isolated so this nil-check is safe and synchronous.
+        guard runnerStore == nil else {
+            log("AppDelegate › setupSubscriptions — already configured, skipping (guard against double-init)")
+            return
+        }
         log("AppDelegate › setupSubscriptions — begin")
 
         // local runner list changes are now pushed directly from LocalRunnerStore
