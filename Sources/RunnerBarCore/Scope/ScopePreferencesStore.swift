@@ -218,10 +218,12 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")")
     }
 
+    /// Returns the local repository path override for `scope`, or `nil` if unset.
     public func localRepoPath(for scope: String) -> String? {
         read(scope: scope).localRepoPath.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Stores the local repository path for `scope`; pass `nil` or empty string to clear.
     public func setLocalRepoPath(_ path: String?, for scope: String) {
         var prefs = read(scope: scope)
         let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -230,10 +232,12 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")")
     }
 
+    /// Returns the branch filter for the failure hook for `scope`, or `nil` to run on all branches.
     public func failureHookBranch(for scope: String) -> String? {
         read(scope: scope).failureHookBranch.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Stores the branch filter for the failure hook for `scope`; pass `nil` to run on all branches.
     public func setFailureHookBranch(_ branch: String?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.failureHookBranch = (branch?.isEmpty == false) ? branch : nil
