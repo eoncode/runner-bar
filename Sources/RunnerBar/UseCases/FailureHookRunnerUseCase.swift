@@ -48,10 +48,15 @@ struct FailureHookRunnerUseCase: Sendable {
     /// Fetches failed job/step details on the cooperative thread pool, resolves
     /// tokens, then fires the Terminal command on `@MainActor`.
     ///
-    /// Caller must wrap this in a structured `Task` — see `RunnerStore+PollBridge`.
-    /// No longer uses `sending` because the value is not transferred across a
-    /// `Task.detached` boundary. `WorkflowActionGroup` is `Sendable`, so actor
-    /// crossings via `MainActor.run` are safe without it.
+    /// `group` is not annotated `sending` because it no longer crosses a `Task.detached`
+    /// boundary — `fireIfNeeded` is `async` and called inline by `PollResultBuilder`.
+    /// `WorkflowActionGroup` is `Sendable`, so `MainActor.run` hops inside this method
+    /// are safe without `sending`.
+    ///
+    /// - Important: If `WorkflowActionGroup` ever drops its `Sendable` conformance,
+    ///   restore `sending` here and in `FailureHookRunner.fireIfNeeded` to re-establish
+    ///   the ownership-transfer contract across the async boundary.
+    // TODO: restore `sending` on `group` if WorkflowActionGroup drops Sendable conformance.
     func fireIfNeeded(
         group: WorkflowActionGroup,
         scope: String,
@@ -94,6 +99,8 @@ struct FailureHookRunnerUseCase: Sendable {
         log("FailureHookRunnerUseCase -- resolved command (first 300): \(resolved.prefix(300))")
         log("FailureHookRunnerUseCase -- calling terminalLauncher.open for groupID=\(group.id)")
         // TerminalLauncherProtocol.open is @MainActor — hop to main actor.
+        // log() is backed by os.Logger which is nonisolated and thread-safe; safe to
+        // call from inside MainActor.run without any isolation concerns.
         await MainActor.run {
             terminalLauncher.open(command: resolved)
             log("FailureHookRunnerUseCase main actor -- terminalLauncher.open returned for groupID=\(group.id)")
