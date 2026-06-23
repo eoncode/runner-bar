@@ -148,6 +148,10 @@ public struct FailureHookRunnerUseCase: Sendable {
     }
 
     /// Builds the `$FAILURE_LOG` content from failed job results.
+    ///
+    /// Falls back to a run-level summary (failed run IDs and conclusions) when
+    /// `jobs` is empty. Otherwise concatenates available log tails, or
+    /// failed step names when no log tail was fetched.
     internal static func buildLogContent(
         group: WorkflowActionGroup,
         scope _: String,
@@ -185,14 +189,23 @@ public struct FailureHookRunnerUseCase: Sendable {
         return parts.joined(separator: "\n\n")
     }
 
-    // MARK: - Internal types
+    // MARK: - Public types
 
     /// The result of fetching a single failed job, including its raw log tail.
+    ///
+    /// Returned by the `jobFetcher` closure injected into `FailureHookRunnerUseCase`.
+    /// The production implementation in `FailureHookRunner` fetches data from the
+    /// GitHub Actions API; test doubles return synthesised values.
     public struct FailedJobResult {
         /// The failed job payload returned by the GitHub Actions jobs API.
         public let job: JobPayload
         /// The last 150 lines of the job log, or `nil` if the log was unavailable.
         public let logTail: String?
+
+        /// Creates a `FailedJobResult` with the given job payload and optional log tail.
+        /// - Parameters:
+        ///   - job: The failed `JobPayload` from the GitHub Actions jobs API.
+        ///   - logTail: The last 150 lines of the job log, or `nil` if unavailable.
         public init(job: JobPayload, logTail: String?) {
             self.job = job
             self.logTail = logTail
@@ -207,6 +220,7 @@ public struct FailureHookRunnerUseCase: Sendable {
     }
 
     /// Escapes `str` so it is safe to embed between single-quotes in a shell command.
+    /// Replaces every `'` with `'\''` — the standard POSIX single-quote escape.
     private static func singleQuoteEscape(_ str: String) -> String {
         str.replacingOccurrences(of: "'", with: "'\\''")
     }
