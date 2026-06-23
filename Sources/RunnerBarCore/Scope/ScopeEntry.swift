@@ -31,7 +31,12 @@ public struct ScopeEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
     /// Explicit coding keys so that `displayName` is never written to or read from
     /// the persisted `UserDefaults` blob — it is always re-hydrated at runtime.
     enum CodingKeys: String, CodingKey {
-        case id, scope, isEnabled
+        /// Stable UUID identity.
+        case id
+        /// The GitHub scope string.
+        case scope
+        /// Whether polling is active for this scope.
+        case isEnabled
     }
 
     /// Creates a new `ScopeEntry` with a fresh random `id` and no display name.

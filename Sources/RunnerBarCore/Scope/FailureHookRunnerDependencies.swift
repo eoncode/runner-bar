@@ -101,6 +101,7 @@ public protocol ScopePreferencesStoreProtocol: Actor {
 
 // MARK: - ScopePreferencesStoreProtocol default implementations
 
+/// Default implementations for `ScopePreferencesStoreProtocol` convenience methods.
 public extension ScopePreferencesStoreProtocol {
     /// Default implementation: reads, applies `mutation`, and writes — all inside
     /// the actor so the full RMW is a single hop. Concrete conformers can override

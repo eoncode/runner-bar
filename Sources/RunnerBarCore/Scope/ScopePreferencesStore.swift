@@ -50,6 +50,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
 
     // MARK: - Private state
 
+    /// `UserDefaults` instance backing all reads and writes.
     private let store: UserDefaults
 
     /// Reused decoder. Private (not nonisolated) — only called from actor-isolated
@@ -82,6 +83,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
 
     // MARK: - Key helpers
 
+    /// Returns the `UserDefaults` key used to store the JSON blob for `scope`.
     private func blobKey(for scope: String) -> String {
         "scope.\(scope).preferences"
     }
@@ -147,6 +149,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         read(scope: scope).alias.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Sets the display alias for `scope`, trimming whitespace. Passing `nil` or blank clears the alias.
     public func setAlias(_ alias: String?, for scope: String) {
         var prefs = read(scope: scope)
         let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -155,6 +158,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › alias for \(scope) = \(prefs.alias ?? "nil (cleared)")")
     }
 
+    /// Returns the alias for `scope` if set, otherwise the raw scope string.
     public func displayName(for scope: String) -> String {
         alias(for: scope) ?? scope
     }
@@ -168,6 +172,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         read(scope: scope).pollingInterval
     }
 
+    /// Sets the per-scope polling interval in seconds. Pass `nil` to fall back to the global default.
     public func setPollingInterval(_ interval: Int?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.pollingInterval = interval
@@ -184,6 +189,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         read(scope: scope).notifyOnSuccess
     }
 
+    /// Sets the per-scope success-notification override. Pass `nil` to use the global setting.
     public func setNotifyOnSuccess(_ value: Bool?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.notifyOnSuccess = value
@@ -198,6 +204,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         read(scope: scope).notifyOnFailure
     }
 
+    /// Sets the per-scope failure-notification override. Pass `nil` to use the global setting.
     public func setNotifyOnFailure(_ value: Bool?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.notifyOnFailure = value
@@ -214,6 +221,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         read(scope: scope).failureHookEnabled
     }
 
+    /// Enables or disables the failure hook for `scope`.
     public func setFailureHookEnabled(_ enabled: Bool, for scope: String) {
         var prefs = read(scope: scope)
         prefs.failureHookEnabled = enabled
@@ -221,10 +229,12 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › failureHookEnabled for \(scope) = \(enabled)")
     }
 
+    /// Returns the failure hook shell command for `scope`, or `nil` if unset or blank.
     public func failureHookCommand(for scope: String) -> String? {
         read(scope: scope).failureHookCommand.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Sets the failure hook shell command for `scope`, trimming whitespace. Passing `nil` or blank clears it.
     public func setFailureHookCommand(_ command: String?, for scope: String) {
         var prefs = read(scope: scope)
         let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -233,10 +243,12 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › failureHookCommand for \(scope) = \(prefs.failureHookCommand ?? "nil (cleared)")")
     }
 
+    /// Returns the local repository path for `scope`, or `nil` if unset or blank.
     public func localRepoPath(for scope: String) -> String? {
         read(scope: scope).localRepoPath.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Sets the local repository path for `scope`, trimming whitespace. Passing `nil` or blank clears it.
     public func setLocalRepoPath(_ path: String?, for scope: String) {
         var prefs = read(scope: scope)
         let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -245,10 +257,12 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         log("ScopePreferencesStore › localRepoPath for \(scope) = \(prefs.localRepoPath ?? "nil (cleared)")")
     }
 
+    /// Returns the failure hook branch filter for `scope`, or `nil` if unset (runs on all branches).
     public func failureHookBranch(for scope: String) -> String? {
         read(scope: scope).failureHookBranch.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Sets the failure hook branch filter for `scope`. Pass `nil` or blank to run on all branches.
     public func setFailureHookBranch(_ branch: String?, for scope: String) {
         var prefs = read(scope: scope)
         prefs.failureHookBranch = (branch?.isEmpty == false) ? branch : nil
@@ -280,6 +294,7 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
 
     // MARK: - Migration
 
+    /// `UserDefaults` boolean flag written after a successful v2 migration run.
     private static let migrationKey = "scope.__migrated_v2"
 
     /// Migrates legacy flat `UserDefaults` keys to the single-blob format.
@@ -307,11 +322,11 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
         }
         for scope in knownScopes {
             var prefs = ScopePreferences()
-            if let v = store.string(forKey: "scope.\(scope).alias"), !v.isEmpty {
-                prefs.alias = v
+            if let val = store.string(forKey: "scope.\(scope).alias"), !val.isEmpty {
+                prefs.alias = val
             }
-            if let v = store.object(forKey: "scope.\(scope).pollingInterval") as? Int {
-                prefs.pollingInterval = v
+            if let val = store.object(forKey: "scope.\(scope).pollingInterval") as? Int {
+                prefs.pollingInterval = val
             }
             if store.object(forKey: "scope.\(scope).notifyOnSuccess") != nil {
                 prefs.notifyOnSuccess = store.bool(forKey: "scope.\(scope).notifyOnSuccess")
@@ -320,14 +335,14 @@ public actor ScopePreferencesStore: ScopePreferencesStoreProtocol {
                 prefs.notifyOnFailure = store.bool(forKey: "scope.\(scope).notifyOnFailure")
             }
             prefs.failureHookEnabled = store.bool(forKey: "scope.\(scope).failureHookEnabled")
-            if let v = store.string(forKey: "scope.\(scope).failureHookCommand"), !v.isEmpty {
-                prefs.failureHookCommand = v
+            if let val = store.string(forKey: "scope.\(scope).failureHookCommand"), !val.isEmpty {
+                prefs.failureHookCommand = val
             }
-            if let v = store.string(forKey: "scope.\(scope).localRepoPath"), !v.isEmpty {
-                prefs.localRepoPath = v
+            if let val = store.string(forKey: "scope.\(scope).localRepoPath"), !val.isEmpty {
+                prefs.localRepoPath = val
             }
-            if let v = store.string(forKey: "scope.\(scope).failureHookBranch"), !v.isEmpty {
-                prefs.failureHookBranch = v
+            if let val = store.string(forKey: "scope.\(scope).failureHookBranch"), !val.isEmpty {
+                prefs.failureHookBranch = val
             }
             write(prefs, for: scope)
             for field in Self.legacyFields {
